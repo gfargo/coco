@@ -1,0 +1,37 @@
+# Ignore all built files
+dist/**/*
+
+# ignore commit-copilot project config
+.coco.config.json
+
+# build reports
+dist/stats.html
+
+# Dependency directories
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Output of 'npm pack'
+*.tgz
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+.DS_Store
