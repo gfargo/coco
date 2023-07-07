@@ -5,17 +5,14 @@ import { Logger } from '../../utils/logger'
 
 import { createDiffTree } from './utils/createDiffTree'
 import { collectDiffs } from './utils/collectDiffs'
-import { parseFileDiff } from './utils/parseFileDiff'
 import { getChain, getTextSplitter } from '../../langchain/utils'
 import { SUMMARIZE_PROMPT } from '../../langchain/prompts/summarize'
+import { getDiff } from '../../simple-git/getDiff'
 
 const MAX_TOKENS_PER_SUMMARY = 2048
 
-export const fileChangeParser: BaseParser = async (changes, { tokenizer, repo, model }) => {
+export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, model }) => {
   const logger = new Logger(config)
-  const head = await repo.getHeadCommit()
-  const headTree = await head.getTree()
-  const index = await repo.refreshIndex()
 
   const textSplitter = getTextSplitter({ chunkSize: 2000, chunkOverlap: 125, })
   const summarizationChain = getChain(model, {
@@ -32,7 +29,7 @@ export const fileChangeParser: BaseParser = async (changes, { tokenizer, repo, m
   logger.startTimer().startSpinner(`Collecting Diffs...\n`, { color: 'blue' })
   const diffs = await collectDiffs(
     rootTreeNode,
-    (path) => parseFileDiff(path, repo, headTree, index, logger),
+    (path) => getDiff(path, { git, logger }),
     tokenizer,
     logger
   )
@@ -47,6 +44,8 @@ export const fileChangeParser: BaseParser = async (changes, { tokenizer, repo, m
     chain: summarizationChain,
   })
   logger.stopTimer(`\nSummary generated for ${changes.length} staged files`, { color: 'green' })
+
+  logger.verbose(`\nSummary:\n${summary}`, { color: 'blue' })
 
   return summary
 }

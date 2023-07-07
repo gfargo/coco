@@ -80,7 +80,7 @@ const defaultOutputCallback = (group: DirectoryDiff) => {
 -------\n* changes in "/${group.path}"\n\n`
 
   if (group.summary) {
-    output += `${group.diffs.map((diff) => ` • ${diff.summary}`).join('\n')}\n\nSummary:${
+    output += `${group.diffs.map((diff) => ` • ${diff.summary}`).join('\n')}\n\nSummary:\n\n${
       group.summary
     }\n\n`
   } else {

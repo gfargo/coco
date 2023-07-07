@@ -3,20 +3,22 @@
 import { Repository } from 'nodegit'
 import { select, editor } from '@inquirer/prompts'
 import config from './lib/config'
-import { fileChangeParser } from './lib/parsers/default/fileChangeParser'
+import { fileChangeParser } from './lib/parsers/default'
 import { logCommit, logSuccess } from './lib/ui'
 import { loadArgv } from './lib/config/services/yargs'
 import { getTokenizer } from './lib/utils/getTokenizer'
 import { Logger } from './lib/utils/logger'
-import { getChanges } from './lib/utils/git/getChanges'
 import { COMMIT_PROMPT } from './lib/langchain/prompts/commitDefault'
 import { getModel, getPrompt, validatePromptTemplate } from './lib/langchain/utils'
-import { createCommit } from './lib/utils/git/createCommit'
 import { llm } from './lib/langchain/chains/llm'
 import { noResult } from './lib/parsers/noResult'
+import { getChanges } from './lib/simple-git/getChanges'
+import { createCommit } from './lib/simple-git/createCommit'
+import { simpleGit, SimpleGit, CleanOptions } from 'simple-git';
 
 const argv = loadArgv()
 const tokenizer = getTokenizer()
+const git: SimpleGit = simpleGit()
 
 async function main(options: typeof argv) {
   const logger = new Logger(config)
@@ -26,7 +28,6 @@ async function main(options: typeof argv) {
     process.exit(1)
   }
 
-  const repo = await Repository.open('.')
   const model = getModel({
     temperature: 0.4,
     maxConcurrency: 10,
@@ -35,10 +36,7 @@ async function main(options: typeof argv) {
 
   const INTERACTIVE = config?.mode === 'interactive' || options.interactive
 
-  const { staged: changes } = await getChanges(repo, {
-    ignoreUnstaged: true,
-    ignoreUntracked: true,
-  })
+  const { staged: changes } = await getChanges(git)
 
   let summary = ''
   let commitMsg = ''
@@ -51,12 +49,12 @@ async function main(options: typeof argv) {
         color: 'blue',
       })
 
-      summary = await fileChangeParser(changes, { tokenizer, repo, model })
+      summary = await fileChangeParser(changes, { tokenizer, git, model })
     }
 
     // Handle empty summary
     if (!summary.length) {
-      noResult({ repo, logger })
+      noResult({ git, logger })
     }
 
     // Prompt user for commit template prompt, if necessary
@@ -186,7 +184,7 @@ async function main(options: typeof argv) {
     // Handle resulting commit message
     switch (MODE) {
       case 'interactive':
-        await createCommit(commitMsg, repo)
+        await createCommit(commitMsg, git)
         logSuccess()
         break
       case 'stdout':
