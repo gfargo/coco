@@ -86,6 +86,7 @@
     "p-queue": "^5.0.0",
     "performance-now": "^2.1.0",
     "pretty-ms": "^7.0.1",
+    "simple-git": "^3.19.1",
     "yargs": "^17.7.2"
   }
 }
