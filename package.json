@@ -73,7 +73,6 @@
     "typescript": "^5.1.6"
   },
   "dependencies": {
-    "@huggingface/inference": "^1.8.0",
     "@inquirer/prompts": "^2.3.0",
     "chalk": "^4.1.2",
     "diff": "^5.1.0",
@@ -84,9 +83,9 @@
     "nodegit": "^0.28.0-alpha.21",
     "openai": "^3.2.1",
     "ora": "^5.4.1",
-    "p-queue": "^7.3.4",
+    "p-queue": "^5.0.0",
     "performance-now": "^2.1.0",
-    "pretty-ms": "^8.0.0",
+    "pretty-ms": "^7.0.1",
     "yargs": "^17.7.2"
   }
 }

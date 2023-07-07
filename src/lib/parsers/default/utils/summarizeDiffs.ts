@@ -1,10 +1,11 @@
 import GPT3Tokenizer from 'gpt3-tokenizer'
-import { default as PQueue } from 'p-queue' // For priority queue
 import { DirectoryDiff, DiffNode } from '../../../types'
+import pQueue from 'p-queue'
 import { Logger } from '../../../utils/logger'
 import config from '../../../config'
 import { getPathFromFilePath } from '../../../utils/getPathFromFilePath'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
+
 
 /**
  * Create groups from a given node info.
@@ -106,7 +107,7 @@ export async function summarizeDiffs(
   }: SummarizeDiffsOptions
 ): Promise<string> {
   const logger = new Logger(config)
-  const queue = new PQueue({ concurrency: 8 })
+  const queue = new pQueue({ concurrency: 8 })
 
   logger.startTimer().startSpinner(`Organizing Diffs...`, { color: 'blue' })
   const directoryDiffs = createDirectoryDiffs(rootDiffNode)
