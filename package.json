@@ -1,7 +1,7 @@
 {
-  "name": "@gfargo/coco",
-  "version": "0.1.6",
-  "description": "zero-effort git commits with coco",
+  "name": "git-coco",
+  "version": "0.0.0",
+  "description": "zero-effort git commits with commit copilot, or coco for short.",
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
   "main": "dist/index.js",

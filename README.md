@@ -1,55 +1,56 @@
-# Commit Copilot (`coco`) 🤖 🦍
+# `coco` 🤖🦍
 
-Commit Copilot, or `coco`, is an intelligent command-line tool designed to automate away the process of writing Git commit messages using the power of OpenAI's language model.
-
-With `coco`, you can generate meaningful commit messages for your code changes effortlessly, allowing you to focus more on coding and less on commit documentation.
+Commit Copilot, or `coco`, is your personal scribe for git commit messages. Using [LangChain🦜🔗](https://js.langchain.com/) to automate the task of creating meaningful commit messages based on your staged changes!
 
 ## Installation
 
-```bash
-npm i @gfargo/coco --save-dev
-```
-
-Or, if you prefer, you can instal globally:
+Get started by adding `coco` to your project's development dependencies:
 
 ```bash
-npm i -g @gfargo/coco
+npm i git-coco --save-dev
 ```
 
-After installing, both `commit-copilot` 🤖 *or* `coco` 🦍  commands will be available.  Going forward, we will use `coco` in our examples.
+Or, for global access, you can install `coco` system-wide:
+
+```bash
+npm i -g git-coco
+```
 
 ## Usage
 
-Once installed, you can use `coco` in two ways:
+There are two main ways to use `coco`: 
 
-1. [Interactive](#interactive)
-1. [CLI](#cli)
+1. [Interactive Mode](#interactive)
+2. [Command Line Interface (CLI)](#cli)
 
-### **Interactive**
+### **Interactive Mode**
 
-Simply type `coco` and follow the prompts! ✨
+Just type `coco` and let the friendly prompts guide you through the commit process!
 
 ```bash
 coco -i
 ```
 
-`coco` will analyze your staged changes and interactively guide you through the commit process.  One advantage using `coco` interactively provides is the ability to edit the generated commit message before performing the commit.
+The interactive mode offers you several benefits:
 
-### **CLI**
+- Preview and approve or regenerate the commit message before it's committed
+- Customize your prompts for a personalized commit experience
 
-Pass your commit message directly as a command line argument:
+### **Command Line Interface (CLI)**
+
+If you're the type who likes to keep it simple, you can pass your commit message directly as a CLI argument:
 
 ```bash
 coco --openAIApiKey="sk_your-openai-api-key"
 ```
 
-Assuming you have stored the API key in the config file ([see below](#the-cococonfig))...
+Assuming you've stored your API key in the config file ([learn more](#the-cococonfig)), you can also commit with:
 
 ```bash
 git commit -m $(coco)
 ```
 
-Simplify things even further by letting coco make the commit for you!
+Alternatively, take advantage of `coco`'s full potential by allowing it to make the commit for you!
 
 ```bash
 coco -s
@@ -57,48 +58,63 @@ coco -s
 
 ## **The `coco.config`**
 
-The `coco.config` settings allow you to specify project-level configuration. These settings can be defined in multiple ways and are sourced in a hierarchical order. If the same configuration setting is defined in multiple places, the setting from the higher priority source will be used.
+`coco.config` houses the project-level settings and can be defined in multiple places, adhering to a hierarchical order of priority. If the same configuration is found in multiple places, the higher priority one will be considered.
 
-The order of priority from highest to lowest is as follows:
+From highest to lowest, the priority order is:
 
-1. **Command Line Flags**: Any configuration options set as flags in the command line will override all other sources.
-2. **Environment Variables**: Environment variables are the next highest priority. You can set any of the configuration options as an environment variable in your system.
-3. **Project Config (`.coco.config.json`)**: You can create a `.coco.config.json` file in your project root directory to set any of the configuration options. This file is optional, but it is recommended to store your OpenAI API key here as well as any other configuration settings you want to use for the project.
-4. **Git Profile (`.gitconfig`)**: Configuration options can be set in your git profile under a `[coco]` section. These settings will be used if not overridden by any of the above.
-5. **XDG Configuration Directory**: If the `XDG_CONFIG_HOME` environment variable is set, Coco will look for a `coco/config` file within this directory to use as configuration options.
+1. **Command Line Flags**: Flags in the command line have the highest priority, and they override all other settings.
+2. **Environment Variables**: Next in line are environment variables. You can set any configuration option as an environment variable.
+3. **Project Config (`.coco.config.json`)**: Create a `.coco.config.json` file in your project root to set configurations. It's recommended to store your OpenAI API key here alongside any other project-specific configurations.
+4. **Git Profile (`.gitconfig`)**: You can define `coco` settings under a `[coco]` section in your git profile. These settings will be used unless overridden by higher-priority ones.
+5. **XDG Configuration Directory**: If `XDG_CONFIG_HOME` is set, `coco` will look for a `coco/config` file in this directory for configurations.
 
-Here's an example of how you might define settings in a `.coco.config.json` file:
+Here's an example `.coco.config.json` file:
 
 ```json
 {
     "openAIApiKey": "sk_your-openai-api-key",
-    "prompt": "What are the changes in this commit?",
 }
 ```
 
-And here's an example of the same settings defined in a `.gitconfig`:
+And the same settings in `.gitconfig`:
 
 ```ini
 [coco]
     openAIApiKey = sk_your-openai-api-key
-    prompt = What are the changes in this commit?
 ```
 
-Please note that command line flags and environment variables should be in `UPPER_SNAKE_CASE`. For example, the `openAIApiKey` setting would be `OPENAI_API_KEY` when used as a flag or environment variable.
+Remember, command line flags and environment variables should be defined in `UPPER_SNAKE_CASE`. For instance, the `openAIApiKey` setting becomes `OPENAI_API_KEY`.
 
 ### Options
 
 | Name                     | Type                            | Default Value                             | Description                                                                                                               |
 |--------------------------|---------------------------------|-------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
-| openAIApiKey                   | string                          | None                                      | Your OpenAI API key                                                                                                       |
-| tokenLimit               | number                          | 500                                       | Maximum number of tokens to generate for the commit message                                                               |
+| openAIApiKey             | string                          | None                                      | Your OpenAI API key                                                                                                       |
+| tokenLimit               | number                          | 500                                       | Maximum number of tokens for the commit message                                                                           |
 | prompt                   | string                          | `"What are the changes in this commit?"`  | Prompt for OpenAI GPT-3                                                                                                   |
-| temperature              | number                          | 0.4                                       | Controls randomness of OpenAI's GPT-3 output. Lower values (e.g. 0.2) make the output focused, while higher make it diverse|
-| mode                     | `stdout` \| `interactive`       | `stdout`                                  | Output method for generated commit message. message                                                                              |
-| summarizePrompt   | string                          | `"Summarize the changes in this large file:"` | Prompt for OpenAI GPT-3 when summarizing large files                                         |
-| ignoredFiles             | string[]                        | `["package-lock.json"]`                  | List of file paths to ignore when generating commit messages                                                             |
-| ignoredExtensions        | string[]                        | `[".map", ".lock"]`                      | List of file extensions to ignore when generating commit messages                                                        |
+| temperature              | number                          | 0.4                                       | Controls randomness in GPT-3 output. Lower values yield focused output; higher values offer diversity                      |
+| mode                     | `stdout` \| `interactive`       | `stdout`                                  | Preferred output method for generated commit messages                                                                     |
+| summarizePrompt          | string                          | `"Summarize the changes in this large file:"` | GPT-3 prompt for summarizing large files                                                                                  |
+| ignoredFiles             | string[]                        | `["package-lock.json"]`                  | Paths of files to be excluded when generating commit messages                                                             |
+| ignoredExtensions        | string[]                        | `[".map", ".lock"]`                      | File extensions to be excluded when generating commit messages                                                            |
+
+## Roadmap
+
+- [x] Interactive mode 🤖
+- [x] Stdout 📤
+- [x] LangChain integration 🦜
+- [ ] Additional tests! 🧪
+- [ ] Conventional commits 🔜
+- [ ] HuggingFace integration 🔜
+- [ ] Google Vertex AI integration (?)
+- [ ] Automatic changelog generation 🫣
+- [ ] Rebase support 🔀
+- [ ] `coco --amend b31dfc` 👩‍💻
+
+...and more! 🧑‍🔬 🚀
 
 ## Contribution
 
-As an open source project, we welcome contributions! Please check out our [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+Have an idea for a feature or want to get involved, we welcome contributions!
+
+Please check out our [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
