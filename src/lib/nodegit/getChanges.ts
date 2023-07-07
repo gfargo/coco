@@ -1,8 +1,8 @@
 import { Repository, Diff, Tree } from 'nodegit'
-import config from '../../config'
+import config from '../config'
 import { EMPTY_GIT_TREE_HASH } from './constants'
 import { parsePatches } from './parsePatches'
-import { FileChange } from '../../types'
+import { FileChange } from '../types'
 
 const DEFAULT_IGNORED_FILES = [
   ...(config?.ignoredFiles?.length && config?.ignoredFiles?.length > 0 ? config.ignoredFiles : []),

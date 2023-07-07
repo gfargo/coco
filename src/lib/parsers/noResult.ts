@@ -1,5 +1,5 @@
 import { Repository } from 'nodegit'
-import { getChanges } from '../utils/git/getChanges'
+import { getChanges } from '../nodegit/getChanges'
 import { Logger } from '../utils/logger'
 
 type NoResultInput = {

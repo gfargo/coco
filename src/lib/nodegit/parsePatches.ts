@@ -1,9 +1,9 @@
 import { minimatch } from 'minimatch'
 import { ConvenientPatch } from 'nodegit'
-import config from '../../config'
+import config from '../config'
 import { getSummaryText } from './getSummaryText'
 import { getStatus } from './getStatus'
-import { FileChange } from '../../types'
+import { FileChange } from '../types'
 
 const DEFAULT_IGNORED_FILES = [
   ...(config?.ignoredFiles?.length && config?.ignoredFiles?.length > 0 ? config.ignoredFiles : []),

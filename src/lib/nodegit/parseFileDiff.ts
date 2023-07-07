@@ -1,9 +1,9 @@
 import { Repository, Diff, Blob, Tree, Index } from 'nodegit'
 import { createTwoFilesPatch } from 'diff'
 
-import { FileChange } from '../../../types'
-import { readFile } from '../../../utils/readFile'
-import { Logger } from '../../../utils/logger'
+import { FileChange } from '../types'
+import { readFile } from '../utils/readFile'
+import { Logger } from '../utils/logger'
 
 const parseDefaultFileDiff = async (
   nodeFile: FileChange,

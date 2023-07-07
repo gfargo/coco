@@ -1,5 +1,5 @@
 import { ConvenientPatch } from "nodegit"
-import { FileChangeStatus } from "../../types"
+import { FileChangeStatus } from "../types"
 
 export const getStatus = (patch: ConvenientPatch): FileChangeStatus => {
   let status: FileChangeStatus
