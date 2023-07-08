@@ -1,17 +1,9 @@
-import { Repository } from 'nodegit'
-import { getChanges } from '../nodegit/getChanges'
+import { getChanges } from '../simple-git/getChanges'
 import { Logger } from '../utils/logger'
+import { SimpleGit } from 'simple-git'
 
-type NoResultInput = {
-  repo: Repository
-  logger: Logger
-}
-
-export const noResult = async ({ repo, logger }: NoResultInput) => {
-  const { staged, unstaged, untracked } = await getChanges(repo, {
-    ignoreUnstaged: false,
-    ignoreUntracked: false,
-  })
+export const noResult = async ({ git, logger }: { git: SimpleGit; logger: Logger }) => {
+  const { staged, unstaged, untracked } = await getChanges(git)
 
   if (staged.length > 0) {
     logger.log(`Staged files detected, but no summary generated...`, { color: 'red' })

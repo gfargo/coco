@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { Repository } from 'nodegit'
 import { select, editor } from '@inquirer/prompts'
 import config from './lib/config'
 import { fileChangeParser } from './lib/parsers/default'
@@ -14,7 +13,7 @@ import { llm } from './lib/langchain/chains/llm'
 import { noResult } from './lib/parsers/noResult'
 import { getChanges } from './lib/simple-git/getChanges'
 import { createCommit } from './lib/simple-git/createCommit'
-import { simpleGit, SimpleGit, CleanOptions } from 'simple-git';
+import { simpleGit, SimpleGit } from 'simple-git'
 
 const argv = loadArgv()
 const tokenizer = getTokenizer()
@@ -124,7 +123,8 @@ async function main(options: typeof argv) {
           {
             name: '🔄 Retry - Full',
             value: 'retryFull',
-            description: 'Restart the function execution from the beginning, regenerating both the diff summary and commit message',
+            description:
+              'Restart the function execution from the beginning, regenerating both the diff summary and commit message',
           },
           {
             name: '💣 Cancel',
