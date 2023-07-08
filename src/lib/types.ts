@@ -1,12 +1,11 @@
 import GPT3Tokenizer from 'gpt3-tokenizer'
-import { Repository } from 'nodegit'
 import { getModel } from './langchain/utils'
+import { SimpleGit } from 'simple-git'
 
 export type FileChangeStatus =
   | 'modified'
   | 'renamed'
   | 'added'
-  | 'new file'
   | 'deleted'
   | 'untracked'
   | 'unknown'
@@ -42,7 +41,7 @@ export interface BaseParser {
     options: {
       tokenizer: GPT3Tokenizer
       model: ReturnType<typeof getModel>,
-      repo: Repository
+      git: SimpleGit
     }
   ): Promise<string>
 }

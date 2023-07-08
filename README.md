@@ -1,4 +1,4 @@
-# `coco` 🤖🦍
+# `coco` 🤖 🦍
 
 Commit Copilot, or `coco`, is your personal scribe for git commit messages. Using [LangChain🦜🔗](https://js.langchain.com/) to automate the task of creating meaningful commit messages based on your staged changes!
 
