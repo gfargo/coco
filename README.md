@@ -1,5 +1,11 @@
 # `coco` 🤖 🦍
 
+[![GitHub issues](https://img.shields.io/github/issues/gfargo/coco)](https://github.com/gfargo/coco/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/gfargo/coco)](https://github.com/gfargo/coco/pulls)
+[![Last Commit](https://img.shields.io/github/last-commit/gfargo/coco)](https://github.com/gfargo/coco/tree/main)
+[![NPM Version](https://img.shields.io/npm/v/git-coco.svg)](https://www.npmjs.com/package/git-coco)
+[![NPM Downloads](https://img.shields.io/npm/dt/git-coco.svg)](https://www.npmjs.com/package/git-coco)
+
 Commit Copilot, or `coco`, is your personal scribe for git commit messages. Using [LangChain🦜🔗](https://js.langchain.com/) to automate the task of creating meaningful commit messages based on your staged changes!
 
 ## Installation
