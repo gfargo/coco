@@ -10,7 +10,13 @@ import {
 import { ConfigurationParameters } from 'openai'
 import config from '../config'
 
-// TODO: Extend this to support other models! 🎉
+/**
+ * Get LLM Model Based on Configuration
+ *
+ * @param fields
+ * @param configuration
+ * @returns LLM Model
+ */
 export function getModel(
   fields?:
     | (Partial<OpenAIInput> &
@@ -22,12 +28,10 @@ export function getModel(
   configuration?: ConfigurationParameters | undefined
 ): OpenAI | HuggingFaceInference {
   const [llm, model] = config.model.split(/\/(.*)/s)
-  
+
   if (!model) {
     throw new Error(`Invalid model: ${config.model}`)
   }
-  
-  console.log({ llm, model })
 
   switch (llm) {
     case 'huggingface':
@@ -39,11 +43,14 @@ export function getModel(
       })
     case 'openai':
     default:
-      return new OpenAI({
-        openAIApiKey: config.openAIApiKey,
-        modelName: model,
-        ...fields
-      }, configuration)
+      return new OpenAI(
+        {
+          openAIApiKey: config.openAIApiKey,
+          modelName: model,
+          ...fields,
+        },
+        configuration
+      )
   }
 }
 
