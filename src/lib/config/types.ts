@@ -1,8 +1,25 @@
 export interface Config {
   /**
+   * The LLM model to use for generating results.
+   * 
+   * @default 'openai/gpt-3.5-turbo'
+   * 
+   * @example 'openai/gpt-4'
+   * @example 'openai/gpt-3.5-turbo'
+   * @example 'huggingface/bigscience/bloom'
+   **/
+
+  model: string
+  
+  /**
    * The OpenAI API key.
    */
-  openAIApiKey: string
+  openAIApiKey?: string
+
+  /**
+   * The HuggingFace Hub API key.
+   */
+  huggingFaceHubApiKey?: string
 
   /**
    * The maximum number of tokens per request.

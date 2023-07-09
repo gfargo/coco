@@ -7,6 +7,7 @@ jest.mock('fs')
 const mockFs = fs as jest.Mocked<typeof fs>
 
 const defaultConfig: Config = {
+  model: 'openai/gpt-3.5-turbo',
   openAIApiKey: 'sk_default-api-key',
   temperature: 0.4,
   ignoredFiles: ['package-lock.json'],

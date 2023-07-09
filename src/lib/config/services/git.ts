@@ -18,7 +18,9 @@ export function loadGitConfig(config: Config): Config {
 
     config = {
       ...config,
+      model: gitConfigParsed.coco?.model || config.model,
       openAIApiKey: gitConfigParsed.coco?.openAIApiKey || config.openAIApiKey,
+      huggingFaceHubApiKey: gitConfigParsed.coco?.huggingFaceHubApiKey || config.huggingFaceHubApiKey,
       tokenLimit: parseInt(gitConfigParsed.coco?.tokenLimit) || config.tokenLimit,
       prompt: gitConfigParsed.coco?.prompt || config.prompt,
       mode: gitConfigParsed.coco?.mode || config.mode,

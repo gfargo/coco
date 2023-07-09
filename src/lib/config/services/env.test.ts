@@ -2,6 +2,7 @@ import { Config } from '../types'
 import { loadEnvConfig } from './env'
 
 const defaultConfig: Config = {
+  model: 'openai/gpt-3.5-turbo',
   openAIApiKey: 'sk_test_1234',
   temperature: 0.4,
   ignoredFiles: ['package-lock.json'],

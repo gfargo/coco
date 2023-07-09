@@ -9,7 +9,9 @@ import { Config } from '../types'
  **/
 export function loadEnvConfig(config: Config): Config {
   const envConfig: Partial<Config> = {
+    model: process.env.COCO_MODEL || undefined,
     openAIApiKey: process.env.OPENAI_API_KEY || undefined,
+    huggingFaceHubApiKey: process.env.HUGGINGFACE_HUB_API_KEY || undefined,
     tokenLimit: process.env.COCO_TOKEN_LIMIT
       ? parseInt(process.env.COCO_TOKEN_LIMIT)
       : undefined,

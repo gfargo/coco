@@ -8,8 +8,15 @@ import {
   RecursiveCharacterTextSplitterParams,
 } from 'langchain/text_splitter'
 import { ConfigurationParameters } from 'openai'
+import config from '../config'
 
-// TODO: Extend this to support other models! 🎉
+/**
+ * Get LLM Model Based on Configuration
+ *
+ * @param fields
+ * @param configuration
+ * @returns LLM Model
+ */
 export function getModel(
   fields?:
     | (Partial<OpenAIInput> &
@@ -20,16 +27,31 @@ export function getModel(
     | undefined,
   configuration?: ConfigurationParameters | undefined
 ): OpenAI | HuggingFaceInference {
-  return new OpenAI(fields, configuration)
-  // return new HuggingFaceInference({
-  //   // model: 'gpt2',
-  //   // model: 'bigcode/starcoder',
-  //   model: 'bigscience/bloom',
-  //   apiKey: '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',
-  //   maxConcurrency: 4,
-  //   cache: true,
-  //   // maxTokens: 2046,
-  // })
+  const [llm, model] = config.model.split(/\/(.*)/s)
+
+  if (!model) {
+    throw new Error(`Invalid model: ${config.model}`)
+  }
+
+  switch (llm) {
+    case 'huggingface':
+      return new HuggingFaceInference({
+        model: model,
+        apiKey: config.huggingFaceHubApiKey,
+        maxConcurrency: 4,
+        ...fields,
+      })
+    case 'openai':
+    default:
+      return new OpenAI(
+        {
+          openAIApiKey: config.openAIApiKey,
+          modelName: model,
+          ...fields,
+        },
+        configuration
+      )
+  }
 }
 
 export function getTextSplitter(
