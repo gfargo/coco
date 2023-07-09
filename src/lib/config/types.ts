@@ -1,6 +1,12 @@
 export interface Config {
   /**
    * The LLM model to use for generating results.
+   * 
+   * @default 'openai/gpt-3.5-turbo'
+   * 
+   * @example 'openai/gpt-4'
+   * @example 'openai/gpt-3.5-turbo'
+   * @example 'huggingface/bigscience/bloom'
    **/
 
   model: string

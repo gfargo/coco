@@ -15,9 +15,7 @@ import { SUMMARIZE_PROMPT as SUMMARIZE_PROMPT } from '../langchain/prompts/summa
  * @type {Config}
  */
 export const DEFAULT_CONFIG = {
-  model: 'huggingface/openchat/openchat_8192',
-  // openAIApiKey: '',
-  // huggingFaceHubApiKey: '',
+  model: 'openai/gpt-3.5-turbo',
   verbose: false,
   tokenLimit: 1024,
   prompt: COMMIT_PROMPT.template,
