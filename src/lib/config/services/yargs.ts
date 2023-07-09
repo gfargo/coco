@@ -7,7 +7,9 @@ import { Options } from 'yargs'
  * Command line options via yargs
  */
 export const options = {
+  model: { type: 'string', description: 'LLM/Model-Name' },
   openAIApiKey: { type: 'string', description: 'OpenAI API Key' },
+  huggingFaceHubApiKey: { type: 'string', description: 'HuggingFace Hub API Key' },
   tokenLimit: { type: 'number', description: 'Token limit' },
   prompt: {
     type: 'string',

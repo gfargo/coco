@@ -1,8 +1,19 @@
 export interface Config {
   /**
+   * The LLM model to use for generating results.
+   **/
+
+  model: string
+  
+  /**
    * The OpenAI API key.
    */
-  openAIApiKey: string
+  openAIApiKey?: string
+
+  /**
+   * The HuggingFace Hub API key.
+   */
+  huggingFaceHubApiKey?: string
 
   /**
    * The maximum number of tokens per request.
