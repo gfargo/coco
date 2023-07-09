@@ -6,7 +6,9 @@
 [![NPM Version](https://img.shields.io/npm/v/git-coco.svg)](https://www.npmjs.com/package/git-coco)
 [![NPM Downloads](https://img.shields.io/npm/dt/git-coco.svg)](https://www.npmjs.com/package/git-coco)
 
-Commit Copilot, or `coco`, is your personal scribe for git commit messages. Using [LangChain🦜🔗](https://js.langchain.com/) to automate the task of creating meaningful commit messages based on your staged changes!
+Commit Copilot, or `coco`, is your personal scribe for git commit messages. Leveraging the power of [LangChain🦜🔗](https://js.langchain.com/) and LLMs to encapsulate your staged changes into meaningful commit messages!
+
+
 
 ## Installation
 
