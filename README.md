@@ -113,7 +113,7 @@ Remember, command line flags and environment variables should be defined in `UPP
 - [x] LangChain integration 🦜
 - [ ] Additional tests! 🧪
 - [ ] Conventional commits 🔜
-- [ ] HuggingFace integration 🔜
+- [x] HuggingFace integration 🔜
 - [ ] Google Vertex AI integration (?)
 - [ ] Automatic changelog generation 🫣
 - [ ] Rebase support 🔀
