@@ -6,7 +6,6 @@ import config from '../../../config'
 import { getPathFromFilePath } from '../../../utils/getPathFromFilePath'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
 
-
 /**
  * Create groups from a given node info.
  * @param {DiffNode} node - The node info to start grouping.

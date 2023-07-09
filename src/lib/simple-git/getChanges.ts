@@ -40,8 +40,6 @@ export async function getChanges(
   const status = await git.status()
 
   status.files.forEach((file) => {
-    // console.log({ file })
-
     const fileChange: Partial<FileChange> = {
       filepath: file.path,
       oldFilepath: status.renamed.filter((renamed) => renamed.to === file.path)[0]?.from,

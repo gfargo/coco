@@ -17,11 +17,8 @@ const parseRenamedFileDiff = async (
 
   try {
     const [headContent, indexContent] = await Promise.all([
-      // git.diff(['HEAD', '-M', '--', oldFilepath]),
-      // git.diff(['-z', '-M', '--staged', nodeFile.filepath]),
       git.show([`HEAD:${oldFilepath}`]),
       git.show([`:${nodeFile.filepath}`]),
-      // readFile(nodeFile.filepath),
     ])
 
     if (headContent !== indexContent) {
@@ -29,13 +26,13 @@ const parseRenamedFileDiff = async (
         oldFilepath,
         nodeFile.filepath,
         headContent,
-        indexContent.toString(),
+        indexContent,
         '',
         '',
         {
           context: 3,
         }
-      )
+      )      
       // remove the first 4 lines of the patch (they contain the old and new file names)
       result = result.split('\n').slice(4).join('\n')
     } else {
@@ -43,7 +40,6 @@ const parseRenamedFileDiff = async (
     }
   } catch (err) {
     logger.verbose(`Error comparing file contents for ${nodeFile.filepath}`, { color: 'red' })
-    console.log(err)
     result = 'Error comparing file contents.'
   }
   return result

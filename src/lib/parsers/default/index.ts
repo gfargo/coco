@@ -45,7 +45,6 @@ export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, mo
   })
   logger.stopTimer(`\nSummary generated for ${changes.length} staged files`, { color: 'green' })
 
-  logger.verbose(`\nSummary:\n${summary}`, { color: 'blue' })
 
   return summary
 }
