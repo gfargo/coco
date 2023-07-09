@@ -1,19 +1,13 @@
 import { SimpleGit } from 'simple-git'
 import path from 'path'
+import { minimatch } from 'minimatch'
 import config from '../config'
 import { FileChange } from '../types'
 import { getStatus } from './getStatus'
 import { getSummaryText } from './getSummaryText'
 
-const DEFAULT_IGNORED_FILES = [
-  ...(config?.ignoredFiles?.length && config?.ignoredFiles?.length > 0 ? config.ignoredFiles : []),
-]
-
-const DEFAULT_IGNORED_EXTENSIONS = [
-  ...(config?.ignoredExtensions?.length && config?.ignoredExtensions?.length > 0
-    ? config.ignoredExtensions
-    : []),
-]
+const DEFAULT_IGNORED_FILES = config?.ignoredFiles?.length ? config.ignoredFiles : []
+const DEFAULT_IGNORED_EXTENSIONS = config?.ignoredExtensions?.length ? config.ignoredExtensions : []
 
 export type GetChangesArgs = {
   ignoredFiles?: string[]
@@ -67,22 +61,25 @@ export async function getChanges(
     }
   })
 
-  const ignoredExtensionsSet = new Set(
-    ignoredExtensions.map((extension) => extension.toLowerCase())
-  )
+  const ignoredExtensionsSet = new Set(ignoredExtensions.map((extension) => extension.toLowerCase()))
   const filteredStaged = staged.filter((file) => {
     const extension = path.extname(file.filepath).toLowerCase()
-    return !ignoredExtensionsSet.has(extension) && !ignoredFiles.includes(file.filepath)
+    return !ignoredExtensionsSet.has(extension) && !ignoredFiles.some(ignoredPattern => minimatch(file.filepath, ignoredPattern))
   })
 
   const filteredUnstaged = unstaged.filter((file) => {
     const extension = path.extname(file.filepath).toLowerCase()
-    return !ignoredExtensionsSet.has(extension) && !ignoredFiles.includes(file.filepath)
+    return !ignoredExtensionsSet.has(extension) && !ignoredFiles.some(ignoredPattern => minimatch(file.filepath, ignoredPattern))
+  })
+
+  const filteredUntracked = untracked.filter((file) => {
+    const extension = path.extname(file.filepath).toLowerCase()
+    return !ignoredExtensionsSet.has(extension) && !ignoredFiles.some(ignoredPattern => minimatch(file.filepath, ignoredPattern))
   })
 
   return {
     staged: filteredStaged,
     unstaged: filteredUnstaged,
-    untracked,
+    untracked: filteredUntracked,
   }
 }
