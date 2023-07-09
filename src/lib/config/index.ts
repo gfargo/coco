@@ -5,7 +5,29 @@ import { loadProjectConfig } from './services/project'
 import { loadXDGConfig } from './services/xdg'
 import { loadCmdLineFlags } from './services/yargs'
 import { Config } from './types'
-import { DEFAULT_CONFIG } from './default'
+
+import { COMMIT_PROMPT } from '../langchain/prompts/commitDefault'
+import { SUMMARIZE_PROMPT as SUMMARIZE_PROMPT } from '../langchain/prompts/summarize'
+
+/**
+ * Default Config
+ *
+ * @type {Config}
+ */
+export const DEFAULT_CONFIG = {
+  model: 'huggingface/openchat/openchat_8192',
+  // openAIApiKey: '',
+  // huggingFaceHubApiKey: '',
+  verbose: false,
+  tokenLimit: 1024,
+  prompt: COMMIT_PROMPT.template,
+  summarizePrompt: SUMMARIZE_PROMPT.template,
+  temperature: 0.4,
+  mode: 'stdout',
+
+  ignoredFiles: ['package-lock.json'],
+  ignoredExtensions: ['.map', '.lock'],
+} as Config
 
 /**
  * Load application config
