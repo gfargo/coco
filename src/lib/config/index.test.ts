@@ -69,8 +69,8 @@ describe('loadConfig', () => {
       }
     })
 
-    process.env.COPILOT_API_KEY = 'envApiKey'
-    process.env.COPILOT_TOKEN_LIMIT = '350'
+    process.env.OPENAI_API_KEY = 'envApiKey'
+    process.env.COCO_TOKEN_LIMIT = '350'
 
     const config = loadConfig()
 
@@ -81,7 +81,7 @@ describe('loadConfig', () => {
     expect(config.ignoredFiles).toContain('ignorefile.txt')
 
     // Cleanup
-    delete process.env.COPILOT_API_KEY
-    delete process.env.COPILOT_TOKEN_LIMIT
+    delete process.env.OPENAI_API_KEY
+    delete process.env.COCO_TOKEN_LIMIT
   })
 })

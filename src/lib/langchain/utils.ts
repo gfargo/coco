@@ -8,7 +8,7 @@ import {
   RecursiveCharacterTextSplitterParams,
 } from 'langchain/text_splitter'
 import { ConfigurationParameters } from 'openai'
-import config from '../config'
+import { BaseCommandOptions } from '../../types'
 
 /**
  * Get LLM Model Based on Configuration
@@ -18,6 +18,8 @@ import config from '../config'
  * @returns LLM Model
  */
 export function getModel(
+  name: string,
+  key: string,
   fields?:
     | (Partial<OpenAIInput> &
         Partial<AzureOpenAIInput> &
@@ -27,17 +29,17 @@ export function getModel(
     | undefined,
   configuration?: ConfigurationParameters | undefined
 ): OpenAI | HuggingFaceInference {
-  const [llm, model] = config.model.split(/\/(.*)/s)
+  const [llm, model] = name.split(/\/(.*)/s)
 
   if (!model) {
-    throw new Error(`Invalid model: ${config.model}`)
+    throw new Error(`Invalid model: ${name}`)
   }
 
   switch (llm) {
     case 'huggingface':
       return new HuggingFaceInference({
         model: model,
-        apiKey: config.huggingFaceHubApiKey,
+        apiKey: key,
         maxConcurrency: 4,
         ...fields,
       })
@@ -45,12 +47,31 @@ export function getModel(
     default:
       return new OpenAI(
         {
-          openAIApiKey: config.openAIApiKey,
+          openAIApiKey: key,
           modelName: model,
           ...fields,
         },
         configuration
       )
+  }
+}
+
+export function getModelAPIKey(
+  name: string,
+  options: BaseCommandOptions
+) {
+  const [llm, model] = name.split(/\/(.*)/s)
+
+  if (!model) {
+    throw new Error(`Invalid model: ${name}`)
+  }
+
+  switch (llm) {
+    case 'huggingface':
+      return options.huggingFaceHubApiKey
+    case 'openai':
+    default:
+      return options.openAIApiKey
   }
 }
 

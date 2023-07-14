@@ -1,5 +1,4 @@
 import GPT3Tokenizer from 'gpt3-tokenizer'
-import config from '../../../config'
 import { DiffNode, FileChange } from '../../../types'
 import { Logger } from '../../../utils/logger'
 import { DiffTreeNode } from './createDiffTree'
@@ -11,7 +10,7 @@ export async function collectDiffs(
   node: DiffTreeNode,
   getFileDiff: (change: FileChange) => Promise<string>,
   tokenizer: GPT3Tokenizer,
-  logger: Logger = new Logger(config)
+  logger: Logger
 ): Promise<DiffNode> {
   // Collect diffs for the files of the current node
   const diffPromises = node.files.map(async (nodeFile) => {
@@ -35,7 +34,7 @@ export async function collectDiffs(
 
   // Collect diffs for the children of the current node
   const childrenPromises = Array.from(node.children.values()).map(async (child) =>
-    collectDiffs(child, getFileDiff, tokenizer)
+    collectDiffs(child, getFileDiff, tokenizer, logger)
   )
 
   const [diffs, children] = await Promise.all([

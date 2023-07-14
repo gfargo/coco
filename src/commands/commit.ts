@@ -1,43 +1,107 @@
 import { select, editor } from '@inquirer/prompts'
-import config from '../../lib/config'
-import { fileChangeParser } from '../../lib/parsers/default'
-import { logCommit, logSuccess } from '../../lib/ui'
-import { getTokenizer } from '../../lib/utils/getTokenizer'
-import { Logger } from '../../lib/utils/logger'
-import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
-import { getModel, getPrompt, validatePromptTemplate } from '../../lib/langchain/utils'
-import { llm } from '../../lib/langchain/chains/llm'
-import { noResult } from '../../lib/parsers/noResult'
-import { getChanges } from '../../lib/simple-git/getChanges'
-import { createCommit } from '../../lib/simple-git/createCommit'
+import { CommandBuilder } from 'yargs'
 import { simpleGit, SimpleGit } from 'simple-git'
-import { CommitOptions } from './options'
+import { loadConfig } from '../lib/config'
+import { fileChangeParser } from '../lib/parsers/default'
+import { logCommit, logSuccess } from '../lib/ui'
+import { getTokenizer } from '../lib/utils/getTokenizer'
+import { Logger } from '../lib/utils/logger'
+import { COMMIT_PROMPT } from '../lib/langchain/prompts/commitDefault'
+import { getModel, getModelAPIKey, getPrompt, validatePromptTemplate } from '../lib/langchain/utils'
+import { llm } from '../lib/langchain/chains/llm'
+import { noResult } from '../lib/parsers/noResult'
+import { getChanges } from '../lib/simple-git/getChanges'
+import { createCommit } from '../lib/simple-git/createCommit'
+import { BaseCommandOptions } from '../types'
 
 // const argv = loadArgv()
 const tokenizer = getTokenizer()
 const git: SimpleGit = simpleGit()
 
-export async function handler(options: CommitOptions) {
-  const logger = new Logger(config)
+export interface CommitOptions extends BaseCommandOptions {
+  interactive: boolean
+  tokenLimit: number
+  prompt: string
+  commit: boolean
+  summarizePrompt: string
+  openInEditor: boolean
+  ignoredFiles: string[]
+  ignoredExtensions: string[]
+}
 
-  if (!config.openAIApiKey) {
+export const command = ['commit','$0']
+export const description = 'Generate a commit message based on the diff summary'
+
+export const builder: CommandBuilder<CommitOptions> = {
+  model: { type: 'string', description: 'LLM/Model-Name' },
+  openAIApiKey: {
+    type: 'string',
+    description: 'OpenAI API Key',
+    conflicts: 'huggingFaceHubApiKey',
+  },
+  huggingFaceHubApiKey: {
+    type: 'string',
+    description: 'HuggingFace Hub API Key',
+    conflicts: 'openAIApiKey',
+  },
+  tokenLimit: { type: 'number', description: 'Token limit' },
+  prompt: {
+    type: 'string',
+    alias: 'p',
+    description: 'Commit message prompt',
+  },
+  i: {
+    type: 'boolean',
+    alias: 'interactive',
+    description: 'Toggle interactive mode',
+  },
+  s: {
+    type: 'boolean',
+    description: 'Automatically commit staged changes with generated commit message',
+    default: false,
+  },
+  e: {
+    type: 'boolean',
+    alias: 'edit',
+    description: 'Open commit message in editor before proceeding',
+  },
+  summarizePrompt: {
+    type: 'string',
+    description: 'Large file summary prompt',
+  },
+  ignoredFiles: {
+    type: 'array',
+    description: 'Ignored files',
+  },
+  ignoredExtensions: {
+    type: 'array',
+    description: 'Ignored extensions',
+  },
+}
+
+export async function handler(argv: any) {
+  const options = loadConfig(argv) as CommitOptions
+  const logger = new Logger(options)
+
+  const key = getModelAPIKey(options.model, options)
+
+  if (!key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
 
-  const model = getModel({
+  const model = getModel(options.model, key, {
     temperature: 0.4,
     maxConcurrency: 10,
-    openAIApiKey: config.openAIApiKey,
   })
 
-  const INTERACTIVE = config?.mode === 'interactive' || options.interactive
+  const INTERACTIVE = options?.mode === 'interactive' || options.interactive
 
   const { staged: changes } = await getChanges(git)
 
   let summary = ''
   let commitMsg = ''
-  let promptTemplate = config?.prompt || ''
+  let promptTemplate = options?.prompt || ''
   let modifyPrompt = false
 
   while (true) {
@@ -46,12 +110,13 @@ export async function handler(options: CommitOptions) {
         color: 'blue',
       })
 
-      summary = await fileChangeParser(changes, { tokenizer, git, model })
+      summary = await fileChangeParser(changes, { tokenizer, git, model, logger })
     }
 
     // Handle empty summary
     if (!summary.length) {
-      noResult({ git, logger })
+      await noResult({ git, logger })
+      process.exit(0)
     }
 
     // Prompt user for commit template prompt, if necessary
@@ -136,7 +201,7 @@ export async function handler(options: CommitOptions) {
       }
 
       if (reviewAnswer === 'edit') {
-        config.openInEditor = true
+        options.openInEditor = true
       }
 
       if (reviewAnswer === 'retryFull') {
@@ -159,7 +224,7 @@ export async function handler(options: CommitOptions) {
       }
     }
 
-    if (config.openInEditor) {
+    if (options.openInEditor) {
       commitMsg = await editor({
         message: 'Edit the commit message',
         default: commitMsg,
@@ -176,7 +241,7 @@ export async function handler(options: CommitOptions) {
     const MODE =
       (options.interactive && 'interactive') ||
       (options.commit && 'interactive') ||
-      config?.mode ||
+      options?.mode ||
       'stdout'
 
     // Handle resulting commit message

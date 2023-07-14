@@ -3,7 +3,6 @@ import { loadGitConfig } from './services/git'
 import { loadGitignore, loadIgnore } from './services/ignore'
 import { loadProjectConfig } from './services/project'
 import { loadXDGConfig } from './services/xdg'
-import { loadCmdLineFlags } from './services/yargs'
 import { Config } from './types'
 
 import { COMMIT_PROMPT } from '../langchain/prompts/commitDefault'
@@ -44,20 +43,15 @@ export const DEFAULT_CONFIG = {
  *
  * @returns {Config} application config
  **/
-export function loadConfig(): Config {
+export function loadConfig(argv = {}): Config {
   // Default config
   let config = DEFAULT_CONFIG
-
   config = loadGitignore(config)
   config = loadIgnore(config)
   config = loadXDGConfig(config)
   config = loadGitConfig(config)
   config = loadProjectConfig(config)
   config = loadEnvConfig(config)
-  config = loadCmdLineFlags(config)
-  return config
+
+  return { ...config, ...argv }
 }
-
-const config = loadConfig()
-
-export default config

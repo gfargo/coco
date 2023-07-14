@@ -1,6 +1,7 @@
 import GPT3Tokenizer from 'gpt3-tokenizer'
 import { getModel } from './langchain/utils'
 import { SimpleGit } from 'simple-git'
+import { Logger } from './utils/logger'
 
 export type FileChangeStatus =
   | 'modified'
@@ -42,6 +43,7 @@ export interface BaseParser {
       tokenizer: GPT3Tokenizer
       model: ReturnType<typeof getModel>,
       git: SimpleGit
+      logger: Logger
     }
   ): Promise<string>
 }
