@@ -1,5 +1,5 @@
 import { select, editor } from '@inquirer/prompts'
-import { CommandBuilder } from 'yargs'
+import { Argv, CommandBuilder } from 'yargs'
 import { simpleGit, SimpleGit } from 'simple-git'
 import { loadConfig } from '../lib/config/loadConfig'
 import { fileChangeParser } from '../lib/parsers/default'
@@ -79,7 +79,7 @@ export const builder: CommandBuilder<CommitOptions> = {
   },
 }
 
-export async function handler(argv: any) {
+export async function handler(argv: Argv<CommitOptions>["argv"]) {
   const options = loadConfig(argv) as CommitOptions
   const logger = new Logger(options)
 
