@@ -38,6 +38,7 @@ export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, mo
     maxTokens: MAX_TOKENS_PER_SUMMARY,
     textSplitter,
     chain: summarizationChain,
+    logger
   })
   logger.stopTimer(`\nSummary generated for ${changes.length} staged files`, { color: 'green' })
 

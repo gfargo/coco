@@ -2,7 +2,6 @@ import GPT3Tokenizer from 'gpt3-tokenizer'
 import { DirectoryDiff, DiffNode } from '../../../types'
 import pQueue from 'p-queue'
 import { Logger } from '../../../utils/logger'
-import config from '../../../config'
 import { getPathFromFilePath } from '../../../utils/getPathFromFilePath'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
 
@@ -91,6 +90,7 @@ const defaultOutputCallback = (group: DirectoryDiff) => {
 
 type SummarizeDiffsOptions = {
   tokenizer: GPT3Tokenizer
+  logger: Logger
   maxTokens: number
   handleOutput?: typeof defaultOutputCallback
 } & SummarizeContext
@@ -99,13 +99,13 @@ export async function summarizeDiffs(
   rootDiffNode: DiffNode,
   {
     tokenizer,
+    logger,
     maxTokens = 2048,
     textSplitter,
     chain,
     handleOutput = defaultOutputCallback,
   }: SummarizeDiffsOptions
 ): Promise<string> {
-  const logger = new Logger(config)
   const queue = new pQueue({ concurrency: 8 })
 
   logger.startTimer().startSpinner(`Organizing Diffs...`, { color: 'blue' })
