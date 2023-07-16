@@ -1,4 +1,4 @@
-import { loadConfig } from '../config'
+import { loadConfig } from './loadConfig'
 import * as fs from 'fs'
 
 jest.mock('fs')

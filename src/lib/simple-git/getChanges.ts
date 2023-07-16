@@ -4,7 +4,7 @@ import { minimatch } from 'minimatch'
 import { FileChange } from '../types'
 import { getStatus } from './getStatus'
 import { getSummaryText } from './getSummaryText'
-import { loadConfig } from '../config'
+import { loadConfig } from '../config/loadConfig'
 
 const config = loadConfig()
 

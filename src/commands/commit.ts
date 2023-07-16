@@ -1,7 +1,7 @@
 import { select, editor } from '@inquirer/prompts'
 import { CommandBuilder } from 'yargs'
 import { simpleGit, SimpleGit } from 'simple-git'
-import { loadConfig } from '../lib/config'
+import { loadConfig } from '../lib/config/loadConfig'
 import { fileChangeParser } from '../lib/parsers/default'
 import { logCommit, logSuccess } from '../lib/ui'
 import { getTokenizer } from '../lib/utils/getTokenizer'
