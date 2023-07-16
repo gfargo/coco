@@ -1,7 +1,5 @@
-import config from '../../config'
 import { BaseParser } from '../../types'
 import { summarizeDiffs } from './utils/summarizeDiffs'
-import { Logger } from '../../utils/logger'
 
 import { createDiffTree } from './utils/createDiffTree'
 import { collectDiffs } from './utils/collectDiffs'
@@ -11,9 +9,7 @@ import { getDiff } from '../../simple-git/getDiff'
 
 const MAX_TOKENS_PER_SUMMARY = 2048
 
-export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, model }) => {
-  const logger = new Logger(config)
-
+export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, model, logger }) => {
   const textSplitter = getTextSplitter({ chunkSize: 2000, chunkOverlap: 125, })
   const summarizationChain = getChain(model, {
     type: 'map_reduce',
@@ -42,6 +38,7 @@ export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, mo
     maxTokens: MAX_TOKENS_PER_SUMMARY,
     textSplitter,
     chain: summarizationChain,
+    logger
   })
   logger.stopTimer(`\nSummary generated for ${changes.length} staged files`, { color: 'green' })
 

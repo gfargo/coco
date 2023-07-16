@@ -43,7 +43,7 @@ export default {
     json(),
     preserveShebangs(),
     visualizer({
-      title: 'Commit-Copilot Rollup Visualizer',
+      title: 'git-coco rollup visualizer',
       filename: 'dist/stats.html',
       template: 'network',
       brotliSize: true,

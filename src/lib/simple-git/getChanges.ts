@@ -1,10 +1,12 @@
 import { SimpleGit } from 'simple-git'
 import path from 'path'
 import { minimatch } from 'minimatch'
-import config from '../config'
 import { FileChange } from '../types'
 import { getStatus } from './getStatus'
 import { getSummaryText } from './getSummaryText'
+import { loadConfig } from '../config/loadConfig'
+
+const config = loadConfig()
 
 const DEFAULT_IGNORED_FILES = config?.ignoredFiles?.length ? config.ignoredFiles : []
 const DEFAULT_IGNORED_EXTENSIONS = config?.ignoredExtensions?.length ? config.ignoredExtensions : []

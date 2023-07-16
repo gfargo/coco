@@ -8,16 +8,17 @@ import {
   RecursiveCharacterTextSplitterParams,
 } from 'langchain/text_splitter'
 import { ConfigurationParameters } from 'openai'
-import config from '../config'
+import { BaseCommandOptions } from '../../types'
 
 /**
  * Get LLM Model Based on Configuration
- *
  * @param fields
  * @param configuration
  * @returns LLM Model
  */
 export function getModel(
+  name: string,
+  key: string,
   fields?:
     | (Partial<OpenAIInput> &
         Partial<AzureOpenAIInput> &
@@ -27,17 +28,17 @@ export function getModel(
     | undefined,
   configuration?: ConfigurationParameters | undefined
 ): OpenAI | HuggingFaceInference {
-  const [llm, model] = config.model.split(/\/(.*)/s)
+  const [llm, model] = name.split(/\/(.*)/s)
 
   if (!model) {
-    throw new Error(`Invalid model: ${config.model}`)
+    throw new Error(`Invalid model: ${name}`)
   }
 
   switch (llm) {
     case 'huggingface':
       return new HuggingFaceInference({
         model: model,
-        apiKey: config.huggingFaceHubApiKey,
+        apiKey: key,
         maxConcurrency: 4,
         ...fields,
       })
@@ -45,7 +46,7 @@ export function getModel(
     default:
       return new OpenAI(
         {
-          openAIApiKey: config.openAIApiKey,
+          openAIApiKey: key,
           modelName: model,
           ...fields,
         },
@@ -54,12 +55,45 @@ export function getModel(
   }
 }
 
+/**
+ * Retrieve appropriate API key based on selected model
+ * @param name
+ * @param options
+ * @returns
+ */
+export function getModelAPIKey(name: string, options: BaseCommandOptions) {
+  const [llm, model] = name.split(/\/(.*)/s)
+
+  if (!model) {
+    throw new Error(`Invalid model: ${name}`)
+  }
+
+  switch (llm) {
+    case 'huggingface':
+      return options.huggingFaceHubApiKey
+    case 'openai':
+    default:
+      return options.openAIApiKey
+  }
+}
+
+/**
+ * Get Recursive Character Text Splitter
+ * @param options
+ * @returns
+ */
 export function getTextSplitter(
   options: Partial<RecursiveCharacterTextSplitterParams> = {}
 ): RecursiveCharacterTextSplitter {
   return new RecursiveCharacterTextSplitter(options)
 }
 
+/**
+ * Get Summarization Chain
+ * @param model
+ * @param options
+ * @returns
+ */
 export function getChain(
   model: ReturnType<typeof getModel>,
   options: SummarizationChainParams = { type: 'map_reduce' }
@@ -86,6 +120,12 @@ export function getPrompt({ template, variables, fallback }: CreatePromptInput) 
   ) as PromptTemplate
 }
 
+/**
+ * Verify  template string contains all required input variables
+ * @param text template string
+ * @param inputVariables template variables
+ * @returns boolean or error message
+ */
 export function validatePromptTemplate(text: string, inputVariables: string[]) {
   if (!text) {
     return 'Prompt template cannot be empty'
@@ -97,5 +137,6 @@ export function validatePromptTemplate(text: string, inputVariables: string[]) {
       inputVariables.map((value) => `{${value}}`).join(', ')
     )
   }
+
   return true
 }
