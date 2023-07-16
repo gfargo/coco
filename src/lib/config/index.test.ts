@@ -5,31 +5,6 @@ jest.mock('fs')
 jest.mock('os')
 jest.mock('path')
 jest.mock('ini')
-jest.mock('yargs', () => {
-  interface YargsMock {
-    argv: {
-      openAIApiKey: string
-      tokenLimit: number
-    }
-    options: jest.Mock<YargsMock, []>
-    parseSync: jest.Mock<YargsMock['argv']>
-  }
-
-  const yargsMock: YargsMock = {
-    argv: {
-      openAIApiKey: 'cmdLineApiKey',
-      tokenLimit: 450,
-    },
-    options: jest.fn(() => yargsMock),
-    parseSync: jest.fn(() => yargsMock.argv),
-  }
-
-  return jest.fn(() => yargsMock)
-})
-
-jest.mock('yargs/helpers', () => ({
-  hideBin: jest.fn((processArgv) => processArgv),
-}))
 
 const mockFs = fs as jest.Mocked<typeof fs>
 
@@ -72,7 +47,12 @@ describe('loadConfig', () => {
     process.env.OPENAI_API_KEY = 'envApiKey'
     process.env.COCO_TOKEN_LIMIT = '350'
 
-    const config = loadConfig()
+    const argv = {
+      openAIApiKey: 'cmdLineApiKey',
+      tokenLimit: 450,
+    }
+
+    const config = loadConfig(argv)
 
     // Check that the configuration is correctly combined
     expect(config.openAIApiKey).toBe('cmdLineApiKey') // cmd line flags should have the highest priority
