@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import yargs from 'yargs'
 import * as commit from './commands/commit'
+import { loadConfig } from './lib/config/loadConfig'
 
 yargs
   .scriptName('coco')
@@ -16,4 +17,4 @@ yargs
     description: 'Run with verbose logging',
   }).argv
 
-export { commit }
+export { commit, loadConfig }
