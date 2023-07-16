@@ -1,6 +1,6 @@
 {
   "name": "git-coco",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "zero-effort git commits with coco.",
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
