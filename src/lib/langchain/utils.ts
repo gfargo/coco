@@ -12,7 +12,6 @@ import { BaseCommandOptions } from '../../types'
 
 /**
  * Get LLM Model Based on Configuration
- *
  * @param fields
  * @param configuration
  * @returns LLM Model
@@ -56,10 +55,13 @@ export function getModel(
   }
 }
 
-export function getModelAPIKey(
-  name: string,
-  options: BaseCommandOptions
-) {
+/**
+ * Retrieve appropriate API key based on selected model
+ * @param name
+ * @param options
+ * @returns
+ */
+export function getModelAPIKey(name: string, options: BaseCommandOptions) {
   const [llm, model] = name.split(/\/(.*)/s)
 
   if (!model) {
@@ -75,12 +77,23 @@ export function getModelAPIKey(
   }
 }
 
+/**
+ * Get Recursive Character Text Splitter
+ * @param options
+ * @returns
+ */
 export function getTextSplitter(
   options: Partial<RecursiveCharacterTextSplitterParams> = {}
 ): RecursiveCharacterTextSplitter {
   return new RecursiveCharacterTextSplitter(options)
 }
 
+/**
+ * Get Summarization Chain
+ * @param model
+ * @param options
+ * @returns
+ */
 export function getChain(
   model: ReturnType<typeof getModel>,
   options: SummarizationChainParams = { type: 'map_reduce' }
@@ -107,6 +120,12 @@ export function getPrompt({ template, variables, fallback }: CreatePromptInput) 
   ) as PromptTemplate
 }
 
+/**
+ * Verify  template string contains all required input variables
+ * @param text template string
+ * @param inputVariables template variables
+ * @returns boolean or error message
+ */
 export function validatePromptTemplate(text: string, inputVariables: string[]) {
   if (!text) {
     return 'Prompt template cannot be empty'
@@ -118,5 +137,6 @@ export function validatePromptTemplate(text: string, inputVariables: string[]) {
       inputVariables.map((value) => `{${value}}`).join(', ')
     )
   }
+
   return true
 }
