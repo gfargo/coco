@@ -2,7 +2,7 @@ export interface Config {
   /**
    * The LLM model to use for generating results.
    * 
-   * @default 'openai/gpt-3.5-turbo'
+   * @default 'openai/gpt-4'
    * 
    * @example 'openai/gpt-4'
    * @example 'openai/gpt-3.5-turbo'

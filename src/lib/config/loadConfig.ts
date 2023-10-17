@@ -14,7 +14,7 @@ import { SUMMARIZE_PROMPT as SUMMARIZE_PROMPT } from '../langchain/prompts/summa
  * @type {Config}
  */
 export const DEFAULT_CONFIG = {
-  model: 'openai/gpt-3.5-turbo',
+  model: 'openai/gpt-4',
   verbose: false,
   tokenLimit: 1024,
   prompt: COMMIT_PROMPT.template,
