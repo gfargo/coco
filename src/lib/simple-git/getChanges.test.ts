@@ -32,7 +32,7 @@ describe('getChanges', () => {
   })
 
   it('should return file changes correctly', async () => {
-    const result = await getChanges(git)
+    const result = await getChanges({ git })
 
     expect(result).toEqual({
       staged: [
@@ -81,13 +81,13 @@ describe('getChanges', () => {
   })
 
   it('should filter ignored files and extensions', async () => {
-    const result = await getChanges(git, {
+    const result = await getChanges({git, options: {
       ignoredFiles: [
         '**/file4.txt', 
         'file3.txt'
       ],
       ignoredExtensions: ['.js'],
-    })
+    }})
 
     expect(result).toEqual({
       staged: [

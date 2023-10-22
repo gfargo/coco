@@ -7,7 +7,12 @@ import { logCommit, logSuccess } from '../lib/ui'
 import { getTokenizer } from '../lib/utils/getTokenizer'
 import { Logger } from '../lib/utils/logger'
 import { COMMIT_PROMPT } from '../lib/langchain/prompts/commitDefault'
-import { getModel, getModelAPIKey as getApiKeyForModel, getPrompt, validatePromptTemplate } from '../lib/langchain/utils'
+import {
+  getModel,
+  getModelAPIKey as getApiKeyForModel,
+  getPrompt,
+  validatePromptTemplate,
+} from '../lib/langchain/utils'
 import { llm } from '../lib/langchain/chains/llm'
 import { noResult } from '../lib/parsers/noResult'
 import { getChanges } from '../lib/simple-git/getChanges'
@@ -29,7 +34,7 @@ export interface CommitOptions extends BaseCommandOptions {
   ignoredExtensions: string[]
 }
 
-export const command = ['commit','$0']
+export const command = ['commit', '$0']
 export const description = 'Generate a commit message based on the diff summary'
 
 export const builder: CommandBuilder<CommitOptions> = {
@@ -79,7 +84,7 @@ export const builder: CommandBuilder<CommitOptions> = {
   },
 }
 
-export async function handler(argv: Argv<CommitOptions>["argv"]) {
+export async function handler(argv: Argv<CommitOptions>['argv']) {
   const options = loadConfig(argv) as CommitOptions
   const logger = new Logger(options)
 
