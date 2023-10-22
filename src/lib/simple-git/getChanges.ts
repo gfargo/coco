@@ -12,8 +12,11 @@ const DEFAULT_IGNORED_FILES = config?.ignoredFiles?.length ? config.ignoredFiles
 const DEFAULT_IGNORED_EXTENSIONS = config?.ignoredExtensions?.length ? config.ignoredExtensions : []
 
 export type GetChangesArgs = {
-  ignoredFiles?: string[]
-  ignoredExtensions?: string[]
+  git: SimpleGit
+  options?: {
+    ignoredFiles?: string[]
+    ignoredExtensions?: string[]
+  }
 }
 
 export type GetChangesResult = {
@@ -22,12 +25,9 @@ export type GetChangesResult = {
   untracked?: FileChange[]
 }
 
-export async function getChanges(
-  git: SimpleGit,
-  options: GetChangesArgs = {}
-): Promise<GetChangesResult> {
+export async function getChanges({ git, options }: GetChangesArgs): Promise<GetChangesResult> {
   const { ignoredFiles = DEFAULT_IGNORED_FILES, ignoredExtensions = DEFAULT_IGNORED_EXTENSIONS } =
-    options
+    options || {}
 
   const staged: FileChange[] = []
   const unstaged: FileChange[] = []
@@ -63,20 +63,31 @@ export async function getChanges(
     }
   })
 
-  const ignoredExtensionsSet = new Set(ignoredExtensions.map((extension) => extension.toLowerCase()))
+  const ignoredExtensionsSet = new Set(
+    ignoredExtensions.map((extension) => extension.toLowerCase())
+  )
   const filteredStaged = staged.filter((file) => {
     const extension = path.extname(file.filepath).toLowerCase()
-    return !ignoredExtensionsSet.has(extension) && !ignoredFiles.some(ignoredPattern => minimatch(file.filepath, ignoredPattern))
+    return (
+      !ignoredExtensionsSet.has(extension) &&
+      !ignoredFiles.some((ignoredPattern) => minimatch(file.filepath, ignoredPattern))
+    )
   })
 
   const filteredUnstaged = unstaged.filter((file) => {
     const extension = path.extname(file.filepath).toLowerCase()
-    return !ignoredExtensionsSet.has(extension) && !ignoredFiles.some(ignoredPattern => minimatch(file.filepath, ignoredPattern))
+    return (
+      !ignoredExtensionsSet.has(extension) &&
+      !ignoredFiles.some((ignoredPattern) => minimatch(file.filepath, ignoredPattern))
+    )
   })
 
   const filteredUntracked = untracked.filter((file) => {
     const extension = path.extname(file.filepath).toLowerCase()
-    return !ignoredExtensionsSet.has(extension) && !ignoredFiles.some(ignoredPattern => minimatch(file.filepath, ignoredPattern))
+    return (
+      !ignoredExtensionsSet.has(extension) &&
+      !ignoredFiles.some((ignoredPattern) => minimatch(file.filepath, ignoredPattern))
+    )
   })
 
   return {
