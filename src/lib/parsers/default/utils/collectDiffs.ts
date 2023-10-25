@@ -20,12 +20,12 @@ export async function collectDiffs(
     const tokenizedDiff = tokenizer.encode(diff).text
     const tokenCount = tokenizedDiff.length
 
-    logger.verbose(`Collected diff for ${nodeFile.filepath} (${tokenCount} tokens)`, {
+    logger.verbose(`Collected diff for ${nodeFile.filePath} (${tokenCount} tokens)`, {
       color: 'magenta',
     })
 
     return {
-      file: nodeFile.filepath,
+      file: nodeFile.filePath,
       summary: nodeFile.summary,
       diff,
       tokenCount,
