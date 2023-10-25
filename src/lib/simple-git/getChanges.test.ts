@@ -37,42 +37,42 @@ describe('getChanges', () => {
     expect(result).toEqual({
       staged: [
         {
-          filepath: 'file1.txt',
-          oldFilepath: 'oldFile.txt',
+          filePath: 'file1.txt',
+          oldFilePath: 'oldFile.txt',
           status: 'mockedStatus',
           summary: 'mockedSummary',
         },
         {
-          filepath: 'dir/file4.txt',
-          oldFilepath: undefined,
+          filePath: 'dir/file4.txt',
+          oldFilePath: undefined,
           status: 'mockedStatus',
           summary: 'mockedSummary',
         },
         {
-          filepath: 'dir/file5.js',
-          oldFilepath: undefined,
+          filePath: 'dir/file5.js',
+          oldFilePath: undefined,
           status: 'mockedStatus',
           summary: 'mockedSummary',
         },
       ],
       unstaged: [
         {
-          filepath: 'file1.txt',
-          oldFilepath: 'oldFile.txt',
+          filePath: 'file1.txt',
+          oldFilePath: 'oldFile.txt',
           status: 'mockedStatus',
           summary: 'mockedSummary',
         },
         {
-          filepath: 'file2.js',
-          oldFilepath: undefined,
+          filePath: 'file2.js',
+          oldFilePath: undefined,
           status: 'mockedStatus',
           summary: 'mockedSummary',
         },
       ],
       untracked: [
         {
-          filepath: 'file3.txt',
-          oldFilepath: undefined,
+          filePath: 'file3.txt',
+          oldFilePath: undefined,
           status: 'added',
           summary: 'mockedSummary',
         },
@@ -92,16 +92,16 @@ describe('getChanges', () => {
     expect(result).toEqual({
       staged: [
         {
-          filepath: 'file1.txt',
-          oldFilepath: 'oldFile.txt',
+          filePath: 'file1.txt',
+          oldFilePath: 'oldFile.txt',
           status: 'mockedStatus',
           summary: 'mockedSummary',
         },
       ],
       unstaged: [
         {
-          filepath: 'file1.txt',
-          oldFilepath: 'oldFile.txt',
+          filePath: 'file1.txt',
+          oldFilePath: 'oldFile.txt',
           status: 'mockedStatus',
           summary: 'mockedSummary',
         },

@@ -15,7 +15,7 @@ describe('getDiff', () => {
   } as unknown as SimpleGit
   const nodeFile: FileChange = {
     summary: 'test',
-    filepath: 'test.txt',
+    filePath: 'test.txt',
     status: 'modified' as FileChangeStatus,
   }
 
@@ -40,7 +40,7 @@ describe('getDiff', () => {
 +new content
 `);
     nodeFile.status = 'renamed';
-    nodeFile.oldFilepath = 'old.txt';
+    nodeFile.oldFilePath = 'old.txt';
     const result = await getDiff(nodeFile, { git, logger });
     expect(result).toBe('-old content\n+new content\n'); // Expecting the '\n' character as createTwoFilesPatch returns with a '\n' in the end
 });
@@ -49,7 +49,7 @@ it('should return message for renamed files when contents are same', async () =>
     (git.show as jest.MockedFunction<typeof git.show>).mockResolvedValueOnce('same content');
     (git.show as jest.MockedFunction<typeof git.show>).mockResolvedValueOnce('same content');
     nodeFile.status = 'renamed';
-    nodeFile.oldFilepath = 'old.txt';
+    nodeFile.oldFilePath = 'old.txt';
     const result = await getDiff(nodeFile, { git, logger });
     expect(result).toBe('File contents are unchanged.');
 });
@@ -63,7 +63,7 @@ it('should return message for renamed files when contents are same', async () =>
 
   it('should handle errors while comparing file contents for renamed files', async () => {
     nodeFile.status = 'renamed';
-    nodeFile.oldFilepath = 'old.txt';
+    nodeFile.oldFilePath = 'old.txt';
     (git.show as jest.MockedFunction<typeof git.show>).mockRejectedValueOnce(new Error('error'))
     const result = await getDiff(nodeFile, { git, logger })
     expect(result).toBe('Error comparing file contents.')

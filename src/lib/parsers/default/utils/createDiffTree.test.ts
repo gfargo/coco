@@ -14,7 +14,7 @@ describe('DiffTreeNode', () => {
     const node = new DiffTreeNode()
     const file: FileChange = {
       summary: 'added: test.txt',
-      filepath: 'test.txt',
+      filePath: 'test.txt',
       status: 'added',
     }
 
@@ -37,17 +37,17 @@ describe('createDiffTree', () => {
   const changes: FileChange[] = [
     {
       summary: 'added: src/test1.txt',
-      filepath: 'src/test1.txt',
+      filePath: 'src/test1.txt',
       status: 'added',
     },
     {
       summary: 'modified: src/test2.txt',
-      filepath: 'src/test2.txt',
+      filePath: 'src/test2.txt',
       status: 'modified',
     },
     {
       summary: 'deleted: src/utils/test3.txt',
-      filepath: 'src/utils/test3.txt',
+      filePath: 'src/utils/test3.txt',
       status: 'deleted',
     },
   ]

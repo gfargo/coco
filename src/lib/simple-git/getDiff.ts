@@ -13,17 +13,17 @@ const parseRenamedFileDiff = async (
   logger: Logger
 ): Promise<string> => {
   let result = ''
-  const oldFilepath = nodeFile?.oldFilePath || nodeFile.filePath
+  const oldFilePath = nodeFile?.oldFilePath || nodeFile.filePath
 
   try {
     const [headContent, indexContent] = await Promise.all([
-      git.show([`HEAD:${oldFilepath}`]),
+      git.show([`HEAD:${oldFilePath}`]),
       git.show([`:${nodeFile.filePath}`]),
     ])
 
     if (headContent !== indexContent) {
       result = createTwoFilesPatch(
-        oldFilepath,
+        oldFilePath,
         nodeFile.filePath,
         headContent,
         indexContent,
