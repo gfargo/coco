@@ -1,22 +1,18 @@
-import { select, editor } from '@inquirer/prompts'
 import { Argv, CommandBuilder } from 'yargs'
 import { simpleGit, SimpleGit } from 'simple-git'
 import { loadConfig } from '../lib/config/loadConfig'
-import { fileChangeParser } from '../lib/parsers/default'
-import { generateCommitMessageAndReviewLoop, handleResult, isInteractive, logCommit, logSuccess } from '../lib/ui'
+import {
+  generateCommitMessageAndReviewLoop,
+  handleResult,
+  isInteractive,
+} from '../lib/ui'
 import { getTokenizer } from '../lib/utils/getTokenizer'
 import { Logger } from '../lib/utils/logger'
-import { COMMIT_PROMPT } from '../lib/langchain/prompts/commitDefault'
 import {
   getModel,
   getModelAPIKey as getApiKeyForModel,
-  getPrompt,
-  validatePromptTemplate,
 } from '../lib/langchain/utils'
-import { llm } from '../lib/langchain/chains/llm'
-import { noResult } from '../lib/parsers/noResult'
 import { getChanges } from '../lib/simple-git/getChanges'
-import { createCommit } from '../lib/simple-git/createCommit'
 import { BaseCommandOptions } from '../types'
 
 // const argv = loadArgv()

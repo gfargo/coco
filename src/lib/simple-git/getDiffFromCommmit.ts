@@ -18,6 +18,7 @@ export async function getDiffForCommit(commitId: string,  {
   try {
     return await git.diff(['-p', `${commitId}^..${commitId}`])
   } catch (error) {
-    throw new Error(`Error fetching diff for commit ${commitId}: ${error.message}`)
+    throw new Error(`Error fetching diff for commit ${commitId}: ${(error as Error).message}`)
   }
 }
+

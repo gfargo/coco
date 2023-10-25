@@ -1,23 +1,18 @@
 import chalk from 'chalk'
 import { select, editor } from '@inquirer/prompts'
-import { Argv, CommandBuilder } from 'yargs'
-import { simpleGit, SimpleGit } from 'simple-git'
-import { loadConfig } from '../lib/config/loadConfig'
+import { type SimpleGit } from 'simple-git'
 import { fileChangeParser } from '../lib/parsers/default'
 import { getTokenizer } from '../lib/utils/getTokenizer'
 import { Logger } from '../lib/utils/logger'
 import { COMMIT_PROMPT } from '../lib/langchain/prompts/commitDefault'
 import {
   getModel,
-  getModelAPIKey as getApiKeyForModel,
   getPrompt,
   validatePromptTemplate,
 } from '../lib/langchain/utils'
 import { llm } from '../lib/langchain/chains/llm'
 import { noResult } from '../lib/parsers/noResult'
-import { getChanges } from '../lib/simple-git/getChanges'
 import { createCommit } from '../lib/simple-git/createCommit'
-import { BaseCommandOptions } from '../types'
 
 import { CommitOptions } from '../commands/commit'
 import { FileChange } from './types'
