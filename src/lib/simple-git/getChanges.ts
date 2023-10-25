@@ -37,8 +37,8 @@ export async function getChanges({ git, options }: GetChangesArgs): Promise<GetC
 
   status.files.forEach((file) => {
     const fileChange: Partial<FileChange> = {
-      filepath: file.path,
-      oldFilepath: status.renamed.filter((renamed) => renamed.to === file.path)[0]?.from,
+      filePath: file.path,
+      oldFilePath: status.renamed.filter((renamed) => renamed.to === file.path)[0]?.from,
     }
 
     // Unstaged files
@@ -67,26 +67,26 @@ export async function getChanges({ git, options }: GetChangesArgs): Promise<GetC
     ignoredExtensions.map((extension) => extension.toLowerCase())
   )
   const filteredStaged = staged.filter((file) => {
-    const extension = path.extname(file.filepath).toLowerCase()
+    const extension = path.extname(file.filePath).toLowerCase()
     return (
       !ignoredExtensionsSet.has(extension) &&
-      !ignoredFiles.some((ignoredPattern) => minimatch(file.filepath, ignoredPattern))
+      !ignoredFiles.some((ignoredPattern) => minimatch(file.filePath, ignoredPattern))
     )
   })
 
   const filteredUnstaged = unstaged.filter((file) => {
-    const extension = path.extname(file.filepath).toLowerCase()
+    const extension = path.extname(file.filePath).toLowerCase()
     return (
       !ignoredExtensionsSet.has(extension) &&
-      !ignoredFiles.some((ignoredPattern) => minimatch(file.filepath, ignoredPattern))
+      !ignoredFiles.some((ignoredPattern) => minimatch(file.filePath, ignoredPattern))
     )
   })
 
   const filteredUntracked = untracked.filter((file) => {
-    const extension = path.extname(file.filepath).toLowerCase()
+    const extension = path.extname(file.filePath).toLowerCase()
     return (
       !ignoredExtensionsSet.has(extension) &&
-      !ignoredFiles.some((ignoredPattern) => minimatch(file.filepath, ignoredPattern))
+      !ignoredFiles.some((ignoredPattern) => minimatch(file.filePath, ignoredPattern))
     )
   })
 

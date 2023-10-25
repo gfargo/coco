@@ -13,10 +13,11 @@ export type FileChangeStatus =
 
 export interface FileChange {
   summary: string
-  filepath: string
-  oldFilepath?: string
+  filePath: string
+  oldFilePath?: string
   status: FileChangeStatus
 }
+
 
 export interface FileDiff {
   file: string

@@ -31,7 +31,7 @@ export const createDiffTree = (changes: FileChange[]): DiffTreeNode => {
 
   for (const change of changes) {
     let currentParent = root
-    const parts = change.filepath.split('/')
+    const parts = change.filePath.split('/')
     parts.pop()
 
     for (const part of parts) {
@@ -47,8 +47,8 @@ export const createDiffTree = (changes: FileChange[]): DiffTreeNode => {
 
     // Create a NodeFile object and add it to the parent
     currentParent.addFile({
-      filepath: change.filepath,
-      oldFilepath: change.oldFilepath,
+      filePath: change.filePath,
+      oldFilePath: change.oldFilePath,
       summary: change.summary,
       status: change.status,
     })

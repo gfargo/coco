@@ -3,11 +3,11 @@ import { PromptTemplate } from 'langchain/prompts'
 import { SummarizationChainParams, loadSummarizationChain } from 'langchain/chains'
 import { BaseLLMParams } from 'langchain/llms/base'
 import { AzureOpenAIInput, OpenAIInput, OpenAI } from 'langchain/llms/openai'
+
 import {
   RecursiveCharacterTextSplitter,
   RecursiveCharacterTextSplitterParams,
 } from 'langchain/text_splitter'
-import { ConfigurationParameters } from 'openai'
 import { BaseCommandOptions } from '../../types'
 
 /**
@@ -19,14 +19,7 @@ import { BaseCommandOptions } from '../../types'
 export function getModel(
   name: string,
   key: string,
-  fields?:
-    | (Partial<OpenAIInput> &
-        Partial<AzureOpenAIInput> &
-        BaseLLMParams & {
-          configuration?: ConfigurationParameters | undefined
-        })
-    | undefined,
-  configuration?: ConfigurationParameters | undefined
+  fields?: (Partial<OpenAIInput> & Partial<AzureOpenAIInput> & BaseLLMParams) | undefined
 ): OpenAI | HuggingFaceInference {
   const [llm, model] = name.split(/\/(.*)/s)
 
@@ -44,14 +37,11 @@ export function getModel(
       })
     case 'openai':
     default:
-      return new OpenAI(
-        {
-          openAIApiKey: key,
-          modelName: model,
-          ...fields,
-        },
-        configuration
-      )
+      return new OpenAI({
+        openAIApiKey: key,
+        modelName: model,
+        ...fields,
+      })
   }
 }
 

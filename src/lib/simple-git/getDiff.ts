@@ -4,7 +4,7 @@ import { FileChange } from '../types'
 import { Logger } from '../utils/logger'
 
 const parseDefaultFileDiff = async (nodeFile: FileChange, git: SimpleGit): Promise<string> => {
-  return await git.diff(['--staged', nodeFile.filepath])
+  return await git.diff(['--staged', nodeFile.filePath])
 }
 
 const parseRenamedFileDiff = async (
@@ -13,18 +13,18 @@ const parseRenamedFileDiff = async (
   logger: Logger
 ): Promise<string> => {
   let result = ''
-  const oldFilepath = nodeFile?.oldFilepath || nodeFile.filepath
+  const oldFilepath = nodeFile?.oldFilePath || nodeFile.filePath
 
   try {
     const [headContent, indexContent] = await Promise.all([
       git.show([`HEAD:${oldFilepath}`]),
-      git.show([`:${nodeFile.filepath}`]),
+      git.show([`:${nodeFile.filePath}`]),
     ])
 
     if (headContent !== indexContent) {
       result = createTwoFilesPatch(
         oldFilepath,
-        nodeFile.filepath,
+        nodeFile.filePath,
         headContent,
         indexContent,
         '',
@@ -39,7 +39,7 @@ const parseRenamedFileDiff = async (
       result = 'File contents are unchanged.'
     }
   } catch (err) {
-    logger.verbose(`Error comparing file contents for ${nodeFile.filepath}`, { color: 'red' })
+    logger.verbose(`Error comparing file contents for ${nodeFile.filePath}`, { color: 'red' })
     result = 'Error comparing file contents.'
   }
   return result
@@ -59,7 +59,7 @@ export const getDiff = async (
     return 'This file has been deleted.'
   }
 
-  if (nodeFile.status === 'renamed' && nodeFile.oldFilepath) {
+  if (nodeFile.status === 'renamed' && nodeFile.oldFilePath) {
     const renamedDiff = await parseRenamedFileDiff(nodeFile, git, logger)
     return renamedDiff
   }
