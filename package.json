@@ -63,7 +63,7 @@
     "rollup-plugin-executable": "^1.6.3",
     "rollup-plugin-peer-deps-external": "^2.2.4",
     "rollup-plugin-preserve-shebangs": "^0.2.0",
-    "rollup-plugin-typescript2": "^0.35.0",
+    "rollup-plugin-typescript2": "^0.36.0",
     "rollup-plugin-visualizer": "^5.9.2",
     "ts-jest": "^29.1.0",
     "ts-node": "^10.9.1",
