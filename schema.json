@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "openAIApiKey": {
+      "type": "string",
+      "description": "Your OpenAI API key",
+      "default": null
+    },
+    "tokenLimit": {
+      "type": "number",
+      "description": "Maximum number of tokens for the commit message",
+      "default": 500
+    },
+    "verbose": {
+      "type": "boolean",
+      "description": "Verbose output",
+      "default": false
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Prompt for OpenAI GPT-3",
+      "default": "What are the changes in this commit?"
+    },
+    "temperature": {
+      "type": "number",
+      "description": "Controls randomness in GPT-3 output. Lower values yield focused output; higher values offer diversity",
+      "default": 0.4
+    },
+    "mode": {
+      "type": "string",
+      "description": "Preferred output method for generated commit messages",
+      "enum": ["stdout", "interactive"],
+      "default": "stdout"
+    },
+    "summarizePrompt": {
+      "type": "string",
+      "description": "GPT-3 prompt for summarizing large files",
+      "default": "Summarize the changes in this large file:"
+    },
+    "ignoredFiles": {
+      "type": "array",
+      "description": "Paths of files to be excluded when generating commit messages",
+      "items": {
+        "type": "string"
+      },
+      "default": ["package-lock.json"]
+    },
+    "ignoredExtensions": {
+      "type": "array",
+      "description": "File extensions to be excluded when generating commit messages",
+      "items": {
+        "type": "string"
+      },
+      "default": [".map", ".lock"]
+    }
+  },
+  "required": ["openAIApiKey"],
+  "additionalProperties": false
+}
