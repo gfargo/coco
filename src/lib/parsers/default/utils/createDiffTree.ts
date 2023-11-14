@@ -38,7 +38,7 @@ export class DiffTreeNode {
 
     if (this.children.size > 0) {
       output += `${indent}  Children:\n`;
-      for (const [part, child] of this.children) {
+      for (const [, child] of this.children) {
         output += child.print(indentation + 4);
       }
     }
