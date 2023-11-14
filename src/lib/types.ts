@@ -1,7 +1,7 @@
-import GPT3Tokenizer from 'gpt3-tokenizer'
 import { getModel } from './langchain/utils'
 import { SimpleGit } from 'simple-git'
 import { Logger } from './utils/logger'
+import { getTokenizer } from './utils/getTokenizer'
 
 export type FileChangeStatus =
   | 'modified'
@@ -36,15 +36,26 @@ export interface DirectoryDiff {
   summary?: string
   tokenCount: number
 }
-export interface BaseParser {
-  (
-    changes: FileChange[],
-    commit: '--staged' | string,
-    options: {
-      tokenizer: GPT3Tokenizer
-      model: ReturnType<typeof getModel>,
-      git: SimpleGit
-      logger: Logger
-    }
-  ): Promise<string>
+
+export interface BaseParserOptions {
+  tokenizer: ReturnType<typeof getTokenizer>
+  model: ReturnType<typeof getModel>
+  git: SimpleGit
+  logger: Logger
+}
+
+export interface BaseParserInput {
+  options: BaseParserOptions
+}
+
+export interface FileChangeParserInput extends BaseParserInput {
+  changes: FileChange[]
+  commit: '--staged' | string
+}
+
+export interface CommitLogParserInput extends BaseParserInput {
+  range: {
+    from: string
+    to: string
+  }
 }

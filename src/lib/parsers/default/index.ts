@@ -1,4 +1,4 @@
-import { BaseParser } from '../../types'
+import { FileChangeParserInput } from '../../types'
 import { summarizeDiffs } from './utils/summarizeDiffs'
 
 import { createDiffTree } from './utils/createDiffTree'
@@ -9,11 +9,11 @@ import { getDiff } from '../../simple-git/getDiff'
 
 const MAX_TOKENS_PER_SUMMARY = 2048
 
-export const fileChangeParser: BaseParser = async (
+export async function fileChangeParser({
   changes,
   commit,
-  { tokenizer, git, model, logger }
-) => {
+  options: { tokenizer, git, model, logger },
+}: FileChangeParserInput): Promise<string> {
   const textSplitter = getTextSplitter({ chunkSize: 2000, chunkOverlap: 125 })
   const summarizationChain = getChain(model, {
     type: 'map_reduce',

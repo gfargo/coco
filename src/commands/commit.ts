@@ -105,7 +105,11 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   }
 
   async function parser(changes: FileChange[]) {
-    return await fileChangeParser(changes, '--staged', { tokenizer, git, model, logger })
+    return await fileChangeParser({
+      changes,
+      commit: '--staged',
+      options: { tokenizer, git, model, logger },
+    })
   }
 
   const commitMsg = await generateAndReviewLoop({
