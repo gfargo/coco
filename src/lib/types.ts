@@ -18,7 +18,6 @@ export interface FileChange {
   status: FileChangeStatus
 }
 
-
 export interface FileDiff {
   file: string
   diff: string
@@ -40,6 +39,7 @@ export interface DirectoryDiff {
 export interface BaseParser {
   (
     changes: FileChange[],
+    commit: '--staged' | string,
     options: {
       tokenizer: GPT3Tokenizer
       model: ReturnType<typeof getModel>,

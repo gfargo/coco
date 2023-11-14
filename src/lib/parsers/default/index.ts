@@ -9,8 +9,12 @@ import { getDiff } from '../../simple-git/getDiff'
 
 const MAX_TOKENS_PER_SUMMARY = 2048
 
-export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, model, logger }) => {
-  const textSplitter = getTextSplitter({ chunkSize: 2000, chunkOverlap: 125, })
+export const fileChangeParser: BaseParser = async (
+  changes,
+  commit,
+  { tokenizer, git, model, logger }
+) => {
+  const textSplitter = getTextSplitter({ chunkSize: 2000, chunkOverlap: 125 })
   const summarizationChain = getChain(model, {
     type: 'map_reduce',
     combineMapPrompt: SUMMARIZE_PROMPT,
@@ -19,13 +23,13 @@ export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, mo
 
   logger.startTimer()
   const rootTreeNode = createDiffTree(changes)
-  logger.stopTimer('Created file hierarchy') 
+  logger.stopTimer('Created file hierarchy')
 
   // Collect diffs
   logger.startTimer().startSpinner(`Collecting Diffs...\n`, { color: 'blue' })
   const diffs = await collectDiffs(
     rootTreeNode,
-    (path) => getDiff(path, { git, logger }),
+    (path) => getDiff(path, commit, { git, logger }),
     tokenizer,
     logger
   )
@@ -38,10 +42,9 @@ export const fileChangeParser: BaseParser = async (changes, { tokenizer, git, mo
     maxTokens: MAX_TOKENS_PER_SUMMARY,
     textSplitter,
     chain: summarizationChain,
-    logger
+    logger,
   })
   logger.stopTimer(`\nSummary generated for ${changes.length} staged files`, { color: 'green' })
-
 
   return summary
 }
