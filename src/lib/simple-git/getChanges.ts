@@ -11,7 +11,7 @@ const config = loadConfig()
 const DEFAULT_IGNORED_FILES = config?.ignoredFiles?.length ? config.ignoredFiles : []
 const DEFAULT_IGNORED_EXTENSIONS = config?.ignoredExtensions?.length ? config.ignoredExtensions : []
 
-export type GetChangesArgs = {
+export type GetChangesInput = {
   git: SimpleGit
   options?: {
     ignoredFiles?: string[]
@@ -25,7 +25,7 @@ export type GetChangesResult = {
   untracked?: FileChange[]
 }
 
-export async function getChanges({ git, options }: GetChangesArgs): Promise<GetChangesResult> {
+export async function getChanges({ git, options }: GetChangesInput): Promise<GetChangesResult> {
   const { ignoredFiles = DEFAULT_IGNORED_FILES, ignoredExtensions = DEFAULT_IGNORED_EXTENSIONS } =
     options || {}
 

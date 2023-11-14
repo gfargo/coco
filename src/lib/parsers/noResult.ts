@@ -2,7 +2,12 @@ import { getChanges } from '../simple-git/getChanges'
 import { Logger } from '../utils/logger'
 import { SimpleGit } from 'simple-git'
 
-export const noResult = async ({ git, logger }: { git: SimpleGit; logger: Logger }) => {
+type NoResultInput = {
+  git: SimpleGit
+  logger: Logger
+}
+
+export async function noResult({ git, logger }: NoResultInput): Promise<void> {
   const { staged, unstaged, untracked } = await getChanges({ git })
   const hasStaged = staged && staged.length > 0
   const hasUnstaged = unstaged && unstaged.length > 0

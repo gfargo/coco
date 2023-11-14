@@ -13,7 +13,7 @@ const config = loadConfig()
 const DEFAULT_IGNORED_FILES = config?.ignoredFiles?.length ? config.ignoredFiles : []
 const DEFAULT_IGNORED_EXTENSIONS = config?.ignoredExtensions?.length ? config.ignoredExtensions : []
 
-export type GetChangeByCommitArgs = {
+export type GetChangeByCommitInput = {
   commit: string
   options: {
     git: SimpleGit
@@ -30,7 +30,7 @@ export async function getChangesByCommit({
     ignoredFiles = DEFAULT_IGNORED_FILES,
     ignoredExtensions = DEFAULT_IGNORED_EXTENSIONS,
   },
-}: GetChangeByCommitArgs): Promise<FileChange[]> {
+}: GetChangeByCommitInput): Promise<FileChange[]> {
   const changes: FileChange[] = []
 
   const diffSummary = await git.diffSummary([`${commit}^..${commit}`])
