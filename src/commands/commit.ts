@@ -1,19 +1,20 @@
 import { Argv, CommandBuilder } from 'yargs'
 import { simpleGit, SimpleGit } from 'simple-git'
 import { loadConfig } from '../lib/config/loadConfig'
-import {
-  generateCommitMessageAndReviewLoop,
-  handleResult,
-  isInteractive,
-} from '../lib/ui'
+
 import { getTokenizer } from '../lib/utils/getTokenizer'
 import { Logger } from '../lib/utils/logger'
-import {
-  getModel,
-  getModelAPIKey as getApiKeyForModel,
-} from '../lib/langchain/utils'
+import { getModel, getModelAPIKey as getApiKeyForModel, getPrompt } from '../lib/langchain/utils'
 import { getChanges } from '../lib/simple-git/getChanges'
 import { BaseCommandOptions } from '../types'
+import { FileChange } from '../lib/types'
+import { fileChangeParser } from '../lib/parsers/default'
+import { isInteractive } from '../lib/ui/helpers'
+import { generateAndReviewLoop } from '../lib/ui/generateAndReviewLoop'
+import { handleResult } from '../lib/ui/handleResult'
+import { noResult } from '../lib/parsers/noResult'
+import { COMMIT_PROMPT } from '../lib/langchain/prompts/commitDefault'
+import { executeChain } from '../lib/langchain/executeChain'
 
 // const argv = loadArgv()
 const tokenizer = getTokenizer()
@@ -98,23 +99,42 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
 
   const INTERACTIVE = isInteractive(options)
 
-  const { staged: changes } = await getChanges({ git })
+  async function factory() {
+    const changes = await getChanges({ git })
+    return changes.staged
+  }
 
-  const commitMsg = await generateCommitMessageAndReviewLoop(changes, {
-    logger,
-    model,
-    git,
-    tokenizer,
-    prompt: options.prompt,
-    interactive: INTERACTIVE,
-    openInEditor: options.openInEditor,
+  async function parser(changes: FileChange[]) {
+    return await fileChangeParser(changes, '--staged', { tokenizer, git, model, logger })
+  }
+
+  const commitMsg = await generateAndReviewLoop({
+    factory,
+    parser,
+    agent: async (context, options) => {
+      return await executeChain({
+        llm: model,
+        prompt: getPrompt({
+          template: options.prompt,
+          variables: COMMIT_PROMPT.inputVariables,
+          fallback: COMMIT_PROMPT,
+        }),
+        variables: { summary: context },
+      })
+    },
+    noResult: async () => {
+      await noResult({ git, logger })
+      process.exit(0)
+    },
+    options: {
+      ...options,
+      logger,
+      interactive: INTERACTIVE,
+    },
   })
 
   const MODE =
-    (options.interactive && 'interactive') ||
-    (options.commit && 'interactive') ||
-    options?.mode ||
-    'stdout'
+    (INTERACTIVE && 'interactive') || (options.commit && 'interactive') || options?.mode || 'stdout'
 
   handleResult(commitMsg, {
     mode: MODE as 'interactive' | 'stdout',
