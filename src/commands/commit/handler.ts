@@ -69,6 +69,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
     },
     options: {
       ...options,
+      prompt: options.prompt || COMMIT_PROMPT.template,
       logger,
       interactive: INTERACTIVE,
     },
