@@ -8,7 +8,7 @@ import {
   RecursiveCharacterTextSplitter,
   RecursiveCharacterTextSplitterParams,
 } from 'langchain/text_splitter'
-import { BaseCommandOptions } from '../../types'
+import { BaseCommandOptions } from '../../commands/types'
 
 /**
  * Get LLM Model Based on Configuration
@@ -51,7 +51,7 @@ export function getModel(
  * @param options
  * @returns
  */
-export function getModelAPIKey(name: string, options: BaseCommandOptions) {
+export function getApiKeyForModel(name: string, options: BaseCommandOptions) {
   const [llm, model] = name.split(/\/(.*)/s)
 
   if (!model) {

@@ -5,8 +5,8 @@ import { loadProjectConfig } from './services/project'
 import { loadXDGConfig } from './services/xdg'
 import { Config } from './types'
 
-import { COMMIT_PROMPT } from '../langchain/prompts/commitDefault'
 import { SUMMARIZE_PROMPT as SUMMARIZE_PROMPT } from '../langchain/prompts/summarize'
+import { COMMIT_PROMPT } from '../langchain/prompts/commitDefault'
 
 /**
  * Default Config

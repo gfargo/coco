@@ -1,10 +1,10 @@
 import { LLMChain, LLMChainInput } from 'langchain/chains'
 
-type LLMInput = {
+type ExecuteChainInput = {
   variables: Record<string, unknown>
 } & LLMChainInput
 
-export const llm = async ({ llm, prompt, variables }: LLMInput) => {
+export const executeChain = async ({ llm, prompt, variables }: ExecuteChainInput) => {
   if (!llm || !prompt || !variables) {
     throw new Error('The input parameters "llm", "prompt", and "variables" are all required.')
   }

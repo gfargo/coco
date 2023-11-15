@@ -24,6 +24,27 @@ export class DiffTreeNode {
   getPath(): string {
     return this.path.join('/')
   }
+
+  print(indentation = 0): string {
+    const indent = ' '.repeat(indentation);
+    let output = `${indent}- Path: ${this.getPath()}\n`;
+
+    if (this.files.length > 0) {
+      output += `${indent}  Files:\n`;
+      for (const file of this.files) {
+        output += `${indent}    - ${file.summary}\n`;
+      }
+    }
+
+    if (this.children.size > 0) {
+      output += `${indent}  Children:\n`;
+      for (const [, child] of this.children) {
+        output += child.print(indentation + 4);
+      }
+    }
+
+    return output;
+  }
 }
 
 export const createDiffTree = (changes: FileChange[]): DiffTreeNode => {
