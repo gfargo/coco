@@ -3,25 +3,24 @@ import { createTwoFilesPatch } from 'diff'
 import { FileChange } from '../types'
 import { Logger } from '../utils/logger'
 
-const parseDefaultFileDiff = async (
+async function parseDefaultFileDiff(
   nodeFile: FileChange,
   commit = '--staged',
   git: SimpleGit
-): Promise<string> => {
-
-  if(commit !== '--staged') {
-    return await git.diff([`${commit}~1..${commit}`, '--', nodeFile.filePath]);
+): Promise<string> {
+  if (commit !== '--staged') {
+    return await git.diff([`${commit}~1..${commit}`, '--', nodeFile.filePath])
   }
 
   return await git.diff([commit, nodeFile.filePath])
 }
 
-const parseRenamedFileDiff = async (
+async function parseRenamedFileDiff(
   nodeFile: FileChange,
   commit: string,
   git: SimpleGit,
   logger: Logger
-): Promise<string> => {
+): Promise<string> {
   let result = ''
   const oldFilePath = nodeFile?.oldFilePath || nodeFile.filePath
 
@@ -69,7 +68,7 @@ const parseRenamedFileDiff = async (
   return result
 }
 
-export const getDiff = async (
+export async function getDiff(
   nodeFile: FileChange,
   commit: string,
   {
@@ -79,7 +78,7 @@ export const getDiff = async (
     git: SimpleGit
     logger: Logger
   }
-): Promise<string> => {
+): Promise<string> {
   if (nodeFile.status === 'deleted') {
     return 'This file has been deleted.'
   }

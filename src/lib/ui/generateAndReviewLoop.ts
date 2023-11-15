@@ -12,6 +12,7 @@ export type GenerateReviewLoopOptions = {
 }
 
 export type GenerateReviewLoopInput<T> = {
+  label: string
   factory: () => Promise<T[]>
   parser: (changes: T[], commit: string, options: GenerateReviewLoopOptions) => Promise<string>
   noResult: (options: GenerateReviewLoopOptions) => Promise<void>
@@ -20,6 +21,7 @@ export type GenerateReviewLoopInput<T> = {
 }
 
 export async function generateAndReviewLoop<T>({
+  label,
   factory,
   parser,
   noResult,
@@ -53,14 +55,14 @@ export async function generateAndReviewLoop<T>({
       options.prompt = await editPrompt(options)
     }
 
-    logger.startTimer().startSpinner(`Generating Message\n`, {
+    logger.startTimer().startSpinner(`Generating ${label}\n`, {
       color: 'blue',
     })
 
     result = await agent(context, options)
 
     if (!result) {
-      logger.stopSpinner('💀 Agent failed to generate message.', {
+      logger.stopSpinner('💀 Agent failed to return content.', {
         mode: 'fail',
         color: 'red',
       })
@@ -68,7 +70,7 @@ export async function generateAndReviewLoop<T>({
     }
 
     logger
-      .stopSpinner('Generated Commit Message', {
+      .stopSpinner(`Generated ${label}`, {
         color: 'green',
         mode: 'succeed',
       })

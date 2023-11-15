@@ -1,27 +1,23 @@
-import { fileChangeParser } from '../../lib/parsers/default'
-import { getTokenizer } from '../../lib/utils/getTokenizer'
 import { Logger } from '../../lib/utils/logger'
-import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
 import { getApiKeyForModel, getModel, getPrompt } from '../../lib/langchain/utils'
-import { noResult } from '../../lib/parsers/noResult'
-import { getChanges } from '../../lib/simple-git/getChanges'
 import { simpleGit, SimpleGit } from 'simple-git'
-import { CommitOptions } from './options'
 import { Argv } from 'yargs'
 import { loadConfig } from '../../lib/config/loadConfig'
 import { isInteractive } from '../../lib/ui/helpers'
-import { FileChange } from '../../lib/types'
+import { ChangelogOptions } from './options'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { executeChain } from '../../lib/langchain/executeChain'
+import { noResult } from '../../lib/parsers/noResult'
 import { handleResult } from '../../lib/ui/handleResult'
+import { CHANGELOG_PROMPT } from '../../lib/langchain/prompts/changelog'
+import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
 
-const tokenizer = getTokenizer()
 const git: SimpleGit = simpleGit()
 
-export async function handler(argv: Argv<CommitOptions>['argv']) {
-  const options = loadConfig(argv) as CommitOptions
+export async function handler(argv: Argv<ChangelogOptions>['argv']) {
+  const options = loadConfig(argv) as ChangelogOptions
   const logger = new Logger(options)
-  
+
   const key = getApiKeyForModel(options.model, options)
 
   if (!key) {
@@ -36,31 +32,37 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
 
   const INTERACTIVE = isInteractive(options)
 
+  const [from, to] = options.range?.split(':')
+
+  if (!from || !to) {
+    logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
+    process.exit(1)
+  }
+
   async function factory() {
-    const changes = await getChanges({ git })
-    return changes.staged
+    const messages = await getCommitLogRange(from, to, { git, noMerges: true })
+    return messages
   }
 
-  async function parser(changes: FileChange[]) {
-    return await fileChangeParser({
-      changes,
-      commit: '--staged',
-      options: { tokenizer, git, model, logger },
-    })
+  async function parser(messages: string[]) {
+    const result = messages.join('\n')
+    return result
   }
 
-  const commitMsg = await generateAndReviewLoop({
-    label: 'Commit Message',
+  const changelogMsg = await generateAndReviewLoop({
+    label: 'Changelog',
     factory,
     parser,
     agent: async (context, options) => {
+      const prompt = getPrompt({
+        template: options.prompt,
+        variables: CHANGELOG_PROMPT.inputVariables,
+        fallback: CHANGELOG_PROMPT,
+      })
+
       return await executeChain({
         llm: model,
-        prompt: getPrompt({
-          template: options.prompt,
-          variables: COMMIT_PROMPT.inputVariables,
-          fallback: COMMIT_PROMPT,
-        }),
+        prompt,
         variables: { summary: context },
       })
     },
@@ -70,7 +72,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
     },
     options: {
       ...options,
-      prompt: options.prompt || COMMIT_PROMPT.template,
+      prompt: options.prompt || CHANGELOG_PROMPT.template,
       logger,
       interactive: INTERACTIVE,
     },
@@ -79,7 +81,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   const MODE =
     (INTERACTIVE && 'interactive') || (options.commit && 'interactive') || options?.mode || 'stdout'
 
-  handleResult(commitMsg, {
+  handleResult(changelogMsg, {
     mode: MODE as 'interactive' | 'stdout',
     git,
   })

@@ -5,8 +5,7 @@ import { loadProjectConfig } from './services/project'
 import { loadXDGConfig } from './services/xdg'
 import { Config } from './types'
 
-import { SUMMARIZE_PROMPT as SUMMARIZE_PROMPT } from '../langchain/prompts/summarize'
-import { COMMIT_PROMPT } from '../langchain/prompts/commitDefault'
+import { SUMMARIZE_PROMPT } from '../langchain/prompts/summarize'
 
 /**
  * Default Config
@@ -17,11 +16,9 @@ export const DEFAULT_CONFIG = {
   model: 'openai/gpt-4',
   verbose: false,
   tokenLimit: 1024,
-  prompt: COMMIT_PROMPT.template,
   summarizePrompt: SUMMARIZE_PROMPT.template,
   temperature: 0.4,
   mode: 'stdout',
-
   ignoredFiles: ['package-lock.json'],
   ignoredExtensions: ['.map', '.lock'],
 } as Config
