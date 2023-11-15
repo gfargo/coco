@@ -10,33 +10,9 @@ import { executeChain } from '../../lib/langchain/executeChain'
 import { noResult } from '../../lib/parsers/noResult'
 import { handleResult } from '../../lib/ui/handleResult'
 import { CHANGELOG_PROMPT } from '../../lib/langchain/prompts/changelog'
- 
+import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
+
 const git: SimpleGit = simpleGit()
-
-async function getCommitMessagesBetween(
-  git: SimpleGit,
-  fromCommit: string,
-  toCommit: string
-): Promise<string[]> {
-  try {
-    // Using the 'raw' method to execute the 'git log' command with the desired options.
-    const output = await git.raw([
-      'log',
-      `${fromCommit}..${toCommit}`,
-      '--pretty=format:%s', // This tells git to output only the commit messages.
-      // You could also include '--no-merges' here if you want to exclude merge commits.
-    ])
-
-    // The 'output' will be a string with each commit message on a new line.
-    // Split the output by new lines to create an array of commit messages.
-    const messages = output.split('\n').filter(Boolean) // filter(Boolean) removes any empty strings
-    return messages
-  } catch (error) {
-    // If there's an error, handle it appropriately
-    console.error('Error getting commit messages:', error)
-    throw error
-  }
-}
 
 export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   const options = loadConfig(argv) as ChangelogOptions
@@ -56,12 +32,14 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
 
   const INTERACTIVE = isInteractive(options)
 
+  console.log('options range', options.range)
+
   async function factory() {
-    const messages = await getCommitMessagesBetween(
+    const messages = await getCommitLogRange({
       git,
-      '00427c6d0ba35159caa4f0fdf90738e463b8ec88',
-      'HEAD'
-    )
+      from: '00427c6d0ba35159caa4f0fdf90738e463b8ec88',
+      to: 'HEAD',
+    })
     return messages
   }
 
