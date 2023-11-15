@@ -50,6 +50,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   }
 
   const commitMsg = await generateAndReviewLoop({
+    label: 'Commit Message',
     factory,
     parser,
     agent: async (context, options) => {
