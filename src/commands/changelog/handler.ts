@@ -32,22 +32,25 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
 
   const INTERACTIVE = isInteractive(options)
 
-  console.log('options range', options.range)
+  const [from, to] = options.range?.split(':')
+
+  if (!from || !to) {
+    logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
+    process.exit(1)
+  }
 
   async function factory() {
-    const messages = await getCommitLogRange({
-      git,
-      from: '00427c6d0ba35159caa4f0fdf90738e463b8ec88',
-      to: 'HEAD',
-    })
+    const messages = await getCommitLogRange(from, to, { git, noMerges: true })
     return messages
   }
 
   async function parser(messages: string[]) {
-    return messages.join('\n')
+    const result = messages.join('\n')
+    return result
   }
 
   const changelogMsg = await generateAndReviewLoop({
+    label: 'Changelog',
     factory,
     parser,
     agent: async (context, options) => {
@@ -56,8 +59,6 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
         variables: CHANGELOG_PROMPT.inputVariables,
         fallback: CHANGELOG_PROMPT,
       })
-
-      console.log('prompt', { options, prompt })
 
       return await executeChain({
         llm: model,
