@@ -25,7 +25,7 @@ describe('getDiff', () => {
 
   it('should return deleted message for deleted files', async () => {
     nodeFile.status = 'deleted'
-    const result = await getDiff(nodeFile, { git, logger })
+    const result = await getDiff(nodeFile, '--staged', { git, logger })
     expect(result).toBe('This file has been deleted.')
   })
 
@@ -41,7 +41,7 @@ describe('getDiff', () => {
 `);
     nodeFile.status = 'renamed';
     nodeFile.oldFilePath = 'old.txt';
-    const result = await getDiff(nodeFile, { git, logger });
+    const result = await getDiff(nodeFile, '--staged', { git, logger });
     expect(result).toBe('-old content\n+new content\n'); // Expecting the '\n' character as createTwoFilesPatch returns with a '\n' in the end
 });
 
@@ -50,14 +50,14 @@ it('should return message for renamed files when contents are same', async () =>
     (git.show as jest.MockedFunction<typeof git.show>).mockResolvedValueOnce('same content');
     nodeFile.status = 'renamed';
     nodeFile.oldFilePath = 'old.txt';
-    const result = await getDiff(nodeFile, { git, logger });
+    const result = await getDiff(nodeFile, '--staged', { git, logger });
     expect(result).toBe('File contents are unchanged.');
 });
 
   it('should return diff for other files', async () => {
     (git.diff as jest.MockedFunction<typeof git.diff>).mockResolvedValueOnce('diff')
     nodeFile.status = 'modified'
-    const result = await getDiff(nodeFile, { git, logger })
+    const result = await getDiff(nodeFile, '--staged', { git, logger })
     expect(result).toBe('diff')
   })
 
@@ -65,7 +65,7 @@ it('should return message for renamed files when contents are same', async () =>
     nodeFile.status = 'renamed';
     nodeFile.oldFilePath = 'old.txt';
     (git.show as jest.MockedFunction<typeof git.show>).mockRejectedValueOnce(new Error('error'))
-    const result = await getDiff(nodeFile, { git, logger })
+    const result = await getDiff(nodeFile, '--staged', { git, logger })
     expect(result).toBe('Error comparing file contents.')
     expect(logger.verbose).toHaveBeenCalled()
   })
