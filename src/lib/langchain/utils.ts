@@ -8,7 +8,7 @@ import {
   RecursiveCharacterTextSplitter,
   RecursiveCharacterTextSplitterParams,
 } from 'langchain/text_splitter'
-import { BaseCommandOptions } from '../../types'
+import { BaseCommandOptions } from '../../commands/types'
 
 /**
  * Get LLM Model Based on Configuration

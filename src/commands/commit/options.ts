@@ -1,5 +1,5 @@
 import { Options, Argv } from 'yargs'
-import { BaseCommandOptions } from '../../types'
+import { BaseCommandOptions } from '../types'
 
 export interface CommitOptions extends BaseCommandOptions {
   prompt: string

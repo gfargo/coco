@@ -1,4 +1,4 @@
-import { Config } from './lib/config/types'
+import { Config } from '../lib/config/types'
 
 interface BaseArgvOptions {
   interactive: boolean
