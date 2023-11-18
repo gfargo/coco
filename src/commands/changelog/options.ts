@@ -19,7 +19,6 @@ export const options = {
     type: 'string',
     alias: 'r',
     description: 'Commit range e.g `HEAD~2:HEAD`',
-    demandOption: true,
   },
   model: { type: 'string', description: 'LLM/Model-Name' },
   openAIApiKey: {
