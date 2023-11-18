@@ -86,4 +86,11 @@ export interface Config {
    * @default ['.map', '.lock']
    */
   ignoredExtensions?: string[]
+
+  /**
+   * Default git branch for the repository.
+   * 
+   * @default 'main'
+   */
+  defaultBranch?: string
 }

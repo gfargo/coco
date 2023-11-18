@@ -21,6 +21,7 @@ export const DEFAULT_CONFIG = {
   mode: 'stdout',
   ignoredFiles: ['package-lock.json'],
   ignoredExtensions: ['.map', '.lock'],
+  defaultBranch: 'main',
 } as Config
 
 /**
