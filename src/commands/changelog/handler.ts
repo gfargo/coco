@@ -45,7 +45,7 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
     }
 
     logger.verbose(`No range provided. Defaulting to current branch`, { color: 'yellow' })
-    return await getCommitLogCurrentBranch({ git })
+    return await getCommitLogCurrentBranch({ git, logger })
   }
 
   async function parser(messages: string[]) {
