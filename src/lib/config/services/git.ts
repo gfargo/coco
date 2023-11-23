@@ -29,6 +29,7 @@ export function loadGitConfig(config: Config): Config {
         gitConfigParsed.coco?.summarizePrompt || config.summarizePrompt,
       ignoredFiles: gitConfigParsed.coco?.ignoredFiles || config.ignoredFiles,
       ignoredExtensions: gitConfigParsed.coco?.ignoredExtensions || config.ignoredExtensions,
+      defaultBranch: gitConfigParsed.coco?.defaultBranch || config.defaultBranch,
     }
   }
   return config
