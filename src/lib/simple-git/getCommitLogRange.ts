@@ -7,8 +7,6 @@ export async function getCommitLogRange(
   to: string,
   { noMerges, git }: GetCommitLogRangeOptions
 ): Promise<string[]> {
-  console.log('getCommitLogRange', { from, to })
-
   try {
     const logOptions = { from: `${from}^1`, to, '--no-merges': noMerges } as
       | TaskOptions
@@ -16,8 +14,6 @@ export async function getCommitLogRange(
       | undefined
 
     const commitLog = await git.log(logOptions)
-
-    console.log('commitLog', { commitLog })
 
     return commitLog.all.map(
       ({ message, date, body, author_name }) =>
