@@ -53,6 +53,11 @@
         "type": "string"
       },
       "default": [".map", ".lock"]
+    },
+    "defaultBranch": {
+      "type": "string",
+      "description": "Default branch for the repository",
+      "default": "main"
     }
   },
   "required": ["openAIApiKey"],

@@ -7,10 +7,10 @@ import { isInteractive } from '../../lib/ui/helpers'
 import { ChangelogOptions } from './options'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { executeChain } from '../../lib/langchain/executeChain'
-import { noResult } from '../../lib/parsers/noResult'
 import { handleResult } from '../../lib/ui/handleResult'
 import { CHANGELOG_PROMPT } from '../../lib/langchain/prompts/changelog'
 import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
+import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 
 const git: SimpleGit = simpleGit()
 
@@ -32,16 +32,20 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
 
   const INTERACTIVE = isInteractive(options)
 
-  const [from, to] = options.range?.split(':')
-
-  if (!from || !to) {
-    logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
-    process.exit(1)
-  }
-
   async function factory() {
-    const messages = await getCommitLogRange(from, to, { git, noMerges: true })
-    return messages
+    if (options.range) {
+      const [from, to] = options.range?.split(':')
+
+      if (!from || !to) {
+        logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
+        process.exit(1)
+      }
+
+      return await getCommitLogRange(from, to, { git, noMerges: true })
+    }
+
+    logger.verbose(`No range provided. Defaulting to current branch`, { color: 'yellow' })
+    return await getCommitLogCurrentBranch({ git })
   }
 
   async function parser(messages: string[]) {
@@ -67,7 +71,12 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
       })
     },
     noResult: async () => {
-      await noResult({ git, logger })
+      if (options.range) {
+        logger.log(`No commits found in the provided range.`, { color: 'red' })
+        process.exit(0)
+      }
+
+      logger.log(`No commits found in the current branch.`, { color: 'red' })
       process.exit(0)
     },
     options: {

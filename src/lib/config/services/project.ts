@@ -8,6 +8,7 @@ import { Config } from '../types'
  * @returns {Config} Updated config
  **/
 export function loadProjectConfig(config: Config): Config {
+  // TODO: Add validation based of JSON schema?
   if (fs.existsSync('.coco.config.json')) {
     const projectConfig = JSON.parse(fs.readFileSync('.coco.config.json', 'utf-8')) as Config
     config = { ...config, ...projectConfig }

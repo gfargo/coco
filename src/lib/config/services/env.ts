@@ -24,6 +24,7 @@ export function loadEnvConfig(config: Config): Config {
     ignoredExtensions: process.env.COCO_IGNORED_EXTENSIONS
       ? process.env.COCO_IGNORED_EXTENSIONS.split(',')
       : undefined,
+    defaultBranch: process.env.COCO_DEFAULT_BRANCH || undefined,
   }
 
   config = { ...config, ...removeUndefined(envConfig) }
