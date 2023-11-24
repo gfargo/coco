@@ -3,7 +3,7 @@ import * as os from 'os'
 import * as path from 'path'
 import * as ini from 'ini'
 import { Config } from '../types'
-import inquirer from 'inquirer'
+import { updateFileSection } from '../../utils/updateFileSection'
 
 /**
  * Load git profile config (from ~/.gitconfig)
@@ -48,79 +48,26 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
   }
 
   const startComment = '# -- Start coco config --'
-  const header = '[coco]'
   const endComment = '# -- End coco config --'
-  const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/)
-  const newLines = []
-  let foundCocoSection = false
+  const header = '[coco]'
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-
-    if (line.trim() === startComment) {
-      foundCocoSection = true
-
-      // Prompt for confirmation to overwrite
-      const { confirm } = await inquirer.prompt({
-        type: 'confirm',
-        name: 'confirm',
-        message: 'hmm, looks like a config already exists. would you like to overwrite it?',
-      })
-
-      if (!confirm) {
-        // keep all lines until the end comment
-        while (i < lines.length && lines[i].trim() !== endComment) {
-          newLines.push(lines[i])
-          i++
-        }
-        newLines.push(endComment)
-        continue
-      }
-
-      newLines.push(startComment)
-      newLines.push(header)
-      for (const key in config) {
-        // check if string has new lines, if so, wrap in quotes
-        if (typeof config[key as keyof Config] === 'string') {
-          const value = config[key as keyof Config] as string
-          if (value.includes('\n')) {
-            newLines.push(`\t${key} = ${JSON.stringify(value)}`)
-            continue
-          }
-        }
-        newLines.push(`\t${key} = ${config[key as keyof Config]}`)
-      }
-
-      while (i < lines.length && lines[i].trim() !== endComment) {
-        i++
-      }
-
-      newLines.push(endComment)
-      continue
-    }
-
-    if (!foundCocoSection || line.trim() !== endComment) {
-      newLines.push(line)
-    }
-  }
-
-  // If coco section comments weren't found, append them to the end
-  if (!foundCocoSection) {
-    newLines.push('\n' + startComment)
-    newLines.push(header)
+  // Function to generate new content for the coco section
+  const getNewContent = async () => {
+    const contentLines = [header]
     for (const key in config) {
       // check if string has new lines, if so, wrap in quotes
       if (typeof config[key as keyof Config] === 'string') {
         const value = config[key as keyof Config] as string
         if (value.includes('\n')) {
-          newLines.push(`\t${key} = ${JSON.stringify(value)}`)
+          contentLines.push(`\t${key} = ${JSON.stringify(value)}`)
           continue
         }
       }
-      newLines.push(`\t${key} = ${config[key as keyof Config]}`)
+      contentLines.push(`\t${key} = ${config[key as keyof Config]}`)
     }
-    newLines.push(endComment)
+    return contentLines.join('\n')
   }
 
-  fs.writeFileSync(filePath, newLines.join('\n'))
+  // Use the updateFileSection utility
+  await updateFileSection(filePath, startComment, endComment, getNewContent)
 }

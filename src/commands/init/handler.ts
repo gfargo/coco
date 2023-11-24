@@ -12,6 +12,7 @@ import { loadConfig } from '../../lib/config/loadConfig'
 import { Logger } from '../../lib/utils/logger'
 import { logResult } from '../../lib/ui/logResult'
 import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
+import { appendToProjectConfig } from '../../lib/config/services/project'
 
 const handleProjectLevelConfig = async () => {
   const { projectConfiguration } = await inquirer.prompt({
@@ -45,16 +46,16 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
     type: 'list',
     name: 'level',
     message: 'configure coco at the system or project level:',
-    choices: ['System', 'Project'],
+    choices: ['system', 'project'],
   })
 
   let configFilePath = ''
 
   switch (level) {
-    case 'System':
+    case 'system':
       configFilePath = await handleSystemLevelConfig()
       break
-    case 'Project':
+    case 'project':
       configFilePath = await handleProjectLevelConfig()
       break
     default:
@@ -71,7 +72,6 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
     {
       type: 'password',
       name: 'apiKey',
-      // message: `Enter your ${llm} API key:`,
       message: `enter your OpenAI API key:`,
       validate(input) {
         return input.length > 0 ? true : 'API key cannot be empty'
@@ -167,7 +167,6 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   // add to config after logging, so that the API key is not logged
   config.openAIApiKey = apiKey
 
-  // Verify answers before proceeding
   const { confirm } = await inquirer.prompt({
     type: 'confirm',
     name: 'confirm',
@@ -178,9 +177,9 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
     if (configFilePath.endsWith('.gitconfig')) {
       await appendToGitConfig(configFilePath, config)
     } else if (configFilePath === '.env') {
-      appendToEnvFile(configFilePath, config)
-    } else {
-      fs.appendFileSync(configFilePath, JSON.stringify(config, null, 2))
+      await appendToEnvFile(configFilePath, config)
+    } else if (configFilePath === '.coco.config.json'){
+      await appendToProjectConfig(configFilePath, config)
     }
 
     logger.log(`init successful! 🦾🤖🎉`, { color: 'green' })

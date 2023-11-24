@@ -16,3 +16,17 @@ export function loadProjectConfig(config: Config): Config {
   }
   return config
 }
+
+export const appendToProjectConfig = (filePath: string, config: Partial<Config>) => {
+  fs.writeFileSync(
+    filePath,
+    JSON.stringify(
+      {
+        $schema: 'https://git-co.co/schema.json',
+        ...config,
+      },
+      null,
+      2
+    )
+  )
+}
