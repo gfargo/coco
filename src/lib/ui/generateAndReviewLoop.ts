@@ -77,7 +77,7 @@ export async function generateAndReviewLoop<T>({
       .stopTimer()
 
     if (options?.interactive) {
-      logResult(result)
+      logResult(label, result)
       const reviewAnswer = await getUserReviewDecision()
 
       if (reviewAnswer === 'cancel') {
