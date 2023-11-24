@@ -108,18 +108,38 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
    * Prompt for advanced options
    *
    * e.g.
+   * - temperature
+   * - verbose logging
    * - ignored files
    * - ignored extensions
    * - commit message prompt
    */
   if (advOptions) {
+    const { temperature, verbose } = await inquirer.prompt([
+      {
+        type: 'number',
+        name: 'temperature',
+        message: 'temperature for the model:',
+        default: 0.4,
+      },
+      {
+        type: 'confirm',
+        name: 'verbose',
+        message: 'enable verbose logging:',
+        default: false,
+      },
+    ])
+
+    config.temperature = temperature
+    config.verbose = verbose
+
     const { promptForIgnores } = await inquirer.prompt({
       type: 'confirm',
       name: 'promptForIgnores',
       message: 'would you like to configure ignored files and extensions?',
       default: false,
     })
-
+    
     if (promptForIgnores) {
       const { ignoredFiles, ignoredExtensions } = await inquirer.prompt([
         {
