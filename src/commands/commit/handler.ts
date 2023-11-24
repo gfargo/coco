@@ -5,7 +5,6 @@ import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
 import { getApiKeyForModel, getModel, getPrompt } from '../../lib/langchain/utils'
 import { noResult } from '../../lib/parsers/noResult'
 import { getChanges } from '../../lib/simple-git/getChanges'
-import { simpleGit, SimpleGit } from 'simple-git'
 import { CommitOptions } from './options'
 import { Argv } from 'yargs'
 import { loadConfig } from '../../lib/config/loadConfig'
@@ -14,11 +13,11 @@ import { FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { executeChain } from '../../lib/langchain/executeChain'
 import { handleResult } from '../../lib/ui/handleResult'
-
-const tokenizer = getTokenizer()
-const git: SimpleGit = simpleGit()
+import { getRepo } from '../../lib/simple-git/getRepo'
 
 export async function handler(argv: Argv<CommitOptions>['argv']) {
+  const tokenizer = getTokenizer()
+  const git = getRepo()
   const options = loadConfig(argv) as CommitOptions
   const logger = new Logger(options)
   

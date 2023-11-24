@@ -7,12 +7,14 @@ export type GetCommitLogCurrentBranch = {
   git: SimpleGit
   logger?: Logger
   comparisonBranch?: string
+  comparisonRemote?: string
 }
 
 export async function getCommitLogCurrentBranch({
   git,
   logger,
   comparisonBranch = 'main',
+  comparisonRemote = 'origin',
 }: GetCommitLogCurrentBranch): Promise<string[]> {
   try {
     // Get the current branch name
@@ -21,18 +23,35 @@ export async function getCommitLogCurrentBranch({
     // Check if the current branch has any commits
     const hasCommits = (await git.raw(['rev-list', '--count', branch])) !== '0'
     if (!hasCommits) {
-      console.log('No commits on the current branch.')
+      logger?.log('No commits on the current branch.')
       return []
     }
 
     // Get the list of commits that are unique to the current branch
-    const uniqueCommits = (await git.raw(['rev-list', `${comparisonBranch}..${branch}`]))
-      .split('\n')
-      .filter(Boolean)
-      .reverse()
+    let uniqueCommits;
+    if (comparisonBranch === branch) {
+      // If the comparison branch is the same as the current branch, we compare against the remote.
+      uniqueCommits = (await git.raw(['rev-list', `${comparisonRemote}/${comparisonBranch}..${branch}`]))
+          .split('\n')
+          .filter(Boolean)
+          .reverse();
+    } else {
+      // Your existing code for different branches
+      uniqueCommits = (await git.raw(['rev-list', `${comparisonBranch}..${branch}`]))
+          .split('\n')
+          .filter(Boolean)
+          .reverse();
+    }
+
+    logger?.verbose(`Found ${uniqueCommits.length} unique commits on "${branch}"`, { color: 'blue' })
 
     const firstCommit = uniqueCommits[0]
     const lastCommit = uniqueCommits[uniqueCommits.length - 1]
+
+    if (!firstCommit || !lastCommit) {
+      logger?.log('Unable to determine first and last commit on the current branch', { color: 'yellow' })
+      return []
+    }
 
     // Retrieve commit log with messages
     return await getCommitLogRange(firstCommit, lastCommit, { git, noMerges: true })
