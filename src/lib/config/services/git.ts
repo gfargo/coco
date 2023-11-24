@@ -3,6 +3,7 @@ import * as os from 'os'
 import * as path from 'path'
 import * as ini from 'ini'
 import { Config } from '../types'
+import inquirer from 'inquirer'
 
 /**
  * Load git profile config (from ~/.gitconfig)
@@ -42,21 +43,69 @@ export function loadGitConfig(config: Config): Config {
  * @param filePath - The path to the INI file.
  * @param config - The configuration object to append.
  */
-export const appendToIniFile = (filePath: string, config: Partial<Config>) => {
-  const existingConfig = fs.existsSync(filePath)
-    ? ini.parse(fs.readFileSync(filePath, 'utf-8'))
-    : {}
-  const combinedConfig = { ...existingConfig, ...config }
-  const formattedConfig = ini.stringify(combinedConfig)
-  fs.appendFileSync(filePath, `\n${formattedConfig}`)
-}
+export const appendToGitConfig = async (filePath: string, config: Partial<Config>) => {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`File ${filePath} does not exist.`)
+  }
 
-/**
- * Converts the provided configuration to INI format.
- *
- * @param config - The configuration object to convert.
- * @returns The configuration in INI format.
- */
-export const convertToIniFormat = (config: Partial<Config>): string => {
-  return ini.stringify(config)
+  const startComment = '# -- Start coco config --'
+  const header = '[coco]'
+  const endComment = '# -- End coco config --'
+  const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/)
+  const newLines = []
+  let foundCocoSection = false
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    if (line.trim() === startComment) {
+      foundCocoSection = true
+
+      // Prompt for confirmation to overwrite
+      const { confirm } = await inquirer.prompt({
+        type: 'confirm',
+        name: 'confirm',
+        message: 'hmm, looks like a config already exists. would you like to overwrite it?',
+      })
+
+      if (!confirm) {
+        // keep all lines until the end comment
+        while (i < lines.length && lines[i].trim() !== endComment) {
+          newLines.push(lines[i])
+          i++
+        }
+        newLines.push(endComment)
+        continue
+      }
+
+      newLines.push(startComment)
+      newLines.push(header)
+      for (const key in config) {
+        newLines.push(`\t${key} = ${config[key as keyof Config]}`)
+      }
+
+      while (i < lines.length && lines[i].trim() !== endComment) {
+        i++
+      }
+
+      newLines.push(endComment)
+      continue
+    }
+
+    if (!foundCocoSection || line.trim() !== endComment) {
+      newLines.push(line)
+    }
+  }
+
+  // If coco section comments weren't found, append them to the end
+  if (!foundCocoSection) {
+    newLines.push('\n' + startComment)
+    newLines.push(header)
+    for (const key in config) {
+      newLines.push(`\t${key} = ${config[key as keyof Config]}`)
+    }
+    newLines.push(endComment)
+  }
+
+  fs.writeFileSync(filePath, newLines.join('\n'))
 }
