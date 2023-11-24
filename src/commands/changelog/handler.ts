@@ -1,6 +1,5 @@
 import { Logger } from '../../lib/utils/logger'
 import { getApiKeyForModel, getModel, getPrompt } from '../../lib/langchain/utils'
-import { simpleGit, SimpleGit } from 'simple-git'
 import { Argv } from 'yargs'
 import { loadConfig } from '../../lib/config/loadConfig'
 import { isInteractive } from '../../lib/ui/helpers'
@@ -11,13 +10,12 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { CHANGELOG_PROMPT } from '../../lib/langchain/prompts/changelog'
 import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
-
-const git: SimpleGit = simpleGit()
+import { getRepo } from '../../lib/simple-git/getRepo'
 
 export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   const options = loadConfig(argv) as ChangelogOptions
   const logger = new Logger(options)
-
+  const git = getRepo()
   const key = getApiKeyForModel(options.model, options)
 
   if (!key) {

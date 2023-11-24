@@ -1,0 +1,14 @@
+import { simpleGit, SimpleGit } from 'simple-git'
+
+export const getRepo = () => {
+  let git: SimpleGit
+  
+  try {
+    git = simpleGit()
+  } catch (e) {
+    console.log('Error initializing git repo', e)
+    process.exit(1)
+  }
+
+  return git
+}

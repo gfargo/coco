@@ -43,7 +43,7 @@ export async function getCommitLogCurrentBranch({
           .reverse();
     }
 
-    logger?.verbose(`Found ${uniqueCommits.length} unique commits on ${branch} branch`, { color: 'blue' })
+    logger?.verbose(`Found ${uniqueCommits.length} unique commits on "${branch}"`, { color: 'blue' })
 
     const firstCommit = uniqueCommits[0]
     const lastCommit = uniqueCommits[uniqueCommits.length - 1]
