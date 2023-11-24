@@ -6,11 +6,12 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { Config } from '../types'
-import { appendToIniFile } from '../../lib/config/services/git'
+import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToEnvFile } from '../../lib/config/services/env'
 import { loadConfig } from '../../lib/config/loadConfig'
 import { Logger } from '../../lib/utils/logger'
 import { logResult } from '../../lib/ui/logResult'
+import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
 
 const handleProjectLevelConfig = async () => {
   const { projectConfiguration } = await inquirer.prompt({
@@ -51,7 +52,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
 
   switch (level) {
     case 'System':
-      configFilePath = handleSystemLevelConfig()
+      configFilePath = await handleSystemLevelConfig()
       break
     case 'Project':
       configFilePath = await handleProjectLevelConfig()
@@ -60,70 +61,129 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
       break
   }
 
-  const { apiKey, tokenLimit, ignoredFiles, ignoredExtensions, defaultBranch } =
-    await inquirer.prompt([
-      {
-        type: 'password',
-        name: 'apiKey',
-        // message: `Enter your ${llm} API key:`,
-        message: `enter your OpenAI API key:`,
-        validate(input) {
-          return input.length > 0 ? true : 'API key cannot be empty'
-        },
+  const { apiKey, tokenLimit, defaultBranch, advOptions, mode } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'mode',
+      message: 'what mode would you like to use?',
+      choices: ['interactive', 'stdout'],
+    },
+    {
+      type: 'password',
+      name: 'apiKey',
+      // message: `Enter your ${llm} API key:`,
+      message: `enter your OpenAI API key:`,
+      validate(input) {
+        return input.length > 0 ? true : 'API key cannot be empty'
       },
-      {
-        type: 'number',
-        name: 'tokenLimit',
-        message: 'maximum number of tokens for the commit message:',
-        default: 500,
-      },
-      {
-        type: 'input',
-        name: 'ignoredFiles',
-        message: 'paths of files to be excluded when generating commit messages (comma-separated):',
-        default: 'package-lock.json',
-      },
-      {
-        type: 'input',
-        name: 'ignoredExtensions',
-        message:
-          'File extensions to be excluded when generating commit messages (comma-separated):',
-        default: '.map, .lock',
-      },
-      {
-        type: 'input',
-        name: 'defaultBranch',
-        message: 'Default branch for the repository:',
-        default: 'main',
-      },
-    ])
+    },
+    {
+      type: 'number',
+      name: 'tokenLimit',
+      message: 'maximum number of tokens for the commit message:',
+      default: 500,
+    },
+    {
+      type: 'input',
+      name: 'defaultBranch',
+      message: 'default branch for the repository:',
+      default: 'main',
+    },
+    {
+      type: 'confirm',
+      name: 'advOptions',
+      message: 'would you like to configure advanced options?',
+      default: false,
+    },
+  ])
 
   const config: Partial<Config> = {
-    openAIApiKey: apiKey,
+    openAIApiKey: '•••••••••••••••',
     tokenLimit,
-    ignoredFiles: ignoredFiles.split(',').map((file: string) => file.trim()),
-    ignoredExtensions: ignoredExtensions.split(',').map((ext: string) => ext.trim()),
     defaultBranch,
+    mode,
+  }
+
+  /**
+   * Prompt for advanced options
+   *
+   * e.g.
+   * - ignored files
+   * - ignored extensions
+   * - commit message prompt
+   */
+  if (advOptions) {
+    const { promptForIgnores } = await inquirer.prompt({
+      type: 'confirm',
+      name: 'promptForIgnores',
+      message: 'would you like to configure ignored files and extensions?',
+      default: false,
+    })
+
+    if (promptForIgnores) {
+      const { ignoredFiles, ignoredExtensions } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'ignoredFiles',
+          message:
+            'paths of files to be excluded when generating commit messages (comma-separated):',
+          default: 'package-lock.json',
+        },
+        {
+          type: 'input',
+          name: 'ignoredExtensions',
+          message:
+            'file extensions to be excluded when generating commit messages (comma-separated):',
+          default: '.map, .lock',
+        },
+      ])
+
+      config.ignoredFiles =
+        ignoredFiles && ignoredFiles.split(',').map((file: string) => file.trim())
+      config.ignoredExtensions =
+        ignoredExtensions && ignoredExtensions.split(',').map((ext: string) => ext.trim())
+    }
+
+    const { promptForCommitPrompt } = await inquirer.prompt({
+      type: 'confirm',
+      name: 'promptForCommitPrompt',
+      message: 'would you like to configure the commit message prompt?',
+      default: false,
+    })
+
+    if (promptForCommitPrompt) {
+      const { commitPrompt } = await inquirer.prompt({
+        type: 'editor',
+        name: 'commitPrompt',
+        message: 'modify default commit message prompt:',
+        default: COMMIT_PROMPT.template,
+      })
+
+      config.prompt = commitPrompt
+    }
   }
 
   logResult('Config', JSON.stringify(config, null, 2))
+  // add to config after logging, so that the API key is not logged
+  config.openAIApiKey = apiKey
 
   // Verify answers before proceeding
   const { confirm } = await inquirer.prompt({
     type: 'confirm',
     name: 'confirm',
-    message: 'Are these settings correct?',
+    message: 'look good? (hiding API key for security)',
   })
 
   if (confirm) {
     if (configFilePath.endsWith('.gitconfig')) {
-      appendToIniFile(configFilePath, config)
+      await appendToGitConfig(configFilePath, config)
     } else if (configFilePath === '.env') {
       appendToEnvFile(configFilePath, config)
     } else {
       fs.appendFileSync(configFilePath, JSON.stringify(config, null, 2))
     }
-    logger.log(`configuration appended to ${configFilePath}`, { color: 'green' })
+
+    logger.log(`init successful! 🦾🤖🎉`, { color: 'green' })
   } else {
     logger.log('init cancelled.', { color: 'yellow' })
   }
