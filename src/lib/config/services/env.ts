@@ -1,3 +1,5 @@
+import fs from 'fs'
+
 import { removeUndefined } from '../../utils/removeUndefined'
 import { Config } from '../types'
 
@@ -24,9 +26,23 @@ export function loadEnvConfig(config: Config): Config {
     ignoredExtensions: process.env.COCO_IGNORED_EXTENSIONS
       ? process.env.COCO_IGNORED_EXTENSIONS.split(',')
       : undefined,
-    defaultBranch: process.env.COCO_DEFAULT_BRANCH || undefined,
+    defaultBranch: process.env.COCO_DEFAULT_BRANCH 
   }
 
   config = { ...config, ...removeUndefined(envConfig) }
   return config
+}
+
+export const appendToEnvFile = (filePath: string, config: Partial<Config>) => {
+  const formattedConfig = Object.entries(config)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')
+  fs.appendFileSync(filePath, `\n${formattedConfig}`)
+}
+
+export const convertToEnvFormat = (config: Partial<Config>): string => {
+  // Convert the JSON object to .env format (KEY=VALUE)
+  return Object.entries(config)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')
 }
