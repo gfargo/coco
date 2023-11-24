@@ -37,10 +37,9 @@ export function loadGitConfig(config: Config): Config {
 }
 
 /**
- * Appends the provided configuration to an INI file.
- * If the file does not exist, it creates a new one.
+ * Appends the provided configuration to a git config file.
  *
- * @param filePath - The path to the INI file.
+ * @param filePath - The path to the .gitconfig
  * @param config - The configuration object to append.
  */
 export const appendToGitConfig = async (filePath: string, config: Partial<Config>) => {
@@ -81,6 +80,14 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
       newLines.push(startComment)
       newLines.push(header)
       for (const key in config) {
+        // check if string has new lines, if so, wrap in quotes
+        if (typeof config[key as keyof Config] === 'string') {
+          const value = config[key as keyof Config] as string
+          if (value.includes('\n')) {
+            newLines.push(`\t${key} = ${JSON.stringify(value)}`)
+            continue
+          }
+        }
         newLines.push(`\t${key} = ${config[key as keyof Config]}`)
       }
 
@@ -102,6 +109,14 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
     newLines.push('\n' + startComment)
     newLines.push(header)
     for (const key in config) {
+      // check if string has new lines, if so, wrap in quotes
+      if (typeof config[key as keyof Config] === 'string') {
+        const value = config[key as keyof Config] as string
+        if (value.includes('\n')) {
+          newLines.push(`\t${key} = ${JSON.stringify(value)}`)
+          continue
+        }
+      }
       newLines.push(`\t${key} = ${config[key as keyof Config]}`)
     }
     newLines.push(endComment)
