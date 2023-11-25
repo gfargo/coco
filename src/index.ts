@@ -4,6 +4,9 @@ import commit from './commands/commit'
 import changelog from './commands/changelog'
 import init from './commands/init'
 
+import * as types from './lib/types'
+import { Config } from './lib/config/types'
+
 yargs
   .scriptName('coco')
   .usage('$0 <cmd> [args]')
@@ -36,3 +39,11 @@ yargs
   )
   .demandCommand()
   .help().argv
+
+export { 
+  changelog, 
+  commit, 
+  init,
+  types,
+  Config,
+}
