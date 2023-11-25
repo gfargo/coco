@@ -14,6 +14,7 @@ const enableBenchmarking = false
 const config = [
   {
     input: 'src/index.ts',
+    treeshake: true,
     output: [
       {
         file: 'dist/index.esm.mjs',
@@ -51,15 +52,19 @@ const config = [
         title: 'git-coco rollup visualizer',
         filename: 'coverage/stats.html',
         template: 'network',
-        sourcemap: enableBenchmarking,  
+        sourcemap: enableBenchmarking,
       }),
       executable(),
     ],
   },
   {
-    // path to your declaration files root
     input: './dist/dts/index.d.ts',
-    output: [{ file: 'dist/index.d.ts', format: 'es' }],
+    output: [
+      {
+        file: 'dist/index.d.ts',
+        format: 'es',
+      },
+    ],
     plugins: [dts()],
   },
 ]
