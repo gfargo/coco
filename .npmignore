@@ -1,2 +1,10 @@
+# directories
 src/
+coverage/
+
+# ignore individual type definitions. 
+dist/dst
+
+# root files
 tsconfig.json
+README.md
