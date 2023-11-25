@@ -1,5 +1,6 @@
 import { removeUndefined } from '../../utils/removeUndefined'
 import { Config } from '../types'
+import { CONFIG_KEYS } from '../constants'
 import { updateFileSection } from '../../utils/updateFileSection'
 
 type Keys = keyof Config
@@ -14,20 +15,13 @@ type ValuesTypes = Config[Keys]
 export function loadEnvConfig(config: Config): Config {
   const envConfig: Partial<Config> = {}
 
-  Object.keys(config).forEach((key) => {
+  CONFIG_KEYS.forEach((key) => {
     const envVarName = toEnvVarName(key as keyof Config)
     const envValue = parseEnvValue(key, process.env[envVarName])
-    
+
     if (envValue === undefined) return
-    if (!envConfig || !envConfig[key as Keys] || typeof envValue !== typeof config[key as Keys]) {
-      throw new Error(
-        `Invalid type for environment variable ${envVarName}. Expected ${typeof config[
-          key as Keys
-        ]} but got ${typeof envValue}`
-      )
-    }
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore  
+    // @ts-ignore
     envConfig[key as Keys] = envValue
   })
 

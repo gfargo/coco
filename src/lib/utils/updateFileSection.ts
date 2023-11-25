@@ -1,5 +1,5 @@
 import fs from 'fs'
-import inquirer from 'inquirer'
+import { confirm }  from '@inquirer/prompts'
 
 export async function updateFileSection(
   filePath: string,
@@ -17,13 +17,12 @@ export async function updateFileSection(
       foundSection = true
 
       if (confirmUpdate) {
-        const { confirm } = await inquirer.prompt({
-          type: 'confirm',
-          name: 'confirm',
+        const confirmOverwrite = await confirm({
           message: `A section already exists in ${filePath}, do you want to override it?`,
+          default: false,
         })
 
-        if (!confirm) {
+        if (!confirmOverwrite) {
           // keep all lines until the end comment
           while (i < lines.length && lines[i].trim() !== endComment) {
             newLines.push(lines[i])
