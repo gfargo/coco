@@ -7,8 +7,10 @@
   "main": "dist/index.js",
   "module": "dist/index.esm.mjs",
   "files": [
-    "dist"
+    "dist",
+    "!dist/dts"
   ],
+  "types": "dist/index.d.ts",
   "homepage": "https://github.com/gfargo/coco#readme",
   "bugs": {
     "url": "https://github.com/gfargo/coco/issues"
@@ -21,15 +23,19 @@
     "url": "git+https://github.com/gfargo/coco.git"
   },
   "scripts": {
-    "test": "jest",
     "start": "npm run dev",
     "dev": "tsx watch src/index.ts",
     "build": "rollup -c",
     "build:watch": "rollup -c -w",
+    "clean": "rimraf dist && rimraf coverage",
     "lint": "eslint src",
     "lint:fix": "eslint --fix src",
+    "format": "prettier --write src",
+    "test": "npm run test:jest && npm run test:publish",
+    "test:publish": "npm run lint && npm publish --dry-run",
+    "test:jest": "jest",
     "release": "release-it",
-    "prepublishOnly": "rimraf dist && npm run build",
+    "prepublishOnly": "npm run clean && npm run build",
     "coco": "npm run coco:ts",
     "coco:ts": "tsx src/index.ts",
     "coco:cjs": "node dist/index.js",
@@ -60,6 +66,7 @@
     "rollup": "^3.26.1",
     "rollup-plugin-banner2": "^1.2.2",
     "rollup-plugin-bin": "^1.0.0",
+    "rollup-plugin-dts": "^6.1.0",
     "rollup-plugin-executable": "^1.6.3",
     "rollup-plugin-peer-deps-external": "^2.2.4",
     "rollup-plugin-preserve-shebangs": "^0.2.0",
