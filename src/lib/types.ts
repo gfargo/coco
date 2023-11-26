@@ -1,8 +1,7 @@
 import { getLlm } from './langchain/utils'
-import { getTikToken } from './utils/getTokenCounter'
 import { SimpleGit } from 'simple-git'
 import { Logger } from './utils/logger'
-import { TokenCounter, getTokenCounter } from './utils/tokenizer'
+import { TokenCounter } from './utils/tokenizer'
 
 export type FileChangeStatus =
   | 'modified'
