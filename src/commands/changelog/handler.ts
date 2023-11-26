@@ -1,6 +1,8 @@
+import { Argv } from 'yargs'
+import clipboard from 'clipboardy';
 import { Logger } from '../../lib/utils/logger'
 import { getApiKeyForModel, getLlm, getPrompt } from '../../lib/langchain/utils'
-import { Argv } from 'yargs'
+
 import { loadConfig } from '../../lib/config/loadConfig'
 import { isInteractive } from '../../lib/ui/helpers'
 import { ChangelogOptions } from './options'
@@ -13,6 +15,7 @@ import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurr
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { logResult } from '../../lib/ui/logResult'
+
 
 export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   const options = loadConfig(argv) as ChangelogOptions
@@ -93,7 +96,8 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   handleResult({
     result: changelogMsg,
     interactiveHandler: async (result) => {
-      logResult('Changelog:', result)
+      clipboard.writeSync(result)
+      logger.log(`Copied to clipboard 📋`, { color: 'green' })
       logSuccess()
     },
     mode: MODE as 'interactive' | 'stdout',
