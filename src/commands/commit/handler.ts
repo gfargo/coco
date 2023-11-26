@@ -1,7 +1,12 @@
 import { fileChangeParser } from '../../lib/parsers/default'
 import { Logger } from '../../lib/utils/logger'
 import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
-import { getApiKeyForModel, getLlm as getLlm, getModelFromService, getPrompt } from '../../lib/langchain/utils'
+import {
+  getApiKeyForModel,
+  getLlm as getLlm,
+  getModelFromService,
+  getPrompt,
+} from '../../lib/langchain/utils'
 import { noResult } from '../../lib/parsers/noResult'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { CommitOptions } from './options'
@@ -11,16 +16,18 @@ import { isInteractive } from '../../lib/ui/helpers'
 import { FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { executeChain } from '../../lib/langchain/executeChain'
-import { handleResult } from '../../lib/ui/handleResult'
+import { commitResultHandler, handleResult } from '../../lib/ui/handleResult'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { createCommit } from '../../lib/simple-git/createCommit'
+import { logSuccess } from '../../lib/ui/logSuccess'
 
 export async function handler(argv: Argv<CommitOptions>['argv']) {
   const git = getRepo()
   const options = loadConfig(argv) as CommitOptions
   const { service } = options
   const logger = new Logger(options)
-  
+
   const key = getApiKeyForModel(service, options)
   const tokenizer = await getTokenCounter(getModelFromService(service))
 
@@ -79,8 +86,12 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   const MODE =
     (INTERACTIVE && 'interactive') || (options.commit && 'interactive') || options?.mode || 'stdout'
 
-  handleResult(commitMsg, {
+  handleResult({
+    result: commitMsg,
+    interactiveHandler: async (result) => {
+      await createCommit(result, git)
+      logSuccess()
+    },
     mode: MODE as 'interactive' | 'stdout',
-    git,
   })
 }

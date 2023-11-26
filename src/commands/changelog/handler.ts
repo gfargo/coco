@@ -11,6 +11,8 @@ import { CHANGELOG_PROMPT } from '../../lib/langchain/prompts/changelog'
 import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getRepo } from '../../lib/simple-git/getRepo'
+import { logSuccess } from '../../lib/ui/logSuccess'
+import { logResult } from '../../lib/ui/logResult'
 
 export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   const options = loadConfig(argv) as ChangelogOptions
@@ -88,8 +90,12 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   const MODE =
     (INTERACTIVE && 'interactive') || (options.commit && 'interactive') || options?.mode || 'stdout'
 
-  handleResult(changelogMsg, {
+  handleResult({
+    result: changelogMsg,
+    interactiveHandler: async (result) => {
+      logResult('Changelog:', result)
+      logSuccess()
+    },
     mode: MODE as 'interactive' | 'stdout',
-    git,
   })
 }
