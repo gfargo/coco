@@ -1,3 +1,9 @@
+import { TiktokenModel } from "langchain/dist/types/openai-types";
+
+export type ServiceProvider = "openai" | "huggingface";
+export type ServiceModel = TiktokenModel;
+type Service = `${ServiceProvider}/${ServiceModel}`;
+
 export interface Config {
   /**
    * The LLM model to use for generating results.
@@ -9,7 +15,7 @@ export interface Config {
    * @example 'huggingface/bigscience/bloom'
    **/
 
-  model: string
+  service: Service
   
   /**
    * The OpenAI API key.

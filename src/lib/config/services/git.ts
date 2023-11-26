@@ -19,7 +19,7 @@ export function loadGitConfig(config: Config): Config {
 
     config = {
       ...config,
-      model: gitConfigParsed.coco?.model || config.model,
+      service: gitConfigParsed.coco?.model || config.service,
       openAIApiKey: gitConfigParsed.coco?.openAIApiKey || config.openAIApiKey,
       huggingFaceHubApiKey:
         gitConfigParsed.coco?.huggingFaceHubApiKey || config.huggingFaceHubApiKey,

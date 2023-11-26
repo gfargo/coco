@@ -7,10 +7,10 @@ interface BaseArgvOptions {
 }
 export interface BaseCommandOptions extends BaseArgvOptions {
   [x: string]: unknown
-  model: string
-  openAIApiKey: string
-  huggingFaceHubApiKey: string
-  tokenLimit: number
+  service: Config['service']
+  openAIApiKey: Config['openAIApiKey']
+  huggingFaceHubApiKey: Config['huggingFaceHubApiKey']
+  tokenLimit: Config['tokenLimit']
 }
 
 export { Config }
