@@ -82,7 +82,6 @@
     "@inquirer/prompts": "3.3.0",
     "chalk": "4.1.2",
     "diff": "5.1.0",
-    "gpt3-tokenizer": "1.1.5",
     "ini": "4.1.1",
     "langchain": "0.0.196",
     "minimatch": "9.0.3",
@@ -91,6 +90,7 @@
     "performance-now": "2.1.0",
     "pretty-ms": "7.0.1",
     "simple-git": "3.21.0",
+    "tiktoken": "^1.0.11",
     "yargs": "17.7.2"
   }
 }

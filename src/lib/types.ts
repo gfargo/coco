@@ -1,7 +1,8 @@
-import { getModel } from './langchain/utils'
+import { getLlm } from './langchain/utils'
+import { getTikToken } from './utils/getTokenCounter'
 import { SimpleGit } from 'simple-git'
 import { Logger } from './utils/logger'
-import { getTokenizer } from './utils/getTokenizer'
+import { TokenCounter, getTokenCounter } from './utils/tokenizer'
 
 export type FileChangeStatus =
   | 'modified'
@@ -38,8 +39,8 @@ export interface DirectoryDiff {
 }
 
 export interface BaseParserOptions {
-  tokenizer: ReturnType<typeof getTokenizer>
-  model: ReturnType<typeof getModel>
+  tokenizer: TokenCounter
+  llm: ReturnType<typeof getLlm>
   git: SimpleGit
   logger: Logger
 }

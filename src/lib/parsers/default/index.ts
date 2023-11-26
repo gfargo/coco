@@ -3,7 +3,7 @@ import { summarizeDiffs } from './utils/summarizeDiffs'
 
 import { createDiffTree } from './utils/createDiffTree'
 import { collectDiffs } from './utils/collectDiffs'
-import { getChain, getTextSplitter } from '../../langchain/utils'
+import { getSummarizationChain, getTextSplitter } from '../../langchain/utils'
 import { SUMMARIZE_PROMPT } from '../../langchain/prompts/summarize'
 import { getDiff } from '../../simple-git/getDiff'
 
@@ -12,10 +12,10 @@ const MAX_TOKENS_PER_SUMMARY = 2048
 export async function fileChangeParser({
   changes,
   commit,
-  options: { tokenizer, git, model, logger },
+  options: { tokenizer, git, llm: model, logger },
 }: FileChangeParserInput): Promise<string> {
   const textSplitter = getTextSplitter({ chunkSize: 2000, chunkOverlap: 125 })
-  const summarizationChain = getChain(model, {
+  const summarizationChain = getSummarizationChain(model, {
     type: 'map_reduce',
     combineMapPrompt: SUMMARIZE_PROMPT,
     combinePrompt: SUMMARIZE_PROMPT,

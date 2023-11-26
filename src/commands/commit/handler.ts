@@ -1,8 +1,7 @@
 import { fileChangeParser } from '../../lib/parsers/default'
-import { getTokenizer } from '../../lib/utils/getTokenizer'
 import { Logger } from '../../lib/utils/logger'
 import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
-import { getApiKeyForModel, getModel, getPrompt } from '../../lib/langchain/utils'
+import { getApiKeyForModel, getLlm as getLlm, getModelFromService, getPrompt } from '../../lib/langchain/utils'
 import { noResult } from '../../lib/parsers/noResult'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { CommitOptions } from './options'
@@ -14,21 +13,23 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { executeChain } from '../../lib/langchain/executeChain'
 import { handleResult } from '../../lib/ui/handleResult'
 import { getRepo } from '../../lib/simple-git/getRepo'
+import { getTokenCounter } from '../../lib/utils/tokenizer'
 
 export async function handler(argv: Argv<CommitOptions>['argv']) {
-  const tokenizer = getTokenizer()
   const git = getRepo()
   const options = loadConfig(argv) as CommitOptions
+  const { service } = options
   const logger = new Logger(options)
   
-  const key = getApiKeyForModel(options.model, options)
+  const key = getApiKeyForModel(service, options)
+  const tokenizer = await getTokenCounter(getModelFromService(service))
 
   if (!key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
 
-  const model = getModel(options.model, key, {
+  const llm = getLlm(service, key, {
     temperature: 0.4,
     maxConcurrency: 10,
   })
@@ -44,7 +45,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
     return await fileChangeParser({
       changes,
       commit: '--staged',
-      options: { tokenizer, git, model, logger },
+      options: { tokenizer, git, llm, logger },
     })
   }
 
@@ -54,7 +55,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
     parser,
     agent: async (context, options) => {
       return await executeChain({
-        llm: model,
+        llm,
         prompt: getPrompt({
           template: options.prompt,
           variables: COMMIT_PROMPT.inputVariables,
