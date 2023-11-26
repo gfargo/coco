@@ -1,9 +1,9 @@
-import GPT3Tokenizer from 'gpt3-tokenizer'
 import { DirectoryDiff, DiffNode } from '../../../types'
 import pQueue from 'p-queue'
 import { Logger } from '../../../utils/logger'
 import { getPathFromFilePath } from '../../../utils/getPathFromFilePath'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
+import { TokenCounter } from '../../../utils/tokenizer'
 
 /**
  * Create groups from a given node info.
@@ -31,7 +31,7 @@ export function createDirectoryDiffs(node: DiffNode): DirectoryDiff[] {
 }
 
 type SummarizeDirectoryDiffOptions = {
-  tokenizer: GPT3Tokenizer
+  tokenizer: TokenCounter
 } & SummarizeContext
 
 /**
@@ -59,7 +59,7 @@ export async function summarizeDirectoryDiff(
       }
     )
 
-    const newTokenTotal = tokenizer.encode(directorySummary).text.length
+    const newTokenTotal = tokenizer(directorySummary)
 
     return {
       diffs: directory.diffs,
@@ -89,7 +89,7 @@ const defaultOutputCallback = (group: DirectoryDiff) => {
 }
 
 type SummarizeDiffsOptions = {
-  tokenizer: GPT3Tokenizer
+  tokenizer: TokenCounter
   logger: Logger
   maxTokens: number
   handleOutput?: typeof defaultOutputCallback

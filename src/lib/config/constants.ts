@@ -6,9 +6,8 @@ import { Config } from './types';
  *
  * @type {Config}
  */
-
 export const DEFAULT_CONFIG = {
-  model: 'openai/gpt-4',
+  service: 'openai/gpt-4',
   verbose: false,
   tokenLimit: 1024,
   summarizePrompt: SUMMARIZE_PROMPT.template,
@@ -20,7 +19,9 @@ export const DEFAULT_CONFIG = {
 } as Config
 
 /**
- * Config keys
+ * Create a named export of all config keys for use in other modules.
+ * 
+ * @see Currently used in `src/lib/config/services/env.ts` to validate all env vars.
  *
  * @type {string[]}
  */

@@ -12,7 +12,7 @@ jest.mock('yargs', () => ({
 const mockFs = fs as jest.Mocked<typeof fs>
 
 const defaultConfig: Config = {
-  model: 'huggingface/gpt2',
+  service: 'huggingface/gpt2',
   openAIApiKey: 'sk_default-api-key',
   temperature: 0.4,
   ignoredFiles: ['package-lock.json'],

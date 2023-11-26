@@ -1,7 +1,7 @@
-import GPT3Tokenizer from 'gpt3-tokenizer'
 import { DiffNode, FileChange } from '../../../types'
 import { Logger } from '../../../utils/logger'
 import { DiffTreeNode } from './createDiffTree'
+import { TokenCounter } from '../../../utils/tokenizer'
 
 /**
  * Asynchronously collect diffs for a given node and its children.
@@ -9,16 +9,13 @@ import { DiffTreeNode } from './createDiffTree'
 export async function collectDiffs(
   node: DiffTreeNode,
   getFileDiff: (change: FileChange) => Promise<string>,
-  tokenizer: GPT3Tokenizer,
+  tokenizer: TokenCounter,
   logger: Logger
 ): Promise<DiffNode> {
   // Collect diffs for the files of the current node
   const diffPromises = node.files.map(async (nodeFile) => {
     const diff = await getFileDiff(nodeFile)
-    
-    // TODO: Swap out the GPT3Tokenizer for LangChain tokenizer
-    const tokenizedDiff = tokenizer.encode(diff).text
-    const tokenCount = tokenizedDiff.length
+    const tokenCount = tokenizer(diff)
 
     logger.verbose(`Collected diff for ${nodeFile.filePath} (${tokenCount} tokens)`, {
       color: 'magenta',

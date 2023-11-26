@@ -8,7 +8,28 @@ import {
   RecursiveCharacterTextSplitter,
   RecursiveCharacterTextSplitterParams,
 } from 'langchain/text_splitter'
-import { BaseCommandOptions } from '../../commands/types'
+import { BaseCommandOptions, Config } from '../../commands/types'
+import { ServiceModel, ServiceProvider } from '../config/types'
+
+export function getModelAndProviderFromService(service: Config['service']) {
+  const [provider, model] = service.split(/\/(.*)/s) as [ServiceProvider, ServiceModel]
+
+  if (!model || !provider) {
+    throw new Error(`Invalid service: ${service}`)
+  }
+
+  return { provider, model }
+}
+
+export function getModelFromService(service: Config['service']) {
+  const { model } = getModelAndProviderFromService(service)
+  return model
+}
+
+export function getProviderFromService(service: Config['service']) {
+  const { provider } = getModelAndProviderFromService(service)
+  return provider
+}
 
 /**
  * Get LLM Model Based on Configuration
@@ -16,18 +37,18 @@ import { BaseCommandOptions } from '../../commands/types'
  * @param configuration
  * @returns LLM Model
  */
-export function getModel(
-  name: string,
+export function getLlm(
+  service: Config['service'],
   key: string,
   fields?: (Partial<OpenAIInput> & Partial<AzureOpenAIInput> & BaseLLMParams) | undefined
 ): OpenAI | HuggingFaceInference {
-  const [llm, model] = name.split(/\/(.*)/s)
+  const { provider, model } = getModelAndProviderFromService(service)
 
   if (!model) {
-    throw new Error(`Invalid model: ${name}`)
+    throw new Error(`Invalid LLM Service: ${service}`)
   }
 
-  switch (llm) {
+  switch (provider) {
     case 'huggingface':
       return new HuggingFaceInference({
         model: model,
@@ -47,18 +68,14 @@ export function getModel(
 
 /**
  * Retrieve appropriate API key based on selected model
- * @param name
+ * @param service
  * @param options
  * @returns
  */
-export function getApiKeyForModel(name: string, options: BaseCommandOptions) {
-  const [llm, model] = name.split(/\/(.*)/s)
+export function getApiKeyForModel(service: Config['service'], options: BaseCommandOptions) {
+  const { provider } = getModelAndProviderFromService(service)
 
-  if (!model) {
-    throw new Error(`Invalid model: ${name}`)
-  }
-
-  switch (llm) {
+  switch (provider) {
     case 'huggingface':
       return options.huggingFaceHubApiKey
     case 'openai':
@@ -84,8 +101,8 @@ export function getTextSplitter(
  * @param options
  * @returns
  */
-export function getChain(
-  model: ReturnType<typeof getModel>,
+export function getSummarizationChain(
+  model: ReturnType<typeof getLlm>,
   options: SummarizationChainParams = { type: 'map_reduce' }
 ) {
   return loadSummarizationChain(model, options)

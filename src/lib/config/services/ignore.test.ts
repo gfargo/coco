@@ -12,7 +12,7 @@ jest.mock('yargs', () => ({
 const mockFs = fs as jest.Mocked<typeof fs>
 
 const defaultConfig: Config = {
-  model: 'openai/gpt-3.5-turbo',
+  service: 'openai/gpt-3.5-turbo',
   openAIApiKey: 'sk_default-api-key',
 }
 
