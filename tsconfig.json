@@ -28,5 +28,5 @@
     "**/*.test.ts",
     "dist",
     "rollup.config.mjs"
-  ]
+  ],
 }

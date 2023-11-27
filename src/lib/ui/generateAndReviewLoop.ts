@@ -1,7 +1,7 @@
 import { Logger } from '../utils/logger'
 import { logResult } from './logResult'
 import { editResult } from './editResult'
-import { getUserReviewDecision } from './getUserReviewDecision'
+import { ReviewDecision, getUserReviewDecision } from './getUserReviewDecision'
 import { editPrompt } from './editPrompt'
 
 export type GenerateReviewLoopOptions = {
@@ -9,6 +9,12 @@ export type GenerateReviewLoopOptions = {
   logger: Logger
   prompt?: string
   openInEditor?: boolean
+  review?: {
+    descriptions?: Partial<Record<ReviewDecision, string>>
+    enableRetry?: boolean
+    enableFullRetry?: boolean
+    enableModifyPrompt?: boolean
+  }
 }
 
 export type GenerateReviewLoopInput<T> = {
@@ -78,7 +84,10 @@ export async function generateAndReviewLoop<T>({
 
     if (options?.interactive) {
       logResult(label, result)
-      const reviewAnswer = await getUserReviewDecision()
+      const reviewAnswer = await getUserReviewDecision({
+        label,
+        ...options?.review || {},
+      })
 
       if (reviewAnswer === 'cancel') {
         process.exit(0)
