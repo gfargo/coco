@@ -57,7 +57,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   }
 
   const commitMsg = await generateAndReviewLoop({
-    label: 'Commit Message',
+    label: 'commit message',
     factory,
     parser,
     agent: async (context, options) => {
@@ -80,6 +80,16 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
       prompt: options.prompt || COMMIT_PROMPT.template,
       logger,
       interactive: INTERACTIVE,
+      review: {
+        descriptions: {
+          approve: `Commit staged changes with generated commit message`,
+          edit: 'Edit the commit message before proceeding',
+          modifyPrompt: 'Modify the prompt template and regenerate the commit message',
+          retryMessageOnly: 'Restart the function execution from generating the commit message',
+          retryFull:
+            'Restart the function execution from the beginning, regenerating both the diff summary and commit message',
+        },
+      },
     },
   })
 

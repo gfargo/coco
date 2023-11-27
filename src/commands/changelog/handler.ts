@@ -14,8 +14,6 @@ import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { logSuccess } from '../../lib/ui/logSuccess'
-import { logResult } from '../../lib/ui/logResult'
-
 
 export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   const options = loadConfig(argv) as ChangelogOptions
@@ -57,7 +55,7 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   }
 
   const changelogMsg = await generateAndReviewLoop({
-    label: 'Changelog',
+    label: 'changelog',
     factory,
     parser,
     agent: async (context, options) => {
@@ -87,6 +85,9 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
       prompt: options.prompt || CHANGELOG_PROMPT.template,
       logger,
       interactive: INTERACTIVE,
+      review: {
+        enableFullRetry: false,
+      }
     },
   })
 
