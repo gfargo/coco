@@ -1,5 +1,5 @@
 import { Argv } from 'yargs'
-import clipboard from 'clipboardy';
+
 import { Logger } from '../../lib/utils/logger'
 import { getApiKeyForModel, getLlm, getPrompt } from '../../lib/langchain/utils'
 
@@ -95,9 +95,7 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
 
   handleResult({
     result: changelogMsg,
-    interactiveHandler: async (result) => {
-      clipboard.writeSync(result)
-      logger.log(`Copied to clipboard 📋`, { color: 'green' })
+    interactiveHandler: async () => {
       logSuccess()
     },
     mode: MODE as 'interactive' | 'stdout',
