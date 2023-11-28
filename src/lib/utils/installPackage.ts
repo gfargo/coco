@@ -17,7 +17,8 @@ export async function installNpmPackage({
   flags = [],
   cwd = process.cwd(),
 }: InstallPackageInput) {
-  const { stdout, stderr } = await execPromise(`npm i ${name} ${flags.join(' ')} --yes`, { cwd })
+  const version = name.includes('@') ? '' : '@latest'
+  const { stdout, stderr } = await execPromise(`npm i ${name}${version} ${flags.join(' ')} --yes`, { cwd })
 
   if (stderr) {
     console.error(`Execution error: ${stderr}`)
