@@ -42,7 +42,7 @@ export async function checkAndHandlePackageInstallation({
     }
 
     logger.startSpinner(`Installing '${packageName}' in project...`, { color: 'blue' })
-    await installNpmPackage({ name: packageName, cwd: projectRoot })
+    await installNpmPackage({ name: packageName, cwd: projectRoot, flags: ['--save-dev'] })
     logger.stopSpinner(`Installed '${packageName}' in project`)
   } catch (error) {
     console.error(`Error: ${(error as Error).message}`)
