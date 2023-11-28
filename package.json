@@ -30,7 +30,6 @@
     "clean": "rimraf dist && rimraf coverage",
     "lint": "eslint src",
     "lint:fix": "eslint --fix src",
-    "format": "prettier --write src",
     "test": "npm run test:jest && npm run test:publish",
     "test:publish": "npm run lint && npm publish --dry-run",
     "test:jest": "jest",
