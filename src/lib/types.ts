@@ -59,3 +59,8 @@ export interface CommitLogParserInput extends BaseParserInput {
     to: string
   }
 }
+
+export type CommandHandler<T> = (argv: T, logger: Logger) => Promise<void>;
+
+export type ConfirmMessageCallback = (path: string) => string
+export type ConfirmMessage = string | ConfirmMessageCallback

@@ -2,6 +2,7 @@ import { removeUndefined } from '../../utils/removeUndefined'
 import { Config } from '../types'
 import { CONFIG_KEYS } from '../constants'
 import { updateFileSection } from '../../utils/updateFileSection'
+import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 
 type Keys = keyof Config
 type ValuesTypes = Config[Keys]
@@ -77,5 +78,11 @@ export const appendToEnvFile = async (filePath: string, config: Partial<Config>)
       .join('\n')
   }
 
-  await updateFileSection(filePath, startComment, endComment, getNewContent)
+  await updateFileSection({
+    filePath,
+    startComment,
+    endComment,
+    getNewContent,
+    confirmMessage: CONFIG_ALREADY_EXISTS,
+  })
 }

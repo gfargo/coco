@@ -1,53 +1,20 @@
-import { CommitOptions } from './options'
-import { Argv } from 'yargs'
-
 import { input, password, select, confirm, editor } from '@inquirer/prompts'
-import fs from 'fs'
-import os from 'os'
-import path from 'path'
 import { Config } from '../types'
 import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToEnvFile } from '../../lib/config/services/env'
-import { loadConfig } from '../../lib/config/loadConfig'
-import { Logger } from '../../lib/utils/logger'
 import { logResult } from '../../lib/ui/logResult'
 import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
 import { appendToProjectConfig } from '../../lib/config/services/project'
+import { LOGO } from '../../lib/ui/helpers'
+import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
 
-const handleProjectLevelConfig = async () => {
-  const projectConfiguration = await select({
-    message: 'select type project level configuration:',
-    choices: [
-      {
-        name: '.coco.config.json',
-        value: '.coco.config.json',
-      },
-      {
-        name: '.env',
-        value: '.env',
-      },
-    ],
-  })
+import { InitArgv } from './options'
+import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
+import { createProjectFileAndReturnPath } from '../../lib/utils/createProjectFileAndReturnPath'
+import { CommandHandler } from '../../lib/types'
 
-  let configFile = '.coco.config.json'
-
-  if (projectConfiguration === '.env') {
-    configFile = '.env'
-    if (!fs.existsSync('.env')) {
-      fs.writeFileSync('.env', '')
-    }
-  }
-
-  return configFile
-}
-
-const handleSystemLevelConfig = () => {
-  return path.join(os.homedir(), '.gitconfig')
-}
-
-export async function handler(argv: Argv<CommitOptions>['argv']) {
-  const options = loadConfig(argv) as CommitOptions
-  const logger = new Logger(options)
+export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
+  logger.log(LOGO)
 
   const level = await select({
     message: 'configure coco at the system or project level:',
@@ -68,13 +35,25 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   let configFilePath = ''
 
   switch (level) {
-    case 'system':
-      configFilePath = await handleSystemLevelConfig()
-      break
     case 'project':
-      configFilePath = await handleProjectLevelConfig()
+      const projectConfiguration = await select({
+        message: 'select type project level configuration:',
+        choices: [
+          {
+            name: '.coco.config.json',
+            value: '.coco.config.json',
+          },
+          {
+            name: '.env',
+            value: '.env',
+          },
+        ],
+      })
+      configFilePath = await createProjectFileAndReturnPath(projectConfiguration)
       break
+    case 'system':
     default:
+      configFilePath = getPathToUsersGitConfig()
       break
   }
 
@@ -189,7 +168,7 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   config.openAIApiKey = apiKey
 
   const isApproved = await confirm({
-    message: 'look good? (hiding API key for security)',
+    message: 'looking good? (API key hidden for security)',
   })
 
   if (isApproved) {
@@ -201,8 +180,11 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
       await appendToProjectConfig(configFilePath, config)
     }
 
-    logger.log(`init successful! 🦾🤖🎉`, { color: 'green' })
+    // After config is written, check for package installation
+    await checkAndHandlePackageInstallation({ global: level === 'system', logger })
+
+    logger.log(`\ninit successful! 🦾🤖🎉`, { color: 'green' })
   } else {
-    logger.log('init cancelled.', { color: 'yellow' })
+    logger.log('\ninit cancelled.', { color: 'yellow' })
   }
 }

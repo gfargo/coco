@@ -1,11 +1,8 @@
-import { Argv } from 'yargs'
-
-import { Logger } from '../../lib/utils/logger'
 import { getApiKeyForModel, getLlm, getPrompt } from '../../lib/langchain/utils'
 
 import { loadConfig } from '../../lib/config/loadConfig'
-import { isInteractive } from '../../lib/ui/helpers'
-import { ChangelogOptions } from './options'
+import { LOGO, isInteractive } from '../../lib/ui/helpers'
+import { ChangelogArgv, ChangelogOptions } from './options'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { executeChain } from '../../lib/langchain/executeChain'
 import { handleResult } from '../../lib/ui/handleResult'
@@ -14,10 +11,10 @@ import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { logSuccess } from '../../lib/ui/logSuccess'
+import { CommandHandler } from '../../lib/types'
 
-export async function handler(argv: Argv<ChangelogOptions>['argv']) {
+export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const options = loadConfig(argv) as ChangelogOptions
-  const logger = new Logger(options)
   const git = getRepo()
   const key = getApiKeyForModel(options.service, options)
 
@@ -32,6 +29,10 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
   })
 
   const INTERACTIVE = isInteractive(options)
+
+  if (INTERACTIVE) {
+    logger.log(LOGO)
+  }
 
   async function factory() {
     if (options.range) {
@@ -87,7 +88,7 @@ export async function handler(argv: Argv<ChangelogOptions>['argv']) {
       interactive: INTERACTIVE,
       review: {
         enableFullRetry: false,
-      }
+      },
     },
   })
 

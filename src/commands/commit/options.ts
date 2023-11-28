@@ -10,6 +10,8 @@ export interface CommitOptions extends BaseCommandOptions {
   ignoredExtensions: string[]
 }
 
+export type CommitArgv = Argv<CommitOptions>['argv']
+
 /**
  * Command line options via yargs
  */

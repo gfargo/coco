@@ -1,6 +1,6 @@
 import { Config } from '../lib/config/types'
 
-interface BaseArgvOptions {
+export interface BaseArgvOptions {
   interactive: boolean
   help: boolean
   verbose: boolean

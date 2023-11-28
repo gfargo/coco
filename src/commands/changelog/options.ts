@@ -11,6 +11,8 @@ export interface ChangelogOptions extends BaseCommandOptions {
   ignoredExtensions: string[]
 }
 
+export type ChangelogArgv = Argv<ChangelogOptions>['argv']
+
 /**
  * Command line options via yargs
  */
