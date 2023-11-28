@@ -1,13 +1,25 @@
 import fs from 'fs'
-import { confirm }  from '@inquirer/prompts'
+import { confirm } from '@inquirer/prompts'
+import { ConfirmMessage } from '../types'
 
-export async function updateFileSection(
-  filePath: string,
-  startComment: string,
-  endComment: string,
-  getNewContent: () => Promise<string>,
-  confirmUpdate = true
-) {
+type UpdateFileSectionInput = {
+  filePath: string
+  startComment: string
+  endComment: string
+  getNewContent: () => Promise<string>
+  confirmUpdate?: boolean
+  confirmMessage?: ConfirmMessage
+}
+
+export async function updateFileSection({
+  filePath,
+  startComment,
+  endComment,
+  getNewContent,
+  confirmUpdate = true,
+  confirmMessage = (path: string) =>
+    `A section already exists in ${path}, do you want to override it?`,
+}: UpdateFileSectionInput) {
   const lines = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8').split(/\r?\n/) : []
   const newLines = []
   let foundSection = false
@@ -18,7 +30,7 @@ export async function updateFileSection(
 
       if (confirmUpdate) {
         const confirmOverwrite = await confirm({
-          message: `A section already exists in ${filePath}, do you want to override it?`,
+          message: typeof confirmMessage === 'function' ? confirmMessage(filePath) : confirmMessage,
           default: false,
         })
 

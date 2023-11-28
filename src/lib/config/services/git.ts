@@ -4,6 +4,7 @@ import * as path from 'path'
 import * as ini from 'ini'
 import { Config } from '../types'
 import { updateFileSection } from '../../utils/updateFileSection'
+import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 
 /**
  * Load git profile config (from ~/.gitconfig)
@@ -67,7 +68,13 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
     }
     return contentLines.join('\n')
   }
-
-  // Use the updateFileSection utility
-  await updateFileSection(filePath, startComment, endComment, getNewContent)
+  
+  await updateFileSection({
+    filePath,
+    startComment,
+    endComment,
+    getNewContent,
+    confirmUpdate: true,
+    confirmMessage: CONFIG_ALREADY_EXISTS,
+  })
 }

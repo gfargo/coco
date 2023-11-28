@@ -14,7 +14,7 @@ export async function handleResult({ result, mode, interactiveHandler }: HandleR
       if (interactiveHandler) {
         await interactiveHandler(result)
       } else {
-        console.error('No result handler provided for interactive mode')
+        console.warn('No result handler provided for interactive mode.')
         logSuccess()
       }
       break
