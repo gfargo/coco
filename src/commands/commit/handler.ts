@@ -1,5 +1,4 @@
 import { fileChangeParser } from '../../lib/parsers/default'
-import { Logger } from '../../lib/utils/logger'
 import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
 import {
   getApiKeyForModel,
@@ -9,11 +8,10 @@ import {
 } from '../../lib/langchain/utils'
 import { noResult } from '../../lib/parsers/noResult'
 import { getChanges } from '../../lib/simple-git/getChanges'
-import { CommitOptions } from './options'
-import { Argv } from 'yargs'
+import { CommitArgv, CommitOptions } from './options'
 import { loadConfig } from '../../lib/config/loadConfig'
-import { isInteractive } from '../../lib/ui/helpers'
-import { FileChange } from '../../lib/types'
+import { LOGO, isInteractive } from '../../lib/ui/helpers'
+import { CommandHandler, FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { executeChain } from '../../lib/langchain/executeChain'
 import { handleResult } from '../../lib/ui/handleResult'
@@ -22,11 +20,10 @@ import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { logSuccess } from '../../lib/ui/logSuccess'
 
-export async function handler(argv: Argv<CommitOptions>['argv']) {
+export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
   const options = loadConfig(argv) as CommitOptions
   const { service } = options
-  const logger = new Logger(options)
 
   const key = getApiKeyForModel(service, options)
   const tokenizer = await getTokenCounter(getModelFromService(service))
@@ -42,6 +39,9 @@ export async function handler(argv: Argv<CommitOptions>['argv']) {
   })
 
   const INTERACTIVE = isInteractive(options)
+  if (INTERACTIVE) {
+    logger.log(LOGO)
+  }
 
   async function factory() {
     const changes = await getChanges({ git })
