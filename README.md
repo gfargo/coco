@@ -35,6 +35,10 @@ npx git-coco@latest init -l global
 Generates commit messages based on staged changes.
 
 ```bash
+coco
+
+# or 
+
 coco commit
 ```
 
