@@ -1,14 +1,24 @@
 import { Options, Argv } from 'yargs'
 import { BaseArgvOptions } from '../types'
 
-export type InitOptions = BaseArgvOptions
+export interface InitOptions extends BaseArgvOptions {
+  level?: 'system' | 'project'
+}
 
 export type InitArgv = Argv<InitOptions>['argv']
 
 /**
  * Command line options via yargs
  */
-export const options = {} as Record<string, Options>
+export const options = {
+  level: {
+    type: 'string',
+    alias: 'l',
+    description: 'Configure coco at the system or project level',
+    choices: ['system', 'project'],
+  },
+  
+} as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
   return yargs.options(options)

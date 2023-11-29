@@ -15,7 +15,7 @@ export interface Config {
    * @example 'huggingface/bigscience/bloom'
    **/
 
-  service: Service
+  service?: Service
   
   /**
    * The OpenAI API key.
