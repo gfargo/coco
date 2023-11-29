@@ -22,11 +22,11 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   let level = options?.level
   if (!level) {
     level = await select({
-      message: 'configure coco at the system or project level:',
+      message: 'configure coco for the current user or project?',
       choices: [
         {
-          name: 'system',
-          value: 'system',
+          name: 'global',
+          value: 'global',
           description: 'add coco config to your global git config',
         },
         {
@@ -57,7 +57,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       })
       configFilePath = await createProjectFileAndReturnPath(projectConfiguration)
       break
-    case 'system':
+    case 'global':
     default:
       configFilePath = getPathToUsersGitConfig()
       break
@@ -187,7 +187,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     }
 
     // After config is written, check for package installation
-    await checkAndHandlePackageInstallation({ global: level === 'system', logger })
+    await checkAndHandlePackageInstallation({ global: level === 'global', logger })
 
     logger.log(`\ninit successful! 🦾🤖🎉`, { color: 'green' })
   } else {

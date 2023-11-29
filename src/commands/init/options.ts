@@ -2,7 +2,7 @@ import { Options, Argv } from 'yargs'
 import { BaseArgvOptions } from '../types'
 
 export interface InitOptions extends BaseArgvOptions {
-  level?: 'system' | 'project'
+  level?: 'global' | 'project'
 }
 
 export type InitArgv = Argv<InitOptions>['argv']
@@ -14,10 +14,9 @@ export const options = {
   level: {
     type: 'string',
     alias: 'l',
-    description: 'Configure coco at the system or project level',
-    choices: ['system', 'project'],
+    description: 'configure coco for the current user or project?',
+    choices: ['global', 'project'],
   },
-  
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
