@@ -71,14 +71,14 @@ coco -i
 coco -s
 ```
 
+## Configuration
+
+The `.coco.config` documentation has moved to our [wiki](https://github.com/gfargo/coco/wiki/Config-Overview). Here, you'll find detailed information on setting up and customizing your experience.
+
 ### **Ignoring Files**
 
 You can specify files to be ignored when generating commit messages by adding them to your config file or via command line flags.  Read more about ignoring files & extensions in the [wiki](https://github.com/gfargo/coco/wiki/Ignoring-Files-&-Extensions).
 
-
-## Configuration
-
-The `.coco.config` documentation has moved to our [wiki](https://github.com/gfargo/coco/wiki/Config-Overview). Here, you'll find detailed information on setting up and customizing your experience.
 
 ## Contribution
 
