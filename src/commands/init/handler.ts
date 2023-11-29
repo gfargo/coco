@@ -8,29 +8,35 @@ import { appendToProjectConfig } from '../../lib/config/services/project'
 import { LOGO } from '../../lib/ui/helpers'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
 
-import { InitArgv } from './options'
+import { InitArgv, InitOptions } from './options'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
 import { createProjectFileAndReturnPath } from '../../lib/utils/createProjectFileAndReturnPath'
 import { CommandHandler } from '../../lib/types'
+import { loadConfig } from '../../lib/config/loadConfig'
 
 export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
+  const options = loadConfig(argv) as InitOptions
+  
   logger.log(LOGO)
-
-  const level = await select({
-    message: 'configure coco at the system or project level:',
-    choices: [
-      {
-        name: 'system',
-        value: 'system',
-        description: 'add coco config to your global git config',
-      },
-      {
-        name: 'project',
-        value: 'project',
-        description: 'add coco config to existing git project',
-      },
-    ],
-  })
+  
+  let level = options?.level
+  if (!level) {
+    level = await select({
+      message: 'configure coco at the system or project level:',
+      choices: [
+        {
+          name: 'system',
+          value: 'system',
+          description: 'add coco config to your global git config',
+        },
+        {
+          name: 'project',
+          value: 'project',
+          description: 'add coco config to existing git project',
+        },
+      ],
+    })
+  }
 
   let configFilePath = ''
 
