@@ -5,6 +5,7 @@ import * as ini from 'ini'
 import { Config } from '../types'
 import { updateFileSection } from '../../utils/updateFileSection'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
+import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants'
 
 /**
  * Load git profile config (from ~/.gitconfig)
@@ -48,11 +49,8 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
     throw new Error(`File ${filePath} does not exist.`)
   }
 
-  const startComment = '# -- Start coco config --'
-  const endComment = '# -- End coco config --'
   const header = '[coco]'
 
-  // Function to generate new content for the coco section
   const getNewContent = async () => {
     const contentLines = [header]
     for (const key in config) {
@@ -68,11 +66,11 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
     }
     return contentLines.join('\n')
   }
-  
+
   await updateFileSection({
     filePath,
-    startComment,
-    endComment,
+    startComment: COCO_CONFIG_START_COMMENT,
+    endComment: COCO_CONFIG_END_COMMENT,
     getNewContent,
     confirmUpdate: true,
     confirmMessage: CONFIG_ALREADY_EXISTS,
