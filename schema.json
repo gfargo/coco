@@ -2,6 +2,15 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
+    "service": {
+      "type":"string",
+      "description": "The LLM provider and model to use",
+      "default": "openai/gpt-4"
+    },
+    "endpoint": {
+      "type": "string",
+      "description": "The endpoint to use for the LLM service"
+    },
     "openAIApiKey": {
       "type": "string",
       "description": "Your OpenAI API key",
