@@ -12,6 +12,10 @@ import { BaseCommandOptions, Config } from '../../commands/types'
 import { ServiceModel, ServiceProvider } from '../config/types'
 
 export function getModelAndProviderFromService(service: Config['service']) {
+  if (!service) {
+    throw new Error(`Missing service`)
+  }
+
   const [provider, model] = service.split(/\/(.*)/s) as [ServiceProvider, ServiceModel]
 
   if (!model || !provider) {

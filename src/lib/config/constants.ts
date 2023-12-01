@@ -7,7 +7,7 @@ import { Config } from './types'
  * @type {Config}
  */
 export const DEFAULT_CONFIG = {
-  service: 'ollama/codellama',
+  service: 'openai/gpt-4',
   verbose: false,
   tokenLimit: 1024,
   summarizePrompt: SUMMARIZE_PROMPT.template,
