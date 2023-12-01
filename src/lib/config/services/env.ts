@@ -3,6 +3,8 @@ import { Config } from '../types'
 import { CONFIG_KEYS } from '../constants'
 import { updateFileSection } from '../../utils/updateFileSection'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
+import { COCO_CONFIG_START_COMMENT } from '../constants'
+import { COCO_CONFIG_END_COMMENT } from '../constants'
 
 type Keys = keyof Config
 type ValuesTypes = Config[Keys]
@@ -69,8 +71,6 @@ function formatEnvValue(value: ValuesTypes): string {
 }
 
 export const appendToEnvFile = async (filePath: string, config: Partial<Config>) => {
-  const startComment = '# -- Start coco config --'
-  const endComment = '# -- End coco config --'
 
   const getNewContent = async () => {
     return Object.entries(config)
@@ -80,8 +80,8 @@ export const appendToEnvFile = async (filePath: string, config: Partial<Config>)
 
   await updateFileSection({
     filePath,
-    startComment,
-    endComment,
+    startComment: COCO_CONFIG_START_COMMENT,
+    endComment: COCO_CONFIG_END_COMMENT,
     getNewContent,
     confirmMessage: CONFIG_ALREADY_EXISTS,
   })

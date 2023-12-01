@@ -4,21 +4,24 @@ import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToEnvFile } from '../../lib/config/services/env'
 import { logResult } from '../../lib/ui/logResult'
 import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
-import { appendToProjectConfig } from '../../lib/config/services/project'
+import { appendToProjectJsonConfig } from '../../lib/config/services/project'
 import { LOGO } from '../../lib/ui/helpers'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
 
 import { InitArgv, InitOptions } from './options'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
-import { createProjectFileAndReturnPath } from '../../lib/utils/createProjectFileAndReturnPath'
+import {
+  ProjectConfigFileName,
+  getProjectConfigFilePath,
+} from '../../lib/utils/getProjectConfigFilePath'
 import { CommandHandler } from '../../lib/types'
 import { loadConfig } from '../../lib/config/loadConfig'
 
 export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   const options = loadConfig(argv) as InitOptions
-  
+
   logger.log(LOGO)
-  
+
   let level = options?.level
   if (!level) {
     level = await select({
@@ -36,31 +39,6 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         },
       ],
     })
-  }
-
-  let configFilePath = ''
-
-  switch (level) {
-    case 'project':
-      const projectConfiguration = await select({
-        message: 'select type project level configuration:',
-        choices: [
-          {
-            name: '.coco.config.json',
-            value: '.coco.config.json',
-          },
-          {
-            name: '.env',
-            value: '.env',
-          },
-        ],
-      })
-      configFilePath = await createProjectFileAndReturnPath(projectConfiguration)
-      break
-    case 'global':
-    default:
-      configFilePath = getPathToUsersGitConfig()
-      break
   }
 
   // interactive v.s stdout mode
@@ -177,13 +155,38 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     message: 'looking good? (API key hidden for security)',
   })
 
+  let configFilePath = ''
+
+  switch (level) {
+    case 'project':
+      const projectConfiguration = (await select({
+        message: 'where would you like to store the project config?',
+        choices: [
+          {
+            name: '.coco.config.json',
+            value: '.coco.config.json',
+          },
+          {
+            name: '.env',
+            value: '.env',
+          },
+        ],
+      })) as ProjectConfigFileName
+      configFilePath = await getProjectConfigFilePath(projectConfiguration)
+      break
+    case 'global':
+    default:
+      configFilePath = getPathToUsersGitConfig()
+      break
+  }
+
   if (isApproved) {
     if (configFilePath.endsWith('.gitconfig')) {
       await appendToGitConfig(configFilePath, config)
-    } else if (configFilePath === '.env') {
+    } else if (configFilePath.endsWith('.env')) {
       await appendToEnvFile(configFilePath, config)
-    } else if (configFilePath === '.coco.config.json') {
-      await appendToProjectConfig(configFilePath, config)
+    } else if (configFilePath.endsWith('.coco.config.json')) {
+      await appendToProjectJsonConfig(configFilePath, config)
     }
 
     // After config is written, check for package installation

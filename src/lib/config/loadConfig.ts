@@ -1,7 +1,7 @@
 import { loadEnvConfig } from './services/env'
 import { loadGitConfig } from './services/git'
 import { loadGitignore, loadIgnore } from './services/ignore'
-import { loadProjectConfig } from './services/project'
+import { loadProjectJsonConfig } from './services/project'
 import { loadXDGConfig } from './services/xdg'
 import { Config } from './types'
 
@@ -31,8 +31,8 @@ export function loadConfig(argv = {}): Config {
   config = loadIgnore(config)
   config = loadXDGConfig(config)
   config = loadGitConfig(config)
-  config = loadProjectConfig(config)
+  config = loadProjectJsonConfig(config)
   config = loadEnvConfig(config)
-
+  
   return { ...config, ...argv }
 }
