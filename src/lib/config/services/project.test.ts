@@ -1,5 +1,5 @@
 import * as fs from 'fs'
-import { loadProjectConfig } from './project'
+import { loadProjectJsonConfig } from './project'
 import { Config } from '../types'
 jest.mock('fs')
 jest.mock('os')
@@ -28,7 +28,7 @@ describe('loadProjectConfig', () => {
   it('should load project config', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(JSON.stringify({ openAIApiKey: 'sk_project-json-api-key' }))
-    const config = loadProjectConfig(defaultConfig)
+    const config = loadProjectJsonConfig(defaultConfig)
     expect(config.openAIApiKey).toBe('sk_project-json-api-key')
   })
 })

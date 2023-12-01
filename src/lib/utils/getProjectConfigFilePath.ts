@@ -1,4 +1,3 @@
-import fs from 'fs'
 import { findProjectRoot } from './findProjectRoot'
 
 export type ProjectConfigFileName = '.coco.config.json' | '.env'
