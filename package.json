@@ -74,7 +74,7 @@
     "ts-jest": "^29.1.0",
     "ts-node": "^10.9.1",
     "tslib": "^2.5.3",
-    "tsx": "^3.12.7",
+    "tsx": "^4.7.0",
     "typescript": "^5.1.6"
   },
   "dependencies": {
