@@ -3,7 +3,7 @@ import { Config } from '../types'
 import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToEnvFile } from '../../lib/config/services/env'
 import { logResult } from '../../lib/ui/logResult'
-import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
+import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commit'
 import { appendToProjectJsonConfig } from '../../lib/config/services/project'
 import { LOGO } from '../../lib/ui/helpers'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
@@ -15,10 +15,10 @@ import {
   getProjectConfigFilePath,
 } from '../../lib/utils/getProjectConfigFilePath'
 import { CommandHandler } from '../../lib/types'
-import { loadConfig } from '../../lib/config/loadConfig'
+import { loadConfig } from '../../lib/config/utils/loadConfig'
 
 export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
-  const options = loadConfig(argv) as InitOptions
+  const options = loadConfig<InitOptions, InitArgv>(argv)
 
   logger.log(LOGO)
 

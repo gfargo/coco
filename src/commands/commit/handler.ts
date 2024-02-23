@@ -1,19 +1,16 @@
 import { fileChangeParser } from '../../lib/parsers/default'
-import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
-import {
-  getApiKeyForModel,
-  getLlm as getLlm,
-  getModelFromService,
-  getPrompt,
-} from '../../lib/langchain/utils'
+import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commit'
+import { getApiKeyForModel } from '../../lib/langchain/utils'
+import { getLlm } from '../../lib/langchain/utils/getLlm'
+import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { noResult } from '../../lib/parsers/noResult'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { CommitArgv, CommitOptions } from './options'
-import { loadConfig } from '../../lib/config/loadConfig'
+import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { CommandHandler, FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
-import { executeChain } from '../../lib/langchain/executeChain'
+import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { handleResult } from '../../lib/ui/handleResult'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
@@ -22,21 +19,28 @@ import { logSuccess } from '../../lib/ui/logSuccess'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
-  const options = loadConfig(argv) as CommitOptions
+  const options = loadConfig<CommitOptions, CommitArgv>(argv)
   const { service } = options
 
-  const key = getApiKeyForModel(service, options)
-  const tokenizer = await getTokenCounter(getModelFromService(service))
+  console.log({ options })
+
+  const key = getApiKeyForModel(options)
+
+  console.log({ key, service })
+
+  // const tokenizer = await getTokenCounter(getModelFromService(service))
+  const tokenizer = await getTokenCounter('gpt-4') // TODO: Remove hard coded tokenizer
 
   if (!key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
 
-  const llm = getLlm(service, key, {
-    temperature: 0.4,
-    maxConcurrency: 10,
-  })
+  console.log({ service })
+
+  const llm = getLlm(options)
+
+  console.log({llm})
 
   const INTERACTIVE = isInteractive(options)
   if (INTERACTIVE) {
