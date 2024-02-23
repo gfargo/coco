@@ -1,4 +1,5 @@
 import { Config } from '../lib/config/types'
+import { LLMServiceAlias } from '../lib/langchain/types'
 
 export interface BaseArgvOptions {
   [x: string]: unknown
@@ -7,10 +8,9 @@ export interface BaseArgvOptions {
   verbose: boolean
 }
 export interface BaseCommandOptions extends BaseArgvOptions {
-  service: Config['service']
-  openAIApiKey: Config['openAIApiKey']
-  huggingFaceHubApiKey: Config['huggingFaceHubApiKey']
-  tokenLimit: Config['tokenLimit']
+  service: LLMServiceAlias
+  openAIApiKey: string
+  tokenLimit: number
 }
 
 export { Config }
