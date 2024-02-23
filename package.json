@@ -33,6 +33,7 @@
     "test": "npm run test:jest && npm run test:publish",
     "test:publish": "npm run lint && npm publish --dry-run",
     "test:jest": "jest",
+    "test:jest:watch": "jest --watch",
     "release": "release-it",
     "prepublishOnly": "npm run clean && npm run build",
     "coco": "npm run coco:ts",
