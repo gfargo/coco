@@ -7,14 +7,14 @@ import { Config } from '../types'
  * @param {Config} config
  * @returns {Config} Updated config
  **/
-export function loadProjectJsonConfig(config: Config): Config {
+export function loadProjectJsonConfig<ConfigType = Config>(config: Partial<Config>){
   // TODO: Add validation based of JSON schema?
   // @see https://github.com/acornejo/jjv
   if (fs.existsSync('.coco.config.json')) {
-    const projectConfig = JSON.parse(fs.readFileSync('.coco.config.json', 'utf-8')) as Config
-    config = { ...config, ...projectConfig }
+    const projectConfig = JSON.parse(fs.readFileSync('.coco.config.json', 'utf-8')) as Partial<Config>
+    config = { ...config, ...projectConfig } as Config
   }
-  return config
+  return config as ConfigType
 }
 
 export const appendToProjectJsonConfig = (filePath: string, config: Partial<Config>) => {

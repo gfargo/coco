@@ -1,52 +1,7 @@
-import { TiktokenModel } from "langchain/dist/types/openai-types";
+import { BaseCommandOptions } from '../../commands/types'
+import { LLMService, OllamaLLMService, OpenAILLMService } from '../langchain/types'
 
-export type ServiceProvider = "openai" | "huggingface";
-export type ServiceModel = TiktokenModel;
-type Service = `${ServiceProvider}/${ServiceModel}`;
-
-export interface Config {
-  /**
-   * The LLM model to use for generating results.
-   * 
-   * @default 'openai/gpt-4'
-   * 
-   * @example 'openai/gpt-4'
-   * @example 'openai/gpt-3.5-turbo'
-   * @example 'huggingface/bigscience/bloom'
-   **/
-
-  service?: Service
-  
-  /**
-   * The OpenAI API key.
-   */
-  openAIApiKey?: string
-
-  /**
-   * The HuggingFace Hub API key.
-   */
-  huggingFaceHubApiKey?: string
-
-  /**
-   * The maximum number of tokens per request.
-   *
-   * @default 1024
-   */
-  tokenLimit?: number
-
-  /**
-   * The prompt text used for generating results.
-   */
-  prompt?: string
-
-  /**
-   * The temperature value controls the randomness of the generated output.
-   * Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.
-   *
-   * @default 0.4
-   */
-  temperature?: number
-
+interface BaseConfig {
   /**
    * The output destination for the generated result.
    * - 'stdout': Prints the result to the standard output.  This is the default behavior.
@@ -54,7 +9,7 @@ export interface Config {
    *
    * @default 'stdout'
    */
-  mode?: 'stdout' | 'interactive'
+  mode: 'stdout' | 'interactive'
 
   /**
    * Enable verbose logging.
@@ -69,6 +24,11 @@ export interface Config {
    * @default false
    */
   openInEditor?: boolean
+
+  /**
+   * The prompt text used for generating results.
+   */
+  prompt?: string
 
   /**
    * The prompt text used specifically for generating summaries of large files.
@@ -95,8 +55,30 @@ export interface Config {
 
   /**
    * Default git branch for the repository.
-   * 
+   *
    * @default 'main'
    */
-  defaultBranch?: string
+  defaultBranch: string
 }
+
+export interface OpenAIAliasConfig extends BaseConfig {
+  service: 'openai'
+  model?: OpenAILLMService['model']
+  openAIApiKey: string
+}
+
+export interface OllamaAliasConfig extends BaseConfig {
+  service: 'ollama'
+  model?: OllamaLLMService['model']
+  endpoint: string
+}
+
+export type ConfigWithServiceAlias = (OpenAIAliasConfig | OllamaAliasConfig) &
+  Partial<BaseCommandOptions>
+
+export type ConfigWithServiceObject = BaseConfig &
+Partial<BaseCommandOptions> & {
+  service: LLMService
+}
+
+export type Config = ConfigWithServiceAlias | ConfigWithServiceObject

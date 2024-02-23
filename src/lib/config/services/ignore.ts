@@ -7,15 +7,16 @@ import { Config } from '../types'
  * @param {Config} config
  * @returns
  */
-export function loadGitignore(config: Config): Config {
+export function loadGitignore<ConfigType = Config>(config: Partial<Config>) {
   if (fs.existsSync('.gitignore')) {
     const gitignoreContent = fs.readFileSync('.gitignore', 'utf-8')
+    
     config.ignoredFiles = [
       ...(config?.ignoredFiles || []),
       ...gitignoreContent.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#')),
     ]
   }
-  return config
+  return config as ConfigType
 }
 
 /**
@@ -24,7 +25,7 @@ export function loadGitignore(config: Config): Config {
  * @param {Config} config
  * @returns
  */
-export function loadIgnore(config: Config): Config {
+export function loadIgnore<ConfigType = Config>(config: Partial<Config>) {
   if (fs.existsSync('.ignore')) {
     const ignoreContent = fs.readFileSync('.ignore', 'utf-8')
     config.ignoredFiles = [
@@ -32,5 +33,5 @@ export function loadIgnore(config: Config): Config {
       ...ignoreContent.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#')),
     ]
   }
-  return config
+  return config as ConfigType
 }

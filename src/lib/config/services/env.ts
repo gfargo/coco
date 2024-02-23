@@ -6,8 +6,7 @@ import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { COCO_CONFIG_START_COMMENT } from '../constants'
 import { COCO_CONFIG_END_COMMENT } from '../constants'
 
-type Keys = keyof Config
-type ValuesTypes = Config[Keys]
+type ValuesTypes = Config[keyof Config]
 
 /**
  * Load environment variables
@@ -15,45 +14,48 @@ type ValuesTypes = Config[Keys]
  * @param {Config} config
  * @returns {Config} Updated config
  **/
-export function loadEnvConfig(config: Config): Config {
+export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
   const envConfig: Partial<Config> = {}
 
   CONFIG_KEYS.forEach((key) => {
-    const envVarName = toEnvVarName(key as keyof Config)
-    const envValue = parseEnvValue(key, process.env[envVarName])
+    const envVarName = toEnvVarName(key as string)
+    const envValue = parseEnvValue(key as string, process.env[envVarName])
 
-    if (envValue === undefined) return
+    if (envValue === undefined) {
+      return
+    }
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    envConfig[key as Keys] = envValue
+    envConfig[key as string] = envValue
   })
 
-  return { ...config, ...removeUndefined(envConfig) }
+  return { ...config, ...removeUndefined(envConfig) } as ConfigType
 }
 
 function parseEnvValue(key: string, value: ValuesTypes) {
-  if (value === undefined) {
-    return undefined
-  } else if (key === 'tokenLimit' && typeof value === 'string') {
-    return parseInt(value)
-  } else if (
-    (key === 'ignoredFiles' || key === 'ignoredExtensions') &&
-    typeof value === 'string' &&
-    value.includes(',')
-  ) {
-    return value.split(',')
+  switch (true) {
+    // Handle undefined values
+    case value === undefined:
+      return undefined
+    // Handle comma separated strings for ignoredFiles and ignoredExtensions arrays
+    case (key === 'ignoredFiles' || key === 'ignoredExtensions') &&
+      typeof value === 'string' &&
+      value.includes(','):
+      return value.split(',')
+    // Handle boolean values
+    case typeof value === 'string' && (value === 'false' || value === 'true'):
+      return value === 'true'
+    default:
+      return value
   }
-  return value
 }
 
-function toEnvVarName(key: Keys): string {
+function toEnvVarName(key: string): string {
   switch (key) {
     case 'openAIApiKey':
       return 'OPENAI_API_KEY'
-    case 'huggingFaceHubApiKey':
-      return 'HUGGINGFACE_HUB_API_KEY'
     default:
-      return 'COCO_' + key.replace(/([A-Z])/g, '_$1').toUpperCase()
+      return `COCO_${key.replace(/([A-Z])/g, '_$1').toLocaleUpperCase()}`
   }
 }
 
@@ -71,10 +73,11 @@ function formatEnvValue(value: ValuesTypes): string {
 }
 
 export const appendToEnvFile = async (filePath: string, config: Partial<Config>) => {
-
   const getNewContent = async () => {
     return Object.entries(config)
-      .map(([key, value]) => `${toEnvVarName(key as keyof Config)}=${formatEnvValue(value)}`)
+      .map(
+        ([key, value]) => `${toEnvVarName(key as string)}=${formatEnvValue(value as ValuesTypes)}`
+      )
       .join('\n')
   }
 

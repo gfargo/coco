@@ -5,21 +5,81 @@ jest.mock('fs')
 
 const mockFs = fs as jest.Mocked<typeof fs>
 
-const defaultConfig: Config = {
-  service: 'huggingface/gpt2',
-  openAIApiKey: 'sk_default-api-key',
+const defaultConfig: Partial<Config> = {
+  service: 'ollama',
+  mode: 'stdout',
+  defaultBranch: 'test',
 }
+
+const MOCK_GIT_CONFIG = `
+[coco]
+  service=openai
+  mode=interactive
+  defaultBranch=main
+`
+
+const MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION = `
+[core]
+  editor=nano
+  autocrlf=input
+  excludesfile=/home/username/.gitignore_global
+  [user]
+    name=John Doe
+`
+
+const MOCK_GIT_CONFIG_WITH_COCO_COMMENTS = `
+# -- Start coco config --
+[coco]
+	service = openai
+	defaultBranch = main
+	mode = interactive
+# -- End coco config --
+`
+
+const MOCK_GIT_CONFIG_WITH_SERVICE_ALIAS_AND_OPENAI_API_KEY = `
+[coco]
+  service = openai
+  openAIApiKey = apikey
+`
 
 describe('loadGitConfig', () => {
   afterEach(() => {
     jest.resetAllMocks()
   })
 
-  it('should load Git config', () => {
+  it('should parse basic .gitconfig file', () => {
     mockFs.existsSync.mockReturnValue(true)
-    mockFs.readFileSync.mockReturnValue('[coco]\nopenAIApiKey=sk_git-config-api-key\ntokenLimit=250\n')
-    const config = loadGitConfig(defaultConfig)
-    expect(config.openAIApiKey).toBe('sk_git-config-api-key')
-    expect(config.tokenLimit).toBe(250)
+    mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG)
+    const config = loadGitConfig(defaultConfig as Config)
+    expect(config.service).toBe('openai')
+    expect(config.mode).toBe('interactive')
+    expect(config.defaultBranch).toBe('main')
+  })
+
+  it('should parse .gitconfig file without coco section', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION)
+    const config = loadGitConfig(defaultConfig as Config)
+    expect(config.service).toBe('ollama')
+    expect(config.mode).toBe('stdout')
+    expect(config.defaultBranch).toBe('test')
+  })
+
+  it('should parse .gitconfig file with coco comments', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_WITH_COCO_COMMENTS)
+    const config = loadGitConfig(defaultConfig as Config)
+    expect(config.service).toBe('openai')
+    expect(config.mode).toBe('interactive')
+    expect(config.defaultBranch).toBe('main')
+  })
+
+  it('should parse .gitconfig file with service alias and openai api key', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_WITH_SERVICE_ALIAS_AND_OPENAI_API_KEY)
+    const config = loadGitConfig(defaultConfig as Config)
+    expect(config.service).toBe('openai')
+    expect(config.mode).toBe('stdout')
+    expect(config.defaultBranch).toBe('test')
   })
 })
