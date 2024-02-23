@@ -3,9 +3,14 @@
   "type": "object",
   "properties": {
     "service": {
-      "type":"string",
-      "description": "The LLM provider and model to use",
-      "default": "openai/gpt-4"
+      "description": "The LLM provider to use",
+      "default": "openai",
+      "enum": ["openai", "ollama"]
+    },
+    "model": {
+      "type": "string",
+      "description": "The LLM model to use",
+      "default": "gpt-4"
     },
     "endpoint": {
       "type": "string",
@@ -28,7 +33,7 @@
     },
     "prompt": {
       "type": "string",
-      "description": "Prompt for OpenAI GPT-3",
+      "description": "Prompt for the LLM service",
       "default": "What are the changes in this commit?"
     },
     "temperature": {
@@ -69,6 +74,26 @@
       "default": "main"
     }
   },
-  "required": ["openAIApiKey"],
+  "required": ["service", "model"],
+  "definitions": {
+    "is-openai": {
+      "properties": {
+        "service": { "enum": ["openai"] }
+      },
+      "required": ["service"]
+    },
+    "is-ollama": {
+      "properties": {
+        "service": { "enum": ["ollama"] }
+      },
+      "required": ["service"]
+    },
+    "ollama-requires-endpoint": {
+      "anyOf": [
+        { "not": { "$ref": "#/definitions/is-openai" } },
+        { "required": ["endpoint"] }
+      ]
+    }
+  },
   "additionalProperties": false
 }
