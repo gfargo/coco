@@ -1,4 +1,4 @@
-import { getLlm } from './langchain/utils'
+import { getLlm } from './langchain/utils/getLlm'
 import { SimpleGit } from 'simple-git'
 import { Logger } from './utils/logger'
 import { TokenCounter } from './utils/tokenizer'

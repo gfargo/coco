@@ -1,5 +1,5 @@
 import { Argv } from 'yargs'
-import { loadConfig } from '../config/loadConfig'
+import { loadConfig } from '../config/utils/loadConfig'
 import { Logger } from './logger'
 import { CommandHandler } from '../types'
 import { BaseArgvOptions } from '../../commands/types'
