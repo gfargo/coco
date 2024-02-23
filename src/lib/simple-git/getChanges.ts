@@ -4,12 +4,7 @@ import { minimatch } from 'minimatch'
 import { FileChange } from '../types'
 import { getStatus } from './getStatus'
 import { getSummaryText } from './getSummaryText'
-import { loadConfig } from '../config/loadConfig'
-
-const config = loadConfig()
-
-const DEFAULT_IGNORED_FILES = config?.ignoredFiles?.length ? config.ignoredFiles : []
-const DEFAULT_IGNORED_EXTENSIONS = config?.ignoredExtensions?.length ? config.ignoredExtensions : []
+import { DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../config/constants'
 
 export type GetChangesInput = {
   git: SimpleGit
