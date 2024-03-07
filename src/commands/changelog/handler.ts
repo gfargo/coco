@@ -1,10 +1,12 @@
-import { getApiKeyForModel, getLlm, getPrompt } from '../../lib/langchain/utils'
+import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
+import { getLlm } from '../../lib/langchain/utils/getLlm'
+import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 
-import { loadConfig } from '../../lib/config/loadConfig'
+import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { ChangelogArgv, ChangelogOptions } from './options'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
-import { executeChain } from '../../lib/langchain/executeChain'
+import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { handleResult } from '../../lib/ui/handleResult'
 import { CHANGELOG_PROMPT } from '../../lib/langchain/prompts/changelog'
 import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
@@ -14,19 +16,18 @@ import { logSuccess } from '../../lib/ui/logSuccess'
 import { CommandHandler } from '../../lib/types'
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
-  const options = loadConfig(argv) as ChangelogOptions
+  const options = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
   const git = getRepo()
-  const key = getApiKeyForModel(options.service, options)
+  const key = getApiKeyForModel(options)
 
   if (!key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
 
-  const model = getLlm(options.service, key, {
-    temperature: 0.4,
-    maxConcurrency: 10,
-  })
+  const { provider, model } = getModelAndProviderFromConfig(options)
+
+  const llm = getLlm(provider, model, options)
 
   const INTERACTIVE = isInteractive(options)
 
@@ -67,7 +68,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       })
 
       return await executeChain({
-        llm: model,
+        llm,
         prompt,
         variables: { summary: context },
       })

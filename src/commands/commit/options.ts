@@ -16,16 +16,10 @@ export type CommitArgv = Argv<CommitOptions>['argv']
  * Command line options via yargs
  */
 export const options = {
-  model: { type: 'string', description: 'LLM/Model-Name' },
+  service: { type: 'string', description: 'LLM/Model-Name', choices: ['openai', 'ollama'] },
   openAIApiKey: {
     type: 'string',
     description: 'OpenAI API Key',
-    conflicts: 'huggingFaceHubApiKey',
-  },
-  huggingFaceHubApiKey: {
-    type: 'string',
-    description: 'HuggingFace Hub API Key',
-    conflicts: 'openAIApiKey',
   },
   tokenLimit: { type: 'number', description: 'Token limit' },
   prompt: {

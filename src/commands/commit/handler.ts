@@ -1,42 +1,40 @@
 import { fileChangeParser } from '../../lib/parsers/default'
-import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commitDefault'
-import {
-  getApiKeyForModel,
-  getLlm as getLlm,
-  getModelFromService,
-  getPrompt,
-} from '../../lib/langchain/utils'
+import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commit'
+import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
+import { getLlm } from '../../lib/langchain/utils/getLlm'
+import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { noResult } from '../../lib/parsers/noResult'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { CommitArgv, CommitOptions } from './options'
-import { loadConfig } from '../../lib/config/loadConfig'
+import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { CommandHandler, FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
-import { executeChain } from '../../lib/langchain/executeChain'
+import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { handleResult } from '../../lib/ui/handleResult'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { logSuccess } from '../../lib/ui/logSuccess'
+import { TiktokenModel } from 'langchain/dist/types/openai-types'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
-  const options = loadConfig(argv) as CommitOptions
-  const { service } = options
-
-  const key = getApiKeyForModel(service, options)
-  const tokenizer = await getTokenCounter(getModelFromService(service))
+  const options = loadConfig<CommitOptions, CommitArgv>(argv)
+  const key = getApiKeyForModel(options)
 
   if (!key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
 
-  const llm = getLlm(service, key, {
-    temperature: 0.4,
-    maxConcurrency: 10,
-  })
+  const { provider, model } = getModelAndProviderFromConfig(options)
+
+  const tokenizer = await getTokenCounter(
+    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4'
+  )
+
+  const llm = getLlm(provider, model, options)
 
   const INTERACTIVE = isInteractive(options)
   if (INTERACTIVE) {

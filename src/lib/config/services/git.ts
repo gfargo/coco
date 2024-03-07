@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import * as ini from 'ini'
-import { Config } from '../types'
+import { Config, ConfigWithServiceAlias, OllamaAliasConfig, OpenAIAliasConfig } from '../types'
 import { updateFileSection } from '../../utils/updateFileSection'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants'
@@ -13,7 +13,7 @@ import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants
  * @param {Config} config
  * @returns {Config} Updated config
  **/
-export function loadGitConfig(config: Config): Config {
+export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
   const gitConfigPath = path.join(os.homedir(), '.gitconfig')
   if (fs.existsSync(gitConfigPath)) {
     const gitConfigRaw = fs.readFileSync(gitConfigPath, 'utf-8')
@@ -21,21 +21,30 @@ export function loadGitConfig(config: Config): Config {
 
     config = {
       ...config,
-      service: gitConfigParsed.coco?.model || config.service,
-      openAIApiKey: gitConfigParsed.coco?.openAIApiKey || config.openAIApiKey,
-      huggingFaceHubApiKey:
-        gitConfigParsed.coco?.huggingFaceHubApiKey || config.huggingFaceHubApiKey,
-      tokenLimit: parseInt(gitConfigParsed.coco?.tokenLimit) || config.tokenLimit,
+      service: gitConfigParsed.coco?.service || config.service,
+
+      ...(config.service === 'ollama'
+        ? {
+            endpoint: gitConfigParsed.coco?.endpoint || (config as OllamaAliasConfig)?.endpoint,
+          }
+        : {
+            openAIApiKey:
+              gitConfigParsed.coco?.openAIApiKey || (config as OpenAIAliasConfig)?.openAIApiKey,
+          }),
+      model: gitConfigParsed.coco?.model || (config as ConfigWithServiceAlias)?.model,
+      temperature:
+        gitConfigParsed.coco?.temperature || (config as ConfigWithServiceAlias)?.temperature,
+      tokenLimit:
+        gitConfigParsed.coco?.tokenLimit || (config as ConfigWithServiceAlias)?.tokenLimit,
       prompt: gitConfigParsed.coco?.prompt || config.prompt,
       mode: gitConfigParsed.coco?.mode || config.mode,
-      temperature: gitConfigParsed.coco?.temperature || config.temperature,
       summarizePrompt: gitConfigParsed.coco?.summarizePrompt || config.summarizePrompt,
       ignoredFiles: gitConfigParsed.coco?.ignoredFiles || config.ignoredFiles,
       ignoredExtensions: gitConfigParsed.coco?.ignoredExtensions || config.ignoredExtensions,
       defaultBranch: gitConfigParsed.coco?.defaultBranch || config.defaultBranch,
     }
   }
-  return config
+  return config as ConfigType
 }
 
 /**

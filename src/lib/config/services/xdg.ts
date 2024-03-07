@@ -9,12 +9,13 @@ import { Config } from '../types'
  * @param {Config} config
  * @returns {Config} Updated config
  */
-export function loadXDGConfig(config: Config): Config {
+export function loadXDGConfig<ConfigType = Config>(config: Partial<Config>) {
   const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
   const xdgConfigPath = path.join(xdgConfigHome, 'coco', 'config.json')
   if (fs.existsSync(xdgConfigPath)) {
-    const xdgConfig = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8')) as Config
+    const xdgConfig = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8'))
+    
     config = { ...config, ...xdgConfig }
   }
-  return config
+  return config as ConfigType
 }

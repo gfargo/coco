@@ -3,7 +3,8 @@ import { summarizeDiffs } from './utils/summarizeDiffs'
 
 import { createDiffTree } from './utils/createDiffTree'
 import { collectDiffs } from './utils/collectDiffs'
-import { getSummarizationChain, getTextSplitter } from '../../langchain/utils'
+import { getSummarizationChain } from '../../langchain/utils/getSummarizationChain'
+import { getTextSplitter } from '../../langchain/utils/getTextSplitter'
 import { SUMMARIZE_PROMPT } from '../../langchain/prompts/summarize'
 import { getDiff } from '../../simple-git/getDiff'
 

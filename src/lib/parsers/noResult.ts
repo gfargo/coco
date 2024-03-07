@@ -23,14 +23,14 @@ export async function noResult({ git, logger }: NoResultInput): Promise<void> {
     logger.log('Forget something? No staged changes found... 👻', { color: 'red' })
 
     if (hasUnstaged) {
-      logger.log('\nDetected unstaged changes', { color: 'yellow' })
+      logger.log('\nChanges not staged for commit:', { color: 'yellow' })
       logger.verbose(`\t${unstaged.map(({ summary }) => summary).join('\n\t')}`, {
         color: 'red',
       })
     }
 
     if (hasUntracked) {
-      logger.log('\nDetected untracked changes', { color: 'yellow' })
+      logger.log('\nUntracked changes:', { color: 'yellow' })
       logger.verbose(`\t${untracked.map(({ summary }) => summary).join('\n\t')}`, {
         color: 'red',
       })

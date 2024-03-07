@@ -5,7 +5,7 @@ import { getStatus } from './getStatus'
 import { getSummaryText } from './getSummaryText'
 import { Logger } from '../utils/logger'
 import { parseFileString } from './helpers'
-import { loadConfig } from '../config/loadConfig'
+import { loadConfig } from '../config/utils/loadConfig'
 import { minimatch } from 'minimatch'
 
 const config = loadConfig()
