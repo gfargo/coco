@@ -6,7 +6,7 @@
 [![NPM Version](https://img.shields.io/npm/v/git-coco.svg)](https://www.npmjs.com/package/git-coco)
 [![NPM Downloads](https://img.shields.io/npm/dt/git-coco.svg)](https://www.npmjs.com/package/git-coco)
 
-`coco`, the Commit Copilot, is not just your scribe for git commit messages. With the power of [LangChain🦜🔗](https://js.langchain.com/) and LLMs, it now brings you a suite of tools to streamline your git workflow!
+`coco`, the Commit Copilot, transcends being merely a robotic scribe for crafting git commit messages. Leveraging the capabilities of [LangChain🦜🔗](https://js.langchain.com/) and LLMs, `coco` is committed to providing a suite of insightful tools aimed at enhancing and streamlining your git workflow!
 
 ## Commands
 
