@@ -40,21 +40,33 @@ export interface BaseLLMService {
    * @default 6
    */
   maxConcurrent?: number
-  authentication: {
-    type: 'APIKey' | 'OAuth' | 'None'
-    credentials?: {
-      apiKey?: string
-      clientId?: string
-      clientSecret?: string
-      token?: string
-    }
-  }
+  authentication: Authentication
   requestOptions?: {
     timeout?: number
     maxRetries?: number
   }
   fields?: OpenAIFields | OllamaFields
 }
+
+type Authentication =
+  | {
+      type: 'None'
+      credentials: undefined
+    }
+  | {
+      type: 'OAuth'
+      credentials: {
+        clientId?: string
+        clientSecret?: string
+        token?: string
+      }
+    }
+  | {
+      type: 'APIKey'
+      credentials: {
+        apiKey: string
+      }
+    }
 
 type OpenAIFields = Partial<OpenAIInput> & BaseLLMParams
 type OllamaFields = Partial<OllamaInput> & BaseLLMParams
