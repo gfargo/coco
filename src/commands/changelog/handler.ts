@@ -1,4 +1,4 @@
-import { getApiKeyForModel } from '../../lib/langchain/utils'
+import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 
@@ -25,13 +25,9 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     process.exit(1)
   }
 
-  // const model = getLlm(options.service, key, {
-  //   temperature: 0.4,
-  //   maxConcurrency: 10,
-  // })
-  const model = getLlm(options)
+  const { provider, model } = getModelAndProviderFromConfig(options)
 
-  console.log(model)
+  const llm = getLlm(provider, model, options)
 
   const INTERACTIVE = isInteractive(options)
 
@@ -72,7 +68,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       })
 
       return await executeChain({
-        llm: model,
+        llm,
         prompt,
         variables: { summary: context },
       })

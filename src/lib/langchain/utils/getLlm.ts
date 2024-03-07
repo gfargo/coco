@@ -1,42 +1,37 @@
 import { Ollama } from 'langchain/llms/ollama'
-// import { BaseLLMParams } from 'langchain/llms/base'
-import {
-  //AzureOpenAIInput,
-  //OpenAIInput,
-  OpenAI,
-} from 'langchain/llms/openai'
+import { OpenAI } from 'langchain/llms/openai'
 import { Config } from '../../../commands/types'
-import { getModelAndProviderFromConfig as getModelAndProviderFromConfig } from '../utils'
+import { DEFAULT_OLLAMA_LLM_SERVICE } from '../constants'
+import { OllamaModel } from '../types'
+import { TiktokenModel } from 'langchain/dist/types/openai-types'
 
 /**
  * Get LLM Model Based on Configuration
+ *
  * @param fields
  * @param configuration
  * @returns LLM Model
  */
-
-export function getLlm(config: Config) {
-  const { provider, model } = getModelAndProviderFromConfig(config)
-
+export function getLlm(
+  provider: 'openai' | 'ollama',
+  model: TiktokenModel | OllamaModel,
+  config: Config
+) {
   if (!model) {
-    throw new Error(`Invalid LLM Service: ${config.service}`)
+    throw new Error(`Invalid LLM Service: ${provider}/${model}`)
   }
 
   switch (provider) {
     case 'ollama':
-      console.log('Using Ollama')
-
       return new Ollama({
-        baseUrl: 'http://localhost:11434',
+        baseUrl: DEFAULT_OLLAMA_LLM_SERVICE.endpoint,
         model,
-        // ...fields,
       })
     case 'openai':
     default:
       return new OpenAI({
         openAIApiKey: config.openAIApiKey,
         modelName: model,
-        // ...config.,
       })
   }
 }

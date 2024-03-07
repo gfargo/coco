@@ -12,7 +12,10 @@ export function getModelAndProviderFromConfig(config: Config) {
 
   switch (typeof config.service) {
     case 'string':
-      result = getDefaultServiceConfigFromAlias(config.service, (config as ConfigWithServiceAlias)?.model)
+      result = getDefaultServiceConfigFromAlias(
+        config.service,
+        (config as ConfigWithServiceAlias)?.model
+      )
       break
     case 'object':
     default:
@@ -33,17 +36,18 @@ export function getModelAndProviderFromConfig(config: Config) {
  * Retrieve appropriate API key based on selected model
  * @param service
  * @param options
- * @returns
+ * @returns API Key
  */
 export function getApiKeyForModel(config: Config) {
   const { provider } = getModelAndProviderFromConfig(config)
 
   switch (provider) {
-    case 'ollama':
-      // TODO: Implement Ollama API key retrieval, currently not supported.
     case 'openai':
+      return (
+        config.openAIApiKey || (config.service as LLMService)?.authentication.credentials?.apiKey
+      )
     default:
-      return config.openAIApiKey || (config.service as LLMService)?.authentication.credentials?.apiKey
+      return (config.service as LLMService)?.authentication.credentials?.apiKey || ''
   }
 }
 

@@ -1,6 +1,6 @@
 import { fileChangeParser } from '../../lib/parsers/default'
 import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commit'
-import { getApiKeyForModel } from '../../lib/langchain/utils'
+import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { noResult } from '../../lib/parsers/noResult'
@@ -16,31 +16,25 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { logSuccess } from '../../lib/ui/logSuccess'
+import { TiktokenModel } from 'langchain/dist/types/openai-types'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
   const options = loadConfig<CommitOptions, CommitArgv>(argv)
-  const { service } = options
-
-  console.log({ options })
-
   const key = getApiKeyForModel(options)
-
-  console.log({ key, service })
-
-  // const tokenizer = await getTokenCounter(getModelFromService(service))
-  const tokenizer = await getTokenCounter('gpt-4') // TODO: Remove hard coded tokenizer
 
   if (!key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
 
-  console.log({ service })
+  const { provider, model } = getModelAndProviderFromConfig(options)
 
-  const llm = getLlm(options)
+  const tokenizer = await getTokenCounter(
+    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4'
+  )
 
-  console.log({llm})
+  const llm = getLlm(provider, model, options)
 
   const INTERACTIVE = isInteractive(options)
   if (INTERACTIVE) {
