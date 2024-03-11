@@ -83,7 +83,7 @@
     "chalk": "4.1.2",
     "diff": "5.1.0",
     "ini": "4.1.1",
-    "langchain": "0.0.196",
+    "langchain": "0.1.26",
     "minimatch": "9.0.3",
     "ora": "5.4.1",
     "p-queue": "5.0.0",
