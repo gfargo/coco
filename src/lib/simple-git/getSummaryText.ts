@@ -2,6 +2,14 @@ import { DiffResultBinaryFile, DiffResultTextFile, FileStatusResult } from 'simp
 import { getStatus } from './getStatus'
 import { FileChange } from '../types'
 
+/**
+ * Returns the summary text for a file change.
+ * 
+ * @param file - The file status or diff result.
+ * @param change - The partial file change object.
+ * @returns The summary text for the file change.
+ * @throws Error if the file type is invalid.
+ */
 export function getSummaryText(
   file: FileStatusResult | DiffResultTextFile | DiffResultBinaryFile,
   change: Partial<FileChange>

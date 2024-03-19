@@ -23,6 +23,13 @@ export type GetChangeByCommitInput = {
   }
 }
 
+/**
+ * Retrieves the changes made in a commit.
+ * 
+ * @param commit - The commit hash.
+ * @param options - Optional parameters for customization.
+ * @returns A promise that resolves to an array of FileChange objects representing the changes made in the commit.
+ */
 export async function getChangesByCommit({
   commit,
   options: {

@@ -20,6 +20,12 @@ export type GetChangesResult = {
   untracked?: FileChange[]
 }
 
+/**
+ * Retrieves the changes in the Git repository.
+ * 
+ * @param {GetChangesInput} options - The options for retrieving the changes.
+ * @returns {Promise<GetChangesResult>} A promise that resolves to the changes in the Git repository.
+ */
 export async function getChanges({ git, options }: GetChangesInput): Promise<GetChangesResult> {
   const { ignoredFiles = DEFAULT_IGNORED_FILES, ignoredExtensions = DEFAULT_IGNORED_EXTENSIONS } =
     options || {}
