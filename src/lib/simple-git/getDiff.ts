@@ -3,6 +3,14 @@ import { createTwoFilesPatch } from 'diff'
 import { FileChange } from '../types'
 import { Logger } from '../utils/logger'
 
+/**
+ * Parses the default file diff for a given nodeFile.
+ *
+ * @param nodeFile - The file change object.
+ * @param commit - The commit to diff against. Defaults to '--staged'.
+ * @param git - The SimpleGit instance.
+ * @returns A Promise that resolves to the file diff as a string.
+ */
 async function parseDefaultFileDiff(
   nodeFile: FileChange,
   commit = '--staged',
@@ -15,6 +23,15 @@ async function parseDefaultFileDiff(
   return await git.diff([commit, nodeFile.filePath])
 }
 
+/**
+ * Parses the diff for a renamed file.
+ *
+ * @param nodeFile - The file change object.
+ * @param commit - The commit hash or '--staged'.
+ * @param git - The SimpleGit instance.
+ * @param logger - The logger instance.
+ * @returns A Promise that resolves to the diff string.
+ */
 async function parseRenamedFileDiff(
   nodeFile: FileChange,
   commit: string,
@@ -68,6 +85,18 @@ async function parseRenamedFileDiff(
   return result
 }
 
+/**
+ * Retrieves the diff for a given file change in a specific commit.
+ * If the file is deleted, it returns a message indicating that the file has been deleted.
+ * If the file is renamed, it parses the renamed file diff and returns it.
+ * Otherwise, it retrieves the default diff from the index and returns it.
+ *
+ * @param nodeFile - The file change object.
+ * @param commit - The commit hash.
+ * @param git - The SimpleGit instance.
+ * @param logger - The logger instance.
+ * @returns A promise that resolves to the diff as a string.
+ */
 export async function getDiff(
   nodeFile: FileChange,
   commit: string,

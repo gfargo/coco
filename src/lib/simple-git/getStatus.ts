@@ -1,6 +1,14 @@
 import { FileChangeStatus } from '../types'
 import { DiffResultBinaryFile, DiffResultTextFile, FileStatusResult } from 'simple-git'
 
+/**
+ * Determines the status of a file based on its changes in the Git repository.
+ *
+ * @param file - The file to check the status of.
+ * @param location - The location to check the status in ('index' or 'working_dir'). Defaults to 'index'.
+ * @returns The status of the file ('added', 'deleted', 'modified', 'renamed', 'untracked', or 'unknown').
+ * @throws Error if the file type is invalid.
+ */
 export function getStatus(
   file: FileStatusResult | DiffResultTextFile | DiffResultBinaryFile,
   location: 'index' | 'working_dir' = 'index'

@@ -10,6 +10,16 @@ export type GetCommitLogCurrentBranch = {
   comparisonRemote?: string
 }
 
+/**
+ * Retrieves the commit log for the current branch.
+ * 
+ * @param {Object} options - The options for retrieving the commit log.
+ * @param {SimpleGit} options.git - The SimpleGit instance.
+ * @param {Logger} options.logger - The logger for logging messages.
+ * @param {string} [options.comparisonBranch='main'] - The branch to compare against.
+ * @param {string} [options.comparisonRemote='origin'] - The remote to compare against.
+ * @returns {Promise<string[]>} The array of commit messages in the commit log.
+ */
 export async function getCommitLogCurrentBranch({
   git,
   logger,
