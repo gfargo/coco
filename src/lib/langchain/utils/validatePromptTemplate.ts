@@ -1,10 +1,10 @@
 /**
- * Verify  template string contains all required input variables
+ * Verify template string contains all required input variables
+ * 
  * @param text template string
  * @param inputVariables template variables
  * @returns boolean or error message
  */
-
 export function validatePromptTemplate(text: string, inputVariables: string[]) {
   if (!text) {
     return 'Prompt template cannot be empty';
