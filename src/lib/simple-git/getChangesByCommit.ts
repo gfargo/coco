@@ -4,7 +4,7 @@ import { FileChange } from '../types'
 import { getStatus } from './getStatus'
 import { getSummaryText } from './getSummaryText'
 import { Logger } from '../utils/logger'
-import { parseFileString } from './helpers'
+import { parseFileString } from "./parseFileString"
 import { loadConfig } from '../config/utils/loadConfig'
 import { minimatch } from 'minimatch'
 

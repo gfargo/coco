@@ -5,10 +5,10 @@ import {
 
 /**
  * Get Recursive Character Text Splitter
+ * 
  * @param options
  * @returns
  */
-
 export function getTextSplitter(
   options: Partial<RecursiveCharacterTextSplitterParams> = {}
 ): RecursiveCharacterTextSplitter {
