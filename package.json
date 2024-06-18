@@ -80,7 +80,7 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@inquirer/prompts": "3.3.0",
+    "@inquirer/prompts": "5.0.5",
     "@jridgewell/sourcemap-codec": "^1.4.15",
     "chalk": "4.1.2",
     "diff": "5.2.0",
