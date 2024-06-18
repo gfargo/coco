@@ -7,6 +7,8 @@ import { Config } from '../types'
 
 import { DEFAULT_CONFIG } from '../constants'
 import { BaseCommandOptions } from '../../../commands/types'
+import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
+import { TiktokenModel } from 'langchain/dist/types/openai-types'
 
 /**
  * Load application config
@@ -30,6 +32,12 @@ export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(
 ) {
   // Default config
   let config = DEFAULT_CONFIG
+  const { model } = getDefaultServiceConfigFromAlias(config.service!, config.model)
+
+  config = {
+    model: model as TiktokenModel | undefined,
+    ...config,
+  }  
 
   config = loadGitignore(config)
   config = loadIgnore(config)

@@ -83,6 +83,6 @@ describe('loadConfig', () => {
   // It should load correct Auth API key for OpenAI from env var when using LLM Alias
   it('should load correct Auth API key for OpenAI from env var when using LLM Alias', () => {})
 
-  // It shoudl load correct Auth config for Olama from env var when using LLM Alias
-  it('should load correct Auth config for Olama from env var when using LLM Alias', () => {})
+  // It should load correct Auth config for Ollama from env var when using LLM Alias
+  it('should load correct Auth config for Ollama from env var when using LLM Alias', () => {})
 })
