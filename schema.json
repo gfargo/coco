@@ -1,5 +1,6 @@
 {
-  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://git-co.co/schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "service": {
@@ -13,7 +14,7 @@
     "model": {
       "type": "string",
       "description": "The LLM model to use",
-      "default": "gpt-4",
+      "default": "gpt-4o",
       "oneOf": [
         {
           "if": {
@@ -63,15 +64,6 @@
           }
         }
       ]
-    },
-    "endpoint": {
-      "type": "string",
-      "description": "The endpoint to use for the LLM service"
-    },
-    "openAIApiKey": {
-      "type": "string",
-      "description": "Your OpenAI API key",
-      "default": null
     },
     "tokenLimit": {
       "type": "number",
@@ -138,8 +130,101 @@
     "service",
     "model"
   ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "service": {
+            "const": "openai"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "model": {
+            "enum": [
+              "gpt-3.5-turbo",
+              "gpt-3.5-turbo-16k",
+              "gpt-4",
+              "gpt-4-32k",
+              "gpt-4-turbo",
+              "gpt-4-turbo-preview",
+              "gpt-4o",
+              "gpt-4o-2024-05-13"
+            ]
+          },
+          "openAIApiKey": {
+            "type": "string",
+            "description": "Your OpenAI API key",
+            "default": null
+          },
+          "endpoint": false
+        },
+        "required": [
+          "openAIApiKey"
+        ],
+        "not": {
+          "required": [
+            "endpoint"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "service": {
+            "const": "ollama"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "model": {
+            "enum": [
+              "orca-mini",
+              "orca-mini:13b",
+              "orca2",
+              "aya:8b",
+              "aya:35b",
+              "mistral",
+              "codegemma",
+              "codegemma:7b-code",
+              "codellama",
+              "llama2",
+              "llama2-uncensored",
+              "llama2:13b",
+              "llama2:70b",
+              "llama3",
+              "llama3:70b",
+              "phi3",
+              "phi3:mini",
+              "phi3:medium",
+              "qwen2",
+              "qwen2:1.5b",
+              "qwen2:0.5b"
+            ]
+          },
+          "openAIApiKey": false,
+          "endpoint": {
+            "type": "string",
+            "description": "The endpoint to use for the LLM service"
+          }
+        },
+        "not": {
+          "required": [
+            "openAIApiKey"
+          ]
+        },
+        "required": [
+          "endpoint"
+        ]
+      }
+    }
+  ],
   "definitions": {
     "is-openai": {
+      "type": "string",
       "properties": {
         "service": {
           "enum": [
@@ -152,6 +237,7 @@
       ]
     },
     "is-ollama": {
+      "type": "string",
       "properties": {
         "service": {
           "enum": [
@@ -214,6 +300,5 @@
         "qwen2:0.5b"
       ]
     }
-  },
-  "additionalProperties": false
+  }
 }

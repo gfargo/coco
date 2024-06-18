@@ -1,5 +1,6 @@
 import fs from 'fs'
 
+// List of available OpenAI models
 const openaiModels = [
   'gpt-3.5-turbo',
   'gpt-3.5-turbo-16k',
@@ -11,6 +12,7 @@ const openaiModels = [
   'gpt-4o-2024-05-13',
 ]
 
+// List of available Ollama models
 const ollamaModels = [
   'orca-mini',
   'orca-mini:13b',
@@ -35,8 +37,10 @@ const ollamaModels = [
   'qwen2:0.5b',
 ]
 
+// Define the JSON schema
 const schema = {
-  $schema: 'https://json-schema.org/draft-07/schema#',
+  $id: 'https://git-co.co/schema.json',
+  $schema: 'http://json-schema.org/draft-07/schema#',
   type: 'object',
   properties: {
     service: {
@@ -58,15 +62,6 @@ const schema = {
           then: { enum: ollamaModels },
         },
       ],
-    },
-    endpoint: {
-      type: 'string',
-      description: 'The endpoint to use for the LLM service',
-    },
-    openAIApiKey: {
-      type: 'string',
-      description: 'Your OpenAI API key',
-      default: null,
     },
     tokenLimit: {
       type: 'number',
@@ -123,14 +118,57 @@ const schema = {
     },
   },
   required: ['service', 'model'],
+  allOf: [
+    {
+      if: {
+        properties: { service: { const: 'openai' } },
+      },
+      then: {
+        properties: {
+          model: { enum: openaiModels },
+          openAIApiKey: {
+            type: 'string',
+            description: 'Your OpenAI API key',
+            default: null,
+          },
+          endpoint: false,
+        },
+        required: ['openAIApiKey'],
+        not: {
+          required: ['endpoint'],
+        },
+      },
+    },
+    {
+      if: {
+        properties: { service: { const: 'ollama' } },
+      },
+      then: {
+        properties: {
+          model: { enum: ollamaModels },
+          openAIApiKey: false,
+          endpoint: {
+            type: 'string',
+            description: 'The endpoint to use for the LLM service',
+          },
+        },
+        not: {
+          required: ['openAIApiKey'],
+        },
+        required: ['endpoint'],
+      },
+    }
+  ],
   definitions: {
     'is-openai': {
+      type: 'string',
       properties: {
         service: { enum: ['openai'] },
       },
       required: ['service'],
     },
     'is-ollama': {
+      type: 'string',
       properties: {
         service: { enum: ['ollama'] },
       },
@@ -140,9 +178,9 @@ const schema = {
       anyOf: [{ not: { $ref: '#/definitions/is-openai' } }, { required: ['endpoint'] }],
     },
   },
-  additionalProperties: false,
 }
 
+// Add model definitions to the schema
 schema.definitions['openai-models'] = {
   enum: openaiModels,
 }
@@ -151,6 +189,7 @@ schema.definitions['ollama-models'] = {
   enum: ollamaModels,
 }
 
+// Update the model property with conditional logic
 schema.properties.model = {
   type: 'string',
   description: 'The LLM model to use',
@@ -168,5 +207,11 @@ schema.properties.model = {
 }
 
 console.log('Generating schema.json...')
-fs.writeFileSync('schema.json', JSON.stringify(schema, null, 2))
-console.log('schema.json has been generated successfully.')
+
+// Write the schema to a file with error handling
+try {
+  fs.writeFileSync('schema.json', JSON.stringify(schema, null, 2))
+  console.log('schema.json has been generated successfully.')
+} catch (error) {
+  console.error('Error generating schema.json:', error)
+}
