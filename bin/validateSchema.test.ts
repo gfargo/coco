@@ -1,14 +1,6 @@
 import fs from 'fs'
-import Ajv from 'ajv'
-// import addFormats from 'ajv-formats'
+import { ajv } from '../src/lib/ajv'
 
-const ajv = new Ajv({
-  allErrors: true,
-  verbose: true,
-  strictTypes: false,
-})
-
-// Load the schema
 const schema = JSON.parse(fs.readFileSync('schema.json', 'utf8'))
 
 // Sample instance to validate
