@@ -9,3 +9,4 @@ updates:
       - dependency-name: "p-queue"
       - dependency-name: "ora"
       - dependency-name: "chalk"
+      - dependency-name: " @inquirer/prompts"
