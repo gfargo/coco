@@ -1,5 +1,4 @@
-import { TiktokenModel } from 'langchain/dist/types/openai-types'
-import { encoding_for_model } from 'tiktoken'
+import { encoding_for_model, TiktokenModel } from 'tiktoken'
 
 export type BPE_Tokenizer = Awaited<ReturnType<typeof getTikToken>>
 export type TokenCounter = Awaited<ReturnType<typeof getTokenCounter>>
