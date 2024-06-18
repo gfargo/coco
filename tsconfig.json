@@ -21,12 +21,6 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": [
-    "node_modules",
-    "**/*.spec.ts",
-    "**/*.test.ts",
-    "dist",
-    "rollup.config.mjs"
-  ],
+  "include": ["src/**/*.ts", "bin/validateSchema.test.ts"],
+  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts", "dist", "rollup.config.mjs"]
 }
