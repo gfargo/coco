@@ -5,12 +5,64 @@
     "service": {
       "description": "The LLM provider to use",
       "default": "openai",
-      "enum": ["openai", "ollama"]
+      "enum": [
+        "openai",
+        "ollama"
+      ]
     },
     "model": {
       "type": "string",
       "description": "The LLM model to use",
-      "default": "gpt-4"
+      "default": "gpt-4",
+      "oneOf": [
+        {
+          "if": {
+            "$ref": "#/definitions/is-openai"
+          },
+          "then": {
+            "enum": [
+              "gpt-3.5-turbo",
+              "gpt-3.5-turbo-16k",
+              "gpt-4",
+              "gpt-4-32k",
+              "gpt-4-turbo",
+              "gpt-4-turbo-preview",
+              "gpt-4o",
+              "gpt-4o-2024-05-13"
+            ]
+          }
+        },
+        {
+          "if": {
+            "$ref": "#/definitions/is-ollama"
+          },
+          "then": {
+            "enum": [
+              "orca-mini",
+              "orca-mini:13b",
+              "orca2",
+              "aya:8b",
+              "aya:35b",
+              "mistral",
+              "codegemma",
+              "codegemma:7b-code",
+              "codellama",
+              "llama2",
+              "llama2-uncensored",
+              "llama2:13b",
+              "llama2:70b",
+              "llama3",
+              "llama3:70b",
+              "phi3",
+              "phi3:mini",
+              "phi3:medium",
+              "qwen2",
+              "qwen2:1.5b",
+              "qwen2:0.5b"
+            ]
+          }
+        }
+      ]
     },
     "endpoint": {
       "type": "string",
@@ -44,7 +96,10 @@
     "mode": {
       "type": "string",
       "description": "Preferred output method for generated commit messages",
-      "enum": ["stdout", "interactive"],
+      "enum": [
+        "stdout",
+        "interactive"
+      ],
       "default": "stdout"
     },
     "summarizePrompt": {
@@ -58,7 +113,9 @@
       "items": {
         "type": "string"
       },
-      "default": ["package-lock.json"]
+      "default": [
+        "package-lock.json"
+      ]
     },
     "ignoredExtensions": {
       "type": "array",
@@ -66,7 +123,10 @@
       "items": {
         "type": "string"
       },
-      "default": [".map", ".lock"]
+      "default": [
+        ".map",
+        ".lock"
+      ]
     },
     "defaultBranch": {
       "type": "string",
@@ -74,24 +134,84 @@
       "default": "main"
     }
   },
-  "required": ["service", "model"],
+  "required": [
+    "service",
+    "model"
+  ],
   "definitions": {
     "is-openai": {
       "properties": {
-        "service": { "enum": ["openai"] }
+        "service": {
+          "enum": [
+            "openai"
+          ]
+        }
       },
-      "required": ["service"]
+      "required": [
+        "service"
+      ]
     },
     "is-ollama": {
       "properties": {
-        "service": { "enum": ["ollama"] }
+        "service": {
+          "enum": [
+            "ollama"
+          ]
+        }
       },
-      "required": ["service"]
+      "required": [
+        "service"
+      ]
     },
     "ollama-requires-endpoint": {
       "anyOf": [
-        { "not": { "$ref": "#/definitions/is-openai" } },
-        { "required": ["endpoint"] }
+        {
+          "not": {
+            "$ref": "#/definitions/is-openai"
+          }
+        },
+        {
+          "required": [
+            "endpoint"
+          ]
+        }
+      ]
+    },
+    "openai-models": {
+      "enum": [
+        "gpt-3.5-turbo",
+        "gpt-3.5-turbo-16k",
+        "gpt-4",
+        "gpt-4-32k",
+        "gpt-4-turbo",
+        "gpt-4-turbo-preview",
+        "gpt-4o",
+        "gpt-4o-2024-05-13"
+      ]
+    },
+    "ollama-models": {
+      "enum": [
+        "orca-mini",
+        "orca-mini:13b",
+        "orca2",
+        "aya:8b",
+        "aya:35b",
+        "mistral",
+        "codegemma",
+        "codegemma:7b-code",
+        "codellama",
+        "llama2",
+        "llama2-uncensored",
+        "llama2:13b",
+        "llama2:70b",
+        "llama3",
+        "llama3:70b",
+        "phi3",
+        "phi3:mini",
+        "phi3:medium",
+        "qwen2",
+        "qwen2:1.5b",
+        "qwen2:0.5b"
       ]
     }
   },
