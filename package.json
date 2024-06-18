@@ -86,7 +86,7 @@
     "diff": "5.2.0",
     "ini": "4.1.1",
     "langchain": "0.0.196",
-    "minimatch": "9.0.3",
+    "minimatch": "9.0.4",
     "ora": "5.4.1",
     "p-queue": "5.0.0",
     "performance-now": "2.1.0",
