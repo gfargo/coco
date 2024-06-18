@@ -161,14 +161,12 @@ const schema = {
   ],
   definitions: {
     'is-openai': {
-      type: 'string',
       properties: {
         service: { enum: ['openai'] },
       },
       required: ['service'],
     },
     'is-ollama': {
-      type: 'string',
       properties: {
         service: { enum: ['ollama'] },
       },
