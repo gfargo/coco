@@ -26,7 +26,7 @@
     "start": "npm run dev",
     "dev": "tsx watch src/index.ts",
     "build": "rollup -c",
-    "build:schema": "node bin/generateSchema.js",
+    "build:schema": "node bin/generateSchema.mjs",
     "build:watch": "rollup -c -w",
     "clean": "rimraf dist && rimraf coverage",
     "lint": "eslint src",
