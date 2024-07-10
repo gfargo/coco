@@ -101,7 +101,7 @@ const schema = {
       items: {
         type: 'string',
       },
-      default: ['package-lock.json'],
+      default: ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'],
     },
     ignoredExtensions: {
       type: 'array',

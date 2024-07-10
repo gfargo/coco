@@ -4,7 +4,7 @@ import { builder, options } from './options'
 
 export default {
   command: 'commit',
-  desc: 'Generate commit message',
+  desc: 'Write a commit message summarizing the staged changes.',
   builder,
   handler: commandExecutor(handler),
   options,
