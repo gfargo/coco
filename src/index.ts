@@ -19,7 +19,7 @@ y.command(
   // @ts-ignore
   commit.builder,
   commit.handler
-)
+).options(commit.options)
 
 y.command(
   changelog.command,
@@ -29,7 +29,7 @@ y.command(
   // @ts-ignore
   changelog.builder,
   changelog.handler
-)
+).options(changelog.options)
 
 y.command(
   init.command,
@@ -39,7 +39,7 @@ y.command(
   // @ts-ignore
   init.builder,
   init.handler
-)
+).options(init.options)
 
 y.parse(process.argv.slice(2))
 
