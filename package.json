@@ -93,7 +93,7 @@
     "p-queue": "5.0.0",
     "performance-now": "2.1.0",
     "pretty-ms": "7.0.1",
-    "simple-git": "3.23.0",
+    "simple-git": "3.25.0",
     "tiktoken": "^1.0.15",
     "yargs": "17.7.2"
   }
