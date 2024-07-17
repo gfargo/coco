@@ -1,4 +1,4 @@
-import { SUMMARIZE_PROMPT } from '../langchain/prompts/summarize'
+import { SUMMARIZE_PROMPT } from '../langchain/chains/summarize/prompt'
 import { Config, OpenAIAliasConfig } from './types'
 
 export const DEFAULT_IGNORED_FILES = ['package-lock.json']

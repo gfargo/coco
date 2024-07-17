@@ -1,5 +1,5 @@
 import { fileChangeParser } from '../../lib/parsers/default'
-import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commit'
+import { COMMIT_PROMPT } from './prompt'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
