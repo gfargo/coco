@@ -1,5 +1,5 @@
-import { getChanges } from '../simple-git/getChanges'
-import { Logger } from '../utils/logger'
+import { getChanges } from '../../lib/simple-git/getChanges'
+import { Logger } from '../../lib/utils/logger'
 import { SimpleGit } from 'simple-git'
 
 type NoResultInput = {
