@@ -8,7 +8,7 @@ import { ChangelogArgv, ChangelogOptions } from './options'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { handleResult } from '../../lib/ui/handleResult'
-import { CHANGELOG_PROMPT } from '../../lib/langchain/prompts/changelog'
+import { CHANGELOG_PROMPT } from './prompt'
 import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getRepo } from '../../lib/simple-git/getRepo'
@@ -36,8 +36,8 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   }
 
   async function factory() {
-    if (options.range) {
-      const [from, to] = options.range?.split(':')
+    if (options.range && options.range.includes(':')) {
+      const [from, to] = options.range.split(':')
 
       if (!from || !to) {
         logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
