@@ -5,7 +5,7 @@ import { createDiffTree } from './utils/createDiffTree'
 import { collectDiffs } from './utils/collectDiffs'
 import { getSummarizationChain } from '../../langchain/utils/getSummarizationChain'
 import { getTextSplitter } from '../../langchain/utils/getTextSplitter'
-import { SUMMARIZE_PROMPT } from '../../langchain/prompts/summarize'
+import { SUMMARIZE_PROMPT } from '../../langchain/chains/summarize/prompt'
 import { getDiff } from '../../simple-git/getDiff'
 
 const MAX_TOKENS_PER_SUMMARY = 2048

@@ -3,8 +3,7 @@ import { Config } from '../types'
 import { CONFIG_KEYS } from '../constants'
 import { updateFileSection } from '../../utils/updateFileSection'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
-import { COCO_CONFIG_START_COMMENT } from '../constants'
-import { COCO_CONFIG_END_COMMENT } from '../constants'
+import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants'
 
 type ValuesTypes = Config[keyof Config]
 

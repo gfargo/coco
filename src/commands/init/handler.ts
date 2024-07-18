@@ -3,7 +3,7 @@ import { Config } from '../types'
 import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToEnvFile } from '../../lib/config/services/env'
 import { logResult } from '../../lib/ui/logResult'
-import { COMMIT_PROMPT } from '../../lib/langchain/prompts/commit'
+import { COMMIT_PROMPT } from '../commit/prompt'
 import { appendToProjectJsonConfig } from '../../lib/config/services/project'
 import { LOGO } from '../../lib/ui/helpers'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
@@ -126,10 +126,9 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         default: '.map, .lock',
       })
 
-      config.ignoredFiles =
-        (ignoredFiles && ignoredFiles.split(',').map((file: string) => file.trim())) || []
+      config.ignoredFiles = ignoredFiles?.split(',')?.map((file: string) => file.trim()) || []
       config.ignoredExtensions =
-        (ignoredExtensions && ignoredExtensions.split(',').map((ext: string) => ext.trim())) || []
+        ignoredExtensions?.split(',')?.map((ext: string) => ext.trim()) || []
     }
 
     const promptForCommitPrompt = await confirm({
@@ -186,7 +185,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     } else if (configFilePath.endsWith('.env')) {
       await appendToEnvFile(configFilePath, config)
     } else if (configFilePath.endsWith('.coco.config.json')) {
-      await appendToProjectJsonConfig(configFilePath, config)
+      appendToProjectJsonConfig(configFilePath, config)
     }
 
     // After config is written, check for package installation

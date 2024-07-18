@@ -1,6 +1,6 @@
 import { editor } from '@inquirer/prompts'
 import { GenerateReviewLoopOptions } from './generateAndReviewLoop'
-import { COMMIT_PROMPT } from '../langchain/prompts/commit'
+import { COMMIT_PROMPT } from '../../commands/commit/prompt'
 import { validatePromptTemplate } from '../langchain/utils/validatePromptTemplate'
 
 export async function editPrompt(options: GenerateReviewLoopOptions): Promise<string> {
