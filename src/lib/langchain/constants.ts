@@ -1,13 +1,12 @@
-import { OllamaLLMService, OpenAILLMService } from "./types"
+import { type OllamaLLMService, type OpenAILLMService } from './types'
 
 export const DEFAULT_OLLAMA_LLM_SERVICE = {
   provider: 'ollama',
-  model: 'codellama',
+  model: 'llama3',
   endpoint: 'http://localhost:11434',
   maxConcurrent: 1,
   tokenLimit: 1024,
 } as OllamaLLMService
-
 
 export const DEFAULT_OPENAI_LLM_SERVICE = {
   provider: 'openai',

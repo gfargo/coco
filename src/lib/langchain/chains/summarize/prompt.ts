@@ -1,4 +1,4 @@
-import { PromptTemplate } from 'langchain/prompts'
+import { PromptTemplate } from '@langchain/core/prompts'
 
 const template = `GOAL: Use functional abstractions to summarize the following text
 
@@ -10,6 +10,6 @@ TEXT:"""{text}"""
 export const inputVariables = ['text']
 
 export const SUMMARIZE_PROMPT = new PromptTemplate({
-  template,
   inputVariables,
+  template,
 })

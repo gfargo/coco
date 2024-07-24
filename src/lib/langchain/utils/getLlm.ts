@@ -1,9 +1,8 @@
-import { Ollama } from 'langchain/llms/ollama'
-import { OpenAI } from 'langchain/llms/openai'
+import { Ollama } from '@langchain/community/llms/ollama'
+import { OpenAI } from '@langchain/openai'
 import { Config } from '../../../commands/types'
 import { DEFAULT_OLLAMA_LLM_SERVICE } from '../constants'
-import { OllamaModel } from '../types'
-import { TiktokenModel } from 'langchain/dist/types/openai-types'
+import { LLMModel } from '../types'
 
 /**
  * Get LLM Model Based on Configuration
@@ -12,11 +11,7 @@ import { TiktokenModel } from 'langchain/dist/types/openai-types'
  * @param configuration
  * @returns LLM Model
  */
-export function getLlm(
-  provider: 'openai' | 'ollama',
-  model: TiktokenModel | OllamaModel,
-  config: Config
-) {
+export function getLlm(provider: 'openai' | 'ollama', model: LLMModel, config: Config) {
   if (!model) {
     throw new Error(`Invalid LLM Service: ${provider}/${model}`)
   }

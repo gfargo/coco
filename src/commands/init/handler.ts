@@ -139,7 +139,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     if (promptForCommitPrompt) {
       const commitPrompt = await editor({
         message: 'modify default commit message prompt:',
-        default: COMMIT_PROMPT.template,
+        default: COMMIT_PROMPT.template as string,
       })
 
       config.prompt = commitPrompt

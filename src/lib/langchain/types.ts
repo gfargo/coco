@@ -1,6 +1,6 @@
-import { OpenAIInput, TiktokenModel } from 'langchain/dist/types/openai-types'
-import { OllamaInput } from 'langchain/dist/util/ollama'
-import { BaseLLMParams } from 'langchain/llms/base'
+import { type OpenAIInput, type TiktokenModel } from '@langchain/openai'
+import { type OllamaInput } from '@langchain/community/llms/ollama'
+import { type BaseLLMParams } from '@langchain/core/language_models/llms'
 
 export type LLMProvider = 'openai' | 'ollama'
 
