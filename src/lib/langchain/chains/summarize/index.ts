@@ -22,7 +22,7 @@ export async function summarize(
 
   const docs = await textSplitter.splitDocuments(documents.map((doc) => new Document(doc)))
 
-  const res = await chain.call({
+  const res = await chain.invoke({
     input_documents: docs,
     returnIntermediateSteps,
   })

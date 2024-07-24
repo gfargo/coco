@@ -1,6 +1,6 @@
 import {
   RecursiveCharacterTextSplitter,
-  RecursiveCharacterTextSplitterParams
+  type RecursiveCharacterTextSplitterParams
 } from 'langchain/text_splitter';
 
 /**

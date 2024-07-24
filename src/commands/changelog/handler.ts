@@ -84,7 +84,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     },
     options: {
       ...options,
-      prompt: options.prompt || CHANGELOG_PROMPT.template,
+      prompt: options.prompt || CHANGELOG_PROMPT.template as string,
       logger,
       interactive: INTERACTIVE,
       review: {

@@ -16,7 +16,7 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { logSuccess } from '../../lib/ui/logSuccess'
-import { TiktokenModel } from 'langchain/dist/types/openai-types'
+import { type TiktokenModel } from '@langchain/openai'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -53,29 +53,12 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       options: { tokenizer, git, llm, logger },
     })
   }
-
+  
   const commitMsg = await generateAndReviewLoop({
     label: 'commit message',
-    factory,
-    parser,
-    agent: async (context, options) => {
-      return await executeChain({
-        llm,
-        prompt: getPrompt({
-          template: options.prompt,
-          variables: COMMIT_PROMPT.inputVariables,
-          fallback: COMMIT_PROMPT,
-        }),
-        variables: { summary: context },
-      })
-    },
-    noResult: async () => {
-      await noResult({ git, logger })
-      process.exit(0)
-    },
     options: {
       ...options,
-      prompt: options.prompt || COMMIT_PROMPT.template,
+      prompt: options.prompt || (COMMIT_PROMPT.template as string),
       logger,
       interactive: INTERACTIVE,
       review: {
@@ -88,6 +71,25 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
             'Restart the function execution from the beginning, regenerating both the diff summary and commit message',
         },
       },
+    },
+    factory,
+    parser,
+    agent: async (context, options) => {
+      const prompt = getPrompt({
+        template: options.prompt,
+        variables: COMMIT_PROMPT.inputVariables,
+        fallback: COMMIT_PROMPT,
+      })
+
+      return await executeChain({
+        llm,
+        prompt,
+        variables: { summary: context },
+      })
+    },
+    noResult: async () => {
+      await noResult({ git, logger })
+      process.exit(0)
     },
   })
 

@@ -1,6 +1,6 @@
-import { PromptTemplate } from 'langchain/prompts'
+import { PromptTemplate } from '@langchain/core/prompts'
 
-const template = `Write informative git commit message, in the imperative, based on the diffs & file changes provided in the "Diff Summary" section.  
+export const template = `Write informative git commit message, in the imperative, based on the diffs & file changes provided in the "Diff Summary" section.  
 Commit Messages must have a short description that is less than 50 characters and a longer detailed summary no more than 300 characters, the shorter and more concise the better.  The detailed summary should be separated from the short description by a blank line.  Please follow the guidelines below when writing your commit message:
 
 - Write concisely using an informal tone

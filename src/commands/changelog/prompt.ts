@@ -1,4 +1,4 @@
-import { PromptTemplate } from 'langchain/prompts'
+import { PromptTemplate } from '@langchain/core/prompts'
 
 const template = `Write informative git changelog, in the imperative, based on a series of individual messages.
 
