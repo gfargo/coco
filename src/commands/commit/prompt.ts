@@ -10,9 +10,11 @@ Commit Messages must have a short description that is less than 50 characters an
 - Wrap variable, class, function, components, and dependency names in back ticks e.g. \`variable\`
 - ONLY respond with the resulting commit message.
 
-"""{summary}"""
+--------
+{summary}
+--------
 
-Commit:`
+COMMIT MESSAGE:`
 
 export const inputVariables = ['summary']
 
