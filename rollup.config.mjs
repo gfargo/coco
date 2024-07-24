@@ -19,11 +19,13 @@ const config = [
       {
         file: 'dist/index.esm.mjs',
         sourcemap: enableBenchmarking,
+        inlineDynamicImports: true,
         format: 'esm',
       },
       {
         file: 'dist/index.js',
         sourcemap: enableBenchmarking,
+        inlineDynamicImports: true,
         format: 'cjs',
       },
     ],
