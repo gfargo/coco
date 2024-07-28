@@ -1,8 +1,10 @@
 import { Options, Argv } from 'yargs'
 import { BaseArgvOptions } from '../types'
 
+export type InstallationScope = 'global' | 'project'
+
 export interface InitOptions extends BaseArgvOptions {
-  level?: 'global' | 'project'
+  scope?: InstallationScope
 }
 
 export type InitArgv = Argv<InitOptions>['argv']
@@ -11,9 +13,8 @@ export type InitArgv = Argv<InitOptions>['argv']
  * Command line options via yargs
  */
 export const options = {
-  level: {
+  scope: {
     type: 'string',
-    alias: 'l',
     description: 'configure coco for the current user or project?',
     choices: ['global', 'project'],
   },
