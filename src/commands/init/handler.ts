@@ -94,20 +94,8 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
 
     switch (scope) {
       case 'project':
-        const projectConfiguration = (await select({
-          message: 'where would you like to store the project config?',
-          choices: [
-            {
-              name: '.coco.config.json',
-              value: '.coco.config.json',
-            },
-            {
-              name: '.env',
-              value: '.env',
-            },
-          ],
-        })) as ProjectConfigFileName
-        configFilePath = await getProjectConfigFilePath(projectConfiguration)
+        const fileTypeSelection = await questions.selectProjectConfigFileType()
+        configFilePath = await getProjectConfigFilePath(fileTypeSelection)
         break
       case 'global':
       default:

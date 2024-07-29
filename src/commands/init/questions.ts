@@ -1,6 +1,7 @@
 import { input, password, select, confirm, editor } from '@inquirer/prompts'
 import { InstallationScope } from './options'
 import { COMMIT_PROMPT } from '../commit/prompt'
+import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
 
 export const questions = {
   /**
@@ -113,5 +114,20 @@ export const questions = {
     await editor({
       message: 'modify default commit message prompt:',
       default: COMMIT_PROMPT.template as string,
+    }),
+
+  selectProjectConfigFileType: async (): Promise<ProjectConfigFileName> =>
+    await select({
+      message: 'where would you like to store the project config?',
+      choices: [
+        {
+          name: '.coco.config.json',
+          value: '.coco.config.json',
+        },
+        {
+          name: '.env',
+          value: '.env',
+        },
+      ],
     }),
 }
