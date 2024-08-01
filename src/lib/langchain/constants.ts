@@ -1,21 +1,9 @@
-import { type OllamaLLMService, type OpenAILLMService } from './types'
+import { TiktokenModel } from '@langchain/openai'
 
-export const DEFAULT_OLLAMA_LLM_SERVICE = {
-  provider: 'ollama',
-  model: 'llama3',
-  endpoint: 'http://localhost:11434',
-  maxConcurrent: 1,
-  tokenLimit: 1024,
-} as OllamaLLMService
-
-export const DEFAULT_OPENAI_LLM_SERVICE = {
-  provider: 'openai',
-  model: 'gpt-4',
-  authentication: {
-    type: 'APIKey',
-    credentials: {
-      apiKey: '',
-    },
-  },
-  tokenLimit: 1024,
-} as OpenAILLMService
+export const OPEN_AI_MODELS = [
+  'gpt-4o',
+  'gpt-4-32k',
+  'gpt-4-turbo',
+  'gpt-4',
+  'gpt-3.5-turbo',
+] as TiktokenModel[]

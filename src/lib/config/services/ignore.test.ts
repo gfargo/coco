@@ -1,6 +1,8 @@
 import * as fs from 'fs'
 import { Config } from '../types'
 import { loadGitignore, loadIgnore } from './ignore'
+import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
+
 jest.mock('fs')
 jest.mock('os')
 jest.mock('path')
@@ -12,10 +14,9 @@ jest.mock('yargs', () => ({
 const mockFs = fs as jest.Mocked<typeof fs>
 
 const defaultConfig: Config = {
-  service: 'openai',
-  openAIApiKey: 'sk_default-api-key',
+  service: getDefaultServiceConfigFromAlias('openai'),
   mode: 'stdout',
-  defaultBranch: 'main', 
+  defaultBranch: 'main',
 }
 
 describe('loadGitignore', () => {
@@ -30,9 +31,9 @@ describe('loadGitignore', () => {
 
 describe('loadIgnore', () => {
   afterEach(() => {
-    jest.resetAllMocks();
-  });
-  
+    jest.resetAllMocks()
+  })
+
   it('should load .ignore', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue('ignore.txt\n#comment\n')

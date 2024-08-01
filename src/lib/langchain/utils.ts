@@ -1,7 +1,6 @@
 import { Config } from '../../commands/types'
-import { ConfigWithServiceAlias } from '../config/types'
-import { DEFAULT_OLLAMA_LLM_SERVICE, DEFAULT_OPENAI_LLM_SERVICE } from './constants'
-import { LLMModel, LLMService, LLMServiceAlias, OllamaLLMService, OpenAILLMService } from './types'
+// import { ConfigWithServiceAlias } from '../config/types'
+import { LLMModel, LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from './types'
 
 /**
  * Retrieves the provider and model from the given configuration object.
@@ -14,22 +13,7 @@ export function getModelAndProviderFromConfig(config: Config) {
     throw new Error('Invalid service: undefined')
   }
 
-  let result: LLMService
-
-  switch (typeof config.service) {
-    case 'string':
-      result = getDefaultServiceConfigFromAlias(
-        config.service,
-        (config as ConfigWithServiceAlias)?.model
-      )
-      break
-    case 'object':
-    default:
-      result = config.service
-      break
-  }
-
-  const { provider, model } = result
+  const { provider, model } = config.service
 
   if (!model || !provider) {
     throw new Error(`Invalid service: ${config.service}`)
@@ -49,7 +33,7 @@ export function getApiKeyForModel(config: Config) {
 
   switch (provider) {
     case 'openai':
-      return config.openAIApiKey || getDefaultServiceApiKey(config)
+      return getDefaultServiceApiKey(config)
     default:
       return getDefaultServiceApiKey(config)
   }
@@ -72,28 +56,51 @@ export function getDefaultServiceApiKey(config: Config) {
   return ''
 }
 
+export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
+  provider: 'openai',
+  model: 'gpt-4-turbo',
+  tokenLimit: 1024,
+  temperature: 0.4,
+  authentication: {
+    type: 'APIKey',
+    credentials: {
+      apiKey: '',
+    },
+  },
+}
+
+export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
+  provider: 'ollama',
+  model: 'llama3',
+  endpoint: 'http://localhost:11434',
+  maxConcurrent: 1,
+  tokenLimit: 1024,
+  temperature: 0.4,
+  authentication: {
+    type: 'None',
+    credentials: undefined,
+  },
+}
+
 /**
  * Retrieves the default service configuration based on the provided alias and optional model.
- * @param alias - The alias of the service.
+ * @param provider - The alias of the service.
  * @param model - The optional model to be used.
  * @returns The default service configuration.
  * @throws Error if the alias is invalid or undefined.
  */
-export function getDefaultServiceConfigFromAlias(alias: LLMServiceAlias, model?: LLMModel) {
-  if (!alias) {
-    throw new Error('Invalid alias: undefined')
-  }
-
-  switch (alias) {
-    case 'openai':
-      return {
-        ...DEFAULT_OPENAI_LLM_SERVICE,
-        model: model || DEFAULT_OPENAI_LLM_SERVICE.model,
-      } as OpenAILLMService
+export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: LLMModel) {
+  switch (provider) {
     case 'ollama':
       return {
         ...DEFAULT_OLLAMA_LLM_SERVICE,
         model: model || DEFAULT_OLLAMA_LLM_SERVICE.model,
       } as OllamaLLMService
+    case 'openai':
+    default:
+      return {
+        ...DEFAULT_OPENAI_LLM_SERVICE,
+        model: model || DEFAULT_OPENAI_LLM_SERVICE.model,
+      } as OpenAILLMService
   }
 }

@@ -2,6 +2,7 @@ import { Options, Argv } from 'yargs'
 import { BaseCommandOptions } from '../types'
 
 export interface CommitOptions extends BaseCommandOptions {
+  interactive: boolean
   prompt: string
   commit: boolean
   summarizePrompt: string

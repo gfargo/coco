@@ -47,7 +47,7 @@ export type OllamaModel =
 
 export type LLMModel = TiktokenModel | OllamaModel
 
-export interface BaseLLMService {
+export type BaseLLMService = {
   provider: LLMProvider
   model: LLMModel
   /**
@@ -100,13 +100,13 @@ type Authentication =
 type OpenAIFields = Partial<OpenAIInput> & BaseLLMParams
 type OllamaFields = Partial<OllamaInput> & BaseLLMParams
 
-export interface OpenAILLMService extends BaseLLMService {
+export type OpenAILLMService = BaseLLMService & {
   provider: 'openai'
   model: TiktokenModel
   fields?: OpenAIFields
 }
 
-export interface OllamaLLMService extends BaseLLMService {
+export type OllamaLLMService = BaseLLMService & {
   provider: 'ollama'
   model: OllamaModel
   endpoint: string
@@ -114,4 +114,3 @@ export interface OllamaLLMService extends BaseLLMService {
 }
 
 export type LLMService = OpenAILLMService | OllamaLLMService
-export type LLMServiceAlias = 'openai' | 'ollama'

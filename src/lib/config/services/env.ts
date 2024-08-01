@@ -4,6 +4,7 @@ import { CONFIG_KEYS } from '../constants'
 import { updateFileSection } from '../../utils/updateFileSection'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants'
+import { LLMService } from '../../langchain/types'
 
 type ValuesTypes = Config[keyof Config]
 
@@ -16,7 +17,9 @@ type ValuesTypes = Config[keyof Config]
 export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
   const envConfig: Partial<Config> = {}
 
-  CONFIG_KEYS.forEach((key) => {
+  const envKeys = [...CONFIG_KEYS, 'COCO_SERVICE_PROVIDER', 'COCO_SERVICE_MODEL', 'OPEN_AI_KEY']
+
+  envKeys.forEach((key) => {
     const envVarName = toEnvVarName(key as string)
     const envValue = parseEnvValue(key as string, process.env[envVarName])
 
@@ -36,26 +39,35 @@ function parseEnvValue(key: string, value: ValuesTypes) {
     // Handle undefined values
     case value === undefined:
       return undefined
+
     // Handle comma separated strings for ignoredFiles and ignoredExtensions arrays
     case (key === 'ignoredFiles' || key === 'ignoredExtensions') &&
       typeof value === 'string' &&
       value.includes(','):
-      return value.split(',')
+      return (value as string).split(',')
+
     // Handle boolean values
     case typeof value === 'string' && (value === 'false' || value === 'true'):
       return value === 'true'
+
+    // Handle number values
+    case typeof value === 'string' && !isNaN(Number(value)):
+      return Number(value)
     default:
       return value
   }
 }
 
 function toEnvVarName(key: string): string {
-  switch (key) {
-    case 'openAIApiKey':
-      return 'OPENAI_API_KEY'
-    default:
-      return `COCO_${key.replace(/([A-Z])/g, '_$1').toLocaleUpperCase()}`
+  if (key === 'service') {
+    return key
   }
+
+  if (key.includes('COCO_')) {
+    return key
+  }
+
+  return `COCO_${key.replace(/([A-Z])/g, '_$1').toLocaleUpperCase()}`
 }
 
 function formatEnvValue(value: ValuesTypes): string {
@@ -74,9 +86,23 @@ function formatEnvValue(value: ValuesTypes): string {
 export const appendToEnvFile = async (filePath: string, config: Partial<Config>) => {
   const getNewContent = async () => {
     return Object.entries(config)
-      .map(
-        ([key, value]) => `${toEnvVarName(key as string)}=${formatEnvValue(value as ValuesTypes)}`
-      )
+      .map(([key, value]) => {
+        if (key === 'service') {
+          const service = value as LLMService
+          return `${service.provider ? `COCO_SERVICE_PROVIDER=${service.provider}` : ''}\n${
+            service.model ? `COCO_SERVICE_MODEL=${service.model}` : ''
+          }\n${
+            service.authentication.type === 'APIKey'
+              ? `OPEN_AI_KEY=${service.authentication.credentials.apiKey}`
+              : ''
+          }`
+        }
+
+        const envVarName = toEnvVarName(key)
+        const envValue = formatEnvValue(value)
+
+        return `${envVarName}=${envValue}`
+      })
       .join('\n')
   }
 

@@ -13,15 +13,17 @@ const validate = ajv.compile(schema)
  **/
 export function loadProjectJsonConfig<ConfigType = Config>(config: Partial<Config>) {
   if (fs.existsSync('.coco.config.json')) {
-    const projectConfig = JSON.parse(
+    // Removing $schema from the project config to avoid validation errors.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { $schema, ...projectConfig } = JSON.parse(
       fs.readFileSync('.coco.config.json', 'utf-8')
-    ) as Partial<Config>
+    ) as Partial<Config> & { $schema: string }
 
     config = { ...config, ...projectConfig } as Config
 
     const isProjectConfigValid = validate(config)
     if (!isProjectConfigValid) {
-      throw new Error('Invalid project config', { cause: validate.errors })
+      throw new Error('Invalid project config', { cause: ajv.errorsText(validate.errors) })
     }
   }
   return config as ConfigType

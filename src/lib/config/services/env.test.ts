@@ -1,8 +1,9 @@
+import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { Config } from '../types'
 import { loadEnvConfig } from './env'
 
 const defaultConfig: Config = {
-  service: 'ollama',
+  service: getDefaultServiceConfigFromAlias('openai'),
   endpoint: '',
   defaultBranch: 'main',
   mode: 'stdout',
@@ -12,10 +13,10 @@ const defaultConfig: Config = {
 
 describe('loadEnvConfig', () => {
   it('should load environment variables', () => {
-    process.env.COCO_SERVICE = 'openai'
+    process.env.COCO_SERVICE_PROVIDER = 'openai'
     process.env.COCO_DEFAULT_BRANCH = 'coco'
     const config = loadEnvConfig(defaultConfig)
-    expect(config.service).toBe('openai')
+    expect(config.service.provider).toBe('openai')
     expect(config.defaultBranch).toBe('coco')
     delete process.env.COCO_SERVICE
     delete process.env.COCO_DEFAULT_BRANCH

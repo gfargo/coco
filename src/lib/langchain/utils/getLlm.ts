@@ -1,8 +1,8 @@
 import { Ollama } from '@langchain/community/llms/ollama'
 import { OpenAI } from '@langchain/openai'
 import { Config } from '../../../commands/types'
-import { DEFAULT_OLLAMA_LLM_SERVICE } from '../constants'
-import { LLMModel } from '../types'
+import { DEFAULT_OLLAMA_LLM_SERVICE, getApiKeyForModel } from '../utils'
+import { LLMModel, LLMProvider } from '../types'
 
 /**
  * Get LLM Model Based on Configuration
@@ -11,7 +11,7 @@ import { LLMModel } from '../types'
  * @param configuration
  * @returns LLM Model
  */
-export function getLlm(provider: 'openai' | 'ollama', model: LLMModel, config: Config) {
+export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
   if (!model) {
     throw new Error(`Invalid LLM Service: ${provider}/${model}`)
   }
@@ -25,7 +25,7 @@ export function getLlm(provider: 'openai' | 'ollama', model: LLMModel, config: C
     case 'openai':
     default:
       return new OpenAI({
-        openAIApiKey: config.openAIApiKey,
+        openAIApiKey: getApiKeyForModel(config),
         modelName: model,
       })
   }

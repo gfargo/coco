@@ -28,13 +28,17 @@ export async function checkAndHandlePackageInstallation({
     // Project level installation
     const projectRoot = findProjectRoot(process.cwd())
     let shouldInstall = false
+
     if (isPackageInstalled(packageName, projectRoot)) {
       shouldInstall = await confirm({
         message: `'${packageName}' is already installed in '${projectRoot}/package.json', would you like to update?`,
         default: shouldInstall,
       })
     } else {
-      shouldInstall = true
+      shouldInstall = await confirm({
+        message: `'${packageName}' is not installed in '${projectRoot}/package.json', would you like to install?`,
+        default: shouldInstall,
+      })
     }
 
     if (!shouldInstall) {

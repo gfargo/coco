@@ -1,24 +1,16 @@
-import fs from 'fs'
 import { ajv } from '../src/lib/ajv'
+import { DEFAULT_CONFIG } from '../src/lib/config/constants'
+import { DEFAULT_OLLAMA_LLM_SERVICE, DEFAULT_OPENAI_LLM_SERVICE } from '../src/lib/langchain/utils'
+import { schema } from '../src/lib/schema'
 
-const schema = JSON.parse(fs.readFileSync('schema.json', 'utf8'))
-
-// Sample instance to validate
 const sampleOpenAI = {
-  // $schema: 'http://git-co.co/schema.json',
-  service: 'openai',
-  model: 'gpt-4',
-  openAIApiKey: 'sk-default-api-key',
-  tokenLimit: 1024,
-  defaultBranch: 'main',
-  mode: 'interactive',
+  ...DEFAULT_CONFIG,
+  service: DEFAULT_OPENAI_LLM_SERVICE,
 }
 
 const sampleOllama = {
-  // $schema: 'http://git-co.co/schema.json',
-  service: 'ollama',
-  model: 'llama3',
-  endpoint: 'http://localhost:11434',
+  ...DEFAULT_CONFIG,
+  service: DEFAULT_OLLAMA_LLM_SERVICE,
 }
 
 describe('validate schema.json', () => {

@@ -5,7 +5,14 @@ type ExecPromiseResult = {
   stderr: string
 }
 
-// Function to execute a command and return a promise
+/**
+ * Executes a command as a Promise and returns the result.
+ *
+ * @param command - The command to execute.
+ * @param options - The options for the command execution.
+ * @returns A Promise that resolves to an object containing the stdout and stderr of the command.
+ * @throws If there is an error during command execution.
+ */
 export function execPromise(command: string, options = {}): Promise<ExecPromiseResult> {
   return new Promise((resolve, reject) => {
     exec(command, options, (error, stdout, stderr) => {

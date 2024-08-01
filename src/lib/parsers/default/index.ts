@@ -8,14 +8,16 @@ import { getTextSplitter } from '../../langchain/utils/getTextSplitter'
 import { SUMMARIZE_PROMPT } from '../../langchain/chains/summarize/prompt'
 import { getDiff } from '../../simple-git/getDiff'
 
-const MAX_TOKENS_PER_SUMMARY = 2048
+// Max tokens for GPT-3 is 4096
+// const MAX_TOKENS_PER_SUMMARY = 4096
+const MAX_TOKENS_PER_SUMMARY = 12288
 
 export async function fileChangeParser({
   changes,
   commit,
   options: { tokenizer, git, llm: model, logger },
 }: FileChangeParserInput): Promise<string> {
-  const textSplitter = getTextSplitter({ chunkSize: 2000, chunkOverlap: 125 })
+  const textSplitter = getTextSplitter({ chunkSize: 3000, chunkOverlap: 125 })
   const summarizationChain = getSummarizationChain(model, {
     type: 'map_reduce',
     combineMapPrompt: SUMMARIZE_PROMPT,
