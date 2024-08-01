@@ -2,10 +2,12 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import * as ini from 'ini'
-import { Config, ConfigWithServiceAlias, OllamaAliasConfig, OpenAIAliasConfig } from '../types'
+
+import { Config } from '../types'
 import { updateFileSection } from '../../utils/updateFileSection'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants'
+import { removeUndefined } from '../../utils/removeUndefined'
 
 /**
  * Load git profile config (from ~/.gitconfig)
@@ -19,23 +21,12 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
     const gitConfigRaw = fs.readFileSync(gitConfigPath, 'utf-8')
     const gitConfigParsed = ini.parse(gitConfigRaw)
 
+    const service = gitConfigParsed.coco?.service || config.service
+
     config = {
       ...config,
-      service: gitConfigParsed.coco?.service || config.service,
-
-      ...(config.service === 'ollama'
-        ? {
-            endpoint: gitConfigParsed.coco?.endpoint || (config as OllamaAliasConfig)?.endpoint,
-          }
-        : {
-            openAIApiKey:
-              gitConfigParsed.coco?.openAIApiKey || (config as OpenAIAliasConfig)?.openAIApiKey,
-          }),
-      model: gitConfigParsed.coco?.model || (config as ConfigWithServiceAlias)?.model,
-      temperature:
-        gitConfigParsed.coco?.temperature || (config as ConfigWithServiceAlias)?.temperature,
-      tokenLimit:
-        gitConfigParsed.coco?.tokenLimit || (config as ConfigWithServiceAlias)?.tokenLimit,
+      service: service,
+      temperature: gitConfigParsed.coco?.temperature || config.temperature,
       prompt: gitConfigParsed.coco?.prompt || config.prompt,
       mode: gitConfigParsed.coco?.mode || config.mode,
       summarizePrompt: gitConfigParsed.coco?.summarizePrompt || config.summarizePrompt,
@@ -44,7 +35,7 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
       defaultBranch: gitConfigParsed.coco?.defaultBranch || config.defaultBranch,
     }
   }
-  return config as ConfigType
+  return removeUndefined(config) as ConfigType
 }
 
 /**

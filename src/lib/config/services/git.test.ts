@@ -1,12 +1,13 @@
 import * as fs from 'fs'
 import { Config } from '../types'
 import { loadGitConfig } from './git'
+import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 jest.mock('fs')
 
 const mockFs = fs as jest.Mocked<typeof fs>
 
 const defaultConfig: Partial<Config> = {
-  service: 'ollama',
+  service: getDefaultServiceConfigFromAlias('ollama'),
   mode: 'stdout',
   defaultBranch: 'test',
 }
@@ -60,7 +61,7 @@ describe('loadGitConfig', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION)
     const config = loadGitConfig(defaultConfig as Config)
-    expect(config.service).toBe('ollama')
+    expect(config.service.provider).toBe('ollama')
     expect(config.mode).toBe('stdout')
     expect(config.defaultBranch).toBe('test')
   })
