@@ -1,7 +1,7 @@
 import chalk from 'chalk'
-import { CommitOptions } from '../../commands/commit/options'
+import { BaseArgvOptions } from '../../commands/types'
 
-export const isInteractive = (argv: CommitOptions) => {
+export const isInteractive = (argv: BaseArgvOptions) => {
   return argv?.mode === 'interactive' || argv.interactive
 }
 

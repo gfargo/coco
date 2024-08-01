@@ -22,13 +22,12 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
   const options = loadConfig<CommitOptions, CommitArgv>(argv)
   const key = getApiKeyForModel(options)
+  const { provider, model } = getModelAndProviderFromConfig(options)
 
-  if (!key) {
+  if (options.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
-
-  const { provider, model } = getModelAndProviderFromConfig(options)
 
   const tokenizer = await getTokenCounter(
     provider === 'openai' ? (model as TiktokenModel) : 'gpt-4'
@@ -53,7 +52,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       options: { tokenizer, git, llm, logger },
     })
   }
-  
+
   const commitMsg = await generateAndReviewLoop({
     label: 'commit message',
     options: {

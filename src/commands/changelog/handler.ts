@@ -16,28 +16,27 @@ import { logSuccess } from '../../lib/ui/logSuccess'
 import { CommandHandler } from '../../lib/types'
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
-  const options = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
+  const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
   const git = getRepo()
-  const key = getApiKeyForModel(options)
+  const key = getApiKeyForModel(config)
+  const { provider, model } = getModelAndProviderFromConfig(config)
 
-  if (!key) {
+  if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
 
-  const { provider, model } = getModelAndProviderFromConfig(options)
+  const llm = getLlm(provider, model, config)
 
-  const llm = getLlm(provider, model, options)
-
-  const INTERACTIVE = isInteractive(options)
+  const INTERACTIVE = isInteractive(config)
 
   if (INTERACTIVE) {
     logger.log(LOGO)
   }
 
   async function factory() {
-    if (options.range && options.range.includes(':')) {
-      const [from, to] = options.range.split(':')
+    if (config.range && config.range.includes(':')) {
+      const [from, to] = config.range.split(':')
 
       if (!from || !to) {
         logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
@@ -74,7 +73,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       })
     },
     noResult: async () => {
-      if (options.range) {
+      if (config.range) {
         logger.log(`No commits found in the provided range.`, { color: 'red' })
         process.exit(0)
       }
@@ -83,8 +82,8 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       process.exit(0)
     },
     options: {
-      ...options,
-      prompt: options.prompt || CHANGELOG_PROMPT.template as string,
+      ...config,
+      prompt: config.prompt || (CHANGELOG_PROMPT.template as string),
       logger,
       interactive: INTERACTIVE,
       review: {
@@ -94,7 +93,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   })
 
   const MODE =
-    (INTERACTIVE && 'interactive') || (options.commit && 'interactive') || options?.mode || 'stdout'
+    (INTERACTIVE && 'interactive') || (config.commit && 'interactive') || config?.mode || 'stdout'
 
   handleResult({
     result: changelogMsg,
