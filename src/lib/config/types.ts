@@ -1,7 +1,7 @@
 import { BaseCommandOptions } from '../../commands/types'
-import { LLMService, OllamaLLMService, OpenAILLMService } from '../langchain/types'
+import { LLMService } from '../langchain/types'
 
-interface BaseConfig {
+type BaseConfig = {
   /**
    * The output destination for the generated result.
    * - 'stdout': Prints the result to the standard output.  This is the default behavior.
@@ -61,24 +61,9 @@ interface BaseConfig {
   defaultBranch: string
 }
 
-export interface OpenAIAliasConfig extends BaseConfig {
-  service: 'openai'
-  model?: OpenAILLMService['model']
-  openAIApiKey: string
-}
-
-export interface OllamaAliasConfig extends BaseConfig {
-  service: 'ollama'
-  model?: OllamaLLMService['model']
-  endpoint: string
-}
-
-export type ConfigWithServiceAlias = (OpenAIAliasConfig | OllamaAliasConfig) &
-  Partial<BaseCommandOptions>
-
 export type ConfigWithServiceObject = BaseConfig &
-Partial<BaseCommandOptions> & {
-  service: LLMService
-}
+  Partial<BaseCommandOptions> & {
+    service: LLMService
+  }
 
-export type Config = ConfigWithServiceAlias | ConfigWithServiceObject
+export type Config = ConfigWithServiceObject

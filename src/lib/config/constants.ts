@@ -1,25 +1,27 @@
 import { SUMMARIZE_PROMPT } from '../langchain/chains/summarize/prompt'
-import { Config, OpenAIAliasConfig } from './types'
+import { getDefaultServiceConfigFromAlias } from '../langchain/utils'
+import { Config } from './types'
 
 export const DEFAULT_IGNORED_FILES = ['package-lock.json']
 export const DEFAULT_IGNORED_EXTENSIONS = ['.map', '.lock']
+
+export const COCO_CONFIG_START_COMMENT = '# -- start coco config --'
+export const COCO_CONFIG_END_COMMENT = '# -- end coco config --'
 
 /**
  * Default Config
  *
  * @type {Config}
  */
-export const DEFAULT_CONFIG = {
-  service: 'openai',
-  verbose: false,
-  tokenLimit: 1024,
-  summarizePrompt: SUMMARIZE_PROMPT.template,
-  temperature: 0.4,
+export const DEFAULT_CONFIG: Config = {
   mode: 'stdout',
+  verbose: false,
+  defaultBranch: 'main',
+  service: getDefaultServiceConfigFromAlias('openai'),
+  summarizePrompt: SUMMARIZE_PROMPT.template as string,
   ignoredFiles: DEFAULT_IGNORED_FILES,
   ignoredExtensions: DEFAULT_IGNORED_EXTENSIONS,
-  defaultBranch: 'main',
-} as Partial<OpenAIAliasConfig>
+}
 
 /**
  * Create a named export of all config keys for use in other modules.
@@ -30,9 +32,5 @@ export const DEFAULT_CONFIG = {
  */
 export const CONFIG_KEYS = Object.keys({
   ...DEFAULT_CONFIG,
-  endpoint: '',
   prompt: '',
 } as Config) as (keyof Config)[]
-
-export const COCO_CONFIG_START_COMMENT = '# -- start coco config --'
-export const COCO_CONFIG_END_COMMENT = '# -- end coco config --'
