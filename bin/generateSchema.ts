@@ -6,17 +6,10 @@ const config = {
   type: 'ConfigWithServiceObject',
   schemaId: 'http://git-co.co/schema.json',
   skipTypeCheck: false,
-  // additionalProperties: true,
 } as TJS.Config
-
-// const outputPath = "output-schema.json";
 
 const schema = TJS.createGenerator(config).createSchema(config.type)
 const schemaString = JSON.stringify(schema, null, 2)
-
-// fs.writeFile(outputPath, schemaString, (err) => {
-//     if (err) throw err;
-// });
 
 if (!schemaString) {
   console.error('Error generating schema')
