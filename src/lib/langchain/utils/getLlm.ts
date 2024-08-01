@@ -1,5 +1,5 @@
 import { Ollama } from '@langchain/community/llms/ollama'
-import { OpenAI } from '@langchain/openai'
+import { ChatOpenAI, OpenAI } from '@langchain/openai'
 import { Config } from '../../../commands/types'
 import { DEFAULT_OLLAMA_LLM_SERVICE, getApiKeyForModel } from '../utils'
 import { LLMModel, LLMProvider } from '../types'
@@ -20,13 +20,14 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
     case 'ollama':
       return new Ollama({
         baseUrl: DEFAULT_OLLAMA_LLM_SERVICE.endpoint,
+        maxConcurrency: config.service.maxConcurrent,
         model,
       })
     case 'openai':
     default:
       return new OpenAI({
         openAIApiKey: getApiKeyForModel(config),
-        modelName: model,
+        model,
       })
   }
 }

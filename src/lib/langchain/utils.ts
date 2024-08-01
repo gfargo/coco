@@ -59,7 +59,7 @@ export function getDefaultServiceApiKey(config: Config) {
 export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   provider: 'openai',
   model: 'gpt-4-turbo',
-  tokenLimit: 1024,
+  tokenLimit: 2024,
   temperature: 0.4,
   authentication: {
     type: 'APIKey',
@@ -74,7 +74,7 @@ export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   model: 'llama3',
   endpoint: 'http://localhost:11434',
   maxConcurrent: 1,
-  tokenLimit: 1024,
+  tokenLimit: 2024,
   temperature: 0.4,
   authentication: {
     type: 'None',
