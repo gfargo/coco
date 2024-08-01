@@ -8,7 +8,9 @@ import { getTextSplitter } from '../../langchain/utils/getTextSplitter'
 import { SUMMARIZE_PROMPT } from '../../langchain/chains/summarize/prompt'
 import { getDiff } from '../../simple-git/getDiff'
 
-const MAX_TOKENS_PER_SUMMARY = 4096
+// Max tokens for GPT-3 is 4096
+// const MAX_TOKENS_PER_SUMMARY = 4096
+const MAX_TOKENS_PER_SUMMARY = 12288
 
 export async function fileChangeParser({
   changes,
