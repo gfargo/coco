@@ -1,9 +1,9 @@
 import { PromptTemplate } from '@langchain/core/prompts'
-import { getLlm } from "./getLlm";
+import { getLlm } from './getLlm'
 
 type ExecuteChainInput = {
-  variables: Record<string, unknown>,
-  prompt: PromptTemplate,
+  variables: Record<string, unknown>
+  prompt: PromptTemplate
   llm: ReturnType<typeof getLlm>
 }
 
@@ -27,6 +27,6 @@ export const executeChain = async ({ llm, prompt, variables }: ExecuteChainInput
   if (!res) {
     throw new Error('Empty response from LLMChain call')
   }
-  
-  return res.trim()
+
+  return res.content
 }
