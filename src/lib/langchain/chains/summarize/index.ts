@@ -3,8 +3,8 @@ import {
   RefineDocumentsChain,
   StuffDocumentsChain,
 } from 'langchain/chains'
-import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter'
 import { Document, DocumentInput } from 'langchain/document'
+import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 
 export type SummarizeContext = {
   textSplitter: RecursiveCharacterTextSplitter
@@ -27,7 +27,7 @@ export async function summarize(
     returnIntermediateSteps,
   })
 
-  if(res.error) throw new Error(res.error)
-  
+  if (res.error) throw new Error(res.error)
+
   return res.text && res.text.trim()
 }

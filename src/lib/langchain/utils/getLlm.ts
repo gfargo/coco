@@ -1,5 +1,5 @@
 import { Ollama } from '@langchain/community/llms/ollama'
-import { ChatOpenAI, OpenAI } from '@langchain/openai'
+import { OpenAI } from '@langchain/openai'
 import { Config } from '../../../commands/types'
 import { DEFAULT_OLLAMA_LLM_SERVICE, getApiKeyForModel } from '../utils'
 import { LLMModel, LLMProvider } from '../types'
@@ -25,9 +25,12 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
       })
     case 'openai':
     default:
-      return new OpenAI({
+      
+      const openAiModel = new OpenAI({
         openAIApiKey: getApiKeyForModel(config),
         model,
-      })
+      }) 
+
+      return openAiModel
   }
 }
