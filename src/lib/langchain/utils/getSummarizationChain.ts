@@ -1,4 +1,4 @@
-import { SummarizationChainParams, loadSummarizationChain } from 'langchain/chains';
+import { loadSummarizationChain, SummarizationChainParams } from 'langchain/chains';
 import { getLlm } from './getLlm';
 
 /**
