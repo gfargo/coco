@@ -64,16 +64,3 @@ This directory contains configuration files and services for the application. Th
 5. **XDG Configuration**:
    - Define configuration settings in the `coco/config.json` file within the XDG config home directory.
    - Use the `loadXDGConfig` function to load these settings into the configuration object.
-
-## Testing
-
-Each configuration service has corresponding test files to ensure the correctness of the functions. The tests are located in the `services/` directory and follow the naming convention `*.test.ts`.
-
-To run the tests, use the following command:
-```
-npm test
-```
-
-## Conclusion
-
-This directory provides a comprehensive set of tools for managing application configurations. By following the usage guidelines, you can easily set up and manage configurations for your application.
