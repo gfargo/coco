@@ -133,7 +133,7 @@ export const questions = {
   inputTokenLimit: async (): Promise<number> => {
     const tokenLimit = await input({
       message: 'maximum number of tokens for generating commit messages:',
-      default: '60',
+      default: '300',
     })
 
     return parseInt(tokenLimit)
