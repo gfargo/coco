@@ -28,6 +28,7 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
       const openAiModel = new ChatOpenAI({
         openAIApiKey: getApiKeyForModel(config),
         model,
+        temperature: config.service.temperature || 0.2,
       })
 
       return openAiModel

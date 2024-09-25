@@ -1,18 +1,27 @@
 import { PromptTemplate } from '@langchain/core/prompts'
 import { getLlm } from './getLlm'
+import { JsonOutputParser } from '@langchain/core/output_parsers'
 
-type ExecuteChainInput = {
+type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
   prompt: PromptTemplate
   llm: ReturnType<typeof getLlm>
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-expect-error
+  parser: JsonOutputParser<T>
 }
 
-export const executeChain = async ({ llm, prompt, variables }: ExecuteChainInput) => {
+export const executeChain = async <T>({
+  llm,
+  prompt,
+  variables,
+  parser,
+}: ExecuteChainInput<T>)  => {
   if (!llm || !prompt || !variables) {
     throw new Error('The input parameters "llm", "prompt", and "variables" are all required.')
   }
 
-  const chain = prompt.pipe(llm)
+  const chain = prompt.pipe(llm).pipe(parser)
 
   let res
 
@@ -28,5 +37,5 @@ export const executeChain = async ({ llm, prompt, variables }: ExecuteChainInput
     throw new Error('Empty response from LLMChain call')
   }
 
-  return res.content
+  return res
 }
