@@ -1,6 +1,6 @@
 {
   "name": "git-coco",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "zero-effort git commits with coco.",
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
@@ -91,8 +91,8 @@
     "ajv-formats": "^3.0.1",
     "chalk": "4.1.2",
     "diff": "5.2.0",
-    "ini": "4.1.1", 
-    "minimatch": "10.0.1", 
+    "ini": "4.1.1",
+    "minimatch": "10.0.1",
     "ora": "5.4.1",
     "p-queue": "5.0.0",
     "performance-now": "2.1.0",
