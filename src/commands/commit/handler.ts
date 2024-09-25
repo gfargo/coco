@@ -17,6 +17,12 @@ import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { type TiktokenModel } from '@langchain/openai'
+import { JsonOutputParser } from '@langchain/core/output_parsers'
+
+interface CommitMessageResponse {
+  title: string
+  body: string
+}
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -74,17 +80,25 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
+      const parser = new JsonOutputParser<CommitMessageResponse>()
+
       const prompt = getPrompt({
         template: options.prompt,
         variables: COMMIT_PROMPT.inputVariables,
         fallback: COMMIT_PROMPT,
       })
 
-      return await executeChain({
+      const formatInstructions =
+        "Respond with a valid JSON object, containing two fields: 'title' and 'body'."
+
+      const commitMsg = await executeChain({
         llm,
         prompt,
-        variables: { summary: context },
+        variables: { summary: context, format_instructions: formatInstructions },
+        parser,
       })
+
+      return `${commitMsg.title}\n\n${commitMsg.body}`
     },
     noResult: async () => {
       await noResult({ git, logger })

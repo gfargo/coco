@@ -5,11 +5,11 @@ const template = `Write informative git changelog, in the imperative, based on a
 - Typically a hyphen or asterisk is used for the bullet
 - Summarize dependency updates
 
-"""{summary}"""
+{format_instructions}
 
-Changelog:`
+"""{summary}"""`
 
-export const inputVariables = ['summary']
+export const inputVariables = ['format_instructions', 'summary']
 
 export const CHANGELOG_PROMPT = new PromptTemplate({
   template,

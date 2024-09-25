@@ -14,6 +14,12 @@ import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurr
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { CommandHandler } from '../../lib/types'
+import { JsonOutputParser } from '@langchain/core/output_parsers'
+
+interface ChangelogResponse {
+  header: string
+  content: string
+}
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
@@ -60,17 +66,30 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
+      const parser = new JsonOutputParser<ChangelogResponse>()
+
       const prompt = getPrompt({
         template: options.prompt,
         variables: CHANGELOG_PROMPT.inputVariables,
         fallback: CHANGELOG_PROMPT,
       })
 
-      return await executeChain({
+      const formatInstructions =
+        "Respond with a valid JSON object, containing two fields: 'header' and 'content'."
+
+      const changelog = await executeChain<ChangelogResponse>({
         llm,
         prompt,
-        variables: { summary: context },
+        variables: {
+          summary: context,
+          format_instructions: formatInstructions,
+        },
+        parser,
       })
+
+      console.log({ changelog })
+
+      return `${changelog.header}\n\n${changelog.content}`
     },
     noResult: async () => {
       if (config.range) {
