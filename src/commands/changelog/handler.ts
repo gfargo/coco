@@ -15,6 +15,7 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { CommandHandler } from '../../lib/types'
 import { JsonOutputParser } from '@langchain/core/output_parsers'
+import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 
 interface ChangelogResponse {
   header: string
@@ -49,15 +50,23 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         process.exit(1)
       }
 
-      return await getCommitLogRange(from, to, { git, noMerges: true })
+      const branchName = await getCurrentBranchName({ git })
+
+      return {
+        branch: branchName,
+        commits: await getCommitLogRange(from, to, { git, noMerges: true }),
+      }
     }
 
     logger.verbose(`No range provided. Defaulting to current branch`, { color: 'yellow' })
     return await getCommitLogCurrentBranch({ git, logger })
   }
 
-  async function parser(messages: string[]) {
-    const result = messages.join('\n')
+  async function parser({ branch, commits }: { branch: string; commits: string[] }) {
+    console.log({ branch, commits })
+
+    
+    const result = `## ${branch}\n\n${commits.map((commit) => `- ${commit}`).join('\n')}`
     return result
   }
 
