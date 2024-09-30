@@ -25,8 +25,8 @@ export async function getCommitLogRange(
     const commitLog = await git.log(logOptions)
 
     return commitLog.all.map(
-      ({ message, date, body, author_name }) =>
-        `[${date}] ${message}\n${body}\n - ${author_name}`
+      ({ message, date, body, author_name, hash, author_email }) =>
+        `[${date}] ${message}\n${body}\n - ${author_name}<${author_email}> (${hash})`
     )
   } catch (error) {
     // If there's an error, handle it appropriately
