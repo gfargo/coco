@@ -1,7 +1,7 @@
 import * as fs from 'fs'
+import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { Config } from '../types'
 import { loadGitConfig } from './git'
-import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 jest.mock('fs')
 
 const mockFs = fs as jest.Mocked<typeof fs>
@@ -52,7 +52,10 @@ describe('loadGitConfig', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG)
     const config = loadGitConfig(defaultConfig as Config)
-    expect(config.service).toBe('openai')
+
+    console.log({ config })
+
+    expect(config.service.provider).toBe('openai')
     expect(config.mode).toBe('interactive')
     expect(config.defaultBranch).toBe('main')
   })
@@ -61,7 +64,7 @@ describe('loadGitConfig', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION)
     const config = loadGitConfig(defaultConfig as Config)
-    expect(config.service.provider).toBe('ollama')
+    expect(config.service).toBe(defaultConfig.service)
     expect(config.mode).toBe('stdout')
     expect(config.defaultBranch).toBe('test')
   })
@@ -70,7 +73,7 @@ describe('loadGitConfig', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_WITH_COCO_COMMENTS)
     const config = loadGitConfig(defaultConfig as Config)
-    expect(config.service).toBe('openai')
+    expect(config.service.provider).toBe('openai')
     expect(config.mode).toBe('interactive')
     expect(config.defaultBranch).toBe('main')
   })
@@ -79,7 +82,7 @@ describe('loadGitConfig', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_WITH_SERVICE_ALIAS_AND_OPENAI_API_KEY)
     const config = loadGitConfig(defaultConfig as Config)
-    expect(config.service).toBe('openai')
+    expect(config.service.provider).toBe('openai')
     expect(config.mode).toBe('stdout')
     expect(config.defaultBranch).toBe('test')
   })

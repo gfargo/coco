@@ -1,8 +1,8 @@
 import { Logger } from '../utils/logger'
-import { logResult } from './logResult'
+import { editPrompt } from './editPrompt'
 import { editResult } from './editResult'
 import { ReviewDecision, getUserReviewDecision } from './getUserReviewDecision'
-import { editPrompt } from './editPrompt'
+import { logResult } from './logResult'
 
 export type GenerateReviewLoopOptions = {
   interactive: boolean
@@ -19,8 +19,8 @@ export type GenerateReviewLoopOptions = {
 
 export type GenerateReviewLoopInput<T> = {
   label: string
-  factory: () => Promise<T[]>
-  parser: (changes: T[], commit: string, options: GenerateReviewLoopOptions) => Promise<string>
+  factory: () => Promise<T>
+  parser: (changes: T, commit: string, options: GenerateReviewLoopOptions) => Promise<string>
   noResult: (options: GenerateReviewLoopOptions) => Promise<void>
   agent: (context: string, options: GenerateReviewLoopOptions) => Promise<string>
   options: GenerateReviewLoopOptions
@@ -43,7 +43,7 @@ export async function generateAndReviewLoop<T>({
 
   const changes = await factory()
   // if we don't have any changes, bail.
-  if (!changes || !changes.length) {
+  if (!changes || !Object.keys(changes).length) {
     await noResult(options)
   }
 
@@ -86,7 +86,7 @@ export async function generateAndReviewLoop<T>({
       logResult(label, result)
       const reviewAnswer = await getUserReviewDecision({
         label,
-        ...options?.review || {},
+        ...(options?.review || {}),
       })
 
       if (reviewAnswer === 'cancel') {

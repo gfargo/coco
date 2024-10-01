@@ -13,30 +13,35 @@ This directory contains configuration files and services for the application. Th
 ## Configuration Services
 
 ### `env.ts`
+
 - **Purpose**: Manages environment variable configurations.
 - **Functions**:
   - `loadEnvConfig`: Loads environment variables into the configuration object.
   - `appendToEnvFile`: Appends configuration values to an environment file.
 
 ### `git.ts`
+
 - **Purpose**: Manages Git-related configurations.
 - **Functions**:
   - `loadGitConfig`: Loads Git profile configuration from `~/.gitconfig`.
   - `appendToGitConfig`: Appends configuration values to a Git config file.
 
 ### `ignore.ts`
+
 - **Purpose**: Manages ignored files configurations.
 - **Functions**:
   - `loadGitignore`: Loads ignored files from the `.gitignore` file.
   - `loadIgnore`: Loads ignored files from the `.ignore` file.
 
 ### `project.ts`
+
 - **Purpose**: Manages project-specific configurations.
 - **Functions**:
   - `loadProjectJsonConfig`: Loads project configuration from `.coco.config.json`.
   - `appendToProjectJsonConfig`: Appends configuration values to a project JSON config file.
 
 ### `xdg.ts`
+
 - **Purpose**: Manages configurations based on the XDG Base Directory Specification.
 - **Functions**:
   - `loadXDGConfig`: Loads configuration from the XDG config directory.
@@ -64,3 +69,62 @@ This directory contains configuration files and services for the application. Th
 5. **XDG Configuration**:
    - Define configuration settings in the `coco/config.json` file within the XDG config home directory.
    - Use the `loadXDGConfig` function to load these settings into the configuration object.
+
+### Example Configurations
+
+#### XDG Config (`config.json`)
+
+```json
+{
+  "temperature": 0.7,
+  "prompt": "Translate the following text to French:",
+  "mode": "translation",
+  "summarizePrompt": "Summarize the following text:",
+  "ignoredFiles": ["node_modules", ".git"],
+  "ignoredExtensions": [".log", ".tmp"],
+  "defaultBranch": "main",
+  "service": {
+    "provider": "openai",
+    "model": "gpt-3.5-turbo",
+    "fields": {
+      "apiKey": "your-openai-api-key"
+    }
+  }
+}
+```
+
+#### Git Config (`~/.gitconfig`)
+
+```ini
+[coco]
+    temperature = 0.7
+    prompt = Translate the following text to French:
+    mode = translation
+    summarizePrompt = Summarize the following text:
+    ignoredFiles = node_modules,.git
+    ignoredExtensions = .log,.tmp
+    defaultBranch = main
+    provider = openai
+    model = gpt-3.5-turbo
+    apiKey = your-openai-api-key
+```
+
+#### Project Config (`.coco.config.json`)
+
+```json
+{
+  "temperature": 0.3,
+  "ignoredFiles": ["node_modules", ".git"],
+  "ignoredExtensions": [".log", ".tmp"],
+  "defaultBranch": "main",
+  "service": {
+    "provider": "openai",
+    "model": "gpt-4",
+    "fields": {
+      "apiKey": "your-openai-api-key"
+    }
+  }
+}
+```
+
+These examples demonstrate how the configuration files should be structured to align with the new `Config` or `ConfigWithServiceObject` types.

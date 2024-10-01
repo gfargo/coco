@@ -7,8 +7,7 @@ export interface ChangelogOptions extends BaseCommandOptions {
   commit: boolean
   summarizePrompt: string
   openInEditor: boolean
-  ignoredFiles: string[]
-  ignoredExtensions: string[]
+
 }
 
 export type ChangelogArgv = Argv<ChangelogOptions>['argv']
@@ -21,17 +20,6 @@ export const options = {
     type: 'string',
     alias: 'r',
     description: 'Commit range e.g `HEAD~2:HEAD`',
-  },
-  model: { type: 'string', description: 'LLM/Model-Name' },
-  openAIApiKey: {
-    type: 'string',
-    description: 'OpenAI API Key',
-    conflicts: 'huggingFaceHubApiKey',
-  },
-  huggingFaceHubApiKey: {
-    type: 'string',
-    description: 'HuggingFace Hub API Key',
-    conflicts: 'openAIApiKey',
   },
   tokenLimit: { type: 'number', description: 'Token limit' },
   prompt: {
@@ -53,14 +41,7 @@ export const options = {
     type: 'string',
     description: 'Prompt for summarizing large files',
   },
-  ignoredFiles: {
-    type: 'array',
-    description: 'Ignored files',
-  },
-  ignoredExtensions: {
-    type: 'array',
-    description: 'Ignored extensions',
-  },
+
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {

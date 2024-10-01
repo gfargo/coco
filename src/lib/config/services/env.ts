@@ -4,7 +4,7 @@ import { CONFIG_KEYS } from '../constants'
 import { updateFileSection } from '../../utils/updateFileSection'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants'
-import { LLMService } from '../../langchain/types'
+import { LLMService, OpenAILLMService } from '../../langchain/types'
 
 type ValuesTypes = Config[keyof Config]
 
@@ -26,12 +26,36 @@ export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
     if (envValue === undefined) {
       return
     }
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    envConfig[key as string] = envValue
+
+    if (key === 'COCO_SERVICE_PROVIDER' || key === 'COCO_SERVICE_MODEL' || key === 'OPEN_AI_KEY') {
+      // NOTE: We want to ensure that the service object is always defined
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      envConfig.service = envConfig.service || {}
+      handleServiceEnvVar(envConfig.service as LLMService, key, envValue)
+    } else {
+      envConfig[key as keyof Config] = envValue
+    }
   })
 
   return { ...config, ...removeUndefined(envConfig) } as ConfigType
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function handleServiceEnvVar(service: LLMService, key: string, value: any) {
+  switch (key) {
+    case 'COCO_SERVICE_PROVIDER':
+      service.provider = value
+      break
+    case 'COCO_SERVICE_MODEL':
+      service.model = value
+      break
+    case 'OPEN_AI_KEY':
+      if (service.provider === 'openai') {
+        ;(service as OpenAILLMService).fields = { apiKey: value }
+      }
+      break
+  }
 }
 
 function parseEnvValue(key: string, value: ValuesTypes) {
