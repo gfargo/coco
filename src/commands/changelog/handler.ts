@@ -2,20 +2,20 @@ import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/lang
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 
-import { loadConfig } from '../../lib/config/utils/loadConfig'
-import { LOGO, isInteractive } from '../../lib/ui/helpers'
-import { ChangelogArgv, ChangelogOptions } from './options'
-import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
-import { executeChain } from '../../lib/langchain/utils/executeChain'
-import { handleResult } from '../../lib/ui/handleResult'
-import { CHANGELOG_PROMPT } from './prompt'
-import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
-import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
-import { getRepo } from '../../lib/simple-git/getRepo'
-import { logSuccess } from '../../lib/ui/logSuccess'
-import { CommandHandler } from '../../lib/types'
 import { JsonOutputParser } from '@langchain/core/output_parsers'
+import { loadConfig } from '../../lib/config/utils/loadConfig'
+import { executeChain } from '../../lib/langchain/utils/executeChain'
+import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
+import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
+import { getRepo } from '../../lib/simple-git/getRepo'
+import { CommandHandler } from '../../lib/types'
+import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
+import { handleResult } from '../../lib/ui/handleResult'
+import { LOGO, isInteractive } from '../../lib/ui/helpers'
+import { logSuccess } from '../../lib/ui/logSuccess'
+import { ChangelogArgv, ChangelogOptions } from './options'
+import { CHANGELOG_PROMPT } from './prompt'
 
 interface ChangelogResponse {
   header: string
@@ -42,6 +42,8 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   }
 
   async function factory() {
+    const branchName = await getCurrentBranchName({ git })
+
     if (config.range && config.range.includes(':')) {
       const [from, to] = config.range.split(':')
 
@@ -50,8 +52,6 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         process.exit(1)
       }
 
-      const branchName = await getCurrentBranchName({ git })
-
       return {
         branch: branchName,
         commits: await getCommitLogRange(from, to, { git, noMerges: true }),
@@ -59,18 +59,23 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     }
 
     logger.verbose(`No range provided. Defaulting to current branch`, { color: 'yellow' })
-    return await getCommitLogCurrentBranch({ git, logger })
+    return {
+      branch: branchName,
+      commits: await getCommitLogCurrentBranch({ git, logger }),
+    }
   }
 
   async function parser({ branch, commits }: { branch: string; commits: string[] }) {
     console.log({ branch, commits })
 
-    
     const result = `## ${branch}\n\n${commits.map((commit) => `- ${commit}`).join('\n')}`
     return result
   }
 
-  const changelogMsg = await generateAndReviewLoop({
+  const changelogMsg = await generateAndReviewLoop<{
+    branch: string
+    commits: string[]
+  }>({
     label: 'changelog',
     factory,
     parser,
