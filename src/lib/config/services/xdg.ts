@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import { Config } from '../types'
+import { LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 
 /**
  * Load XDG config
@@ -14,8 +15,42 @@ export function loadXDGConfig<ConfigType = Config>(config: Partial<Config>) {
   const xdgConfigPath = path.join(xdgConfigHome, 'coco', 'config.json')
   if (fs.existsSync(xdgConfigPath)) {
     const xdgConfig = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8'))
-    
-    config = { ...config, ...xdgConfig }
+
+    const service = parseServiceConfig(xdgConfig.service || config.service)
+
+    config = { 
+      ...config, 
+      ...xdgConfig, 
+      service: service 
+    }
   }
   return config as ConfigType
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseServiceConfig(service: any): LLMService | undefined {
+  if (!service) return undefined
+
+  switch (service.provider) {
+    case 'openai':
+      return {
+        provider: 'openai',
+        model: service.model,
+        authentication: {
+          type: 'APIKey',
+          credentials: {
+            apiKey: service.apiKey
+          }
+        }
+      } as OpenAILLMService
+    case 'ollama':
+      return {
+        provider: 'ollama',
+        model: service.model,
+        endpoint: service.endpoint,
+        fields: service.fields
+      } as OllamaLLMService
+    default:
+      return undefined
+  }
 }

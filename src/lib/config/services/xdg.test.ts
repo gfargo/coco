@@ -35,6 +35,8 @@ describe('loadXDGConfig', () => {
       JSON.stringify({ service: getDefaultServiceConfigFromAlias('openai') })
     )
     const config = loadXDGConfig(openAIConfig)
+
+    expect(config.service.provider).toBe('openai')
     expect(config.service.authentication.type).toBe('APIKey')
   })
 
