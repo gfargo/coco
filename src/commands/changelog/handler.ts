@@ -5,6 +5,7 @@ import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { JsonOutputParser } from '@langchain/core/output_parsers'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
+import { getCommitLogAgainstBranch } from '../../lib/simple-git/getCommitLogAgainstBranch'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
@@ -58,7 +59,15 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       }
     }
 
-    logger.verbose(`No range provided. Defaulting to current branch`, { color: 'yellow' })
+    if (argv.branch) {
+      logger.verbose(`Generating commit log against branch: ${argv.branch}`, { color: 'yellow' })
+      return {
+        branch: branchName,
+        commits: await getCommitLogAgainstBranch({ git, logger, targetBranch: argv.branch }),
+      }
+    }
+
+    logger.verbose(`No range or branch provided. Defaulting to current branch`, { color: 'yellow' })
     return {
       branch: branchName,
       commits: await getCommitLogCurrentBranch({ git, logger }),
