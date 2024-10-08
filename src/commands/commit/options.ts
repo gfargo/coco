@@ -3,9 +3,7 @@ import { BaseCommandOptions } from '../types'
 
 export interface CommitOptions extends BaseCommandOptions {
   interactive: boolean
-  prompt: string
   commit: boolean
-  summarizePrompt: string
   openInEditor: boolean
   ignoredFiles: string[]
   ignoredExtensions: string[]
@@ -17,43 +15,24 @@ export type CommitArgv = Arguments<CommitOptions>
  * Command line options via yargs
  */
 export const options = {
-  service: { type: 'string', description: 'LLM/Model-Name', choices: ['openai', 'ollama'] },
-  openAIApiKey: {
-    type: 'string',
-    description: 'OpenAI API Key',
-  },
   tokenLimit: { type: 'number', description: 'Token limit' },
-  prompt: {
-    type: 'string',
-    alias: 'p',
-    description: 'Commit message prompt',
-  },
   i: {
-    type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
-  },
-  s: {
     type: 'boolean',
-    description: 'Automatically commit staged changes with generated commit message',
-    default: false,
   },
   e: {
-    type: 'boolean',
     alias: 'edit',
     description: 'Open commit message in editor before proceeding',
-  },
-  summarizePrompt: {
-    type: 'string',
-    description: 'Large file summary prompt',
+    type: 'boolean',
   },
   ignoredFiles: {
-    type: 'array',
     description: 'Ignored files',
+    type: 'array',
   },
   ignoredExtensions: {
-    type: 'array',
     description: 'Ignored extensions',
+    type: 'array',
   },
 } as Record<string, Options>
 

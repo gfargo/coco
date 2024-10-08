@@ -89,7 +89,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       })
 
       const formatInstructions =
-        "Respond with a valid JSON object, containing two fields: 'title' and 'body'."
+        "Respond with a valid JSON object, containing two fields: 'title' and 'body', both strings."
 
       const commitMsg = await executeChain({
         llm,
