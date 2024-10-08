@@ -2,8 +2,7 @@ import { PromptTemplate } from '@langchain/core/prompts'
 
 const template = `Write informative git changelog, in the imperative, based on a series of individual messages.
 
-- Content should be formatted in Github-flavored markdown
-- Include git commit hashes connected to each respective change
+- Include the git commit hash as reference for each change, including just the first 7 characters
 - Logically group changes, and if necessary, summarize dependency updates
 
 {format_instructions}
