@@ -66,9 +66,9 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   }
 
   async function parser({ branch, commits }: { branch: string; commits: string[] }) {
-    console.log({ branch, commits })
+    const result = `## ${branch}\n\n${commits.map((commit) => `${commit}`).join('\n\n\n')}`
 
-    const result = `## ${branch}\n\n${commits.map((commit) => `- ${commit}`).join('\n')}`
+    console.log({ result }) 
     return result
   }
 
@@ -89,7 +89,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       })
 
       const formatInstructions =
-        "Respond with a valid JSON object, containing two fields: 'header' and 'content'."
+        "Respond with a valid JSON object, containing two fields: 'header' and 'content', both strings."
 
       const changelog = await executeChain<ChangelogResponse>({
         llm,
@@ -100,8 +100,6 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         },
         parser,
       })
-
-      console.log({ changelog })
 
       return `${changelog.header}\n\n${changelog.content}`
     },
