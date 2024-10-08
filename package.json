@@ -83,10 +83,10 @@
   "dependencies": {
     "@inquirer/prompts": "3.3.0",
     "@jridgewell/sourcemap-codec": "^1.4.15",
-    "@langchain/community": "^0.3.2",
-    "@langchain/core": "^0.3.3",
+    "@langchain/community": "^0.3.4",
+    "@langchain/core": "^0.3.7",
     "@langchain/ollama": "^0.1.0",
-    "@langchain/openai": "^0.3.0",
+    "@langchain/openai": "^0.3.5",
     "ajv": "^8.16.0",
     "ajv-formats": "^3.0.1",
     "chalk": "4.1.2",
@@ -98,7 +98,7 @@
     "performance-now": "2.1.0",
     "pretty-ms": "7.0.1",
     "simple-git": "3.25.0",
-    "tiktoken": "^1.0.15",
+    "tiktoken": "^1.0.17",
     "yargs": "17.7.2"
   }
 }
