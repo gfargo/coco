@@ -1,4 +1,4 @@
-import { DefaultLogFields, LogOptions, SimpleGit, TaskOptions } from 'simple-git'
+import { DefaultLogFields, LogOptions, SimpleGit, TaskOptions } from 'simple-git';
 
 type GetCommitLogRangeOptions = { git: SimpleGit; noMerges?: boolean }
 
@@ -26,7 +26,7 @@ export async function getCommitLogRange(
 
     return commitLog.all.map(
       ({ message, date, body, author_name, hash, author_email }) =>
-        `[${date}] ${message}\n${body}\n - ${author_name}<${author_email}> (${hash})`
+        `[${date}] ${message}\n${body}\n(${hash}) - ${author_name}<${author_email}>`
     )
   } catch (error) {
     // If there's an error, handle it appropriately
