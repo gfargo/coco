@@ -30,7 +30,6 @@ export async function getCommitLogRange(
     )
   } catch (error) {
     // If there's an error, handle it appropriately
-    console.error('Error getting commit messages:', error)
     throw error
   }
 }

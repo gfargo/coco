@@ -52,9 +52,6 @@ describe('loadGitConfig', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG)
     const config = loadGitConfig(defaultConfig as Config)
-
-    console.log({ config })
-
     expect(config.service.provider).toBe('openai')
     expect(config.mode).toBe('interactive')
     expect(config.defaultBranch).toBe('main')
