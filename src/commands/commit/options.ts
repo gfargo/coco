@@ -1,4 +1,4 @@
-import { Options, Argv } from 'yargs'
+import yargs, { Arguments, Options } from 'yargs'
 import { BaseCommandOptions } from '../types'
 
 export interface CommitOptions extends BaseCommandOptions {
@@ -11,7 +11,7 @@ export interface CommitOptions extends BaseCommandOptions {
   ignoredExtensions: string[]
 }
 
-export type CommitArgv = Argv<CommitOptions>['argv']
+export type CommitArgv = Arguments<CommitOptions>
 
 /**
  * Command line options via yargs
@@ -57,6 +57,6 @@ export const options = {
   },
 } as Record<string, Options>
 
-export const builder = (yargs: Argv) => {
-  return yargs.options(options)
+export const builder = (yargsInstance: ReturnType<typeof yargs>) => {
+  return yargsInstance.options(options)
 }
