@@ -2,7 +2,7 @@ import chalk from 'chalk'
 import { loadConfig } from '../config/utils/loadConfig'
 
 export const isInteractive = (config: ReturnType<typeof loadConfig>) => {
-  return config?.mode === 'interactive' || config?.interactive
+  return config?.mode === 'interactive' || !!config?.interactive 
 }
 
 export const SEPERATOR = chalk.blue('─────────────')
