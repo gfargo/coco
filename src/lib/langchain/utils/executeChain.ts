@@ -1,6 +1,7 @@
+import { JsonOutputParser } from '@langchain/core/output_parsers'
+
 import { PromptTemplate } from '@langchain/core/prompts'
 import { getLlm } from './getLlm'
-import { JsonOutputParser } from '@langchain/core/output_parsers'
 
 type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
@@ -11,12 +12,7 @@ type ExecuteChainInput<T> = {
   parser: JsonOutputParser<T>
 }
 
-export const executeChain = async <T>({
-  llm,
-  prompt,
-  variables,
-  parser,
-}: ExecuteChainInput<T>)  => {
+export const executeChain = async <T>({ llm, prompt, variables, parser }: ExecuteChainInput<T>) => {
   if (!llm || !prompt || !variables) {
     throw new Error('The input parameters "llm", "prompt", and "variables" are all required.')
   }
