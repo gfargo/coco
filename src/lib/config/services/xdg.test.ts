@@ -1,7 +1,7 @@
 import * as fs from 'fs'
+import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { Config } from '../types'
 import { loadXDGConfig } from './xdg'
-import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 
 jest.mock('fs')
 
@@ -9,9 +9,7 @@ const mockFs = fs as jest.Mocked<typeof fs>
 
 const openAIConfig: Partial<Config> = {
   service: getDefaultServiceConfigFromAlias('openai'),
-  openAIApiKey: 'sk_default-api-key',
   mode: 'stdout',
-  temperature: 0.4,
   ignoredFiles: ['package-lock.json'],
   ignoredExtensions: ['.map', '.lock'],
 }
@@ -19,7 +17,6 @@ const openAIConfig: Partial<Config> = {
 const ollamaConfig: Partial<Config> = {
   service: getDefaultServiceConfigFromAlias('ollama'),
   mode: 'stdout',
-  temperature: 0.4,
   ignoredFiles: ['package-lock.json'],
   ignoredExtensions: ['.map', '.lock'],
 }

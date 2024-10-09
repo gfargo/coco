@@ -1,19 +1,19 @@
 import { confirm } from '@inquirer/prompts'
-import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToEnvFile } from '../../lib/config/services/env'
-import { logResult } from '../../lib/ui/logResult'
+import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToProjectJsonConfig } from '../../lib/config/services/project'
-import { LOGO } from '../../lib/ui/helpers'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
+import { LOGO } from '../../lib/ui/helpers'
+import { logResult } from '../../lib/ui/logResult'
 
-import { InitArgv, InitOptions } from './options'
+import { ConfigWithServiceObject } from '../../lib/config/types'
+import { loadConfig } from '../../lib/config/utils/loadConfig'
+import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
+import { CommandHandler } from '../../lib/types'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
 import { getProjectConfigFilePath } from '../../lib/utils/getProjectConfigFilePath'
-import { CommandHandler } from '../../lib/types'
-import { loadConfig } from '../../lib/config/utils/loadConfig'
+import { InitArgv, InitOptions } from './options'
 import { questions } from './questions'
-import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
-import { ConfigWithServiceObject } from '../../lib/config/types'
 
 export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   const options = loadConfig<InitOptions, InitArgv>(argv)
@@ -64,9 +64,11 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
 
       config.defaultBranch = await questions.selectDefaultGitBranch()
 
-      config.temperature = await questions.inputModelTemperature()
-
-      config.tokenLimit = await questions.inputTokenLimit()
+      config.service = {
+        ...config.service,
+        temperature: await questions.inputModelTemperature(),
+        tokenLimit: await questions.inputTokenLimit(),
+      }
 
       config.verbose = await questions.enableVerboseMode()
 
