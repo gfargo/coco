@@ -5,6 +5,7 @@ import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { JsonOutputParser } from '@langchain/core/output_parsers'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
+import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
 import { getCommitLogAgainstBranch } from '../../lib/simple-git/getCommitLogAgainstBranch'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
@@ -74,10 +75,16 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     }
   }
 
-  async function parser({ branch, commits }: { branch: string; commits: string[] }) {
-    const result = `## ${branch}\n\n${commits.map((commit) => `${commit}`).join('\n\n\n')}`
+  async function parser(
+    { branch, commits }: { branch: string; commits: string[] }
+  ) {
+    let result
+    if (!commits || commits.length === 0) {
+      result = `## ${branch}\n\nNo commits found.`
+    } else {
+      result = `## ${branch}\n\n${commits.map((commit) => commit.trim()).join('\n\n')}`
+    }
 
-    console.log({ result }) 
     return result
   }
 
@@ -110,7 +117,11 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         parser,
       })
 
-      return `${changelog.header}\n\n${changelog.content}`
+      const branchName = await getCurrentBranchName({ git })
+      const ticketId = extractTicketIdFromBranchName(branchName)
+      const footer = ticketId ? `\n\nPart of **${ticketId}**` : ''
+
+      return `${changelog.header}\n\n${changelog.content}${footer}`
     },
     noResult: async () => {
       if (config.range) {
