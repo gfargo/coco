@@ -1,16 +1,12 @@
-import { Options, Argv } from 'yargs'
+import yargs, { Arguments, Options } from 'yargs'
 import { BaseCommandOptions } from '../types'
 
 export interface ChangelogOptions extends BaseCommandOptions {
   range: string
-  prompt: string
-  commit: boolean
-  summarizePrompt: string
-  openInEditor: boolean
-
+  branch: string
 }
 
-export type ChangelogArgv = Argv<ChangelogOptions>['argv']
+export type ChangelogArgv = Arguments<ChangelogOptions>
 
 /**
  * Command line options via yargs
@@ -21,29 +17,18 @@ export const options = {
     alias: 'r',
     description: 'Commit range e.g `HEAD~2:HEAD`',
   },
-  tokenLimit: { type: 'number', description: 'Token limit' },
-  prompt: {
+  branch: {
     type: 'string',
-    alias: 'p',
-    description: 'Prompt for llm',
+    alias: 'b',
+    description: 'Target branch to compare against',
   },
   i: {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
   },
-  e: {
-    type: 'boolean',
-    alias: 'edit',
-    description: 'Open generated changelog message in editor before proceeding',
-  },
-  summarizePrompt: {
-    type: 'string',
-    description: 'Prompt for summarizing large files',
-  },
-
 } as Record<string, Options>
 
-export const builder = (yargs: Argv) => {
-  return yargs.options(options)
+export const builder = (yargsInstance: ReturnType<typeof yargs>) => {
+  return yargsInstance.options(options)
 }

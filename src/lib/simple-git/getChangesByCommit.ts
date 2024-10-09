@@ -1,12 +1,12 @@
-import { SimpleGit } from 'simple-git'
+import { minimatch } from 'minimatch'
 import path from 'path'
+import { SimpleGit } from 'simple-git'
+import { loadConfig } from '../config/utils/loadConfig'
 import { FileChange } from '../types'
+import { Logger } from '../utils/logger'
 import { getStatus } from './getStatus'
 import { getSummaryText } from './getSummaryText'
-import { Logger } from '../utils/logger'
 import { parseFileString } from "./parseFileString"
-import { loadConfig } from '../config/utils/loadConfig'
-import { minimatch } from 'minimatch'
 
 const config = loadConfig()
 
@@ -25,6 +25,8 @@ export type GetChangeByCommitInput = {
 
 /**
  * Retrieves the changes made in a commit.
+ * 
+ * @deprecated use `getChanges` instead
  * 
  * @param commit - The commit hash.
  * @param options - Optional parameters for customization.

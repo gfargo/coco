@@ -1,10 +1,9 @@
-import { removeUndefined } from '../../utils/removeUndefined'
-import { Config } from '../types'
-import { CONFIG_KEYS } from '../constants'
-import { updateFileSection } from '../../utils/updateFileSection'
-import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
-import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants'
 import { LLMService, OpenAILLMService } from '../../langchain/types'
+import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
+import { removeUndefined } from '../../utils/removeUndefined'
+import { updateFileSection } from '../../utils/updateFileSection'
+import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT, CONFIG_KEYS } from '../constants'
+import { Config } from '../types'
 
 type ValuesTypes = Config[keyof Config]
 
@@ -15,7 +14,7 @@ type ValuesTypes = Config[keyof Config]
  * @returns {Config} Updated config
  **/
 export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
-  const envConfig: Partial<Config> = {}
+  const envConfig: Partial<Record<keyof Config, ValuesTypes>> = {}
 
   const envKeys = [...CONFIG_KEYS, 'COCO_SERVICE_PROVIDER', 'COCO_SERVICE_MODEL', 'OPEN_AI_KEY']
 
@@ -34,7 +33,11 @@ export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
       envConfig.service = envConfig.service || {}
       handleServiceEnvVar(envConfig.service as LLMService, key, envValue)
     } else {
-      envConfig[key as keyof Config] = envValue
+      if (key === 'service' || !envValue) {
+        return
+      }
+
+      envConfig[key as keyof typeof envConfig] = envValue as ValuesTypes
     }
   })
 

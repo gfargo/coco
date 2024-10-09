@@ -4,7 +4,6 @@ import { loadEnvConfig } from './env'
 
 const defaultConfig: Config = {
   service: getDefaultServiceConfigFromAlias('openai'),
-  endpoint: '',
   defaultBranch: 'main',
   mode: 'stdout',
   ignoredFiles: ['package-lock.json'],

@@ -1,8 +1,8 @@
 import chalk from 'chalk'
-import { BaseArgvOptions } from '../../commands/types'
+import { loadConfig } from '../config/utils/loadConfig'
 
-export const isInteractive = (argv: BaseArgvOptions) => {
-  return argv?.mode === 'interactive' || argv.interactive
+export const isInteractive = (config: ReturnType<typeof loadConfig>) => {
+  return config?.mode === 'interactive' || !!config?.interactive 
 }
 
 export const SEPERATOR = chalk.blue('─────────────')
@@ -12,7 +12,12 @@ export const LOGO = chalk.green(
 │┌─┐┌─┐┌─┐┌─┐│
 ││  │ ││  │ ││
 │└─┘└─┘└─┘└─┘│
-└────────────┘ 
+└────────────┘`
+)
+
+export const USAGE_BANNER = chalk.green(
+  `${LOGO}
+v: ${process.env.npm_package_version}
 `
 )
 

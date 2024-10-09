@@ -34,7 +34,6 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
     config = {
       ...config,
       service: service,
-      temperature: gitConfigParsed.coco?.temperature || config.temperature,
       prompt: gitConfigParsed.coco?.prompt || config.prompt,
       mode: gitConfigParsed.coco?.mode || config.mode,
       summarizePrompt: gitConfigParsed.coco?.summarizePrompt || config.summarizePrompt,
