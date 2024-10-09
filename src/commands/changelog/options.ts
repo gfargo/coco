@@ -4,7 +4,6 @@ import { BaseCommandOptions } from '../types'
 export interface ChangelogOptions extends BaseCommandOptions {
   range: string
   branch: string
-  edit: boolean
 }
 
 export type ChangelogArgv = Arguments<ChangelogOptions>
@@ -23,16 +22,10 @@ export const options = {
     alias: 'b',
     description: 'Target branch to compare against',
   },
-  tokenLimit: { type: 'number', description: 'Token limit' },
   i: {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
-  },
-  e: {
-    type: 'boolean',
-    alias: 'edit',
-    description: 'Open generated changelog message in editor before proceeding',
   },
 } as Record<string, Options>
 
