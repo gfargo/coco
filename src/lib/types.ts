@@ -1,5 +1,5 @@
-import { getLlm } from './langchain/utils/getLlm'
 import { SimpleGit } from 'simple-git'
+import { getLlm } from './langchain/utils/getLlm'
 import { Logger } from './utils/logger'
 import { TokenCounter } from './utils/tokenizer'
 
@@ -50,7 +50,7 @@ export interface BaseParserInput {
 
 export interface FileChangeParserInput extends BaseParserInput {
   changes: FileChange[]
-  commit: '--staged' | string
+  commit: '--staged' | '--unstaged' | '--untracked' | string
 }
 
 export interface CommitLogParserInput extends BaseParserInput {
