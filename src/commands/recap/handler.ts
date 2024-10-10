@@ -105,8 +105,6 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   }
 
   async function parser(changes: string[]) {
-    const [unstaged, untracked, staged] = changes
-
     return changes.join('\n')
   }
 
