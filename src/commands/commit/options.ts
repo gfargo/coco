@@ -27,6 +27,14 @@ export const options = {
     description: 'Ignored extensions',
     type: 'array',
   },
+  append: {
+    description: 'Add content to the end of the generated commit message',
+    type: 'string',
+  },
+  additional: {
+    description: 'Add extra contextual information to the prompt',
+    type: 'string',
+  },
 } as Record<string, Options>
 
 export const builder = (yargsInstance: ReturnType<typeof yargs>) => {

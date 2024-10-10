@@ -26,11 +26,11 @@ interface CommitMessageResponse {
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
-  const options = loadConfig<CommitOptions, CommitArgv>(argv)
-  const key = getApiKeyForModel(options)
-  const { provider, model } = getModelAndProviderFromConfig(options)
+  const config = loadConfig<CommitOptions, CommitArgv>(argv)
+  const key = getApiKeyForModel(config)
+  const { provider, model } = getModelAndProviderFromConfig(config)
 
-  if (options.service.authentication.type !== 'None' && !key) {
+  if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
     process.exit(1)
   }
@@ -39,9 +39,9 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     provider === 'openai' ? (model as TiktokenModel) : 'gpt-4'
   )
 
-  const llm = getLlm(provider, model, options)
+  const llm = getLlm(provider, model, config)
 
-  const INTERACTIVE = isInteractive(options)
+  const INTERACTIVE = isInteractive(config)
   if (INTERACTIVE) {
     logger.log(LOGO)
   }
@@ -62,8 +62,8 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const commitMsg = await generateAndReviewLoop({
     label: 'commit message',
     options: {
-      ...options,
-      prompt: options.prompt || (COMMIT_PROMPT.template as string),
+      ...config,
+      prompt: config.prompt || (COMMIT_PROMPT.template as string),
       logger,
       interactive: INTERACTIVE,
       review: {
@@ -87,18 +87,25 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         variables: COMMIT_PROMPT.inputVariables,
         fallback: COMMIT_PROMPT,
       })
-
+      
       const formatInstructions =
-        "Respond with a valid JSON object, containing two fields: 'title' and 'body', both strings."
+      "Respond with a valid JSON object, containing two fields: 'title' and 'body', both strings."
+      
+      const additionalContext = argv.additional ? `${argv.additional}` : ''
 
       const commitMsg = await executeChain({
         llm,
         prompt,
-        variables: { summary: context, format_instructions: formatInstructions },
+        variables: {
+          summary: context,
+          format_instructions: formatInstructions,
+          additional: additionalContext,
+        },
         parser,
       })
 
-      return `${commitMsg.title}\n\n${commitMsg.body}`
+      const appendedText = argv.append ? `\n\n${argv.append}` : ''
+      return `${commitMsg.title}\n\n${commitMsg.body}${appendedText}`
     },
     noResult: async () => {
       await noResult({ git, logger })
@@ -107,7 +114,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   })
 
   const MODE =
-    (INTERACTIVE && 'interactive') || (options.commit && 'interactive') || options?.mode || 'stdout'
+    (INTERACTIVE && 'interactive') || (config.commit && 'interactive') || config?.mode || 'stdout'
 
   handleResult({
     result: commitMsg,
