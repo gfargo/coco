@@ -1,4 +1,6 @@
-import { Options, Argv } from 'yargs'
+import { Argv, Options } from 'yargs'
+import init from '.'
+import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseArgvOptions } from '../types'
 
 export type InstallationScope = 'global' | 'project'
@@ -21,5 +23,5 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options)
+  return yargs.options(options).usage(getCommandUsageHeader(init.command))
 }

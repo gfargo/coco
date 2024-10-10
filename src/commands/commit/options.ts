@@ -1,4 +1,6 @@
 import yargs, { Arguments, Options } from 'yargs'
+import commit from '.'
+import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
 export interface CommitOptions extends BaseCommandOptions {
@@ -18,7 +20,7 @@ export const options = {
     alias: 'interactive',
     description: 'Toggle interactive mode',
     type: 'boolean',
-  }, 
+  },
   ignoredFiles: {
     description: 'Ignored files',
     type: 'array',
@@ -38,5 +40,5 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargsInstance: ReturnType<typeof yargs>) => {
-  return yargsInstance.options(options)
+  return yargsInstance.options(options).usage(getCommandUsageHeader(commit.command))
 }

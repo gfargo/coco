@@ -1,4 +1,6 @@
 import yargs, { Arguments, Options } from 'yargs'
+import recap from '.'
+import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
 export interface RecapOptions extends BaseCommandOptions {
@@ -41,5 +43,5 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargsInstance: ReturnType<typeof yargs>) => {
-  return yargsInstance.options(options).wrap(36)
+  return yargsInstance.options(options).usage(getCommandUsageHeader(recap.command))
 }
