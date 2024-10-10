@@ -13,9 +13,14 @@ Please follow the guidelines below when writing your commit message:
 
 {format_instructions}
 
-"""{summary}"""`
+""""""
+{summary}
+""""""
 
-export const inputVariables = ['summary', 'format_instructions']
+{additional}
+`
+
+const inputVariables = ['summary', 'format_instructions', 'additional']
 
 export const COMMIT_PROMPT = new PromptTemplate({
   template,
