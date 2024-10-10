@@ -1,7 +1,7 @@
-import { SimpleGit } from 'simple-git'
-import { createTwoFilesPatch } from 'diff'
-import { FileChange } from '../types'
-import { Logger } from '../utils/logger'
+import { createTwoFilesPatch } from 'diff';
+import { SimpleGit } from 'simple-git';
+import { FileChange } from '../types';
+import { Logger } from '../utils/logger';
 
 /**
  * Parses the default file diff for a given nodeFile.
@@ -16,8 +16,13 @@ async function parseDefaultFileDiff(
   commit = '--staged',
   git: SimpleGit
 ): Promise<string> {
-  if (commit !== '--staged') {
-    return await git.diff([`${commit}~1..${commit}`, '--', nodeFile.filePath])
+  if (commit === '--staged') {
+    return await git.diff(['--staged', nodeFile.filePath]);
+  } else if (commit === '--unstaged') {
+    return await git.diff([nodeFile.filePath]);
+  } else if (commit === '--untracked') {
+    // For untracked files, return the entire file content
+    return await git.show([`:${nodeFile.filePath}`]);
   }
 
   return await git.diff([commit, nodeFile.filePath])
@@ -99,7 +104,7 @@ async function parseRenamedFileDiff(
  */
 export async function getDiff(
   nodeFile: FileChange,
-  commit: string,
+  commit: '--staged' | '--unstaged' | '--untracked' | string,
   {
     git,
     logger,

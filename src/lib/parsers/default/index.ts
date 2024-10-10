@@ -1,10 +1,10 @@
 import { FileChangeParserInput } from '../../types'
 import { summarizeDiffs } from './utils/summarizeDiffs'
 
-import { createDiffTree } from './utils/createDiffTree'
-import { collectDiffs } from './utils/collectDiffs'
 import { getSummarizationChain } from '../../langchain/utils/getSummarizationChain'
 import { getTextSplitter } from '../../langchain/utils/getTextSplitter'
+import { collectDiffs } from './utils/collectDiffs'
+import { createDiffTree } from './utils/createDiffTree'
 // import { TokenTextSplitter } from "@langchain/textsplitters";
 
 import { SUMMARIZE_PROMPT } from '../../langchain/chains/summarize/prompt'
@@ -20,11 +20,6 @@ export async function fileChangeParser({
   options: { tokenizer, git, llm: model, logger },
 }: FileChangeParserInput): Promise<string> {
   const textSplitter = getTextSplitter({ chunkSize: 10000, chunkOverlap: 250 })
-
-  // const textSplitter = new TokenTextSplitter({
-  //   chunkSize: 10000,
-  //   chunkOverlap: 250,
-  // });
 
   const summarizationChain = getSummarizationChain(model, {
     type: 'map_reduce',

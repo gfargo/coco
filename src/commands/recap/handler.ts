@@ -59,15 +59,30 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
             untracked?.length || 0
           }`
         )
-        const result = await fileChangeParser({
-          changes: [...staged, ...(unstaged ? unstaged : []), ...(untracked ? untracked : [])],
-          commit: 'HEAD',
+
+        const unstagedChanges = await fileChangeParser({
+          changes: unstaged || [],
+          commit: '--unstaged',
           options: { tokenizer, git, llm, logger },
         })
 
-        logger.log(`Parsed Result: ${result}`)
+        const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
 
-        return [result]
+        const untrackedChanges = await fileChangeParser({
+          changes: untracked || [],
+          commit: '--untracked',
+          options: { tokenizer, git, llm, logger },
+        })
+        const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
+
+        const stagedChanges = await fileChangeParser({
+          changes: staged,
+          commit: '--staged',
+          options: { tokenizer, git, llm, logger },
+        })
+        const stagedResponse = `Staged changes:\n${stagedChanges}`
+
+        return [unstagedResponse, untrackedResponse, stagedResponse]
       case 'yesterday':
         const yesterday = new Date()
         yesterday.setDate(yesterday.getDate() - 1)
@@ -90,7 +105,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   }
 
   async function parser(changes: string[]) {
-    console.log({ changes })
+    const [unstaged, untracked, staged] = changes
 
     return changes.join('\n')
   }
