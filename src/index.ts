@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 import yargs from 'yargs'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
@@ -11,11 +12,10 @@ import recap from './commands/recap'
 import { RecapOptions } from './commands/recap/options'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
-import { USAGE_BANNER } from './lib/ui/helpers'
 
 const y = yargs()
 
-y.scriptName('coco').usage(USAGE_BANNER)
+y.scriptName('coco')
 
 y.command<CommitOptions>(
   [commit.command, '$0'],
