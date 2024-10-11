@@ -33,6 +33,10 @@ export const options = {
     description: 'Add content to the end of the generated commit message',
     type: 'string',
   },
+  appendTicket: {
+    description: 'Append ticket ID from branch name to the commit message',
+    type: 'boolean',
+  },
   additional: {
     description: 'Add extra contextual information to the prompt',
     type: 'string',
