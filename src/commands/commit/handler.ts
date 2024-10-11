@@ -7,7 +7,9 @@ import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createCommit } from '../../lib/simple-git/createCommit'
+import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
 import { getChanges } from '../../lib/simple-git/getChanges'
+import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler, FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
@@ -105,7 +107,12 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       })
 
       const appendedText = argv.append ? `\n\n${argv.append}` : ''
-      return `${commitMsg.title}\n\n${commitMsg.body}${appendedText}`
+      
+      const branchName = await getCurrentBranchName({ git })
+      const ticketId = extractTicketIdFromBranchName(branchName)
+      const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
+      
+      return `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
     },
     noResult: async () => {
       await noResult({ git, logger })
