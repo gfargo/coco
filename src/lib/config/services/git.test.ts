@@ -14,9 +14,9 @@ const defaultConfig: Partial<Config> = {
 
 const MOCK_GIT_CONFIG = `
 [coco]
-  service=openai
-  mode=interactive
-  defaultBranch=main
+  service = {"provider":"openai","model":"gpt-4o","tokenLimit":2024,"temperature":0.32,"authentication":{"type":"APIKey","credentials":{"apiKey":"test-api-key"}}}
+  mode = interactive
+  defaultBranch = main
 `
 
 const MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION = `
@@ -24,14 +24,14 @@ const MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION = `
   editor=nano
   autocrlf=input
   excludesfile=/home/username/.gitignore_global
-  [user]
-    name=John Doe
+[user]
+  name=John Doe
 `
 
 const MOCK_GIT_CONFIG_WITH_COCO_COMMENTS = `
 # -- Start coco config --
 [coco]
-	service = openai
+	service = {"provider":"openai","model":"gpt-4o","tokenLimit":2024,"temperature":0.32,"authentication":{"type":"APIKey","credentials":{"apiKey":"test-api-key"}}}
 	defaultBranch = main
 	mode = interactive
 # -- End coco config --
@@ -39,8 +39,7 @@ const MOCK_GIT_CONFIG_WITH_COCO_COMMENTS = `
 
 const MOCK_GIT_CONFIG_WITH_SERVICE_ALIAS_AND_OPENAI_API_KEY = `
 [coco]
-  service = openai
-  openAIApiKey = apikey
+  service = {"provider":"openai","model":"gpt-4o","tokenLimit":2024,"temperature":0.32,"authentication":{"type":"APIKey","credentials":{"apiKey":"test-api-key"}}}
 `
 
 describe('loadGitConfig', () => {
