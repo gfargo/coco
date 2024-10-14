@@ -34,5 +34,5 @@ export const getCommandUsageHeader = (command: string) => {
 }
 
 export const CONFIG_ALREADY_EXISTS = (path: string) => {
-  return `coco config found in '${path}', do you want to override it?`
+  return `existing config found in '${path}', do you want to override it?`
 }

@@ -3,8 +3,7 @@ import * as ini from 'ini'
 import * as os from 'os'
 import * as path from 'path'
 
-import { LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
-import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
+import { LLMService } from '../../langchain/types'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { removeUndefined } from '../../utils/removeUndefined'
 import { updateFileSection } from '../../utils/updateFileSection'
@@ -22,13 +21,13 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
   if (fs.existsSync(gitConfigPath)) {
     const gitConfigRaw = fs.readFileSync(gitConfigPath, 'utf-8')
     const gitConfigParsed = ini.parse(gitConfigRaw)
-    const gitServiceAlias = gitConfigParsed.coco?.service
+    const gitConfigServiceObject = gitConfigParsed.coco?.service
 
     let service: LLMService | undefined = config.service
-    
-    if (gitServiceAlias) {
-      const gitServiceConfig = getDefaultServiceConfigFromAlias(gitServiceAlias)
-      service = parseServiceConfig(gitServiceConfig || config.service)
+
+    if (gitConfigServiceObject) {
+      const gitServiceConfig = JSON.parse(gitConfigServiceObject)
+      service = gitServiceConfig || config?.service
     }
 
     config = {
@@ -40,32 +39,10 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
       ignoredFiles: gitConfigParsed.coco?.ignoredFiles || config.ignoredFiles,
       ignoredExtensions: gitConfigParsed.coco?.ignoredExtensions || config.ignoredExtensions,
       defaultBranch: gitConfigParsed.coco?.defaultBranch || config.defaultBranch,
+      verbose: gitConfigParsed.coco?.verbose || config.verbose,
     }
   }
   return removeUndefined(config) as ConfigType
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseServiceConfig(service: any): LLMService | undefined {
-  if (!service) return undefined
-
-  switch (service.provider) {
-    case 'openai':
-      return {
-        provider: 'openai',
-        model: service.model,
-        fields: { apiKey: service.apiKey },
-      } as OpenAILLMService
-    case 'ollama':
-      return {
-        provider: 'ollama',
-        model: service.model,
-        endpoint: service.endpoint,
-        fields: service.fields,
-      } as OllamaLLMService
-    default:
-      return undefined
-  }
 }
 
 /**
@@ -84,15 +61,16 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
   const getNewContent = async () => {
     const contentLines = [header]
     for (const key in config) {
-      // check if string has new lines, if so, wrap in quotes
-      if (typeof config[key as keyof Config] === 'string') {
-        const value = config[key as keyof Config] as string
-        if (value.includes('\n')) {
-          contentLines.push(`\t${key} = ${JSON.stringify(value)}`)
-          continue
-        }
+      const value = config[key as keyof Config]
+      if (typeof value === 'object') {
+        // Serialize object to JSON string
+        contentLines.push(`\t${key} = ${JSON.stringify(value)}`)
+      } else if (typeof value === 'string' && value.includes('\n')) {
+        // Wrap strings with new lines in quotes
+        contentLines.push(`\t${key} = ${JSON.stringify(value)}`)
+      } else {
+        contentLines.push(`\t${key} = ${value}`)
       }
-      contentLines.push(`\t${key} = ${config[key as keyof Config]}`)
     }
     return contentLines.join('\n')
   }
