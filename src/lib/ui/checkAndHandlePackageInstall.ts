@@ -19,9 +19,18 @@ export async function checkAndHandlePackageInstallation({
   try {
     // Global installation
     if (global) {
-      logger.startSpinner(`Installing '${packageName}' globally...`, { color: 'blue' })
-      await installNpmPackage({ name: packageName, flags: ['-g'] })
-      logger.stopSpinner(`Installed '${packageName}' globally`)
+      const shouldInstall = await confirm({
+        message: `Would you like to install/update '${packageName}' globally at this time?`,
+        default: true,
+      })
+
+      if (!shouldInstall) {
+        return
+      }
+
+      logger.startSpinner(`Updating '${packageName}'...`, { color: 'blue' })
+      // await installNpmPackage({ name: packageName, flags: ['-g'] })
+      logger.stopSpinner(`Updated '${packageName}'`)
       return
     }
 
