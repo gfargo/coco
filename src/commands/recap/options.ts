@@ -1,13 +1,13 @@
-import yargs, { Arguments, Options } from 'yargs'
+import { Arguments, Argv, Options } from 'yargs'
 import recap from '.'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
 export interface RecapOptions extends BaseCommandOptions {
   yesterday?: boolean
-  "last-week"?: boolean
-  "last-month"?: boolean
-  "last-tag"?: boolean
+  'last-week'?: boolean
+  'last-month'?: boolean
+  'last-tag'?: boolean
 }
 
 export type RecapArgv = Arguments<RecapOptions>
@@ -20,17 +20,17 @@ export const options = {
     type: 'boolean',
     description: 'Recap for yesterday',
   },
-  "last-week": {
+  'last-week': {
     alias: 'week',
     type: 'boolean',
     description: 'Recap for last week',
   },
-  "last-month": {
+  'last-month': {
     alias: 'month',
     type: 'boolean',
     description: 'Recap for last month',
   },
-  "last-tag": {
+  'last-tag': {
     alias: 'tag',
     type: 'boolean',
     description: 'Recap for last tag',
@@ -42,6 +42,6 @@ export const options = {
   },
 } as Record<string, Options>
 
-export const builder = (yargsInstance: ReturnType<typeof yargs>) => {
-  return yargsInstance.options(options).usage(getCommandUsageHeader(recap.command))
+export const builder = (yargs: Argv) => {
+  return yargs.options(options).usage(getCommandUsageHeader(recap.command))
 }
