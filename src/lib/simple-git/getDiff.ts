@@ -27,7 +27,7 @@ async function parseDefaultFileDiff(
       const fileContent = await fs.readFile(nodeFile.filePath, 'utf-8')
       return fileContent
     } catch (error) {
-      throw new Error(`Error reading untracked file: ${error?.message || 'Unknown error'}`)
+      throw new Error(`Error reading untracked file: ${(error as Error)?.message || 'Unknown error'}`)
     }
   }
 
