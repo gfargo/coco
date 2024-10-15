@@ -14,6 +14,8 @@
 
 - **`changelog`**: create changelogs for the current branch or a range of commits.
 
+- **`recap`**: summarize changes from working-tree, or yesterday, or in the last month, or since the last tag!
+
 - **`init`**: step by step wizard to set up `coco` globally or for a project.
 
 ## Getting Started
@@ -42,6 +44,24 @@ coco
 coco commit
 ```
 
+#### Useful options
+
+ 
+```bash
+# --append
+# Add content to the end of the generated commit
+coco --append "Resolves #128"
+
+# --append-ticket
+# Automatically append Jira/Linear ticket ID from the branch name to the commit message 
+coco --append-ticket
+
+# --additional
+# Add extra context before generating the commit
+coco --additional "Resolves UX bug with sign up button"
+```
+
+
 ### **`coco changelog`**
 
 Creates changelogs.
@@ -52,8 +72,22 @@ coco changelog
 
 # For a specific range
 coco changelog -r HEAD~5:HEAD
+
+# For a target branch
+coco changelog -b other-branch
 ```
 
+### **`coco recap`**
+
+Summarize the working-tree, or other configured ranges
+
+```bash
+# Summarize all working directory changes
+coco recap
+
+# Or these available ranges
+coco recap --yesterday | --last-week | --last-month | --last-tag
+```
 
 ### Stdout vs. Interactive Mode
 
