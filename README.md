@@ -121,3 +121,11 @@ You can specify files to be ignored when generating commit messages by adding th
 ## Contribution
 
 We welcome contributions! Check out our [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+
+## Project Stats
+
+![Alt](https://repobeats.axiom.co/api/embed/ea76b881139f16595a343046d4f2bc9125a47e26.svg "Repobeats analytics image")
+
+## License
+
+MIT © [gfargo](https://github.com/gfargo/)
