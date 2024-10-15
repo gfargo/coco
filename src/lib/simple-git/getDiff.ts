@@ -1,7 +1,8 @@
-import { createTwoFilesPatch } from 'diff';
-import { SimpleGit } from 'simple-git';
-import { FileChange } from '../types';
-import { Logger } from '../utils/logger';
+import { createTwoFilesPatch } from 'diff'
+import { promises as fs } from 'fs'
+import { SimpleGit } from 'simple-git'
+import { FileChange } from '../types'
+import { Logger } from '../utils/logger'
 
 /**
  * Parses the default file diff for a given nodeFile.
@@ -17,12 +18,17 @@ async function parseDefaultFileDiff(
   git: SimpleGit
 ): Promise<string> {
   if (commit === '--staged') {
-    return await git.diff(['--staged', nodeFile.filePath]);
+    return await git.diff(['--staged', nodeFile.filePath])
   } else if (commit === '--unstaged') {
-    return await git.diff([nodeFile.filePath]);
+    return await git.diff([nodeFile.filePath])
   } else if (commit === '--untracked') {
-    // For untracked files, return the entire file content
-    return await git.show([`:${nodeFile.filePath}`]);
+    // For untracked files, read the file content directly from the filesystem
+    try {
+      const fileContent = await fs.readFile(nodeFile.filePath, 'utf-8')
+      return fileContent
+    } catch (error) {
+      throw new Error(`Error reading untracked file: ${error?.message || 'Unknown error'}`)
+    }
   }
 
   return await git.diff([commit, nodeFile.filePath])
