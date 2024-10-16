@@ -17,29 +17,31 @@ export type GenerateReviewLoopOptions = {
   }
 }
 
-export type GenerateReviewLoopInput<T> = {
+export type GenerateReviewLoopInput<T, R = string> = {
   label: string
   factory: () => Promise<T>
-  parser: (changes: T, commit: string, options: GenerateReviewLoopOptions) => Promise<string>
+  parser: (changes: T, result: R, options: GenerateReviewLoopOptions) => Promise<string>
   noResult: (options: GenerateReviewLoopOptions) => Promise<void>
-  agent: (context: string, options: GenerateReviewLoopOptions) => Promise<string>
+  agent: (context: string, options: GenerateReviewLoopOptions) => Promise<R>
+  reviewParser?: (result: R, options: GenerateReviewLoopOptions) => string
   options: GenerateReviewLoopOptions
 }
 
-export async function generateAndReviewLoop<T>({
+export async function generateAndReviewLoop<T, R>({
   label,
   factory,
   parser,
   noResult,
   agent,
+  reviewParser,
   options,
-}: GenerateReviewLoopInput<T>): Promise<string> {
+}: GenerateReviewLoopInput<T, R>) : Promise<R> {
   const { logger } = options
 
   let continueLoop = true
   let modifyPrompt = false
   let context = ''
-  let result = ''
+  let result = '' as R
 
   const changes = await factory()
   // if we don't have any changes, bail.
@@ -83,7 +85,9 @@ export async function generateAndReviewLoop<T>({
       .stopTimer()
 
     if (options?.interactive) {
-      logResult(label, result)
+
+      logResult(label, reviewParser ? reviewParser(result, options) : result as string)
+
       const reviewAnswer = await getUserReviewDecision({
         label,
         ...(options?.review || {}),
@@ -99,14 +103,14 @@ export async function generateAndReviewLoop<T>({
 
       if (reviewAnswer === 'retryFull') {
         context = ''
-        result = ''
+        result = '' as R
         options.prompt = ''
         continue
       }
 
       if (reviewAnswer === 'retryMessageOnly') {
         modifyPrompt = false
-        result = ''
+        result = '' as R
         continue
       }
 
