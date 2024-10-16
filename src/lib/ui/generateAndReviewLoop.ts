@@ -10,10 +10,13 @@ export type GenerateReviewLoopOptions = {
   prompt?: string
   openInEditor?: boolean
   review?: {
+    selectLabel?: string
     descriptions?: Partial<Record<ReviewDecision, string>>
+    labels?: Partial<Record<ReviewDecision, string>>
     enableRetry?: boolean
     enableFullRetry?: boolean
     enableModifyPrompt?: boolean
+    enableEdit?: boolean
   }
 }
 
@@ -116,13 +119,13 @@ export async function generateAndReviewLoop<T, R>({
 
       if (reviewAnswer === 'modifyPrompt') {
         modifyPrompt = true
-        result = ''
+        result = '' as string as R
         continue
       }
     }
 
     // if we're here, we're done.
-    result = await editResult(result, options)
+    result = await editResult(result as string, options) as R
     continueLoop = false
   }
 

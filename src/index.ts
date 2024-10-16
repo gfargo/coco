@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-
 import yargs from 'yargs'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
 import init from './commands/init'
+import recap from './commands/recap'
+import review from './commands/review'
 
 import { ChangelogOptions } from './commands/changelog/options'
 import { CommitOptions } from './commands/commit/options'
 import { InitOptions } from './commands/init/options'
-import recap from './commands/recap'
 import { RecapOptions } from './commands/recap/options'
+import { ReviewOptions } from './commands/review/options'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
 
@@ -36,6 +37,13 @@ y.command<RecapOptions>(
   recap.desc,
   recap.builder,
   recap.handler
+)
+
+y.command<ReviewOptions>(
+  review.command,
+  review.desc,
+  review.builder,
+  review.handler
 )
 
 y.command<InitOptions>(
