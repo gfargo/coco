@@ -125,7 +125,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
 
   handleResult({
     result: commitMsg,
-    interactiveHandler: async (result) => {
+    interactiveModeCallback: async (result) => {
       await createCommit(result, git)
       logSuccess()
     },

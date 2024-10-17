@@ -93,6 +93,15 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     commits: string[]
   }, string>({
     label: 'changelog',
+    options: {
+      ...config,
+      prompt: config.prompt || (CHANGELOG_PROMPT.template as string),
+      logger,
+      interactive: INTERACTIVE,
+      review: {
+        enableFullRetry: false,
+      },
+    },
     factory,
     parser,
     agent: async (context, options) => {
@@ -132,15 +141,6 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       logger.log(`No commits found in the current branch.`, { color: 'red' })
       process.exit(0)
     },
-    options: {
-      ...config,
-      prompt: config.prompt || (CHANGELOG_PROMPT.template as string),
-      logger,
-      interactive: INTERACTIVE,
-      review: {
-        enableFullRetry: false,
-      },
-    },
   })
 
   const MODE =
@@ -148,7 +148,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
 
   handleResult({
     result: changelogMsg,
-    interactiveHandler: async () => {
+    interactiveModeCallback: async () => {
       logSuccess()
     },
     mode: MODE as 'interactive' | 'stdout',

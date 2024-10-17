@@ -4,15 +4,15 @@ type ResultHandler = (result: string) => Promise<void>
 
 type HandleResultInput = {
   result: string
-  interactiveHandler?: ResultHandler
+  interactiveModeCallback?: ResultHandler
   mode: 'interactive' | 'stdout'
 }
 
-export async function handleResult({ result, mode, interactiveHandler }: HandleResultInput) {
+export async function handleResult({ result, mode, interactiveModeCallback }: HandleResultInput) {
   switch (mode) {
     case 'interactive':
-      if (interactiveHandler) {
-        await interactiveHandler(result)
+      if (interactiveModeCallback) {
+        await interactiveModeCallback(result)
       } else {
         console.warn('No result handler provided for interactive mode.')
         logSuccess()
