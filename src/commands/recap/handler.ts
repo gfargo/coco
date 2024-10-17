@@ -46,7 +46,15 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
   const { 'last-month': lastMonth, 'last-tag': lastTag, yesterday, 'last-week': lastWeek } = argv
 
-  const timeframe = lastMonth ? 'last-month' : lastTag ? 'last-tag' : yesterday ? 'yesterday' : lastWeek ? 'last-week' : 'current'
+  const timeframe = lastMonth
+    ? 'last-month'
+    : lastTag
+    ? 'last-tag'
+    : yesterday
+    ? 'yesterday'
+    : lastWeek
+    ? 'last-week'
+    : 'current'
 
   logger.log(`Generating recap for timeframe: ${timeframe}`)
 
@@ -108,7 +116,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     return changes.join('\n')
   }
 
-  const recap = await generateAndReviewLoop({
+  await generateAndReviewLoop({
     label: 'recap',
     options: {
       ...config,
@@ -116,13 +124,17 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
       logger,
       interactive: INTERACTIVE,
       review: {
+        enableModifyPrompt: false,
+        enableEdit: false,
+        enableFullRetry: false,
+        selectLabel: 'Any of this ringing a bell?',
+        labels: {
+          approve: '👍 Looks good',
+          retryMessageOnly: '🔄 Reword Recap',
+          cancel: '🚫 Exit',
+        },
         descriptions: {
-          approve: `Commit staged changes with generated commit message`,
-          edit: 'Edit the commit message before proceeding',
-          modifyPrompt: 'Modify the prompt template and regenerate the commit message',
-          retryMessageOnly: 'Restart the function execution from generating the commit message',
-          retryFull:
-            'Restart the function execution from the beginning, regenerating both the diff summary and commit message',
+          approve: `The generated recap for the timeframe: ${timeframe}`,
         },
       },
     },
@@ -150,15 +162,11 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         },
         parser,
       })
-      logger.log(response.summary || 'no response')
-
-      return `${response.summary}`
+      return `${response.summary || 'no response'}`
     },
     noResult: async () => {
       await noResult({ git, logger })
       process.exit(0)
     },
   })
-
-  logger.log(`Recap generated: ${recap}`, { color: 'green' })
 }
