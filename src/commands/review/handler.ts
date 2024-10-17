@@ -14,17 +14,9 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { noResult } from './noResult'
-import { ReviewArgv, ReviewOptions } from './options'
+import { ReviewArgv, ReviewFeedbackItem, ReviewOptions } from './options'
 import { REVIEW_PROMPT } from './prompt'
 import { TaskList } from './TaskList'
-
-export type ReviewFeedbackItem = {
-  title: string
-  summary: string
-  severity: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
-  category: string
-  filePath: string
-}
 
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -50,6 +42,11 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
 
   async function factory() {
     const { staged, unstaged, untracked } = await getChanges({ git })
+    if (staged.length === 0 && unstaged?.length === 0 && untracked?.length === 0) {
+      logger.log('No changes detected. Exiting...')
+      process.exit(0)
+    }
+
     if (INTERACTIVE) {
       logger.verbose(
         `Staged: ${staged.length}, Unstaged: ${unstaged?.length || 0}, Untracked: ${
