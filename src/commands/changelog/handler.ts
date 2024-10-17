@@ -91,7 +91,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const changelogMsg = await generateAndReviewLoop<{
     branch: string
     commits: string[]
-  }>({
+  }, string>({
     label: 'changelog',
     factory,
     parser,

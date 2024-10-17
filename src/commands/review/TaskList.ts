@@ -126,39 +126,43 @@ export class TaskList {
 
   private getActionWithKeyboardShortcut(): Promise<string> {
     return new Promise((resolve) => {
-      const keyHandler = (_, key: { name: string }) => {
+      interface Key {
+        name: string
+      }
+
+      const keyHandler = (_: string, key: Key) => {
         if (key) {
           switch (key.name) {
-            case 'o':
-              resolve('open')
-              break
-            case 'd':
-              resolve('complete')
-              break
-            case 's':
-              resolve('skip')
-              break
-            case 'x':
-              resolve('omit')
-              break
-            case 'right':
-              resolve('next')
-              break
-            case 'left':
-              resolve('prev')
-              break
-            case 'q':
-              resolve('exit')
-              break
+        case 'o':
+          resolve('open')
+          break
+        case 'd':
+          resolve('complete')
+          break
+        case 's':
+          resolve('skip')
+          break
+        case 'x':
+          resolve('omit')
+          break
+        case 'right':
+          resolve('next')
+          break
+        case 'left':
+          resolve('prev')
+          break
+        case 'q':
+          resolve('exit')
+          break
           }
         }
       }
 
-      this.rl.input.on('keypress', keyHandler)
-
+      readline.emitKeypressEvents(process.stdin)
+      process.stdin.on('keypress', keyHandler)
       this.promptAction().then((action) => {
-        this.rl.input.removeListener('keypress', keyHandler)
-        resolve(action)
+        process.stdin.removeListener('keypress', keyHandler)
+         resolve(action)
       })
     })
   }
@@ -174,7 +178,7 @@ export class TaskList {
     }
 
     this.items.forEach((item, index) => {
-      statusCounts[item.status]++
+      statusCounts[item.status as keyof typeof statusCounts]++
       console.log(
         chalk.dim(`${index + 1}.`),
         this.getStatusColor(item.status)(item.status.toUpperCase()),
