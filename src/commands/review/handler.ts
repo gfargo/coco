@@ -12,11 +12,11 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
+import { TaskList } from '../../lib/ui/TaskList'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { noResult } from './noResult'
 import { ReviewArgv, ReviewFeedbackItem, ReviewOptions } from './options'
 import { REVIEW_PROMPT } from './prompt'
-import { TaskList } from './TaskList'
 
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const git = getRepo()

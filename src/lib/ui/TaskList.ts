@@ -1,9 +1,9 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import * as readline from 'readline'
-import { bannerWithHeader, DIVIDER, hotKey, severityColor, statusColor } from '../../lib/ui/helpers'
-import { execPromise } from '../../lib/utils/execPromise'
-import { ReviewFeedbackItem } from './handler'
+import { ReviewFeedbackItem } from '../../commands/review/handler'
+import { execPromise } from '../utils/execPromise'
+import { bannerWithHeader, DIVIDER, hotKey, severityColor, statusColor } from './helpers'
 
 type FeedbackTaskItem = ReviewFeedbackItem & {
   status: 'pending' | 'completed' | 'skipped' | 'omitted'
