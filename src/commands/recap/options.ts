@@ -12,6 +12,10 @@ export interface RecapOptions extends BaseCommandOptions {
 
 export type RecapArgv = Arguments<RecapOptions>
 
+export interface RecapLlmResponse {
+  summary: string
+}
+
 /**
  * Command line options via yargs
  */

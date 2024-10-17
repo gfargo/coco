@@ -15,12 +15,8 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { noResult } from './noResult'
-import { RecapArgv, RecapOptions } from './options'
+import { RecapArgv, RecapLlmResponse, RecapOptions } from './options'
 import { RECAP_PROMPT } from './prompt'
-
-interface RecapLlmResponse {
-  summary: string
-}
 
 export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const git = getRepo()

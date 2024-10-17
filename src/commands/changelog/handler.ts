@@ -16,13 +16,8 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
-import { ChangelogArgv, ChangelogOptions } from './options'
+import { ChangelogArgv, ChangelogOptions, ChangelogResponse } from './options'
 import { CHANGELOG_PROMPT } from './prompt'
-
-interface ChangelogResponse {
-  header: string
-  content: string
-}
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
