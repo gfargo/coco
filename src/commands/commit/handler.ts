@@ -18,13 +18,8 @@ import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { noResult } from './noResult'
-import { CommitArgv, CommitOptions } from './options'
+import { CommitArgv, CommitMessageResponse, CommitOptions } from './options'
 import { COMMIT_PROMPT } from './prompt'
-
-interface CommitMessageResponse {
-  title: string
-  body: string
-}
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -125,7 +120,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
 
   handleResult({
     result: commitMsg,
-    interactiveHandler: async (result) => {
+    interactiveModeCallback: async (result) => {
       await createCommit(result, git)
       logSuccess()
     },

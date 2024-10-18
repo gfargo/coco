@@ -12,6 +12,11 @@ export interface CommitOptions extends BaseCommandOptions {
 
 export type CommitArgv = Arguments<CommitOptions>
 
+export interface CommitMessageResponse {
+  title: string
+  body: string
+}
+
 /**
  * Command line options via yargs
  */

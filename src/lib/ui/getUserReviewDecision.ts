@@ -56,7 +56,7 @@ export async function getUserReviewDecision({
 
   if (enableRetry) {
     choices.push({
-      name: '🔄 Retry',
+      name: labels?.retryMessageOnly || '🔄 Retry',
       value: 'retryMessageOnly',
       description:
         descriptions?.retryMessageOnly ||
@@ -66,7 +66,7 @@ export async function getUserReviewDecision({
 
   if (enableFullRetry) {
     choices.push({
-      name: '🔄 Retry Full',
+      name: labels?.retryFull || '🔄 Retry Full',
       value: 'retryFull',
       description:
         descriptions?.retryFull ||
@@ -75,7 +75,7 @@ export async function getUserReviewDecision({
   }
 
   choices.push({
-    name: '💣 Cancel',
+    name: labels?.cancel || '💣 Cancel',
     value: 'cancel',
     description: descriptions?.cancel || `Cancel the ${label}`,
   })
