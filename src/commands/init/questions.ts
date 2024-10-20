@@ -1,10 +1,10 @@
-import { input, password, select, confirm, editor } from '@inquirer/prompts'
-import { InstallationScope } from './options'
-import { COMMIT_PROMPT } from '../commit/prompt'
-import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
+import { confirm, editor, input, password, select } from '@inquirer/prompts'
+import { ANTHROPIC_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
 import { execPromise } from '../../lib/utils/execPromise'
-import { OPEN_AI_MODELS } from '../../lib/langchain/constants'
+import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
+import { COMMIT_PROMPT } from '../commit/prompt'
+import { InstallationScope } from './options'
 
 export const questions = {
   /**
@@ -33,24 +33,37 @@ export const questions = {
         {
           name: 'Ollama',
           value: 'ollama',
-          description: 'Ollama API',
+          description: 'Ollama Instance',
         },
         {
           name: 'OpenAI',
           value: 'openai',
           description: 'OpenAI API',
         },
+        {
+          name: "Anthropic",
+          value: "anthropic",
+          description: "Anthropic API"
+        }
       ],
       default: 'ollama',
     }),
 
   selectLLMModel: async (provider: LLMProvider): Promise<LLMModel> => {
-    console.log('provider', provider)
     let availableModels = [] as { name: string; value: LLMModel }[]
 
     if (provider === 'openai') {
       availableModels = [
         ...OPEN_AI_MODELS.map((model) => ({
+          name: model as string,
+          value: model,
+        })),
+      ]
+    }
+
+    if (provider === 'anthropic') {
+      availableModels = [
+        ...ANTHROPIC_MODELS.map((model) => ({
           name: model as string,
           value: model,
         })),
@@ -106,28 +119,29 @@ export const questions = {
       ],
     }),
 
-  inputOpenAIApiKey: async (): Promise<string> => {
-    // check for existing env var
-    if (process.env.OPENAI_API_KEY) {
-      return (await confirm({
-        message: `use existing OPENAI_API_KEY env var?`,
+  inputApiKey: async (
+    keyName: string,
+    envVarName: string
+  ): Promise<string> => {
+    const envVarValue = process.env[envVarName];
+  
+    if (envVarValue) {
+      const useExisting = await confirm({
+        message: `Use existing ${envVarName} env var?`,
         default: true,
-      }))
-        ? process.env.OPENAI_API_KEY
-        : await password({
-            message: `enter your OpenAI API key:`,
-            validate(input) {
-              return input.length > 0 ? true : 'API key cannot be empty'
-            },
-          })
+      });
+  
+      if (useExisting) {
+        return envVarValue;
+      }
     }
-
+  
     return await password({
-      message: `enter your OpenAI API key:`,
+      message: `Enter your ${keyName} API key:`,
       validate(input) {
-        return input.length > 0 ? true : 'API key cannot be empty'
+        return input.length > 0 ? true : 'API key cannot be empty';
       },
-    })
+    });
   },
 
   inputTokenLimit: async (): Promise<number> => {

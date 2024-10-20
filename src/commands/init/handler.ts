@@ -35,9 +35,18 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       service: service,
     }
 
-    let openAIKey = ''
+    let apiKey = ''
+
     if (llmProvider === 'openai') {
-      openAIKey = await questions.inputOpenAIApiKey()
+      apiKey = await questions.inputApiKey('OpenAI', 'OPENAI_API_KEY')
+
+      if (config.service.authentication.type === 'APIKey') {
+        config.service.authentication.credentials.apiKey = '•••••••••••••••'
+      }
+    }
+
+    if (llmProvider === 'anthropic') {
+      apiKey = await questions.inputApiKey('Anthropic', 'ANTHROPIC_API_KEY')
 
       if (config.service.authentication.type === 'APIKey') {
         config.service.authentication.credentials.apiKey = '•••••••••••••••'
@@ -95,12 +104,10 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     logResult('Config', JSON.stringify(config, null, 2))
     let approvalMessage = 'does this look good?'
 
-    if (llmProvider === 'openai') {
-      if (config.service.authentication.type === 'APIKey') {
-        // add to config after logging, so that the API key is not logged
-        config.service.authentication.credentials.apiKey = openAIKey
-        approvalMessage = 'looking good? (API key hidden for security)'
-      }
+    if (config.service.authentication.type === 'APIKey') {
+      // add to config after logging, so that the API key is not logged
+      config.service.authentication.credentials.apiKey = apiKey
+      approvalMessage = 'looking good? (API key hidden for security)'
     }
 
     const isApproved = await confirm({

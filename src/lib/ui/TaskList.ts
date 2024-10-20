@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import * as readline from 'readline'
-import { ReviewFeedbackItem } from '../../commands/review/handler'
+import { ReviewFeedbackItem } from '../../commands/review/options'
 import { execPromise } from '../utils/execPromise'
 import { bannerWithHeader, DIVIDER, hotKey, severityColor, statusColor } from './helpers'
 
@@ -133,27 +133,27 @@ export class TaskList {
       const keyHandler = (_: string, key: Key) => {
         if (key) {
           switch (key.name) {
-        case 'o':
-          resolve('open')
-          break
-        case 'd':
-          resolve('complete')
-          break
-        case 's':
-          resolve('skip')
-          break
-        case 'x':
-          resolve('omit')
-          break
-        case 'right':
-          resolve('next')
-          break
-        case 'left':
-          resolve('prev')
-          break
-        case 'q':
-          resolve('exit')
-          break
+            case 'o':
+              resolve('open')
+              break
+            case 'd':
+              resolve('complete')
+              break
+            case 's':
+              resolve('skip')
+              break
+            case 'x':
+              resolve('omit')
+              break
+            case 'right':
+              resolve('next')
+              break
+            case 'left':
+              resolve('prev')
+              break
+            case 'q':
+              resolve('exit')
+              break
           }
         }
       }
@@ -162,7 +162,7 @@ export class TaskList {
       process.stdin.on('keypress', keyHandler)
       this.promptAction().then((action) => {
         process.stdin.removeListener('keypress', keyHandler)
-         resolve(action)
+        resolve(action)
       })
     })
   }
