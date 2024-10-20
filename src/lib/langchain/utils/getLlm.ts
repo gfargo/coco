@@ -1,8 +1,9 @@
-import { ChatOllama } from '@langchain/ollama'
-import { ChatOpenAI } from '@langchain/openai'
-import { Config } from '../../../commands/types'
-import { DEFAULT_OLLAMA_LLM_SERVICE, getApiKeyForModel } from '../utils'
-import { LLMModel, LLMProvider } from '../types'
+import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatOllama } from '@langchain/ollama';
+import { ChatOpenAI } from '@langchain/openai';
+import { Config } from '../../../commands/types';
+import { LLMModel, LLMProvider } from '../types';
+import { DEFAULT_OLLAMA_LLM_SERVICE, getApiKeyForModel } from '../utils';
 
 /**
  * Get LLM Model Based on Configuration
@@ -17,10 +18,15 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
   }
 
   switch (provider) {
+    case 'anthropic':
+      return new ChatAnthropic({
+        maxConcurrency: config.service.maxConcurrent,
+        model,
+      })
     case 'ollama':
       return new ChatOllama({
         baseUrl: DEFAULT_OLLAMA_LLM_SERVICE.endpoint,
-        maxConcurrency: config.service.maxConcurrent,
+        maxConcurrency: config.service.maxConcurrent, 
         model,
       })
     case 'openai':

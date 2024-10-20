@@ -1,8 +1,17 @@
+import { AnthropicInput } from '@langchain/anthropic'
 import { type OllamaInput } from '@langchain/community/llms/ollama'
 import { type BaseLLMParams } from '@langchain/core/language_models/llms'
 import { type OpenAIInput, type TiktokenModel } from '@langchain/openai'
 
-export type LLMProvider = 'openai' | 'ollama'
+export type LLMProvider = 'openai' | 'ollama' | 'anthropic'
+
+export type AnthropicModel =
+  | 'claude-3-5-sonnet-20240620'
+  | 'claude-3-opus-20240229'
+  | 'claude-3-sonnet-20240229'
+  | 'claude-3-haiku-20240307'
+  | 'claude-2.1'
+  | 'claude-2.0'
 
 export type OllamaModel =
   | 'codegemma:2b'
@@ -56,7 +65,7 @@ export type OllamaModel =
   | 'qwen2:72b'
   | 'qwen2'
 
-export type LLMModel = TiktokenModel | OllamaModel
+export type LLMModel = TiktokenModel | OllamaModel | AnthropicModel
 
 export type BaseLLMService = {
   provider: LLMProvider
@@ -110,6 +119,7 @@ type Authentication =
 
 type OpenAIFields = Partial<OpenAIInput> & BaseLLMParams
 type OllamaFields = Partial<OllamaInput> & BaseLLMParams
+type AnthropicFields = Partial<AnthropicInput> & BaseLLMParams
 
 export type OpenAILLMService = BaseLLMService & {
   provider: 'openai'
@@ -122,6 +132,12 @@ export type OllamaLLMService = BaseLLMService & {
   model: OllamaModel
   endpoint: string
   fields?: OllamaFields
+}
+
+export type AnthropicLLMService = BaseLLMService & {
+  provider: 'anthropic'
+  model: string
+  fields?: AnthropicFields
 }
 
 export type LLMService = OpenAILLMService | OllamaLLMService
