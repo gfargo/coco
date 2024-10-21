@@ -140,4 +140,4 @@ export type AnthropicLLMService = BaseLLMService & {
   fields?: AnthropicFields
 }
 
-export type LLMService = OpenAILLMService | OllamaLLMService
+export type LLMService = OpenAILLMService | OllamaLLMService | AnthropicLLMService

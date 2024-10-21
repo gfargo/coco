@@ -2,7 +2,7 @@ import { SUMMARIZE_PROMPT } from '../langchain/chains/summarize/prompt'
 import { getDefaultServiceConfigFromAlias } from '../langchain/utils'
 import { Config } from './types'
 
-export const DEFAULT_IGNORED_FILES = ['package-lock.json']
+export const DEFAULT_IGNORED_FILES = ['package-lock.json', 'yarn.lock', 'node_modules']
 export const DEFAULT_IGNORED_EXTENSIONS = ['.map', '.lock']
 
 export const COCO_CONFIG_START_COMMENT = '# -- start coco config --'

@@ -8,6 +8,7 @@ import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default/index'
 import { getChanges } from '../../lib/simple-git/getChanges'
+import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
@@ -41,43 +42,64 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   }
 
   async function factory() {
-    const { staged, unstaged, untracked } = await getChanges({ git })
-    if (staged.length === 0 && unstaged?.length === 0 && untracked?.length === 0) {
-      logger.log('No changes detected. Exiting...')
-      process.exit(0)
+    if (argv.branch) {
+      logger.verbose(`Generating diff for branch: ${argv.branch}`, { color: 'yellow' })
+
+      const diff = await getDiffForBranch({
+        git,
+        logger,
+        targetBranch: argv.branch,
+        ignoredFiles: config.ignoredFiles || [],
+        ignoredExtensions: config.ignoredExtensions || [],
+      })
+
+      return [diff]
+    } else {
+      const { staged, unstaged, untracked } = await getChanges({
+        git,
+        options: {
+          ignoredFiles: config.ignoredFiles || undefined,
+          ignoredExtensions: config.ignoredExtensions || undefined,
+        },
+      })
+      
+      if (staged.length === 0 && unstaged?.length === 0 && untracked?.length === 0) {
+        logger.log('No changes detected. Exiting...')
+        process.exit(0)
+      }
+
+      if (INTERACTIVE) {
+        logger.verbose(
+          `Staged: ${staged.length}, Unstaged: ${unstaged?.length || 0}, Untracked: ${
+            untracked?.length || 0
+          }`
+        )
+      }
+
+      const unstagedChanges = await fileChangeParser({
+        changes: unstaged || [],
+        commit: '--unstaged',
+        options: { tokenizer, git, llm, logger },
+      })
+
+      const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
+
+      const untrackedChanges = await fileChangeParser({
+        changes: untracked || [],
+        commit: '--untracked',
+        options: { tokenizer, git, llm, logger },
+      })
+      const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
+
+      const stagedChanges = await fileChangeParser({
+        changes: staged,
+        commit: '--staged',
+        options: { tokenizer, git, llm, logger },
+      })
+      const stagedResponse = `Staged changes:\n${stagedChanges}`
+
+      return [unstagedResponse, untrackedResponse, stagedResponse]
     }
-
-    if (INTERACTIVE) {
-      logger.verbose(
-        `Staged: ${staged.length}, Unstaged: ${unstaged?.length || 0}, Untracked: ${
-          untracked?.length || 0
-        }`
-      )
-    }
-
-    const unstagedChanges = await fileChangeParser({
-      changes: unstaged || [],
-      commit: '--unstaged',
-      options: { tokenizer, git, llm, logger },
-    })
-
-    const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
-
-    const untrackedChanges = await fileChangeParser({
-      changes: untracked || [],
-      commit: '--untracked',
-      options: { tokenizer, git, llm, logger },
-    })
-    const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
-
-    const stagedChanges = await fileChangeParser({
-      changes: staged,
-      commit: '--staged',
-      options: { tokenizer, git, llm, logger },
-    })
-    const stagedResponse = `Staged changes:\n${stagedChanges}`
-
-    return [unstagedResponse, untrackedResponse, stagedResponse]
   }
 
   async function parser(changes: string[]) {

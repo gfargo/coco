@@ -35,8 +35,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       service: service,
     }
 
-    let apiKey = ''
-
+    let apiKey = '' as string
     if (llmProvider === 'openai') {
       apiKey = await questions.inputApiKey('OpenAI', 'OPENAI_API_KEY')
 
@@ -44,7 +43,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         config.service.authentication.credentials.apiKey = '•••••••••••••••'
       }
     }
-
+    
     if (llmProvider === 'anthropic') {
       apiKey = await questions.inputApiKey('Anthropic', 'ANTHROPIC_API_KEY')
 
