@@ -3,7 +3,10 @@ import recap from '.'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
-export interface ReviewOptions extends BaseCommandOptions {}
+export interface ReviewOptions extends BaseCommandOptions {
+  interactive: boolean
+  branch: string
+}
 
 export type ReviewArgv = Arguments<ReviewOptions>
 
@@ -23,7 +26,12 @@ export const options = {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
-  },  
+  },
+  'b': {
+    type: 'string',
+    alias: 'branch',
+    description: 'Branch to review',
+  },
 } as Record<string, Options>  
 
 export const builder = (yargs: Argv) => {
