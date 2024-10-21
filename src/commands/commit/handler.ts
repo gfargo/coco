@@ -44,7 +44,13 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   }
 
   async function factory() {
-    const changes = await getChanges({ git })
+    const changes = await getChanges({
+      git,
+      options: {
+        ignoredFiles: config.ignoredFiles || undefined,
+        ignoredExtensions: config.ignoredExtensions || undefined,
+      },
+    })
     return changes.staged
   }
 
@@ -84,10 +90,10 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         variables: COMMIT_PROMPT.inputVariables,
         fallback: COMMIT_PROMPT,
       })
-      
+
       const formatInstructions =
-      "Respond with a valid JSON object, containing two fields: 'title' and 'body', both strings."
-      
+        "Respond with a valid JSON object, containing two fields: 'title' and 'body', both strings."
+
       const additionalContext = argv.additional ? `${argv.additional}` : ''
 
       const commitMsg = await executeChain({
@@ -102,11 +108,11 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       })
 
       const appendedText = argv.append ? `\n\n${argv.append}` : ''
-      
+
       const branchName = await getCurrentBranchName({ git })
       const ticketId = extractTicketIdFromBranchName(branchName)
       const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
-      
+
       return `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
     },
     noResult: async () => {
