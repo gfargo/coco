@@ -25,6 +25,7 @@
   "scripts": {
     "start": "npm run dev",
     "dev": "tsx watch src/index.ts",
+    "prebuild": "npm run build:schema",
     "build": "rollup -c",
     "build:schema": "tsx bin/generateSchema.ts",
     "build:watch": "rollup -c -w",

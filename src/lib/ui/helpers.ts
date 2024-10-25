@@ -1,8 +1,6 @@
-import chalk from 'chalk';
-import { loadConfig } from '../config/utils/loadConfig';
-import { getPackageJson } from '../utils/getPackageJson';
-
-const { version } = getPackageJson();
+import chalk from 'chalk'
+import { loadConfig } from '../config/utils/loadConfig'
+import { BUILD_VERSION } from '../schema'
 
 export const isInteractive = (config: ReturnType<typeof loadConfig>) => {
   return config?.mode === 'interactive' || !!config?.interactive
@@ -30,10 +28,9 @@ export const bannerWithHeader = (banner: string) => {
 └────┘`)
 }
 
-
 export const USAGE_BANNER = chalk.green(
   `${LOGO}
-${chalk.bgGreen(`\xa0v${version}\xa0`)}
+${chalk.bgGreen(`\xa0v${BUILD_VERSION}\xa0`)}
 `
 )
 
