@@ -1,8 +1,8 @@
 import * as fs from 'fs'
-import * as path from 'path'
 import * as os from 'os'
+import * as path from 'path'
+import { AnthropicLLMService, LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 import { Config } from '../types'
-import { LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 
 /**
  * Load XDG config
@@ -43,6 +43,18 @@ function parseServiceConfig(service: any): LLMService | undefined {
           }
         }
       } as OpenAILLMService
+    case 'anthropic':
+      return {
+        provider: 'anthropic',
+        model: service.model,
+        authentication: {
+          type: 'APIKey',
+          credentials: {
+            apiKey: service.apiKey
+          }
+        },
+        fields: service.fields
+      } as AnthropicLLMService
     case 'ollama':
       return {
         provider: 'ollama',
