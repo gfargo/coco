@@ -4,7 +4,7 @@ import { LLMModel, LLMProvider } from '../../lib/langchain/types'
 import { execPromise } from '../../lib/utils/execPromise'
 import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
 import { COMMIT_PROMPT } from '../commit/prompt'
-import { InstallationScope } from './options'
+import { InstallationScope } from './config'
 
 export const questions = {
   /**

@@ -1,6 +1,6 @@
 import { Config } from '../../commands/types'
 // import { ConfigWithServiceAlias } from '../config/types'
-import { LLMModel, LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from './types'
+import { AnthropicLLMService, LLMModel, LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from './types'
 
 /**
  * Retrieves the provider and model from the given configuration object.
@@ -69,6 +69,18 @@ export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   },
 }
 
+export const DEFAULT_ANTHROPIC_LLM_SERVICE: AnthropicLLMService = {
+  provider: 'anthropic',
+  model: 'claude-3-5-sonnet-20240620',
+  temperature: 0.32,
+  authentication: {
+    type: 'APIKey',
+    credentials: {
+      apiKey: '',
+    },
+  },
+}
+
 export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   provider: 'ollama',
   model: 'llama3',
@@ -91,6 +103,11 @@ export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
  */
 export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: LLMModel) {
   switch (provider) {
+    case 'anthropic':
+      return {
+        ...DEFAULT_OPENAI_LLM_SERVICE,
+        model: model || DEFAULT_OPENAI_LLM_SERVICE.model,
+      } as OpenAILLMService
     case 'ollama':
       return {
         ...DEFAULT_OLLAMA_LLM_SERVICE,

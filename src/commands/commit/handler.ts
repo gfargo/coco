@@ -17,8 +17,8 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { CommitArgv, CommitMessageResponse, CommitOptions } from './config'
 import { noResult } from './noResult'
-import { CommitArgv, CommitMessageResponse, CommitOptions } from './options'
 import { COMMIT_PROMPT } from './prompt'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {

@@ -12,7 +12,7 @@ import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
 import { CommandHandler } from '../../lib/types'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
 import { getProjectConfigFilePath } from '../../lib/utils/getProjectConfigFilePath'
-import { InitArgv, InitOptions } from './options'
+import { InitArgv, InitOptions } from './config'
 import { questions } from './questions'
 
 export const handler: CommandHandler<InitArgv> = async (argv, logger) => {

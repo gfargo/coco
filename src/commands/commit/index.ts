@@ -1,9 +1,9 @@
 import commandExecutor from '../../lib/utils/commandExecutor'
+import { builder, command, options } from './config'
 import { handler } from './handler'
-import { builder, options } from './options'
 
 export default {
-  command: 'commit',
+  command,
   desc: 'Summarize the staged changes in a commit message.',
   builder,
   handler: commandExecutor(handler),

@@ -1,4 +1,3 @@
-import { AnthropicInput } from '@langchain/anthropic'
 import { type OllamaInput } from '@langchain/community/llms/ollama'
 import { type BaseLLMParams } from '@langchain/core/language_models/llms'
 import { type OpenAIInput, type TiktokenModel } from '@langchain/openai'
@@ -73,7 +72,7 @@ export type BaseLLMService = {
   /**
    * The maximum number of tokens per request.
    *
-   * @default 1024
+   * @default 2048
    */
   tokenLimit?: number
   /**
@@ -94,7 +93,6 @@ export type BaseLLMService = {
     timeout?: number
     maxRetries?: number
   }
-  fields?: OpenAIFields | OllamaFields
 }
 
 type Authentication =
@@ -119,7 +117,6 @@ type Authentication =
 
 type OpenAIFields = Partial<OpenAIInput> & BaseLLMParams
 type OllamaFields = Partial<OllamaInput> & BaseLLMParams
-type AnthropicFields = Partial<AnthropicInput> & BaseLLMParams
 
 export type OpenAILLMService = BaseLLMService & {
   provider: 'openai'
@@ -136,8 +133,11 @@ export type OllamaLLMService = BaseLLMService & {
 
 export type AnthropicLLMService = BaseLLMService & {
   provider: 'anthropic'
-  model: string
-  fields?: AnthropicFields
+  model: AnthropicModel
+  fields?: {
+    temperature?: number
+    maxTokens?: number
+  }
 }
 
 export type LLMService = OpenAILLMService | OllamaLLMService | AnthropicLLMService
