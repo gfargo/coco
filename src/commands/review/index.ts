@@ -4,7 +4,7 @@ import { handler } from './handler'
 
 export default {
   command,
-  desc: 'Review the staged changes',
+  desc: 'Perform a code review on your changes',
   builder,
   handler: commandExecutor(handler),
   options,
