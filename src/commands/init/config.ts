@@ -1,5 +1,4 @@
 import { Argv, Options } from 'yargs'
-import init from '.'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseArgvOptions } from '../types'
 
@@ -10,6 +9,8 @@ export interface InitOptions extends BaseArgvOptions {
 }
 
 export type InitArgv = Argv<InitOptions>['argv']
+
+export const command = 'init'
 
 /**
  * Command line options via yargs
@@ -23,5 +24,5 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(init.command))
+  return yargs.options(options).usage(getCommandUsageHeader(command))
 }

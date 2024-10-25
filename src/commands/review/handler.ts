@@ -15,8 +15,8 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { ReviewArgv, ReviewFeedbackItem, ReviewOptions } from './config'
 import { noResult } from './noResult'
-import { ReviewArgv, ReviewFeedbackItem, ReviewOptions } from './options'
 import { REVIEW_PROMPT } from './prompt'
 
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {

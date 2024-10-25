@@ -14,8 +14,8 @@ import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { RecapArgv, RecapLlmResponse, RecapOptions } from './config'
 import { noResult } from './noResult'
-import { RecapArgv, RecapLlmResponse, RecapOptions } from './options'
 import { RECAP_PROMPT } from './prompt'
 
 export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {

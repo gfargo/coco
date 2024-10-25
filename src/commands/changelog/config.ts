@@ -1,5 +1,4 @@
 import { Arguments, Argv, Options } from 'yargs'
-import changelog from '.'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 export interface ChangelogOptions extends BaseCommandOptions {
@@ -13,6 +12,8 @@ export interface ChangelogResponse {
   header: string
   content: string
 }
+
+export const command = 'changelog'
 
 /**
  * Command line options via yargs
@@ -36,6 +37,5 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(changelog.command))
+  return yargs.options(options).usage(getCommandUsageHeader(command))
 }
-

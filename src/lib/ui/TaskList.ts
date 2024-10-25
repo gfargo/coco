@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import * as readline from 'readline'
-import { ReviewFeedbackItem } from '../../commands/review/options'
+import { ReviewFeedbackItem } from '../../commands/review/config'
 import { execPromise } from '../utils/execPromise'
 import { bannerWithHeader, DIVIDER, hotKey, severityColor, statusColor } from './helpers'
 

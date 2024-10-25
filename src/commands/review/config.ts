@@ -1,5 +1,4 @@
 import { Arguments, Argv, Options } from 'yargs'
-import recap from '.'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
@@ -18,6 +17,8 @@ export type ReviewFeedbackItem = {
   filePath: string
 }
 
+export const command = 'review'
+
 /**
  * Command line options via yargs 
  */
@@ -35,6 +36,6 @@ export const options = {
 } as Record<string, Options>  
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(recap.command))
+  return yargs.options(options).usage(getCommandUsageHeader(command))
 }  
 

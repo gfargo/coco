@@ -16,7 +16,7 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
-import { ChangelogArgv, ChangelogOptions, ChangelogResponse } from './options'
+import { ChangelogArgv, ChangelogOptions, ChangelogResponse } from './config'
 import { CHANGELOG_PROMPT } from './prompt'
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {

@@ -1,5 +1,4 @@
 import { Arguments, Argv, Options } from 'yargs'
-import commit from '.'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
@@ -16,6 +15,8 @@ export interface CommitMessageResponse {
   title: string
   body: string
 }
+
+export const command = 'commit'
 
 /**
  * Command line options via yargs
@@ -49,5 +50,5 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(commit.command))
+  return yargs.options(options).usage(getCommandUsageHeader(command))
 }

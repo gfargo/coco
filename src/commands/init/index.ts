@@ -1,9 +1,9 @@
 import commandExecutor from '../../lib/utils/commandExecutor'
+import { builder, command, options } from './config'
 import { handler } from './handler'
-import { builder, options } from './options'
 
 export default {
-  command: 'init',
+  command,
   desc: 'install & configure coco globally or for the current project',
   builder,
   handler: commandExecutor(handler),
