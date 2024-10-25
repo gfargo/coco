@@ -933,9 +933,9 @@
     zod-to-json-schema "^3.22.4"
 
 "@langchain/community@^0.3.4":
-  version "0.3.4"
-  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.4.tgz#6ade0816e45602bdd22376d67ce0908a94458f35"
-  integrity sha512-CLHjqxjWQnujofE40JNGsZuEruf0JCUxplbqNJoLKxbyx9JUD6kUnOpdoIuyywZWyBKwbLWZdCymlGzjokt3XQ==
+  version "0.3.7"
+  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.7.tgz#7933d4c8002de0f8f6cdd687507f23da283506f0"
+  integrity sha512-ubRQJNQUoXTfMEy5zklF+dWsCQm0pZnhIBOsrRYHsp3PiBaUthlw/u6m/WXPN+zIeArSw7QZpdfTbawMj4FnYw==
   dependencies:
     "@langchain/openai" ">=0.2.0 <0.4.0"
     binary-extensions "^2.2.0"
