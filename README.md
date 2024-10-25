@@ -16,7 +16,11 @@
 
 - **`recap`**: summarize changes from working-tree, or yesterday, or in the last month, or since the last tag!
 
+- **`review`**: perform a code review on the changes in the working directory.
+
 - **`init`**: step by step wizard to set up `coco` globally or for a project.
+
+- **`help`**: display help for `coco` commands.
 
 ## Getting Started
 
