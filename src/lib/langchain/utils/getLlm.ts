@@ -20,6 +20,7 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
   switch (provider) {
     case 'anthropic':
       return new ChatAnthropic({
+        anthropicApiKey:  getApiKeyForModel(config),
         maxConcurrency: config.service.maxConcurrent,
         model,
       })
