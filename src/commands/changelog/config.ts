@@ -9,7 +9,7 @@ export interface ChangelogOptions extends BaseCommandOptions {
 export type ChangelogArgv = Arguments<ChangelogOptions>
 
 export interface ChangelogResponse {
-  header: string
+  title: string
   content: string
 }
 

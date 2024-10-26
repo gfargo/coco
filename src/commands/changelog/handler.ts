@@ -109,7 +109,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       })
 
       const formatInstructions =
-        "Respond with a valid JSON object, containing two fields: 'header' and 'content', both strings."
+        "Respond with a valid JSON object, containing two fields: 'title' a string, no more than 65 characters, and 'content' a string."
 
       const changelog = await executeChain<ChangelogResponse>({
         llm,
@@ -125,7 +125,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       const ticketId = extractTicketIdFromBranchName(branchName)
       const footer = ticketId ? `\n\nPart of **${ticketId}**` : ''
 
-      return `${changelog.header}\n\n${changelog.content}${footer}`
+      return `${changelog.title}\n\n${changelog.content}${footer}`
     },
     noResult: async () => {
       if (config.range) {
