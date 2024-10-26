@@ -6,7 +6,7 @@
 [![NPM Version](https://img.shields.io/npm/v/git-coco.svg)](https://www.npmjs.com/package/git-coco)
 [![NPM Downloads](https://img.shields.io/npm/dt/git-coco.svg)](https://www.npmjs.com/package/git-coco)
 
-`coco`, the Commit Copilot, transcends being merely a robotic scribe for crafting git commit messages. Leveraging the capabilities of [LangChain🦜🔗](https://js.langchain.com/) and LLMs, `coco` is committed to providing a suite of insightful tools aimed at enhancing and streamlining your git workflow!
+`coco`, your AI-powered git assistant for the command line, is more than just a robotic scribe. Powered by [LangChain🦜🔗](https://js.langchain.com/) and available in both CommonJS and ESM, it generates commit messages, creates changelogs, summarizes code changes, performs code reviews, and more - with new features being added regularly!
 
 ## Commands
 
@@ -14,7 +14,7 @@
 
 - **`changelog`**: create changelogs for the current branch or a range of commits.
 
-- **`recap`**: summarize changes from working-tree, or yesterday, or in the last month, or since the last tag!
+- **`recap`**: summarize changes from working-tree, or yesterday, or in the last month, or since the last tag.
 
 - **`review`**: perform a code review on the changes in the working directory.
 
@@ -50,7 +50,6 @@ coco commit
 
 #### Useful options
 
- 
 ```bash
 # --append
 # Add content to the end of the generated commit
@@ -64,7 +63,6 @@ coco --append-ticket
 # Add extra context before generating the commit
 coco --additional "Resolves UX bug with sign up button"
 ```
-
 
 ### **`coco changelog`**
 
@@ -120,7 +118,6 @@ The `.coco.config` documentation has moved to our [wiki](https://github.com/gfar
 ### **Ignoring Files**
 
 You can specify files to be ignored when generating commit messages by adding them to your config file or via command line flags.  Read more about ignoring files & extensions in the [wiki](https://github.com/gfargo/coco/wiki/Ignoring-Files-&-Extensions).
-
 
 ## Contribution
 
