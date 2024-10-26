@@ -25,9 +25,10 @@
   "scripts": {
     "start": "npm run dev",
     "dev": "tsx watch src/index.ts",
-    "prebuild": "npm run build:schema",
+    "prebuild": "npm run build:schema && npm run build:info",
     "build": "rollup -c",
     "build:schema": "tsx bin/generateSchema.ts",
+    "build:info": "tsx bin/generateBuildInfo.ts",
     "build:watch": "rollup -c -w",
     "clean": "rimraf dist && rimraf coverage",
     "lint": "eslint src",

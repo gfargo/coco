@@ -20,22 +20,21 @@ export type ReviewFeedbackItem = {
 export const command = 'review'
 
 /**
- * Command line options via yargs 
+ * Command line options via yargs
  */
-export const options = { 
+export const options = {
   i: {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
   },
-  'b': {
+  b: {
     type: 'string',
     alias: 'branch',
     description: 'Branch to review',
   },
-} as Record<string, Options>  
+} as Record<string, Options>
 
-export const builder = (yargs: Argv) => {
+export const builder = (yargs: Argv) => { 
   return yargs.options(options).usage(getCommandUsageHeader(command))
-}  
-
+}

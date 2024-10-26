@@ -64,11 +64,6 @@ async function generateSchema(config: SchemaConfig): Promise<void> {
 export const SCHEMA_PUBLIC_URL = ${JSON.stringify(schema.$id)}
 
 /**
- * Current build version from package.json
- */
-export const BUILD_VERSION = ${JSON.stringify(process.env.npm_package_version)}
-
-/**
  * Generated JSON schema
  */
 export const schema = ${schemaString} as const`

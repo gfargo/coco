@@ -7,11 +7,6 @@
 export const SCHEMA_PUBLIC_URL = "http://git-co.co/schema.json"
 
 /**
- * Current build version from package.json
- */
-export const BUILD_VERSION = "0.14.2"
-
-/**
  * Generated JSON schema
  */
 export const schema = {
