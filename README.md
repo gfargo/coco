@@ -1,4 +1,6 @@
-# `coco` 🤖 🦍
+![coco banner image](https://repository-images.githubusercontent.com/663130268/2fc2b7a1-2626-4f9a-9938-a5b410db1b0e)
+
+# `coco`
 
 [![NPM Version](https://img.shields.io/npm/v/git-coco.svg)](https://www.npmjs.com/package/git-coco)
 [![Typescript Support](https://img.shields.io/npm/types/git-coco.svg)](https://www.npmjs.com/package/git-coco)
@@ -8,7 +10,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/gfargo/coco)](https://github.com/gfargo/coco/tree/main)
 [![Discord](https://img.shields.io/discord/1176716060825767948)](https://discord.gg/KGu9nE9Ejx)
 
-Spawned by the dream to automate away the tedium of writing commit messages, `coco` has grown into a multi-facetted git assistant to expedite any developers workflow.
+Spawned by the dream to automate away the tedium of writing commit messages, `coco` has grown into a multi-facetted git assistant to expedite any developer git workflow.
 
 Currently `coco` generates commit messages, creates changelogs, summarizes code changes, perform code review, and more - with new features being added regularly!
 
@@ -134,3 +136,8 @@ We welcome contributions! Check out our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 ## License
 
 MIT © [gfargo](https://github.com/gfargo/)
+
+<div style="text-align:center; padding-top: 2em;">
+<img src="https://git-co.co/mascott/mascott_d.png" width="260px">
+<p>Thanks for using <code>coco</code> ✨💜</p>
+</div>
