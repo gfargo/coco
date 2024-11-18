@@ -137,7 +137,7 @@ We welcome contributions! Check out our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 
 MIT © [gfargo](https://github.com/gfargo/)
 
-<div style="text-align:center; padding-top: 2em;">
-<img src="https://git-co.co/mascott/mascott_d.png" width="260px">
+<div style="text-align:center; padding-top: 2rem;">
+<img src="https://git-co.co/mascott/mascott_d.png" width="200px">
 <p>Thanks for using <code>coco</code> ✨💜</p>
 </div>
