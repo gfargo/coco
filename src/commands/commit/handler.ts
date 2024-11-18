@@ -33,7 +33,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   }
 
   const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4'
+    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
   )
 
   const llm = getLlm(provider, model, config)
