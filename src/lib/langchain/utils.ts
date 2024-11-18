@@ -58,7 +58,7 @@ export function getDefaultServiceApiKey(config: Config) {
 
 export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   provider: 'openai',
-  model: 'gpt-4',
+  model: 'gpt-4o',
   tokenLimit: 2024,
   temperature: 0.32,
   authentication: {
