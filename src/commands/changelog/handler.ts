@@ -109,7 +109,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       })
 
       const formatInstructions =
-        "Respond with a valid JSON object, containing two fields: 'title' a string, no more than 65 characters, and 'content' a string."
+        "Only respond with a valid JSON object, containing two fields: 'title' an escaped string, no more than 65 characters, and 'content' also an escaped string."
 
       const changelog = await executeChain<ChangelogResponse>({
         llm,
