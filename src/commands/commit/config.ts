@@ -42,10 +42,12 @@ export const options = {
   appendTicket: {
     description: 'Append ticket ID from branch name to the commit message',
     type: 'boolean',
+    alias: 't',
   },
   additional: {
     description: 'Add extra contextual information to the prompt',
     type: 'string',
+    alias: 'a',
   },
 } as Record<string, Options>
 
