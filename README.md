@@ -4,7 +4,9 @@
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/gfargo/coco)](https://github.com/gfargo/coco/pulls)
 [![Last Commit](https://img.shields.io/github/last-commit/gfargo/coco)](https://github.com/gfargo/coco/tree/main)
 [![NPM Version](https://img.shields.io/npm/v/git-coco.svg)](https://www.npmjs.com/package/git-coco)
+[![Typescript Support](https://img.shields.io/npm/types/git-coco.svg)](https://www.npmjs.com/package/git-coco)
 [![NPM Downloads](https://img.shields.io/npm/dt/git-coco.svg)](https://www.npmjs.com/package/git-coco)
+[![Discord](https://img.shields.io/discord/1176716060825767948)](https://discord.gg/KGu9nE9Ejx)
 
 `coco`, your AI-powered git assistant for the command line, is more than just a robotic scribe. Powered by [LangChain🦜🔗](https://js.langchain.com/) and available in both CommonJS and ESM, it generates commit messages, creates changelogs, summarizes code changes, performs code reviews, and more - with new features being added regularly!
 
