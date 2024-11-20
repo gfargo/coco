@@ -38,9 +38,11 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
 
   const llm = getLlm(provider, model, config)
 
-  const INTERACTIVE = isInteractive(config)
+  const INTERACTIVE = argv.interactive || isInteractive(config)
   if (INTERACTIVE) {
     logger.log(LOGO)
+  } else {
+    logger.setConfig({ silent: true })
   }
 
   async function factory() {
