@@ -966,11 +966,11 @@
     zod-to-json-schema "^3.22.3"
 
 "@langchain/ollama@^0.1.0":
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/@langchain/ollama/-/ollama-0.1.0.tgz#5600d9d47da56546f9dbef9ae7a7723d74cd8089"
-  integrity sha512-TI4DGenLf1ApoxFf4Bx/VPyO+a+poJKIul8AGm/FEyORtw3JPq1UDR6SdkGETrkDqzzdK9R0DvFRStd1MSTE/w==
+  version "0.1.2"
+  resolved "https://registry.yarnpkg.com/@langchain/ollama/-/ollama-0.1.2.tgz#7a7f6ed782dd5f4e3db19dc9651ccddb81c5d13b"
+  integrity sha512-WCeogCFjdWf6jGwLt12cxkSpm5eVamv43b48DIlbJ4np9vChwVlZZB6FU7uEXNrJ9c0dsoa6877hJ5mYHdbJvw==
   dependencies:
-    ollama "^0.5.6"
+    ollama "^0.5.9"
     uuid "^10.0.0"
 
 "@langchain/openai@>=0.1.0 <0.4.0", "@langchain/openai@>=0.2.0 <0.4.0", "@langchain/openai@^0.3.5":
@@ -4171,10 +4171,10 @@ npm-run-path@^5.1.0:
   dependencies:
     path-key "^4.0.0"
 
-ollama@^0.5.6:
-  version "0.5.9"
-  resolved "https://registry.yarnpkg.com/ollama/-/ollama-0.5.9.tgz#d8c010fa80c8d6ece0c5cbc19b8432c780316cc0"
-  integrity sha512-F/KZuDRC+ZsVCuMvcOYuQ6zj42/idzCkkuknGyyGVmNStMZ/sU3jQpvhnl4SyC0+zBzLiKNZJnJeuPFuieWZvQ==
+ollama@^0.5.9:
+  version "0.5.10"
+  resolved "https://registry.yarnpkg.com/ollama/-/ollama-0.5.10.tgz#82267e91b75445cef72a303a65664511f11bbbf9"
+  integrity sha512-M5O4u6S6yZeeKFrKA7ZfGGLjK54otOVGPrOUc3N64zSTpz9J+x/nh93dmD6Py7YLgXzq9I6Nq+PDDoaqJuV3LQ==
   dependencies:
     whatwg-fetch "^3.6.20"
 
