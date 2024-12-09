@@ -83,7 +83,7 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@inquirer/prompts": "3.3.0",
+    "@inquirer/prompts": "7.2.0",
     "@jridgewell/sourcemap-codec": "^1.4.15",
     "@langchain/anthropic": "^0.3.5",
     "@langchain/community": "^0.3.4",
