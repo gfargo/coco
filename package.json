@@ -53,7 +53,7 @@
     "@types/chunk-text": "^1.0.0",
     "@types/common-tags": "^1.8.1",
     "@types/diff": "^5.0.3",
-    "@types/ini": "^1.3.31",
+    "@types/ini": "^4.1.1",
     "@types/inquirer": "^9.0.3",
     "@types/jest": "^29.5.10",
     "@types/node": "^22.7.5",
