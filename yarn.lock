@@ -954,9 +954,9 @@
     zod-to-json-schema "^3.22.5"
 
 "@langchain/core@^0.3.13":
-  version "0.3.24"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.24.tgz#c6e00bfce6e9a78efda16cc549d3aba87b78ade7"
-  integrity sha512-xd7+VSJCwFNwt57poYjl18SbAb51mLWvq7OvQhkUQXv20LdnrO8Y5e2NhVKpNcYE306fFfAu+ty9ncPyKCpMZA==
+  version "0.3.26"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.26.tgz#0ebe7cbe7be316076ddef3feff4ce256a953b751"
+  integrity sha512-6RUQHEp8wv+JwtYIIEBYBzbLlcAQZFc7EDOgAM0ukExjh9HiXoJzoWpgMRRCrr/koIbtwXPJUqBprZK1I1CXHQ==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
