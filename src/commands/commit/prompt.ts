@@ -13,13 +13,13 @@ Please follow the guidelines below when writing your commit message:
 
 {format_instructions}
 
+{previous_commits}
+
 """"""
 {summary}
 """"""
 
 {additional_context}
-
-{previous_commits}
 `
 
 const inputVariables = ['summary', 'format_instructions', 'additional_context', 'previous_commits']
