@@ -4,6 +4,7 @@ import { BaseCommandOptions } from '../types'
 export interface ChangelogOptions extends BaseCommandOptions {
   range: string
   branch: string
+  sinceLastTag: boolean
 }
 
 export type ChangelogArgv = Arguments<ChangelogOptions>
@@ -28,6 +29,12 @@ export const options = {
     type: 'string',
     alias: 'b',
     description: 'Target branch to compare against',
+  },
+  sinceLastTag: {
+    type: 'boolean',
+    alias: 't',
+    description: 'Generate changelog for all commits since the last tag',
+    default: false,
   },
   i: {
     type: 'boolean',

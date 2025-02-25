@@ -6,6 +6,7 @@ import { JsonOutputParser } from '@langchain/core/output_parsers'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
+import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLastTag'
 import { getCommitLogAgainstBranch } from '../../lib/simple-git/getCommitLogAgainstBranch'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
@@ -41,6 +42,14 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   async function factory() {
     const branchName = await getCurrentBranchName({ git })
 
+    if (config.sinceLastTag) {
+      logger.verbose(`Generating commit log since the last tag`, { color: 'yellow' })
+      return {
+        branch: branchName,
+        commits: await getChangesSinceLastTag({ git, logger }),
+      }
+    }
+
     if (config.range && config.range.includes(':')) {
       const [from, to] = config.range.split(':')
 
@@ -63,7 +72,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       }
     }
 
-    logger.verbose(`No range or branch provided. Defaulting to current branch`, { color: 'yellow' })
+    logger.verbose(`No range, branch, or tag option provided. Defaulting to current branch`, { color: 'yellow' })
     return {
       branch: branchName,
       commits: await getCommitLogCurrentBranch({ git, logger }),
