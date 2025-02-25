@@ -23,8 +23,6 @@ import { RECAP_PROMPT } from './prompt'
 export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const git = getRepo()
   const config = loadConfig<RecapOptions, RecapArgv>(argv)
-  console.log('config', config)
-
   const key = getApiKeyForModel(config)
   const { provider, model } = getModelAndProviderFromConfig(config)
 
@@ -40,8 +38,6 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const llm = getLlm(provider, model, config)
 
   const INTERACTIVE = argv.interactive || isInteractive(config)
-  console.log('INTERACTIVE', { INTERACTIVE })
-
   if (INTERACTIVE) {
     logger.log(LOGO)
   } else {
@@ -146,7 +142,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     parser,
     agent: async (context, options) => {
       const formatInstructions =
-        "Respond with a valid JSON object, containing one field: 'summary', a string."
+        'Respond in a readable format. Include both high level and detailed information. Use markdown to format the response.'
 
       const prompt = getPrompt({
         template: options.prompt,
@@ -155,13 +151,9 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
       })
 
       try {
-        // First try with the parser
-        // const parser = new JsonOutputParser<RecapLlmResponse>()
-        const parser = new StringOutputParser()
-        console.log('context', context)
-        console.log('prompt', prompt)
+        const stringParser = new StringOutputParser()
 
-        const response = await executeChain({
+        const response = (await executeChain({
           llm,
           prompt,
           variables: {
@@ -169,16 +161,16 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
             format_instructions: formatInstructions,
             timeframe,
           },
-          parser,
-        })
-        console.log('response', response)
-        
+          parser: stringParser,
+        })) as string
+
         return `${response || 'no response'}`
 
         // return `${response.summary || 'no response'}`
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
         // Log the error but don't exit
-        logger.log(`Error parsing LLM response: ${error.message}`, { color: 'red' })
+        logger.log(`Error parsing LLM response: ${errorMessage}`, { color: 'red' })
 
         // Always return a fallback message instead of exiting
         const fallbackMessage = `
@@ -189,7 +181,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 - The changes include modifications to files related to the coco project.
 
 ### Technical Details
-- Error encountered: ${error.message}
+- Error encountered: ${errorMessage}
 - Try running in interactive mode for more details.
 
 ### Next Steps

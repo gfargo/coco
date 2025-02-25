@@ -14,6 +14,7 @@ export function getPrompt({ template, variables, fallback }: CreatePromptInput) 
       ? new PromptTemplate({
           template,
           inputVariables: variables,
+          templateFormat: 'mustache',
         })
       : fallback
   ) as PromptTemplate
