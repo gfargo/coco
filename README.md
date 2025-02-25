@@ -83,6 +83,9 @@ coco changelog -r HEAD~5:HEAD
 
 # For a target branch
 coco changelog -b other-branch
+
+# For all commits since the last tag
+coco changelog -t
 ```
 
 ### **`coco recap`**
