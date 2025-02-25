@@ -161,6 +161,12 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
             format_instructions: formatInstructions,
             timeframe,
           },
+          
+          // NOTE: parser is not optional and JSONOutputParser is expected, however making a union type for `executeChain` breaks type generation downstream.
+          // In the future, we should consider making the parser optional in `executeChain` and better handle parser types.
+
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-expect-error - parser is not optional and JSONOutputParser is expected
           parser: stringParser,
         })) as string
 
