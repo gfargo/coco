@@ -17,10 +17,12 @@ Please follow the guidelines below when writing your commit message:
 {summary}
 """"""
 
-{additional}
+{additional_context}
+
+{previous_commits}
 `
 
-const inputVariables = ['summary', 'format_instructions', 'additional']
+const inputVariables = ['summary', 'format_instructions', 'additional_context', 'previous_commits']
 
 export const COMMIT_PROMPT = new PromptTemplate({
   template,

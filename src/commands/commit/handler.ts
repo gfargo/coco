@@ -97,18 +97,22 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       const formatInstructions =
         "Respond with a valid JSON object, containing two fields: 'title' and 'body', both strings."
 
-      const additionalContext = argv.additional ? `${argv.additional}` : ''
+      // Get additional context if provided
+      let additional_context = argv.additional || ''
+      if (additional_context) {
+        additional_context = `## Additional Context\n${additional_context}`
+      }
       
       // Get previous commits if requested
-      let previousCommitsContext = ''
+      let previous_commits = ''
       if (argv.withPreviousCommits > 0) {
-        previousCommitsContext = await getPreviousCommits({
+        const previousCommitsData = await getPreviousCommits({
           git,
           count: argv.withPreviousCommits
         })
         
-        if (previousCommitsContext) {
-          previousCommitsContext = `\n\nPrevious commits:\n${previousCommitsContext}`
+        if (previousCommitsData) {
+          previous_commits = `## Previous Commits\n${previousCommitsData}`
         }
       }
 
@@ -118,7 +122,8 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         variables: {
           summary: context,
           format_instructions: formatInstructions,
-          additional: `${additionalContext}${previousCommitsContext}`,
+          additional_context: additional_context,
+          previous_commits: previous_commits,
         },
         parser,
       })
