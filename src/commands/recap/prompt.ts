@@ -5,13 +5,13 @@ The summarization should descibe in a general sense what has changed in the repo
 
 Breaking down the changes into categories (e.g. bug fixes, new features, etc.) with markdown headings is encouraged.
 
-{timeframe}
+{{timeframe}}
 
-{format_instructions}
+{{format_instructions}}
 
-"""{changes}"""`
+"""{{changes}}"""`
 
-export const inputVariables = ['format_instructions', 'changes', 'timeframe']
+export const inputVariables = ['timeframe', 'format_instructions', 'changes']
 
 export const RECAP_PROMPT = new PromptTemplate({
   template,

@@ -1,4 +1,4 @@
-import { JsonOutputParser } from '@langchain/core/output_parsers'
+import { StringOutputParser } from '@langchain/core/output_parsers'
 import { TiktokenModel } from '@langchain/openai'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -12,15 +12,19 @@ import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLast
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
+import { handleResult } from '../../lib/ui/handleResult'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
+import { logSuccess } from '../../lib/ui/logSuccess'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
-import { RecapArgv, RecapLlmResponse, RecapOptions } from './config'
+import { RecapArgv, RecapOptions } from './config'
 import { noResult } from './noResult'
 import { RECAP_PROMPT } from './prompt'
 
 export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const git = getRepo()
   const config = loadConfig<RecapOptions, RecapArgv>(argv)
+  console.log('config', config)
+
   const key = getApiKeyForModel(config)
   const { provider, model } = getModelAndProviderFromConfig(config)
 
@@ -35,9 +39,13 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
   const llm = getLlm(provider, model, config)
 
-  const INTERACTIVE = isInteractive(config)
+  const INTERACTIVE = argv.interactive || isInteractive(config)
+  console.log('INTERACTIVE', { INTERACTIVE })
+
   if (INTERACTIVE) {
     logger.log(LOGO)
+  } else {
+    logger.setConfig({ silent: true })
   }
 
   const { 'last-month': lastMonth, 'last-tag': lastTag, yesterday, 'last-week': lastWeek } = argv
@@ -112,7 +120,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     return changes.join('\n')
   }
 
-  await generateAndReviewLoop({
+  const recapResult = await generateAndReviewLoop({
     label: 'recap',
     options: {
       ...config,
@@ -137,8 +145,6 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = new JsonOutputParser<RecapLlmResponse>()
-
       const formatInstructions =
         "Respond with a valid JSON object, containing one field: 'summary', a string."
 
@@ -148,21 +154,69 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         fallback: RECAP_PROMPT,
       })
 
-      const response = await executeChain({
-        llm,
-        prompt,
-        variables: {
-          changes: context,
-          format_instructions: formatInstructions,
-          timeframe,
-        },
-        parser,
-      })
-      return `${response.summary || 'no response'}`
+      try {
+        // First try with the parser
+        // const parser = new JsonOutputParser<RecapLlmResponse>()
+        const parser = new StringOutputParser()
+        console.log('context', context)
+        console.log('prompt', prompt)
+
+        const response = await executeChain({
+          llm,
+          prompt,
+          variables: {
+            changes: context,
+            format_instructions: formatInstructions,
+            timeframe,
+          },
+          parser,
+        })
+        console.log('response', response)
+        
+        return `${response || 'no response'}`
+
+        // return `${response.summary || 'no response'}`
+      } catch (error) {
+        // Log the error but don't exit
+        logger.log(`Error parsing LLM response: ${error.message}`, { color: 'red' })
+
+        // Always return a fallback message instead of exiting
+        const fallbackMessage = `
+## Recap of Changes (Timeframe: ${timeframe})
+
+### Changes Overview
+- There are changes in the codebase that couldn't be properly summarized due to a technical issue.
+- The changes include modifications to files related to the coco project.
+
+### Technical Details
+- Error encountered: ${error.message}
+- Try running in interactive mode for more details.
+
+### Next Steps
+- You can run the command again or try in interactive mode.
+- Check the logs for more information about the error.
+`
+        return fallbackMessage
+      }
     },
     noResult: async () => {
       await noResult({ git, logger })
       process.exit(0)
     },
+  })
+
+  // Handle the result based on the mode (interactive or stdout)
+  const MODE =
+    (INTERACTIVE && 'interactive') || (config.recap && 'interactive') || config?.mode || 'stdout' // Default to stdout
+
+  // In non-interactive mode, we need to ensure the result is properly output to stdout
+  handleResult({
+    result: recapResult,
+    interactiveModeCallback: async () => {
+      // In interactive mode, we've already displayed the result
+      logSuccess()
+      // process.exit(0)
+    },
+    mode: MODE as 'interactive' | 'stdout',
   })
 }
