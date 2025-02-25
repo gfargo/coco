@@ -165,8 +165,6 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         })) as string
 
         return `${response || 'no response'}`
-
-        // return `${response.summary || 'no response'}`
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         // Log the error but don't exit
@@ -174,19 +172,13 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
         // Always return a fallback message instead of exiting
         const fallbackMessage = `
-## Recap of Changes (Timeframe: ${timeframe})
-
-### Changes Overview
+## Failed to parse the response [timeframe: ${timeframe}]
 - There are changes in the codebase that couldn't be properly summarized due to a technical issue.
-- The changes include modifications to files related to the coco project.
+- LLM encountered issues when parsing the changes.
 
-### Technical Details
-- Error encountered: ${errorMessage}
-- Try running in interactive mode for more details.
+### Error encountered
 
-### Next Steps
-- You can run the command again or try in interactive mode.
-- Check the logs for more information about the error.
+${errorMessage}
 `
         return fallbackMessage
       }
@@ -201,13 +193,10 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const MODE =
     (INTERACTIVE && 'interactive') || (config.recap && 'interactive') || config?.mode || 'stdout' // Default to stdout
 
-  // In non-interactive mode, we need to ensure the result is properly output to stdout
   handleResult({
     result: recapResult,
     interactiveModeCallback: async () => {
-      // In interactive mode, we've already displayed the result
       logSuccess()
-      // process.exit(0)
     },
     mode: MODE as 'interactive' | 'stdout',
   })
