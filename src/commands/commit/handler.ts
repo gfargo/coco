@@ -10,6 +10,7 @@ import { createCommit } from '../../lib/simple-git/createCommit'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
+import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler, FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
@@ -97,6 +98,19 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         "Respond with a valid JSON object, containing two fields: 'title' and 'body', both strings."
 
       const additionalContext = argv.additional ? `${argv.additional}` : ''
+      
+      // Get previous commits if requested
+      let previousCommitsContext = ''
+      if (argv.withPreviousCommits > 0) {
+        previousCommitsContext = await getPreviousCommits({
+          git,
+          count: argv.withPreviousCommits
+        })
+        
+        if (previousCommitsContext) {
+          previousCommitsContext = `\n\nPrevious commits:\n${previousCommitsContext}`
+        }
+      }
 
       const commitMsg = await executeChain({
         llm,
@@ -104,7 +118,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         variables: {
           summary: context,
           format_instructions: formatInstructions,
-          additional: additionalContext,
+          additional: `${additionalContext}${previousCommitsContext}`,
         },
         parser,
       })

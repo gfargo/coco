@@ -7,6 +7,7 @@ export interface CommitOptions extends BaseCommandOptions {
   openInEditor: boolean
   ignoredFiles: string[]
   ignoredExtensions: string[]
+  withPreviousCommits: number
 }
 
 export type CommitArgv = Arguments<CommitOptions>
@@ -48,6 +49,12 @@ export const options = {
     description: 'Add extra contextual information to the prompt',
     type: 'string',
     alias: 'a',
+  },
+  withPreviousCommits: {
+    description: 'Include previous commits as context (specify number of commits, 0 for none)',
+    type: 'number',
+    default: 0,
+    alias: 'p',
   },
 } as Record<string, Options>
 
