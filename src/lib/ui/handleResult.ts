@@ -20,7 +20,8 @@ export async function handleResult({ result, mode, interactiveModeCallback }: Ha
       break
     case 'stdout':
     default:
-      process.stdout.write(result, 'utf8')
+      // Ensure we write the result to stdout in non-interactive mode
+      process.stdout.write(result + '\n', 'utf8')
       break
   }
 

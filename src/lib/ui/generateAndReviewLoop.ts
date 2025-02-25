@@ -88,7 +88,6 @@ export async function generateAndReviewLoop<T, R>({
       .stopTimer()
 
     if (options?.interactive) {
-
       logResult(label, reviewParser ? reviewParser(result, options) : result as string)
 
       const reviewAnswer = await getUserReviewDecision({
@@ -122,10 +121,18 @@ export async function generateAndReviewLoop<T, R>({
         result = '' as string as R
         continue
       }
+      
+      // Only edit the result in interactive mode if approved
+      result = await editResult(result as string, options) as R
+    } else {
+      // In non-interactive mode, we return the result as is to be output to stdout by the caller.
+      const displayResult = reviewParser ? reviewParser(result, options) : result as string
+    
+      // In non-interactive mode, ensure we return the properly formatted result
+      result = displayResult as unknown as R
     }
 
     // if we're here, we're done.
-    result = await editResult(result as string, options) as R
     continueLoop = false
   }
 

@@ -1,4 +1,4 @@
-import { JsonOutputParser } from '@langchain/core/output_parsers'
+import { StringOutputParser } from '@langchain/core/output_parsers'
 import { TiktokenModel } from '@langchain/openai'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -12,9 +12,11 @@ import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLast
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
+import { handleResult } from '../../lib/ui/handleResult'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
+import { logSuccess } from '../../lib/ui/logSuccess'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
-import { RecapArgv, RecapLlmResponse, RecapOptions } from './config'
+import { RecapArgv, RecapOptions } from './config'
 import { noResult } from './noResult'
 import { RECAP_PROMPT } from './prompt'
 
@@ -35,9 +37,11 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
   const llm = getLlm(provider, model, config)
 
-  const INTERACTIVE = isInteractive(config)
+  const INTERACTIVE = argv.interactive || isInteractive(config)
   if (INTERACTIVE) {
     logger.log(LOGO)
+  } else {
+    logger.setConfig({ silent: true })
   }
 
   const { 'last-month': lastMonth, 'last-tag': lastTag, yesterday, 'last-week': lastWeek } = argv
@@ -112,7 +116,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     return changes.join('\n')
   }
 
-  await generateAndReviewLoop({
+  const recapResult = await generateAndReviewLoop({
     label: 'recap',
     options: {
       ...config,
@@ -137,10 +141,8 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = new JsonOutputParser<RecapLlmResponse>()
-
       const formatInstructions =
-        "Respond with a valid JSON object, containing one field: 'summary', a string."
+        'Respond in a readable format. Include both high level and detailed information. Use markdown to format the response.'
 
       const prompt = getPrompt({
         template: options.prompt,
@@ -148,21 +150,54 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         fallback: RECAP_PROMPT,
       })
 
-      const response = await executeChain({
-        llm,
-        prompt,
-        variables: {
-          changes: context,
-          format_instructions: formatInstructions,
-          timeframe,
-        },
-        parser,
-      })
-      return `${response.summary || 'no response'}`
+      try {
+        const stringParser = new StringOutputParser()
+
+        const response = (await executeChain({
+          llm,
+          prompt,
+          variables: {
+            changes: context,
+            format_instructions: formatInstructions,
+            timeframe,
+          },
+          parser: stringParser,
+        })) as string
+
+        return `${response || 'no response'}`
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        // Log the error but don't exit
+        logger.log(`Error parsing LLM response: ${errorMessage}`, { color: 'red' })
+
+        // Always return a fallback message instead of exiting
+        const fallbackMessage = `
+## Failed to parse the response [timeframe: ${timeframe}]
+- There are changes in the codebase that couldn't be properly summarized due to a technical issue.
+- LLM encountered issues when parsing the changes.
+
+### Error encountered
+
+${errorMessage}
+`
+        return fallbackMessage
+      }
     },
     noResult: async () => {
       await noResult({ git, logger })
       process.exit(0)
     },
+  })
+
+  // Handle the result based on the mode (interactive or stdout)
+  const MODE =
+    (INTERACTIVE && 'interactive') || (config.recap && 'interactive') || config?.mode || 'stdout' // Default to stdout
+
+  handleResult({
+    result: recapResult,
+    interactiveModeCallback: async () => {
+      logSuccess()
+    },
+    mode: MODE as 'interactive' | 'stdout',
   })
 }

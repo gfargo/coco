@@ -9,7 +9,7 @@ type ExecuteChainInput<T> = {
   llm: ReturnType<typeof getLlm>
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-expect-error
-  parser: JsonOutputParser<T>
+  parser: JsonOutputParser<T> | StringOutputParser<T>
 }
 
 export const executeChain = async <T>({ llm, prompt, variables, parser }: ExecuteChainInput<T>) => {
