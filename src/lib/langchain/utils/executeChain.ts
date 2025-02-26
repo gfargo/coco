@@ -7,8 +7,6 @@ type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
   prompt: PromptTemplate
   llm: ReturnType<typeof getLlm>
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-expect-error - This is a generic type 
   parser: BaseOutputParser<T>
 }
 
