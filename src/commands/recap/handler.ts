@@ -1,4 +1,4 @@
-import { StringOutputParser } from '@langchain/core/output_parsers'
+import { StructuredOutputParser } from '@langchain/core/output_parsers'
 import { TiktokenModel } from '@langchain/openai'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -16,7 +16,7 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
-import { RecapArgv, RecapOptions } from './config'
+import { RecapArgv, RecapLlmResponseSchema, RecapOptions } from './config'
 import { noResult } from './noResult'
 import { RECAP_PROMPT } from './prompt'
 
@@ -142,7 +142,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     parser,
     agent: async (context, options) => {
       const formatInstructions =
-        'Respond in a readable format. Include both high level and detailed information. Use markdown to format the response.'
+        "Respond with a valid JSON object, containing two fields: 'title' and 'summary', both strings."
 
       const prompt = getPrompt({
         template: options.prompt,
@@ -151,9 +151,9 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
       })
 
       try {
-        const stringParser = new StringOutputParser()
+        const parser = new StructuredOutputParser(RecapLlmResponseSchema)
 
-        const response = (await executeChain({
+        const response = await executeChain({
           llm,
           prompt,
           variables: {
@@ -161,16 +161,10 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
             format_instructions: formatInstructions,
             timeframe,
           },
-          
-          // NOTE: parser is not optional and JSONOutputParser is expected, however making a union type for `executeChain` breaks type generation downstream.
-          // In the future, we should consider making the parser optional in `executeChain` and better handle parser types.
+          parser,
+        })
 
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-expect-error - parser is not optional and JSONOutputParser is expected
-          parser: stringParser,
-        })) as string
-
-        return `${response || 'no response'}`
+        return response ? `${response.title}\n\n${response.summary}` : 'no response'
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         // Log the error but don't exit

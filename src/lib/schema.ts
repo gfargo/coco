@@ -183,6 +183,10 @@ export const schema = {
               "type": "number",
               "description": "Maximum number of tokens to generate in the completion. -1 returns as many tokens as possible given the prompt and the model's maximum context size."
             },
+            "maxCompletionTokens": {
+              "type": "number",
+              "description": "Maximum number of tokens to generate in the completion. -1 returns as many tokens as possible given the prompt and the model's maximum context size. Alias for `maxTokens` for reasoning models."
+            },
             "topP": {
               "type": "number",
               "description": "Total probability mass of tokens to consider at each step"
@@ -221,7 +225,8 @@ export const schema = {
             },
             "modelName": {
               "type": "string",
-              "description": "Model name to use Alias for `model`"
+              "description": "Model name to use Alias for `model`",
+              "deprecated": "Use \"model\" instead."
             },
             "model": {
               "type": "string",

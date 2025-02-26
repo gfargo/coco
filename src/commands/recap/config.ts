@@ -1,4 +1,5 @@
 import { Arguments, Argv, Options } from 'yargs'
+import { z } from 'zod'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
@@ -11,9 +12,10 @@ export interface RecapOptions extends BaseCommandOptions {
 
 export type RecapArgv = Arguments<RecapOptions>
 
-export interface RecapLlmResponse {
-  summary: string
-}
+export const RecapLlmResponseSchema = z.object({
+  title: z.string().optional(),
+  summary: z.string().optional(),
+})
 
 export const command = 'recap'
 

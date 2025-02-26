@@ -12,11 +12,11 @@ export const template = `As an experienced software engineer, you are tasked wit
 - Breaking down the changes into categories and ranking by severity is helpful.
 - Output the content in a clear and concise manner that will render well in a terminal or CLI.
 
-{format_instructions}
+{{format_instructions}}
 
 Following the formatting instructions, perform a code review on the following changes
 
-"""{changes}"""`
+"""{{changes}}"""`
 
 export const inputVariables = ['format_instructions', 'changes']
 

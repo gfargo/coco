@@ -78,8 +78,11 @@ Creates changelogs.
 # For the current branch
 coco changelog
 
-# For a specific range
+# For a specific range (using HEAD references)
 coco changelog -r HEAD~5:HEAD
+
+# For a specific range (using commit hashes)
+coco changelog -r abc1234:def5678
 
 # For a target branch
 coco changelog -b other-branch

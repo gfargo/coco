@@ -1,6 +1,7 @@
-import { Arguments, Argv, Options } from 'yargs'
-import { getCommandUsageHeader } from '../../lib/ui/helpers'
-import { BaseCommandOptions } from '../types'
+import { Arguments, Argv, Options } from 'yargs';
+import { z } from 'zod';
+import { getCommandUsageHeader } from '../../lib/ui/helpers';
+import { BaseCommandOptions } from '../types';
 
 export interface CommitOptions extends BaseCommandOptions {
   interactive: boolean
@@ -12,10 +13,12 @@ export interface CommitOptions extends BaseCommandOptions {
 
 export type CommitArgv = Arguments<CommitOptions>
 
-export interface CommitMessageResponse {
-  title: string
-  body: string
-}
+export const CommitMessageResponseSchema = z.object({
+  title: z.string(),
+  body: z.string(),
+});
+
+export type CommitMessageResponse = z.infer<typeof CommitMessageResponseSchema>;
 
 export const command = 'commit'
 

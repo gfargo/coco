@@ -1,4 +1,4 @@
-import { JsonOutputParser } from '@langchain/core/output_parsers'
+import { BaseOutputParser } from '@langchain/core/output_parsers'
 
 import { PromptTemplate } from '@langchain/core/prompts'
 import { getLlm } from './getLlm'
@@ -8,8 +8,8 @@ type ExecuteChainInput<T> = {
   prompt: PromptTemplate
   llm: ReturnType<typeof getLlm>
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-expect-error
-  parser: JsonOutputParser<T>
+  // @ts-expect-error - This is a generic type 
+  parser: BaseOutputParser<T>
 }
 
 export const executeChain = async <T>({ llm, prompt, variables, parser }: ExecuteChainInput<T>) => {

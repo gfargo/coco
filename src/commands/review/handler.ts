@@ -1,4 +1,4 @@
-import { JsonOutputParser } from '@langchain/core/output_parsers'
+import { StructuredOutputParser } from '@langchain/core/output_parsers'
 import { TiktokenModel } from '@langchain/openai'
 import chalk from 'chalk'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
@@ -15,7 +15,7 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
-import { ReviewArgv, ReviewFeedbackItem, ReviewOptions } from './config'
+import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions } from './config'
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
 
@@ -62,7 +62,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
           ignoredExtensions: config.ignoredExtensions || undefined,
         },
       })
-      
+
       if (staged.length === 0 && unstaged?.length === 0 && untracked?.length === 0) {
         logger.log('No changes detected. Exiting...')
         process.exit(0)
@@ -130,7 +130,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = new JsonOutputParser<ReviewFeedbackItem[]>()
+      const parser = new StructuredOutputParser(ReviewFeedbackItemArraySchema)
 
       const formatInstructions =
         "Respond with a valid JSON object, containing four fields:'title' a string, 'summary' a short summary of the problem (include line number if big file), 'severity' a numeric enum up to ten, 'category' an enum string, and 'filePath' a relative filepath to file as string."

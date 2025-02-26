@@ -20,15 +20,15 @@ Please follow the guidelines below when writing your commit message:
 - DO NOT include any diffs or file changes in the commit message
 - Wrap variable, class, function, components, and dependency names in back ticks e.g. \`variable\`
 
-{format_instructions}
+{{format_instructions}}
 
-{commit_history}
+{{commit_history}}
 
 """"""
-{summary}
+{{summary}}
 """"""
 
-{additional_context}
+{{additional_context}}
 `
 
 // Define the variables that will be passed to the prompt template

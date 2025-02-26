@@ -1,4 +1,4 @@
-import { JsonOutputParser } from '@langchain/core/output_parsers'
+import { StructuredOutputParser } from '@langchain/core/output_parsers'
 import { type TiktokenModel } from '@langchain/openai'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -18,7 +18,7 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
-import { CommitArgv, CommitMessageResponse, CommitOptions } from './config'
+import { CommitArgv, CommitMessageResponseSchema, CommitOptions } from './config'
 import { noResult } from './noResult'
 import { COMMIT_PROMPT } from './prompt'
 
@@ -86,7 +86,9 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = new JsonOutputParser<CommitMessageResponse>()
+      const parser = new StructuredOutputParser(
+        CommitMessageResponseSchema
+      )
 
       const prompt = getPrompt({
         template: options.prompt,
