@@ -8,9 +8,9 @@ const template = `Write informative git changelog, in the imperative, based on a
 - Depending on the size of the changes, consider breaking the changelog into sections
 - Avoid generlizations like "various bug fixes" or "improvements" or "enhancements"
 
-{format_instructions}
+{{format_instructions}}
 
-"""{summary}"""`
+"""{{summary}}"""`
 
 export const inputVariables = ['format_instructions', 'summary']
 

@@ -2,7 +2,7 @@ import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/lang
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 
-import { JsonOutputParser } from '@langchain/core/output_parsers'
+import { StructuredOutputParser } from '@langchain/core/output_parsers'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
@@ -17,7 +17,11 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
-import { ChangelogArgv, ChangelogOptions, ChangelogResponse } from './config'
+import {
+  ChangelogArgv,
+  ChangelogOptions,
+  ChangelogResponseSchema
+} from './config'
 import { CHANGELOG_PROMPT } from './prompt'
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
@@ -72,16 +76,16 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       }
     }
 
-    logger.verbose(`No range, branch, or tag option provided. Defaulting to current branch`, { color: 'yellow' })
+    logger.verbose(`No range, branch, or tag option provided. Defaulting to current branch`, {
+      color: 'yellow',
+    })
     return {
       branch: branchName,
       commits: await getCommitLogCurrentBranch({ git, logger }),
     }
   }
 
-  async function parser(
-    { branch, commits }: { branch: string; commits: string[] }
-  ) {
+  async function parser({ branch, commits }: { branch: string; commits: string[] }) {
     let result
     if (!commits || commits.length === 0) {
       result = `## ${branch}\n\nNo commits found.`
@@ -92,10 +96,13 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     return result
   }
 
-  const changelogMsg = await generateAndReviewLoop<{
-    branch: string
-    commits: string[]
-  }, string>({
+  const changelogMsg = await generateAndReviewLoop<
+    {
+      branch: string
+      commits: string[]
+    },
+    string
+  >({
     label: 'changelog',
     options: {
       ...config,
@@ -109,7 +116,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = new JsonOutputParser<ChangelogResponse>()
+      const parser = new StructuredOutputParser(ChangelogResponseSchema)
 
       const prompt = getPrompt({
         template: options.prompt,
@@ -120,7 +127,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       const formatInstructions =
         "Only respond with a valid JSON object, containing two fields: 'title' an escaped string, no more than 65 characters, and 'content' also an escaped string."
 
-      const changelog = await executeChain<ChangelogResponse>({
+      const changelog = await executeChain({
         llm,
         prompt,
         variables: {

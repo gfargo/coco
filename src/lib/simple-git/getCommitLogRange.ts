@@ -5,8 +5,8 @@ type GetCommitLogRangeOptions = { git: SimpleGit; noMerges?: boolean }
 /**
  * Retrieves the commit log range between two specified commits.
  *
- * @param from - The starting commit.
- * @param to - The ending commit.
+ * @param from - The starting commit (can be a commit hash, HEAD reference, or branch name).
+ * @param to - The ending commit (can be a commit hash, HEAD reference, or branch name).
  * @param options - Additional options for retrieving the commit log range.
  * @returns A promise that resolves to an array of commit log messages.
  * @throws If there is an error retrieving the commit log range.
@@ -17,10 +17,12 @@ export async function getCommitLogRange(
   { noMerges, git }: GetCommitLogRangeOptions
 ): Promise<string[]> {
   try {
-    const logOptions = { from: `${from}^1`, to, '--no-merges': noMerges } as
-      | TaskOptions
-      | LogOptions<DefaultLogFields>
-      | undefined
+    // Use the git range syntax directly (from..to) which works with both commit hashes and references
+    const logOptions = { 
+      from, 
+      to, 
+      '--no-merges': noMerges 
+    } as TaskOptions | LogOptions<DefaultLogFields> | undefined
 
     const commitLog = await git.log(logOptions)
 

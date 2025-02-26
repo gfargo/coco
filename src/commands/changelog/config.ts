@@ -1,4 +1,5 @@
 import { Arguments, Argv, Options } from 'yargs'
+import { z } from 'zod'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 export interface ChangelogOptions extends BaseCommandOptions {
@@ -9,10 +10,12 @@ export interface ChangelogOptions extends BaseCommandOptions {
 
 export type ChangelogArgv = Arguments<ChangelogOptions>
 
-export interface ChangelogResponse {
-  title: string
-  content: string
-}
+export const ChangelogResponseSchema = z.object({
+  title: z.string(),
+  content: z.string(),
+})
+
+export type ChangelogResponse = z.infer<typeof ChangelogResponseSchema>
 
 export const command = 'changelog'
 
@@ -23,7 +26,7 @@ export const options = {
   range: {
     type: 'string',
     alias: 'r',
-    description: 'Commit range e.g `HEAD~2:HEAD`',
+    description: 'Commit range e.g `HEAD~2:HEAD^1` or `abc1234:def5678` (commit hashes)',
   },
   branch: {
     type: 'string',
