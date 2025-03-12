@@ -70,14 +70,28 @@ export async function generateAndReviewLoop<T, R>({
       color: 'blue',
     })
 
-    result = await agent(context, options)
+    try {
+      result = await agent(context, options)
 
-    if (!result) {
-      logger.stopSpinner('💀 Agent failed to return content.', {
-        mode: 'fail',
-        color: 'red',
-      })
-      process.exit(0)
+      if (!result) {
+        logger.stopSpinner('💀 Agent failed to return content.', {
+          mode: 'fail',
+          color: 'red',
+        })
+        process.exit(0)
+      }
+    } catch (error) {
+      // Handle special regeneration request from validation
+      if ((error as Error).message === 'REGENERATE_COMMIT_MESSAGE') {
+        logger.stopSpinner('Regenerating commit message...', {
+          mode: 'info',
+          color: 'blue',
+        })
+        result = '' as R
+        continue
+      }
+      // Re-throw other errors
+      throw error
     }
 
     logger
