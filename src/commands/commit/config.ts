@@ -31,7 +31,7 @@ export const ConventionalCommitMessageResponseSchema = z.object({
       "Title must follow Conventional Commits format (e.g., 'feat: add new feature' or 'fix(scope): fix bug')"
     ),
   body: z.string()
-    .max(280, "Body must be 280 characters or less"),
+    // .max(280, "Body must be 280 characters or less"),
 });
 
 export type CommitMessageResponse = z.infer<typeof CommitMessageResponseSchema>;

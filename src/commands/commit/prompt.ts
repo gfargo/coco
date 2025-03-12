@@ -2,7 +2,7 @@ import { PromptTemplate } from '@langchain/core/prompts'
 
 /**
  * Template for generating git commit messages based on code changes
- * 
+ *
  * Variables:
  * - summary: Contains the diff summary of staged changes
  * - format_instructions: Instructions for the output format (JSON with title and body)
@@ -20,13 +20,13 @@ Please follow the guidelines below when writing your commit message:
 - DO NOT include any diffs or file changes in the commit message
 - Wrap variable, class, function, components, and dependency names in back ticks e.g. \`variable\`
 
-{{format_instructions}}
-
-{{commit_history}}
-
 """"""
 {{summary}}
 """"""
+
+{{format_instructions}}
+
+{{commit_history}}
 
 {{additional_context}}
 `
@@ -37,4 +37,63 @@ const inputVariables = ['summary', 'format_instructions', 'additional_context', 
 export const COMMIT_PROMPT = new PromptTemplate({
   template,
   inputVariables,
+})
+
+export const CONVENTIONAL_TEMPLATE = `Generate a commit message that strictly adheres to the Conventional Commits specification. Follow these rules precisely:
+
+1. Type Selection:
+   - Choose ONE of these types based on the changes:
+     * feat: A new feature
+     * fix: A bug fix
+     * docs: Documentation only changes
+     * style: Changes that don't affect the code's meaning (white-space, formatting, etc)
+     * refactor: Code changes that neither fix a bug nor add a feature
+     * perf: Code changes that improve performance
+     * test: Adding missing tests or correcting existing tests
+     * build: Changes that affect the build system or external dependencies
+     * ci: Changes to CI configuration files and scripts
+     * chore: Other changes that don't modify src or test files
+     * revert: Reverts a previous commit
+
+2. Format Requirements:
+   - Title format: <type>(<optional-scope>): <description>
+   - Title must be 50 characters or less
+   - Description should be in imperative mood (e.g., "add" not "adds/added")
+   - Body MUST be 280 characters or less
+   - Separate body from title with a blank line
+   - Body should explain the motivation for the change and contrast it with previous behavior
+
+3. Scope Guidelines:
+   - If the change affects a specific component/area, include it as a scope
+   - Scope should be a noun in parentheses (e.g., (parser), (ui), (config))
+   - Omit scope if the change is broad or affects multiple areas
+
+Based on the following diff summary, generate a conventional commit message that follows these rules exactly:
+
+""""""
+{{summary}}
+""""""
+
+{{format_instructions}}
+
+{{commit_history}}
+
+{{additional_context}}
+
+Remember:
+- Be concise and precise
+- Focus on WHAT and WHY, not HOW
+- Use imperative mood in both title and body
+- Ensure the title alone provides enough context to understand the change`
+
+const conventionalInputVariables = [
+  'summary',
+  'additional_context',
+  'commit_history',
+  'format_instructions',
+]
+
+export const CONVENTIONAL_COMMIT_PROMPT = new PromptTemplate({
+  template: CONVENTIONAL_TEMPLATE,
+  inputVariables: conventionalInputVariables,
 })
