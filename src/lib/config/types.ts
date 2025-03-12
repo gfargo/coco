@@ -12,6 +12,15 @@ type BaseConfig = {
   mode: 'stdout' | 'interactive'
 
   /**
+   * Whether to generate commit messages in Conventional Commits format.
+   * When enabled, commit messages will follow the Conventional Commits specification.
+   * 
+   * @see https://www.conventionalcommits.org/
+   * @default false
+   */
+  conventionalCommits?: boolean
+
+  /**
    * Enable verbose logging.
    *
    * @default false
