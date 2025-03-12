@@ -83,6 +83,10 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "@commitlint/core": "^19.8.0",
+    "@commitlint/types": "^19.8.0",
     "@inquirer/prompts": "3.3.0",
     "@jridgewell/sourcemap-codec": "^1.4.15",
     "@langchain/anthropic": "^0.3.14",

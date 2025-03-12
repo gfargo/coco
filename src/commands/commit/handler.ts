@@ -18,9 +18,14 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
-import { CommitArgv, CommitMessageResponseSchema, CommitOptions } from './config'
+import {
+  CommitArgv,
+  CommitMessageResponseSchema,
+  CommitOptions,
+  ConventionalCommitMessageResponseSchema,
+} from './config'
 import { noResult } from './noResult'
-import { COMMIT_PROMPT } from './prompt'
+import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -69,7 +74,11 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     label: 'commit message',
     options: {
       ...config,
-      prompt: config.prompt || (COMMIT_PROMPT.template as string),
+      prompt:
+        config.prompt ||
+        ((config.conventionalCommits || argv.conventional
+          ? CONVENTIONAL_COMMIT_PROMPT.template
+          : COMMIT_PROMPT.template) as string),
       logger,
       interactive: INTERACTIVE,
       review: {
@@ -86,14 +95,25 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = new StructuredOutputParser(
-        CommitMessageResponseSchema
-      )
+      // Check if conventional commits are enabled via config or CLI flag
+      const useConventional = config.conventionalCommits || argv.conventional
+
+      // Select the appropriate schema based on whether conventional commits are enabled
+      const schema = useConventional
+        ? ConventionalCommitMessageResponseSchema
+        : CommitMessageResponseSchema
+
+      console.log('schema', schema)
+
+      const parser = new StructuredOutputParser(schema)
+
+      // Use conventional commit prompt if enabled
+      const promptTemplate = useConventional ? CONVENTIONAL_COMMIT_PROMPT : COMMIT_PROMPT
 
       const prompt = getPrompt({
         template: options.prompt,
-        variables: COMMIT_PROMPT.inputVariables,
-        fallback: COMMIT_PROMPT,
+        variables: promptTemplate.inputVariables,
+        fallback: promptTemplate,
       })
 
       const formatInstructions =
@@ -104,19 +124,22 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       if (argv.additional) {
         additional_context = `## Additional Context\n${argv.additional}`
       }
-      
+
       // Get commit history if requested
       let commit_history = ''
       if (argv.withPreviousCommits > 0) {
         const commitHistoryData = await getPreviousCommits({
           git,
-          count: argv.withPreviousCommits
+          count: argv.withPreviousCommits,
         })
-        
+
         if (commitHistoryData) {
           commit_history = `## Commit History\n${commitHistoryData}`
         }
       }
+
+      console.log('context', context)
+      console.log('prompt', prompt)
 
       const commitMsg = await executeChain({
         llm,
@@ -130,13 +153,50 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         parser,
       })
 
+      // Construct the full commit message
       const appendedText = argv.append ? `\n\n${argv.append}` : ''
-
       const branchName = await getCurrentBranchName({ git })
       const ticketId = extractTicketIdFromBranchName(branchName)
       const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
+      const fullMessage = `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
 
-      return `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
+      // If conventional commits are enabled, validate with commitlint
+      if (useConventional) {
+        const { validateCommitMessage } = await import('../../lib/utils/commitlintValidator')
+        const { handleValidationErrors } = await import('../../lib/ui/commitValidationHandler')
+
+        const validationResult = await validateCommitMessage(fullMessage)
+        const validationHandlerResult = await handleValidationErrors(
+          fullMessage,
+          validationResult,
+          {
+            logger,
+            interactive: INTERACTIVE,
+            openInEditor: config.openInEditor,
+          }
+        )
+
+        switch (validationHandlerResult.action) {
+          case 'proceed':
+            // Validation passed, use the message as is
+            return validationHandlerResult.message
+
+          case 'edit':
+            // User edited the message, use the edited version
+            return validationHandlerResult.message
+
+          case 'regenerate':
+            // User wants to regenerate, throw special error to trigger regeneration
+            throw new Error('REGENERATE_COMMIT_MESSAGE')
+
+          case 'abort':
+            // User wants to abort or validation failed in non-interactive mode
+            logger.log('\nAborting commit due to validation errors.', { color: 'red' })
+            process.exit(1)
+        }
+      }
+
+      return fullMessage
     },
     noResult: async () => {
       await noResult({ git, logger })

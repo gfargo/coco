@@ -9,13 +9,29 @@ export interface CommitOptions extends BaseCommandOptions {
   ignoredFiles: string[]
   ignoredExtensions: string[]
   withPreviousCommits: number
+  conventional: boolean
 }
 
 export type CommitArgv = Arguments<CommitOptions>
 
+const conventionalTypeRegex = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?:/;
+
+// Regular commit message schema with basic validation
 export const CommitMessageResponseSchema = z.object({
   title: z.string(),
   body: z.string(),
+});
+
+// Conventional commit message schema with strict formatting rules
+export const ConventionalCommitMessageResponseSchema = z.object({
+  title: z.string()
+    .max(50, "Title must be 50 characters or less")
+    .refine(
+      (title) => conventionalTypeRegex.test(title),
+      "Title must follow Conventional Commits format (e.g., 'feat: add new feature' or 'fix(scope): fix bug')"
+    ),
+  body: z.string()
+    // .max(280, "Body must be 280 characters or less"),
 });
 
 export type CommitMessageResponse = z.infer<typeof CommitMessageResponseSchema>;
@@ -58,6 +74,12 @@ export const options = {
     type: 'number',
     default: 0,
     alias: 'p',
+  },
+  conventional: {
+    description: 'Generate commit message in Conventional Commits format',
+    type: 'boolean',
+    default: false,
+    alias: 'c',
   },
 } as Record<string, Options>
 
