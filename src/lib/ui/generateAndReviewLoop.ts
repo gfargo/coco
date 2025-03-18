@@ -84,7 +84,7 @@ export async function generateAndReviewLoop<T, R>({
       // Handle special regeneration request from validation
       if ((error as Error).message === 'REGENERATE_COMMIT_MESSAGE') {
         logger.stopSpinner('Regenerating commit message...', {
-          mode: 'info',
+          mode: 'stop',
           color: 'blue',
         })
         result = '' as R
