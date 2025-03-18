@@ -1103,9 +1103,9 @@
     zod-to-json-schema "^3.22.4"
 
 "@langchain/community@^0.3.32":
-  version "0.3.32"
-  resolved "https://registry.npmjs.org/@langchain/community/-/community-0.3.32.tgz"
-  integrity sha512-5AvGyjIFheXdBUSiIWNwc40rI8fXYiHV0UA3ncbBVu5fTwWur+mAQvl2ZsgyxBBKm4VuoCcuh6U6I7b1kiOYBQ==
+  version "0.3.36"
+  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.36.tgz#e4c13b8f928b17e0f9257395f43be2246dfada40"
+  integrity sha512-4jBB4yqux8CGfCwlBbtXck5qP0yJPwDvtwI4KUN2j/At+zSZn1FyTL11G75ctG2b5GO7u+cR6QatDXIPooJphA==
   dependencies:
     "@langchain/openai" ">=0.2.0 <0.5.0"
     binary-extensions "^2.2.0"
