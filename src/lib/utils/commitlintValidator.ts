@@ -1,8 +1,8 @@
 import { lint, load } from '@commitlint/core'
 import type { LintOptions, QualifiedConfig } from '@commitlint/types'
-import { findProjectRoot } from './findProjectRoot'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { findProjectRoot } from './findProjectRoot'
 
 /**
  * Result of commit message validation
@@ -17,7 +17,7 @@ export interface ValidationResult {
  * Check if a commitlint configuration exists in the project root
  */
 export async function hasCommitlintConfig(): Promise<boolean> {
-  const projectRoot = await findProjectRoot()
+  const projectRoot = await findProjectRoot(process.cwd())
   if (!projectRoot) return false
 
   const possibleConfigFiles = [
@@ -29,7 +29,7 @@ export async function hasCommitlintConfig(): Promise<boolean> {
     'commitlint.config.js',
     'commitlint.config.cjs',
     '.commitlintrc.cjs',
-    'package.json'
+    'package.json',
   ]
 
   // Check for dedicated commitlint config files
@@ -37,7 +37,8 @@ export async function hasCommitlintConfig(): Promise<boolean> {
     if (existsSync(join(projectRoot, file))) {
       // For package.json, check if it contains commitlint config
       if (file === 'package.json') {
-        const pkg = require(join(projectRoot, file))
+        const pkgContent = readFileSync(join(projectRoot, file), 'utf8')
+        const pkg = JSON.parse(pkgContent)
         if (pkg.commitlint) return true
       } else {
         return true
@@ -59,7 +60,7 @@ export async function loadCommitlintConfig(): Promise<QualifiedConfig> {
   } catch (error) {
     // If no config found or error loading, use conventional config
     return load({
-      extends: ['@commitlint/config-conventional']
+      extends: ['@commitlint/config-conventional'],
     })
   }
 }
@@ -77,14 +78,14 @@ export async function validateCommitMessage(
 
     return {
       valid: result.valid,
-      errors: result.errors.map(error => error.message),
-      warnings: result.warnings.map(warning => warning.message)
+      errors: result.errors.map((error) => error.message),
+      warnings: result.warnings.map((warning) => warning.message),
     }
   } catch (error) {
     return {
       valid: false,
       errors: [(error as Error).message],
-      warnings: []
+      warnings: [],
     }
   }
 }

@@ -44,6 +44,11 @@ export const schema = {
           "description": "The output destination for the generated result.\n- 'stdout': Prints the result to the standard output.  This is the default behavior.\n- 'interactive': Provides an interactive prompt for editing the result & committing the changes.",
           "default": "stdout"
         },
+        "conventionalCommits": {
+          "type": "boolean",
+          "description": "Whether to generate commit messages in Conventional Commits format. When enabled, commit messages will follow the Conventional Commits specification.",
+          "default": false
+        },
         "openInEditor": {
           "type": "boolean",
           "description": "Open the commit message in an editor for editing before proceeding.",

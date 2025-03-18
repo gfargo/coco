@@ -76,7 +76,7 @@ export async function handleValidationErrors(
   switch (choice) {
     case '1': {
       // Edit message manually
-      const editedMessage = await editResult(message, options.openInEditor)
+      const editedMessage = await editResult(message, options)
       return { message: editedMessage, action: 'edit' }
     }
     case '2':
