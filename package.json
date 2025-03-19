@@ -107,5 +107,8 @@
     "simple-git": "3.27.0",
     "tiktoken": "^1.0.17",
     "yargs": "17.7.2"
+  }, 
+  "resolutions": {
+    "cross-spawn": "7.0.6"
   }
 }
