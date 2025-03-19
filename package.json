@@ -1,6 +1,6 @@
 {
   "name": "git-coco",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "zero-effort git commits with coco.",
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
@@ -107,7 +107,7 @@
     "simple-git": "3.27.0",
     "tiktoken": "^1.0.17",
     "yargs": "17.7.2"
-  }, 
+  },
   "resolutions": {
     "cross-spawn": "7.0.6"
   }
