@@ -10,6 +10,7 @@ export interface CommitOptions extends BaseCommandOptions {
   ignoredExtensions: string[]
   withPreviousCommits: number
   conventional: boolean
+  includeBranchName: boolean
 }
 
 export type CommitArgv = Arguments<CommitOptions>
@@ -80,6 +81,11 @@ export const options = {
     type: 'boolean',
     default: false,
     alias: 'c',
+  },
+  includeBranchName: {
+    description: 'Include the current branch name in the commit prompt for context',
+    type: 'boolean',
+    default: true,
   },
 } as Record<string, Options>
 

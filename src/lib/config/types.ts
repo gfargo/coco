@@ -14,7 +14,7 @@ type BaseConfig = {
   /**
    * Whether to generate commit messages in Conventional Commits format.
    * When enabled, commit messages will follow the Conventional Commits specification.
-   * 
+   *
    * @see https://www.conventionalcommits.org/
    * @default false
    */
@@ -68,6 +68,14 @@ type BaseConfig = {
    * @default 'main'
    */
   defaultBranch: string
+
+  /**
+   * Whether to include the current branch name in the commit prompt for context.
+   * When enabled, the current git branch name will be included in the prompt.
+   *
+   * @default true
+   */
+  includeBranchName?: boolean
 }
 
 export type ConfigWithServiceObject = BaseConfig &
