@@ -138,24 +138,38 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         }
       }
 
+      // Get current branch name - we need this for ticket extraction regardless of prompt inclusion
+      const branchName = await getCurrentBranchName({ git })
+      
+      // Check if branch name should be included in the prompt context
+      const includeBranchName = argv.includeBranchName !== undefined 
+        ? argv.includeBranchName 
+        : config.includeBranchName !== false; // Default to true if not explicitly set to false
+      
+      // Create branch name context string based on the configuration
+      const branchNameContext = includeBranchName ? `Current git branch name: ${branchName}` : ''
+      
+      // Get variables for the prompt
+      const variables: Record<string, string> = {
+        summary: context,
+        format_instructions: formatInstructions,
+        additional_context: additional_context,
+        commit_history: commit_history,
+        branch_name_context: branchNameContext,
+      }
+
       console.log('context', context)
       console.log('prompt', prompt)
 
       const commitMsg = await executeChain({
         llm,
         prompt,
-        variables: {
-          summary: context,
-          format_instructions: formatInstructions,
-          additional_context: additional_context,
-          commit_history: commit_history,
-        },
+        variables,
         parser,
       })
 
       // Construct the full commit message
       const appendedText = argv.append ? `\n\n${argv.append}` : ''
-      const branchName = await getCurrentBranchName({ git })
       const ticketId = extractTicketIdFromBranchName(branchName)
       const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
       const fullMessage = `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
