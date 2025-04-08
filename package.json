@@ -66,7 +66,7 @@
     "jest-mock": "^29.5.0",
     "release-it": "^18.1.2",
     "rimraf": "^6.0.1",
-    "rollup": "^3.26.1",
+    "rollup": "^4.39.0",
     "rollup-plugin-banner2": "^1.2.2",
     "rollup-plugin-bin": "^1.0.0",
     "rollup-plugin-dts": "^6.1.0",
