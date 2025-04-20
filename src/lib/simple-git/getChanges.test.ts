@@ -109,4 +109,28 @@ describe('getChanges', () => {
       untracked: [],
     })
   })
+  
+  it('should filter files by wildcard ignoredFiles pattern', async () => {
+    // Ignore all .txt files via wildcard
+    const result = await getChanges({ git, options: {
+      ignoredFiles: ['**/*.txt'],
+      ignoredExtensions: [],
+    } })
+    // Only .js files should remain
+    expect(result.staged.map(f => f.filePath)).toEqual(['dir/file5.js'])
+    expect(result.unstaged.map(f => f.filePath)).toEqual(['file2.js'])
+    expect(result.untracked).toEqual([])
+  })
+
+  it('should ignore nested directories via pattern', async () => {
+    // Ignore entire 'dir' folder
+    const result = await getChanges({ git, options: {
+      ignoredFiles: ['dir/**'],
+      ignoredExtensions: [],
+    } })
+    // Only top-level files remain
+    expect(result.staged.map(f => f.filePath)).toEqual(['file1.txt'])
+    expect(result.unstaged.map(f => f.filePath)).toEqual(['file1.txt', 'file2.js'])
+    expect(result.untracked.map(f => f.filePath)).toEqual(['file3.txt'])
+  })
 })
