@@ -1,4 +1,4 @@
-import { lint, load } from '@commitlint/core'
+// Avoid static require of ESM-only commitlint; functions are imported dynamically at runtime
 import type { LintOptions, QualifiedConfig } from '@commitlint/types'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -53,11 +53,14 @@ export async function hasCommitlintConfig(): Promise<boolean> {
  * Load commitlint configuration
  */
 export async function loadCommitlintConfig(): Promise<QualifiedConfig> {
+  // Dynamically import commitlint core
+  const commitlint = await import('@commitlint/core')
+  const { load } = commitlint
   try {
     // Try to load project config
     const config = await load()
     return config
-  } catch (error) {
+  } catch {
     // If no config found or error loading, use conventional config
     return load({
       extends: ['@commitlint/config-conventional'],
@@ -74,6 +77,9 @@ export async function validateCommitMessage(
 ): Promise<ValidationResult> {
   try {
     const config = await loadCommitlintConfig()
+    // Dynamically import commitlint lint function
+    const commitlint = await import('@commitlint/core')
+    const { lint } = commitlint
     const result = await lint(message, config.rules, options)
 
     return {

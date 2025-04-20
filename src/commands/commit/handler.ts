@@ -103,8 +103,6 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         ? ConventionalCommitMessageResponseSchema
         : CommitMessageResponseSchema
 
-      console.log('schema', schema)
-
       const parser = new StructuredOutputParser(schema)
 
       // Use conventional commit prompt if enabled
@@ -157,9 +155,6 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         commit_history: commit_history,
         branch_name_context: branchNameContext,
       }
-
-      console.log('context', context)
-      console.log('prompt', prompt)
 
       const commitMsg = await executeChain({
         llm,
