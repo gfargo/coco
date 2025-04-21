@@ -15,9 +15,12 @@ export type GetChangesInput = {
 }
 
 export type GetChangesResult = {
+  /** Changes that have been staged (added to the index). */
   staged: FileChange[]
-  unstaged?: FileChange[]
-  untracked?: FileChange[]
+  /** Changes in the working directory that are not yet staged. */
+  unstaged: FileChange[]
+  /** Files that are not tracked by Git. */
+  untracked: FileChange[]
 }
 
 /**
