@@ -1265,21 +1265,21 @@
     zod-to-json-schema "^3.22.5"
 
 "@langchain/core@^0.3.40":
-  version "0.3.43"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.43.tgz#e23adfdc4b806c92002f9f56d6590c4a43eb4418"
-  integrity sha512-DwiSUwmZqcuOn7j8SFdeOH1nvaUqG7q8qn3LhobdQYEg5PmjLgd2yLr2KzuT/YWMBfjkOR+Di5K6HEdFmouTxg==
+  version "0.3.61"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.61.tgz#73e0f7971e99bd45985d2ba58229e41b93b6149d"
+  integrity sha512-4O7fw5SXNSE+uBnathLQrhm3t+7dZGagt/5kt37A+pXw0AkudxEBvveg73sSnpBd9SIz3/Vc7F4k8rCKXGbEDA==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
     camelcase "6"
     decamelize "1.2.0"
     js-tiktoken "^1.0.12"
-    langsmith ">=0.2.8 <0.4.0"
+    langsmith "^0.3.33"
     mustache "^4.2.0"
     p-queue "^6.6.2"
     p-retry "4"
     uuid "^10.0.0"
-    zod "^3.22.4"
+    zod "^3.25.32"
     zod-to-json-schema "^3.22.3"
 
 "@langchain/ollama@^0.2.0":
@@ -4351,10 +4351,10 @@ ky@^1.2.0:
     zod "^3.22.4"
     zod-to-json-schema "^3.22.3"
 
-"langsmith@>=0.2.8 <0.4.0", langsmith@^0.3.16:
-  version "0.3.20"
-  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.3.20.tgz#9a6951871cc35fbc98b19cadb4dda92e0d6e6836"
-  integrity sha512-zwVQos6tjcksCTfdM67QKq7yyED4GmQiZw/sJ6UCMYZxlvTMMg3PeQ9tOePXAWNWoJygOnH+EwGXr7gYOOETDg==
+"langsmith@>=0.2.8 <0.4.0", langsmith@^0.3.16, langsmith@^0.3.33:
+  version "0.3.33"
+  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.3.33.tgz#f6c56b338cd6a9aa139dbbafcf4b037320eb3041"
+  integrity sha512-imNIaBL6+ElE5eMzNHYwFxo6W/6rHlqcaUjCYoIeGdCYWlARxE3CTGKul5DJnaUgGP2CTLFeNXyvRx5HWC/4KQ==
   dependencies:
     "@types/uuid" "^10.0.0"
     chalk "^4.1.2"
@@ -6268,7 +6268,7 @@ zod-to-json-schema@^3.22.3, zod-to-json-schema@^3.22.4, zod-to-json-schema@^3.22
   resolved "https://registry.npmjs.org/zod-to-json-schema/-/zod-to-json-schema-3.24.3.tgz"
   integrity sha512-HIAfWdYIt1sssHfYZFCXp4rU1w2r8hVVXYIlmoa0r0gABLs5di3RCqPU5DDROogVz1pAdYBaz7HK5n9pSUNs3A==
 
-zod@^3.22.3, zod@^3.22.4, zod@^3.24.1:
-  version "3.24.2"
-  resolved "https://registry.npmjs.org/zod/-/zod-3.24.2.tgz"
-  integrity sha512-lY7CDW43ECgW9u1TcT3IoXHflywfVqDYze4waEz812jR/bZ8FHDsl7pFQoSZTz5N+2NqRXs8GBwnAwo3ZNxqhQ==
+zod@^3.22.3, zod@^3.22.4, zod@^3.24.1, zod@^3.25.32:
+  version "3.25.67"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-3.25.67.tgz#62987e4078e2ab0f63b491ef0c4f33df24236da8"
+  integrity sha512-idA2YXwpCdqUSKRCACDE6ItZD9TZzy3OZMtpfLoh6oPR47lipysRrJfjzMqFxQ3uJuUPyUeWe1r9vLH33xO/Qw==
