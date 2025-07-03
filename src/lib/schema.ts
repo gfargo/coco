@@ -465,6 +465,9 @@ export const schema = {
     "OllamaModel": {
       "type": "string",
       "enum": [
+        "deepseek-r1:1.5b",
+        "deepseek-r1:8b",
+        "deepseek-r1:32b",
         "codegemma:2b",
         "codegemma:7b-code",
         "codegemma",
@@ -499,6 +502,7 @@ export const schema = {
         "llama3.2:1b-instruct-fp16",
         "llama3.2:1b-instruct-q3_K_M",
         "llama3",
+        "llava-llama3:latest",
         "mistral:7b",
         "mistral:latest",
         "mistral:text",
@@ -514,12 +518,18 @@ export const schema = {
         "qwen2:1.5b",
         "qwen2:72b-text",
         "qwen2:72b",
-        "qwen2"
+        "qwen2",
+        "qwen2.5-coder:32b"
       ]
     },
     "AnthropicModel": {
       "type": "string",
       "enum": [
+        "claude-sonnet-4-0",
+        "claude-3-7-sonnet-latest",
+        "claude-3-5-haiku-latest",
+        "claude-3-5-sonnet-latest",
+        "claude-3-5-sonnet-20241022",
         "claude-3-5-sonnet-20240620",
         "claude-3-opus-20240229",
         "claude-3-sonnet-20240229",
