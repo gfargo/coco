@@ -99,7 +99,7 @@
     "chalk": "4.1.2",
     "diff": "7.0.0",
     "ini": "5.0.0",
-    "minimatch": "^9.0.5",
+    "minimatch": "^10.0.2",
     "ora": "5.4.1",
     "p-queue": "5.0.0",
     "performance-now": "2.1.0",
