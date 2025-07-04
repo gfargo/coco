@@ -39,3 +39,6 @@ npm-debug.log*
 coverage/
 
 /src/lib/buildInfo.ts
+
+.claude
+CLAUDE.md
