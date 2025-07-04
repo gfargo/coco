@@ -169,17 +169,19 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
           : 3
 
       const commitMsg = await executeChainWithSchema(schema, llm, prompt, variables, {
-        maxAttempts,
+        retryOptions: {
+          maxAttempts,
+          onRetry: (attempt: number, error: Error) => {
+            logger.verbose(
+              `Failed to parse commit message (attempt ${attempt}/${maxAttempts}): ${error.message}`,
+              { color: 'yellow' }
+            )
+          }
+        },
         fallbackParser: (text: string) => ({
           title: text.split('\n')[0] || 'Auto-generated commit',
           body: text.split('\n').slice(1).join('\n') || 'Generated commit message',
         }),
-        onRetry: (attempt: number, error: Error) => {
-          logger.verbose(
-            `Failed to parse commit message (attempt ${attempt}/${maxAttempts}): ${error.message}`,
-            { color: 'yellow' }
-          )
-        },
         onFallback: () => {
           logger.verbose('Max retry attempts reached. Falling back to simple text output.', {
             color: 'red',

@@ -1,7 +1,7 @@
 import { PromptTemplate } from '@langchain/core/prompts'
-import { LangChainValidationError, LangChainExecutionError } from '../errors'
-import { validateRequired, validateNonEmptyString, validateNonEmptyArray } from '../validation'
 import { handleLangChainError } from '../errorHandler'
+import { LangChainExecutionError, LangChainValidationError } from '../errors'
+import { validateNonEmptyArray, validateNonEmptyString, validateRequired } from '../validation'
 
 export type CreatePromptInput = {
   template?: string
@@ -56,7 +56,7 @@ export function getPrompt({ template, variables, fallback }: CreatePromptInput):
     if (!(fallback instanceof PromptTemplate)) {
       throw new LangChainValidationError(
         'getPrompt: Fallback must be a PromptTemplate instance',
-        { fallbackType: typeof fallback, fallbackConstructor: fallback.constructor.name }
+        { fallbackType: typeof fallback, fallbackConstructor: (fallback as object).constructor?.name }
       )
     }
     

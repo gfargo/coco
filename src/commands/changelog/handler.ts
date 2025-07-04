@@ -79,9 +79,11 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     logger.verbose(`No range, branch, or tag option provided. Defaulting to current branch`, {
       color: 'yellow',
     })
+    const commits = await getCommitLogCurrentBranch({ git, logger })
+
     return {
       branch: branchName,
-      commits: await getCommitLogCurrentBranch({ git, logger }),
+      commits,
     }
   }
 

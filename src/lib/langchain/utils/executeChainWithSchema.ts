@@ -4,12 +4,14 @@ import { z } from 'zod'
 import { executeChain } from './executeChain'
 import { getLlm } from './getLlm'
 import { createSchemaParser, SchemaParserOptions } from './createSchemaParser'
-import { LangChainTimeoutError } from '../errors'
+import { withRetry, type RetryOptions } from '../../utils/retry'
 
 export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
-  maxAttempts?: number
+  /** Options for retry behavior - uses general retry utility */
+  retryOptions?: RetryOptions
+  /** Fallback parser to use if schema parsing fails completely */
   fallbackParser?: (text: string) => T
-  onRetry?: (attempt: number, error: Error) => void
+  /** Called when fallback parser is used */
   onFallback?: () => void
 }
 
@@ -31,61 +33,49 @@ export async function executeChainWithSchema<T>(
   options: ExecuteChainWithSchemaOptions<T> = {}
 ): Promise<T> {
   const {
-    maxAttempts = 3,
+    retryOptions = { maxAttempts: 3 },
     fallbackParser,
-    onRetry,
     onFallback,
     ...parserOptions
   } = options
 
   const parser = createSchemaParser(schema, llm, parserOptions)
   
-  let attempts = 0
+  // Define the operation to retry
+  const operation = async (): Promise<T> => {
+    const result = await executeChain({
+      llm,
+      prompt,
+      variables,
+      parser,
+    })
+    
+    return result as T
+  }
   
-  while (attempts < maxAttempts) {
-    try {
-      const result = await executeChain({
+  try {
+    // Use the general retry utility
+    return await withRetry(operation, retryOptions)
+  } catch (error) {
+    // If all retries failed and we have a fallback parser, use it
+    if (fallbackParser) {
+      if (onFallback) {
+        onFallback()
+      }
+      
+      // Generate without structured parsing as fallback
+      const fallbackResult = await executeChain({
         llm,
         prompt,
         variables,
-        parser,
+        parser: new StringOutputParser(),
       })
       
-      return result as T
-    } catch (error) {
-      attempts++
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      
-      if (onRetry) {
-        onRetry(attempts, error instanceof Error ? error : new Error(errorMessage))
-      }
-      
-      if (attempts >= maxAttempts) {
-        if (fallbackParser) {
-          if (onFallback) {
-            onFallback()
-          }
-          
-          // Generate without structured parsing as fallback
-          const fallbackResult = await executeChain({
-            llm,
-            prompt,
-            variables,
-            parser: new StringOutputParser(),
-          })
-          
-          const fallbackText = typeof fallbackResult === 'string' ? fallbackResult : String(fallbackResult)
-          return fallbackParser(fallbackText)
-        } else {
-          throw new Error(`Schema parsing failed after ${maxAttempts} attempts. Last error: ${errorMessage}`)
-        }
-      }
+      const fallbackText = typeof fallbackResult === 'string' ? fallbackResult : String(fallbackResult)
+      return fallbackParser(fallbackText)
     }
+    
+    // No fallback available, re-throw the error
+    throw error
   }
-  
-  // This line should never be reached due to the loop logic above
-  throw new LangChainTimeoutError(
-    `Unexpected execution flow: exceeded ${maxAttempts} attempts without resolution`,
-    { maxAttempts }
-  )
 }

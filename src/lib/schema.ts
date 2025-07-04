@@ -375,6 +375,11 @@ export const schema = {
             }
           },
           "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
         }
       },
       "required": [
@@ -499,10 +504,11 @@ export const schema = {
         "llama3.2:latest",
         "llama3.2:1b",
         "llama3.2:3b",
-        "llama3.2:1b-instruct-fp16",
-        "llama3.2:1b-instruct-q3_K_M",
         "llama3",
         "llava-llama3:latest",
+        "dolphin-llama3:latest",
+        "dolphin-llama3:8b",
+        "dolphin-llama3:70b",
         "mistral:7b",
         "mistral:latest",
         "mistral:text",
@@ -519,6 +525,12 @@ export const schema = {
         "qwen2:72b-text",
         "qwen2:72b",
         "qwen2",
+        "qwen2.5-coder:latest",
+        "qwen2.5-coder:0.5b",
+        "qwen2.5-coder:1.5b",
+        "qwen2.5-coder:3b",
+        "qwen2.5-coder:7b",
+        "qwen2.5-coder:14b",
         "qwen2.5-coder:32b"
       ]
     },
@@ -533,9 +545,7 @@ export const schema = {
         "claude-3-5-sonnet-20240620",
         "claude-3-opus-20240229",
         "claude-3-sonnet-20240229",
-        "claude-3-haiku-20240307",
-        "claude-2.1",
-        "claude-2.0"
+        "claude-3-haiku-20240307"
       ]
     },
     "Callbacks": {
@@ -980,6 +990,11 @@ export const schema = {
             }
           },
           "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
         }
       },
       "required": [
@@ -1126,6 +1141,11 @@ export const schema = {
             }
           },
           "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
         }
       },
       "required": [
