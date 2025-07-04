@@ -14,8 +14,6 @@ export type AnthropicModel =
   | 'claude-3-opus-20240229'
   | 'claude-3-sonnet-20240229'
   | 'claude-3-haiku-20240307'
-  | 'claude-2.1'
-  | 'claude-2.0'
 
 export type OllamaModel =
   | 'deepseek-r1:1.5b'
@@ -52,10 +50,12 @@ export type OllamaModel =
   | 'llama3.2:latest'
   | 'llama3.2:1b'
   | 'llama3.2:3b'
-  | 'llama3.2:1b-instruct-fp16'
-  | 'llama3.2:1b-instruct-q3_K_M'
   | 'llama3'
   | 'llava-llama3:latest'
+  | 'dolphin-llama3:latest'
+  | 'dolphin-llama3:8b'
+  | 'dolphin-llama3:70b'
+  // UNTESTED
   | 'mistral:7b'
   | 'mistral:latest'
   | 'mistral:text'
@@ -72,6 +72,12 @@ export type OllamaModel =
   | 'qwen2:72b-text'
   | 'qwen2:72b'
   | 'qwen2'
+  | 'qwen2.5-coder:latest'
+  | 'qwen2.5-coder:0.5b'
+  | 'qwen2.5-coder:1.5b'
+  | 'qwen2.5-coder:3b'
+  | 'qwen2.5-coder:7b'
+  | 'qwen2.5-coder:14b'
   | 'qwen2.5-coder:32b'
 
 export type LLMModel = TiktokenModel | OllamaModel | AnthropicModel

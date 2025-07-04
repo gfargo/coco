@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { executeChain } from './executeChain'
 import { getLlm } from './getLlm'
 import { createSchemaParser, SchemaParserOptions } from './createSchemaParser'
+import { LangChainTimeoutError } from '../errors'
 
 export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
   maxAttempts?: number
@@ -82,5 +83,9 @@ export async function executeChainWithSchema<T>(
     }
   }
   
-  throw new Error('Unexpected execution flow in executeChainWithSchema')
+  // This line should never be reached due to the loop logic above
+  throw new LangChainTimeoutError(
+    `Unexpected execution flow: exceeded ${maxAttempts} attempts without resolution`,
+    { maxAttempts }
+  )
 }
