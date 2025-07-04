@@ -88,6 +88,7 @@ export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   maxConcurrent: 1,
   tokenLimit: 2024,
   temperature: 0.4,
+  maxParsingAttempts: 3,
   authentication: {
     type: 'None',
     credentials: undefined,

@@ -139,6 +139,12 @@ export type OllamaLLMService = BaseLLMService & {
   model: OllamaModel
   endpoint: string
   fields?: OllamaFields
+  /**
+   * The maximum number of attempts for schema parsing with retry logic.
+   *
+   * @default 3
+   */
+  maxParsingAttempts?: number
 }
 
 export type AnthropicLLMService = BaseLLMService & {
