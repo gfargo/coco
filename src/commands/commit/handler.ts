@@ -1,8 +1,7 @@
-import { StructuredOutputParser } from '@langchain/core/output_parsers'
 import { type TiktokenModel } from '@langchain/openai'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
-import { executeChain } from '../../lib/langchain/utils/executeChain'
+import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default'
@@ -103,7 +102,8 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         ? ConventionalCommitMessageResponseSchema
         : CommitMessageResponseSchema
 
-      const parser = new StructuredOutputParser(schema)
+      const formatInstructions = `You must always return valid JSON fenced by a markdown code block. Do not return any additional text. The JSON object you return should match the following schema:
+{{ body: string, title: string }}`
 
       // Use conventional commit prompt if enabled
       const promptTemplate = useConventional ? CONVENTIONAL_COMMIT_PROMPT : COMMIT_PROMPT
@@ -114,8 +114,14 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         fallback: promptTemplate,
       })
 
-      const formatInstructions =
-        "Respond with a valid JSON object, containing two fields: 'title' and 'body', both strings."
+      if (config.service.provider === 'ollama') {
+        logger.log(
+          'Note: Ollama models may not strictly adhere to the output format instructions.',
+          {
+            color: 'yellow',
+          }
+        )
+      }
 
       // Get additional context if provided
       let additional_context = ''
@@ -138,15 +144,16 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
 
       // Get current branch name - we need this for ticket extraction regardless of prompt inclusion
       const branchName = await getCurrentBranchName({ git })
-      
+
       // Check if branch name should be included in the prompt context
-      const includeBranchName = argv.includeBranchName !== undefined 
-        ? argv.includeBranchName 
-        : config.includeBranchName !== false; // Default to true if not explicitly set to false
-      
+      const includeBranchName =
+        argv.includeBranchName !== undefined
+          ? argv.includeBranchName
+          : config.includeBranchName !== false // Default to true if not explicitly set to false
+
       // Create branch name context string based on the configuration
       const branchNameContext = includeBranchName ? `Current git branch name: ${branchName}` : ''
-      
+
       // Get variables for the prompt
       const variables: Record<string, string> = {
         summary: context,
@@ -156,11 +163,28 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         branch_name_context: branchNameContext,
       }
 
-      const commitMsg = await executeChain({
-        llm,
-        prompt,
-        variables,
-        parser,
+      const maxAttempts =
+        config.service.provider === 'ollama' && 'maxParsingAttempts' in config.service
+          ? config.service.maxParsingAttempts || 3
+          : 3
+
+      const commitMsg = await executeChainWithSchema(schema, llm, prompt, variables, {
+        maxAttempts,
+        fallbackParser: (text: string) => ({
+          title: text.split('\n')[0] || 'Auto-generated commit',
+          body: text.split('\n').slice(1).join('\n') || 'Generated commit message',
+        }),
+        onRetry: (attempt: number, error: Error) => {
+          logger.verbose(
+            `Failed to parse commit message (attempt ${attempt}/${maxAttempts}): ${error.message}`,
+            { color: 'yellow' }
+          )
+        },
+        onFallback: () => {
+          logger.verbose('Max retry attempts reached. Falling back to simple text output.', {
+            color: 'red',
+          })
+        },
       })
 
       // Construct the full commit message

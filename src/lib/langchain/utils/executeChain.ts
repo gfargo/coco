@@ -1,13 +1,14 @@
 import { BaseOutputParser } from '@langchain/core/output_parsers'
 
 import { PromptTemplate } from '@langchain/core/prompts'
+import { RunnableRetry } from '@langchain/core/runnables'
 import { getLlm } from './getLlm'
 
 type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
   prompt: PromptTemplate
   llm: ReturnType<typeof getLlm>
-  parser: BaseOutputParser<T>
+  parser: BaseOutputParser<T> | RunnableRetry
 }
 
 export const executeChain = async <T>({ llm, prompt, variables, parser }: ExecuteChainInput<T>) => {
