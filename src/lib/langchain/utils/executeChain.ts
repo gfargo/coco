@@ -1,8 +1,10 @@
 import { BaseOutputParser } from '@langchain/core/output_parsers'
-
 import { PromptTemplate } from '@langchain/core/prompts'
 import { RunnableRetry } from '@langchain/core/runnables'
 import { getLlm } from './getLlm'
+import { LangChainExecutionError } from '../errors'
+import { validateRequired } from '../validation'
+import { handleLangChainError } from '../errorHandler'
 
 type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
@@ -11,26 +13,52 @@ type ExecuteChainInput<T> = {
   parser: BaseOutputParser<T> | RunnableRetry
 }
 
-export const executeChain = async <T>({ llm, prompt, variables, parser }: ExecuteChainInput<T>) => {
-  if (!llm || !prompt || !variables) {
-    throw new Error('The input parameters "llm", "prompt", and "variables" are all required.')
+/**
+ * Executes a LangChain pipeline with the provided LLM, prompt, variables, and parser.
+ * @param params - The execution parameters
+ * @returns The parsed result from the LLM chain
+ * @throws LangChainExecutionError if the chain execution fails or returns empty results
+ */
+export const executeChain = async <T>({ llm, prompt, variables, parser }: ExecuteChainInput<T>): Promise<T> => {
+  // Validate all required parameters
+  validateRequired(llm, 'llm', 'executeChain')
+  validateRequired(prompt, 'prompt', 'executeChain')
+  validateRequired(variables, 'variables', 'executeChain')
+  validateRequired(parser, 'parser', 'executeChain')
+
+  // Validate that variables is an object
+  if (typeof variables !== 'object' || Array.isArray(variables)) {
+    throw new LangChainExecutionError(
+      'executeChain: Variables must be a non-array object',
+      { variables, type: typeof variables, isArray: Array.isArray(variables) }
+    )
   }
-
-  const chain = prompt.pipe(llm).pipe(parser)
-
-  let res
 
   try {
-    res = await chain.invoke(variables)
-  } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(`LLMChain call error: ${error.message}`)
+    const chain = prompt.pipe(llm).pipe(parser)
+    const result = await chain.invoke(variables)
+    
+    console.debug('LLMChain call result:', result)
+
+    if (result === null || result === undefined) {
+      throw new LangChainExecutionError(
+        'executeChain: Chain execution returned null or undefined result',
+        { variables, promptInputVariables: prompt.inputVariables }
+      )
     }
-  }
 
-  if (!res) {
-    throw new Error('Empty response from LLMChain call')
+    return result
+  } catch (error) {
+    // Re-throw LangChain errors as-is
+    if (error instanceof LangChainExecutionError) {
+      throw error
+    }
+    
+    // Wrap other errors with context
+    handleLangChainError(error, 'executeChain: Chain execution failed', {
+      promptInputVariables: prompt.inputVariables,
+      variableKeys: Object.keys(variables),
+      parserType: parser.constructor.name
+    })
   }
-
-  return res
 }
