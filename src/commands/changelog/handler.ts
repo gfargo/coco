@@ -40,7 +40,9 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const INTERACTIVE = isInteractive(config)
 
   if (INTERACTIVE) {
-    logger.log(LOGO)
+    if (!config.hideCocoBanner) {
+      logger.log(LOGO)
+    }
   }
 
   async function factory() {

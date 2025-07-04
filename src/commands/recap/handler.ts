@@ -39,7 +39,9 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
   const INTERACTIVE = argv.interactive || isInteractive(config)
   if (INTERACTIVE) {
-    logger.log(LOGO)
+    if (!config.hideCocoBanner) {
+      logger.log(LOGO)
+    }
   } else {
     logger.setConfig({ silent: true })
   }
