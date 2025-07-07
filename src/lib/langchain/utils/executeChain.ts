@@ -20,7 +20,6 @@ type ExecuteChainInput<T> = {
  * @throws LangChainExecutionError if the chain execution fails or returns empty results
  */
 export const executeChain = async <T>({ llm, prompt, variables, parser }: ExecuteChainInput<T>): Promise<T> => {
-  // Validate all required parameters
   validateRequired(llm, 'llm', 'executeChain')
   validateRequired(prompt, 'prompt', 'executeChain')
   validateRequired(variables, 'variables', 'executeChain')
