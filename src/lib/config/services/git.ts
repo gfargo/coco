@@ -25,21 +25,21 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
     let service: LLMService | undefined = config.service
     if (gitConfigParsed.coco) {
       service = {
-        provider: gitConfigParsed.coco?.['service.provider'],
-        model: gitConfigParsed.coco?.['service.model'],
+        provider: gitConfigParsed.coco?.serviceProvider,
+        model: gitConfigParsed.coco?.serviceModel,
         authentication: {
           type: 'APIKey',
           credentials: {
-            apiKey: gitConfigParsed.coco?.['service.apiKey'],
+            apiKey: gitConfigParsed.coco?.serviceApiKey,
           },
         },
         requestOptions: {
-          timeout: Number(gitConfigParsed.coco?.['service.requestOptions.timeout']),
-          maxRetries: Number(gitConfigParsed.coco?.['service.requestOptions.maxRetries']),
+          timeout: Number(gitConfigParsed.coco?.serviceRequestOptionsTimeout),
+          maxRetries: Number(gitConfigParsed.coco?.serviceRequestOptionsMaxRetries),
         },
-        endpoint: gitConfigParsed.coco?.['service.endpoint'],
-        fields: gitConfigParsed.coco?.['service.fields']
-          ? JSON.parse(gitConfigParsed.coco?.['service.fields'])
+        endpoint: gitConfigParsed.coco?.serviceEndpoint,
+        fields: gitConfigParsed.coco?.serviceFields
+          ? JSON.parse(gitConfigParsed.coco?.serviceFields)
           : undefined,
       } as LLMService
     }
@@ -72,25 +72,25 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
       const value = config[key as keyof Config]
       if (key === 'service') {
         const service = value as LLMService
-        contentLines.push(`\tservice.provider = ${service.provider}`)
-        contentLines.push(`\tservice.model = ${service.model}`)
+        contentLines.push(`	serviceProvider = ${service.provider}`)
+        contentLines.push(`	serviceModel = ${service.model}`)
         if (service.authentication.type === 'APIKey') {
-          contentLines.push(`\tservice.apiKey = ${service.authentication.credentials.apiKey}`)
+          contentLines.push(`	serviceApiKey = ${service.authentication.credentials.apiKey}`)
         }
         if (service.requestOptions?.timeout) {
-          contentLines.push(`\tservice.requestOptions.timeout = ${service.requestOptions.timeout}`)
+          contentLines.push(`	serviceRequestOptionsTimeout = ${service.requestOptions.timeout}`)
         }
         if (service.requestOptions?.maxRetries) {
-          contentLines.push(`\tservice.requestOptions.maxRetries = ${service.requestOptions.maxRetries}`)
+          contentLines.push(`	serviceRequestOptionsMaxRetries = ${service.requestOptions.maxRetries}`)
         }
         if (service.provider === 'ollama') {
           const ollamaService = service as OllamaLLMService;
           if (ollamaService.endpoint) {
-            contentLines.push(`	service.endpoint = ${ollamaService.endpoint}`);
+            contentLines.push(`	serviceEndpoint = ${ollamaService.endpoint}`);
           }
         }
         if (service.fields) {
-          contentLines.push(`\tservice.fields = ${JSON.stringify(service.fields)}`)
+          contentLines.push(`	serviceFields = ${JSON.stringify(service.fields)}`)
         }
       } else if (typeof value === 'string' && value.includes('\n')) {
         // Wrap strings with new lines in quotes
