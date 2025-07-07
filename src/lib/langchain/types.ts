@@ -91,6 +91,9 @@ export type OllamaModel =
 export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel
 
 export type BaseLLMService = {
+  /**
+   * @additionalProperties true
+   */
   provider: LLMProvider
   model: LLMModel
   /**

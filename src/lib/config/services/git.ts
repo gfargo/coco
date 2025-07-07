@@ -46,8 +46,17 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
 
     config = {
       ...config,
-      ...gitConfigParsed.coco,
       service: service,
+      prompt: gitConfigParsed.coco?.prompt || config.prompt,
+      mode: gitConfigParsed.coco?.mode || config.mode,
+      summarizePrompt: gitConfigParsed.coco?.summarizePrompt || config.summarizePrompt,
+      ignoredFiles: gitConfigParsed.coco?.ignoredFiles || config.ignoredFiles,
+      ignoredExtensions: gitConfigParsed.coco?.ignoredExtensions || config.ignoredExtensions,
+      defaultBranch: gitConfigParsed.coco?.defaultBranch || config.defaultBranch,
+      verbose: gitConfigParsed.coco?.verbose || config.verbose,
+      conventionalCommits: gitConfigParsed.coco?.conventionalCommits || config.conventionalCommits,
+      openInEditor: gitConfigParsed.coco?.openInEditor || config.openInEditor,
+      includeBranchName: gitConfigParsed.coco?.includeBranchName || config.includeBranchName,
     }
   }
   return removeUndefined(config) as ConfigType
