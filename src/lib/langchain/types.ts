@@ -4,6 +4,14 @@ import { type OpenAIInput, type TiktokenModel } from '@langchain/openai'
 
 export type LLMProvider = 'openai' | 'ollama' | 'anthropic'
 
+export type OpenAIModel =
+  | TiktokenModel
+  | 'gpt-4o-mini'
+  | 'gpt-4o'
+  | 'gpt-4.1'
+  | 'gpt-4.1-mini' 
+  | 'gpt-4.1-nano'
+
 export type AnthropicModel =
   | 'claude-sonnet-4-0'
   | 'claude-3-7-sonnet-latest'
@@ -80,7 +88,7 @@ export type OllamaModel =
   | 'qwen2.5-coder:14b'
   | 'qwen2.5-coder:32b'
 
-export type LLMModel = TiktokenModel | OllamaModel | AnthropicModel
+export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel
 
 export type BaseLLMService = {
   provider: LLMProvider
@@ -142,7 +150,7 @@ type OllamaFields = Partial<OllamaInput> & BaseLLMParams
 
 export type OpenAILLMService = BaseLLMService & {
   provider: 'openai'
-  model: TiktokenModel
+  model: OpenAIModel
   fields?: OpenAIFields
 }
 
