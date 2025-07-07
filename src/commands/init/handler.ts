@@ -8,6 +8,7 @@ import { logResult } from '../../lib/ui/logResult'
 
 import { ConfigWithServiceObject } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
+import { OllamaLLMService } from '../../lib/langchain/types'
 import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
 import { CommandHandler } from '../../lib/types'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
@@ -43,7 +44,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         config.service.authentication.credentials.apiKey = '•••••••••••••••'
       }
     }
-    
+
     if (llmProvider === 'anthropic') {
       apiKey = await questions.inputApiKey('Anthropic', 'ANTHROPIC_API_KEY')
 
@@ -81,7 +82,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       config.verbose = await questions.enableVerboseMode()
 
       if (llmProvider === 'ollama') {
-        config.service.endpoint = await questions.inputOllamaEndpoint()
+        ;(config.service as OllamaLLMService).endpoint = await questions.inputOllamaEndpoint()
       }
 
       config.service.requestOptions = {
@@ -99,7 +100,11 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         try {
           config.service.fields = JSON.parse(fieldsJson)
         } catch (e) {
-          logger.error('Invalid JSON for service fields. Skipping.', e)
+          logger.log('Invalid JSON for service fields. Skipping.', { color: 'red' })
+          
+          logger.verbose(`Error parsing service fields: ${(e as Error).message}`, {
+            color: 'red',
+          })
         }
       }
 
