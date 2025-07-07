@@ -1,6 +1,6 @@
 import { Config } from '../../commands/types'
+import { LangChainAuthenticationError, LangChainConfigurationError } from './errors'
 import { AnthropicLLMService, LLMModel, LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from './types'
-import { LangChainConfigurationError, LangChainAuthenticationError } from './errors'
 import { validateRequired, validateServiceConfig } from './validation'
 
 /**
@@ -103,7 +103,7 @@ export function getDefaultServiceApiKey(config: Config): string {
 
 export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   provider: 'openai',
-  model: 'gpt-4o',
+  model: 'gpt-4o-mini',
   tokenLimit: 2024,
   temperature: 0.32,
   authentication: {
