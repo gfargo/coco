@@ -1,5 +1,6 @@
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { Config } from '../types'
+import { OllamaLLMService } from '../../langchain/types'
 import { loadEnvConfig } from './env'
 
 const defaultConfig: Config = {
@@ -54,5 +55,31 @@ describe('loadEnvConfig', () => {
     const config = loadEnvConfig(defaultConfig)
     expect(config.prompt).toEqual('prompt')
     delete process.env.COCO_PROMPT
+  })
+
+  it('should load environment variables with service fields', () => {
+    process.env.COCO_SERVICE_FIELDS = '{"temperature": 0.5, "maxTokens": 4000}'
+    const config = loadEnvConfig(defaultConfig)
+    expect(config.service.fields).toEqual({ temperature: 0.5, maxTokens: 4000 })
+    delete process.env.COCO_SERVICE_FIELDS
+  })
+
+  it('should load environment variables with request options', () => {
+    process.env.COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT = '10000'
+    process.env.COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES = '5'
+    const config = loadEnvConfig(defaultConfig)
+    expect(config.service.requestOptions?.timeout).toBe(10000)
+    expect(config.service.requestOptions?.maxRetries).toBe(5)
+    delete process.env.COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT
+    delete process.env.COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES
+  })
+
+  it('should load environment variables with ollama endpoint', () => {
+    process.env.COCO_SERVICE_PROVIDER = 'ollama'
+    process.env.COCO_SERVICE_ENDPOINT = 'http://localhost:11434'
+    const config = loadEnvConfig(defaultConfig)
+    expect((config.service as OllamaLLMService).endpoint).toBe('http://localhost:11434')
+    delete process.env.COCO_SERVICE_PROVIDER
+    delete process.env.COCO_SERVICE_ENDPOINT
   })
 })
