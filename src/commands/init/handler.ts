@@ -80,6 +80,29 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
 
       config.verbose = await questions.enableVerboseMode()
 
+      if (llmProvider === 'ollama') {
+        config.service.endpoint = await questions.inputOllamaEndpoint()
+      }
+
+      config.service.requestOptions = {
+        timeout: await questions.inputRequestTimeout(),
+        maxRetries: await questions.inputRequestMaxRetries(),
+      }
+
+      const promptForServiceFields = await confirm({
+        message: 'would you like to configure additional service fields (advanced)?',
+        default: false,
+      })
+
+      if (promptForServiceFields) {
+        const fieldsJson = await questions.inputServiceFields()
+        try {
+          config.service.fields = JSON.parse(fieldsJson)
+        } catch (e) {
+          logger.error('Invalid JSON for service fields. Skipping.', e)
+        }
+      }
+
       const promptForIgnores = await confirm({
         message: 'would you like to configure ignored files and extensions?',
         default: false,

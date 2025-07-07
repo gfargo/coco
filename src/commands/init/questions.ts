@@ -161,6 +161,36 @@ export const questions = {
     return parseFloat(temperature)
   },
 
+  inputOllamaEndpoint: async (): Promise<string> => {
+    return await input({
+      message: 'Ollama endpoint (e.g., http://localhost:11434):',
+      default: 'http://localhost:11434',
+    })
+  },
+
+  inputRequestTimeout: async (): Promise<number> => {
+    const timeout = await input({
+      message: 'Request timeout in milliseconds:',
+      default: '30000',
+    })
+    return parseInt(timeout)
+  },
+
+  inputRequestMaxRetries: async (): Promise<number> => {
+    const maxRetries = await input({
+      message: 'Maximum number of request retries:',
+      default: '3',
+    })
+    return parseInt(maxRetries)
+  },
+
+  inputServiceFields: async (): Promise<string> => {
+    return await editor({
+      message: 'Enter additional service fields as a JSON string (optional):',
+      default: '{}',
+    })
+  },
+
   selectDefaultGitBranch: async (): Promise<string> =>
     (await input({
       message: 'default branch for the repository:',
