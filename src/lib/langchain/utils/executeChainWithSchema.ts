@@ -1,10 +1,10 @@
 import { StringOutputParser } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { z } from 'zod'
+import { withRetry, type RetryOptions } from '../../utils/retry'
+import { createSchemaParser, SchemaParserOptions } from './createSchemaParser'
 import { executeChain } from './executeChain'
 import { getLlm } from './getLlm'
-import { createSchemaParser, SchemaParserOptions } from './createSchemaParser'
-import { withRetry, type RetryOptions } from '../../utils/retry'
 
 export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
   /** Options for retry behavior - uses general retry utility */
@@ -38,10 +38,9 @@ export async function executeChainWithSchema<T>(
     onFallback,
     ...parserOptions
   } = options
-
-  const parser = createSchemaParser(schema, llm, parserOptions)
   
-  // Define the operation to retry
+  const parser = createSchemaParser(schema, llm, parserOptions)
+
   const operation = async (): Promise<T> => {
     const result = await executeChain({
       llm,
@@ -54,16 +53,13 @@ export async function executeChainWithSchema<T>(
   }
   
   try {
-    // Use the general retry utility
     return await withRetry(operation, retryOptions)
   } catch (error) {
-    // If all retries failed and we have a fallback parser, use it
     if (fallbackParser) {
       if (onFallback) {
         onFallback()
       }
       
-      // Generate without structured parsing as fallback
       const fallbackResult = await executeChain({
         llm,
         prompt,

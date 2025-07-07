@@ -2,10 +2,10 @@ import { StructuredOutputParser } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { OutputFixingParser } from 'langchain/output_parsers'
 import { z } from 'zod'
-import { getLlm } from './getLlm'
+import { handleLangChainError } from '../errorHandler'
 import { LangChainExecutionError } from '../errors'
 import { validateRequired } from '../validation'
-import { handleLangChainError } from '../errorHandler'
+import { getLlm } from './getLlm'
 
 export interface SchemaParserOptions {
   maxRetries?: number
@@ -25,7 +25,6 @@ export function createSchemaParser<T>(
   llm: ReturnType<typeof getLlm>,
   options: SchemaParserOptions = {}
 ): OutputFixingParser<T> {
-  // Validate required parameters
   validateRequired(schema, 'schema', 'createSchemaParser')
   validateRequired(llm, 'llm', 'createSchemaParser')
   validateRequired(options, 'options', 'createSchemaParser')
