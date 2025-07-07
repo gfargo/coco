@@ -20,21 +20,21 @@ const defaultConfig: Partial<Config> = {
 
 const MOCK_GIT_CONFIG = `
 [coco]
-  service.provider = openai
-  service.model = gpt-4o
-  service.apiKey = test-api-key
-  service.requestOptions.timeout = 10000
-  service.requestOptions.maxRetries = 5
-  service.fields = {"temperature":0.5,"maxTokens":4000}
+  serviceProvider = openai
+  serviceModel = gpt-4o
+  serviceApiKey = test-api-key
+  serviceRequestOptionsTimeout = 10000
+  serviceRequestOptionsMaxRetries = 5
+  serviceFields = {"temperature":0.5,"maxTokens":4000}
   mode = interactive
   defaultBranch = main
 `
 
 const MOCK_GIT_CONFIG_OLLAMA = `
 [coco]
-  service.provider = ollama
-  service.model = llama3
-  service.endpoint = http://localhost:11434
+  serviceProvider = ollama
+  serviceModel = llama3
+  serviceEndpoint = http://localhost:11434
 `
 
 const MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION = `
