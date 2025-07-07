@@ -3,7 +3,7 @@ import * as ini from 'ini'
 import * as os from 'os'
 import * as path from 'path'
 
-import { LLMService } from '../../langchain/types'
+import { LLMService, OllamaLLMService } from '../../langchain/types'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { removeUndefined } from '../../utils/removeUndefined'
 import { updateFileSection } from '../../utils/updateFileSection'
@@ -21,25 +21,33 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
   if (fs.existsSync(gitConfigPath)) {
     const gitConfigRaw = fs.readFileSync(gitConfigPath, 'utf-8')
     const gitConfigParsed = ini.parse(gitConfigRaw)
-    const gitConfigServiceObject = gitConfigParsed.coco?.service
 
     let service: LLMService | undefined = config.service
-
-    if (gitConfigServiceObject) {
-      const gitServiceConfig = JSON.parse(gitConfigServiceObject)
-      service = gitServiceConfig || config?.service
+    if (gitConfigParsed.coco) {
+      service = {
+        provider: gitConfigParsed.coco?.['service.provider'],
+        model: gitConfigParsed.coco?.['service.model'],
+        authentication: {
+          type: 'APIKey',
+          credentials: {
+            apiKey: gitConfigParsed.coco?.['service.apiKey'],
+          },
+        },
+        requestOptions: {
+          timeout: Number(gitConfigParsed.coco?.['service.requestOptions.timeout']),
+          maxRetries: Number(gitConfigParsed.coco?.['service.requestOptions.maxRetries']),
+        },
+        endpoint: gitConfigParsed.coco?.['service.endpoint'],
+        fields: gitConfigParsed.coco?.['service.fields']
+          ? JSON.parse(gitConfigParsed.coco?.['service.fields'])
+          : undefined,
+      } as LLMService
     }
 
     config = {
       ...config,
+      ...gitConfigParsed.coco,
       service: service,
-      prompt: gitConfigParsed.coco?.prompt || config.prompt,
-      mode: gitConfigParsed.coco?.mode || config.mode,
-      summarizePrompt: gitConfigParsed.coco?.summarizePrompt || config.summarizePrompt,
-      ignoredFiles: gitConfigParsed.coco?.ignoredFiles || config.ignoredFiles,
-      ignoredExtensions: gitConfigParsed.coco?.ignoredExtensions || config.ignoredExtensions,
-      defaultBranch: gitConfigParsed.coco?.defaultBranch || config.defaultBranch,
-      verbose: gitConfigParsed.coco?.verbose || config.verbose,
     }
   }
   return removeUndefined(config) as ConfigType
@@ -62,9 +70,28 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
     const contentLines = [header]
     for (const key in config) {
       const value = config[key as keyof Config]
-      if (typeof value === 'object') {
-        // Serialize object to JSON string
-        contentLines.push(`\t${key} = ${JSON.stringify(value)}`)
+      if (key === 'service') {
+        const service = value as LLMService
+        contentLines.push(`\tservice.provider = ${service.provider}`)
+        contentLines.push(`\tservice.model = ${service.model}`)
+        if (service.authentication.type === 'APIKey') {
+          contentLines.push(`\tservice.apiKey = ${service.authentication.credentials.apiKey}`)
+        }
+        if (service.requestOptions?.timeout) {
+          contentLines.push(`\tservice.requestOptions.timeout = ${service.requestOptions.timeout}`)
+        }
+        if (service.requestOptions?.maxRetries) {
+          contentLines.push(`\tservice.requestOptions.maxRetries = ${service.requestOptions.maxRetries}`)
+        }
+        if (service.provider === 'ollama') {
+          const ollamaService = service as OllamaLLMService;
+          if (ollamaService.endpoint) {
+            contentLines.push(`	service.endpoint = ${ollamaService.endpoint}`);
+          }
+        }
+        if (service.fields) {
+          contentLines.push(`\tservice.fields = ${JSON.stringify(service.fields)}`)
+        }
       } else if (typeof value === 'string' && value.includes('\n')) {
         // Wrap strings with new lines in quotes
         contentLines.push(`\t${key} = ${JSON.stringify(value)}`)

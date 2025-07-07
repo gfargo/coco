@@ -52,6 +52,15 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     logger.setConfig({ silent: true })
   }
 
+  if (config.service.provider === 'ollama') {
+    logger.verbose(
+      '⚠️  Ollama models may not strictly adhere to the output format instructions.',
+      {
+        color: 'yellow',
+      }
+    )
+  }
+
   async function factory() {
     const changes = await getChanges({
       git,
@@ -116,15 +125,6 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         fallback: promptTemplate,
       })
 
-      if (config.service.provider === 'ollama') {
-        logger.log(
-          'Note: Ollama models may not strictly adhere to the output format instructions.',
-          {
-            color: 'yellow',
-          }
-        )
-      }
-
       // Get additional context if provided
       let additional_context = ''
       if (argv.additional) {
@@ -178,7 +178,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
               `Failed to parse commit message (attempt ${attempt}/${maxAttempts}): ${error.message}`,
               { color: 'yellow' }
             )
-          }
+          },
         },
         fallbackParser: (text: string) => ({
           title: text.split('\n')[0] || 'Auto-generated commit',

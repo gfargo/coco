@@ -1,10 +1,10 @@
 import { BaseOutputParser } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { RunnableRetry } from '@langchain/core/runnables'
-import { getLlm } from './getLlm'
+import { handleLangChainError } from '../errorHandler'
 import { LangChainExecutionError } from '../errors'
 import { validateRequired } from '../validation'
-import { handleLangChainError } from '../errorHandler'
+import { getLlm } from './getLlm'
 
 type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
@@ -38,8 +38,6 @@ export const executeChain = async <T>({ llm, prompt, variables, parser }: Execut
     const chain = prompt.pipe(llm).pipe(parser)
     const result = await chain.invoke(variables)
     
-    console.debug('LLMChain call result:', result)
-
     if (result === null || result === undefined) {
       throw new LangChainExecutionError(
         'executeChain: Chain execution returned null or undefined result',
