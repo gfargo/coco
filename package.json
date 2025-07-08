@@ -106,7 +106,7 @@
     "pretty-ms": "7.0.1",
     "simple-git": "3.27.0",
     "tiktoken": "^1.0.21",
-    "yargs": "17.7.2"
+    "yargs": "18.0.0"
   },
   "resolutions": {
     "cross-spawn": "7.0.6"
