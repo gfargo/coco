@@ -62,14 +62,23 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   }
 
   async function factory() {
-    const changes = await getChanges({
-      git,
-      options: {
-        ignoredFiles: config.ignoredFiles || undefined,
-        ignoredExtensions: config.ignoredExtensions || undefined,
-      },
-    })
-    return changes.staged
+    if (config.noDiff) {
+      const status = await git.status()
+      return status.files.map(file => ({
+        filePath: file.path,
+        status: (file.index === 'A' || file.index === '?' ? 'added' : 'modified') as FileChange['status'],
+        summary: file.path, // Simplified summary for noDiff
+      }))
+    } else {
+      const changes = await getChanges({
+        git,
+        options: {
+          ignoredFiles: config.ignoredFiles || undefined,
+          ignoredExtensions: config.ignoredExtensions || undefined,
+        },
+      })
+      return changes.staged
+    }
   }
 
   async function parser(changes: FileChange[]) {
@@ -245,7 +254,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     (INTERACTIVE && 'interactive') || (config.commit && 'interactive') || config?.mode || 'stdout'
 
   handleResult({
-    result: commitMsg,
+    result: commitMsg as string,
     interactiveModeCallback: async (result) => {
       await createCommit(result, git)
       logSuccess()

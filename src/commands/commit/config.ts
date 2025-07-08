@@ -87,6 +87,11 @@ export const options = {
     type: 'boolean',
     default: true,
   },
+  noDiff: {
+    description: 'Only pass basic "git status" result instead of providing entire diff',
+    type: 'boolean',
+    default: false,
+  },
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
