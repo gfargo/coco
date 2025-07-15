@@ -8,6 +8,8 @@ export interface RecapOptions extends BaseCommandOptions {
   'last-week'?: boolean
   'last-month'?: boolean
   'last-tag'?: boolean
+  currentBranch?: boolean
+  timeframe?: 'current' | 'yesterday' | 'last-week' | 'last-month' | 'last-tag' | 'currentBranch'
 }
 
 export type RecapArgv = Arguments<RecapOptions>
@@ -41,6 +43,10 @@ export const options = {
     alias: 'tag',
     type: 'boolean',
     description: 'Recap for last tag',
+  },
+  currentBranch: {
+    type: 'boolean',
+    description: 'Recap for the current branch',
   },
   i: {
     type: 'boolean',

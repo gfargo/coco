@@ -10,6 +10,8 @@ import { getChanges } from '../../lib/simple-git/getChanges'
 import { getChangesByTimestamp } from '../../lib/simple-git/getChangesByTimestamp'
 import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLastTag'
 import { getRepo } from '../../lib/simple-git/getRepo'
+import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
+import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
@@ -56,6 +58,8 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     ? 'yesterday'
     : lastWeek
     ? 'last-week'
+    : config.currentBranch
+    ? 'currentBranch'
     : 'current'
 
   logger.log(`Generating recap for timeframe: ${timeframe}`)
@@ -108,6 +112,26 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
       case 'last-tag':
         const tags = await getChangesSinceLastTag({ git })
         return tags
+      case 'currentBranch':
+        const currentBranch = await getCurrentBranchName({ git })
+        const baseBranch = config.defaultBranch
+        logger.log(`Recapping changes on branch '${currentBranch}' compared to '${baseBranch}'`)
+        const changes = await getDiffForBranch({
+          git,
+          baseBranch,
+          headBranch: currentBranch,
+          options: {
+            ignoredFiles: config.ignoredFiles || undefined,
+            ignoredExtensions: config.ignoredExtensions || undefined,
+          },
+        })
+        const branchChanges = await fileChangeParser({
+          changes: changes.staged,
+          commit: `branch:${currentBranch}`,
+          options: { tokenizer, git, llm, logger },
+        })
+
+        return [branchChanges]
       default:
         logger.log(`Invalid timeframe: ${timeframe}`, { color: 'red' })
         return []
@@ -187,13 +211,15 @@ ${errorMessage}
     },
     noResult: async () => {
       await noResult({ git, logger })
-      process.exit(0)
+      if (process.env.NODE_ENV !== 'test') {
+        process.exit(0)
+      }
     },
   })
 
   // Handle the result based on the mode (interactive or stdout)
   const MODE =
-    (INTERACTIVE && 'interactive') || (config.recap && 'interactive') || config?.mode || 'stdout' // Default to stdout
+    (INTERACTIVE && 'interactive') ?? (config.recap && 'interactive') ?? config?.mode ?? 'stdout' // Default to stdout
 
   handleResult({
     result: recapResult,
