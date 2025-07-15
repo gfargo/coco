@@ -13,7 +13,7 @@ const CONFIG: SchemaConfig = {
   type: 'ConfigWithServiceObject',
   schemaId: 'https://git-co.co/schema.json',
   skipTypeCheck: false,
-  outputDir: '.',
+  outputDir: '.'
 }
 
 function ensureDirectoryExists(filePath: string): void {

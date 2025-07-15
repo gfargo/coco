@@ -25,5 +25,7 @@ export async function handleResult({ result, mode, interactiveModeCallback }: Ha
       break
   }
 
-  process.exit(0)
+  if (process.env.NODE_ENV !== 'test') {
+    process.exit(0)
+  }
 }
