@@ -1,4 +1,3 @@
-import { StructuredOutputParser } from '@langchain/core/output_parsers'
 import { TiktokenModel } from '@langchain/openai'
 import chalk from 'chalk'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
@@ -19,6 +18,7 @@ import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbackItem } from './config'
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
+import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
 
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -143,7 +143,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = new StructuredOutputParser(ReviewFeedbackItemArraySchema)
+      const parser = createSchemaParser(ReviewFeedbackItemArraySchema, llm)
 
       const formatInstructions =
         "Respond with a valid JSON object, containing four fields:'title' a string, 'summary' a short summary of the problem (include line number if big file), 'severity' a numeric enum up to ten, 'category' an enum string, and 'filePath' a relative filepath to file as string."

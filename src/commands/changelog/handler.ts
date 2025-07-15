@@ -1,8 +1,7 @@
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
-
-import { StructuredOutputParser } from '@langchain/core/output_parsers'
+import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
@@ -120,7 +119,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = new StructuredOutputParser(ChangelogResponseSchema)
+      const parser = createSchemaParser(ChangelogResponseSchema, llm)
 
       const prompt = getPrompt({
         template: options.prompt,
