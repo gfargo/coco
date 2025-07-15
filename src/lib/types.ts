@@ -18,6 +18,15 @@ export interface FileChange {
   status: FileChangeStatus
 }
 
+export interface GetChangesResult {
+  /** Changes that have been staged (added to the index). */
+  staged: FileChange[]
+  /** Changes in the working directory that are not yet staged. */
+  unstaged: FileChange[]
+  /** Files that are not tracked by Git. */
+  untracked: FileChange[]
+}
+
 export interface FileDiff {
   file: string
   diff: string

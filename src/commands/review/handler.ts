@@ -10,12 +10,13 @@ import { fileChangeParser } from '../../lib/parsers/default/index'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { getRepo } from '../../lib/simple-git/getRepo'
+import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
-import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions } from './config'
+import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbackItem } from './config'
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
 
@@ -47,15 +48,25 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     if (argv.branch) {
       logger.verbose(`Generating diff for branch: ${argv.branch}`, { color: 'yellow' })
 
+      const currentBranch = await getCurrentBranchName({ git })
       const diff = await getDiffForBranch({
         git,
         logger,
-        targetBranch: argv.branch,
-        ignoredFiles: config.ignoredFiles || [],
-        ignoredExtensions: config.ignoredExtensions || [],
+        baseBranch: argv.branch,
+        headBranch: currentBranch,
+        options: {
+          ignoredFiles: config.ignoredFiles || [],
+          ignoredExtensions: config.ignoredExtensions || [],
+        },
       })
 
-      return [diff]
+      const branchChanges = await fileChangeParser({
+        changes: diff.staged,
+        commit: `--branch-diff-${argv.branch}`,
+        options: { tokenizer, git, llm, logger },
+      })
+
+      return [branchChanges]
     } else {
       const { staged, unstaged, untracked } = await getChanges({
         git,
@@ -108,7 +119,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     return changes.join('\n')
   }
 
-  const recap = await generateAndReviewLoop({
+  const recap = await generateAndReviewLoop<string[], ReviewFeedbackItem[]>({
     label: 'review',
     options: {
       ...config,
@@ -151,14 +162,14 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
           format_instructions: formatInstructions,
         },
         parser,
-      })
+      }) as ReviewFeedbackItem[]
 
       // sort by severity
-      return response.sort((a, b) => b.severity - a.severity)
+      return response.sort((a: ReviewFeedbackItem, b: ReviewFeedbackItem) => b.severity - a.severity)
     },
-    reviewParser(result) {
+    reviewParser(result: ReviewFeedbackItem[]) {
       return result
-        .map((task) => {
+        .map((task: ReviewFeedbackItem) => {
           const color = severityColor(task.severity)
           return color(
             `[${task.severity}] ${chalk.bold(task.title)} (${task.category})\n ${chalk.dim(
@@ -174,6 +185,6 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     },
   })
 
-  const reviewer = new TaskList(recap)
+  const reviewer = new TaskList(recap as ReviewFeedbackItem[])
   await reviewer.start()
 }
