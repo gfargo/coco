@@ -35,6 +35,15 @@ export async function getDiffForBranch({
   options,
 }: GetDiffForBranch): Promise<GetChangesResult> {
   try {
+    logger?.verbose(`Getting diff for branches: baseBranch="${baseBranch}", headBranch="${headBranch}"`, {
+      color: 'blue',
+    })
+
+    // Validate branch names
+    if (!baseBranch || !headBranch) {
+      throw new Error(`Invalid branch names: baseBranch="${baseBranch}", headBranch="${headBranch}"`)
+    }
+
     const { ignoredFiles = [], ignoredExtensions = [] } = options || {}
     // Prepare ignore patterns
     const ignorePatterns = [
@@ -48,6 +57,10 @@ export async function getDiffForBranch({
       diffArgs.push('--')
       diffArgs.push(...ignorePatterns)
     }
+
+    logger?.verbose(`Running git diff with args: ${diffArgs.join(' ')}`, {
+      color: 'blue',
+    })
 
     // Get the diff
     const diff = await git.diff(diffArgs)
@@ -86,12 +99,12 @@ export async function getDiffForBranch({
       untracked: [],
     }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
     console.error('Error in getDiffForBranch:', error)
-    logger?.log('Encountered an error getting diff between branches', { color: 'red' })
-    return {
-      staged: [],
-      unstaged: [],
-      untracked: [],
-    }
+    logger?.log(`Encountered an error getting diff between branches: ${errorMessage}`, { color: 'red' })
+    logger?.log(`Branch details: baseBranch="${baseBranch}", headBranch="${headBranch}"`, { color: 'red' })
+    
+    // Re-throw the error so the caller can handle it appropriately
+    throw error
   }
 }

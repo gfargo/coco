@@ -58,7 +58,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     ? 'yesterday'
     : lastWeek
     ? 'last-week'
-    : config.currentBranch
+    : argv.currentBranch || config.currentBranch
     ? 'currentBranch'
     : 'current'
 
@@ -114,7 +114,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         return tags
       case 'currentBranch':
         const currentBranch = await getCurrentBranchName({ git })
-        const baseBranch = config.defaultBranch
+        const baseBranch = config.defaultBranch || 'main'
         logger.log(`Recapping changes on branch '${currentBranch}' compared to '${baseBranch}'`)
         const changes = await getDiffForBranch({
           git,
@@ -127,7 +127,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         })
         const branchChanges = await fileChangeParser({
           changes: changes.staged,
-          commit: `branch:${currentBranch}`,
+          commit: baseBranch,
           options: { tokenizer, git, llm, logger },
         })
 
