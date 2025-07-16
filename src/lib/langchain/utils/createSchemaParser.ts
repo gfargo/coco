@@ -56,6 +56,7 @@ export function createSchemaParser<T>(
   }
 
   try {
+    // @ts-expect-error - StructuredOutputParser constructor type issue with Zod schema
     const baseParser = new StructuredOutputParser(schema)
     
     const defaultRetryTemplate = `The following text failed to parse as valid JSON. Please convert it into a valid JSON object that matches the required schema.

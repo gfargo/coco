@@ -1,11 +1,10 @@
-import { StructuredOutputParser } from '@langchain/core/output_parsers'
 import { TiktokenModel } from '@langchain/openai'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
+import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
-import { fileChangeParser } from '../../lib/parsers/default'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getChangesByTimestamp } from '../../lib/simple-git/getChangesByTimestamp'
 import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLastTag'
@@ -21,6 +20,7 @@ import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { RecapArgv, RecapLlmResponseSchema, RecapOptions } from './config'
 import { noResult } from './noResult'
 import { RECAP_PROMPT } from './prompt'
+import { fileChangeParser } from '../../lib/parsers/default'
 
 export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -58,7 +58,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     ? 'yesterday'
     : lastWeek
     ? 'last-week'
-    : config.currentBranch
+    : argv.currentBranch || config.currentBranch
     ? 'currentBranch'
     : 'current'
 
@@ -114,7 +114,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         return tags
       case 'currentBranch':
         const currentBranch = await getCurrentBranchName({ git })
-        const baseBranch = config.defaultBranch
+        const baseBranch = config.defaultBranch || 'main'
         logger.log(`Recapping changes on branch '${currentBranch}' compared to '${baseBranch}'`)
         const changes = await getDiffForBranch({
           git,
@@ -127,7 +127,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         })
         const branchChanges = await fileChangeParser({
           changes: changes.staged,
-          commit: `branch:${currentBranch}`,
+          commit: baseBranch,
           options: { tokenizer, git, llm, logger },
         })
 
@@ -177,8 +177,8 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
       })
 
       try {
-        const parser = new StructuredOutputParser(RecapLlmResponseSchema)
-
+        const parser = createSchemaParser(RecapLlmResponseSchema, llm)
+        
         const response = await executeChain({
           llm,
           prompt,

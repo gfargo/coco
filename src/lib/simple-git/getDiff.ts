@@ -31,7 +31,39 @@ async function parseDefaultFileDiff(
     }
   }
 
-  return await git.diff([commit, nodeFile.filePath])
+  // For branch comparisons, handle files that may not exist in the base branch
+  try {
+    return await git.diff([commit, nodeFile.filePath])
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    
+    // If the error indicates the file doesn't exist in the base branch, handle it gracefully
+    if (errorMessage.includes('unknown revision or path not in the working tree') || 
+        errorMessage.includes('ambiguous argument')) {
+      
+      // This is likely a newly added file - show the entire file content as an addition
+      if (nodeFile.status === 'added') {
+        try {
+          const fileContent = await fs.readFile(nodeFile.filePath, 'utf-8')
+          return `+++ ${nodeFile.filePath}\n${fileContent.split('\n').map(line => `+${line}`).join('\n')}`
+        } catch (fsError) {
+          return `Error reading added file ${nodeFile.filePath}: ${fsError instanceof Error ? fsError.message : String(fsError)}`
+        }
+      }
+      
+      // For other cases, try to get the file content from the current HEAD
+      try {
+        const fileContent = await git.show([`HEAD:${nodeFile.filePath}`])
+        return `File content from current version:\n${fileContent}`
+      } catch (showError) {
+        // If all else fails, provide a meaningful error message
+        return `Unable to retrieve diff for ${nodeFile.filePath}. File may be newly added or renamed.`
+      }
+    }
+    
+    // Re-throw other types of errors
+    throw error
+  }
 }
 
 /**
