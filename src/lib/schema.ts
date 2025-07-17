@@ -4,13 +4,13 @@
 /**
  * Schema ID for JSON validation
  */
-export const SCHEMA_PUBLIC_URL = "https://git-co.co/schema.json"
+export const SCHEMA_PUBLIC_URL = "https://coco.griffen.codes/schema.json"
 
 /**
  * Generated JSON schema
  */
 export const schema = {
-  "$id": "https://git-co.co/schema.json",
+  "$id": "https://coco.griffen.codes/schema.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$ref": "#/definitions/ConfigWithServiceObject",
   "definitions": {
