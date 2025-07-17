@@ -11,7 +11,7 @@ interface SchemaConfig extends TJS.Config {
 const CONFIG: SchemaConfig = {
   tsconfig: 'tsconfig.json',
   type: 'ConfigWithServiceObject',
-  schemaId: 'https://git-co.co/schema.json',
+  schemaId: 'https://coco.griffen.codes/schema.json',
   skipTypeCheck: false,
   outputDir: '.'
 }
