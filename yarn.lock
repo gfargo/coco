@@ -333,16 +333,16 @@
   integrity sha512-ZykIcDTVv5UNmKWSTLAs3VukO6NDJkkSKxrgUTDPBkAlORVT3H9n5DbRjRl8xIotklscHdbLIa0b9+y3mQq73g==
 
 "@commitlint/cli@^19.8.0":
-  version "19.8.0"
-  resolved "https://registry.npmjs.org/@commitlint/cli/-/cli-19.8.0.tgz"
-  integrity sha512-t/fCrLVu+Ru01h0DtlgHZXbHV2Y8gKocTR5elDOqIRUzQd0/6hpt2VIWOj9b3NDo7y4/gfxeR2zRtXq/qO6iUg==
+  version "19.8.1"
+  resolved "https://registry.yarnpkg.com/@commitlint/cli/-/cli-19.8.1.tgz#85f7d9f331344e1f0a2b9d8b24fd3695466e1158"
+  integrity sha512-LXUdNIkspyxrlV6VDHWBmCZRtkEVRpBKxi2Gtw3J54cGWhLCTouVD/Q6ZSaSvd2YaDObWK8mDjrz3TIKtaQMAA==
   dependencies:
-    "@commitlint/format" "^19.8.0"
-    "@commitlint/lint" "^19.8.0"
-    "@commitlint/load" "^19.8.0"
-    "@commitlint/read" "^19.8.0"
-    "@commitlint/types" "^19.8.0"
-    tinyexec "^0.3.0"
+    "@commitlint/format" "^19.8.1"
+    "@commitlint/lint" "^19.8.1"
+    "@commitlint/load" "^19.8.1"
+    "@commitlint/read" "^19.8.1"
+    "@commitlint/types" "^19.8.1"
+    tinyexec "^1.0.0"
     yargs "^17.0.0"
 
 "@commitlint/config-conventional@^19.8.0":
@@ -388,7 +388,7 @@
   resolved "https://registry.npmjs.org/@commitlint/execute-rule/-/execute-rule-19.8.1.tgz"
   integrity sha512-YfJyIqIKWI64Mgvn/sE7FXvVMQER/Cd+s3hZke6cI1xgNT/f6ZAz5heND0QtffH+KbcqAwXDEE1/5niYayYaQA==
 
-"@commitlint/format@^19.8.0", "@commitlint/format@^19.8.1":
+"@commitlint/format@^19.8.1":
   version "19.8.1"
   resolved "https://registry.npmjs.org/@commitlint/format/-/format-19.8.1.tgz"
   integrity sha512-kSJj34Rp10ItP+Eh9oCItiuN/HwGQMXBnIRk69jdOwEW9llW9FlyqcWYbHPSGofmjsqeoxa38UaEA5tsbm2JWw==
@@ -404,7 +404,7 @@
     "@commitlint/types" "^19.8.1"
     semver "^7.6.0"
 
-"@commitlint/lint@^19.8.0", "@commitlint/lint@^19.8.1":
+"@commitlint/lint@^19.8.1":
   version "19.8.1"
   resolved "https://registry.npmjs.org/@commitlint/lint/-/lint-19.8.1.tgz"
   integrity sha512-52PFbsl+1EvMuokZXLRlOsdcLHf10isTPlWwoY1FQIidTsTvjKXVXYb7AvtpWkDzRO2ZsqIgPK7bI98x8LRUEw==
@@ -414,7 +414,7 @@
     "@commitlint/rules" "^19.8.1"
     "@commitlint/types" "^19.8.1"
 
-"@commitlint/load@^19.8.0", "@commitlint/load@^19.8.1":
+"@commitlint/load@^19.8.1":
   version "19.8.1"
   resolved "https://registry.npmjs.org/@commitlint/load/-/load-19.8.1.tgz"
   integrity sha512-9V99EKG3u7z+FEoe4ikgq7YGRCSukAcvmKQuTtUyiYPnOd9a2/H9Ak1J9nJA1HChRQp9OA/sIKPugGS+FK/k1A==
@@ -444,7 +444,7 @@
     conventional-changelog-angular "^7.0.0"
     conventional-commits-parser "^5.0.0"
 
-"@commitlint/read@^19.8.0", "@commitlint/read@^19.8.1":
+"@commitlint/read@^19.8.1":
   version "19.8.1"
   resolved "https://registry.npmjs.org/@commitlint/read/-/read-19.8.1.tgz"
   integrity sha512-03Jbjb1MqluaVXKHKRuGhcKWtSgh3Jizqy2lJCRbRrnWpcM06MYm8th59Xcns8EqBYvo0Xqb+2DoZFlga97uXQ==
@@ -5929,11 +5929,6 @@ tiktoken@^1.0.21:
   version "1.0.21"
   resolved "https://registry.npmjs.org/tiktoken/-/tiktoken-1.0.21.tgz"
   integrity sha512-/kqtlepLMptX0OgbYD9aMYbM7EFrMZCL7EoHM8Psmg2FuhXoo/bH64KqOiZGGwa6oS9TPdSEDKBnV2LuB8+5vQ==
-
-tinyexec@^0.3.0:
-  version "0.3.2"
-  resolved "https://registry.npmjs.org/tinyexec/-/tinyexec-0.3.2.tgz"
-  integrity sha512-KQQR9yN7R5+OSwaK0XQoj22pwHoTlgYqmUscPYoknOoWCWfj/5/ABTMRi69FrKU5ffPVh5QcFikpWJI/P1ocHA==
 
 tinyexec@^1.0.0:
   version "1.0.1"
