@@ -78,6 +78,27 @@ export async function handleValidationErrors(
     case 'edit': {
       // Edit message manually
       const editedMessage = await editResult(message, options)
+      
+      // Validate the manually edited message if commitlint config exists
+      const { hasCommitlintConfig } = await import('../utils/hasCommitlintConfig')
+      const hasConfig = await hasCommitlintConfig()
+      
+      if (hasConfig) {
+        const { validateCommitMessage } = await import('../utils/commitlintValidator')
+        const editedValidationResult = await validateCommitMessage(editedMessage)
+        
+        if (!editedValidationResult.valid) {
+          // Show validation errors for the edited message
+          options.logger.log('\nEdited commit message also has validation issues:', { color: 'yellow' })
+          editedValidationResult.errors.forEach((error) => {
+            options.logger.log(`  • ${error}`, { color: 'red' })
+          })
+          
+          // Recursively handle validation errors for the edited message
+          return await handleValidationErrors(editedMessage, editedValidationResult, options)
+        }
+      }
+      
       return { message: editedMessage, action: 'edit' }
     }
     case 'retry':

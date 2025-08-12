@@ -17,6 +17,7 @@ export type GenerateReviewLoopOptions = {
     enableFullRetry?: boolean
     enableModifyPrompt?: boolean
     enableEdit?: boolean
+    customEditFunction?: (message: string, options: GenerateReviewLoopOptions) => Promise<string>
   }
 }
 
@@ -137,7 +138,9 @@ export async function generateAndReviewLoop<T, R>({
       }
       
       // Only edit the result in interactive mode if approved
-      result = await editResult(result as string, options) as R
+      // Use custom edit function if provided, otherwise use default editResult
+      const editFunction = options.review?.customEditFunction || editResult
+      result = await editFunction(result as string, options) as R
     } else {
       // In non-interactive mode, we return the result as is to be output to stdout by the caller.
       const displayResult = reviewParser ? reviewParser(result, options) : result as string

@@ -115,6 +115,10 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
           retryFull:
             'Restart the function execution from the beginning, regenerating both the diff summary and commit message',
         },
+        customEditFunction: async (message: string, options) => {
+          const { editCommitMessage } = await import('../../lib/ui/editCommitMessage')
+          return editCommitMessage(message, options)
+        },
       },
     },
     factory,
@@ -241,6 +245,8 @@ ${schema.description}`
         const ticketId = extractTicketIdFromBranchName(branchName)
         const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
         const fullMessage = `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
+
+        logger.log(`~~~ Generated commit message:\n\n${fullMessage}\n`, { color: 'green' })
 
         // If commitlint validation is needed, validate the message
         if (USE_CONVENTIONAL_COMMITS || hasCommitLintConfig) {

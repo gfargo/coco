@@ -101,14 +101,14 @@ export function formatCommitlintRulesForPrompt(config: QualifiedConfig): string 
   if (rules['header-max-length']) {
     const [level, , maxLength] = rules['header-max-length']
     if (level > 0) {
-      ruleDescriptions.push(`Header (title) must be ${maxLength} characters or less`)
+      ruleDescriptions.push(`Header (title) must be ${maxLength} characters or less (including spaces)`)
     }
   }
   
   if (rules['header-min-length']) {
     const [level, , minLength] = rules['header-min-length']
     if (level > 0) {
-      ruleDescriptions.push(`Header (title) must be at least ${minLength} characters`)
+      ruleDescriptions.push(`Header (title) must be at least ${minLength} characters (including spaces)`)
     }
   }
 
@@ -116,7 +116,7 @@ export function formatCommitlintRulesForPrompt(config: QualifiedConfig): string 
   if (rules['body-max-line-length']) {
     const [level, , maxLength] = rules['body-max-line-length']
     if (level > 0) {
-      ruleDescriptions.push(`Body lines must be ${maxLength} characters or less`)
+      ruleDescriptions.push(`Body lines must be ${maxLength} characters or less (including spaces)`)
     }
   }
 
