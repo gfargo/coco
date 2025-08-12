@@ -20,6 +20,16 @@ import { Logger } from '../../lib/utils/logger'
 import { SimpleGit } from 'simple-git'
 import { Config } from '../../commands/types'
 
+jest.mock('../../lib/utils/commitlintValidator', () => ({
+  hasCommitlintConfig: jest.fn().mockResolvedValue(false),
+  validateCommitMessage: jest.fn().mockResolvedValue({
+    valid: true,
+    errors: [],
+    warnings: [],
+  }),
+  getCommitlintRulesContext: jest.fn().mockResolvedValue(''),
+}))
+
 jest.mock('../../lib/simple-git/getRepo')
 jest.mock('../../lib/simple-git/getChanges')
 jest.mock('../../lib/ui/logSuccess')
