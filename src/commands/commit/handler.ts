@@ -60,8 +60,12 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     })
   }
 
-  const USE_CONVENTIONAL_COMMITS =
-    config.conventionalCommits || argv.conventional
+  logger.verbose(`→ ${provider} (${model})`, {
+    color: 'green',
+  })
+
+
+  const USE_CONVENTIONAL_COMMITS = config.conventionalCommits || argv.conventional
 
   async function factory() {
     if (config.noDiff) {
@@ -124,11 +128,6 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-
-      logger.log(`Using ${USE_CONVENTIONAL_COMMITS ? 'conventional commits' : 'standard commit'} mode.`, {
-        color: 'bgYellow',
-      })
-
       // Select the appropriate schema based on whether conventional commits are enabled
       const schema = USE_CONVENTIONAL_COMMITS
         ? ConventionalCommitMessageResponseSchema
@@ -139,8 +138,6 @@ ${schema.description}`
 
       // Use conventional commit prompt if enabled
       const promptTemplate = USE_CONVENTIONAL_COMMITS ? CONVENTIONAL_COMMIT_PROMPT : COMMIT_PROMPT
-
-      logger.log(`Using prompt template:\n\n${promptTemplate.template}\n`, { color: 'yellow' })
 
       const prompt = getPrompt({
         template: options.prompt,
@@ -202,21 +199,17 @@ ${schema.description}`
           ? config.service.maxParsingAttempts || 3
           : 3
 
-      logger.verbose(`Prompt variables: ${JSON.stringify(variables, null, 2)}`)
-      logger.verbose(`Model: ${model}, Provider: ${provider}`, { color: 'blue' })
-      logger.verbose(`Max parsing attempts: ${maxAttempts}`, { color: 'blue' })
-
       // Custom retry logic for commitlint validation
       let retryCount = 0
       let validationErrors = ''
-      
+
       const generateCommitMessage = async (): Promise<string> => {
         // Update variables with validation errors for retry attempts
-        const currentVariables = { 
+        const currentVariables = {
           ...variables,
-          additional_context: validationErrors ? 
-            `${variables.additional_context}\n\n## Validation Errors from Previous Attempt\nPlease fix the following issues:\n${validationErrors}` : 
-            variables.additional_context
+          additional_context: validationErrors
+            ? `${variables.additional_context}\n\n## Validation Errors from Previous Attempt\nPlease fix the following issues:\n${validationErrors}`
+            : variables.additional_context,
         }
 
         const commitMsg = await executeChainWithSchema(schema, llm, prompt, currentVariables, {
@@ -246,30 +239,35 @@ ${schema.description}`
         const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
         const fullMessage = `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
 
-        logger.log(`~~~ Generated commit message:\n\n${fullMessage}\n`, { color: 'green' })
-
         // If commitlint validation is needed, validate the message
         if (USE_CONVENTIONAL_COMMITS || hasCommitLintConfig) {
-          const { validateCommitMessage, CommitlintValidationError } = await import('../../lib/utils/commitlintValidator')
+          const { validateCommitMessage, CommitlintValidationError } = await import(
+            '../../lib/utils/commitlintValidator'
+          )
           const validationResult = await validateCommitMessage(fullMessage)
 
-          logger.verbose(`Validation result: ${JSON.stringify(validationResult)}`, { color: 'yellow' })
+          logger.verbose(`Validation result: ${JSON.stringify(validationResult)}`, {
+            color: 'yellow',
+          })
 
           if (!validationResult.valid) {
             retryCount++
             // Format validation errors for next attempt
-            validationErrors = validationResult.errors.map(error => `- ${error}`).join('\n')
-            
+            validationErrors = validationResult.errors.map((error) => `- ${error}`).join('\n')
+
             // Auto-retry up to 2 times
             if (retryCount <= 2) {
-              logger.verbose(`Commit message validation failed (attempt ${retryCount}/2). Retrying with error feedback...`, { color: 'yellow' })
+              logger.verbose(
+                `Commit message validation failed (attempt ${retryCount}/2). Retrying with error feedback...`,
+                { color: 'yellow' }
+              )
               throw new CommitlintValidationError(
                 `Validation failed: ${validationResult.errors.join('; ')}`,
                 validationResult,
                 fullMessage
               )
             }
-            
+
             // After 2 failed attempts, let the user decide
             const { handleValidationErrors } = await import('../../lib/ui/commitValidationHandler')
             const validationHandlerResult = await handleValidationErrors(
@@ -282,9 +280,12 @@ ${schema.description}`
               }
             )
 
-            logger.verbose(`Validation handler result: ${JSON.stringify(validationHandlerResult)}`, {
-              color: 'blue',
-            })
+            logger.verbose(
+              `Validation handler result: ${JSON.stringify(validationHandlerResult)}`,
+              {
+                color: 'blue',
+              }
+            )
 
             switch (validationHandlerResult.action) {
               case 'proceed':
