@@ -235,7 +235,7 @@ describe('commit command', () => {
     expect(mockGetChanges).not.toHaveBeenCalled()
   })
 
-  it('should pass simplified file changes to parser when noDiff is true', async () => {
+  it('should NOT call fileChangeParser when noDiff is true', async () => {
     argv.noDiff = true
     // Update the config mock to have noDiff: true
     mockLoadConfig.mockReturnValue({
@@ -255,14 +255,8 @@ describe('commit command', () => {
     } as unknown as Config)
 
     await handler(argv, logger)
-    expect(mockFileChangeParser).toHaveBeenCalledWith(
-      expect.objectContaining({
-        changes: [
-          { filePath: 'file1.txt', status: 'added', summary: 'file1.txt' },
-          { filePath: 'file2.txt', status: 'modified', summary: 'file2.txt' },
-          { filePath: 'file3.txt', status: 'added', summary: 'file3.txt' },
-        ],
-      })
-    )
+    // When noDiff is true, fileChangeParser should NOT be called
+    // because we bypass diff parsing and just use file status
+    expect(mockFileChangeParser).not.toHaveBeenCalled()
   })
 })

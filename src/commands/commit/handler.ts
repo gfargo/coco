@@ -64,7 +64,6 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     color: 'green',
   })
 
-
   const USE_CONVENTIONAL_COMMITS = config.conventionalCommits || argv.conventional
 
   async function factory() {
@@ -90,14 +89,20 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   }
 
   async function parser(changes: FileChange[]) {
+    if (config.noDiff) {
+      // When noDiff is enabled, just return a simple summary without parsing file contents
+      const filesSummary = changes
+        .map((change) => `${change.status}: ${change.filePath}`)
+        .join('\n')
+      return `Staged files:\n${filesSummary}`
+    }
+
     return await fileChangeParser({
       changes,
       commit: '--staged',
       options: { tokenizer, git, llm, logger },
     })
   }
-
-  logger.log(`Generating commit message...${JSON.stringify(config.prompt)}`, { color: 'blue' })
 
   const commitMsg = await generateAndReviewLoop({
     label: 'commit message',
@@ -134,7 +139,11 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         : CommitMessageResponseSchema
 
       const formatInstructions = `You must always return valid JSON fenced by a markdown code block. Do not return any additional text. The JSON object you return should match the following schema:
-${schema.description}`
+${schema.description}
+{
+  "title": "The commit title",
+  "body": "The commit body"
+}`
 
       // Use conventional commit prompt if enabled
       const promptTemplate = USE_CONVENTIONAL_COMMITS ? CONVENTIONAL_COMMIT_PROMPT : COMMIT_PROMPT
