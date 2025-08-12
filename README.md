@@ -44,7 +44,7 @@ npx git-coco@latest init -l global
 
 ### **`coco commit`**
 
-Generates commit messages based on staged changes.
+Generates commit messages based on staged changes with intelligent commitlint integration.
 
 ```bash
 coco
@@ -53,6 +53,16 @@ coco
 
 coco commit
 ```
+
+#### Commitlint Integration
+
+`coco` automatically detects and integrates with your project's commitlint configuration:
+
+- **Smart Detection**: Automatically finds commitlint config files (`.commitlintrc.*`, `commitlint.config.*`, or `package.json` with commitlint field)
+- **AI-Aware Rules**: Passes your commitlint rules to the AI for better compliance from the start
+- **Automatic Retry**: When validation fails, `coco` automatically retries generation with error feedback (up to 2 attempts)
+- **User-Friendly Flow**: After auto-retries, offers options to try 2 more times or edit manually
+- **Full Validation**: Both AI-generated and manually edited commit messages are validated against your rules
 
 #### Useful options
 
@@ -68,6 +78,10 @@ coco --append-ticket
 # --additional
 # Add extra context before generating the commit
 coco --additional "Resolves UX bug with sign up button"
+
+# --conventional
+# Force conventional commits mode (also enabled automatically with commitlint config)
+coco --conventional
 ```
 
 ### **`coco changelog`**

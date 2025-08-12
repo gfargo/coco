@@ -56,30 +56,52 @@ export async function handleValidationErrors(
     message: 'How would you like to proceed?:',
     choices: [
       {
-        name: 'Edit',
-        value: 'edit',
-        description: 'Edit the commit message manually',
+        name: 'Try 2 more attempts',
+        value: 'retry',
+        description: 'Let the AI try generating 2 more commit messages with error feedback',
       },
       {
-        name: 'Retry',
-        value: 'retry',
-        description: 'Regenerate a new commit message',
+        name: 'Edit manually',
+        value: 'edit',
+        description: 'Edit the commit message manually to fix the issues',
       },
       {
         name: 'Abort',
         value: 'abort',
-        description: 'Abort the commit',
+        description: 'Abort the commit process',
       },
+
     ],
   })
 
   switch (choice) {
-    case '1': {
+    case 'edit': {
       // Edit message manually
       const editedMessage = await editResult(message, options)
+      
+      // Validate the manually edited message if commitlint config exists
+      const { hasCommitlintConfig } = await import('../utils/hasCommitlintConfig')
+      const hasConfig = await hasCommitlintConfig()
+      
+      if (hasConfig) {
+        const { validateCommitMessage } = await import('../utils/commitlintValidator')
+        const editedValidationResult = await validateCommitMessage(editedMessage)
+        
+        if (!editedValidationResult.valid) {
+          // Show validation errors for the edited message
+          options.logger.log('\nEdited commit message also has validation issues:', { color: 'yellow' })
+          editedValidationResult.errors.forEach((error) => {
+            options.logger.log(`  • ${error}`, { color: 'red' })
+          })
+          
+          // Recursively handle validation errors for the edited message
+          return await handleValidationErrors(editedMessage, editedValidationResult, options)
+        }
+      }
+      
       return { message: editedMessage, action: 'edit' }
     }
-    case '2':
+    case 'retry':
       // Regenerate message
       return { message, action: 'regenerate' }
     default:
