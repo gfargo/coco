@@ -87,7 +87,7 @@
     "@commitlint/config-conventional": "^19.8.0",
     "@commitlint/core": "^19.8.0",
     "@commitlint/types": "^19.8.0",
-    "@inquirer/prompts": "3.3.0",
+    "@inquirer/prompts": "7.0.0",
     "@jridgewell/sourcemap-codec": "^1.4.15",
     "@langchain/anthropic": "^0.3.14",
     "@langchain/community": "^0.3.32",
