@@ -1,5 +1,5 @@
 import chalk from 'chalk'
-import inquirer from 'inquirer'
+import { select } from '@inquirer/prompts'
 import * as readline from 'readline'
 import { ReviewFeedbackItem } from '../../commands/review/config'
 import { execPromise } from '../utils/execPromise'
@@ -57,14 +57,10 @@ export class TaskList {
   }
 
   private async promptAction() {
-    const { action } = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'action',
-        message: 'Choose an action:',
-        choices: this.getChoices(),
-      },
-    ])
+    const action = await select({
+      message: 'Choose an action:',
+      choices: this.getChoices(),
+    })
     return action
   }
 
