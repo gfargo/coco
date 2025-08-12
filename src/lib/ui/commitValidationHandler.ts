@@ -56,30 +56,31 @@ export async function handleValidationErrors(
     message: 'How would you like to proceed?:',
     choices: [
       {
-        name: 'Edit',
-        value: 'edit',
-        description: 'Edit the commit message manually',
+        name: 'Try 2 more attempts',
+        value: 'retry',
+        description: 'Let the AI try generating 2 more commit messages with error feedback',
       },
       {
-        name: 'Retry',
-        value: 'retry',
-        description: 'Regenerate a new commit message',
+        name: 'Edit manually',
+        value: 'edit',
+        description: 'Edit the commit message manually to fix the issues',
       },
       {
         name: 'Abort',
         value: 'abort',
-        description: 'Abort the commit',
+        description: 'Abort the commit process',
       },
+
     ],
   })
 
   switch (choice) {
-    case '1': {
+    case 'edit': {
       // Edit message manually
       const editedMessage = await editResult(message, options)
       return { message: editedMessage, action: 'edit' }
     }
-    case '2':
+    case 'retry':
       // Regenerate message
       return { message, action: 'regenerate' }
     default:

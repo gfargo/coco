@@ -19,8 +19,8 @@ const conventionalTypeRegex = /^(feat|fix|docs|style|refactor|perf|test|build|ci
 
 // Regular commit message schema with basic validation
 export const CommitMessageResponseSchema = z.object({
-  title: z.string(),
-  body: z.string(),
+  title: z.string().describe("Title of the commit message"),
+  body: z.string().describe("Body of the commit message"),
 });
 
 // Conventional commit message schema with strict formatting rules
@@ -30,10 +30,10 @@ export const ConventionalCommitMessageResponseSchema = z.object({
     .refine(
       (title) => conventionalTypeRegex.test(title),
       "Title must follow Conventional Commits format (e.g., 'feat: add new feature' or 'fix(scope): fix bug')"
-    ),
-  body: z.string()
+    ).describe("Title of the commit message"),
+  body: z.string().describe("Body of the commit message")
     // .max(280, "Body must be 280 characters or less"),
-});
+}).describe("Conventional commit message schema with strict formatting rules");
 
 export type CommitMessageResponse = z.infer<typeof CommitMessageResponseSchema>;
 

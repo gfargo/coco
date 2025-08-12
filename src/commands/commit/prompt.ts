@@ -27,6 +27,8 @@ Please follow the guidelines below when writing your commit message:
 
 {{branch_name_context}}
 
+{{commitlint_rules_context}}
+
 {{format_instructions}}
 
 {{commit_history}}
@@ -35,7 +37,7 @@ Please follow the guidelines below when writing your commit message:
 `
 
 // Define the variables that will be passed to the prompt template
-const inputVariables = ['summary', 'format_instructions', 'additional_context', 'commit_history', 'branch_name_context']
+const inputVariables = ['summary', 'format_instructions', 'additional_context', 'commit_history', 'branch_name_context', 'commitlint_rules_context']
 
 export const COMMIT_PROMPT = new PromptTemplate({
   template,
@@ -79,17 +81,13 @@ Based on the following diff summary, generate a conventional commit message that
 
 {{branch_name_context}}
 
+{{commitlint_rules_context}}
+
 {{format_instructions}}
 
 {{commit_history}}
 
-{{additional_context}}
-
-Remember:
-- Be concise and precise
-- Focus on WHAT and WHY, not HOW
-- Use imperative mood in both title and body
-- Ensure the title alone provides enough context to understand the change`
+{{additional_context}}`
 
 const conventionalInputVariables = [
   'summary',
@@ -97,6 +95,7 @@ const conventionalInputVariables = [
   'commit_history',
   'format_instructions',
   'branch_name_context',
+  'commitlint_rules_context',
 ]
 
 export const CONVENTIONAL_COMMIT_PROMPT = new PromptTemplate({
