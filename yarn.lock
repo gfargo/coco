@@ -1359,9 +1359,9 @@
     fast-xml-parser "^4.4.1"
 
 "@langchain/community@^0.3.32":
-  version "0.3.50"
-  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.50.tgz#9e60828cfde4ae68492bdb321c317eecc9f12857"
-  integrity sha512-3tni++DmYV1Xb4AYZmky4he8lMxrTrkOT+/RSVin5gAwEN5e0QEeNmipWpcKRrmDNUsZZxGdYRPN5Wo23hDqBA==
+  version "0.3.51"
+  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.51.tgz#873807ad0f9e10d07a9d5259b14ca12490ca7534"
+  integrity sha512-xzBBWLK+HhpS7yi1TzcHfgaNwR3o0v3aN1Z79HUdCOQ2TZdmxxQaVcxB9PUwNrq+LtrOwvhRid3+AOPyob6uYg==
   dependencies:
     "@langchain/openai" ">=0.2.0 <0.7.0"
     "@langchain/weaviate" "^0.2.0"
