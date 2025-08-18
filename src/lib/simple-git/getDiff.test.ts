@@ -32,7 +32,6 @@ describe('getDiff', () => {
   it('should return diff for renamed files when contents are different', async () => {
     ;(git.show as jest.MockedFunction<typeof git.show>).mockResolvedValueOnce('old content')
     ;(git.show as jest.MockedFunction<typeof git.show>).mockResolvedValueOnce('new content')
-    // @ts-expect-error - jest types are not up to date
     ;(createTwoFilesPatch as jest.MockedFunction<typeof createTwoFilesPatch>).mockReturnValue(`
 --- old.txt
 +++ new.txt
