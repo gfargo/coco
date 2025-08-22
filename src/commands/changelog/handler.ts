@@ -164,7 +164,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
 
       const author_instructions = argv.author
         ? 'At the end of each item, attribute the author and include a reference to the commit hash, like this: `by @author_name (f6dbe61)`. Use the first 7 characters of the hash.'
-        : 'Omit author attribution.'
+        : 'At the end of each item, include a reference to the commit hash, like this: `(f6dbe61)`. Use the first 7 characters of the hash.'
 
       const changelog = await executeChain({
         llm,
