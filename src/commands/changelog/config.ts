@@ -6,6 +6,10 @@ export interface ChangelogOptions extends BaseCommandOptions {
   range: string
   branch: string
   sinceLastTag: boolean
+  withDiff?: boolean
+  onlyDiff?: boolean
+  additional?: string
+  author?: boolean
 }
 
 export type ChangelogArgv = Arguments<ChangelogOptions>
@@ -37,6 +41,26 @@ export const options = {
     type: 'boolean',
     alias: 't',
     description: 'Generate changelog for all commits since the last tag',
+    default: false,
+  },
+  withDiff: {
+    type: 'boolean',
+    description: 'Include the diff for each commit in the prompt',
+    default: false,
+  },
+  onlyDiff: {
+    type: 'boolean',
+    description: 'Generate a changelog based only on the diff of the entire branch',
+    default: false,
+  },
+  additional: {
+    type: 'string',
+    alias: 'a',
+    description: 'Add extra contextual information to the prompt',
+  },
+  author: {
+    type: 'boolean',
+    description: 'Include author attribution in the changelog',
     default: false,
   },
   i: {

@@ -1,6 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { Logger } from '../utils/logger'
-import { getCommitLogRange } from './getCommitLogRange'
+import { getCommitLogRangeDetails, CommitDetails } from './getCommitLogRangeDetails'
 import { getCurrentBranchName } from './getCurrentBranchName'
 
 export type GetCommitLogCurrentBranch = {
@@ -18,14 +18,14 @@ export type GetCommitLogCurrentBranch = {
  * @param {Logger} options.logger - The logger for logging messages.
  * @param {string} [options.comparisonBranch='main'] - The branch to compare against.
  * @param {string} [options.comparisonRemote='origin'] - The remote to compare against.
- * @returns {Promise<string[]>} The array of commit messages in the commit log.
+ * @returns {Promise<CommitDetails[]>} The array of commit messages in the commit log.
  */
 export async function getCommitLogCurrentBranch({
   git,
   logger,
   comparisonBranch = 'main',
   comparisonRemote = 'origin',
-}: GetCommitLogCurrentBranch): Promise<string[]> {
+}: GetCommitLogCurrentBranch): Promise<CommitDetails[]> {
   try {
     const branchName = await getCurrentBranchName({ git })
 
@@ -66,7 +66,7 @@ export async function getCommitLogCurrentBranch({
       return []
     }
 
-    return await getCommitLogRange(firstCommit, lastCommit, { git, noMerges: true })
+    return await getCommitLogRangeDetails(firstCommit, lastCommit, { git, noMerges: true })
   } catch (error) {
     logger?.log('Encountered an error getting commit log from current branch', { color: 'red' })
   }
