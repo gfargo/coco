@@ -9,7 +9,7 @@ export interface ChangelogOptions extends BaseCommandOptions {
   withDiff?: boolean
   onlyDiff?: boolean
   additional?: string
-  noAuthor?: boolean
+  author?: boolean
 }
 
 export type ChangelogArgv = Arguments<ChangelogOptions>
@@ -58,9 +58,9 @@ export const options = {
     alias: 'a',
     description: 'Add extra contextual information to the prompt',
   },
-  noAuthor: {
+  author: {
     type: 'boolean',
-    description: 'Omit author attribution from the changelog',
+    description: 'Include author attribution in the changelog',
     default: false,
   },
   i: {
