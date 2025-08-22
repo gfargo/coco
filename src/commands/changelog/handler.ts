@@ -162,6 +162,10 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         additional_context = `## Additional Context\n${argv.additional}`
       }
 
+      const author_instructions = argv.noAuthor
+        ? 'At the end of each item, include a reference to the commit hash, like this: `(f6dbe61)`. Use the first 7 characters of the hash.'
+        : 'At the end of each item, attribute the author and include a reference to the commit hash, like this: `by @author_name (f6dbe61)`. Use the first 7 characters of the hash.'
+
       const changelog = await executeChain({
         llm,
         prompt,
@@ -169,6 +173,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
           summary: context,
           format_instructions: formatInstructions,
           additional_context: additional_context,
+          author_instructions: author_instructions,
         },
         parser,
       })

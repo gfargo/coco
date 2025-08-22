@@ -10,15 +10,14 @@ You will be provided with a summary of changes. This summary can be one of the f
 
 ## Rules
 - Create a descriptive title for the changelog that gives a high-level overview of the changes.
-- Logically group related changes under descriptive headings (e.g., ### Features, ### Fixes, ### Refactors).
-- For each change, provide a concise summary.
-- Annotate each change with the git commit hash (first 7 characters) as a reference.
-- Mention the author of the commit where appropriate, perhaps at the end of the line 
-(Thanks @author_name!)
-.
-- If provided with diffs, use them to understand the technical details and provide a more accurate and detailed description of the changes.
-- Avoid generalizations like "various bug fixes," "improvements," or "enhancements." Be specific.
-- Your entire response must be valid Markdown.
+- **BREAKING CHANGES**: Identify any commits that introduce breaking changes. These must be listed first under a "### 💥 BREAKING CHANGES" heading.
+- **Grouping**: Logically group related changes under descriptive headings (e.g., ### Features, ### Fixes, ### Refactors).
+- **Dependencies**: Group all dependency updates (e.g., changes to package.json, go.mod) under a "### Dependencies" section.
+- **Summaries**: For each change, provide a concise summary.
+- **Attribution**: {{author_instructions}}
+- **Technical Details**: If provided with diffs, use them to understand the technical details and provide a more accurate and detailed description of the changes.
+- **Clarity**: Avoid generalizations like "various bug fixes," "improvements," or "enhancements." Be specific.
+- **Formatting**: Your entire response must be valid Markdown.
 
 ## Formatting Instructions
 {{format_instructions}}
@@ -27,7 +26,12 @@ You will be provided with a summary of changes. This summary can be one of the f
 
 """{{summary}}"""`
 
-export const inputVariables = ['format_instructions', 'summary', 'additional_context']
+export const inputVariables = [
+  'format_instructions',
+  'summary',
+  'additional_context',
+  'author_instructions',
+]
 
 export const CHANGELOG_PROMPT = new PromptTemplate({
   template,
