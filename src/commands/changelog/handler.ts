@@ -8,7 +8,7 @@ import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicke
 import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLastTag'
 import { getCommitLogAgainstBranch } from '../../lib/simple-git/getCommitLogAgainstBranch'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
-import { getCommitLogRange } from '../../lib/simple-git/getCommitLogRange'
+import { getCommitLogRangeDetails, CommitDetails } from '../../lib/simple-git/getCommitLogRangeDetails'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler } from '../../lib/types'
@@ -16,12 +16,23 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
+import { getDiffForCommit } from '../../lib/simple-git/getDiffForCommit'
+import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import {
   ChangelogArgv,
   ChangelogOptions,
   ChangelogResponseSchema
 } from './config'
 import { CHANGELOG_PROMPT } from './prompt'
+
+type CommitDetailsWithDiffText = CommitDetails & { diffText?: string };
+
+type FactoryResult = {
+  branch: string;
+  commits?: CommitDetailsWithDiffText[];
+  diff?: string;
+  withDiff?: boolean;
+}
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
@@ -44,68 +55,84 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     }
   }
 
-  async function factory() {
+  async function factory(): Promise<FactoryResult> {
     const branchName = await getCurrentBranchName({ git })
 
-    if (config.sinceLastTag) {
-      logger.verbose(`Generating commit log since the last tag`, { color: 'yellow' })
+    if (argv.onlyDiff) {
+      logger.verbose(`Generating changelog based on branch diff`, { color: 'yellow' })
+      const diff = await getDiffForBranch({ git, logger, baseBranch: argv.branch || 'main', headBranch: branchName })
       return {
         branch: branchName,
-        commits: await getChangesSinceLastTag({ git, logger }),
+        diff: JSON.stringify(diff.staged, null, 2),
       }
     }
 
-    if (config.range && config.range.includes(':')) {
-      const [from, to] = config.range.split(':')
+    let commits: CommitDetails[] = []
 
+    if (config.sinceLastTag) {
+      logger.verbose(`Generating commit log since the last tag`, { color: 'yellow' })
+      // This function returns string[], needs to be adapted or replaced
+      // For now, this path will have limited details.
+      const commitMessages = await getChangesSinceLastTag({ git, logger })
+      commits = commitMessages.map(msg => ({ message: msg })) as CommitDetails[]
+    } else if (config.range && config.range.includes(':')) {
+      const [from, to] = config.range.split(':')
       if (!from || !to) {
         logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
         process.exit(1)
       }
-
-      return {
-        branch: branchName,
-        commits: await getCommitLogRange(from, to, { git, noMerges: true }),
-      }
-    }
-
-    if (argv.branch) {
+      commits = await getCommitLogRangeDetails(from, to, { git, noMerges: true })
+    } else if (argv.branch) {
       logger.verbose(`Generating commit log against branch: ${argv.branch}`, { color: 'yellow' })
-      return {
-        branch: branchName,
-        commits: await getCommitLogAgainstBranch({ git, logger, targetBranch: argv.branch }),
-      }
+      commits = await getCommitLogAgainstBranch({ git, logger, targetBranch: argv.branch })
+    } else {
+      logger.verbose(`No range, branch, or tag option provided. Defaulting to current branch`,
+        {
+          color: 'yellow',
+        }
+      )
+      commits = await getCommitLogCurrentBranch({ git, logger })
     }
 
-    logger.verbose(`No range, branch, or tag option provided. Defaulting to current branch`, {
-      color: 'yellow',
-    })
-    const commits = await getCommitLogCurrentBranch({ git, logger })
+    let commitsWithDiffText: CommitDetailsWithDiffText[] = commits;
+    if (argv.withDiff) {
+      commitsWithDiffText = await Promise.all(
+        commits.map(async (commit) => ({
+          ...commit,
+          diffText: await getDiffForCommit(commit.hash, { git }),
+        }))
+      );
+    }
 
     return {
       branch: branchName,
-      commits,
+      commits: commitsWithDiffText,
+      withDiff: argv.withDiff,
     }
   }
 
-  async function parser({ branch, commits }: { branch: string; commits: string[] }) {
-    let result
-    if (!commits || commits.length === 0) {
-      result = `## ${branch}\n\nNo commits found.`
-    } else {
-      result = `## ${branch}\n\n${commits.map((commit) => commit.trim()).join('\n\n')}`
+  async function parser(data: FactoryResult) {
+    if (data.diff) {
+      return `## Diff for ${data.branch}\n\n${data.diff}`
     }
 
+    if (!data.commits || data.commits.length === 0) {
+      return `## ${data.branch}\n\nNo commits found.`
+    }
+
+    let result = `## ${data.branch}\n\n`
+    result += data.commits.map(commit => {
+      let commitStr = `Author: ${commit.author_name}\nCommit: ${commit.hash}\nMessage: ${commit.message}\n${commit.body}`
+      if (data.withDiff && commit.diffText) {
+        commitStr += `\nDiff:\n${commit.diffText}`
+      }
+      return commitStr.trim()
+    }).join('\n\n---\n\n')
+    
     return result
   }
 
-  const changelogMsg = await generateAndReviewLoop<
-    {
-      branch: string
-      commits: string[]
-    },
-    string
-  >({
+  const changelogMsg = await generateAndReviewLoop<FactoryResult, string>({
     label: 'changelog',
     options: {
       ...config,
@@ -129,6 +156,11 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
 
       const formatInstructions =
         "Only respond with a valid JSON object, containing two fields: 'title' an escaped string, no more than 65 characters, and 'content' also an escaped string."
+      
+      let additional_context = ''
+      if (argv.additional) {
+        additional_context = `## Additional Context\n${argv.additional}`
+      }
 
       const changelog = await executeChain({
         llm,
@@ -136,6 +168,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         variables: {
           summary: context,
           format_instructions: formatInstructions,
+          additional_context: additional_context,
         },
         parser,
       })
