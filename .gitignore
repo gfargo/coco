@@ -43,3 +43,5 @@ coverage/
 .claude
 CLAUDE.md
 GEMINI.md
+
+commitlint.config.js
