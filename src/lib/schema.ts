@@ -271,6 +271,15 @@ export const schema = {
             "apiKey": {
               "type": "string",
               "description": "API key to use when making requests to OpenAI. Defaults to the value of `OPENAI_API_KEY` environment variable."
+            },
+            "verbosity": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "description": "The verbosity of the model's response."
             }
           }
         },
