@@ -273,12 +273,7 @@ export const schema = {
               "description": "API key to use when making requests to OpenAI. Defaults to the value of `OPENAI_API_KEY` environment variable."
             },
             "verbosity": {
-              "type": "string",
-              "enum": [
-                "low",
-                "medium",
-                "high"
-              ],
+              "$ref": "#/definitions/OpenAIVerbosityParam",
               "description": "The verbosity of the model's response."
             }
           }
@@ -850,6 +845,18 @@ export const schema = {
         "gpt-3.5-turbo-1106",
         "gpt-3.5-turbo-0125",
         "gpt-3.5-turbo-16k-0613"
+      ]
+    },
+    "OpenAIVerbosityParam": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        null
       ]
     },
     "OllamaLLMService": {
