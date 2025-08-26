@@ -138,7 +138,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         ? ConventionalCommitMessageResponseSchema
         : CommitMessageResponseSchema
 
-      const formatInstructions = `You must always return valid JSON fenced by a markdown code block. Do not return any additional text. The JSON object you return should match the following schema:
+      const formatInstructions = `You must always return a valid JSON object. Do not return any additional text. The JSON object you return should match the following schema:
 ${schema.description}
 {
   "title": "The commit title",
