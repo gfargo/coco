@@ -377,7 +377,7 @@ ${schema.description}
 
       // Use retry wrapper for commitlint validation with up to 4 total attempts
       // (2 automatic retries + 2 more if user chooses "Try again")
-      return await withRetry(generateCommitMessage, {
+      const result = await withRetry(generateCommitMessage, {
         maxAttempts: 6, // Allow for multiple user retry requests
         shouldRetry: shouldRetryCommitlint,
         backoffMs: 0, // No delay needed for commitlint retries
@@ -392,6 +392,17 @@ ${schema.description}
           )
         },
       })
+
+      // Ensure we always return a formatted string, not a JSON object
+      if (typeof result === 'object' && result !== null && 'title' in result && 'body' in result) {
+        const commitMsgObj = result as { title: string; body: string }
+        const appendedText = argv.append ? `\n\n${argv.append}` : ''
+        const ticketId = extractTicketIdFromBranchName(branchName)
+        const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
+        return `${commitMsgObj.title}\n\n${commitMsgObj.body}${appendedText}${ticketFooter}`
+      }
+
+      return result
     },
     noResult: async () => {
       await noResult({ git, logger })
