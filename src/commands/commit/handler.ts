@@ -271,11 +271,13 @@ ${schema.description}
           },
         })
 
-        // Construct the full commit message
-        const appendedText = argv.append ? `\n\n${argv.append}` : ''
+        // Construct the full commit message using the utility function
         const ticketId = extractTicketIdFromBranchName(branchName)
-        const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
-        const fullMessage = `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
+        const fullMessage = formatCommitMessage(commitMsg, {
+          append: argv.append as string | undefined,
+          ticketId: ticketId || undefined,
+          appendTicket: argv.appendTicket as boolean | undefined,
+        })
 
         // If commitlint validation is needed and not skipped, validate the message
         if ((USE_CONVENTIONAL_COMMITS || hasCommitLintConfig) && !shouldSkipCommitlintValidation) {
@@ -394,13 +396,8 @@ ${schema.description}
         },
       })
 
-      // Ensure we always return a properly formatted commit message string
-      const ticketId = extractTicketIdFromBranchName(branchName)
-      return formatCommitMessage(result, {
-        append: argv.append as string | undefined,
-        ticketId: ticketId || undefined,
-        appendTicket: argv.appendTicket as boolean | undefined,
-      })
+      // Return the result which is already a properly formatted commit message string
+      return result
     },
     noResult: async () => {
       await noResult({ git, logger })

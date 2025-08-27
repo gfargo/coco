@@ -12,31 +12,70 @@ export function formatCommitMessage(
 ): string {
   const { append, ticketId, appendTicket } = options
   
-  // If it's a string, check if it contains a JSON object
+  // Helper function to construct the final message with appends
+  const constructMessage = (title: string, body: string): string => {
+    const appendedText = append ? `\n\n${append}` : ''
+    const ticketFooter = appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
+    return `${title}\n\n${body}${appendedText}${ticketFooter}`
+  }
+  
+  // If it's a string, check if it contains a JSON object (including markdown code blocks)
   if (typeof result === 'string') {
-    try {
-      // Try to parse as JSON to see if it's a stringified object
-      const parsed = JSON.parse(result)
-      if (parsed && typeof parsed === 'object' && parsed.title && parsed.body) {
-        // It's a stringified JSON object, format it properly
-        const appendedText = append ? `\n\n${append}` : ''
-        const ticketFooter = appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
-        return `${parsed.title}\n\n${parsed.body}${appendedText}${ticketFooter}`
-      }
-    } catch {
-      // Not valid JSON, treat as regular string
+    // Early return if string clearly doesn't contain JSON-like content
+    if (!result.includes('{') && !result.includes('"title"')) {
+      return result
     }
+    
+    // Handle multiple markdown code block formats
+    const codeBlockPatterns = [
+      /```(?:json)?\s*(\{[\s\S]*?\})\s*```/,  // Standard markdown blocks
+      /`(\{[\s\S]*?\})`/,                     // Inline code blocks
+      /^\s*(\{[\s\S]*\})\s*$/                 // Raw JSON without blocks
+    ]
+    
+    let jsonString = result
+    
+    // Try each pattern to extract JSON
+    for (const pattern of codeBlockPatterns) {
+      const match = result.match(pattern)
+      if (match && match[1]) {
+        jsonString = match[1].trim()
+        break
+      }
+    }
+    
+    // Only attempt JSON parsing if we found potential JSON content
+    if (jsonString !== result || jsonString.startsWith('{')) {
+      try {
+        // Try to parse as JSON to see if it's a stringified object
+        const parsed = JSON.parse(jsonString)
+        if (parsed && 
+            typeof parsed === 'object' && 
+            typeof parsed.title === 'string' && 
+            typeof parsed.body === 'string' &&
+            parsed.title.length > 0 && 
+            parsed.body.length > 0) {
+          // It's a valid stringified JSON object, format it properly
+          return constructMessage(parsed.title, parsed.body)
+        }
+      } catch {
+        // Not valid JSON, continue to fallback
+      }
+    }
+    
+    // If no JSON found and it's already formatted, return as-is
     return result
   }
   
   // If it's already an object with title and body, format it
-  if (typeof result === 'object' && result !== null && 'title' in result && 'body' in result) {
+  if (typeof result === 'object' && result !== null && 
+      'title' in result && 'body' in result) {
     const commitMsgObj = result as { title: string; body: string }
-    const appendedText = append ? `\n\n${append}` : ''
-    const ticketFooter = appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
-    return `${commitMsgObj.title}\n\n${commitMsgObj.body}${appendedText}${ticketFooter}`
+    if (typeof commitMsgObj.title === 'string' && typeof commitMsgObj.body === 'string') {
+      return constructMessage(commitMsgObj.title, commitMsgObj.body)
+    }
   }
   
-  // Fallback - convert to string
+  // Fallback - convert to string and return as-is
   return String(result)
 }
