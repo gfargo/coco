@@ -1,4 +1,3 @@
-import { lint, load } from '@commitlint/core'
 import type { LintOptions, QualifiedConfig } from '@commitlint/types'
 import { existsSync } from 'fs'
 import { join } from 'path'
@@ -35,6 +34,7 @@ export class CommitlintValidationError extends Error {
  * Load commitlint configuration
  */
 export async function loadCommitlintConfig(): Promise<QualifiedConfig> {
+  const { load } = await import('@commitlint/core')
   const projectRoot = findProjectRoot(process.cwd())
   const cwd = projectRoot || process.cwd()
 
@@ -193,6 +193,7 @@ export async function validateCommitMessage(
   options: LintOptions = {}
 ): Promise<ValidationResult> {
   try {
+    const { lint } = await import('@commitlint/core')
     const config = await loadCommitlintConfig()
     const result = await lint(message, config.rules, options)
 
