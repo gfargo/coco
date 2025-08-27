@@ -12,6 +12,7 @@ export interface ValidationResult {
   valid: boolean
   errors: string[]
   warnings: string[]
+  missingDependencies?: string[]
 }
 
 /**
@@ -27,6 +28,34 @@ export class CommitlintValidationError extends Error {
     this.name = 'CommitlintValidationError'
     this.validationResult = validationResult
     this.commitMessage = commitMessage
+  }
+}
+
+/**
+ * Check if commitlint config packages are available
+ * We only check for config-conventional since @commitlint/core is bundled with git-coco
+ */
+export function checkCommitlintAvailability(): { available: boolean; missingPackages: string[] } {
+  const requiredPackages = ['@commitlint/config-conventional']
+  const missingPackages: string[] = []
+
+  for (const pkg of requiredPackages) {
+    try {
+      // Try to resolve the package from the current working directory
+      require.resolve(pkg, { paths: [process.cwd(), ...module.paths] })
+    } catch (error) {
+      missingPackages.push(pkg)
+    }
+  }
+
+  // If config-conventional is missing, also suggest installing CLI
+  if (missingPackages.length > 0) {
+    missingPackages.push('@commitlint/cli')
+  }
+
+  return {
+    available: missingPackages.length === 0,
+    missingPackages,
   }
 }
 
@@ -73,10 +102,34 @@ export async function loadCommitlintConfig(): Promise<QualifiedConfig> {
     // Could be an error parsing, or just not found. Fall through to default.
   }
 
-  // If nothing worked, fallback to conventional config
-  return load({
-    extends: ['@commitlint/config-conventional'],
-  })
+  // Try to fallback to conventional config, but handle missing dependencies gracefully
+  try {
+    return await load({
+      extends: ['@commitlint/config-conventional'],
+    })
+  } catch (error) {
+    // If @commitlint/config-conventional is not available, return a basic conventional config
+    if (error instanceof Error && error.message.includes('Cannot find module "@commitlint/config-conventional"')) {
+      return await load({
+        rules: {
+          'header-max-length': [2, 'always', 72],
+          'header-min-length': [2, 'always', 8],
+          'subject-empty': [2, 'never'],
+          'subject-full-stop': [2, 'never', '.'],
+          'subject-case': [2, 'always', ['sentence-case', 'start-case', 'pascal-case', 'upper-case', 'lower-case']],
+          'type-empty': [2, 'never'],
+          'type-case': [2, 'always', 'lower-case'],
+          'type-enum': [2, 'always', [
+            'build', 'chore', 'ci', 'docs', 'feat', 'fix', 
+            'perf', 'refactor', 'revert', 'style', 'test'
+          ]],
+          'body-max-line-length': [2, 'always', 100],
+          'scope-case': [2, 'always', 'lower-case'],
+        },
+      })
+    }
+    throw error
+  }
 }
 
 /**
@@ -203,9 +256,21 @@ export async function validateCommitMessage(
       warnings: result.warnings.map((warning) => warning.message),
     }
   } catch (error) {
+    const errorMessage = (error as Error).message
+    
+    // Check if this is a missing dependency error
+    if (errorMessage.includes('Cannot find module "@commitlint/config-conventional"')) {
+      return {
+        valid: false,
+        errors: ['Commitlint configuration requires @commitlint/config-conventional to be installed'],
+        warnings: [],
+        missingDependencies: ['@commitlint/config-conventional', '@commitlint/cli'],
+      }
+    }
+
     return {
       valid: false,
-      errors: [(error as Error).message],
+      errors: [errorMessage],
       warnings: [],
     }
   }

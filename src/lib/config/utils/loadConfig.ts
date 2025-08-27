@@ -28,13 +28,32 @@ import { BaseCommandOptions } from '../../../commands/types'
 export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} as ArgvType) {
   // Default config
   let config = DEFAULT_CONFIG
+  console.debug(`[DEBUG] loadConfig: Starting with default config`)
 
   config = loadGitignore(config)
   config = loadIgnore(config)
   config = loadXDGConfig(config)
+  console.debug(`[DEBUG] loadConfig: After XDG config, hasService=${!!config.service}`)
+  
   config = loadGitConfig(config)
+  console.debug(`[DEBUG] loadConfig: After Git config, hasService=${!!config.service}, provider=${config.service?.provider}`)
+  
   config = loadProjectJsonConfig(config)
+  console.debug(`[DEBUG] loadConfig: After Project JSON config, hasService=${!!config.service}, provider=${config.service?.provider}`)
+  if (config.service?.authentication?.type === 'APIKey') {
+    const hasApiKey = !!(config.service.authentication.credentials?.apiKey)
+    console.debug(`[DEBUG] loadConfig: After Project config, hasApiKey=${hasApiKey}`)
+  }
+  
   config = loadEnvConfig(config)
+  console.debug(`[DEBUG] loadConfig: After Env config, hasService=${!!config.service}, provider=${config.service?.provider}`)
+  if (config.service?.authentication?.type === 'APIKey') {
+    const hasApiKey = !!(config.service.authentication.credentials?.apiKey)
+    console.debug(`[DEBUG] loadConfig: Final config, hasApiKey=${hasApiKey}`)
+  }
 
-  return { ...config, ...argv } as Config & ConfigType & ArgvType
+  const finalConfig = { ...config, ...argv } as Config & ConfigType & ArgvType
+  console.debug(`[DEBUG] loadConfig: Final merged config, hasService=${!!finalConfig.service}`)
+  
+  return finalConfig
 }

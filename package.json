@@ -45,6 +45,7 @@
     "coco:esm": "node dist/index.esm.mjs"
   },
   "devDependencies": {
+    "@commitlint/types": "^19.8.0",
     "@rollup/plugin-commonjs": "^28.0.0",
     "@rollup/plugin-eslint": "^9.0.5",
     "@rollup/plugin-json": "^6.0.0",
@@ -73,9 +74,7 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@commitlint/config-conventional": "^19.8.0",
     "@commitlint/core": "^19.8.0",
-    "@commitlint/types": "^19.8.0",
     "@inquirer/prompts": "3.3.0",
     "@langchain/anthropic": "^0.3.14",
     "@langchain/community": "^0.3.32",
