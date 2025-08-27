@@ -2,6 +2,7 @@ import { type TiktokenModel } from '@langchain/openai'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
+import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessage'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default'
@@ -393,16 +394,13 @@ ${schema.description}
         },
       })
 
-      // Ensure we always return a formatted string, not a JSON object
-      if (typeof result === 'object' && result !== null && 'title' in result && 'body' in result) {
-        const commitMsgObj = result as { title: string; body: string }
-        const appendedText = argv.append ? `\n\n${argv.append}` : ''
-        const ticketId = extractTicketIdFromBranchName(branchName)
-        const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
-        return `${commitMsgObj.title}\n\n${commitMsgObj.body}${appendedText}${ticketFooter}`
-      }
-
-      return result
+      // Ensure we always return a properly formatted commit message string
+      const ticketId = extractTicketIdFromBranchName(branchName)
+      return formatCommitMessage(result, {
+        append: argv.append as string | undefined,
+        ticketId: ticketId || undefined,
+        appendTicket: argv.appendTicket as boolean | undefined,
+      })
     },
     noResult: async () => {
       await noResult({ git, logger })
