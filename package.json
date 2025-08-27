@@ -60,7 +60,7 @@
     "eslint": "^8.54.0",
     "jest": "^30.0.5",
     "release-it": "^19.0.4",
-    "rollup": "^3.26.1",
+    "rollup": "^4.48.1",
     "rollup-plugin-dts": "^6.1.0",
     "rollup-plugin-executable": "^1.6.3",
     "rollup-plugin-peer-deps-external": "^2.2.4",
