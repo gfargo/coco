@@ -59,14 +59,6 @@ export function getDefaultServiceApiKey(config: Config): string {
   if (service.authentication.type === 'APIKey') {
     const apiKey = service.authentication.credentials?.apiKey
     
-    // Debug logging for API key retrieval
-    console.debug(`[DEBUG] getDefaultServiceApiKey: provider=${provider}, hasApiKey=${!!apiKey}, authType=${service.authentication.type}`)
-    if (apiKey) {
-      console.debug(`[DEBUG] getDefaultServiceApiKey: API key found (${apiKey.length} chars, starts with: ${apiKey.substring(0, 7)}...)`)
-    } else {
-      console.debug(`[DEBUG] getDefaultServiceApiKey: No API key found in config`)
-    }
-    
     if (requiresAuth && (!apiKey || apiKey.trim() === '')) {
       throw new LangChainAuthenticationError(
         `getDefaultServiceApiKey: API key is required for ${provider} provider but not provided`,

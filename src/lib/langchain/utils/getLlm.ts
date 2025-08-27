@@ -28,12 +28,7 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
   let apiKey: string
   try {
     apiKey = getApiKeyForModel(config)
-    console.debug(`[DEBUG] getLlm: Retrieved API key for ${provider}, hasKey=${!!apiKey}`)
-    if (apiKey) {
-      console.debug(`[DEBUG] getLlm: API key length=${apiKey.length}, starts with: ${apiKey.substring(0, 7)}...`)
-    }
   } catch (error) {
-    console.debug(`[DEBUG] getLlm: Failed to retrieve API key:`, error)
     handleLangChainError(error, 'getLlm: Failed to retrieve API key', { provider, model })
   }
 
@@ -59,7 +54,6 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
         })
         
       case 'openai':
-        console.debug(`[DEBUG] getLlm: Creating ChatOpenAI with apiKey=${!!apiKey}, model=${model}, temperature=${config.service.temperature || 0.2}`)
         return new ChatOpenAI({
           apiKey: apiKey,
           model,
