@@ -5,12 +5,14 @@ import { appendToProjectJsonConfig } from '../../lib/config/services/project'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
 import { LOGO } from '../../lib/ui/helpers'
 import { logResult } from '../../lib/ui/logResult'
+import { installNpmPackage } from '../../lib/utils/installPackage'
 
 import { ConfigWithServiceObject } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { OllamaLLMService } from '../../lib/langchain/types'
 import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
 import { CommandHandler } from '../../lib/types'
+import { Logger } from '../../lib/utils/logger'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
 import { getProjectConfigFilePath } from '../../lib/utils/getProjectConfigFilePath'
 import { InitArgv, InitOptions } from './config'
@@ -22,8 +24,13 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   logger.log(LOGO)
 
   let scope = options?.scope
+  let shouldSetupCommitlint = false
+  
   if (!scope) {
     scope = await questions.whatScope()
+
+    // Ask about commitlint setup after scope selection
+    shouldSetupCommitlint = await questions.setupCommitlint()
 
     const llmProvider = await questions.selectLLMProvider()
     const llmModel = await questions.selectLLMModel(llmProvider)
@@ -166,9 +173,51 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       // After config is written, check for package installation
       await checkAndHandlePackageInstallation({ global: scope === 'global', logger })
 
+      // Install commitlint packages if user requested
+      if (shouldSetupCommitlint) {
+        await installCommitlintPackages(scope, logger)
+      }
+
       logger.log(`\ninit successful! 🦾🤖🎉`, { color: 'green' })
     } else {
       logger.log('\ninit cancelled.', { color: 'yellow' })
+    }
+  }
+}
+
+/**
+ * Install commitlint packages based on scope (global or project)
+ */
+async function installCommitlintPackages(scope: 'global' | 'project', logger: Logger): Promise<void> {
+  const packages = ['@commitlint/config-conventional', '@commitlint/cli']
+  
+  try {
+    if (scope === 'global') {
+      logger.startSpinner('Installing commitlint packages globally...', { color: 'blue' })
+      
+      for (const pkg of packages) {
+        await installNpmPackage({ name: pkg, flags: ['-g'] })
+      }
+      
+      logger.stopSpinner('Installed commitlint packages globally')
+    } else {
+      logger.startSpinner('Installing commitlint packages in project...', { color: 'blue' })
+      
+      for (const pkg of packages) {
+        await installNpmPackage({ name: pkg, flags: ['--save-dev'] })
+      }
+      
+      logger.stopSpinner('Installed commitlint packages in project')
+    }
+  } catch (error) {
+    logger.stopSpinner('Failed to install commitlint packages')
+    logger.log(`Error installing commitlint packages: ${(error as Error).message}`, { color: 'red' })
+    logger.log('You can install them manually later:', { color: 'yellow' })
+    
+    if (scope === 'global') {
+      logger.log('npm install -g @commitlint/config-conventional @commitlint/cli', { color: 'gray' })
+    } else {
+      logger.log('npm install --save-dev @commitlint/config-conventional @commitlint/cli', { color: 'gray' })
     }
   }
 }

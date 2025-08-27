@@ -188,9 +188,37 @@ ${schema.description}
       // Load commitlint rules context if available
       const hasCommitLintConfig = await hasCommitlintConfig()
       let commitlint_rules_context = ''
+      let shouldSkipCommitlintValidation = false
+      
       if (USE_CONVENTIONAL_COMMITS || hasCommitLintConfig) {
-        const { getCommitlintRulesContext } = await import('../../lib/utils/commitlintValidator')
-        commitlint_rules_context = await getCommitlintRulesContext()
+        const { getCommitlintRulesContext, checkCommitlintAvailability } = await import('../../lib/utils/commitlintValidator')
+        
+        // Check if commitlint packages are available
+        const availability = checkCommitlintAvailability()
+        
+        if (!availability.available) {
+          const { handleMissingCommitlintDeps } = await import('../../lib/ui/handleMissingCommitlintDeps')
+          const result = await handleMissingCommitlintDeps({
+            logger,
+            interactive: INTERACTIVE,
+            missingPackages: availability.missingPackages,
+          })
+
+          switch (result.action) {
+            case 'continue':
+              shouldSkipCommitlintValidation = true
+              logger.log('Continuing without commitlint validation...', { color: 'yellow' })
+              break
+            case 'setup':
+              logger.log('\nPlease run `coco init` to set up commitlint, then try again.', { color: 'blue' })
+              process.exit(0)
+            case 'abort':
+              logger.log('\nAborting commit operation.', { color: 'red' })
+              process.exit(1)
+          }
+        } else {
+          commitlint_rules_context = await getCommitlintRulesContext()
+        }
       }
 
       // Get variables for the prompt
@@ -248,8 +276,8 @@ ${schema.description}
         const ticketFooter = argv.appendTicket && ticketId ? `\n\nPart of **${ticketId}**` : ''
         const fullMessage = `${commitMsg.title}\n\n${commitMsg.body}${appendedText}${ticketFooter}`
 
-        // If commitlint validation is needed, validate the message
-        if (USE_CONVENTIONAL_COMMITS || hasCommitLintConfig) {
+        // If commitlint validation is needed and not skipped, validate the message
+        if ((USE_CONVENTIONAL_COMMITS || hasCommitLintConfig) && !shouldSkipCommitlintValidation) {
           const { validateCommitMessage, CommitlintValidationError } = await import(
             '../../lib/utils/commitlintValidator'
           )
@@ -258,6 +286,28 @@ ${schema.description}
           logger.verbose(`Validation result: ${JSON.stringify(validationResult)}`, {
             color: 'yellow',
           })
+
+          // Handle missing dependencies gracefully
+          if (validationResult.missingDependencies && validationResult.missingDependencies.length > 0) {
+            const { handleMissingCommitlintDeps } = await import('../../lib/ui/handleMissingCommitlintDeps')
+            const result = await handleMissingCommitlintDeps({
+              logger,
+              interactive: INTERACTIVE,
+              missingPackages: validationResult.missingDependencies,
+            })
+
+            switch (result.action) {
+              case 'continue':
+                logger.log('Skipping commitlint validation...', { color: 'yellow' })
+                return fullMessage
+              case 'setup':
+                logger.log('\nPlease run `coco init` to set up commitlint, then try again.', { color: 'blue' })
+                process.exit(0)
+              case 'abort':
+                logger.log('\nAborting commit due to missing dependencies.', { color: 'red' })
+                process.exit(1)
+            }
+          }
 
           if (!validationResult.valid) {
             retryCount++

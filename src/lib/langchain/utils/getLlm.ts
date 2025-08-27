@@ -55,7 +55,7 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
         
       case 'openai':
         return new ChatOpenAI({
-          openAIApiKey: apiKey,
+          apiKey: apiKey,
           model,
           temperature: config.service.temperature || 0.2,
         })

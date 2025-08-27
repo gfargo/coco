@@ -250,4 +250,10 @@ export const questions = {
         },
       ],
     }),
+
+  setupCommitlint: async (): Promise<boolean> =>
+    await confirm({
+      message: 'set up commitlint for conventional commits support?',
+      default: true,
+    }),
 }
