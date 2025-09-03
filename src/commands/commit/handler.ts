@@ -101,7 +101,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     return await fileChangeParser({
       changes,
       commit: '--staged',
-      options: { tokenizer, git, llm, logger },
+      options: { tokenizer, git, llm, logger, maxTokens: config.service.tokenLimit },
     })
   }
 

@@ -7,14 +7,10 @@ import { getDiff } from '../../simple-git/getDiff'
 import { loadSummarizationChain } from 'langchain/chains'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 
-// Max tokens for GPT-3 is 4096
-// const MAX_TOKENS_PER_SUMMARY = 4096
-const MAX_TOKENS_PER_SUMMARY = 12288
-
 export async function fileChangeParser({
   changes,
   commit,
-  options: { tokenizer, git, llm: model, logger },
+  options: { tokenizer, git, llm: model, logger, maxTokens },
 }: FileChangeParserInput): Promise<string> {
   const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 10000, chunkOverlap: 250 })
 
@@ -42,7 +38,7 @@ export async function fileChangeParser({
   logger.startTimer()
   const summary = await summarizeDiffs(diffs, {
     tokenizer,
-    maxTokens: MAX_TOKENS_PER_SUMMARY,
+    maxTokens: maxTokens || 4096,
     textSplitter,
     chain: summarizationChain,
     logger,
