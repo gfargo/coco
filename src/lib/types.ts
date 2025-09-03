@@ -51,6 +51,7 @@ export interface BaseParserOptions {
   llm: ReturnType<typeof getLlm>
   git: SimpleGit
   logger: Logger
+  maxTokens?: number
 }
 
 export interface BaseParserInput {
