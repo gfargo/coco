@@ -1405,9 +1405,9 @@
     uuid "^10.0.0"
 
 "@langchain/openai@>=0.1.0 <0.7.0", "@langchain/openai@>=0.2.0 <0.7.0", "@langchain/openai@^0.6.7":
-  version "0.6.9"
-  resolved "https://registry.npmjs.org/@langchain/openai/-/openai-0.6.9.tgz"
-  integrity sha512-Dl+YVBTFia7WE4/jFemQEVchPbsahy/dD97jo6A9gLnYfTkWa/jh8Q78UjHQ3lobif84j2ebjHPcDHG1L0NUWg==
+  version "0.6.11"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.6.11.tgz#a3a804148b347bbcfdd864ed3ad86cafba2f67b1"
+  integrity sha512-BkaudQTLsmdt9mF6tn6CrsK2TEFKk4EhAWYkouGTy/ljJIH/p2Nz9awIOGdrQiQt6AJ5mvKGupyVqy3W/jim2Q==
   dependencies:
     js-tiktoken "^1.0.12"
     openai "5.12.2"
