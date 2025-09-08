@@ -1363,9 +1363,9 @@
     fast-xml-parser "^4.4.1"
 
 "@langchain/community@^0.3.32":
-  version "0.3.53"
-  resolved "https://registry.npmjs.org/@langchain/community/-/community-0.3.53.tgz"
-  integrity sha512-TlQzXXuiqPkpALvvuClzt6K83EQ2oA+0B/UzWrrWQPCYpJtfy5kbT/Uwc4PPa8twdVUNpLcXgFaLtb3U1EXVAg==
+  version "0.3.55"
+  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.55.tgz#438155ff354f389bb21e95a031e6ffdd498ca32a"
+  integrity sha512-vCBM59gYfsRxB+OCD2ot/6Hb5/uKHipGKDxP6Jq3PCB/hUR6crvPi0nxb1bi+DJub6FpZUmSnwj7YV240ObaaQ==
   dependencies:
     "@langchain/openai" ">=0.2.0 <0.7.0"
     "@langchain/weaviate" "^0.2.0"
@@ -1374,7 +1374,7 @@
     flat "^5.0.2"
     js-yaml "^4.1.0"
     langchain ">=0.2.3 <0.3.0 || >=0.3.4 <0.4.0"
-    langsmith "^0.3.46"
+    langsmith "^0.3.67"
     uuid "^10.0.0"
     zod "^3.25.32"
 
@@ -4415,10 +4415,10 @@ keyv@^4.5.3:
     yaml "^2.2.1"
     zod "^3.25.32"
 
-langsmith@^0.3.33, langsmith@^0.3.46:
-  version "0.3.56"
-  resolved "https://registry.npmjs.org/langsmith/-/langsmith-0.3.56.tgz"
-  integrity sha512-LLAppYZ6EWodnWSqgf/526ONtfb4Z1qR3QnF1+mYgOAr7aPOs9KNvxZMoCsg4oTXfxgf/+UJQ3Q1roTQEKJUag==
+langsmith@^0.3.33, langsmith@^0.3.46, langsmith@^0.3.67:
+  version "0.3.67"
+  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.3.67.tgz#6e4fbcb7ffb37e690af4d048e3a10a725418c7fe"
+  integrity sha512-l4y3RmJ9yWF5a29fLg3eWZQxn6Q6dxTOgLGgQHzPGZHF3NUynn+A+airYIe/Yt4rwjGbuVrABAPsXBkVu/Hi7g==
   dependencies:
     "@types/uuid" "^10.0.0"
     chalk "^4.1.2"
