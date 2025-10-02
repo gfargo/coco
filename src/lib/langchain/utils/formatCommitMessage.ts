@@ -1,3 +1,6 @@
+
+import { repairJson } from '../../utils/repairJson';
+
 /**
  * Utility function to ensure commit messages are properly formatted as strings
  * rather than JSON objects, whether they come as parsed objects or stringified JSON
@@ -59,7 +62,22 @@ export function formatCommitMessage(
           return constructMessage(parsed.title, parsed.body)
         }
       } catch {
-        // Not valid JSON, continue to fallback
+        // Try to repair the JSON and parse again
+        try {
+          const repairedJson = repairJson(jsonString)
+          const parsed = JSON.parse(repairedJson)
+          if (parsed && 
+              typeof parsed === 'object' && 
+              typeof parsed.title === 'string' && 
+              typeof parsed.body === 'string' &&
+              parsed.title.length > 0 && 
+              parsed.body.length > 0) {
+            // Successfully repaired and parsed JSON
+            return constructMessage(parsed.title, parsed.body)
+          }
+        } catch {
+          // Repair failed, continue to fallback
+        }
       }
     }
     

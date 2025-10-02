@@ -203,5 +203,23 @@ describe('formatCommitMessage', () => {
       const result = formatCommitMessage(input)
       expect(result).toBe('first\n\nFirst match')
     })
+
+    it('should repair malformed JSON with unquoted values', () => {
+      const input = '{"title": chore(.gitignore): update ignore rules, "body": "Updated gitignore file"}'
+      const result = formatCommitMessage(input)
+      expect(result).toBe('chore(.gitignore): update ignore rules\n\nUpdated gitignore file')
+    })
+
+    it('should repair the exact issue example', () => {
+      const input = '{"title": chore(.gitignore): update ignore rules and add config file,"body": "Modify .gitignore to include next-env.d.ts and .coco.config.json for better project hygiene and consistency. This change helps prevent unnecessary files from being committed and improves environment setup clarity."}'
+      const result = formatCommitMessage(input)
+      expect(result).toBe('chore(.gitignore): update ignore rules and add config file\n\nModify .gitignore to include next-env.d.ts and .coco.config.json for better project hygiene and consistency. This change helps prevent unnecessary files from being committed and improves environment setup clarity.')
+    })
+
+    it('should handle valid conventional commit JSON correctly', () => {
+      const input = '{"title": "build: add comprehensive analytics tracking for registry and components","body": "Implement analytics events for registry access, component downloads, errors, performance, and user interactions across API routes and UI components to enable detailed insights and monitoring."}'
+      const result = formatCommitMessage(input)
+      expect(result).toBe('build: add comprehensive analytics tracking for registry and components\n\nImplement analytics events for registry access, component downloads, errors, performance, and user interactions across API routes and UI components to enable detailed insights and monitoring.')
+    })
   })
 })

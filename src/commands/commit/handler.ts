@@ -21,10 +21,10 @@ import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import { withRetry } from '../../lib/utils/retry'
 import {
-  CommitArgv,
-  CommitMessageResponseSchema,
-  CommitOptions,
-  ConventionalCommitMessageResponseSchema,
+    CommitArgv,
+    CommitMessageResponseSchema,
+    CommitOptions,
+    ConventionalCommitMessageResponseSchema,
 } from './config'
 import { noResult } from './noResult'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
@@ -139,12 +139,23 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         ? ConventionalCommitMessageResponseSchema
         : CommitMessageResponseSchema
 
-      const formatInstructions = `You must always return a valid JSON object. Do not return any additional text. The JSON object you return should match the following schema:
+      const formatInstructions = `CRITICAL: You must return ONLY a valid JSON object with no additional text, explanations, or markdown formatting.
+
+REQUIRED JSON FORMAT:
 ${schema.description}
+
+EXAMPLE (follow this exact structure):
 {
-  "title": "The commit title",
-  "body": "The commit body"
-}`
+  "title": "feat(auth): add user authentication system",
+  "body": "Implement JWT-based authentication with login and logout functionality. Includes password hashing and session management."
+}
+
+IMPORTANT RULES:
+- ALL string values MUST be enclosed in double quotes
+- NO trailing commas
+- NO comments or additional text outside the JSON
+- The "title" and "body" values must be properly quoted strings
+- Return ONLY the JSON object, nothing else`
 
       // Use conventional commit prompt if enabled
       const promptTemplate = USE_CONVENTIONAL_COMMITS ? CONVENTIONAL_COMMIT_PROMPT : COMMIT_PROMPT
