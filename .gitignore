@@ -40,8 +40,10 @@ coverage/
 
 /src/lib/buildInfo.ts
 
+.kiro
 .claude
 CLAUDE.md
 GEMINI.md
+AGENTS.md
 
 commitlint.config.js
