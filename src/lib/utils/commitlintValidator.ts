@@ -43,6 +43,18 @@ export function checkCommitlintAvailability(): { available: boolean; missingPack
     try {
       // Try to resolve the package from the current working directory
       require.resolve(pkg, { paths: [process.cwd(), ...module.paths] })
+      
+      // Additional check: try to actually load the config to catch ES module issues
+      try {
+        require(pkg)
+      } catch (loadError) {
+        const loadErrorMessage = loadError instanceof Error ? loadError.message : String(loadError)
+        // If we can resolve but can't load due to ES module issues, treat as missing
+        if (loadErrorMessage.includes('Directory import') || 
+            loadErrorMessage.includes('is not supported resolving ES modules')) {
+          missingPackages.push(pkg)
+        }
+      }
     } catch (error) {
       missingPackages.push(pkg)
     }
@@ -57,6 +69,18 @@ export function checkCommitlintAvailability(): { available: boolean; missingPack
     available: missingPackages.length === 0,
     missingPackages,
   }
+}
+
+/**
+ * Check if we're in a pnpm environment with ES module issues
+ */
+function isPnpmEsModuleIssue(error: Error): boolean {
+  const message = error.message
+  return (
+    message.includes('Directory import') &&
+    message.includes('is not supported resolving ES modules') &&
+    message.includes('@commitlint/config-conventional')
+  )
 }
 
 /**
@@ -108,8 +132,17 @@ export async function loadCommitlintConfig(): Promise<QualifiedConfig> {
       extends: ['@commitlint/config-conventional'],
     })
   } catch (error) {
-    // If @commitlint/config-conventional is not available, return a basic conventional config
-    if (error instanceof Error && error.message.includes('Cannot find module "@commitlint/config-conventional"')) {
+    if (!(error instanceof Error)) {
+      throw error
+    }
+    
+    // Handle various types of config-conventional loading errors
+    const isConfigConventionalError = 
+      error.message.includes('Cannot find module "@commitlint/config-conventional"') ||
+      isPnpmEsModuleIssue(error)
+    
+    if (isConfigConventionalError) {
+      // Return a basic conventional config that matches @commitlint/config-conventional rules
       return await load({
         rules: {
           'header-max-length': [2, 'always', 72],
@@ -256,10 +289,30 @@ export async function validateCommitMessage(
       warnings: result.warnings.map((warning) => warning.message),
     }
   } catch (error) {
-    const errorMessage = (error as Error).message
+    if (!(error instanceof Error)) {
+      return {
+        valid: false,
+        errors: [String(error)],
+        warnings: [],
+      }
+    }
     
-    // Check if this is a missing dependency error
-    if (errorMessage.includes('Cannot find module "@commitlint/config-conventional"')) {
+    // Check if this is a config-conventional related error (including pnpm ES module issues)
+    const isConfigConventionalError = 
+      error.message.includes('Cannot find module "@commitlint/config-conventional"') ||
+      isPnpmEsModuleIssue(error)
+    
+    if (isConfigConventionalError) {
+      // For pnpm ES module issues, we should have already fallen back to built-in rules
+      // during config loading, so this shouldn't happen. But if it does, provide helpful info.
+      if (isPnpmEsModuleIssue(error)) {
+        return {
+          valid: false,
+          errors: ['pnpm ES module compatibility issue with @commitlint/config-conventional'],
+          warnings: ['Try: pnpm add -D @commitlint/config-conventional@latest @commitlint/cli@latest'],
+        }
+      }
+      
       return {
         valid: false,
         errors: ['Commitlint configuration requires @commitlint/config-conventional to be installed'],
@@ -270,7 +323,7 @@ export async function validateCommitMessage(
 
     return {
       valid: false,
-      errors: [errorMessage],
+      errors: [error.message],
       warnings: [],
     }
   }
