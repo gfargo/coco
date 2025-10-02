@@ -73,6 +73,8 @@ export const CONVENTIONAL_TEMPLATE = `Generate a commit message that strictly ad
    - Scope should be a noun in parentheses (e.g., (parser), (ui), (config))
    - Omit scope if the change is broad or affects multiple areas
 
+CRITICAL: You must respond with ONLY valid JSON. All string values must be properly quoted.
+
 Based on the following diff summary, generate a conventional commit message that follows these rules exactly:
 
 """"""
