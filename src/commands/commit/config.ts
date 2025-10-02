@@ -15,7 +15,7 @@ export interface CommitOptions extends BaseCommandOptions {
 
 export type CommitArgv = Arguments<CommitOptions>
 
-const conventionalTypeRegex = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?:/;
+const conventionalTypeRegex = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?:/;
 
 // Regular commit message schema with basic validation
 export const CommitMessageResponseSchema = z.object({
