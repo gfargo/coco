@@ -56,13 +56,18 @@ describe('Conventional Commits Handler', () => {
 
     // Default mocks
     mockLoadConfig.mockReturnValue({
+      mode: 'stdout',
+      defaultBranch: 'main',
       service: {
-        authentication: { type: 'apiKey' },
         provider: 'openai',
         model: 'gpt-4o',
+        authentication: {
+          type: 'APIKey',
+          credentials: { apiKey: 'mock-api-key' },
+        },
       },
       conventionalCommits: false,
-    } as any)
+    })
 
     mockGetApiKeyForModel.mockReturnValue('mock-api-key')
     mockGetModelAndProviderFromConfig.mockReturnValue({
@@ -98,13 +103,18 @@ describe('Conventional Commits Handler', () => {
 
     it('should call generateAndReviewLoop when conventional commits enabled in config', async () => {
       mockLoadConfig.mockReturnValue({
+        mode: 'stdout',
+        defaultBranch: 'main',
         service: {
-          authentication: { type: 'apiKey' },
           provider: 'openai',
           model: 'gpt-4o',
+          authentication: {
+            type: 'APIKey',
+            credentials: { apiKey: 'mock-api-key' },
+          },
         },
         conventionalCommits: true,
-      } as any)
+      })
 
       await handler(argv, logger)
 
@@ -177,13 +187,19 @@ describe('Conventional Commits Handler', () => {
 
     it('should warn about Ollama model limitations', async () => {
       mockLoadConfig.mockReturnValue({
+        mode: 'stdout',
+        defaultBranch: 'main',
         service: {
-          authentication: { type: 'apiKey' },
           provider: 'ollama',
           model: 'llama2',
+          endpoint: 'http://localhost:11434',
+          authentication: {
+            type: 'None',
+            credentials: undefined,
+          },
         },
         conventionalCommits: true,
-      } as unknown)
+      })
 
       mockGetModelAndProviderFromConfig.mockReturnValue({
         provider: 'ollama',
