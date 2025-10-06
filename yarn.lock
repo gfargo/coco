@@ -1399,16 +1399,16 @@
     zod "^3.25.32"
 
 "@langchain/core@^0.3.40":
-  version "0.3.72"
-  resolved "https://registry.npmjs.org/@langchain/core/-/core-0.3.72.tgz"
-  integrity sha512-WsGWVZYnlKffj2eEfDocPNiaTRoxyYiLSQdQ7oxZvxGZBqo/90vpjbC33UGK1uPNBM4kT+pkdaol/MnvKUh8TQ==
+  version "0.3.78"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.78.tgz#40e69fba6688858edbcab4473358ec7affc685fd"
+  integrity sha512-Nn0x9erQlK3zgtRU1Z8NUjLuyW0gzdclMsvLQ6wwLeDqV91pE+YKl6uQb+L2NUDs4F0N7c2Zncgz46HxrvPzuA==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
     camelcase "6"
     decamelize "1.2.0"
     js-tiktoken "^1.0.12"
-    langsmith "^0.3.46"
+    langsmith "^0.3.67"
     mustache "^4.2.0"
     p-queue "^6.6.2"
     p-retry "4"
@@ -4467,7 +4467,7 @@ keyv@^4.5.3:
     yaml "^2.2.1"
     zod "^3.25.32"
 
-langsmith@^0.3.33, langsmith@^0.3.46, langsmith@^0.3.67:
+langsmith@^0.3.33, langsmith@^0.3.67:
   version "0.3.71"
   resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.3.71.tgz#bb8ccbc1288a3fa8d02a337feb61261c76fd34b2"
   integrity sha512-xl00JZso7J3OaurUQ+seT2qRJ34OGZXYAvCYj3vNC3TB+JOcdcYZ1uLvENqOloKB8VCiADh1eZ0FG3Cj/cy2FQ==
