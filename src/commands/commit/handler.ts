@@ -133,6 +133,10 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     },
     factory,
     parser,
+    reviewParser: (result) => {
+      // Ensure the result is properly formatted as a string for display
+      return typeof result === 'string' ? result : String(result)
+    },
     agent: async (context, options) => {
       // Select the appropriate schema based on whether conventional commits are enabled
       const schema = USE_CONVENTIONAL_COMMITS
