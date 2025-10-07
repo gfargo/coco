@@ -288,11 +288,18 @@ IMPORTANT RULES:
 
         // Construct the full commit message using the utility function
         const ticketId = extractTicketIdFromBranchName(branchName)
+        
+        // Debug: Log what commitMsg looks like before formatting
+        logger.verbose(`commitMsg before formatting: ${JSON.stringify(commitMsg)}`, { color: 'blue' })
+        
         const fullMessage = formatCommitMessage(commitMsg, {
           append: argv.append as string | undefined,
           ticketId: ticketId || undefined,
           appendTicket: argv.appendTicket as boolean | undefined,
         })
+        
+        // Debug: Log what fullMessage looks like after formatting
+        logger.verbose(`fullMessage after formatting: ${typeof fullMessage === 'string' ? fullMessage : JSON.stringify(fullMessage)}`, { color: 'blue' })
 
         // If commitlint validation is needed and not skipped, validate the message
         if ((USE_CONVENTIONAL_COMMITS || hasCommitLintConfig) && !shouldSkipCommitlintValidation) {
