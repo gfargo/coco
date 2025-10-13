@@ -1380,9 +1380,9 @@
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
 "@langchain/anthropic@^0.3.14":
-  version "0.3.29"
-  resolved "https://registry.yarnpkg.com/@langchain/anthropic/-/anthropic-0.3.29.tgz#f6a35e838bf8f996e3b96474163523cd1a3da762"
-  integrity sha512-50JWZi8JEEpp+J1WQYNyOj6qkKxvJUHNHksHFOzz2SJ0WF0Fcx5PVss3aDBVRephGppZhOpja1SZ7xdIW49EZA==
+  version "0.3.31"
+  resolved "https://registry.yarnpkg.com/@langchain/anthropic/-/anthropic-0.3.31.tgz#80bc2464ab98cfb8df0de50cf219d92cfe5934e1"
+  integrity sha512-XyjwE1mA1I6sirSlVZtI6tyv7nH3+b8F5IFDi9WNKA8+SidJ0o3cP90TxrK7x1sSLmdj+su3f8s2hOusw6xpaw==
   dependencies:
     "@anthropic-ai/sdk" "^0.65.0"
     fast-xml-parser "^4.4.1"
