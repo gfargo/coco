@@ -7,6 +7,7 @@ import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
 import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLastTag'
 import { getCommitLogAgainstBranch } from '../../lib/simple-git/getCommitLogAgainstBranch'
+import { getCommitLogAgainstTag } from '../../lib/simple-git/getCommitLogAgainstTag'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getCommitLogRangeDetails, CommitDetails } from '../../lib/simple-git/getCommitLogRangeDetails'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
@@ -39,6 +40,17 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const git = getRepo()
   const key = getApiKeyForModel(config)
   const { provider, model } = getModelAndProviderFromConfig(config)
+
+  const exclusiveOptions = [
+    argv.branch ? '--branch' : null,
+    argv.tag ? '--tag' : null,
+    config.sinceLastTag ? '--since-last-tag' : null,
+  ].filter(Boolean)
+
+  if (exclusiveOptions.length > 1) {
+    logger.log(`Options ${exclusiveOptions.join(', ')} cannot be used together.`, { color: 'red' })
+    process.exit(1)
+  }
 
   if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
@@ -85,6 +97,9 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     } else if (argv.branch) {
       logger.verbose(`Generating commit log against branch: ${argv.branch}`, { color: 'yellow' })
       commits = await getCommitLogAgainstBranch({ git, logger, targetBranch: argv.branch })
+    } else if (argv.tag) {
+      logger.verbose(`Generating commit log against tag: ${argv.tag}`, { color: 'yellow' })
+      commits = await getCommitLogAgainstTag({ git, logger, targetTag: argv.tag })
     } else {
       logger.verbose(`No range, branch, or tag option provided. Defaulting to current branch`,
         {
