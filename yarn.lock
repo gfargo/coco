@@ -5527,9 +5527,9 @@ rollup-plugin-typescript2@^0.36.0:
     tslib "^2.6.2"
 
 rollup-plugin-visualizer@^6.0.3:
-  version "6.0.3"
-  resolved "https://registry.npmjs.org/rollup-plugin-visualizer/-/rollup-plugin-visualizer-6.0.3.tgz"
-  integrity sha512-ZU41GwrkDcCpVoffviuM9Clwjy5fcUxlz0oMoTXTYsK+tcIFzbdacnrr2n8TXcHxbGKKXtOdjxM2HUS4HjkwIw==
+  version "6.0.4"
+  resolved "https://registry.yarnpkg.com/rollup-plugin-visualizer/-/rollup-plugin-visualizer-6.0.4.tgz#d0217a3eb3f7f1e936dbbb4ad9638db50577098c"
+  integrity sha512-q8Q7J/6YofkmaGW1sH/fPRAz37x/+pd7VBuaUU7lwvOS/YikuiiEU9jeb9PH8XHiq50XFrUsBbOxeAMYQ7KZkg==
   dependencies:
     open "^8.0.0"
     picomatch "^4.0.2"
