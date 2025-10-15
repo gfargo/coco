@@ -188,11 +188,117 @@ describe('Conventional Commits Integration', () => {
 
     it('should handle mixed quoted and unquoted values', () => {
       const mixedQuoting = '{"title": "style: format code with prettier", "body": Update code formatting across all TypeScript files}'
-      
+
       const repaired = repairJson(mixedQuoting)
       const result = formatCommitMessage(repaired)
-      
+
       const expected = 'style: format code with prettier\n\nUpdate code formatting across all TypeScript files'
+      expect(result).toBe(expected)
+    })
+  })
+
+  describe('Advanced Edge Cases', () => {
+    it('should handle text before JSON', () => {
+      const textBeforeJson = 'Here is your commit message:\n{"title": "feat(api): add endpoint", "body": "Add new REST endpoint for user management."}'
+
+      const result = formatCommitMessage(textBeforeJson)
+
+      // Should extract the JSON and ignore the text before it
+      const expected = 'feat(api): add endpoint\n\nAdd new REST endpoint for user management.'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle text after JSON', () => {
+      const textAfterJson = '{"title": "fix(ui): resolve button alignment", "body": "Fix button positioning in header."}\n\nDoes this commit message work for you?'
+
+      const result = formatCommitMessage(textAfterJson)
+
+      // Should extract the JSON and ignore the text after it
+      const expected = 'fix(ui): resolve button alignment\n\nFix button positioning in header.'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle multiple JSON objects by using the first one', () => {
+      const multipleObjects = '{"title": "feat: add feature A", "body": "First option"} or {"title": "feat: add feature B", "body": "Second option"}'
+
+      const result = formatCommitMessage(multipleObjects)
+
+      // Should use the first valid JSON object
+      const expected = 'feat: add feature A\n\nFirst option'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle unicode and emojis in commit messages', () => {
+      const unicodeJson = '{"title": "feat: add 🎉 celebration animation", "body": "Introduce confetti animation for successful actions. Improves user experience with visual feedback."}'
+
+      const result = formatCommitMessage(unicodeJson)
+
+      const expected = 'feat: add 🎉 celebration animation\n\nIntroduce confetti animation for successful actions. Improves user experience with visual feedback.'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle very long commit body', () => {
+      const longBody = 'This is a very long commit body that contains a lot of information about the changes made. '.repeat(50)
+      const longJson = `{"title": "refactor(core): restructure architecture", "body": "${longBody}"}`
+
+      const result = formatCommitMessage(longJson)
+
+      expect(result).toContain('refactor(core): restructure architecture')
+      expect(result).toContain(longBody)
+      expect(result.length).toBeGreaterThan(2000)
+    })
+
+    it('should handle JSON with newlines in body text', () => {
+      const jsonWithNewlines = '{"title": "docs: update README", "body": "Update documentation:\\n- Add installation guide\\n- Add usage examples\\n- Fix typos"}'
+
+      const result = formatCommitMessage(jsonWithNewlines)
+
+      const expected = 'docs: update README\n\nUpdate documentation:\n- Add installation guide\n- Add usage examples\n- Fix typos'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle JSON with escaped quotes in body', () => {
+      const jsonWithEscapedQuotes = '{"title": "fix(parser): handle quoted strings", "body": "Fix parsing of strings with \\"escaped quotes\\" in the content."}'
+
+      const result = formatCommitMessage(jsonWithEscapedQuotes)
+
+      const expected = 'fix(parser): handle quoted strings\n\nFix parsing of strings with "escaped quotes" in the content.'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle compact JSON on single line', () => {
+      const compactJson = '{"title":"feat(auth):add2FA","body":"Implement two-factor authentication with TOTP support."}'
+
+      const result = formatCommitMessage(compactJson)
+
+      const expected = 'feat(auth):add2FA\n\nImplement two-factor authentication with TOTP support.'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle JSON with tab characters', () => {
+      const jsonWithTabs = '{\t"title":\t"chore: cleanup code",\t"body":\t"Remove unused imports and format code."\t}'
+
+      const result = formatCommitMessage(jsonWithTabs)
+
+      const expected = 'chore: cleanup code\n\nRemove unused imports and format code.'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle JSON response from verbose AI', () => {
+      const verboseResponse = `Based on your changes, I suggest this commit message:
+
+\`\`\`json
+{
+  "title": "feat(components): add Button component",
+  "body": "Create reusable Button component with variants (primary, secondary, danger). Includes hover states and disabled state."
+}
+\`\`\`
+
+This follows the Conventional Commits format and describes your changes clearly.`
+
+      const result = formatCommitMessage(verboseResponse)
+
+      const expected = 'feat(components): add Button component\n\nCreate reusable Button component with variants (primary, secondary, danger). Includes hover states and disabled state.'
       expect(result).toBe(expected)
     })
   })
