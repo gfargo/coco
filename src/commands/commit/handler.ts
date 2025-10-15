@@ -148,18 +148,16 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
 REQUIRED JSON FORMAT:
 ${schema.description}
 
-EXAMPLE (follow this exact structure):
-{
-  "title": "feat(auth): add user authentication system",
-  "body": "Implement JWT-based authentication with login and logout functionality. Includes password hashing and session management."
-}
+EXAMPLE (follow this EXACT format - compact JSON on a single line or minimal whitespace):
+{"title": "feat(auth): add user authentication system", "body": "Implement JWT-based authentication with login and logout functionality. Includes password hashing and session management."}
 
 IMPORTANT RULES:
+- Return ONLY the JSON object - NO markdown code blocks, NO backticks, NO extra text
 - ALL string values MUST be enclosed in double quotes
+- Use compact JSON format (minimal whitespace) for best compatibility
 - NO trailing commas
 - NO comments or additional text outside the JSON
-- The "title" and "body" values must be properly quoted strings
-- Return ONLY the JSON object, nothing else`
+- The "title" and "body" values must be properly quoted strings`
 
       // Use conventional commit prompt if enabled
       const promptTemplate = USE_CONVENTIONAL_COMMITS ? CONVENTIONAL_COMMIT_PROMPT : COMMIT_PROMPT
@@ -275,10 +273,34 @@ IMPORTANT RULES:
               )
             },
           },
-          fallbackParser: (text: string) => ({
-            title: text.split('\n')[0] || 'Auto-generated commit',
-            body: text.split('\n').slice(1).join('\n') || 'Generated commit message',
-          }),
+          fallbackParser: (text: string) => {
+            // First try to parse as JSON in case it's valid JSON with unusual formatting
+            try {
+              // Remove markdown code blocks if present
+              let cleanText = text.trim()
+              const codeBlockMatch = cleanText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
+              if (codeBlockMatch && codeBlockMatch[1]) {
+                cleanText = codeBlockMatch[1].trim()
+              }
+
+              const parsed = JSON.parse(cleanText)
+              if (parsed &&
+                  typeof parsed === 'object' &&
+                  typeof parsed.title === 'string' &&
+                  typeof parsed.body === 'string' &&
+                  parsed.title.length > 0) {
+                return parsed
+              }
+            } catch {
+              // JSON parsing failed, fall through to text splitting
+            }
+
+            // Fallback to simple text splitting
+            return {
+              title: text.split('\n')[0] || 'Auto-generated commit',
+              body: text.split('\n').slice(1).join('\n') || 'Generated commit message',
+            }
+          },
           onFallback: () => {
             logger.verbose('Max retry attempts reached. Falling back to simple text output.', {
               color: 'red',
