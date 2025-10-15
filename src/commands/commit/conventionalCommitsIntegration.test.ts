@@ -148,12 +148,30 @@ describe('Conventional Commits Integration', () => {
   })
 
   describe('JSON Repair Specific Cases', () => {
+    it('should handle JSON with excessive whitespace', () => {
+      const whitespaceHeavyJson = '{\n\n  "title": "feat(components): add SVG upload feature",\n  "body": "Introduce functionality to upload SVG files and import their path data."\n}'
+
+      const result = formatCommitMessage(whitespaceHeavyJson)
+
+      const expected = 'feat(components): add SVG upload feature\n\nIntroduce functionality to upload SVG files and import their path data.'
+      expect(result).toBe(expected)
+    })
+
+    it('should handle JSON with leading whitespace', () => {
+      const leadingWhitespace = '\n\n{\n  "title": "fix(auth): resolve timeout issue",\n  "body": "Increase timeout duration for better reliability."\n}'
+
+      const result = formatCommitMessage(leadingWhitespace)
+
+      const expected = 'fix(auth): resolve timeout issue\n\nIncrease timeout duration for better reliability.'
+      expect(result).toBe(expected)
+    })
+
     it('should repair multiple unquoted values', () => {
       const multipleUnquoted = '{"title": feat(api): add rate limiting, "body": Implement token bucket algorithm for API rate limiting}'
-      
+
       const repaired = repairJson(multipleUnquoted)
       const result = formatCommitMessage(repaired)
-      
+
       const expected = 'feat(api): add rate limiting\n\nImplement token bucket algorithm for API rate limiting'
       expect(result).toBe(expected)
     })
