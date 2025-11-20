@@ -77,7 +77,7 @@
     "@commitlint/core": "^19.8.0",
     "@inquirer/prompts": "3.3.0",
     "@langchain/anthropic": "^0.3.14",
-    "@langchain/community": "^0.3.32",
+    "@langchain/community": "^0.3.58",
     "@langchain/core": "^0.3.40",
     "@langchain/ollama": "^0.2.0",
     "@langchain/openai": "^0.6.7",
