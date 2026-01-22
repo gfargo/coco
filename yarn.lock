@@ -4454,23 +4454,23 @@ keyv@^4.5.3:
     json-buffer "3.0.1"
 
 "langchain@>=0.2.3 <0.3.0 || >=0.3.4 <0.4.0":
-  version "0.3.30"
-  resolved "https://registry.npmjs.org/langchain/-/langchain-0.3.30.tgz"
-  integrity sha512-UyVsfwHDpHbrnWrjWuhJHqi8Non+Zcsf2kdpDTqyJF8NXrHBOpjdHT5LvPuW9fnE7miDTWf5mLcrWAGZgcrznQ==
+  version "0.3.37"
+  resolved "https://registry.yarnpkg.com/langchain/-/langchain-0.3.37.tgz#6931ee5af763a6df35c0ac467eab028ba0ad17de"
+  integrity sha512-1jPsZ6xsxkcQPUvqRjvfuOLwZLLyt49hzcOK7OYAJovIkkOxd5gzK4Yw6giPUQ8g4XHyvULNlWBz+subdkcokw==
   dependencies:
     "@langchain/openai" ">=0.1.0 <0.7.0"
     "@langchain/textsplitters" ">=0.0.0 <0.2.0"
     js-tiktoken "^1.0.12"
     js-yaml "^4.1.0"
     jsonpointer "^5.0.1"
-    langsmith "^0.3.33"
+    langsmith "^0.3.67"
     openapi-types "^12.1.3"
     p-retry "4"
     uuid "^10.0.0"
     yaml "^2.2.1"
     zod "^3.25.32"
 
-langsmith@^0.3.33, langsmith@^0.3.67:
+langsmith@^0.3.67:
   version "0.3.71"
   resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.3.71.tgz#bb8ccbc1288a3fa8d02a337feb61261c76fd34b2"
   integrity sha512-xl00JZso7J3OaurUQ+seT2qRJ34OGZXYAvCYj3vNC3TB+JOcdcYZ1uLvENqOloKB8VCiADh1eZ0FG3Cj/cy2FQ==
