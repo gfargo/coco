@@ -293,6 +293,16 @@ export const schema = {
           "description": "The maximum number of requests to make concurrently.",
           "default": 6
         },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
         "authentication": {
           "anyOf": [
             {
@@ -1053,6 +1063,16 @@ export const schema = {
           "description": "The maximum number of requests to make concurrently.",
           "default": 6
         },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
         "authentication": {
           "anyOf": [
             {
@@ -1203,6 +1223,16 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of requests to make concurrently.",
           "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
         },
         "authentication": {
           "anyOf": [
