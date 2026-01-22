@@ -78,7 +78,7 @@
     "@inquirer/prompts": "3.3.0",
     "@langchain/anthropic": "^0.3.14",
     "@langchain/community": "^0.3.32",
-    "@langchain/core": "^0.3.40",
+    "@langchain/core": "^0.3.80",
     "@langchain/ollama": "^0.2.0",
     "@langchain/openai": "^0.6.7",
     "ajv": "^8.16.0",
