@@ -10,7 +10,16 @@ import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 export async function fileChangeParser({
   changes,
   commit,
-  options: { tokenizer, git, llm: model, logger, maxTokens },
+  options: {
+    tokenizer,
+    git,
+    llm: model,
+    logger,
+    maxTokens,
+    minTokensForSummary,
+    maxFileTokens,
+    maxConcurrent,
+  },
 }: FileChangeParserInput): Promise<string> {
   const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 10000, chunkOverlap: 250 })
 
@@ -34,11 +43,17 @@ export async function fileChangeParser({
   )
   logger.stopSpinner('Diffs Collected').stopTimer()
 
-  // Summarize diffs
+  // Summarize diffs using three-phase approach:
+  // 1. Pre-process large files to prevent bias
+  // 2. Group by directory and assess token count
+  // 3. Wave-based parallel summarization until under budget
   logger.startTimer()
   const summary = await summarizeDiffs(diffs, {
     tokenizer,
-    maxTokens: maxTokens || 4096,
+    maxTokens: maxTokens || 2048,
+    minTokensForSummary,
+    maxFileTokens,
+    maxConcurrent,
     textSplitter,
     chain: summarizationChain,
     logger,

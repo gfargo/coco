@@ -52,6 +52,21 @@ export interface BaseParserOptions {
   git: SimpleGit
   logger: Logger
   maxTokens?: number
+  /**
+   * Minimum token count for a directory/file group to be eligible for summarization.
+   * @default 400
+   */
+  minTokensForSummary?: number
+  /**
+   * Maximum tokens allowed for a single file diff before it gets pre-summarized.
+   * Defaults to 25% of maxTokens if not specified.
+   */
+  maxFileTokens?: number
+  /**
+   * Maximum number of concurrent summarization requests.
+   * @default 6
+   */
+  maxConcurrent?: number
 }
 
 export interface BaseParserInput {
