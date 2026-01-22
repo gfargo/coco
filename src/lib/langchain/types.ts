@@ -112,6 +112,21 @@ export type BaseLLMService = {
    * @default 6
    */
   maxConcurrent?: number
+  /**
+   * Minimum token count for a directory/file group to be eligible for summarization.
+   * Groups below this threshold preserve raw diffs to maintain detail.
+   *
+   * @default 400
+   */
+  minTokensForSummary?: number
+  /**
+   * Maximum tokens allowed for a single file diff before it gets pre-summarized.
+   * Prevents large files from biasing the overall summary.
+   * If not set, defaults to 25% of tokenLimit.
+   *
+   * @default undefined (uses 0.25 * tokenLimit)
+   */
+  maxFileTokens?: number
   authentication: Authentication
   requestOptions?: {
     timeout?: number
