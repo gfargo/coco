@@ -23,6 +23,12 @@ const MOCK_GIT_CONFIG = `
   serviceProvider = openai
   serviceModel = gpt-4o
   serviceApiKey = test-api-key
+  serviceTokenLimit = 4096
+  serviceTemperature = 0.32
+  serviceMaxConcurrent = 12
+  serviceMinTokensForSummary = 800
+  serviceMaxFileTokens = 2000
+  serviceMaxParsingAttempts = 3
   serviceRequestOptionsTimeout = 10000
   serviceRequestOptionsMaxRetries = 5
   serviceFields = {"temperature":0.5,"maxTokens":4000}
@@ -61,6 +67,12 @@ describe('loadGitConfig', () => {
     if (service.authentication.type === 'APIKey') {
       expect(service.authentication.credentials.apiKey).toBe('test-api-key')
     }
+    expect(service.tokenLimit).toBe(4096)
+    expect(service.temperature).toBe(0.32)
+    expect(service.maxConcurrent).toBe(12)
+    expect(service.minTokensForSummary).toBe(800)
+    expect(service.maxFileTokens).toBe(2000)
+    expect(service.maxParsingAttempts).toBe(3)
     expect(service.requestOptions?.timeout).toBe(10000)
     expect(service.requestOptions?.maxRetries).toBe(5)
     expect(service.fields).toEqual({ temperature: 0.5, maxTokens: 4000 })
