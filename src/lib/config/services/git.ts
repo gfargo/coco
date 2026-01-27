@@ -27,6 +27,24 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
       service = {
         provider: gitConfigParsed.coco?.serviceProvider,
         model: gitConfigParsed.coco?.serviceModel,
+        tokenLimit: gitConfigParsed.coco?.serviceTokenLimit
+          ? Number(gitConfigParsed.coco.serviceTokenLimit)
+          : undefined,
+        temperature: gitConfigParsed.coco?.serviceTemperature
+          ? Number(gitConfigParsed.coco.serviceTemperature)
+          : undefined,
+        maxConcurrent: gitConfigParsed.coco?.serviceMaxConcurrent
+          ? Number(gitConfigParsed.coco.serviceMaxConcurrent)
+          : undefined,
+        minTokensForSummary: gitConfigParsed.coco?.serviceMinTokensForSummary
+          ? Number(gitConfigParsed.coco.serviceMinTokensForSummary)
+          : undefined,
+        maxFileTokens: gitConfigParsed.coco?.serviceMaxFileTokens
+          ? Number(gitConfigParsed.coco.serviceMaxFileTokens)
+          : undefined,
+        maxParsingAttempts: gitConfigParsed.coco?.serviceMaxParsingAttempts
+          ? Number(gitConfigParsed.coco.serviceMaxParsingAttempts)
+          : undefined,
         authentication: {
           type: 'APIKey',
           credentials: {
@@ -85,6 +103,24 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
         contentLines.push(`	serviceModel = ${service.model}`)
         if (service.authentication.type === 'APIKey') {
           contentLines.push(`	serviceApiKey = ${service.authentication.credentials.apiKey}`)
+        }
+        if (service.tokenLimit !== undefined) {
+          contentLines.push(`	serviceTokenLimit = ${service.tokenLimit}`)
+        }
+        if (service.temperature !== undefined) {
+          contentLines.push(`	serviceTemperature = ${service.temperature}`)
+        }
+        if (service.maxConcurrent !== undefined) {
+          contentLines.push(`	serviceMaxConcurrent = ${service.maxConcurrent}`)
+        }
+        if (service.minTokensForSummary !== undefined) {
+          contentLines.push(`	serviceMinTokensForSummary = ${service.minTokensForSummary}`)
+        }
+        if (service.maxFileTokens !== undefined) {
+          contentLines.push(`	serviceMaxFileTokens = ${service.maxFileTokens}`)
+        }
+        if (service.maxParsingAttempts !== undefined) {
+          contentLines.push(`	serviceMaxParsingAttempts = ${service.maxParsingAttempts}`)
         }
         if (service.requestOptions?.timeout) {
           contentLines.push(`	serviceRequestOptionsTimeout = ${service.requestOptions.timeout}`)

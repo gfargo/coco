@@ -104,8 +104,11 @@ export function getDefaultServiceApiKey(config: Config): string {
 export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   provider: 'openai',
   model: 'gpt-4o-mini',
-  tokenLimit: 2024,
+  tokenLimit: 4096,
   temperature: 0.32,
+  maxConcurrent: 12,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
   authentication: {
     type: 'APIKey',
     credentials: {
@@ -118,6 +121,10 @@ export const DEFAULT_ANTHROPIC_LLM_SERVICE: AnthropicLLMService = {
   provider: 'anthropic',
   model: 'claude-3-5-sonnet-20240620',
   temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 12,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
   authentication: {
     type: 'APIKey',
     credentials: {
@@ -131,9 +138,11 @@ export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   model: 'llama3',
   endpoint: 'http://localhost:11434',
   maxConcurrent: 1,
-  tokenLimit: 2024,
+  tokenLimit: 4096,
   temperature: 0.4,
   maxParsingAttempts: 3,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
   authentication: {
     type: 'None',
     credentials: undefined,
