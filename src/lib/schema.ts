@@ -127,6 +127,14 @@ export const schema = {
         "model": {
           "$ref": "#/definitions/LLMModel"
         },
+        "baseURL": {
+          "type": "string",
+          "description": "Custom base URL for OpenAI-compatible APIs (e.g., OpenRouter, Azure OpenAI). If not specified, uses the default OpenAI API endpoint.",
+          "examples": [
+            "https://openrouter.ai/api/v1",
+            "https://your-resource.openai.azure.com"
+          ]
+        },
         "fields": {
           "type": "object",
           "additionalProperties": false,
