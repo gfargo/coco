@@ -43,6 +43,14 @@ const MOCK_GIT_CONFIG_OLLAMA = `
   serviceEndpoint = http://localhost:11434
 `
 
+const MOCK_GIT_CONFIG_OPENROUTER = `
+[coco]
+  serviceProvider = openai
+  serviceModel = gpt-4o
+  serviceApiKey = test-api-key
+  serviceBaseURL = https://openrouter.ai/api/v1
+`
+
 const MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION = `
 [core]
   editor=nano
@@ -88,6 +96,19 @@ describe('loadGitConfig', () => {
     expect(service.provider).toBe('ollama')
     expect(service.model).toBe('llama3')
     expect(service.endpoint).toBe('http://localhost:11434')
+  })
+
+  it('should parse .gitconfig file with custom OpenAI baseURL (OpenRouter)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_OPENROUTER)
+    const config = loadGitConfig(defaultConfig as Config)
+    const service = config.service as OpenAILLMService
+    expect(service.provider).toBe('openai')
+    expect(service.model).toBe('gpt-4o')
+    expect(service.baseURL).toBe('https://openrouter.ai/api/v1')
+    if (service.authentication.type === 'APIKey') {
+      expect(service.authentication.credentials.apiKey).toBe('test-api-key')
+    }
   })
 
   it('should parse .gitconfig file without coco section', () => {

@@ -36,12 +36,14 @@ function parseServiceConfig(service: any): LLMService | undefined {
       return {
         provider: 'openai',
         model: service.model,
+        baseURL: service.baseURL,
         authentication: {
           type: 'APIKey',
           credentials: {
             apiKey: service.apiKey
           }
-        }
+        },
+        fields: service.fields
       } as OpenAILLMService
     case 'anthropic':
       return {

@@ -82,4 +82,16 @@ describe('loadEnvConfig', () => {
     delete process.env.COCO_SERVICE_PROVIDER
     delete process.env.COCO_SERVICE_ENDPOINT
   })
+
+  it('should load environment variables with openai baseURL', () => {
+    process.env.COCO_SERVICE_PROVIDER = 'openai'
+    process.env.COCO_SERVICE_BASE_URL = 'https://openrouter.ai/api/v1'
+    const config = loadEnvConfig(defaultConfig)
+    expect(config.service.provider).toBe('openai')
+    if (config.service.provider === 'openai') {
+      expect(config.service.baseURL).toBe('https://openrouter.ai/api/v1')
+    }
+    delete process.env.COCO_SERVICE_PROVIDER
+    delete process.env.COCO_SERVICE_BASE_URL
+  })
 })

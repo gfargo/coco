@@ -1,4 +1,4 @@
-import { LLMService, OllamaLLMService } from '../../langchain/types'
+import { LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { removeUndefined } from '../../utils/removeUndefined'
 import { updateFileSection } from '../../utils/updateFileSection'
@@ -21,6 +21,7 @@ export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
     'COCO_SERVICE_PROVIDER',
     'COCO_SERVICE_MODEL',
     'OPEN_AI_KEY',
+    'COCO_SERVICE_BASE_URL',
     'COCO_SERVICE_ENDPOINT',
     'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
     'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES',
@@ -39,6 +40,7 @@ export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
       key === 'COCO_SERVICE_PROVIDER' ||
       key === 'COCO_SERVICE_MODEL' ||
       key === 'OPEN_AI_KEY' ||
+      key === 'COCO_SERVICE_BASE_URL' ||
       key === 'COCO_SERVICE_ENDPOINT' ||
       key === 'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT' ||
       key === 'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES' ||
@@ -78,6 +80,12 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
             apiKey: value,
           },
         }
+      }
+      break
+    case 'COCO_SERVICE_BASE_URL':
+      if (service.provider === 'openai') {
+        // Cast to OpenAILLMService to access baseURL property
+        (service as OpenAILLMService).baseURL = value
       }
       break
     case 'COCO_SERVICE_ENDPOINT':
