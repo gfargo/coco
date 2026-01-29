@@ -54,11 +54,25 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
         })
         
       case 'openai':
-        return new ChatOpenAI({
+        const openaiConfig: Partial<ConstructorParameters<typeof ChatOpenAI>[0]> = {
           apiKey: apiKey,
           model,
           temperature: config.service.temperature || 0.2,
-        })
+        }
+        
+        // Add custom base URL if specified (for OpenRouter, Azure OpenAI, etc.)
+        if ('baseURL' in config.service && config.service.baseURL) {
+          openaiConfig.configuration = {
+            baseURL: config.service.baseURL,
+          }
+        }
+        
+        // Merge any additional fields from config
+        if ('fields' in config.service && config.service.fields) {
+          Object.assign(openaiConfig, config.service.fields)
+        }
+        
+        return new ChatOpenAI(openaiConfig)
         
       default:
         throw new LangChainConfigurationError(

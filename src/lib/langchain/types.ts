@@ -166,6 +166,14 @@ type OllamaFields = Partial<OllamaInput> & BaseLLMParams
 export type OpenAILLMService = BaseLLMService & {
   provider: 'openai'
   model: OpenAIModel
+  /**
+   * Custom base URL for OpenAI-compatible APIs (e.g., OpenRouter, Azure OpenAI).
+   * If not specified, uses the default OpenAI API endpoint.
+   * 
+   * @example "https://openrouter.ai/api/v1"
+   * @example "https://your-resource.openai.azure.com"
+   */
+  baseURL?: string
   fields?: OpenAIFields
 }
 

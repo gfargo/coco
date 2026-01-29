@@ -45,6 +45,7 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
         maxParsingAttempts: gitConfigParsed.coco?.serviceMaxParsingAttempts
           ? Number(gitConfigParsed.coco.serviceMaxParsingAttempts)
           : undefined,
+        baseURL: gitConfigParsed.coco?.serviceBaseURL,
         authentication: {
           type: 'APIKey',
           credentials: {
@@ -128,6 +129,11 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
         if (service.requestOptions?.maxRetries) {
           contentLines.push(`	serviceRequestOptionsMaxRetries = ${service.requestOptions.maxRetries}`)
         }
+        // Handle baseURL for OpenAI
+        if (service.provider === 'openai' && 'baseURL' in service && service.baseURL) {
+          contentLines.push(`	serviceBaseURL = ${service.baseURL}`)
+        }
+        // Handle endpoint for Ollama
         if (service.provider === 'ollama') {
           const ollamaService = service as OllamaLLMService;
           if (ollamaService.endpoint) {

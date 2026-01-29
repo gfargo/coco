@@ -57,4 +57,23 @@ describe('loadXDGConfig', () => {
       expect(config.service.endpoint).toBe('http://localhost:11434')
     }
   })
+
+  it('should load XDG config with openai baseURL', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        service: {
+          provider: 'openai',
+          model: 'gpt-4o',
+          baseURL: 'https://openrouter.ai/api/v1',
+          apiKey: 'test-key'
+        }
+      })
+    )
+    const config = loadXDGConfig(openAIConfig)
+    expect(config.service.provider).toBe('openai')
+    if (config.service.provider === 'openai') {
+      expect(config.service.baseURL).toBe('https://openrouter.ai/api/v1')
+    }
+  })
 })
