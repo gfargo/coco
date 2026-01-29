@@ -55,3 +55,17 @@ export class LangChainTimeoutError extends LangChainError {
     super(message, context)
   }
 }
+
+/**
+ * Network/connection errors (service unreachable, DNS failures, etc.)
+ */
+export class LangChainNetworkError extends LangChainError {
+  constructor(
+    message: string,
+    public readonly endpoint?: string,
+    public readonly provider?: string,
+    context?: Record<string, unknown>
+  ) {
+    super(message, { ...context, endpoint, provider })
+  }
+}
