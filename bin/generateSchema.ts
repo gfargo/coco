@@ -12,7 +12,7 @@ const CONFIG: SchemaConfig = {
   tsconfig: 'tsconfig.json',
   type: 'ConfigWithServiceObject',
   schemaId: 'https://coco.griffen.codes/schema.json',
-  skipTypeCheck: false,
+  skipTypeCheck: true,
   outputDir: '.'
 }
 

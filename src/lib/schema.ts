@@ -74,7 +74,7 @@ export const schema = {
               "node_modules"
             ]
           ],
-        default: `['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb', contents of .gitignore, contents of .ignore]`
+          "default": "['package-lock.json', contents of .gitignore, contents of .ignore]"
         },
         "ignoredExtensions": {
           "type": "array",
@@ -143,7 +143,247 @@ export const schema = {
               "type": "boolean"
             },
             "callbacks": {
-              "$ref": "#/definitions/Callbacks"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "handlers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "lc_serializable": {
+                            "type": "boolean"
+                          },
+                          "lc_kwargs": {
+                            "type": "object"
+                          },
+                          "lc_namespace": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                          },
+                          "ignoreLLM": {
+                            "type": "boolean"
+                          },
+                          "ignoreChain": {
+                            "type": "boolean"
+                          },
+                          "ignoreAgent": {
+                            "type": "boolean"
+                          },
+                          "ignoreRetriever": {
+                            "type": "boolean"
+                          },
+                          "ignoreCustomEvent": {
+                            "type": "boolean"
+                          },
+                          "_awaitHandler": {
+                            "type": "boolean"
+                          },
+                          "raiseError": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "awaitHandlers": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "awaitHandlers",
+                          "ignoreAgent",
+                          "ignoreChain",
+                          "ignoreCustomEvent",
+                          "ignoreLLM",
+                          "ignoreRetriever",
+                          "lc_kwargs",
+                          "lc_namespace",
+                          "lc_serializable",
+                          "name",
+                          "raiseError"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                      }
+                    },
+                    "inheritableHandlers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "lc_serializable": {
+                            "type": "boolean"
+                          },
+                          "lc_kwargs": {
+                            "type": "object"
+                          },
+                          "lc_namespace": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                          },
+                          "ignoreLLM": {
+                            "type": "boolean"
+                          },
+                          "ignoreChain": {
+                            "type": "boolean"
+                          },
+                          "ignoreAgent": {
+                            "type": "boolean"
+                          },
+                          "ignoreRetriever": {
+                            "type": "boolean"
+                          },
+                          "ignoreCustomEvent": {
+                            "type": "boolean"
+                          },
+                          "_awaitHandler": {
+                            "type": "boolean"
+                          },
+                          "raiseError": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "awaitHandlers": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "awaitHandlers",
+                          "ignoreAgent",
+                          "ignoreChain",
+                          "ignoreCustomEvent",
+                          "ignoreLLM",
+                          "ignoreRetriever",
+                          "lc_kwargs",
+                          "lc_namespace",
+                          "lc_serializable",
+                          "name",
+                          "raiseError"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                      }
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "inheritableTags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "inheritableMetadata": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "_parentRunId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "handlers",
+                    "inheritableHandlers",
+                    "tags",
+                    "inheritableTags",
+                    "metadata",
+                    "inheritableMetadata",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "lc_serializable": {
+                            "type": "boolean"
+                          },
+                          "lc_kwargs": {
+                            "type": "object"
+                          },
+                          "lc_namespace": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                          },
+                          "ignoreLLM": {
+                            "type": "boolean"
+                          },
+                          "ignoreChain": {
+                            "type": "boolean"
+                          },
+                          "ignoreAgent": {
+                            "type": "boolean"
+                          },
+                          "ignoreRetriever": {
+                            "type": "boolean"
+                          },
+                          "ignoreCustomEvent": {
+                            "type": "boolean"
+                          },
+                          "_awaitHandler": {
+                            "type": "boolean"
+                          },
+                          "raiseError": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "awaitHandlers": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "awaitHandlers",
+                          "ignoreAgent",
+                          "ignoreChain",
+                          "ignoreCustomEvent",
+                          "ignoreLLM",
+                          "ignoreRetriever",
+                          "lc_kwargs",
+                          "lc_namespace",
+                          "lc_serializable",
+                          "name",
+                          "raiseError"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "description": "Base interface for callbacks. All methods are optional. If a method is not implemented, it will be ignored. If a method is implemented, it will be called at the appropriate time. All methods are called with the run ID of the LLM/ChatModel/Chain that is running, which is generated by the CallbackManager."
+                      }
+                    ]
+                  }
+                }
+              ]
             },
             "tags": {
               "type": "array",
@@ -164,26 +404,201 @@ export const schema = {
               "description": "The maximum number of retries that can be made for a single call, with an exponential backoff between each attempt. Defaults to 6."
             },
             "onFailedAttempt": {
-              "$ref": "#/definitions/FailedAttemptHandler",
+              "$comment": "(error: any) => any",
+              "type": "object",
+              "properties": {
+                "namedArgs": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "description": "Custom handler to handle failed attempts. Takes the originally thrown error object as input, and should itself throw an error if the input error is not retryable."
             },
             "callbackManager": {
-              "$ref": "#/definitions/CallbackManager",
+              "type": "object",
+              "properties": {
+                "handlers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "lc_serializable": {
+                        "type": "boolean"
+                      },
+                      "lc_kwargs": {
+                        "type": "object"
+                      },
+                      "lc_namespace": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                      },
+                      "ignoreLLM": {
+                        "type": "boolean"
+                      },
+                      "ignoreChain": {
+                        "type": "boolean"
+                      },
+                      "ignoreAgent": {
+                        "type": "boolean"
+                      },
+                      "ignoreRetriever": {
+                        "type": "boolean"
+                      },
+                      "ignoreCustomEvent": {
+                        "type": "boolean"
+                      },
+                      "_awaitHandler": {
+                        "type": "boolean"
+                      },
+                      "raiseError": {
+                        "type": "boolean"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "awaitHandlers": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "awaitHandlers",
+                      "ignoreAgent",
+                      "ignoreChain",
+                      "ignoreCustomEvent",
+                      "ignoreLLM",
+                      "ignoreRetriever",
+                      "lc_kwargs",
+                      "lc_namespace",
+                      "lc_serializable",
+                      "name",
+                      "raiseError"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                  }
+                },
+                "inheritableHandlers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "lc_serializable": {
+                        "type": "boolean"
+                      },
+                      "lc_kwargs": {
+                        "type": "object"
+                      },
+                      "lc_namespace": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                      },
+                      "ignoreLLM": {
+                        "type": "boolean"
+                      },
+                      "ignoreChain": {
+                        "type": "boolean"
+                      },
+                      "ignoreAgent": {
+                        "type": "boolean"
+                      },
+                      "ignoreRetriever": {
+                        "type": "boolean"
+                      },
+                      "ignoreCustomEvent": {
+                        "type": "boolean"
+                      },
+                      "_awaitHandler": {
+                        "type": "boolean"
+                      },
+                      "raiseError": {
+                        "type": "boolean"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "awaitHandlers": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "awaitHandlers",
+                      "ignoreAgent",
+                      "ignoreChain",
+                      "ignoreCustomEvent",
+                      "ignoreLLM",
+                      "ignoreRetriever",
+                      "lc_kwargs",
+                      "lc_namespace",
+                      "lc_serializable",
+                      "name",
+                      "raiseError"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                  }
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "inheritableTags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "metadata": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "inheritableMetadata": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "name": {
+                  "type": "string"
+                },
+                "_parentRunId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "handlers",
+                "inheritableHandlers",
+                "tags",
+                "inheritableTags",
+                "metadata",
+                "inheritableMetadata",
+                "name"
+              ],
+              "additionalProperties": false,
               "deprecated": "Use `callbacks` instead"
             },
             "cache": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/BaseCache"
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Base class for all caches. All caches should extend this class."
                 },
                 {
                   "type": "boolean"
                 }
               ]
-            },
-            "concurrency": {
-              "type": "number",
-              "deprecated": "Use `maxConcurrency` instead"
             },
             "bestOf": {
               "type": "number",
@@ -623,168 +1038,6 @@ export const schema = {
         "claude-3-haiku-20240307"
       ]
     },
-    "Callbacks": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/CallbackManager"
-        },
-        {
-          "type": "array",
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/definitions/BaseCallbackHandler"
-              },
-              {
-                "$ref": "#/definitions/CallbackHandlerMethods"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    "CallbackManager": {
-      "type": "object",
-      "properties": {
-        "handlers": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/BaseCallbackHandler"
-          }
-        },
-        "inheritableHandlers": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/BaseCallbackHandler"
-          }
-        },
-        "tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "inheritableTags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "metadata": {
-          "type": "object",
-          "additionalProperties": {}
-        },
-        "inheritableMetadata": {
-          "type": "object",
-          "additionalProperties": {}
-        },
-        "name": {
-          "type": "string"
-        },
-        "_parentRunId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "handlers",
-        "inheritableHandlers",
-        "tags",
-        "inheritableTags",
-        "metadata",
-        "inheritableMetadata",
-        "name"
-      ],
-      "additionalProperties": false
-    },
-    "BaseCallbackHandler": {
-      "type": "object",
-      "properties": {
-        "lc_serializable": {
-          "type": "boolean"
-        },
-        "lc_kwargs": {
-          "$ref": "#/definitions/SerializedFields"
-        },
-        "lc_namespace": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
-        },
-        "ignoreLLM": {
-          "type": "boolean"
-        },
-        "ignoreChain": {
-          "type": "boolean"
-        },
-        "ignoreAgent": {
-          "type": "boolean"
-        },
-        "ignoreRetriever": {
-          "type": "boolean"
-        },
-        "ignoreCustomEvent": {
-          "type": "boolean"
-        },
-        "_awaitHandler": {
-          "type": "boolean"
-        },
-        "raiseError": {
-          "type": "boolean"
-        },
-        "name": {
-          "type": "string"
-        },
-        "awaitHandlers": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "awaitHandlers",
-        "ignoreAgent",
-        "ignoreChain",
-        "ignoreCustomEvent",
-        "ignoreLLM",
-        "ignoreRetriever",
-        "lc_kwargs",
-        "lc_namespace",
-        "lc_serializable",
-        "name",
-        "raiseError"
-      ],
-      "additionalProperties": false,
-      "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
-    },
-    "SerializedFields": {
-      "type": "object"
-    },
-    "CallbackHandlerMethods": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Base interface for callbacks. All methods are optional. If a method is not implemented, it will be ignored. If a method is implemented, it will be called at the appropriate time. All methods are called with the run ID of the LLM/ChatModel/Chain that is running, which is generated by the CallbackManager."
-    },
-    "FailedAttemptHandler": {
-      "$comment": "(error: any) => any",
-      "type": "object",
-      "properties": {
-        "namedArgs": {
-          "type": "object",
-          "properties": {
-            "error": {}
-          },
-          "required": [
-            "error"
-          ],
-          "additionalProperties": false
-        }
-      }
-    },
-    "BaseCache": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Base class for all caches. All caches should extend this class."
-    },
     "OpenAIChatModelId": {
       "anyOf": [
         {
@@ -898,7 +1151,247 @@ export const schema = {
               "type": "boolean"
             },
             "callbacks": {
-              "$ref": "#/definitions/Callbacks"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "handlers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "lc_serializable": {
+                            "type": "boolean"
+                          },
+                          "lc_kwargs": {
+                            "type": "object"
+                          },
+                          "lc_namespace": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                          },
+                          "ignoreLLM": {
+                            "type": "boolean"
+                          },
+                          "ignoreChain": {
+                            "type": "boolean"
+                          },
+                          "ignoreAgent": {
+                            "type": "boolean"
+                          },
+                          "ignoreRetriever": {
+                            "type": "boolean"
+                          },
+                          "ignoreCustomEvent": {
+                            "type": "boolean"
+                          },
+                          "_awaitHandler": {
+                            "type": "boolean"
+                          },
+                          "raiseError": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "awaitHandlers": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "awaitHandlers",
+                          "ignoreAgent",
+                          "ignoreChain",
+                          "ignoreCustomEvent",
+                          "ignoreLLM",
+                          "ignoreRetriever",
+                          "lc_kwargs",
+                          "lc_namespace",
+                          "lc_serializable",
+                          "name",
+                          "raiseError"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                      }
+                    },
+                    "inheritableHandlers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "lc_serializable": {
+                            "type": "boolean"
+                          },
+                          "lc_kwargs": {
+                            "type": "object"
+                          },
+                          "lc_namespace": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                          },
+                          "ignoreLLM": {
+                            "type": "boolean"
+                          },
+                          "ignoreChain": {
+                            "type": "boolean"
+                          },
+                          "ignoreAgent": {
+                            "type": "boolean"
+                          },
+                          "ignoreRetriever": {
+                            "type": "boolean"
+                          },
+                          "ignoreCustomEvent": {
+                            "type": "boolean"
+                          },
+                          "_awaitHandler": {
+                            "type": "boolean"
+                          },
+                          "raiseError": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "awaitHandlers": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "awaitHandlers",
+                          "ignoreAgent",
+                          "ignoreChain",
+                          "ignoreCustomEvent",
+                          "ignoreLLM",
+                          "ignoreRetriever",
+                          "lc_kwargs",
+                          "lc_namespace",
+                          "lc_serializable",
+                          "name",
+                          "raiseError"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                      }
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "inheritableTags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "inheritableMetadata": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "_parentRunId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "handlers",
+                    "inheritableHandlers",
+                    "tags",
+                    "inheritableTags",
+                    "metadata",
+                    "inheritableMetadata",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "lc_serializable": {
+                            "type": "boolean"
+                          },
+                          "lc_kwargs": {
+                            "type": "object"
+                          },
+                          "lc_namespace": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                          },
+                          "ignoreLLM": {
+                            "type": "boolean"
+                          },
+                          "ignoreChain": {
+                            "type": "boolean"
+                          },
+                          "ignoreAgent": {
+                            "type": "boolean"
+                          },
+                          "ignoreRetriever": {
+                            "type": "boolean"
+                          },
+                          "ignoreCustomEvent": {
+                            "type": "boolean"
+                          },
+                          "_awaitHandler": {
+                            "type": "boolean"
+                          },
+                          "raiseError": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "awaitHandlers": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "awaitHandlers",
+                          "ignoreAgent",
+                          "ignoreChain",
+                          "ignoreCustomEvent",
+                          "ignoreLLM",
+                          "ignoreRetriever",
+                          "lc_kwargs",
+                          "lc_namespace",
+                          "lc_serializable",
+                          "name",
+                          "raiseError"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "description": "Base interface for callbacks. All methods are optional. If a method is not implemented, it will be ignored. If a method is implemented, it will be called at the appropriate time. All methods are called with the run ID of the LLM/ChatModel/Chain that is running, which is generated by the CallbackManager."
+                      }
+                    ]
+                  }
+                }
+              ]
             },
             "tags": {
               "type": "array",
@@ -919,140 +1412,201 @@ export const schema = {
               "description": "The maximum number of retries that can be made for a single call, with an exponential backoff between each attempt. Defaults to 6."
             },
             "onFailedAttempt": {
-              "$ref": "#/definitions/FailedAttemptHandler",
+              "$comment": "(error: any) => any",
+              "type": "object",
+              "properties": {
+                "namedArgs": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "description": "Custom handler to handle failed attempts. Takes the originally thrown error object as input, and should itself throw an error if the input error is not retryable."
             },
             "callbackManager": {
-              "$ref": "#/definitions/CallbackManager",
+              "type": "object",
+              "properties": {
+                "handlers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "lc_serializable": {
+                        "type": "boolean"
+                      },
+                      "lc_kwargs": {
+                        "type": "object"
+                      },
+                      "lc_namespace": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                      },
+                      "ignoreLLM": {
+                        "type": "boolean"
+                      },
+                      "ignoreChain": {
+                        "type": "boolean"
+                      },
+                      "ignoreAgent": {
+                        "type": "boolean"
+                      },
+                      "ignoreRetriever": {
+                        "type": "boolean"
+                      },
+                      "ignoreCustomEvent": {
+                        "type": "boolean"
+                      },
+                      "_awaitHandler": {
+                        "type": "boolean"
+                      },
+                      "raiseError": {
+                        "type": "boolean"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "awaitHandlers": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "awaitHandlers",
+                      "ignoreAgent",
+                      "ignoreChain",
+                      "ignoreCustomEvent",
+                      "ignoreLLM",
+                      "ignoreRetriever",
+                      "lc_kwargs",
+                      "lc_namespace",
+                      "lc_serializable",
+                      "name",
+                      "raiseError"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                  }
+                },
+                "inheritableHandlers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "lc_serializable": {
+                        "type": "boolean"
+                      },
+                      "lc_kwargs": {
+                        "type": "object"
+                      },
+                      "lc_namespace": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "A path to the module that contains the class, eg. [\"langchain\", \"llms\"] Usually should be the same as the entrypoint the class is exported from."
+                      },
+                      "ignoreLLM": {
+                        "type": "boolean"
+                      },
+                      "ignoreChain": {
+                        "type": "boolean"
+                      },
+                      "ignoreAgent": {
+                        "type": "boolean"
+                      },
+                      "ignoreRetriever": {
+                        "type": "boolean"
+                      },
+                      "ignoreCustomEvent": {
+                        "type": "boolean"
+                      },
+                      "_awaitHandler": {
+                        "type": "boolean"
+                      },
+                      "raiseError": {
+                        "type": "boolean"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "awaitHandlers": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "awaitHandlers",
+                      "ignoreAgent",
+                      "ignoreChain",
+                      "ignoreCustomEvent",
+                      "ignoreLLM",
+                      "ignoreRetriever",
+                      "lc_kwargs",
+                      "lc_namespace",
+                      "lc_serializable",
+                      "name",
+                      "raiseError"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Abstract base class for creating callback handlers in the LangChain framework. It provides a set of optional methods that can be overridden in derived classes to handle various events during the execution of a LangChain application."
+                  }
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "inheritableTags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "metadata": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "inheritableMetadata": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "name": {
+                  "type": "string"
+                },
+                "_parentRunId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "handlers",
+                "inheritableHandlers",
+                "tags",
+                "inheritableTags",
+                "metadata",
+                "inheritableMetadata",
+                "name"
+              ],
+              "additionalProperties": false,
               "deprecated": "Use `callbacks` instead"
             },
             "cache": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/BaseCache"
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Base class for all caches. All caches should extend this class."
                 },
                 {
                   "type": "boolean"
                 }
               ]
-            },
-            "concurrency": {
-              "type": "number",
-              "deprecated": "Use `maxConcurrency` instead"
-            },
-            "embeddingOnly": {
-              "type": "boolean"
-            },
-            "f16KV": {
-              "type": "boolean"
-            },
-            "frequencyPenalty": {
-              "type": "number"
-            },
-            "headers": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              }
-            },
-            "keepAlive": {
-              "type": "string"
-            },
-            "logitsAll": {
-              "type": "boolean"
-            },
-            "lowVram": {
-              "type": "boolean"
-            },
-            "mainGpu": {
-              "type": "number"
-            },
-            "model": {
-              "type": "string"
-            },
-            "baseUrl": {
-              "type": "string"
-            },
-            "mirostat": {
-              "type": "number"
-            },
-            "mirostatEta": {
-              "type": "number"
-            },
-            "mirostatTau": {
-              "type": "number"
-            },
-            "numBatch": {
-              "type": "number"
-            },
-            "numCtx": {
-              "type": "number"
-            },
-            "numGpu": {
-              "type": "number"
-            },
-            "numGqa": {
-              "type": "number"
-            },
-            "numKeep": {
-              "type": "number"
-            },
-            "numPredict": {
-              "type": "number"
-            },
-            "numThread": {
-              "type": "number"
-            },
-            "penalizeNewline": {
-              "type": "boolean"
-            },
-            "presencePenalty": {
-              "type": "number"
-            },
-            "repeatLastN": {
-              "type": "number"
-            },
-            "repeatPenalty": {
-              "type": "number"
-            },
-            "ropeFrequencyBase": {
-              "type": "number"
-            },
-            "ropeFrequencyScale": {
-              "type": "number"
-            },
-            "temperature": {
-              "type": "number"
-            },
-            "stop": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "tfsZ": {
-              "type": "number"
-            },
-            "topK": {
-              "type": "number"
-            },
-            "topP": {
-              "type": "number"
-            },
-            "typicalP": {
-              "type": "number"
-            },
-            "useMLock": {
-              "type": "boolean"
-            },
-            "useMMap": {
-              "type": "boolean"
-            },
-            "vocabOnly": {
-              "type": "boolean"
-            },
-            "format": {
-              "$ref": "#/definitions/StringWithAutocomplete%3C%22json%22%3E"
             }
           }
         },
@@ -1180,20 +1734,6 @@ export const schema = {
         "model",
         "provider"
       ]
-    },
-    "StringWithAutocomplete<\"json\">": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "string",
-          "enum": [
-            "json"
-          ]
-        }
-      ],
-      "description": "Represents a string value with autocompleted, but not required, suggestions."
     },
     "AnthropicLLMService": {
       "type": "object",
