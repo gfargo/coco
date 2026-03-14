@@ -85,6 +85,23 @@
           "type": "boolean",
           "description": "Whether to include the current branch name in the commit prompt for context. When enabled, the current git branch name will be included in the prompt.",
           "default": true
+        },
+        "autoFixTool": {
+          "type": "string",
+          "description": "The AI CLI tool to use for auto-fixing review issues. Must match a registered adapter key (e.g. \"codex\", \"claude\", \"gemini\"). When unset, the auto-fix action is disabled."
+        },
+        "autoFixToolOptions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Additional key-value flags passed to the auto-fix CLI tool. Keys are flag names (without leading dashes); values are flag values.",
+          "examples": [
+            {
+              "model": "o4-mini",
+              "approval-mode": "auto-edit"
+            }
+          ]
         }
       },
       "required": [
