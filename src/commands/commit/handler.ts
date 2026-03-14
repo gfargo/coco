@@ -464,7 +464,12 @@ IMPORTANT RULES:
   handleResult({
     result: commitMsg as string,
     interactiveModeCallback: async (result) => {
-      await createCommit(result, git)
+      await createCommit(result, git, () => {
+        logger.log(
+          '⚠️  Pre-commit hook modified files. Staging changes and retrying commit...',
+          { color: 'yellow' }
+        )
+      })
       logSuccess()
     },
     mode: MODE as 'interactive' | 'stdout',
