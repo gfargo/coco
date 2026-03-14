@@ -30,7 +30,15 @@ export function getStatus(
       default:
         return 'unknown'
     }
+  } else if ('binary' in file && file.binary === true) {
+    // DiffResultBinaryFile: has before/after, no changes/insertions/deletions
+    if (file.file.includes('=>')) return 'renamed'
+    if (file.before === 0 && file.after > 0) return 'added'
+    if (file.after === 0 && file.before > 0) return 'deleted'
+    if (file.before > 0 && file.after > 0) return 'modified'
+    return 'untracked'
   } else if ('changes' in file && 'binary' in file) {
+    // DiffResultTextFile: has changes/insertions/deletions
     if (file.changes === 0) return 'untracked'
     if (file.file.includes('=>')) return 'renamed'
     if (file.deletions === 0 && file.insertions > 0) return 'added'
