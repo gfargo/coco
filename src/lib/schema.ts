@@ -1607,6 +1607,138 @@ export const schema = {
                   "type": "boolean"
                 }
               ]
+            },
+            "model": {
+              "type": "string",
+              "description": "The model to use when making requests.",
+              "default": "llama3"
+            },
+            "baseUrl": {
+              "type": "string",
+              "description": "Optionally override the base URL to make request to. This should only be set if your Ollama instance is being server from a non-standard location.",
+              "default": "http://localhost:11434"
+            },
+            "format": {
+              "type": "string"
+            },
+            "headers": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/global.Headers"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "Optional HTTP Headers to include in the request."
+            },
+            "fetch": {
+              "$comment": "(\n        input: string | URL | Request,\n        init?: RequestInit) => Promise<Response>",
+              "description": "The fetch function to use.",
+              "default": "fetch"
+            },
+            "numa": {
+              "type": "boolean"
+            },
+            "numCtx": {
+              "type": "number"
+            },
+            "numBatch": {
+              "type": "number"
+            },
+            "numGpu": {
+              "type": "number"
+            },
+            "mainGpu": {
+              "type": "number"
+            },
+            "lowVram": {
+              "type": "boolean"
+            },
+            "f16Kv": {
+              "type": "boolean"
+            },
+            "logitsAll": {
+              "type": "boolean"
+            },
+            "vocabOnly": {
+              "type": "boolean"
+            },
+            "useMmap": {
+              "type": "boolean"
+            },
+            "useMlock": {
+              "type": "boolean"
+            },
+            "embeddingOnly": {
+              "type": "boolean"
+            },
+            "numThread": {
+              "type": "number"
+            },
+            "numKeep": {
+              "type": "number"
+            },
+            "seed": {
+              "type": "number"
+            },
+            "numPredict": {
+              "type": "number"
+            },
+            "topK": {
+              "type": "number"
+            },
+            "topP": {
+              "type": "number"
+            },
+            "tfsZ": {
+              "type": "number"
+            },
+            "typicalP": {
+              "type": "number"
+            },
+            "repeatLastN": {
+              "type": "number"
+            },
+            "temperature": {
+              "type": "number"
+            },
+            "repeatPenalty": {
+              "type": "number"
+            },
+            "presencePenalty": {
+              "type": "number"
+            },
+            "frequencyPenalty": {
+              "type": "number"
+            },
+            "mirostat": {
+              "type": "number"
+            },
+            "mirostatTau": {
+              "type": "number"
+            },
+            "mirostatEta": {
+              "type": "number"
+            },
+            "penalizeNewline": {
+              "type": "boolean"
+            },
+            "keepAlive": {
+              "type": [
+                "string",
+                "number"
+              ],
+              "default": "5m"
+            },
+            "stop": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         },
@@ -1734,6 +1866,11 @@ export const schema = {
         "model",
         "provider"
       ]
+    },
+    "global.Headers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
     },
     "AnthropicLLMService": {
       "type": "object",
