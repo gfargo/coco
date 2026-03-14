@@ -1,4 +1,4 @@
-import { type OllamaInput } from '@langchain/community/llms/ollama'
+import { type OllamaInput } from '@langchain/ollama'
 import { type BaseLLMParams } from '@langchain/core/language_models/llms'
 import { type OpenAIInput, type TiktokenModel } from '@langchain/openai'
 
