@@ -2,6 +2,8 @@ import chalk from 'chalk'
 import { select } from '@inquirer/prompts'
 import * as readline from 'readline'
 import { ReviewFeedbackItem } from '../../commands/review/config'
+import { runAutoFix } from '../autofix'
+import { AutoFixConfig } from '../autofix/types'
 import { execPromise } from '../utils/execPromise'
 import { bannerWithHeader, DIVIDER, hotKey, severityColor, statusColor } from './helpers'
 
@@ -13,9 +15,11 @@ export class TaskList {
   private items: FeedbackTaskItem[]
   private currentIndex: number = 0
   private rl: readline.Interface
+  private config?: AutoFixConfig
 
-  constructor(items: ReviewFeedbackItem[]) {
+  constructor(items: ReviewFeedbackItem[], config?: AutoFixConfig) {
     this.items = items.map((item) => ({ ...item, status: 'pending' }))
+    this.config = config
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -50,21 +54,14 @@ export class TaskList {
     return [
       { name: `✅ Mark as complete ${hotKey('d')}`, value: 'complete' },
       { name: `📂 Open file ${hotKey('o')}`, value: 'open' },
+      { name: `🤖 Auto-fix ${hotKey('a')}`, value: 'autofix' },
       { name: `⏩ Skip ${hotKey('s')}`, value: 'skip' },
       { name: `🙈 Omit ${hotKey('x')}`, value: 'omit' },
       { name: `${exitText} ${hotKey('q')}`, value: 'exit' },
     ]
   }
 
-  private async promptAction() {
-    const action = await select({
-      message: 'Choose an action:',
-      choices: this.getChoices(),
-    })
-    return action
-  }
 
-  private async openFile() {
     const item = this.items[this.currentIndex]
     await execPromise(`${process.env.EDITOR || 'code'} ${item.filePath}`)
   }
@@ -72,6 +69,19 @@ export class TaskList {
   private markAsComplete() {
     this.items[this.currentIndex].status = 'completed'
     this.navigate(1)
+  }
+
+  private async autoFix(): Promise<void> {
+    if (!this.config?.autoFixTool) {
+      console.log(chalk.yellow('No autoFixTool configured. Set "autoFixTool" in .coco.config.json'))
+      return
+    }
+    try {
+      await runAutoFix(this.items[this.currentIndex], this.config)
+      this.markAsComplete()
+    } catch (err) {
+      console.log(chalk.red(`Auto-fix failed: ${(err as Error).message}`))
+    }
   }
 
   private skip() {
@@ -85,7 +95,14 @@ export class TaskList {
   }
 
   private navigate(direction: number) {
-    this.currentIndex = (this.currentIndex + direction + this.items.length) % this.items.length
+    const allDone = this.items.every((item) => item.status !== 'pending')
+    if (allDone) return
+
+    let next = (this.currentIndex + direction + this.items.length) % this.items.length
+    while (this.items[next].status !== 'pending') {
+      next = (next + direction + this.items.length) % this.items.length
+    }
+    this.currentIndex = next
   }
 
   public async start() {
@@ -99,6 +116,9 @@ export class TaskList {
           break
         case 'complete':
           this.markAsComplete()
+          break
+        case 'autofix':
+          await this.autoFix()
           break
         case 'skip':
           this.skip()
@@ -117,6 +137,12 @@ export class TaskList {
           await this.displaySummary()
           return
       }
+
+      if (this.items.every((item) => item.status !== 'pending')) {
+        this.rl.close()
+        await this.displaySummary()
+        return
+      }
     }
   }
 
@@ -126,40 +152,40 @@ export class TaskList {
         name: string
       }
 
+      const abort = new AbortController()
+      let settled = false
+
+      const settle = (action: string) => {
+        if (settled) return
+        settled = true
+        process.stdin.removeListener('keypress', keyHandler)
+        abort.abort()
+        resolve(action)
+      }
+
       const keyHandler = (_: string, key: Key) => {
-        if (key) {
-          switch (key.name) {
-            case 'o':
-              resolve('open')
-              break
-            case 'd':
-              resolve('complete')
-              break
-            case 's':
-              resolve('skip')
-              break
-            case 'x':
-              resolve('omit')
-              break
-            case 'right':
-              resolve('next')
-              break
-            case 'left':
-              resolve('prev')
-              break
-            case 'q':
-              resolve('exit')
-              break
-          }
+        if (!key) return
+        switch (key.name) {
+          case 'o': return settle('open')
+          case 'a': return settle('autofix')
+          case 'd': return settle('complete')
+          case 's': return settle('skip')
+          case 'x': return settle('omit')
+          case 'right': return settle('next')
+          case 'left': return settle('prev')
+          case 'q': return settle('exit')
         }
       }
 
       readline.emitKeypressEvents(process.stdin)
       process.stdin.on('keypress', keyHandler)
-      this.promptAction().then((action) => {
-        process.stdin.removeListener('keypress', keyHandler)
-        resolve(action)
-      })
+
+      select(
+        { message: 'Choose an action:', choices: this.getChoices() },
+        { signal: abort.signal }
+      )
+        .then((action) => settle(action))
+        .catch(() => { /* aborted by hotkey — ignore */ })
     })
   }
 

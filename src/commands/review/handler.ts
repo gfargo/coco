@@ -185,6 +185,6 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     },
   })
 
-  const reviewer = new TaskList(recap as ReviewFeedbackItem[])
+  const reviewer = new TaskList(recap as ReviewFeedbackItem[], config)
   await reviewer.start()
 }
