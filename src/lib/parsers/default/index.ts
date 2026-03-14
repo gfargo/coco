@@ -4,7 +4,7 @@ import { collectDiffs } from './utils/collectDiffs'
 import { createDiffTree } from './utils/createDiffTree'
 import { SUMMARIZE_PROMPT } from '../../langchain/chains/summarize/prompt'
 import { getDiff } from '../../simple-git/getDiff'
-import { loadSummarizationChain } from 'langchain/chains'
+import { loadSummarizationChain } from '@langchain/classic/chains'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 
 export async function fileChangeParser({

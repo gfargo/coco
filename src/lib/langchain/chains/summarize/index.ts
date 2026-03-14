@@ -1,9 +1,9 @@
 import {
-  MapReduceDocumentsChain,
-  RefineDocumentsChain,
-  StuffDocumentsChain,
-} from 'langchain/chains'
-import { Document, DocumentInput } from 'langchain/document'
+    MapReduceDocumentsChain,
+    RefineDocumentsChain,
+    StuffDocumentsChain,
+} from '@langchain/classic/chains'
+import { Document, DocumentInput } from '@langchain/classic/document'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 
 export type SummarizeContext = {

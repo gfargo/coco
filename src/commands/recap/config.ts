@@ -15,8 +15,8 @@ export interface RecapOptions extends BaseCommandOptions {
 export type RecapArgv = Arguments<RecapOptions>
 
 export const RecapLlmResponseSchema = z.object({
-  title: z.string().optional(),
-  summary: z.string().optional(),
+  title: z.string(),
+  summary: z.string(),
 })
 
 export const command = 'recap'
