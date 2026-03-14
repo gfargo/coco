@@ -213,7 +213,7 @@ export const questions = {
     (
       await input({
         message: 'paths of files to be excluded when generating commit messages (comma-separated):',
-        default: 'package-lock.json',
+        default: 'package-lock.json,yarn.lock,pnpm-lock.yaml,bun.lockb',
       })
     )
       ?.split(',')

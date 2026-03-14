@@ -74,7 +74,7 @@ export const schema = {
               "node_modules"
             ]
           ],
-          "default": "['package-lock.json', contents of .gitignore, contents of .ignore]"
+        default: `['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb', contents of .gitignore, contents of .ignore]`
         },
         "ignoredExtensions": {
           "type": "array",
