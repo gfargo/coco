@@ -76,6 +76,20 @@ type BaseConfig = {
    * @default true
    */
   includeBranchName?: boolean
+
+  /**
+   * The AI CLI tool to use for auto-fixing review issues.
+   * Must match a registered adapter key (e.g. "codex", "claude", "gemini").
+   * When unset, the auto-fix action is disabled.
+   */
+  autoFixTool?: string
+
+  /**
+   * Additional key-value flags passed to the auto-fix CLI tool.
+   * Keys are flag names (without leading dashes); values are flag values.
+   * @example { "model": "o4-mini", "approval-mode": "auto-edit" }
+   */
+  autoFixToolOptions?: Record<string, string>
 }
 
 export type ConfigWithServiceObject = BaseConfig &
