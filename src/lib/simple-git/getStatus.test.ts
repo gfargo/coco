@@ -37,7 +37,6 @@ describe('getStatus', () => {
 
   describe('DiffResultTextFile / DiffResultBinaryFile (changes / binary)', () => {
     const textFile = { file: 'file.ts', binary: false as const, changes: 5, insertions: 3, deletions: 2 }
-    const binaryFile = { file: 'image.png', binary: true as const, changes: 1, insertions: 0, deletions: 0 }
 
     it('returns added when only insertions', () => {
       expect(getStatus({ ...textFile, insertions: 5, deletions: 0 })).toBe('added')
