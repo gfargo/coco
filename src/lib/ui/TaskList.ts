@@ -1,5 +1,4 @@
 import chalk from 'chalk'
-import { select } from '@inquirer/prompts'
 import * as readline from 'readline'
 import { ReviewFeedbackItem } from '../../commands/review/config'
 import { runAutoFix } from '../autofix'
@@ -25,6 +24,7 @@ export class TaskList {
       output: process.stdout,
     })
     process.stdin.setRawMode(true)
+    readline.emitKeypressEvents(process.stdin)
   }
 
   private async displayCurrentItem() {
@@ -61,7 +61,7 @@ export class TaskList {
     ]
   }
 
-
+  private async openFile() {
     const item = this.items[this.currentIndex]
     await execPromise(`${process.env.EDITOR || 'code'} ${item.filePath}`)
   }
@@ -76,11 +76,28 @@ export class TaskList {
       console.log(chalk.yellow('No autoFixTool configured. Set "autoFixTool" in .coco.config.json'))
       return
     }
+    const item = this.items[this.currentIndex]
+    console.clear()
+    console.log(chalk.bold.cyan(`🤖 Running auto-fix: ${item.title}`))
+    console.log(chalk.dim(`File: ${item.filePath}\n`))
+
+    // Fully release terminal control before handing off to child process
+    process.stdin.setRawMode(false)
+    process.stdin.pause()
+    await new Promise((r) => setTimeout(r, 50))
+
     try {
-      await runAutoFix(this.items[this.currentIndex], this.config)
+      await runAutoFix(item, this.config)
       this.markAsComplete()
+      console.log(chalk.green('\n✅ Auto-fix completed successfully.'))
+      await new Promise((r) => setTimeout(r, 1200))
     } catch (err) {
-      console.log(chalk.red(`Auto-fix failed: ${(err as Error).message}`))
+      console.log(chalk.red(`\n❌ Auto-fix failed: ${(err as Error).message}`))
+      await new Promise((r) => setTimeout(r, 1800))
+    } finally {
+      // Restore terminal for our keypress handler
+      process.stdin.resume()
+      process.stdin.setRawMode(true)
     }
   }
 
@@ -146,46 +163,35 @@ export class TaskList {
     }
   }
 
+  private renderMenu() {
+    const choices = this.getChoices()
+    console.log(chalk.dim('Choose an action:'))
+    choices.forEach((c) => console.log(`  ${c.name}`))
+  }
+
   private getActionWithKeyboardShortcut(): Promise<string> {
+    this.renderMenu()
     return new Promise((resolve) => {
-      interface Key {
-        name: string
+      const actionMap: Record<string, string> = {
+        o: 'open',
+        a: 'autofix',
+        d: 'complete',
+        s: 'skip',
+        x: 'omit',
+        right: 'next',
+        left: 'prev',
+        q: 'exit',
       }
 
-      const abort = new AbortController()
-      let settled = false
+      const handleKeypress = (_: string, key: { name: string }) => {
+        const action = key ? actionMap[key.name] : undefined
+        if (!action) return
 
-      const settle = (action: string) => {
-        if (settled) return
-        settled = true
-        process.stdin.removeListener('keypress', keyHandler)
-        abort.abort()
+        process.stdin.removeListener('keypress', handleKeypress)
         resolve(action)
       }
 
-      const keyHandler = (_: string, key: Key) => {
-        if (!key) return
-        switch (key.name) {
-          case 'o': return settle('open')
-          case 'a': return settle('autofix')
-          case 'd': return settle('complete')
-          case 's': return settle('skip')
-          case 'x': return settle('omit')
-          case 'right': return settle('next')
-          case 'left': return settle('prev')
-          case 'q': return settle('exit')
-        }
-      }
-
-      readline.emitKeypressEvents(process.stdin)
-      process.stdin.on('keypress', keyHandler)
-
-      select(
-        { message: 'Choose an action:', choices: this.getChoices() },
-        { signal: abort.signal }
-      )
-        .then((action) => settle(action))
-        .catch(() => { /* aborted by hotkey — ignore */ })
+      process.stdin.on('keypress', handleKeypress)
     })
   }
 

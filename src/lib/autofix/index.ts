@@ -18,5 +18,5 @@ export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig
   }
 
   const prompt = await buildPrompt(item)
-  await adapter.run(prompt, config.autoFixToolOptions)
+  await adapter.run(prompt, config.autoFixToolOptions, config.apiKey)
 }
