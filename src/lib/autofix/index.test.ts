@@ -32,10 +32,10 @@ describe('runAutoFix', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const codexModule = await import('./adapters/codex') as { __mockRun: jest.Mock }
+    const codexModule = await import('./adapters/codex') as unknown as { __mockRun: jest.Mock }
     mockRun = codexModule.__mockRun
     mockRun.mockResolvedValue(undefined)
-    const promptModule = await import('./buildPrompt') as { buildPrompt: typeof import('./buildPrompt').buildPrompt }
+    const promptModule = await import('./buildPrompt') as unknown as { buildPrompt: jest.Mock }
     buildPrompt = promptModule.buildPrompt
   })
 
@@ -60,7 +60,7 @@ describe('runAutoFix', () => {
     await runAutoFix(item, config)
 
     expect(buildPrompt).toHaveBeenCalledWith(item)
-    expect(mockRun).toHaveBeenCalledWith('mocked prompt', options)
+    expect(mockRun).toHaveBeenCalledWith('mocked prompt', options, undefined)
   })
 
   it('calls run without options when autoFixToolOptions is unset', async () => {
@@ -69,6 +69,6 @@ describe('runAutoFix', () => {
     await runAutoFix(item, config)
 
     expect(buildPrompt).toHaveBeenCalledWith(item)
-    expect(mockRun).toHaveBeenCalledWith('mocked prompt', undefined)
+    expect(mockRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
   })
 })
