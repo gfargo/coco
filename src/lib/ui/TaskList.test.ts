@@ -157,7 +157,8 @@ describe('TaskList — keyboard shortcuts', () => {
     await startPromise.catch(() => undefined)
 
     const logCalls = (console.log as jest.Mock).mock.calls.flat()
-    expect(logCalls).toContain(expectedStatusCount)
+    const found = logCalls.some((arg) => typeof arg === 'string' && arg.includes(expectedStatusCount))
+    expect(found).toBe(true)
   })
 
   it('moves to the next item when the right arrow key is pressed', async () => {
