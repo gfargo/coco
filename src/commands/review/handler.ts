@@ -1,5 +1,6 @@
 import { TiktokenModel } from '@langchain/openai'
 import chalk from 'chalk'
+import { z } from 'zod'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
@@ -19,6 +20,13 @@ import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbac
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
+
+// Some review prompts still produce a single feedback object. Normalize that shape
+// so the parser always returns an array for the rest of the review flow.
+const ReviewFeedbackResponseSchema = z.preprocess(
+  (value) => (Array.isArray(value) ? value : [value]),
+  ReviewFeedbackItemArraySchema
+)
 
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -143,7 +151,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = createSchemaParser(ReviewFeedbackItemArraySchema, llm)
+      const parser = createSchemaParser(ReviewFeedbackResponseSchema, llm)
 
       const formatInstructions =
         "Respond with a valid JSON object, containing four fields:'title' a string, 'summary' a short summary of the problem (include line number if big file), 'severity' a numeric enum up to ten, 'category' an enum string, and 'filePath' a relative filepath to file as string."
@@ -185,6 +193,6 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     },
   })
 
-  const reviewer = new TaskList(recap as ReviewFeedbackItem[], config)
+  const reviewer = new TaskList(recap as ReviewFeedbackItem[], { ...config, apiKey: key ?? undefined })
   await reviewer.start()
 }

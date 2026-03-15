@@ -3,7 +3,6 @@ import { AutoFixConfig } from '../autofix/types'
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-jest.mock('@inquirer/prompts', () => ({ select: jest.fn() }))
 jest.mock('../autofix', () => ({ runAutoFix: jest.fn() }))
 jest.mock('../utils/execPromise', () => ({ execPromise: jest.fn() }))
 jest.mock('./helpers', () => ({
@@ -14,7 +13,6 @@ jest.mock('./helpers', () => ({
   statusColor: () => (s: string) => s,
 }))
 
-// readline mock — captured handlers reset per test
 const mockRlClose = jest.fn()
 let keypressHandler: ((ch: string, key: { name: string }) => void) | null = null
 
@@ -23,17 +21,21 @@ jest.mock('readline', () => ({
   emitKeypressEvents: jest.fn(),
 }))
 
-// stdin mock
 const mockStdinSetRawMode = jest.fn()
 const mockStdinOn = jest.fn((event: string, handler: (ch: string, key: { name: string }) => void) => {
   if (event === 'keypress') keypressHandler = handler
 })
-const mockStdinRemoveListener = jest.fn()
+const mockStdinRemoveListener = jest.fn(
+  (event: string, handler: (ch: string, key: { name: string }) => void) => {
+    if (event === 'keypress' && keypressHandler === handler) keypressHandler = null
+  }
+)
 
 Object.defineProperty(process, 'stdin', {
   value: {
     setRawMode: mockStdinSetRawMode,
     on: mockStdinOn,
+    pause: jest.fn(),
     removeListener: mockStdinRemoveListener,
     resume: jest.fn(),
   },
@@ -45,10 +47,10 @@ Object.defineProperty(process, 'stdin', {
 
 import { TaskList } from './TaskList'
 import { runAutoFix } from '../autofix'
-import { select } from '@inquirer/prompts'
+import { execPromise } from '../utils/execPromise'
 
 const mockRunAutoFix = runAutoFix as jest.Mock
-const mockSelect = select as jest.Mock
+const mockExecPromise = execPromise as jest.Mock
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,15 +63,34 @@ const makeItem = (overrides?: Partial<ReviewFeedbackItem>): ReviewFeedbackItem =
   ...overrides,
 })
 
+/** Fire a keypress and flush microtasks */
+const press = async (key: string) => {
+  for (let i = 0; i < 10 && !keypressHandler; i++) {
+    await Promise.resolve()
+  }
+  keypressHandler?.('', { name: key })
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve()
+  }
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
   keypressHandler = null
   jest.spyOn(console, 'log').mockImplementation(() => undefined)
   jest.spyOn(console, 'clear').mockImplementation(() => undefined)
-  // Re-register stdin.on mock after clearAllMocks resets it
+  jest.spyOn(global, 'setTimeout').mockImplementation(((fn: (...args: unknown[]) => void) => {
+    fn()
+    return 0 as unknown as NodeJS.Timeout
+  }) as typeof setTimeout)
   mockStdinOn.mockImplementation((event: string, handler: (ch: string, key: { name: string }) => void) => {
     if (event === 'keypress') keypressHandler = handler
   })
+  mockStdinRemoveListener.mockImplementation(
+    (event: string, handler: (ch: string, key: { name: string }) => void) => {
+      if (event === 'keypress' && keypressHandler === handler) keypressHandler = null
+    }
+  )
 })
 
 afterEach(() => {
@@ -79,60 +100,125 @@ afterEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('TaskList — getChoices()', () => {
-  it('includes autofix choice with value "autofix" and label containing 🤖 Auto-fix', async () => {
-    let capturedChoices: { value: string; name: string }[] = []
-    mockSelect.mockImplementationOnce(({ choices }: { choices: { value: string; name: string }[] }) => {
-      capturedChoices = choices
-      return Promise.resolve('exit')
-    })
-
+  it('includes autofix choice label containing 🤖 Auto-fix', async () => {
     const tl = new TaskList([makeItem()])
-    await tl.start().catch(() => undefined)
+    const startPromise = tl.start()
+    await press('q')
+    await startPromise.catch(() => undefined)
 
-    const autofix = capturedChoices.find((c) => c.value === 'autofix')
-    expect(autofix).toBeDefined()
-    expect(autofix?.name).toContain('🤖 Auto-fix')
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    const hasAutofix = logCalls.some(
+      (arg) => typeof arg === 'string' && arg.includes('🤖 Auto-fix')
+    )
+    expect(hasAutofix).toBe(true)
   })
 })
 
 describe('TaskList — keyboard shortcut "a"', () => {
-  it('resolves to "autofix" action when key "a" is pressed', async () => {
+  it('triggers autofix when key "a" is pressed', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
     mockRunAutoFix.mockResolvedValue(undefined)
-
-    // First select call never resolves (waiting for keypress to fire)
-    // After keypress fires autofix, second select call returns 'exit'
-    let firstSelectResolve: ((v: string) => void) | undefined
-    mockSelect
-      .mockImplementationOnce(() => new Promise<string>((res) => { firstSelectResolve = res }))
-      .mockResolvedValueOnce('exit')
 
     const tl = new TaskList([makeItem()], config)
     const startPromise = tl.start()
 
-    // Wait for keypress handler to be registered
-    await new Promise((r) => setTimeout(r, 20))
-    expect(keypressHandler).not.toBeNull()
-
-    // Simulate pressing 'a' — resolves the action via keypress, bypassing select
-    keypressHandler!('a', { name: 'a' })
-
-    // Also resolve the pending select so it doesn't hang
-    await new Promise((r) => setTimeout(r, 5))
-    if (firstSelectResolve) firstSelectResolve('exit')
-
+    await press('a') // triggers autofix → markAsComplete → all done → exits
     await startPromise.catch(() => undefined)
+
     expect(mockRunAutoFix).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('TaskList — keyboard shortcuts', () => {
+  it('opens the current file when key "o" is pressed', async () => {
+    mockExecPromise.mockResolvedValue(undefined)
+    const expectedEditor = process.env.EDITOR || 'code'
+
+    const tl = new TaskList([makeItem({ filePath: 'src/open-me.ts' })])
+    const startPromise = tl.start()
+
+    await press('o')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockExecPromise).toHaveBeenCalledWith(`${expectedEditor} src/open-me.ts`)
+  })
+
+  it.each([
+    ['d', 'completed: 1'],
+    ['s', 'skipped: 1'],
+    ['x', 'omitted: 1'],
+  ])('updates summary counts when key "%s" is pressed', async (key, expectedStatusCount) => {
+    const tl = new TaskList([makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })])
+    const startPromise = tl.start()
+
+    await press(key)
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(logCalls).toContain(expectedStatusCount)
+  })
+
+  it('moves to the next item when the right arrow key is pressed', async () => {
+    const config: AutoFixConfig = { autoFixTool: 'codex' }
+    mockRunAutoFix.mockResolvedValue(undefined)
+
+    const tl = new TaskList([makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })], config)
+    const startPromise = tl.start()
+
+    await press('right')
+    await press('a')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockRunAutoFix).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Item 2' }),
+      config
+    )
+  })
+
+  it('moves to the previous item when the left arrow key is pressed', async () => {
+    const config: AutoFixConfig = { autoFixTool: 'codex' }
+    mockRunAutoFix.mockResolvedValue(undefined)
+
+    const tl = new TaskList([makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })], config)
+    const startPromise = tl.start()
+
+    await press('right')
+    await press('left')
+    await press('a')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockRunAutoFix).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Item 1' }),
+      config
+    )
+  })
+
+  it('ignores unknown keys until a supported action is pressed', async () => {
+    const tl = new TaskList([makeItem()])
+    const startPromise = tl.start()
+
+    await press('enter')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockRunAutoFix).not.toHaveBeenCalled()
+    expect(mockExecPromise).not.toHaveBeenCalled()
+    expect(mockRlClose).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('TaskList — autoFix() when autoFixTool is not configured', () => {
   it('displays a message and does not call runAutoFix', async () => {
-    // autofix action selected, then exit
-    mockSelect.mockResolvedValueOnce('autofix').mockResolvedValueOnce('exit')
-
     const tl = new TaskList([makeItem()]) // no config
-    await tl.start().catch(() => undefined)
+    const startPromise = tl.start()
+
+    await press('a') // autofix with no tool configured
+    await press('q') // exit
+    await startPromise.catch(() => undefined)
 
     expect(mockRunAutoFix).not.toHaveBeenCalled()
     const logCalls = (console.log as jest.Mock).mock.calls.flat()
@@ -141,29 +227,20 @@ describe('TaskList — autoFix() when autoFixTool is not configured', () => {
     )
     expect(hasMsg).toBe(true)
   })
-
-  it('stays on the same item (does not advance) when autoFixTool is not configured', async () => {
-    mockSelect.mockResolvedValueOnce('autofix').mockResolvedValueOnce('exit')
-
-    const tl = new TaskList([makeItem()])
-    await tl.start().catch(() => undefined)
-
-    // runAutoFix never called means markAsComplete was never called
-    expect(mockRunAutoFix).not.toHaveBeenCalled()
-  })
 })
 
 describe('TaskList — autoFix() on successful runAutoFix', () => {
   it('calls runAutoFix with the current item and config', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex', autoFixToolOptions: { model: 'o4-mini' } }
-    mockRunAutoFix.mockResolvedValueOnce(undefined)
-    mockSelect.mockResolvedValueOnce('autofix').mockResolvedValueOnce('exit')
+    mockRunAutoFix.mockResolvedValue(undefined)
 
     const item = makeItem({ title: 'Fix me' })
     const tl = new TaskList([item], config)
-    await tl.start().catch(() => undefined)
+    const startPromise = tl.start()
 
-    expect(mockRunAutoFix).toHaveBeenCalledTimes(1)
+    await press('a')
+    await startPromise.catch(() => undefined)
+
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Fix me' }),
       config
@@ -172,15 +249,16 @@ describe('TaskList — autoFix() on successful runAutoFix', () => {
 
   it('marks item completed and advances after successful runAutoFix', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
-    mockRunAutoFix.mockResolvedValueOnce(undefined)
-    // After autofix + navigate, we land on item 2 — exit from there
-    mockSelect.mockResolvedValueOnce('autofix').mockResolvedValueOnce('exit')
+    mockRunAutoFix.mockResolvedValue(undefined)
 
     const items = [makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })]
     const tl = new TaskList(items, config)
-    await tl.start().catch(() => undefined)
+    const startPromise = tl.start()
 
-    // runAutoFix called once for item 1
+    await press('a') // fix item 1 → advances to item 2
+    await press('q') // exit from item 2
+    await startPromise.catch(() => undefined)
+
     expect(mockRunAutoFix).toHaveBeenCalledTimes(1)
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 1' }),
@@ -193,12 +271,14 @@ describe('TaskList — autoFix() when runAutoFix throws', () => {
   it('displays the error message', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
     mockRunAutoFix.mockRejectedValueOnce(new Error('codex exited with code 1'))
-    mockSelect.mockResolvedValueOnce('autofix').mockResolvedValueOnce('exit')
 
     const tl = new TaskList([makeItem()], config)
-    await tl.start().catch(() => undefined)
+    const startPromise = tl.start()
 
-    // chalk wraps in ANSI codes — check that some call contains the error text
+    await press('a') // throws
+    await press('q') // exit
+    await startPromise.catch(() => undefined)
+
     const logCalls = (console.log as jest.Mock).mock.calls.flat()
     const hasErrorMsg = logCalls.some(
       (arg) => typeof arg === 'string' && arg.includes('Auto-fix failed: codex exited with code 1')
@@ -208,29 +288,19 @@ describe('TaskList — autoFix() when runAutoFix throws', () => {
 
   it('does not change item status when runAutoFix throws', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
-    mockRunAutoFix.mockRejectedValueOnce(new Error('binary not found'))
-    // After error, autofix again to confirm we're still on item 1, then exit
-    mockRunAutoFix.mockRejectedValueOnce(new Error('binary not found'))
-    mockSelect
-      .mockResolvedValueOnce('autofix') // first attempt — throws
-      .mockResolvedValueOnce('autofix') // second attempt on same item — throws again
-      .mockResolvedValueOnce('exit')
+    mockRunAutoFix.mockRejectedValue(new Error('binary not found'))
 
     const items = [makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })]
     const tl = new TaskList(items, config)
-    await tl.start().catch(() => undefined)
+    const startPromise = tl.start()
 
-    // Both calls were for Item 1 (status never changed, so we stayed on it)
+    await press('a') // throws — stays on item 1
+    await press('a') // throws again — still item 1
+    await press('q') // exit
+    await startPromise.catch(() => undefined)
+
     expect(mockRunAutoFix).toHaveBeenCalledTimes(2)
-    expect(mockRunAutoFix).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ title: 'Item 1' }),
-      config
-    )
-    expect(mockRunAutoFix).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ title: 'Item 1' }),
-      config
-    )
+    expect(mockRunAutoFix).toHaveBeenNthCalledWith(1, expect.objectContaining({ title: 'Item 1' }), config)
+    expect(mockRunAutoFix).toHaveBeenNthCalledWith(2, expect.objectContaining({ title: 'Item 1' }), config)
   })
 })
