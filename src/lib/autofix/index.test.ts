@@ -32,10 +32,10 @@ describe('runAutoFix', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const codexModule = await import('./adapters/codex') as any
+    const codexModule = await import('./adapters/codex') as { __mockRun: jest.Mock }
     mockRun = codexModule.__mockRun
     mockRun.mockResolvedValue(undefined)
-    const promptModule = await import('./buildPrompt') as any
+    const promptModule = await import('./buildPrompt') as { buildPrompt: typeof import('./buildPrompt').buildPrompt }
     buildPrompt = promptModule.buildPrompt
   })
 
