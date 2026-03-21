@@ -13,7 +13,9 @@ export function loadGitignore<ConfigType = Config>(config: Partial<Config>) {
     
     config.ignoredFiles = [
       ...(config?.ignoredFiles || []),
-      ...gitignoreContent.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#')),
+      ...gitignoreContent
+        .split('\n')
+        .filter((line) => line.trim() !== '' && !line.startsWith('#') && !line.startsWith('!')),
     ]
   }
   return config as ConfigType
@@ -30,7 +32,9 @@ export function loadIgnore<ConfigType = Config>(config: Partial<Config>) {
     const ignoreContent = fs.readFileSync('.ignore', 'utf-8')
     config.ignoredFiles = [
       ...(config?.ignoredFiles || []),
-      ...ignoreContent.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#')),
+      ...ignoreContent
+        .split('\n')
+        .filter((line) => line.trim() !== '' && !line.startsWith('#') && !line.startsWith('!')),
     ]
   }
   return config as ConfigType
