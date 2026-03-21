@@ -1,6 +1,5 @@
-import { BaseOutputParser } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
-import { RunnableRetry } from '@langchain/core/runnables'
+import { Runnable } from '@langchain/core/runnables'
 import { handleLangChainError, isNetworkError } from '../errorHandler'
 import { LangChainExecutionError, LangChainNetworkError } from '../errors'
 import { validateRequired } from '../validation'
@@ -10,7 +9,8 @@ type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
   prompt: PromptTemplate
   llm: ReturnType<typeof getLlm>
-  parser: BaseOutputParser<T> | RunnableRetry
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  parser: Runnable<any, T>
   /** Optional provider name for better error messages */
   provider?: string
   /** Optional endpoint URL for better error messages */
@@ -79,7 +79,7 @@ export const executeChain = async <T>({
 
   try {
     const chain = prompt.pipe(llm).pipe(parser)
-    const result = await chain.invoke(variables)
+    const result = (await chain.invoke(variables)) as T
 
     if (result === null || result === undefined) {
       throw new LangChainExecutionError(
