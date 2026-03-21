@@ -18,11 +18,13 @@ export interface SchemaParserOptions {
  * @returns StructuredOutputParser configured with the provided schema
  * @throws LangChainExecutionError if parser creation fails
  */
-export function createSchemaParser<S extends z.ZodType>(
-  schema: S,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function createSchemaParser(
+  schema: z.ZodType,
   llm: ReturnType<typeof getLlm>,
   options: SchemaParserOptions = {}
-): StructuredOutputParser<S> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): any {
   validateRequired(schema, 'schema', 'createSchemaParser')
   validateRequired(llm, 'llm', 'createSchemaParser')
   validateRequired(options, 'options', 'createSchemaParser')
@@ -52,7 +54,8 @@ export function createSchemaParser<S extends z.ZodType>(
   }
 
   try {
-    return StructuredOutputParser.fromZodSchema(schema)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return StructuredOutputParser.fromZodSchema(schema as any)
   } catch (error) {
     handleLangChainError(error, 'createSchemaParser: Failed to create schema parser', {
       schemaName: schema.constructor.name,

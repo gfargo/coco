@@ -39,7 +39,8 @@ export async function executeChainWithSchema<T>(
     ...parserOptions
   } = options
   
-  const parser = createSchemaParser(schema, llm, parserOptions)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parser: any = createSchemaParser(schema, llm, parserOptions)
 
   const operation = async (): Promise<T> => {
     const result = await executeChain({

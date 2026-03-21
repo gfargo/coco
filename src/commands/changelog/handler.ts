@@ -20,9 +20,10 @@ import { logSuccess } from '../../lib/ui/logSuccess'
 import { getDiffForCommit } from '../../lib/simple-git/getDiffForCommit'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import {
-  ChangelogArgv,
-  ChangelogOptions,
-  ChangelogResponseSchema
+    ChangelogArgv,
+    ChangelogOptions,
+    ChangelogResponse,
+    ChangelogResponseSchema,
 } from './config'
 import { CHANGELOG_PROMPT } from './prompt'
 
@@ -161,7 +162,8 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     factory,
     parser,
     agent: async (context, options) => {
-      const parser = createSchemaParser(ChangelogResponseSchema, llm)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parser: any = createSchemaParser(ChangelogResponseSchema, llm)
 
       const prompt = getPrompt({
         template: options.prompt,
@@ -181,7 +183,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         ? 'At the end of each item, attribute the author and include a reference to the commit hash, like this: `by @author_name (f6dbe61)`. Use the first 7 characters of the hash.'
         : 'At the end of each item, include a reference to the commit hash, like this: `(f6dbe61)`. Use the first 7 characters of the hash.'
 
-      const changelog = await executeChain({
+      const changelog = await executeChain<ChangelogResponse>({
         llm,
         prompt,
         variables: {

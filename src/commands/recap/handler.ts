@@ -177,9 +177,10 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
       })
 
       try {
-        const parser = createSchemaParser(RecapLlmResponseSchema, llm)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const parser: any = createSchemaParser(RecapLlmResponseSchema, llm)
         
-        const response = await executeChain({
+        const response = await executeChain<{ title: string; summary: string }>({
           llm,
           prompt,
           variables: {
