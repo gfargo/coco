@@ -8,7 +8,7 @@ export class PreCommitHookError extends Error {
   readonly hookOutput: string
 
   constructor(hookOutput: string) {
-    super(`Pre-commit hook failed:\n${hookOutput}`)
+    super('Pre-commit hook failed')
     this.name = 'PreCommitHookError'
     this.hookOutput = hookOutput
   }

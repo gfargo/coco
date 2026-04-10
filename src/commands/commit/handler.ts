@@ -464,7 +464,7 @@ IMPORTANT RULES:
   handleResult({
     result: commitMsg as string,
     interactiveModeCallback: async (result) => {
-      const noVerify = !!(argv.noVerify || config.noVerify)
+      const noVerify = argv.noVerify || config.noVerify || false
 
       const attemptCommit = async (skipHooks: boolean): Promise<void> => {
         try {

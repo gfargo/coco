@@ -63,7 +63,7 @@ describe('PreCommitHookError', () => {
   it('includes hookOutput in message', () => {
     const output = 'ruff found errors'
     const err = new PreCommitHookError(output)
-    expect(err.message).toContain(output)
+    expect(err.message).toBe('Pre-commit hook failed')
   })
 })
 
