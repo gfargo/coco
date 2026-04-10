@@ -43,6 +43,7 @@ describe('Conventional Commits Handler', () => {
       conventional: false,
       includeBranchName: true,
       noDiff: false,
+      noVerify: false,
       verbose: false,
       version: false,
       help: false,
