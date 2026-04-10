@@ -6,7 +6,7 @@ import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessa
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default'
-import { createCommit } from '../../lib/simple-git/createCommit'
+import { PreCommitHookError, createCommit } from '../../lib/simple-git/createCommit'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
@@ -15,7 +15,7 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler, FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
-import { LOGO, isInteractive } from '../../lib/ui/helpers'
+import { LOGO, SEPERATOR, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
@@ -464,13 +464,77 @@ IMPORTANT RULES:
   handleResult({
     result: commitMsg as string,
     interactiveModeCallback: async (result) => {
-      await createCommit(result, git, () => {
-        logger.log(
-          '⚠️  Pre-commit hook modified files. Staging changes and retrying commit...',
-          { color: 'yellow' }
-        )
-      })
-      logSuccess()
+      const noVerify = !!(argv.noVerify || config.noVerify)
+
+      const attemptCommit = async (skipHooks: boolean): Promise<void> => {
+        try {
+          await createCommit(
+            result,
+            git,
+            () => {
+              logger.log(
+                '⚠️  Pre-commit hook modified files. Staging changes and retrying commit...',
+                { color: 'yellow' }
+              )
+            },
+            { noVerify: skipHooks }
+          )
+          logSuccess()
+        } catch (error) {
+          if (error instanceof PreCommitHookError) {
+            // Display friendly hook failure output
+            logger.log('\n✖ Commit blocked by pre-commit hook', { color: 'red' })
+            logger.log('\nHook output:', { color: 'yellow' })
+            logger.log(SEPERATOR)
+            logger.log(error.hookOutput)
+            logger.log(SEPERATOR)
+
+            if (INTERACTIVE) {
+              const { select } = await import('@inquirer/prompts')
+              const choice = await select({
+                message: 'How would you like to proceed?',
+                choices: [
+                  {
+                    name: '🔄 Retry',
+                    value: 'retry',
+                    description: 'Fix the issues above and retry the commit',
+                  },
+                  {
+                    name: '⚠️  Skip hooks',
+                    value: 'skip',
+                    description: 'Retry with --no-verify to bypass pre-commit hooks (use with care)',
+                  },
+                  {
+                    name: '💣 Abort',
+                    value: 'abort',
+                    description: 'Abort the commit',
+                  },
+                ],
+              })
+
+              if (choice === 'retry') {
+                await attemptCommit(false)
+              } else if (choice === 'skip') {
+                logger.log('⚠️  Skipping hooks with --no-verify...', { color: 'yellow' })
+                await attemptCommit(true)
+              } else {
+                logger.log('\nCommit aborted.', { color: 'red' })
+                process.exit(1)
+              }
+            } else {
+              logger.log(
+                '\nFix the issues above and try again, or use --no-verify to skip hooks.',
+                { color: 'yellow' }
+              )
+              process.exit(1)
+            }
+          } else {
+            throw error
+          }
+        }
+      }
+
+      await attemptCommit(noVerify)
     },
     mode: MODE as 'interactive' | 'stdout',
   })

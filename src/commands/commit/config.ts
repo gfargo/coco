@@ -11,6 +11,7 @@ export interface CommitOptions extends BaseCommandOptions {
   withPreviousCommits: number
   conventional: boolean
   includeBranchName: boolean
+  noVerify: boolean
 }
 
 export type CommitArgv = Arguments<CommitOptions>
@@ -91,6 +92,12 @@ export const options = {
     description: 'Only pass basic "git status" result instead of providing entire diff',
     type: 'boolean',
     default: false,
+  },
+  noVerify: {
+    description: 'Skip pre-commit and commit-msg hooks (passes --no-verify to git commit)',
+    type: 'boolean',
+    default: false,
+    alias: 'n',
   },
 } as Record<string, Options>
 
