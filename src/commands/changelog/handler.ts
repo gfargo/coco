@@ -13,14 +13,15 @@ import { getCommitLogAgainstTag } from '../../lib/simple-git/getCommitLogAgainst
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getCommitLogRangeDetails, CommitDetails } from '../../lib/simple-git/getCommitLogRangeDetails'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
+import { getChangesByCommit } from '../../lib/simple-git/getChangesByCommit'
 import { getRepo } from '../../lib/simple-git/getRepo'
-import { CommandHandler } from '../../lib/types'
+import { CommandHandler, FileChange } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
-import { getDiffForCommit } from '../../lib/simple-git/getDiffForCommit'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
+import { fileChangeParser } from '../../lib/parsers/default'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import {
     ChangelogArgv,
@@ -35,8 +36,25 @@ type CommitDetailsWithDiffText = CommitDetails & { diffText?: string };
 type FactoryResult = {
   branch: string;
   commits?: CommitDetailsWithDiffText[];
-  diff?: string;
+  diffChanges?: FileChange[];
+  diffCommit?: string;
   withDiff?: boolean;
+}
+
+async function processInWaves<T, R>(
+  items: T[],
+  processor: (item: T) => Promise<R>,
+  maxConcurrent = 6
+): Promise<R[]> {
+  const results: R[] = []
+  const limit = Math.max(1, maxConcurrent)
+
+  for (let i = 0; i < items.length; i += limit) {
+    const waveResults = await Promise.all(items.slice(i, i + limit).map(processor))
+    results.push(...waveResults)
+  }
+
+  return results
 }
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
@@ -78,11 +96,13 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     const branchName = await getCurrentBranchName({ git })
 
     if (argv.onlyDiff) {
+      const baseBranch = argv.branch || config.defaultBranch || 'main'
       logger.verbose(`Generating changelog based on branch diff`, { color: 'yellow' })
-      const diff = await getDiffForBranch({ git, logger, baseBranch: argv.branch || 'main', headBranch: branchName })
+      const diff = await getDiffForBranch({ git, logger, baseBranch, headBranch: branchName })
       return {
         branch: branchName,
-        diff: JSON.stringify(diff.staged, null, 2),
+        diffChanges: diff.staged,
+        diffCommit: `${baseBranch}..${branchName}`,
       }
     }
 
@@ -118,11 +138,41 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
 
     let commitsWithDiffText: CommitDetailsWithDiffText[] = commits;
     if (argv.withDiff) {
-      commitsWithDiffText = await Promise.all(
-        commits.map(async (commit) => ({
-          ...commit,
-          diffText: await getDiffForCommit(commit.hash, { git }),
-        }))
+      commitsWithDiffText = await processInWaves(
+        commits,
+        async (commit) => {
+          const changes = await getChangesByCommit({
+            commit: commit.hash,
+            options: {
+              git,
+              logger,
+              ignoredFiles: config.ignoredFiles || undefined,
+              ignoredExtensions: config.ignoredExtensions || undefined,
+            },
+          })
+
+          return {
+            ...commit,
+            diffText:
+              changes.length > 0
+                ? await fileChangeParser({
+                    changes,
+                    commit: `${commit.hash}^..${commit.hash}`,
+                    options: {
+                      tokenizer,
+                      git,
+                      llm,
+                      logger,
+                      maxTokens: config.service.tokenLimit,
+                      minTokensForSummary: config.service.minTokensForSummary,
+                      maxFileTokens: config.service.maxFileTokens,
+                      maxConcurrent: config.service.maxConcurrent,
+                    },
+                  })
+                : undefined,
+          }
+        },
+        config.service.maxConcurrent
       );
     }
 
@@ -134,8 +184,23 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   }
 
   async function parser(data: FactoryResult) {
-    if (data.diff) {
-      return `## Diff for ${data.branch}\n\n${data.diff}`
+    if (data.diffChanges && data.diffCommit) {
+      const diffSummary = await fileChangeParser({
+        changes: data.diffChanges,
+        commit: data.diffCommit,
+        options: {
+          tokenizer,
+          git,
+          llm,
+          logger,
+          maxTokens: config.service.tokenLimit,
+          minTokensForSummary: config.service.minTokensForSummary,
+          maxFileTokens: config.service.maxFileTokens,
+          maxConcurrent: config.service.maxConcurrent,
+        },
+      })
+
+      return `## Diff for ${data.branch}\n\n${diffSummary}`
     }
 
     if (!data.commits || data.commits.length === 0) {

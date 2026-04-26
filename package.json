@@ -48,7 +48,7 @@
     "coco:esm": "node dist/index.esm.mjs"
   },
   "devDependencies": {
-    "@commitlint/types": "^19.8.0",
+    "@commitlint/types": "^20.5.0",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-eslint": "^9.0.5",
     "@rollup/plugin-json": "^6.0.0",
@@ -68,7 +68,7 @@
     "rollup-plugin-executable": "^1.6.3",
     "rollup-plugin-peer-deps-external": "^2.2.4",
     "rollup-plugin-preserve-shebangs": "^0.2.0",
-    "rollup-plugin-typescript2": "^0.36.0",
+    "rollup-plugin-typescript2": "^0.37.0",
     "rollup-plugin-visualizer": "^7.0.1",
     "ts-jest": "^29.1.0",
     "ts-json-schema-generator": "^2.3.0",
@@ -77,7 +77,7 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@commitlint/core": "^19.8.0",
+    "@commitlint/core": "^20.5.0",
     "@inquirer/prompts": "3.3.0",
     "@langchain/anthropic": "^1.0.0",
     "@langchain/community": "^1.0.0",

@@ -251,7 +251,28 @@ export async function summarizeDiffs(
   // Calculate maxFileTokens as 25% of maxTokens if not specified
   const effectiveMaxFileTokens = maxFileTokens ?? Math.floor(maxTokens * 0.25)
 
-  // PHASE 1: Pre-process large files
+  // PHASE 1: Directory grouping & assessment
+  logger.startTimer().startSpinner(`Organizing Diffs...`, { color: 'blue' })
+  let directoryDiffs = createDirectoryDiffs(rootDiffNode)
+
+  // Sort by token count descending for consistent output ordering
+  directoryDiffs.sort((a, b) => b.tokenCount - a.tokenCount)
+
+  let totalTokenCount = directoryDiffs.reduce((sum, group) => sum + group.tokenCount, 0)
+
+  logger.stopSpinner('Diffs Organized').stopTimer()
+
+  logger.verbose(`Total token count: ${totalTokenCount}, max allowed: ${maxTokens}`, {
+    color: totalTokenCount > maxTokens ? 'yellow' : 'green',
+  })
+
+  // Early exit if already under budget
+  if (totalTokenCount <= maxTokens) {
+    logger.verbose(`Already under token budget, skipping summarization.`, { color: 'green' })
+    return directoryDiffs.map(handleOutput).join('')
+  }
+
+  // PHASE 2: Pre-process large files only when the raw diff is over budget
   logger.startTimer().startSpinner(`Pre-processing large files...`, { color: 'blue' })
 
   const preprocessedNode = await preprocessLargeFiles(rootDiffNode, {
@@ -266,24 +287,16 @@ export async function summarizeDiffs(
 
   logger.stopSpinner('Files pre-processed').stopTimer()
 
-  // PHASE 2: Directory grouping & assessment
-  logger.startTimer().startSpinner(`Organizing Diffs...`, { color: 'blue' })
-  const directoryDiffs = createDirectoryDiffs(preprocessedNode)
-
-  // Sort by token count descending for consistent output ordering
+  directoryDiffs = createDirectoryDiffs(preprocessedNode)
   directoryDiffs.sort((a, b) => b.tokenCount - a.tokenCount)
+  totalTokenCount = directoryDiffs.reduce((sum, group) => sum + group.tokenCount, 0)
 
-  const totalTokenCount = directoryDiffs.reduce((sum, group) => sum + group.tokenCount, 0)
-
-  logger.stopSpinner('Diffs Organized').stopTimer()
-
-  logger.verbose(`Total token count: ${totalTokenCount}, max allowed: ${maxTokens}`, {
+  logger.verbose(`Total token count after file pre-processing: ${totalTokenCount}`, {
     color: totalTokenCount > maxTokens ? 'yellow' : 'green',
   })
 
-  // Early exit if already under budget
   if (totalTokenCount <= maxTokens) {
-    logger.verbose(`Already under token budget, skipping summarization.`, { color: 'green' })
+    logger.verbose(`Under token budget after file pre-processing.`, { color: 'green' })
     return directoryDiffs.map(handleOutput).join('')
   }
 
