@@ -125,6 +125,7 @@ describe('summarizeDiffs', () => {
   })
 
   it('should skip summarization when total tokens under maxTokens', async () => {
+    const preprocessLargeFilesMock = jest.requireMock('./summarizeLargeFiles').preprocessLargeFiles
     const rootNode: DiffNode = {
       path: '',
       diffs: [
@@ -145,6 +146,7 @@ describe('summarizeDiffs', () => {
 
     // Should contain raw diff, not summary
     expect(result).toContain('small change')
+    expect(preprocessLargeFilesMock).not.toHaveBeenCalled()
     expect(mockLogger.verbose).toHaveBeenCalledWith(
       expect.stringContaining('Already under token budget'),
       expect.any(Object)
@@ -214,16 +216,16 @@ describe('summarizeDiffs', () => {
     await summarizeDiffs(rootNode, {
       tokenizer: mockTokenizer,
       logger: mockLogger as never,
-      maxTokens: 2000,
+      maxTokens: 50,
       chain: mockChain,
       textSplitter: mockTextSplitter,
     })
 
-    // preprocessLargeFiles should be called with maxFileTokens = 500 (25% of 2000)
+    // preprocessLargeFiles should be called with maxFileTokens = 12 (25% of 50)
     expect(preprocessLargeFilesMock).toHaveBeenCalledWith(
       rootNode,
       expect.objectContaining({
-        maxFileTokens: 500,
+        maxFileTokens: 12,
       })
     )
   })
@@ -240,7 +242,7 @@ describe('summarizeDiffs', () => {
     await summarizeDiffs(rootNode, {
       tokenizer: mockTokenizer,
       logger: mockLogger as never,
-      maxTokens: 2000,
+      maxTokens: 50,
       maxFileTokens: 300, // Custom value
       chain: mockChain,
       textSplitter: mockTextSplitter,
