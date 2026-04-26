@@ -3,6 +3,10 @@ import { enforcePromptBudget } from './enforcePromptBudget'
 
 describe('enforcePromptBudget', () => {
   const tokenizer = (text: string) => text.length
+  const renderVariables = (variables: Record<string, string>) => ({
+    summary: variables.summary,
+    additional_context: variables.additional_context,
+  })
   const prompt = new PromptTemplate({
     template: 'Instructions\n{summary}\nContext: {additional_context}',
     inputVariables: ['summary', 'additional_context'],
@@ -40,7 +44,7 @@ describe('enforcePromptBudget', () => {
 
     expect(result.truncated).toBe(true)
     expect(result.variables.summary.length).toBeLessThan(200)
-    expect(tokenizer(await prompt.format(result.variables))).toBeLessThanOrEqual(70)
+    expect(tokenizer(await prompt.format(renderVariables(result.variables)))).toBeLessThanOrEqual(70)
   })
 
   it('throws when prompt overhead alone exceeds the budget', async () => {
