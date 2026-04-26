@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    name: Release gate (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - 22.12.0
+          - 24.x
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Check package manager hygiene
+        run: test -f yarn.lock && test ! -f package-lock.json
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run Jest tests
+        run: npm run test:jest
+
+      - name: Build
+        run: npm run build
+
+      - name: Check generated schema drift
+        run: git diff --exit-code -- schema.json src/lib/schema.ts
+
+      - name: Verify package dry run
+        run: npm pack --dry-run
