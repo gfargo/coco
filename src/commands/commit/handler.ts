@@ -2,6 +2,7 @@ import { type TiktokenModel } from '@langchain/openai'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
+import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
 import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessage'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
@@ -272,7 +273,21 @@ IMPORTANT RULES:
             : variables.additional_context,
         }
 
-        const commitMsg = await executeChainWithSchema(schema, llm, prompt, currentVariables, {
+        const budgetedPrompt = await enforcePromptBudget({
+          prompt,
+          variables: currentVariables,
+          tokenizer,
+          maxTokens: config.service.tokenLimit || 2048,
+        })
+
+        if (budgetedPrompt.truncated) {
+          logger.verbose(
+            `Rendered prompt exceeded token budget; trimmed summary to ${budgetedPrompt.promptTokenCount} tokens.`,
+            { color: 'yellow' }
+          )
+        }
+
+        const commitMsg = await executeChainWithSchema(schema, llm, prompt, budgetedPrompt.variables, {
           retryOptions: {
             maxAttempts,
             onRetry: (attempt: number, error: Error) => {

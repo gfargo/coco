@@ -1,7 +1,9 @@
+import { type TiktokenModel } from '@langchain/openai'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
+import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
@@ -19,6 +21,7 @@ import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getDiffForCommit } from '../../lib/simple-git/getDiffForCommit'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
+import { getTokenCounter } from '../../lib/utils/tokenizer'
 import {
     ChangelogArgv,
     ChangelogOptions,
@@ -59,6 +62,9 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   }
 
   const llm = getLlm(provider, model, config)
+  const tokenizer = await getTokenCounter(
+    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
+  )
 
   const INTERACTIVE = isInteractive(config)
 
@@ -183,15 +189,31 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         ? 'At the end of each item, attribute the author and include a reference to the commit hash, like this: `by @author_name (f6dbe61)`. Use the first 7 characters of the hash.'
         : 'At the end of each item, include a reference to the commit hash, like this: `(f6dbe61)`. Use the first 7 characters of the hash.'
 
+      const variables = {
+        summary: context,
+        format_instructions: formatInstructions,
+        additional_context: additional_context,
+        author_instructions: author_instructions,
+      }
+
+      const budgetedPrompt = await enforcePromptBudget({
+        prompt,
+        variables,
+        tokenizer,
+        maxTokens: config.service.tokenLimit || 2048,
+      })
+
+      if (budgetedPrompt.truncated) {
+        logger.verbose(
+          `Rendered prompt exceeded token budget; trimmed summary to ${budgetedPrompt.promptTokenCount} tokens.`,
+          { color: 'yellow' }
+        )
+      }
+
       const changelog = await executeChain<ChangelogResponse>({
         llm,
         prompt,
-        variables: {
-          summary: context,
-          format_instructions: formatInstructions,
-          additional_context: additional_context,
-          author_instructions: author_instructions,
-        },
+        variables: budgetedPrompt.variables,
         parser,
       })
 
