@@ -39,7 +39,8 @@ export async function fileChangeParser({
     rootTreeNode,
     (path) => getDiff(path, commit, { git, logger }),
     tokenizer,
-    logger
+    logger,
+    maxConcurrent
   )
   logger.stopSpinner('Diffs Collected').stopTimer()
 
