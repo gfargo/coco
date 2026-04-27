@@ -109,6 +109,7 @@ describe('summarizeDirectoryDiff', () => {
 
 describe('summarizeDiffs', () => {
   const mockTokenizer = (text: string) => Math.ceil(text.length / 4)
+  const summarizeMock = jest.requireMock('../../../langchain/chains/summarize').summarize
   const mockLogger = {
     verbose: jest.fn().mockReturnThis(),
     log: jest.fn().mockReturnThis(),
@@ -122,6 +123,7 @@ describe('summarizeDiffs', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    summarizeMock.mockImplementation(async (docs: unknown[]) => `Summary of ${docs.length} file(s)`)
   })
 
   it('should skip summarization when total tokens under maxTokens', async () => {
@@ -276,5 +278,49 @@ describe('summarizeDiffs', () => {
     expect(result).toContain('changes in "/src/components"')
     expect(result).toContain('Button component')
     expect(result).toContain('button code')
+  })
+
+  it('should condense large diff sets in bounded waves', async () => {
+    const rootNode: DiffNode = {
+      path: '',
+      diffs: Array.from({ length: 12 }, (_, index) => ({
+        file: `src/area-${index}/large.ts`,
+        diff: `${index}`.repeat(2000),
+        summary: `large area ${index}`,
+        tokenCount: 500,
+      })),
+      children: [],
+    }
+    let activeSummaries = 0
+    let maxActiveSummaries = 0
+
+    summarizeMock.mockImplementation(async () => {
+      activeSummaries++
+      maxActiveSummaries = Math.max(maxActiveSummaries, activeSummaries)
+
+      await new Promise((resolve) => setTimeout(resolve, 5))
+
+      activeSummaries--
+      return 'compact'
+    })
+
+    const result = await summarizeDiffs(rootNode, {
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      maxTokens: 1000,
+      minTokensForSummary: 100,
+      maxConcurrent: 3,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(summarizeMock.mock.calls.length).toBeGreaterThanOrEqual(10)
+    expect(summarizeMock.mock.calls.length).toBeLessThanOrEqual(12)
+    expect(maxActiveSummaries).toBeLessThanOrEqual(3)
+    expect(result).toContain('Summary')
+    expect(mockLogger.verbose).toHaveBeenCalledWith(
+      expect.stringContaining('Under token budget'),
+      expect.any(Object)
+    )
   })
 })
