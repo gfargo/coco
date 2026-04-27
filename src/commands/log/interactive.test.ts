@@ -1,6 +1,7 @@
 import { GitCommitDetail, GitLogRow } from './data'
 import { createLogTuiState } from './interactiveState'
 import { renderInteractiveLog } from './interactive'
+import { BranchOverview } from './branchData'
 
 const rows: GitLogRow[] = [
   {
@@ -31,9 +32,42 @@ const detail: GitCommitDetail = {
   ],
 }
 
+const branches: BranchOverview = {
+  currentBranch: 'main',
+  dirty: true,
+  localBranches: [
+    {
+      type: 'local',
+      name: 'refs/heads/main',
+      shortName: 'main',
+      hash: 'abc1234',
+      upstream: 'origin/main',
+      current: true,
+      date: '2026-04-27',
+      subject: 'feat: add interactive log',
+      ahead: 1,
+      behind: 2,
+    },
+  ],
+  remoteBranches: [
+    {
+      type: 'remote',
+      name: 'refs/remotes/origin/main',
+      shortName: 'origin/main',
+      hash: 'abc1234',
+      current: false,
+      remote: 'origin',
+      date: '2026-04-27',
+      subject: 'feat: add interactive log',
+      ahead: 0,
+      behind: 0,
+    },
+  ],
+}
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
-    const output = renderInteractiveLog(createLogTuiState(rows), detail, {
+    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, {
       height: 40,
       width: 100,
     })
@@ -43,6 +77,9 @@ describe('log interactive renderer', () => {
     expect(output).toContain('feat: add interactive log')
     expect(output).toContain('Changed files:')
     expect(output).toContain('A  src/commands/log/interactive.ts')
+    expect(output).toContain('Branches: main | dirty worktree')
+    expect(output).toContain('* main +1/-2 vs origin/main')
+    expect(output).toContain('origin/main')
     expect(output).toContain('Keys:')
   })
 })
