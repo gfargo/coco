@@ -111,6 +111,12 @@ try {
     args: ['log', '--help'],
     label: 'packaged log command help',
   })
+  runCheck({
+    command: packagedBinPath(prefix),
+    args: ['init', '--dry-run', '--scope', 'project'],
+    label: 'packaged init dry run',
+  })
+  console.log('✓ packaged init dry run')
 } finally {
   rmSync(tempRoot, { recursive: true, force: true })
 }
