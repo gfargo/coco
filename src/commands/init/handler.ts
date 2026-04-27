@@ -25,42 +25,48 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
 
   let scope = options?.scope
   let shouldSetupCommitlint = false
+
+  if (options.dryRun) {
+    logger.log(`\ninit dry run successful for ${scope || 'project'} scope`, { color: 'green' })
+    return
+  }
   
   if (!scope) {
     scope = await questions.whatScope()
+  }
 
-    // Ask about commitlint setup after scope selection
-    shouldSetupCommitlint = await questions.setupCommitlint()
+  // Ask about commitlint setup after scope selection
+  shouldSetupCommitlint = await questions.setupCommitlint()
 
-    const llmProvider = await questions.selectLLMProvider()
-    const llmModel = await questions.selectLLMModel(llmProvider)
+  const llmProvider = await questions.selectLLMProvider()
+  const llmModel = await questions.selectLLMModel(llmProvider)
 
-    const service = getDefaultServiceConfigFromAlias(llmProvider, llmModel)
+  const service = getDefaultServiceConfigFromAlias(llmProvider, llmModel)
 
-    const config: ConfigWithServiceObject = {
-      defaultBranch: 'main',
-      mode: 'interactive',
-      service: service,
+  const config: ConfigWithServiceObject = {
+    defaultBranch: 'main',
+    mode: 'interactive',
+    service: service,
+  }
+
+  let apiKey = '' as string
+  if (llmProvider === 'openai') {
+    apiKey = await questions.inputApiKey('OpenAI', 'OPENAI_API_KEY')
+
+    if (config.service.authentication.type === 'APIKey') {
+      config.service.authentication.credentials.apiKey = '•••••••••••••••'
     }
+  }
 
-    let apiKey = '' as string
-    if (llmProvider === 'openai') {
-      apiKey = await questions.inputApiKey('OpenAI', 'OPENAI_API_KEY')
+  if (llmProvider === 'anthropic') {
+    apiKey = await questions.inputApiKey('Anthropic', 'ANTHROPIC_API_KEY')
 
-      if (config.service.authentication.type === 'APIKey') {
-        config.service.authentication.credentials.apiKey = '•••••••••••••••'
-      }
+    if (config.service.authentication.type === 'APIKey') {
+      config.service.authentication.credentials.apiKey = '•••••••••••••••'
     }
+  }
 
-    if (llmProvider === 'anthropic') {
-      apiKey = await questions.inputApiKey('Anthropic', 'ANTHROPIC_API_KEY')
-
-      if (config.service.authentication.type === 'APIKey') {
-        config.service.authentication.credentials.apiKey = '•••••••••••••••'
-      }
-    }
-
-    const advOptions = await questions.configureAdvancedOptions()
+  const advOptions = await questions.configureAdvancedOptions()
 
     /**
      * Prompt for advanced options
@@ -75,8 +81,8 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
      * - ignored extensions
      * - commit message prompt
      */
-    if (advOptions) {
-      config.mode = await questions.selectMode()
+  if (advOptions) {
+    config.mode = await questions.selectMode()
 
       config.defaultBranch = await questions.selectDefaultGitBranch()
 
@@ -135,53 +141,52 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       }
     }
 
-    logResult('Config', JSON.stringify(config, null, 2))
-    let approvalMessage = 'does this look good?'
+  logResult('Config', JSON.stringify(config, null, 2))
+  let approvalMessage = 'does this look good?'
 
-    if (config.service.authentication.type === 'APIKey') {
-      // add to config after logging, so that the API key is not logged
-      config.service.authentication.credentials.apiKey = apiKey
-      approvalMessage = 'looking good? (API key hidden for security)'
+  if (config.service.authentication.type === 'APIKey') {
+    // add to config after logging, so that the API key is not logged
+    config.service.authentication.credentials.apiKey = apiKey
+    approvalMessage = 'looking good? (API key hidden for security)'
+  }
+
+  const isApproved = await confirm({
+    message: approvalMessage,
+  })
+
+  let configFilePath = ''
+
+  switch (scope) {
+    case 'project':
+      const fileTypeSelection = await questions.selectProjectConfigFileType()
+      configFilePath = await getProjectConfigFilePath(fileTypeSelection)
+      break
+    case 'global':
+    default:
+      configFilePath = getPathToUsersGitConfig()
+      break
+  }
+
+  if (isApproved) {
+    if (configFilePath.endsWith('.gitconfig')) {
+      await appendToGitConfig(configFilePath, config)
+    } else if (configFilePath.endsWith('.env')) {
+      await appendToEnvFile(configFilePath, config)
+    } else if (configFilePath.endsWith('.coco.config.json')) {
+      appendToProjectJsonConfig(configFilePath, config)
     }
 
-    const isApproved = await confirm({
-      message: approvalMessage,
-    })
+    // After config is written, check for package installation
+    await checkAndHandlePackageInstallation({ global: scope === 'global', logger })
 
-    let configFilePath = ''
-
-    switch (scope) {
-      case 'project':
-        const fileTypeSelection = await questions.selectProjectConfigFileType()
-        configFilePath = await getProjectConfigFilePath(fileTypeSelection)
-        break
-      case 'global':
-      default:
-        configFilePath = getPathToUsersGitConfig()
-        break
+    // Install commitlint packages if user requested
+    if (shouldSetupCommitlint) {
+      await installCommitlintPackages(scope, logger)
     }
 
-    if (isApproved) {
-      if (configFilePath.endsWith('.gitconfig')) {
-        await appendToGitConfig(configFilePath, config)
-      } else if (configFilePath.endsWith('.env')) {
-        await appendToEnvFile(configFilePath, config)
-      } else if (configFilePath.endsWith('.coco.config.json')) {
-        appendToProjectJsonConfig(configFilePath, config)
-      }
-
-      // After config is written, check for package installation
-      await checkAndHandlePackageInstallation({ global: scope === 'global', logger })
-
-      // Install commitlint packages if user requested
-      if (shouldSetupCommitlint) {
-        await installCommitlintPackages(scope, logger)
-      }
-
-      logger.log(`\ninit successful! 🦾🤖🎉`, { color: 'green' })
-    } else {
-      logger.log('\ninit cancelled.', { color: 'yellow' })
-    }
+    logger.log(`\ninit successful! 🦾🤖🎉`, { color: 'green' })
+  } else {
+    logger.log('\ninit cancelled.', { color: 'yellow' })
   }
 }
 

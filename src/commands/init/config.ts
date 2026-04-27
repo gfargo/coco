@@ -6,6 +6,7 @@ export type InstallationScope = 'global' | 'project'
 
 export interface InitOptions extends BaseArgvOptions {
   scope?: InstallationScope
+  dryRun?: boolean
 }
 
 export type InitArgv = Argv<InitOptions>['argv']
@@ -20,6 +21,11 @@ export const options = {
     type: 'string',
     description: 'configure coco for the current user or project?',
     choices: ['global', 'project'],
+  },
+  dryRun: {
+    type: 'boolean',
+    description: 'validate init can run without prompts or filesystem writes',
+    default: false,
   },
 } as Record<string, Options>
 

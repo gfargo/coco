@@ -79,7 +79,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
 
       const branchChanges = await fileChangeParser({
         changes: diff.staged,
-        commit: `--branch-diff-${argv.branch}`,
+        commit: `${argv.branch}..${currentBranch}`,
         options: {
           tokenizer,
           git,

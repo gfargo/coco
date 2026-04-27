@@ -6,6 +6,8 @@ import { handler as commitHandler } from './commit/handler'
 import { CommitOptions } from './commit/config'
 import { handler as logHandler } from './log/handler'
 import { LogOptions } from './log/config'
+import { handler as reviewHandler } from './review/handler'
+import { ReviewOptions } from './review/config'
 import { loadConfig } from '../lib/config/utils/loadConfig'
 import { executeChain } from '../lib/langchain/utils/executeChain'
 import { executeChainWithSchema } from '../lib/langchain/utils/executeChainWithSchema'
@@ -41,6 +43,11 @@ jest.mock('../lib/langchain/utils/getLlm')
 jest.mock('../lib/utils/tokenizer')
 jest.mock('../lib/ui/logSuccess', () => ({
   logSuccess: jest.fn(),
+}))
+jest.mock('../lib/ui/TaskList', () => ({
+  TaskList: jest.fn().mockImplementation(() => ({
+    start: jest.fn(),
+  })),
 }))
 jest.mock('../lib/utils/hasCommitlintConfig', () => ({
   hasCommitlintConfig: jest.fn().mockResolvedValue(false),
@@ -531,6 +538,76 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('- Summarized feature work')
     expect(variables.summary).toContain('feat: add feature module')
     expect(variables.summary).toContain('feature/changelog-test')
+  })
+
+  it('reviews real working tree changes from a temp git repo', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+    mockExecuteChain.mockResolvedValueOnce([
+      {
+        title: 'Review finding',
+        summary: 'Check README wording.',
+        severity: 4,
+        category: 'maintainability',
+        filePath: 'README.md',
+      },
+    ])
+
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n\nUpdated documentation.\n')
+
+    await reviewHandler({
+      $0: 'coco',
+      _: ['review'],
+      branch: '',
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<ReviewOptions>, createLogger())
+
+    const variables = mockExecuteChain.mock.calls[0][0].variables as Record<string, string>
+
+    expect(variables.changes).toContain('README.md')
+    expect(variables.changes).toContain('Updated documentation')
+  })
+
+  it('reviews real branch diffs from a temp git repo', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+    mockExecuteChain.mockResolvedValueOnce([
+      {
+        title: 'Review finding',
+        summary: 'Check feature module.',
+        severity: 5,
+        category: 'maintainability',
+        filePath: 'src/feature.ts',
+      },
+    ])
+
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.git.checkoutLocalBranch('feature/review-test')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.commitAll('feat: add review feature')
+
+    await reviewHandler({
+      $0: 'coco',
+      _: ['review'],
+      branch: 'main',
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<ReviewOptions>, createLogger())
+
+    const variables = mockExecuteChain.mock.calls[0][0].variables as Record<string, string>
+
+    expect(variables.changes).toContain('src/feature.ts')
+    expect(variables.changes).toContain('export const feature = true')
   })
 
   it('prints a visual git log with refs and graph metadata', async () => {
