@@ -167,6 +167,61 @@ describe('command integration with temp git repos', () => {
     expect(variables.summary).toContain('# Temp repo')
   })
 
+  it('routes dynamic commit and summarize models through the commit command', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+      service: {
+        ...serviceConfig,
+        model: 'dynamic',
+        dynamicModels: {
+          commit: 'gpt-4.1',
+          summarize: 'gpt-4.1-nano',
+        },
+      },
+    } as unknown as Config))
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Dynamic repo\n')
+    await repo.git.add('README.md')
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    expect(mockGetLlm).toHaveBeenCalledWith(
+      'openai',
+      'gpt-4.1',
+      expect.objectContaining({
+        service: expect.objectContaining({
+          model: 'gpt-4.1',
+        }),
+      })
+    )
+    expect(mockGetLlm).toHaveBeenCalledWith(
+      'openai',
+      'gpt-4.1-nano',
+      expect.objectContaining({
+        service: expect.objectContaining({
+          model: 'gpt-4.1-nano',
+        }),
+      })
+    )
+  })
+
   it('prints a non-mutating commit split plan for staged files', async () => {
     mockLoadConfig.mockReturnValue(createConfig({
       mode: 'stdout',
