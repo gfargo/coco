@@ -31,6 +31,7 @@ import {
 } from './config'
 import { noResult } from './noResult'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
+import { handleCommitSplit, isCommitSplitCommand } from './split'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -71,6 +72,23 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   logger.verbose(`→ ${provider} (${model})`, {
     color: 'green',
   })
+
+  if (isCommitSplitCommand(argv)) {
+    const splitResult = await handleCommitSplit({
+      argv,
+      config,
+      git,
+      logger,
+      tokenizer,
+      llm,
+    })
+
+    await handleResult({
+      result: splitResult,
+      mode: config.mode || 'stdout',
+    })
+    return
+  }
 
   const USE_CONVENTIONAL_COMMITS = config.conventionalCommits || argv.conventional
 
