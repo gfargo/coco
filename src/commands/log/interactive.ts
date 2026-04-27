@@ -1,5 +1,6 @@
 import readline from 'readline'
 import { SimpleGit } from 'simple-git'
+import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
 import {
   LogTuiState,
@@ -71,6 +72,51 @@ function renderCommitList(state: LogTuiState, maxRows: number, width: number): s
   })
 }
 
+function formatDivergence(branch: BranchRef): string {
+  if (!branch.upstream) {
+    return 'no upstream'
+  }
+
+  if (branch.ahead === 0 && branch.behind === 0) {
+    return `even with ${branch.upstream}`
+  }
+
+  return `+${branch.ahead}/-${branch.behind} vs ${branch.upstream}`
+}
+
+function renderBranchOverview(overview: BranchOverview | undefined, width: number): string[] {
+  if (!overview) {
+    return ['Branches: unavailable']
+  }
+
+  const dirty = overview.dirty ? 'dirty worktree' : 'clean worktree'
+  const current = overview.localBranches.find((branch) => branch.current)
+  const localBranches = overview.localBranches
+    .slice(0, 6)
+    .map((branch) => {
+      const marker = branch.current ? '*' : ' '
+      return `${marker} ${branch.shortName} ${formatDivergence(branch)}`
+    })
+  const remoteBranches = overview.remoteBranches.slice(0, 6).map((branch) => `  ${branch.shortName}`)
+  const hiddenLocal = overview.localBranches.length > localBranches.length
+    ? [`  ... ${overview.localBranches.length - localBranches.length} more local branch(es)`]
+    : []
+  const hiddenRemote = overview.remoteBranches.length > remoteBranches.length
+    ? [`  ... ${overview.remoteBranches.length - remoteBranches.length} more remote branch(es)`]
+    : []
+
+  return [
+    `Branches: ${overview.currentBranch || '<detached>'} | ${dirty}`,
+    current ? `Upstream: ${formatDivergence(current)}` : 'Upstream: none',
+    'Local:',
+    ...(localBranches.length ? localBranches : ['  No local branches found.']),
+    'Remote:',
+    ...(remoteBranches.length ? remoteBranches : ['  No remote branches found.']),
+    ...hiddenLocal,
+    ...hiddenRemote,
+  ].map((line) => truncate(line, width))
+}
+
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
     return ['Loading selected commit details...']
@@ -102,6 +148,7 @@ function renderDetail(detail: GitCommitDetail | undefined, width: number): strin
 export function renderInteractiveLog(
   state: LogTuiState,
   detail?: GitCommitDetail,
+  branches?: BranchOverview,
   options: RenderInteractiveLogOptions = {}
 ): string {
   const height = options.height || process.stdout.rows || DEFAULT_HEIGHT
@@ -115,8 +162,9 @@ export function renderInteractiveLog(
   const detailHeader = selected
     ? `Selected: ${selected.shortHash} ${selected.message}`
     : 'Selected: none'
-  const listHeight = Math.max(4, Math.floor(height * 0.45))
-  const detailHeight = Math.max(6, height - listHeight - 8)
+  const branchLines = renderBranchOverview(branches, width).slice(0, 12)
+  const listHeight = Math.max(4, Math.floor(height * 0.35))
+  const detailHeight = Math.max(6, height - listHeight - branchLines.length - 10)
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
   const filterPrompt = state.filterMode ? `Search: ${state.filter}_` : `Filter: ${filter}`
 
@@ -124,6 +172,8 @@ export function renderInteractiveLog(
     'coco log',
     `${state.filteredCommits.length}/${state.commits.length} commits | ${filterPrompt} | ${graphMode}`,
     help,
+    '',
+    ...branchLines,
     '',
     ...renderCommitList(state, listHeight, width),
     '',
@@ -142,6 +192,7 @@ export async function startInteractiveLog(
   const output = streams.output || process.stdout
   let state = createLogTuiState(rows)
   const details = new Map<string, GitCommitDetail>()
+  let branches: BranchOverview | undefined
 
   async function loadSelectedDetail(): Promise<GitCommitDetail | undefined> {
     const selected = getSelectedCommit(state)
@@ -161,7 +212,13 @@ export async function startInteractiveLog(
   }
 
   if (!input.isTTY || !output.isTTY) {
-    output.write(`${renderInteractiveLog(state, await loadSelectedDetail())}\n`, 'utf8')
+    try {
+      branches = await getBranchOverview(git)
+    } catch {
+      branches = undefined
+    }
+
+    output.write(`${renderInteractiveLog(state, await loadSelectedDetail(), branches)}\n`, 'utf8')
     return
   }
 
@@ -183,13 +240,13 @@ export async function startInteractiveLog(
 
     const render = async () => {
       const version = ++renderVersion
-      output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state)}\n`, 'utf8')
+      output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches)}\n`, 'utf8')
 
       try {
         const detail = await loadSelectedDetail()
 
         if (!closed && version === renderVersion) {
-          output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, detail)}\n`, 'utf8')
+          output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, detail, branches)}\n`, 'utf8')
         }
       } catch (error) {
         reject(error)
@@ -253,6 +310,14 @@ export async function startInteractiveLog(
     }
 
     input.on('keypress', onKeypress)
+    void getBranchOverview(git)
+      .then((overview) => {
+        branches = overview
+        void render()
+      })
+      .catch(() => {
+        branches = undefined
+      })
     void render()
   })
 }
