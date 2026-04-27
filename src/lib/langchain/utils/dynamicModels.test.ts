@@ -1,5 +1,10 @@
 import { Config } from '../../../commands/types'
-import { DEFAULT_OPENAI_LLM_SERVICE } from '../utils'
+import {
+  DEFAULT_ANTHROPIC_LLM_SERVICE,
+  DEFAULT_OLLAMA_LLM_SERVICE,
+  DEFAULT_OPENAI_LLM_SERVICE,
+} from '../utils'
+import { DynamicModelPreference, LLMProvider, LLMService } from '../types'
 import {
   getDynamicModelDefaults,
   resolveDynamicModel,
@@ -22,6 +27,41 @@ const baseConfig = {
   },
 } as Config
 
+const providerServices: Record<LLMProvider, LLMService> = {
+  openai: DEFAULT_OPENAI_LLM_SERVICE,
+  anthropic: DEFAULT_ANTHROPIC_LLM_SERVICE,
+  ollama: DEFAULT_OLLAMA_LLM_SERVICE,
+}
+const providerOverrides = {
+  openai: {
+    summarize: 'gpt-4.1-nano',
+    largeDiff: 'gpt-4.1-mini',
+  },
+  anthropic: {
+    summarize: 'claude-3-5-haiku-latest',
+    largeDiff: 'claude-3-7-sonnet-latest',
+  },
+  ollama: {
+    summarize: 'llama3.2:3b',
+    largeDiff: 'qwen2.5-coder:14b',
+  },
+} as const
+
+function createDynamicConfig(
+  provider: LLMProvider,
+  dynamicModelPreference: DynamicModelPreference = 'balanced'
+): Config {
+  return {
+    ...baseConfig,
+    service: {
+      ...providerServices[provider],
+      provider,
+      model: 'dynamic',
+      dynamicModelPreference,
+    },
+  } as Config
+}
+
 describe('dynamic model routing', () => {
   it('preserves explicit model behavior', () => {
     const config = {
@@ -40,6 +80,27 @@ describe('dynamic model routing', () => {
     expect(resolveDynamicModel(baseConfig, 'review')).toBe('gpt-4.1')
   })
 
+  it.each([
+    ['openai', 'cost', 'gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1'] as const,
+    ['openai', 'balanced', 'gpt-4.1-mini', 'gpt-4.1-mini', 'gpt-4.1'] as const,
+    ['openai', 'quality', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1'] as const,
+    ['anthropic', 'cost', 'claude-3-5-haiku-latest', 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest'] as const,
+    ['anthropic', 'balanced', 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest'] as const,
+    ['anthropic', 'quality', 'claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-sonnet-4-0'] as const,
+    ['ollama', 'cost', 'llama3.2:3b', 'llama3.1:8b', 'qwen2.5-coder:14b'] as const,
+    ['ollama', 'balanced', 'llama3.1:8b', 'qwen2.5-coder:14b', 'qwen2.5-coder:32b'] as const,
+    ['ollama', 'quality', 'qwen2.5-coder:14b', 'qwen2.5-coder:32b', 'qwen2.5-coder:32b'] as const,
+  ])(
+    'uses %s %s defaults for summarize, commit, and largeDiff',
+    (provider, preference, summarize, commit, largeDiff) => {
+      const config = createDynamicConfig(provider, preference)
+
+      expect(resolveDynamicModel(config, 'summarize')).toBe(summarize)
+      expect(resolveDynamicModel(config, 'commit')).toBe(commit)
+      expect(resolveDynamicModel(config, 'largeDiff')).toBe(largeDiff)
+    }
+  )
+
   it('supports user task overrides', () => {
     const config = {
       ...baseConfig,
@@ -56,6 +117,27 @@ describe('dynamic model routing', () => {
     expect(resolveDynamicModel(config, 'commit')).toBe('gpt-4o')
     expect(resolveDynamicModel(config, 'review')).toBe('gpt-4.1')
   })
+
+  it.each(['openai', 'anthropic', 'ollama'] as const)(
+    'lets user overrides win over %s provider defaults',
+    (provider) => {
+      const baseProviderConfig = createDynamicConfig(provider, 'quality')
+      const overrides = providerOverrides[provider]
+      const config = {
+        ...baseProviderConfig,
+        service: {
+          ...baseProviderConfig.service,
+          dynamicModels: overrides,
+        },
+      } as Config
+
+      expect(resolveDynamicModel(config, 'summarize')).toBe(overrides.summarize)
+      expect(resolveDynamicModel(config, 'largeDiff')).toBe(overrides.largeDiff)
+      expect(resolveDynamicModel(config, 'commit')).toBe(
+        getDynamicModelDefaults(provider, 'quality').commit
+      )
+    }
+  )
 
   it('supports preference-specific defaults', () => {
     const config = {
