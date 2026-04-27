@@ -6,6 +6,7 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
+import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default/index'
@@ -169,13 +170,29 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
         fallback: REVIEW_PROMPT,
       })
 
+      const variables = {
+        changes: context,
+        format_instructions: formatInstructions,
+      }
+      const budgetedPrompt = await enforcePromptBudget({
+        prompt,
+        variables,
+        tokenizer,
+        maxTokens: config.service.tokenLimit || 2048,
+        summaryKey: 'changes',
+      })
+
+      if (budgetedPrompt.truncated) {
+        logger.verbose(
+          `Rendered prompt exceeded token budget; trimmed changes to ${budgetedPrompt.promptTokenCount} tokens.`,
+          { color: 'yellow' }
+        )
+      }
+
       const response = await executeChain({
         llm,
         prompt,
-        variables: {
-          changes: context,
-          format_instructions: formatInstructions,
-        },
+        variables: budgetedPrompt.variables,
         parser,
         logger,
         tokenizer,
