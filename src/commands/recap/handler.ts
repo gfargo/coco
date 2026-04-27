@@ -1,9 +1,11 @@
 import { TiktokenModel } from '@langchain/openai'
+import { LLMModel } from '../../lib/langchain/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
+import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getChangesByTimestamp } from '../../lib/simple-git/getChangesByTimestamp'
@@ -26,7 +28,10 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const git = getRepo()
   const config = loadConfig<RecapOptions, RecapArgv>(argv)
   const key = getApiKeyForModel(config)
-  const { provider, model } = getModelAndProviderFromConfig(config)
+  const { provider } = getModelAndProviderFromConfig(config)
+  const recapService = resolveDynamicService(config, 'recap')
+  const summaryService = resolveDynamicService(config, 'summarize')
+  const model = recapService.model
 
   if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
@@ -37,7 +42,8 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
   )
 
-  const llm = getLlm(provider, model, config)
+  const llm = getLlm(provider, model as LLMModel, { ...config, service: recapService })
+  const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
 
   const INTERACTIVE = argv.interactive || isInteractive(config)
   if (INTERACTIVE) {
@@ -77,7 +83,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const unstagedChanges = await fileChangeParser({
           changes: unstaged || [],
           commit: '--unstaged',
-          options: { tokenizer, git, llm, logger },
+          options: { tokenizer, git, llm: summaryLlm, logger },
         })
 
         const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
@@ -85,14 +91,14 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const untrackedChanges = await fileChangeParser({
           changes: untracked || [],
           commit: '--untracked',
-          options: { tokenizer, git, llm, logger },
+          options: { tokenizer, git, llm: summaryLlm, logger },
         })
         const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
 
         const stagedChanges = await fileChangeParser({
           changes: staged,
           commit: '--staged',
-          options: { tokenizer, git, llm, logger },
+          options: { tokenizer, git, llm: summaryLlm, logger },
         })
         const stagedResponse = `Staged changes:\n${stagedChanges}`
 
@@ -128,7 +134,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const branchChanges = await fileChangeParser({
           changes: changes.staged,
           commit: baseBranch,
-          options: { tokenizer, git, llm, logger },
+          options: { tokenizer, git, llm: summaryLlm, logger },
         })
 
         return [branchChanges]
@@ -195,7 +201,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
             task: 'recap',
             command: 'recap',
             provider,
-            model,
+            model: String(model),
           },
         })
 

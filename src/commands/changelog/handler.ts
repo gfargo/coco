@@ -1,6 +1,8 @@
 import { type TiktokenModel } from '@langchain/openai'
+import { LLMModel } from '../../lib/langchain/types'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
+import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
 import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
@@ -61,7 +63,10 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
   const git = getRepo()
   const key = getApiKeyForModel(config)
-  const { provider, model } = getModelAndProviderFromConfig(config)
+  const { provider } = getModelAndProviderFromConfig(config)
+  const changelogService = resolveDynamicService(config, 'changelog')
+  const summaryService = resolveDynamicService(config, argv.withDiff || argv.onlyDiff ? 'largeDiff' : 'summarize')
+  const model = changelogService.model
 
   const exclusiveOptions = [
     argv.branch ? '--branch' : null,
@@ -79,7 +84,8 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     process.exit(1)
   }
 
-  const llm = getLlm(provider, model, config)
+  const llm = getLlm(provider, model as LLMModel, { ...config, service: changelogService })
+  const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
   const tokenizer = await getTokenCounter(
     provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
   )
@@ -161,7 +167,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
                     options: {
                       tokenizer,
                       git,
-                      llm,
+                      llm: summaryLlm,
                       logger,
                       maxTokens: config.service.tokenLimit,
                       minTokensForSummary: config.service.minTokensForSummary,
@@ -191,7 +197,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         options: {
           tokenizer,
           git,
-          llm,
+          llm: summaryLlm,
           logger,
           maxTokens: config.service.tokenLimit,
           minTokensForSummary: config.service.minTokensForSummary,
@@ -286,7 +292,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
           task: argv.withDiff ? 'changelog-with-diff' : argv.onlyDiff ? 'changelog-only-diff' : 'changelog',
           command: 'changelog',
           provider,
-          model,
+          model: String(model),
         },
       })
 

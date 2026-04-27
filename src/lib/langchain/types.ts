@@ -3,6 +3,15 @@ import { type BaseLLMParams } from '@langchain/core/language_models/llms'
 import { type OpenAIInput, type TiktokenModel } from '@langchain/openai'
 
 export type LLMProvider = 'openai' | 'ollama' | 'anthropic'
+export type DynamicModelTask =
+  | 'summarize'
+  | 'commit'
+  | 'changelog'
+  | 'review'
+  | 'recap'
+  | 'repair'
+  | 'largeDiff'
+export type DynamicModelPreference = 'cost' | 'balanced' | 'quality'
 
 export type OpenAIModel =
   | TiktokenModel
@@ -89,10 +98,12 @@ export type OllamaModel =
   | 'qwen2.5-coder:32b'
 
 export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel
+export type ConfiguredLLMModel = LLMModel | 'dynamic'
+export type DynamicModelProfile = Partial<Record<DynamicModelTask, LLMModel>>
 
 export type BaseLLMService = {
   provider: LLMProvider
-  model: LLMModel
+  model: ConfiguredLLMModel
   /**
    * The maximum number of tokens per request.
    *
@@ -138,6 +149,16 @@ export type BaseLLMService = {
    * @default 3
    */
   maxParsingAttempts?: number
+  /**
+   * Optional task-to-model overrides used when model is set to "dynamic".
+   */
+  dynamicModels?: DynamicModelProfile
+  /**
+   * Default dynamic routing preference when model is set to "dynamic".
+   *
+   * @default 'balanced'
+   */
+  dynamicModelPreference?: DynamicModelPreference
 }
 
 type Authentication =
@@ -165,7 +186,7 @@ type OllamaFields = Partial<OllamaInput> & BaseLLMParams
 
 export type OpenAILLMService = BaseLLMService & {
   provider: 'openai'
-  model: OpenAIModel
+  model: OpenAIModel | 'dynamic'
   /**
    * Custom base URL for OpenAI-compatible APIs (e.g., OpenRouter, Azure OpenAI).
    * If not specified, uses the default OpenAI API endpoint.
@@ -179,14 +200,14 @@ export type OpenAILLMService = BaseLLMService & {
 
 export type OllamaLLMService = BaseLLMService & {
   provider: 'ollama'
-  model: OllamaModel
+  model: OllamaModel | 'dynamic'
   endpoint: string
   fields?: OllamaFields
 }
 
 export type AnthropicLLMService = BaseLLMService & {
   provider: 'anthropic'
-  model: AnthropicModel
+  model: AnthropicModel | 'dynamic'
   fields?: {
     temperature?: number
     maxTokens?: number

@@ -142,7 +142,7 @@ export const schema = {
           "$ref": "#/definitions/LLMProvider"
         },
         "model": {
-          "$ref": "#/definitions/LLMModel"
+          "$ref": "#/definitions/ConfiguredLLMModel"
         },
         "baseURL": {
           "type": "string",
@@ -834,6 +834,15 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
         }
       },
       "required": [
@@ -848,6 +857,17 @@ export const schema = {
         "openai",
         "ollama",
         "anthropic"
+      ]
+    },
+    "ConfiguredLLMModel": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/LLMModel"
+        },
+        {
+          "type": "string",
+          "const": "dynamic"
+        }
       ]
     },
     "LLMModel": {
@@ -1147,6 +1167,41 @@ export const schema = {
         null
       ]
     },
+    "DynamicModelProfile": {
+      "type": "object",
+      "properties": {
+        "summarize": {
+          "$ref": "#/definitions/LLMModel"
+        },
+        "commit": {
+          "$ref": "#/definitions/LLMModel"
+        },
+        "changelog": {
+          "$ref": "#/definitions/LLMModel"
+        },
+        "review": {
+          "$ref": "#/definitions/LLMModel"
+        },
+        "recap": {
+          "$ref": "#/definitions/LLMModel"
+        },
+        "repair": {
+          "$ref": "#/definitions/LLMModel"
+        },
+        "largeDiff": {
+          "$ref": "#/definitions/LLMModel"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DynamicModelPreference": {
+      "type": "string",
+      "enum": [
+        "cost",
+        "balanced",
+        "quality"
+      ]
+    },
     "OllamaLLMService": {
       "type": "object",
       "additionalProperties": false,
@@ -1155,7 +1210,7 @@ export const schema = {
           "$ref": "#/definitions/LLMProvider"
         },
         "model": {
-          "$ref": "#/definitions/LLMModel"
+          "$ref": "#/definitions/ConfiguredLLMModel"
         },
         "endpoint": {
           "type": "string"
@@ -1875,6 +1930,15 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
         }
       },
       "required": [
@@ -1897,7 +1961,7 @@ export const schema = {
           "$ref": "#/definitions/LLMProvider"
         },
         "model": {
-          "$ref": "#/definitions/LLMModel"
+          "$ref": "#/definitions/ConfiguredLLMModel"
         },
         "fields": {
           "type": "object",
@@ -2027,6 +2091,15 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
         }
       },
       "required": [
