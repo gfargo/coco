@@ -23,7 +23,7 @@
     "url": "git+https://github.com/gfargo/coco.git"
   },
   "engines": {
-    "node": "^22.12.0 || >=23"
+    "node": "^22.12.0 || >=24"
   },
   "scripts": {
     "start": "npm run dev",
@@ -37,7 +37,8 @@
     "lint": "eslint src",
     "lint:fix": "eslint --fix src",
     "test": "npm run test:jest && npm run test:publish",
-    "test:publish": "npm run lint && npm publish --dry-run",
+    "test:publish": "npm run lint && npm run build && npm pack --dry-run",
+    "pretest:jest": "npm run build:info",
     "test:jest": "jest",
     "test:jest:watch": "jest --watch",
     "release": "release-it",

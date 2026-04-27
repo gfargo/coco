@@ -9,8 +9,13 @@ import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
+import { loadConfig } from '../../lib/config/utils/loadConfig'
+import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
+import { getLlm } from '../../lib/langchain/utils/getLlm'
+import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { Logger } from '../../lib/utils/logger'
 import { SimpleGit } from 'simple-git'
+import { Config } from '../../commands/types'
 
 jest.mock('../../lib/simple-git/getRepo')
 jest.mock('../../lib/simple-git/getChanges')
@@ -20,6 +25,10 @@ jest.mock('../../lib/simple-git/getCurrentBranchName')
 jest.mock('../../lib/simple-git/getDiffForBranch')
 jest.mock('../../lib/parsers/default')
 jest.mock('../../lib/langchain/utils/executeChain')
+jest.mock('../../lib/config/utils/loadConfig')
+jest.mock('../../lib/langchain/utils')
+jest.mock('../../lib/langchain/utils/getLlm')
+jest.mock('../../lib/utils/tokenizer')
 jest.mock('../../lib/ui/generateAndReviewLoop', () => ({
   generateAndReviewLoop: jest.fn().mockImplementation(async ({ factory, parser, agent, noResult, options }) => {
     const changes = await factory();
@@ -40,6 +49,13 @@ const mockGetCurrentBranchName = getCurrentBranchName as jest.MockedFunction<typ
 const mockGetDiffForBranch = getDiffForBranch as jest.MockedFunction<typeof getDiffForBranch>
 const mockFileChangeParser = fileChangeParser as jest.MockedFunction<typeof fileChangeParser>
 const mockExecuteChain = executeChain as jest.MockedFunction<typeof executeChain>
+const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
+const mockGetApiKeyForModel = getApiKeyForModel as jest.MockedFunction<typeof getApiKeyForModel>
+const mockGetModelAndProviderFromConfig = getModelAndProviderFromConfig as jest.MockedFunction<
+  typeof getModelAndProviderFromConfig
+>
+const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
+const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
 
 
 describe('recap command', () => {
@@ -67,6 +83,31 @@ describe('recap command', () => {
     } as unknown as Logger
 
     mockGetRepo.mockReturnValue({} as SimpleGit)
+    mockLoadConfig.mockReturnValue({
+      service: {
+        authentication: {
+          type: 'APIKey',
+          credentials: {
+            apiKey: 'mock-api-key',
+          },
+        },
+        provider: 'openai',
+        model: 'gpt-4o',
+        tokenLimit: 4096,
+        temperature: 0.2,
+        maxConcurrent: 1,
+      },
+      defaultBranch: 'main',
+      mode: 'stdout',
+      currentBranch: false,
+    } as unknown as Config)
+    mockGetApiKeyForModel.mockReturnValue('mock-api-key')
+    mockGetModelAndProviderFromConfig.mockReturnValue({
+      provider: 'openai',
+      model: 'gpt-4o',
+    })
+    mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
+    mockGetTokenCounter.mockResolvedValue(jest.fn())
     mockGetChanges.mockResolvedValue({
       staged: [],
       unstaged: [],

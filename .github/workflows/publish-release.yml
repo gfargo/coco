@@ -1,42 +1,65 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+name: Publish Release
 
-name: Publish Release to Github
 on:
-  workflow_dispatch:
-  pull_request:
+  release:
     types:
-      - closed
-    branches:
-      - main
+      - published
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the already-versioned package to npm
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
-  build:
+  verify:
+    name: Verify release package
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 16
-      - run: npm ci
-      - run: npm test
-      - name: Initialize Git User
-        run: |
-          git config --global user.name 'Workflow Release'
-          git config --global user.email 'automation@griffen.codes'
-      - name: Initialize NPM Settings for Github
-        run: |
-          npm config set //npm.pkg.github.com/:_authToken ${{secrets.GITHUB_TOKEN}}
-          npm config set registry https://npm.pkg.github.com/gfargo
+          node-version: 22.12.0
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run release gate
+        run: npm test
+
+  publish:
+    name: Publish package to npm
+    runs-on: ubuntu-latest
+    needs: verify
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          registry-url: https://registry.npmjs.org
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Publish to npm
+        run: npm publish
         env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-      - name: Release to Github Package Registry
-        run: |
-          npm run release --ci
-        env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      - name: Publish to Github Package Registry
-        run: |
-          npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
