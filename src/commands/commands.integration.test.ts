@@ -167,6 +167,117 @@ describe('command integration with temp git repos', () => {
     expect(variables.summary).toContain('# Temp repo')
   })
 
+  it('prints a non-mutating commit split plan for staged files', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+    mockExecuteChainWithSchema.mockResolvedValueOnce({
+      groups: [
+        {
+          title: 'docs: update readme',
+          body: 'Document the temp repo.',
+          rationale: 'README-only documentation change.',
+          files: ['README.md'],
+        },
+        {
+          title: 'test: add feature fixture',
+          body: 'Add a feature fixture file.',
+          rationale: 'Fixture code belongs in its own commit.',
+          files: ['src/feature.ts'],
+        },
+      ],
+    })
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.git.add(['README.md', 'src/feature.ts'])
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit', 'split'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      split: true,
+      plan: true,
+      apply: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    const status = await repo.git.status()
+
+    expect(stdout).toContain('docs: update readme')
+    expect(stdout).toContain('test: add feature fixture')
+    expect(status.staged).toEqual(expect.arrayContaining(['README.md', 'src/feature.ts']))
+  })
+
+  it('applies a file-level commit split plan using real git commits', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+    mockExecuteChainWithSchema.mockResolvedValueOnce({
+      groups: [
+        {
+          title: 'docs: update readme',
+          body: 'Document the temp repo.',
+          rationale: 'README-only documentation change.',
+          files: ['README.md'],
+        },
+        {
+          title: 'test: add feature fixture',
+          body: 'Add a feature fixture file.',
+          rationale: 'Fixture code belongs in its own commit.',
+          files: ['src/feature.ts'],
+        },
+      ],
+    })
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.git.add(['README.md', 'src/feature.ts'])
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit', 'split'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      split: true,
+      plan: false,
+      apply: true,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    const log = await repo.git.log()
+    const status = await repo.git.status()
+
+    expect(stdout).toContain('Created 2 split commit(s).')
+    expect(log.all.map((commit) => commit.message)).toEqual(
+      expect.arrayContaining(['docs: update readme', 'test: add feature fixture'])
+    )
+    expect(status.files).toHaveLength(0)
+  })
+
   it('generates a changelog from real branch commit history', async () => {
     mockLoadConfig.mockImplementation((argv) => createConfig({
       ...(argv as Record<string, unknown>),

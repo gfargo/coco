@@ -12,6 +12,9 @@ export interface CommitOptions extends BaseCommandOptions {
   conventional: boolean
   includeBranchName: boolean
   noVerify: boolean
+  split?: boolean
+  plan?: boolean
+  apply?: boolean
 }
 
 export type CommitArgv = Arguments<CommitOptions>
@@ -98,6 +101,21 @@ export const options = {
     type: 'boolean',
     default: false,
     alias: 'n',
+  },
+  split: {
+    description: 'Group staged changes into multiple related commit proposals',
+    type: 'boolean',
+    default: false,
+  },
+  plan: {
+    description: 'Only print a commit split plan without changing git state',
+    type: 'boolean',
+    default: false,
+  },
+  apply: {
+    description: 'Apply a generated file-level commit split plan and create commits',
+    type: 'boolean',
+    default: false,
   },
 } as Record<string, Options>
 
