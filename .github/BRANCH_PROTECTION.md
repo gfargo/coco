@@ -7,7 +7,7 @@ Recommended required checks for `main`:
 - `DevSkim`
 
 The release gate runs linting, Jest, build/schema generation, generated-schema drift
-checks, package-manager hygiene checks, and an npm publish dry run. These checks are
+checks, package-manager hygiene checks, and an npm pack dry run. These checks are
 intended to catch release-blocking failures before merge.
 
 Admin bypasses should be reserved for urgent release repair only. When a bypass is
