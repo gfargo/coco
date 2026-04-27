@@ -564,6 +564,31 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('*')
   })
 
+  it('prints log output when interactive mode is requested', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('src/interactive.ts', 'export const interactive = true\n')
+    await repo.commitAll('feat: add interactive log coverage')
+
+    await logHandler({
+      $0: 'coco',
+      _: ['log'],
+      format: 'table',
+      limit: 2,
+      interactive: true,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<LogOptions>, createLogger())
+
+    expect(stdout).toContain('feat: add interactive log coverage')
+    expect(stdout).toContain('Graph')
+  })
+
   it('prints machine-readable git log output', async () => {
     mockLoadConfig.mockReturnValue(createConfig({
       mode: 'stdout',
