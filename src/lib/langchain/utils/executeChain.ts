@@ -4,6 +4,9 @@ import { handleLangChainError, isNetworkError } from '../errorHandler'
 import { LangChainExecutionError, LangChainNetworkError } from '../errors'
 import { validateRequired } from '../validation'
 import { getLlm } from './getLlm'
+import { Logger } from '../../utils/logger'
+import { TokenCounter } from '../../utils/tokenizer'
+import { estimatePromptTokens, LlmCallMetadata, logLlmCall } from './observability'
 
 type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
@@ -15,6 +18,9 @@ type ExecuteChainInput<T> = {
   provider?: string
   /** Optional endpoint URL for better error messages */
   endpoint?: string
+  logger?: Logger
+  tokenizer?: TokenCounter
+  metadata?: Partial<LlmCallMetadata>
 }
 
 /**
@@ -57,6 +63,9 @@ export const executeChain = async <T>({
   parser,
   provider,
   endpoint,
+  logger,
+  tokenizer,
+  metadata,
 }: ExecuteChainInput<T>): Promise<T> => {
   validateRequired(llm, 'llm', 'executeChain')
   validateRequired(prompt, 'prompt', 'executeChain')
@@ -78,6 +87,18 @@ export const executeChain = async <T>({
   const effectiveEndpoint = endpoint || llmInfo.endpoint
 
   try {
+    const renderedPrompt = await prompt.format(variables)
+    const promptTokens = estimatePromptTokens(tokenizer, renderedPrompt)
+
+    logLlmCall(logger, {
+      task: metadata?.task || 'chain',
+      provider: effectiveProvider,
+      parserType: parser.constructor.name,
+      variableKeys: Object.keys(variables),
+      promptTokens,
+      ...metadata,
+    })
+
     const chain = prompt.pipe(llm).pipe(parser)
     const result = (await chain.invoke(variables)) as T
 

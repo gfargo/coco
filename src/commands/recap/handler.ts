@@ -189,6 +189,14 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
             timeframe,
           },
           parser,
+          logger,
+          tokenizer,
+          metadata: {
+            task: 'recap',
+            command: 'recap',
+            provider,
+            model,
+          },
         })
 
         return response ? `${response.title}\n\n${response.summary}` : 'no response'

@@ -171,6 +171,14 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
           format_instructions: formatInstructions,
         },
         parser,
+        logger,
+        tokenizer,
+        metadata: {
+          task: argv.branch ? 'review-branch' : 'review',
+          command: 'review',
+          provider,
+          model,
+        },
       }) as ReviewFeedbackItem[]
 
       // sort by severity

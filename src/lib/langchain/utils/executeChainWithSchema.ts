@@ -2,9 +2,12 @@ import { StringOutputParser } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { z } from 'zod'
 import { withRetry, type RetryOptions } from '../../utils/retry'
+import { Logger } from '../../utils/logger'
+import { TokenCounter } from '../../utils/tokenizer'
 import { createSchemaParser, SchemaParserOptions } from './createSchemaParser'
 import { executeChain } from './executeChain'
 import { getLlm } from './getLlm'
+import { LlmCallMetadata } from './observability'
 
 export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
   /** Options for retry behavior - uses general retry utility */
@@ -13,6 +16,9 @@ export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
   fallbackParser?: (text: string) => T
   /** Called when fallback parser is used */
   onFallback?: () => void
+  logger?: Logger
+  tokenizer?: TokenCounter
+  metadata?: Partial<LlmCallMetadata>
 }
 
 /**
@@ -36,18 +42,30 @@ export async function executeChainWithSchema<T>(
     retryOptions = { maxAttempts: 3 },
     fallbackParser,
     onFallback,
+    logger,
+    tokenizer,
+    metadata,
     ...parserOptions
   } = options
   
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const parser: any = createSchemaParser(schema, llm, parserOptions)
+  let attempt = 0
 
   const operation = async (): Promise<T> => {
+    attempt++
     const result = await executeChain({
       llm,
       prompt,
       variables,
       parser,
+      logger,
+      tokenizer,
+      metadata: {
+        task: 'schema-chain',
+        ...metadata,
+        retryAttempt: attempt,
+      },
     })
     
     return result as T
@@ -66,6 +84,12 @@ export async function executeChainWithSchema<T>(
         prompt,
         variables,
         parser: new StringOutputParser(),
+        logger,
+        tokenizer,
+        metadata: {
+          task: 'schema-chain-fallback',
+          ...metadata,
+        },
       })
       
       const fallbackText = typeof fallbackResult === 'string' ? fallbackResult : String(fallbackResult)

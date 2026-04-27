@@ -280,6 +280,14 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
         prompt,
         variables: budgetedPrompt.variables,
         parser,
+        logger,
+        tokenizer,
+        metadata: {
+          task: argv.withDiff ? 'changelog-with-diff' : argv.onlyDiff ? 'changelog-only-diff' : 'changelog',
+          command: 'changelog',
+          provider,
+          model,
+        },
       })
 
       const branchName = await getCurrentBranchName({ git })

@@ -288,6 +288,14 @@ IMPORTANT RULES:
         }
 
         const commitMsg = await executeChainWithSchema(schema, llm, prompt, budgetedPrompt.variables, {
+          logger,
+          tokenizer,
+          metadata: {
+            task: USE_CONVENTIONAL_COMMITS ? 'commit-message-conventional' : 'commit-message',
+            command: 'commit',
+            provider,
+            model,
+          },
           retryOptions: {
             maxAttempts,
             onRetry: (attempt: number, error: Error) => {
