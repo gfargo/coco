@@ -25,7 +25,7 @@ export type SummarizeLargeFilesOptions = {
  */
 async function summarizeFileDiff(
   fileDiff: FileDiff,
-  { chain, textSplitter, tokenizer }: Pick<SummarizeLargeFilesOptions, 'chain' | 'textSplitter' | 'tokenizer'>
+  { chain, textSplitter, tokenizer, logger }: Pick<SummarizeLargeFilesOptions, 'chain' | 'textSplitter' | 'tokenizer' | 'logger'>
 ): Promise<FileDiff> {
   try {
     const fileSummary = await summarize(
@@ -41,6 +41,11 @@ async function summarizeFileDiff(
       {
         chain,
         textSplitter,
+        tokenizer,
+        logger,
+        metadata: {
+          task: 'summarize-large-file',
+        },
         options: {
           returnIntermediateSteps: false,
         },
@@ -115,7 +120,7 @@ export async function summarizeLargeFiles(
   // Process large files in waves
   const summarizedFiles = await processInWaves(
     filesToSummarize,
-    async ({ diff }) => summarizeFileDiff(diff, { chain, textSplitter, tokenizer }),
+    async ({ diff }) => summarizeFileDiff(diff, { chain, textSplitter, tokenizer, logger }),
     maxConcurrent
   )
 

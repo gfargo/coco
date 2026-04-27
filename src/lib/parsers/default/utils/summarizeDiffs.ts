@@ -32,6 +32,7 @@ export function createDirectoryDiffs(node: DiffNode): DirectoryDiff[] {
 
 type SummarizeDirectoryDiffOptions = {
   tokenizer: TokenCounter
+  logger?: Logger
 } & SummarizeContext
 
 /**
@@ -39,7 +40,7 @@ type SummarizeDirectoryDiffOptions = {
  */
 export async function summarizeDirectoryDiff(
   directory: DirectoryDiff,
-  { chain, textSplitter, tokenizer }: SummarizeDirectoryDiffOptions
+  { chain, textSplitter, tokenizer, logger }: SummarizeDirectoryDiffOptions
 ): Promise<DirectoryDiff> {
   try {
     const directorySummary = await summarize(
@@ -53,6 +54,11 @@ export async function summarizeDirectoryDiff(
       {
         chain,
         textSplitter,
+        tokenizer,
+        logger,
+        metadata: {
+          task: 'summarize-directory-diff',
+        },
         options: {
           returnIntermediateSteps: true,
         },
@@ -188,7 +194,7 @@ async function summarizeInWaves(
     // Process wave in parallel
     const waveResults = await Promise.all(
       wave.map((idx) =>
-        summarizeDirectoryDiff(results[idx], { chain, textSplitter, tokenizer })
+        summarizeDirectoryDiff(results[idx], { chain, textSplitter, tokenizer, logger })
       )
     )
 
