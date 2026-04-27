@@ -11,6 +11,7 @@ import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default/index'
+import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { getRepo } from '../../lib/simple-git/getRepo'
@@ -80,17 +81,16 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const branchChanges = await fileChangeParser({
         changes: diff.staged,
         commit: `${argv.branch}..${currentBranch}`,
-        options: {
+        options: createFileChangeParserOptions({
+          command: 'review',
           tokenizer,
           git,
           llm: summaryLlm,
           logger,
-          metadata: {
-            command: 'review',
-            provider,
-            model: String(summaryService.model),
-          },
-        },
+          provider,
+          model: String(summaryService.model),
+          service: config.service,
+        }),
       })
 
       return [branchChanges]
@@ -119,17 +119,16 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const unstagedChanges = await fileChangeParser({
         changes: unstaged || [],
         commit: '--unstaged',
-        options: {
+        options: createFileChangeParserOptions({
+          command: 'review',
           tokenizer,
           git,
           llm: summaryLlm,
           logger,
-          metadata: {
-            command: 'review',
-            provider,
-            model: String(summaryService.model),
-          },
-        },
+          provider,
+          model: String(summaryService.model),
+          service: config.service,
+        }),
       })
 
       const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
@@ -137,34 +136,32 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const untrackedChanges = await fileChangeParser({
         changes: untracked || [],
         commit: '--untracked',
-        options: {
+        options: createFileChangeParserOptions({
+          command: 'review',
           tokenizer,
           git,
           llm: summaryLlm,
           logger,
-          metadata: {
-            command: 'review',
-            provider,
-            model: String(summaryService.model),
-          },
-        },
+          provider,
+          model: String(summaryService.model),
+          service: config.service,
+        }),
       })
       const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
 
       const stagedChanges = await fileChangeParser({
         changes: staged,
         commit: '--staged',
-        options: {
+        options: createFileChangeParserOptions({
+          command: 'review',
           tokenizer,
           git,
           llm: summaryLlm,
           logger,
-          metadata: {
-            command: 'review',
-            provider,
-            model: String(summaryService.model),
-          },
-        },
+          provider,
+          model: String(summaryService.model),
+          service: config.service,
+        }),
       })
       const stagedResponse = `Staged changes:\n${stagedChanges}`
 

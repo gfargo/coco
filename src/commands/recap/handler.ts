@@ -26,6 +26,7 @@ import { RecapArgv, RecapLlmResponseSchema, RecapOptions } from './config'
 import { noResult } from './noResult'
 import { RECAP_PROMPT } from './prompt'
 import { fileChangeParser } from '../../lib/parsers/default'
+import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 
 export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const git = getRepo()
@@ -86,17 +87,16 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const unstagedChanges = await fileChangeParser({
           changes: unstaged || [],
           commit: '--unstaged',
-          options: {
+          options: createFileChangeParserOptions({
+            command: 'recap',
             tokenizer,
             git,
             llm: summaryLlm,
             logger,
-            metadata: {
-              command: 'recap',
-              provider,
-              model: String(summaryService.model),
-            },
-          },
+            provider,
+            model: String(summaryService.model),
+            service: config.service,
+          }),
         })
 
         const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
@@ -104,34 +104,32 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const untrackedChanges = await fileChangeParser({
           changes: untracked || [],
           commit: '--untracked',
-          options: {
+          options: createFileChangeParserOptions({
+            command: 'recap',
             tokenizer,
             git,
             llm: summaryLlm,
             logger,
-            metadata: {
-              command: 'recap',
-              provider,
-              model: String(summaryService.model),
-            },
-          },
+            provider,
+            model: String(summaryService.model),
+            service: config.service,
+          }),
         })
         const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
 
         const stagedChanges = await fileChangeParser({
           changes: staged,
           commit: '--staged',
-          options: {
+          options: createFileChangeParserOptions({
+            command: 'recap',
             tokenizer,
             git,
             llm: summaryLlm,
             logger,
-            metadata: {
-              command: 'recap',
-              provider,
-              model: String(summaryService.model),
-            },
-          },
+            provider,
+            model: String(summaryService.model),
+            service: config.service,
+          }),
         })
         const stagedResponse = `Staged changes:\n${stagedChanges}`
 
@@ -167,17 +165,16 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const branchChanges = await fileChangeParser({
           changes: changes.staged,
           commit: baseBranch,
-          options: {
+          options: createFileChangeParserOptions({
+            command: 'recap',
             tokenizer,
             git,
             llm: summaryLlm,
             logger,
-            metadata: {
-              command: 'recap',
-              provider,
-              model: String(summaryService.model),
-            },
-          },
+            provider,
+            model: String(summaryService.model),
+            service: config.service,
+          }),
         })
 
         return [branchChanges]
