@@ -641,7 +641,7 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('*')
   })
 
-  it('prints log output when interactive mode is requested', async () => {
+  it('renders an interactive log smoke view when interactive mode is requested', async () => {
     mockLoadConfig.mockReturnValue(createConfig({
       mode: 'stdout',
     }))
@@ -662,8 +662,10 @@ describe('command integration with temp git repos', () => {
       help: false,
     } as Arguments<LogOptions>, createLogger())
 
+    expect(stdout).toContain('coco log')
     expect(stdout).toContain('feat: add interactive log coverage')
-    expect(stdout).toContain('Graph')
+    expect(stdout).toContain('Changed files:')
+    expect(stdout).toContain('src/interactive.ts')
   })
 
   it('prints machine-readable git log output', async () => {
