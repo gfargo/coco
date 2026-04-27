@@ -25,6 +25,11 @@ export type LogArgv = Arguments<LogOptions>
 export const command = 'log'
 
 export const options = {
+  i: {
+    description: 'Open the interactive terminal log UI',
+    type: 'boolean',
+    alias: 'interactive',
+  },
   all: {
     description: 'Show commits from all local and remote refs',
     type: 'boolean',
