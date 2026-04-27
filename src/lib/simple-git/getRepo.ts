@@ -1,4 +1,5 @@
 import { simpleGit, SimpleGit } from 'simple-git'
+import { commandExit } from '../utils/commandExit'
 
 /**
  * Retrieves the SimpleGit instance for the repository.
@@ -11,7 +12,7 @@ export const getRepo = () => {
     git = simpleGit()
   } catch (e) {
     console.log('Error initializing git repo', e)
-    process.exit(1)
+    commandExit(1)
   }
 
   return git

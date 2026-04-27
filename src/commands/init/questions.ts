@@ -1,6 +1,7 @@
 import { confirm, editor, input, password, select } from '@inquirer/prompts'
 import { ANTHROPIC_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
+import { commandExit } from '../../lib/utils/commandExit'
 import { execPromise } from '../../lib/utils/execPromise'
 import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
 import { COMMIT_PROMPT } from '../commit/prompt'
@@ -80,7 +81,7 @@ export const questions = {
 
       if (availableOllamaModels.length === 0) {
         console.log('No Ollama models found. Please install one via Ollama CLI.')
-        process.exit(1)
+        commandExit(1)
       }
 
       availableModels = [

@@ -4,6 +4,7 @@ import { Logger } from './logger'
 import { CommandHandler } from '../types'
 import { BaseArgvOptions } from '../../commands/types'
 import { LangChainNetworkError, LangChainAuthenticationError } from '../langchain/errors'
+import { isCommandExitError } from './commandExit'
 
 /**
  * Formats a network error with helpful troubleshooting information
@@ -73,6 +74,11 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
     try {
       await handler(argv, logger)
     } catch (error) {
+      if (isCommandExitError(error)) {
+        process.exitCode = error.code
+        return
+      }
+
       // Handle specific error types with helpful messages
       if (error instanceof LangChainNetworkError) {
         formatNetworkError(error, logger)
@@ -83,7 +89,7 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
       }
 
       logger.log('\nThanks for using coco, make it a great day! 👋🤖', { color: 'blue' })
-      process.exit(0)
+      process.exitCode = 1
     }
   }
 }
