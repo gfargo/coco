@@ -278,6 +278,103 @@ describe('command integration with temp git repos', () => {
     expect(status.files).toHaveLength(0)
   })
 
+  it('applies a hunk-level commit split plan within a single file', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+    mockExecuteChainWithSchema.mockResolvedValueOnce({
+      groups: [
+        {
+          title: 'feat: update first behavior',
+          body: 'Update the first behavior in the shared module.',
+          rationale: 'The first hunk is an independent behavior change.',
+          files: [],
+          hunks: ['src/feature.ts::hunk-1'],
+        },
+        {
+          title: 'fix: update second behavior',
+          body: 'Update the second behavior in the shared module.',
+          rationale: 'The second hunk is an independent behavior change.',
+          files: [],
+          hunks: ['src/feature.ts::hunk-2'],
+        },
+      ],
+    })
+
+    await repo.writeFile(
+      'src/feature.ts',
+      [
+        'export const first = "old"',
+        'const spacer1 = 1',
+        'const spacer2 = 2',
+        'const spacer3 = 3',
+        'const spacer4 = 4',
+        'const spacer5 = 5',
+        'const spacer6 = 6',
+        'const spacer7 = 7',
+        'const spacer8 = 8',
+        'export const second = "old"',
+        '',
+      ].join('\n')
+    )
+    await repo.commitAll('chore: initial feature')
+    await repo.writeFile(
+      'src/feature.ts',
+      [
+        'export const first = "new"',
+        'const spacer1 = 1',
+        'const spacer2 = 2',
+        'const spacer3 = 3',
+        'const spacer4 = 4',
+        'const spacer5 = 5',
+        'const spacer6 = 6',
+        'const spacer7 = 7',
+        'const spacer8 = 8',
+        'export const second = "new"',
+        '',
+      ].join('\n')
+    )
+    await repo.git.add('src/feature.ts')
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit', 'split'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      split: true,
+      plan: false,
+      apply: true,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    const log = await repo.git.log()
+    const firstCommit = await repo.git.show(['HEAD~1:src/feature.ts'])
+    const secondCommit = await repo.git.show(['HEAD:src/feature.ts'])
+    const status = await repo.git.status()
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+
+    expect(stdout).toContain('Created 2 split commit(s).')
+    expect(log.all.map((commit) => commit.message)).toEqual(
+      expect.arrayContaining(['feat: update first behavior', 'fix: update second behavior'])
+    )
+    expect(firstCommit).toContain('export const first = "new"')
+    expect(firstCommit).toContain('export const second = "old"')
+    expect(secondCommit).toContain('export const first = "new"')
+    expect(secondCommit).toContain('export const second = "new"')
+    expect(status.files).toHaveLength(0)
+    expect(variables.hunk_inventory).toContain('src/feature.ts::hunk-1')
+    expect(variables.hunk_inventory).toContain('src/feature.ts::hunk-2')
+  })
+
   it('generates a changelog from real branch commit history', async () => {
     mockLoadConfig.mockImplementation((argv) => createConfig({
       ...(argv as Record<string, unknown>),

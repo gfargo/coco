@@ -113,7 +113,7 @@ export const options = {
     default: false,
   },
   apply: {
-    description: 'Apply a generated file-level commit split plan and create commits',
+    description: 'Apply a generated file-level or hunk-level commit split plan and create commits',
     type: 'boolean',
     default: false,
   },
