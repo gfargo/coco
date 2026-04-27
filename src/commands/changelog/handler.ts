@@ -25,6 +25,7 @@ import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { fileChangeParser } from '../../lib/parsers/default'
+import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import {
@@ -166,21 +167,16 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
                 ? await fileChangeParser({
                     changes,
                     commit: `${commit.hash}^..${commit.hash}`,
-                    options: {
+                    options: createFileChangeParserOptions({
+                      command: 'changelog',
                       tokenizer,
                       git,
                       llm: summaryLlm,
                       logger,
-                      maxTokens: config.service.tokenLimit,
-                      minTokensForSummary: config.service.minTokensForSummary,
-                      maxFileTokens: config.service.maxFileTokens,
-                      maxConcurrent: config.service.maxConcurrent,
-                      metadata: {
-                        command: 'changelog',
-                        provider,
-                        model: String(summaryService.model),
-                      },
-                    },
+                      provider,
+                      model: String(summaryService.model),
+                      service: config.service,
+                    }),
                   })
                 : undefined,
           }
@@ -201,21 +197,16 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       const diffSummary = await fileChangeParser({
         changes: data.diffChanges,
         commit: data.diffCommit,
-        options: {
+        options: createFileChangeParserOptions({
+          command: 'changelog',
           tokenizer,
           git,
           llm: summaryLlm,
           logger,
-          maxTokens: config.service.tokenLimit,
-          minTokensForSummary: config.service.minTokensForSummary,
-          maxFileTokens: config.service.maxFileTokens,
-          maxConcurrent: config.service.maxConcurrent,
-          metadata: {
-            command: 'changelog',
-            provider,
-            model: String(summaryService.model),
-          },
-        },
+          provider,
+          model: String(summaryService.model),
+          service: config.service,
+        }),
       })
 
       return `## Diff for ${data.branch}\n\n${diffSummary}`

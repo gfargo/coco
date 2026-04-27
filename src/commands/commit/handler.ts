@@ -10,6 +10,7 @@ import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default'
+import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { PreCommitHookError, createCommit } from '../../lib/simple-git/createCommit'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
 import { getChanges } from '../../lib/simple-git/getChanges'
@@ -129,21 +130,16 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     return await fileChangeParser({
       changes,
       commit: '--staged',
-      options: {
+      options: createFileChangeParserOptions({
+        command: 'commit',
         tokenizer,
         git,
         llm: summaryLlm,
         logger,
-        maxTokens: config.service.tokenLimit,
-        minTokensForSummary: config.service.minTokensForSummary,
-        maxFileTokens: config.service.maxFileTokens,
-        maxConcurrent: config.service.maxConcurrent,
-        metadata: {
-          command: 'commit',
-          provider,
-          model: String(summaryService.model),
-        },
-      },
+        provider,
+        model: String(summaryService.model),
+        service: config.service,
+      }),
     })
   }
 

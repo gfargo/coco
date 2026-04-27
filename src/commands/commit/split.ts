@@ -7,6 +7,7 @@ import { Config } from '../../lib/config/types'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { fileChangeParser } from '../../lib/parsers/default'
+import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { FileChange } from '../../lib/types'
@@ -412,22 +413,17 @@ export async function handleCommitSplit({
   const summary = await fileChangeParser({
     changes: changes.staged,
     commit: '--staged',
-    options: {
+    options: createFileChangeParserOptions({
+      command: 'commit',
       tokenizer,
       git,
       llm,
       logger,
-      maxTokens: config.service.tokenLimit,
-        minTokensForSummary: config.service.minTokensForSummary,
-        maxFileTokens: config.service.maxFileTokens,
-        maxConcurrent: config.service.maxConcurrent,
-        metadata: {
-          command: 'commit',
-          provider: config.service.provider,
-          model: String(config.service.model),
-        },
-      },
-    })
+      provider: config.service.provider,
+      model: String(config.service.model),
+      service: config.service,
+    }),
+  })
 
   const fileInventory = changes.staged
     .map((change) => `- ${change.filePath}: ${change.status} - ${change.summary}`)
