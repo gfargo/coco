@@ -54,3 +54,6 @@ jobs:
 
       - name: Verify package dry run
         run: npm pack --dry-run
+
+      - name: Validate release dry run
+        run: npm run release:dry-run

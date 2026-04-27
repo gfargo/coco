@@ -43,6 +43,7 @@
     "test:jest": "jest",
     "test:jest:watch": "jest --watch",
     "release": "release-it",
+    "release:dry-run": "release-it --ci --dry-run --no-git --no-github.release --no-github.publish --no-npm.publish",
     "prepublishOnly": "npm run clean && npm run build",
     "coco": "npm run coco:ts",
     "coco:ts": "tsx src/index.ts",
