@@ -4,6 +4,7 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
+import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
@@ -186,14 +187,30 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const parser: any = createSchemaParser(RecapLlmResponseSchema, llm)
         
+        const variables = {
+          changes: context,
+          format_instructions: formatInstructions,
+          timeframe,
+        }
+        const budgetedPrompt = await enforcePromptBudget({
+          prompt,
+          variables,
+          tokenizer,
+          maxTokens: config.service.tokenLimit || 2048,
+          summaryKey: 'changes',
+        })
+
+        if (budgetedPrompt.truncated) {
+          logger.verbose(
+            `Rendered prompt exceeded token budget; trimmed changes to ${budgetedPrompt.promptTokenCount} tokens.`,
+            { color: 'yellow' }
+          )
+        }
+
         const response = await executeChain<{ title: string; summary: string }>({
           llm,
           prompt,
-          variables: {
-            changes: context,
-            format_instructions: formatInstructions,
-            timeframe,
-          },
+          variables: budgetedPrompt.variables,
           parser,
           logger,
           tokenizer,
