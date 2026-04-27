@@ -26,6 +26,8 @@ export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
     'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
     'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES',
     'COCO_SERVICE_FIELDS',
+    'COCO_SERVICE_DYNAMIC_MODELS',
+    'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE',
   ]
 
   envKeys.forEach((key) => {
@@ -44,7 +46,9 @@ export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
       key === 'COCO_SERVICE_ENDPOINT' ||
       key === 'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT' ||
       key === 'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES' ||
-      key === 'COCO_SERVICE_FIELDS'
+      key === 'COCO_SERVICE_FIELDS' ||
+      key === 'COCO_SERVICE_DYNAMIC_MODELS' ||
+      key === 'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE'
     ) {
       // NOTE: We want to ensure that the service object is always defined
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -101,6 +105,12 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
       break
     case 'COCO_SERVICE_FIELDS':
       service.fields = value
+      break
+    case 'COCO_SERVICE_DYNAMIC_MODELS':
+      service.dynamicModels = value
+      break
+    case 'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE':
+      service.dynamicModelPreference = value
       break
   }
 }

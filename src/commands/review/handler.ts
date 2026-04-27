@@ -1,9 +1,11 @@
 import { TiktokenModel } from '@langchain/openai'
+import { LLMModel } from '../../lib/langchain/types'
 import chalk from 'chalk'
 import { z } from 'zod'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
+import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default/index'
@@ -32,7 +34,10 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const git = getRepo()
   const config = loadConfig<ReviewOptions, ReviewArgv>(argv)
   const key = getApiKeyForModel(config)
-  const { provider, model } = getModelAndProviderFromConfig(config)
+  const { provider } = getModelAndProviderFromConfig(config)
+  const reviewService = resolveDynamicService(config, 'review')
+  const summaryService = resolveDynamicService(config, argv.branch ? 'largeDiff' : 'summarize')
+  const model = reviewService.model
 
   if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
@@ -43,7 +48,8 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
   )
 
-  const llm = getLlm(provider, model, config)
+  const llm = getLlm(provider, model as LLMModel, { ...config, service: reviewService })
+  const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
 
   const INTERACTIVE = isInteractive(config)
   if (INTERACTIVE) {
@@ -71,7 +77,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const branchChanges = await fileChangeParser({
         changes: diff.staged,
         commit: `--branch-diff-${argv.branch}`,
-        options: { tokenizer, git, llm, logger },
+        options: { tokenizer, git, llm: summaryLlm, logger },
       })
 
       return [branchChanges]
@@ -100,7 +106,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const unstagedChanges = await fileChangeParser({
         changes: unstaged || [],
         commit: '--unstaged',
-        options: { tokenizer, git, llm, logger },
+        options: { tokenizer, git, llm: summaryLlm, logger },
       })
 
       const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
@@ -108,14 +114,14 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const untrackedChanges = await fileChangeParser({
         changes: untracked || [],
         commit: '--untracked',
-        options: { tokenizer, git, llm, logger },
+        options: { tokenizer, git, llm: summaryLlm, logger },
       })
       const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
 
       const stagedChanges = await fileChangeParser({
         changes: staged,
         commit: '--staged',
-        options: { tokenizer, git, llm, logger },
+        options: { tokenizer, git, llm: summaryLlm, logger },
       })
       const stagedResponse = `Staged changes:\n${stagedChanges}`
 
@@ -177,7 +183,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
           task: argv.branch ? 'review-branch' : 'review',
           command: 'review',
           provider,
-          model,
+          model: String(model),
         },
       }) as ReviewFeedbackItem[]
 

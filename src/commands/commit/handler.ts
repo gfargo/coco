@@ -1,10 +1,12 @@
 import { type TiktokenModel } from '@langchain/openai'
+import { LLMModel } from '../../lib/langchain/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
 import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessage'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
+import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { PreCommitHookError, createCommit } from '../../lib/simple-git/createCommit'
@@ -34,7 +36,10 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = getRepo()
   const config = loadConfig<CommitOptions, CommitArgv>(argv)
   const key = getApiKeyForModel(config)
-  const { provider, model } = getModelAndProviderFromConfig(config)
+  const { provider } = getModelAndProviderFromConfig(config)
+  const commitService = resolveDynamicService(config, 'commit')
+  const summaryService = resolveDynamicService(config, 'summarize')
+  const model = commitService.model
 
   if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
@@ -45,7 +50,8 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
   )
 
-  const llm = getLlm(provider, model, config)
+  const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
+  const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
 
   const INTERACTIVE = argv.interactive || isInteractive(config)
   if (INTERACTIVE) {
@@ -105,7 +111,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       options: {
         tokenizer,
         git,
-        llm,
+        llm: summaryLlm,
         logger,
         maxTokens: config.service.tokenLimit,
         minTokensForSummary: config.service.minTokensForSummary,
@@ -294,7 +300,7 @@ IMPORTANT RULES:
             task: USE_CONVENTIONAL_COMMITS ? 'commit-message-conventional' : 'commit-message',
             command: 'commit',
             provider,
-            model,
+            model: String(model),
           },
           retryOptions: {
             maxAttempts,
