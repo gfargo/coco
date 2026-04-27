@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { getLlm } from './langchain/utils/getLlm'
+import { LlmCallMetadata } from './langchain/utils/observability'
 import { Logger } from './utils/logger'
 import { TokenCounter } from './utils/tokenizer'
 
@@ -67,6 +68,7 @@ export interface BaseParserOptions {
    * @default 6
    */
   maxConcurrent?: number
+  metadata?: Partial<LlmCallMetadata>
 }
 
 export interface BaseParserInput {

@@ -7,6 +7,7 @@ import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/lang
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
+import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default/index'
@@ -78,7 +79,17 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const branchChanges = await fileChangeParser({
         changes: diff.staged,
         commit: `--branch-diff-${argv.branch}`,
-        options: { tokenizer, git, llm: summaryLlm, logger },
+        options: {
+          tokenizer,
+          git,
+          llm: summaryLlm,
+          logger,
+          metadata: {
+            command: 'review',
+            provider,
+            model: String(summaryService.model),
+          },
+        },
       })
 
       return [branchChanges]
@@ -107,7 +118,17 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const unstagedChanges = await fileChangeParser({
         changes: unstaged || [],
         commit: '--unstaged',
-        options: { tokenizer, git, llm: summaryLlm, logger },
+        options: {
+          tokenizer,
+          git,
+          llm: summaryLlm,
+          logger,
+          metadata: {
+            command: 'review',
+            provider,
+            model: String(summaryService.model),
+          },
+        },
       })
 
       const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
@@ -115,14 +136,34 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const untrackedChanges = await fileChangeParser({
         changes: untracked || [],
         commit: '--untracked',
-        options: { tokenizer, git, llm: summaryLlm, logger },
+        options: {
+          tokenizer,
+          git,
+          llm: summaryLlm,
+          logger,
+          metadata: {
+            command: 'review',
+            provider,
+            model: String(summaryService.model),
+          },
+        },
       })
       const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
 
       const stagedChanges = await fileChangeParser({
         changes: staged,
         commit: '--staged',
-        options: { tokenizer, git, llm: summaryLlm, logger },
+        options: {
+          tokenizer,
+          git,
+          llm: summaryLlm,
+          logger,
+          metadata: {
+            command: 'review',
+            provider,
+            model: String(summaryService.model),
+          },
+        },
       })
       const stagedResponse = `Staged changes:\n${stagedChanges}`
 
@@ -226,5 +267,6 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   })
 
   const reviewer = new TaskList(recap as ReviewFeedbackItem[], { ...config, apiKey: key ?? undefined })
+  logLlmTelemetrySummary(logger, 'review')
   await reviewer.start()
 }

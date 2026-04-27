@@ -7,6 +7,7 @@ import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudg
 import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessage'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
+import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { PreCommitHookError, createCommit } from '../../lib/simple-git/createCommit'
@@ -87,6 +88,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       result: splitResult,
       mode: config.mode || 'stdout',
     })
+    logLlmTelemetrySummary(logger, 'commit')
     return
   }
 
@@ -135,6 +137,11 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
         minTokensForSummary: config.service.minTokensForSummary,
         maxFileTokens: config.service.maxFileTokens,
         maxConcurrent: config.service.maxConcurrent,
+        metadata: {
+          command: 'commit',
+          provider,
+          model: String(summaryService.model),
+        },
       },
     })
   }
@@ -585,4 +592,5 @@ IMPORTANT RULES:
     },
     mode: MODE as 'interactive' | 'stdout',
   })
+  logLlmTelemetrySummary(logger, 'commit')
 }
