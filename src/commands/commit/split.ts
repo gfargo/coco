@@ -418,11 +418,16 @@ export async function handleCommitSplit({
       llm,
       logger,
       maxTokens: config.service.tokenLimit,
-      minTokensForSummary: config.service.minTokensForSummary,
-      maxFileTokens: config.service.maxFileTokens,
-      maxConcurrent: config.service.maxConcurrent,
-    },
-  })
+        minTokensForSummary: config.service.minTokensForSummary,
+        maxFileTokens: config.service.maxFileTokens,
+        maxConcurrent: config.service.maxConcurrent,
+        metadata: {
+          command: 'commit',
+          provider: config.service.provider,
+          model: String(config.service.model),
+        },
+      },
+    })
 
   const fileInventory = changes.staged
     .map((change) => `- ${change.filePath}: ${change.status} - ${change.summary}`)

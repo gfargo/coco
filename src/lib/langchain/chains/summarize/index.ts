@@ -31,17 +31,20 @@ export async function summarize(
     ? docs.reduce((sum, doc) => sum + tokenizer(doc.pageContent), 0)
     : undefined
 
-  logLlmCall(logger, {
-    task: 'summarize',
-    promptTokens,
-    inputDocuments: documents.length,
-    inputChunks: docs.length,
-    ...metadata,
-  })
-
+  const startedAt = Date.now()
   const res = await chain.invoke({
     input_documents: docs,
     returnIntermediateSteps,
+  })
+  const elapsedMs = Date.now() - startedAt
+
+  logLlmCall(logger, {
+    task: 'summarize',
+    promptTokens,
+    elapsedMs,
+    inputDocuments: documents.length,
+    inputChunks: docs.length,
+    ...metadata,
   })
 
   if (res.error) throw new Error(res.error)

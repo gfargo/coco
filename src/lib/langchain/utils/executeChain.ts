@@ -90,17 +90,20 @@ export const executeChain = async <T>({
     const renderedPrompt = await prompt.format(variables)
     const promptTokens = estimatePromptTokens(tokenizer, renderedPrompt)
 
+    const chain = prompt.pipe(llm).pipe(parser)
+    const startedAt = Date.now()
+    const result = (await chain.invoke(variables)) as T
+    const elapsedMs = Date.now() - startedAt
+
     logLlmCall(logger, {
       task: metadata?.task || 'chain',
       provider: effectiveProvider,
       parserType: parser.constructor.name,
       variableKeys: Object.keys(variables),
       promptTokens,
+      elapsedMs,
       ...metadata,
     })
-
-    const chain = prompt.pipe(llm).pipe(parser)
-    const result = (await chain.invoke(variables)) as T
 
     if (result === null || result === undefined) {
       throw new LangChainExecutionError(

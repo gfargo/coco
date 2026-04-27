@@ -19,6 +19,7 @@ export async function fileChangeParser({
     minTokensForSummary,
     maxFileTokens,
     maxConcurrent,
+    metadata,
   },
 }: FileChangeParserInput): Promise<string> {
   const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 10000, chunkOverlap: 250 })
@@ -58,6 +59,7 @@ export async function fileChangeParser({
     textSplitter,
     chain: summarizationChain,
     logger,
+    metadata,
   })
   logger.stopTimer(`\nSummary generated for ${changes.length} staged files`, { color: 'green' })
 

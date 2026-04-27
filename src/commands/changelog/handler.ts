@@ -3,6 +3,7 @@ import { LLMModel } from '../../lib/langchain/types'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
+import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
 import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
@@ -173,6 +174,11 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
                       minTokensForSummary: config.service.minTokensForSummary,
                       maxFileTokens: config.service.maxFileTokens,
                       maxConcurrent: config.service.maxConcurrent,
+                      metadata: {
+                        command: 'changelog',
+                        provider,
+                        model: String(summaryService.model),
+                      },
                     },
                   })
                 : undefined,
@@ -203,6 +209,11 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
           minTokensForSummary: config.service.minTokensForSummary,
           maxFileTokens: config.service.maxFileTokens,
           maxConcurrent: config.service.maxConcurrent,
+          metadata: {
+            command: 'changelog',
+            provider,
+            model: String(summaryService.model),
+          },
         },
       })
 
@@ -323,4 +334,5 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     },
     mode: MODE as 'interactive' | 'stdout',
   })
+  logLlmTelemetrySummary(logger, 'changelog')
 }

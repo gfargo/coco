@@ -40,7 +40,7 @@ type SummarizeDirectoryDiffOptions = {
  */
 export async function summarizeDirectoryDiff(
   directory: DirectoryDiff,
-  { chain, textSplitter, tokenizer, logger }: SummarizeDirectoryDiffOptions
+  { chain, textSplitter, tokenizer, logger, metadata }: SummarizeDirectoryDiffOptions
 ): Promise<DirectoryDiff> {
   try {
     const directorySummary = await summarize(
@@ -57,6 +57,7 @@ export async function summarizeDirectoryDiff(
         tokenizer,
         logger,
         metadata: {
+          ...metadata,
           task: 'summarize-directory-diff',
         },
         options: {
@@ -149,6 +150,7 @@ async function summarizeInWaves(
     chain,
     textSplitter,
     tokenizer,
+    metadata,
   } = options
 
   let totalTokenCount = initialTotal
@@ -194,7 +196,7 @@ async function summarizeInWaves(
     // Process wave in parallel
     const waveResults = await Promise.all(
       wave.map((idx) =>
-        summarizeDirectoryDiff(results[idx], { chain, textSplitter, tokenizer, logger })
+        summarizeDirectoryDiff(results[idx], { chain, textSplitter, tokenizer, logger, metadata })
       )
     )
 
@@ -251,6 +253,7 @@ export async function summarizeDiffs(
     maxConcurrent = 6,
     textSplitter,
     chain,
+    metadata,
     handleOutput = defaultOutputCallback,
   }: SummarizeDiffsOptions
 ): Promise<string> {
@@ -289,6 +292,7 @@ export async function summarizeDiffs(
     logger,
     chain,
     textSplitter,
+    metadata,
   })
 
   logger.stopSpinner('Files pre-processed').stopTimer()
@@ -318,6 +322,7 @@ export async function summarizeDiffs(
     chain,
     textSplitter,
     tokenizer,
+    metadata,
   })
 
   logger.stopSpinner(`Diffs Consolidated`).stopTimer()

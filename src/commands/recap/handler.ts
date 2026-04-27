@@ -7,6 +7,7 @@ import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser
 import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
+import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getChangesByTimestamp } from '../../lib/simple-git/getChangesByTimestamp'
@@ -84,7 +85,17 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const unstagedChanges = await fileChangeParser({
           changes: unstaged || [],
           commit: '--unstaged',
-          options: { tokenizer, git, llm: summaryLlm, logger },
+          options: {
+            tokenizer,
+            git,
+            llm: summaryLlm,
+            logger,
+            metadata: {
+              command: 'recap',
+              provider,
+              model: String(summaryService.model),
+            },
+          },
         })
 
         const unstagedResponse = `Unstaged changes:\n${unstagedChanges}`
@@ -92,14 +103,34 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const untrackedChanges = await fileChangeParser({
           changes: untracked || [],
           commit: '--untracked',
-          options: { tokenizer, git, llm: summaryLlm, logger },
+          options: {
+            tokenizer,
+            git,
+            llm: summaryLlm,
+            logger,
+            metadata: {
+              command: 'recap',
+              provider,
+              model: String(summaryService.model),
+            },
+          },
         })
         const untrackedResponse = `Untracked changes:\n${untrackedChanges}`
 
         const stagedChanges = await fileChangeParser({
           changes: staged,
           commit: '--staged',
-          options: { tokenizer, git, llm: summaryLlm, logger },
+          options: {
+            tokenizer,
+            git,
+            llm: summaryLlm,
+            logger,
+            metadata: {
+              command: 'recap',
+              provider,
+              model: String(summaryService.model),
+            },
+          },
         })
         const stagedResponse = `Staged changes:\n${stagedChanges}`
 
@@ -135,7 +166,17 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
         const branchChanges = await fileChangeParser({
           changes: changes.staged,
           commit: baseBranch,
-          options: { tokenizer, git, llm: summaryLlm, logger },
+          options: {
+            tokenizer,
+            git,
+            llm: summaryLlm,
+            logger,
+            metadata: {
+              command: 'recap',
+              provider,
+              model: String(summaryService.model),
+            },
+          },
         })
 
         return [branchChanges]
@@ -260,4 +301,5 @@ ${errorMessage}
     },
     mode: MODE as 'interactive' | 'stdout',
   })
+  logLlmTelemetrySummary(logger, 'recap')
 }
