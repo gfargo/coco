@@ -88,6 +88,8 @@ coco recap --yesterday
 coco review
 
 # Explore commit history
+coco log --limit 20
+coco log --view full --limit 20
 coco log --all --limit 20
 coco log --author "Grace Hopper" --path src
 coco log --commit HEAD

@@ -3,6 +3,7 @@ import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
 export type LogFormat = 'table' | 'json'
+export type LogView = 'compact' | 'graph' | 'full'
 
 export interface LogOptions extends BaseCommandOptions {
   all?: boolean
@@ -11,10 +12,12 @@ export interface LogOptions extends BaseCommandOptions {
   commit?: string
   format?: LogFormat
   limit?: number
+  merges?: boolean
   noMerges?: boolean
   path?: string | string[]
   since?: string
   until?: string
+  view?: LogView
 }
 
 export type LogArgv = Arguments<LogOptions>
@@ -52,6 +55,11 @@ export const options = {
     default: 30,
     alias: 'n',
   },
+  merges: {
+    description: 'Include merge commits in compact view',
+    type: 'boolean',
+    default: false,
+  },
   noMerges: {
     description: 'Exclude merge commits',
     type: 'boolean',
@@ -68,6 +76,11 @@ export const options = {
   until: {
     description: 'Show commits older than a date',
     type: 'string',
+  },
+  view: {
+    description: 'History view preset',
+    choices: ['compact', 'graph', 'full'],
+    default: 'compact',
   },
 } as Record<string, Options>
 
