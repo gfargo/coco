@@ -44,6 +44,7 @@ coco -i
 - **`coco changelog`** - Create changelogs from commit history  
 - **`coco recap`** - Summarize recent changes and activity
 - **`coco review`** - AI-powered code review of your changes
+- **`coco log`** - Explore commit history with graph, filters, JSON output, and commit details
 - **`coco init`** - Interactive setup wizard
 
 ## Usage Examples
@@ -85,6 +86,12 @@ coco recap --yesterday
 
 # Code review before committing
 coco review
+
+# Explore commit history
+coco log --all --limit 20
+coco log --author "Grace Hopper" --path src
+coco log --commit HEAD
+coco log --format json
 ```
 
 ## Configuration

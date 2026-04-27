@@ -106,6 +106,11 @@ try {
     args: ['commit', '--help'],
     label: 'packaged commit command help',
   })
+  runHelpCheck({
+    command: packagedBinPath(prefix),
+    args: ['log', '--help'],
+    label: 'packaged log command help',
+  })
 } finally {
   rmSync(tempRoot, { recursive: true, force: true })
 }

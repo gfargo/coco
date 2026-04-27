@@ -3,12 +3,14 @@ import yargs from 'yargs'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
 import init from './commands/init'
+import log from './commands/log'
 import recap from './commands/recap'
 import review from './commands/review'
 
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
 import { InitOptions } from './commands/init/config'
+import { LogOptions } from './commands/log/config'
 import { RecapOptions } from './commands/recap/config'
 import { ReviewOptions } from './commands/review/config'
 import { Config } from './lib/config/types'
@@ -53,7 +55,13 @@ y.command<InitOptions>(
   init.handler
 )
 
+y.command<LogOptions>(
+  log.command,
+  log.desc,
+  log.builder,
+  log.handler
+)
+
 y.help().parse(process.argv.slice(2))
 
-export { changelog, commit, Config, init, recap, types }
-
+export { changelog, commit, Config, init, log, recap, types }

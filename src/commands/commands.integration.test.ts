@@ -4,6 +4,8 @@ import { handler as changelogHandler } from './changelog/handler'
 import { ChangelogOptions } from './changelog/config'
 import { handler as commitHandler } from './commit/handler'
 import { CommitOptions } from './commit/config'
+import { handler as logHandler } from './log/handler'
+import { LogOptions } from './log/config'
 import { loadConfig } from '../lib/config/utils/loadConfig'
 import { executeChain } from '../lib/langchain/utils/executeChain'
 import { executeChainWithSchema } from '../lib/langchain/utils/executeChainWithSchema'
@@ -529,5 +531,97 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('- Summarized feature work')
     expect(variables.summary).toContain('feat: add feature module')
     expect(variables.summary).toContain('feature/changelog-test')
+  })
+
+  it('prints a visual git log with refs and graph metadata', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.git.addTag('v0.1.0')
+    await repo.git.checkoutLocalBranch('feature/log-test')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.commitAll('feat: add log feature')
+
+    await logHandler({
+      $0: 'coco',
+      _: ['log'],
+      all: true,
+      format: 'table',
+      limit: 10,
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<LogOptions>, createLogger())
+
+    expect(stdout).toContain('Graph')
+    expect(stdout).toContain('Commit')
+    expect(stdout).toContain('feat: add log feature')
+    expect(stdout).toContain('v0.1.0')
+    expect(stdout).toContain('*')
+  })
+
+  it('prints machine-readable git log output', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.commitAll('feat: add json log output')
+
+    await logHandler({
+      $0: 'coco',
+      _: ['log'],
+      format: 'json',
+      limit: 2,
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<LogOptions>, createLogger())
+
+    const entries = JSON.parse(stdout)
+
+    expect(entries).toHaveLength(2)
+    expect(entries[0]).toEqual(expect.objectContaining({
+      message: 'feat: add json log output',
+      shortHash: expect.any(String),
+      hash: expect.any(String),
+      refs: expect.any(Array),
+    }))
+  })
+
+  it('shows changed files for a selected commit', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('src/detail.ts', 'export const detail = true\n')
+    await repo.commitAll('feat: add commit detail file')
+
+    const commit = (await repo.git.revparse(['HEAD'])).trim()
+
+    await logHandler({
+      $0: 'coco',
+      _: ['log'],
+      commit,
+      format: 'table',
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<LogOptions>, createLogger())
+
+    expect(stdout).toContain(`commit ${commit}`)
+    expect(stdout).toContain('feat: add commit detail file')
+    expect(stdout).toContain('Changed files:')
+    expect(stdout).toContain('A  src/detail.ts')
   })
 })
