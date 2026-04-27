@@ -19,6 +19,7 @@ import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
+import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbackItem } from './config'
 import { noResult } from './noResult'
@@ -43,7 +44,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
 
   if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
-    process.exit(1)
+    commandExit(1)
   }
 
   const tokenizer = await getTokenCounter(
@@ -104,7 +105,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
 
       if (staged.length === 0 && unstaged?.length === 0 && untracked?.length === 0) {
         logger.log('No changes detected. Exiting...')
-        process.exit(0)
+        commandExit(0)
       }
 
       if (INTERACTIVE) {
@@ -262,7 +263,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     },
     noResult: async () => {
       await noResult({ git, logger })
-      process.exit(0)
+      commandExit(0)
     },
   })
 

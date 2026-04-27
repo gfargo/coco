@@ -24,8 +24,4 @@ export async function handleResult({ result, mode, interactiveModeCallback }: Ha
       process.stdout.write(result + '\n', 'utf8')
       break
   }
-
-  if (process.env.NODE_ENV !== 'test') {
-    process.exit(0)
-  }
 }

@@ -21,6 +21,7 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, SEPERATOR, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
+import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import { withRetry } from '../../lib/utils/retry'
@@ -45,7 +46,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
 
   if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
-    process.exit(1)
+    commandExit(1)
   }
 
   const tokenizer = await getTokenCounter(
@@ -266,10 +267,10 @@ IMPORTANT RULES:
               break
             case 'setup':
               logger.log('\nPlease run `coco init` to set up commitlint, then try again.', { color: 'blue' })
-              process.exit(0)
+              commandExit(0)
             case 'abort':
               logger.log('\nAborting commit operation.', { color: 'red' })
-              process.exit(1)
+              commandExit(1)
           }
         } else {
           commitlint_rules_context = await getCommitlintRulesContext()
@@ -412,10 +413,10 @@ IMPORTANT RULES:
                 return fullMessage
               case 'setup':
                 logger.log('\nPlease run `coco init` to set up commitlint, then try again.', { color: 'blue' })
-                process.exit(0)
+                commandExit(0)
               case 'abort':
                 logger.log('\nAborting commit due to missing dependencies.', { color: 'red' })
-                process.exit(1)
+                commandExit(1)
             }
           }
 
@@ -472,7 +473,7 @@ IMPORTANT RULES:
                 )
               case 'abort':
                 logger.log('\nAborting commit due to validation errors.', { color: 'red' })
-                process.exit(1)
+                commandExit(1)
             }
           }
         }
@@ -508,7 +509,7 @@ IMPORTANT RULES:
     },
     noResult: async () => {
       await noResult({ git, logger })
-      process.exit(0)
+      commandExit(0)
     },
   })
 
@@ -573,14 +574,14 @@ IMPORTANT RULES:
                 await attemptCommit(true)
               } else {
                 logger.log('\nCommit aborted.', { color: 'red' })
-                process.exit(1)
+                commandExit(1)
               }
             } else {
               logger.log(
                 '\nFix the issues above and try again, or use --no-verify to skip hooks.',
                 { color: 'yellow' }
               )
-              process.exit(1)
+              commandExit(1)
             }
           } else {
             throw error

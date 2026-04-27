@@ -3,6 +3,7 @@ import { editPrompt } from './editPrompt'
 import { editResult } from './editResult'
 import { ReviewDecision, getUserReviewDecision } from './getUserReviewDecision'
 import { logResult } from './logResult'
+import { commandExit } from '../utils/commandExit'
 
 export type GenerateReviewLoopOptions = {
   interactive: boolean
@@ -79,7 +80,7 @@ export async function generateAndReviewLoop<T, R>({
           mode: 'fail',
           color: 'red',
         })
-        process.exit(0)
+        commandExit(0)
       }
     } catch (error) {
       // Handle special regeneration request from validation
@@ -111,7 +112,7 @@ export async function generateAndReviewLoop<T, R>({
       })
 
       if (reviewAnswer === 'cancel') {
-        process.exit(0)
+        commandExit(0)
       }
 
       if (reviewAnswer === 'edit') {

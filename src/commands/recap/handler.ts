@@ -20,6 +20,7 @@ import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
+import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import { RecapArgv, RecapLlmResponseSchema, RecapOptions } from './config'
 import { noResult } from './noResult'
@@ -37,7 +38,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
   if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
-    process.exit(1)
+    commandExit(1)
   }
 
   const tokenizer = await getTokenCounter(
@@ -285,7 +286,7 @@ ${errorMessage}
     noResult: async () => {
       await noResult({ git, logger })
       if (process.env.NODE_ENV !== 'test') {
-        process.exit(0)
+        commandExit(0)
       }
     },
   })

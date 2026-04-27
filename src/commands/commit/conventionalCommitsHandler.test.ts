@@ -2,6 +2,7 @@ import { handler } from './handler'
 import { Arguments } from 'yargs'
 import { CommitOptions } from './config'
 import { Logger } from '../../lib/utils/logger'
+import { CommandExitError } from '../../lib/utils/commandExit'
 
 // Mock all dependencies
 jest.mock('../../lib/simple-git/getRepo')
@@ -176,14 +177,11 @@ describe('Conventional Commits Handler', () => {
   describe('Error Handling', () => {
     it('should exit when API key is missing', async () => {
       mockGetApiKeyForModel.mockReturnValue('')
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
-        throw new Error('process.exit called')
-      })
 
-      await expect(handler(argv, logger)).rejects.toThrow('process.exit called')
+      await expect(handler(argv, logger)).rejects.toMatchObject({
+        code: 1,
+      } satisfies Partial<CommandExitError>)
       expect(logger.log).toHaveBeenCalledWith('No API Key found. 🗝️🚪', { color: 'red' })
-      
-      mockExit.mockRestore()
     })
 
     it('should warn about Ollama model limitations', async () => {

@@ -25,6 +25,7 @@ import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { fileChangeParser } from '../../lib/parsers/default'
+import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
 import {
     ChangelogArgv,
@@ -77,12 +78,12 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
 
   if (exclusiveOptions.length > 1) {
     logger.log(`Options ${exclusiveOptions.join(', ')} cannot be used together.`, { color: 'red' })
-    process.exit(1)
+    commandExit(1)
   }
 
   if (config.service.authentication.type !== 'None' && !key) {
     logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
-    process.exit(1)
+    commandExit(1)
   }
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: changelogService })
@@ -125,7 +126,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       const [from, to] = config.range.split(':')
       if (!from || !to) {
         logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
-        process.exit(1)
+        commandExit(1)
       }
       commits = await getCommitLogRangeDetails(from, to, { git, noMerges: true })
     } else if (argv.branch) {
@@ -316,11 +317,11 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     noResult: async () => {
       if (config.range) {
         logger.log(`No commits found in the provided range.`, { color: 'red' })
-        process.exit(0)
+        commandExit(0)
       }
 
       logger.log(`No commits found in the current branch.`, { color: 'red' })
-      process.exit(0)
+      commandExit(0)
     },
   })
 

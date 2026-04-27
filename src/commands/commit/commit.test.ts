@@ -78,11 +78,6 @@ const mockGetCurrentBranchName = getCurrentBranchName as jest.MockedFunction<
 >
 const mockGetPreviousCommits = getPreviousCommits as jest.MockedFunction<typeof getPreviousCommits>
 
-// Mock process.exit to prevent Jest worker crashes
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation(() => {
-  return undefined as never
-})
-
 describe('commit command', () => {
   let argv: Arguments<CommitOptions>
   let logger: Logger
@@ -205,7 +200,6 @@ describe('commit command', () => {
 
   afterEach(() => {
     jest.clearAllMocks()
-    mockProcessExit.mockRestore()
   })
 
   it('should call getChanges when noDiff is false', async () => {
