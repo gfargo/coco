@@ -1,4 +1,5 @@
 import { Arguments } from 'yargs'
+import { loadSummarizationChain } from '@langchain/classic/chains'
 import { handler as changelogHandler } from './changelog/handler'
 import { ChangelogOptions } from './changelog/config'
 import { handler as commitHandler } from './commit/handler'
@@ -13,7 +14,7 @@ import { Config } from '../commands/types'
 import { createTempGitRepo, TempGitRepo } from '../lib/testUtils/tempGitRepo'
 
 jest.mock('@langchain/classic/chains', () => ({
-  loadSummarizationChain: jest.fn().mockReturnValue({}),
+  loadSummarizationChain: jest.fn(),
 }))
 
 jest.mock('../lib/config/utils/loadConfig')
@@ -50,6 +51,9 @@ const mockExecuteChainWithSchema = executeChainWithSchema as jest.MockedFunction
 >
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
 const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockLoadSummarizationChain = loadSummarizationChain as jest.MockedFunction<
+  typeof loadSummarizationChain
+>
 
 jest.setTimeout(15000)
 
@@ -122,6 +126,9 @@ describe('command integration with temp git repos', () => {
       title: 'test: commit staged readme',
       body: 'Commit the staged README file.',
     })
+    mockLoadSummarizationChain.mockReturnValue({
+      invoke: jest.fn().mockResolvedValue({ text: 'condensed large diff summary' }),
+    } as never)
   })
 
   afterEach(async () => {
@@ -220,6 +227,65 @@ describe('command integration with temp git repos', () => {
         }),
       })
     )
+  })
+
+  it('keeps large staged commit summarization calls bounded', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+      service: {
+        ...serviceConfig,
+        tokenLimit: 2500,
+        minTokensForSummary: 50,
+        maxFileTokens: 1000,
+        maxConcurrent: 4,
+      },
+    } as unknown as Config))
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+
+    for (let index = 0; index < 60; index++) {
+      await repo.writeFile(
+        `src/large/file-${index}.ts`,
+        [
+          `export const value${index} = ${index}`,
+          `export const label${index} = "large staged change ${index}"`,
+          `export function feature${index}() {`,
+          `  return value${index}`,
+          '}',
+          '',
+        ].join('\n')
+      )
+    }
+    await repo.git.add('src/large')
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+
+    const summarizeInvoke = (mockLoadSummarizationChain.mock.results[0].value as {
+      invoke: jest.Mock
+    }).invoke
+
+    expect(summarizeInvoke).toHaveBeenCalled()
+    expect(summarizeInvoke.mock.calls.length).toBeLessThanOrEqual(2)
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
+    expect(variables.summary).toContain('condensed large diff summary')
   })
 
   it('prints a non-mutating commit split plan for staged files', async () => {
