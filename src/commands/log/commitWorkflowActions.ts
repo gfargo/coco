@@ -19,6 +19,7 @@ export type CommitWorkflowResult = {
 type CommitWorkflowInput = {
   action: CommitWorkflowAction
   git?: SimpleGit
+  noVerify?: boolean
 }
 
 type CommitWorkflowArgv = Arguments<CommitOptions> & {
@@ -104,8 +105,10 @@ function formatCommitFailure(error: unknown): CommitWorkflowResult {
 export async function runCommitWorkflow({
   action,
   git = getRepo(),
+  noVerify = false,
 }: CommitWorkflowInput): Promise<CommitWorkflowResult> {
   const argv = createCommitWorkflowArgv(action)
+  argv.noVerify = noVerify
   const logger = new Logger({ silent: true })
   const config = loadConfig<CommitOptions, CommitWorkflowArgv>(argv)
   const originalWrite = process.stdout.write.bind(process.stdout)

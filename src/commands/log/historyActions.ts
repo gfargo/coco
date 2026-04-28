@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'child_process'
-import { existsSync } from 'fs'
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
+import { getInProgressOperationType } from './operationData'
 
 function compactOutputLines(output: string): string[] {
   return output
@@ -45,14 +45,6 @@ export type ReflogEntry = {
 
 export type ClipboardRunner = (value: string) => Promise<void>
 export type OpenUrlRunner = (url: string) => Promise<void>
-
-const IN_PROGRESS_GIT_PATHS = [
-  { name: 'merge', path: 'MERGE_HEAD' },
-  { name: 'cherry-pick', path: 'CHERRY_PICK_HEAD' },
-  { name: 'revert', path: 'REVERT_HEAD' },
-  { name: 'rebase', path: 'rebase-merge' },
-  { name: 'rebase', path: 'rebase-apply' },
-]
 
 function runCommandWithInput(command: string, args: string[], input: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -132,15 +124,9 @@ async function isHeadCommit(git: SimpleGit, commitHash: string): Promise<boolean
 }
 
 export async function getInProgressOperation(git: SimpleGit): Promise<string | undefined> {
-  for (const entry of IN_PROGRESS_GIT_PATHS) {
-    const gitPath = (await git.revparse(['--git-path', entry.path])).trim()
+  const operation = await getInProgressOperationType(git)
 
-    if (existsSync(gitPath)) {
-      return entry.name
-    }
-  }
-
-  return undefined
+  return operation === 'none' ? undefined : operation
 }
 
 async function guardNoInProgressOperation(git: SimpleGit): Promise<BranchActionResult | undefined> {
