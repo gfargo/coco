@@ -67,8 +67,8 @@ const branches: BranchOverview = {
 
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
-    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, {
-      height: 40,
+    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, {}, {
+      height: 52,
       width: 100,
     })
 
@@ -81,5 +81,28 @@ describe('log interactive renderer', () => {
     expect(output).toContain('* main +1/-2 vs origin/main')
     expect(output).toContain('origin/main')
     expect(output).toContain('Keys:')
+  })
+
+  it('renders branch focus, status, and pending delete prompts', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      {
+        focus: 'branches',
+        branchIndex: 0,
+        statusMessage: 'Press D to confirm deleting main',
+        pendingDeleteBranch: 'main',
+      },
+      {
+        height: 52,
+        width: 100,
+      }
+    )
+
+    expect(output).toContain('Focus: branches')
+    expect(output).toContain('Status: Press D to confirm deleting main')
+    expect(output).toContain('Pending delete: press D to delete main')
+    expect(output).toContain('>* main +1/-2 vs origin/main')
   })
 })
