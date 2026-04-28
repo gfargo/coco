@@ -3,10 +3,13 @@ import { SimpleGit } from 'simple-git'
 import {
   BranchActionResult,
   checkoutBranch,
+  createBranch,
   deleteBranch,
   fetchRemotes,
   pullCurrentBranch,
   pushCurrentBranch,
+  renameBranch,
+  setUpstream,
 } from './branchActions'
 import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
@@ -34,6 +37,17 @@ type LogTuiRenderUi = {
   branchIndex?: number
   statusMessage?: string
   pendingDeleteBranch?: string
+  inputPrompt?: LogTuiInputPrompt
+}
+
+type LogTuiInputKind = 'create-branch' | 'rename-branch'
+
+type LogTuiInputPrompt = {
+  kind: LogTuiInputKind
+  label: string
+  value: string
+  sourceRef: string
+  branchName?: string
 }
 
 const DEFAULT_HEIGHT = 52
@@ -198,7 +212,7 @@ export function renderInteractiveLog(
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
   const focus = ui.focus || 'commits'
   const help = state.showHelp
-    ? 'Keys: tab focus | up/down or j/k move | / search | enter checkout | g graph | f fetch | q quit'
+    ? 'Keys: tab focus | up/down move | enter checkout | n new | m rename | u upstream | f fetch | q quit'
     : 'Press ? for help'
   const detailHeader = selected
     ? `Selected: ${selected.shortHash} ${selected.message}`
@@ -214,6 +228,7 @@ export function renderInteractiveLog(
     `${state.filteredCommits.length}/${state.commits.length} commits | Focus: ${focus} | ${filterPrompt} | ${graphMode}`,
     help,
     ui.statusMessage ? truncate(`Status: ${ui.statusMessage}`, width) : '',
+    ui.inputPrompt ? truncate(`${ui.inputPrompt.label}: ${ui.inputPrompt.value}_`, width) : '',
     '',
     ...branchLines,
     '',
@@ -239,6 +254,7 @@ export async function startInteractiveLog(
   let branchIndex = 0
   let statusMessage: string | undefined
   let pendingDeleteBranch: string | undefined
+  let inputPrompt: LogTuiInputPrompt | undefined
 
   async function loadSelectedDetail(): Promise<GitCommitDetail | undefined> {
     const selected = getSelectedCommit(state)
@@ -291,6 +307,7 @@ export async function startInteractiveLog(
         branchIndex,
         statusMessage,
         pendingDeleteBranch,
+        inputPrompt,
       }
 
       output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches, ui)}\n`, 'utf8')
@@ -319,6 +336,7 @@ export async function startInteractiveLog(
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
       pendingDeleteBranch = undefined
+      inputPrompt = undefined
 
       if (refresh) {
         await refreshBranches()
@@ -328,6 +346,14 @@ export async function startInteractiveLog(
     }
 
     const selectedBranch = () => getBranchList(branches)[branchIndex]
+
+    const selectedRef = () => {
+      if (focus === 'branches') {
+        return selectedBranch()?.shortName
+      }
+
+      return getSelectedCommit(state)?.hash
+    }
 
     const moveBranchSelection = (delta: number) => {
       const branchesList = getBranchList(branches)
@@ -341,6 +367,71 @@ export async function startInteractiveLog(
       statusMessage = 'Running branch action...'
       await render()
       await setActionResult(await action(), refresh)
+    }
+
+    const startInputPrompt = (prompt: LogTuiInputPrompt) => {
+      inputPrompt = prompt
+      statusMessage = undefined
+      pendingDeleteBranch = undefined
+      void render()
+    }
+
+    const submitInputPrompt = async () => {
+      const prompt = inputPrompt
+
+      if (!prompt) {
+        return
+      }
+
+      const value = prompt.value.trim()
+      inputPrompt = undefined
+
+      if (!value) {
+        statusMessage = 'Branch action cancelled: empty value'
+        await render()
+        return
+      }
+
+      if (prompt.kind === 'create-branch') {
+        await runBranchAction(() => createBranch(git, value, prompt.sourceRef))
+      } else if (prompt.kind === 'rename-branch' && prompt.branchName) {
+        await runBranchAction(() => renameBranch(git, prompt.branchName as string, value))
+      }
+    }
+
+    const onPromptKeypress = (sequence: string | undefined, key: readline.Key) => {
+      if (!inputPrompt) {
+        return
+      }
+
+      if (key.name === 'return') {
+        void submitInputPrompt()
+        return
+      }
+
+      if (key.name === 'escape') {
+        inputPrompt = undefined
+        statusMessage = 'Branch action cancelled'
+        void render()
+        return
+      }
+
+      if (key.name === 'backspace') {
+        inputPrompt = {
+          ...inputPrompt,
+          value: inputPrompt.value.slice(0, -1),
+        }
+        void render()
+        return
+      }
+
+      if (sequence && sequence.length === 1 && !key.ctrl && !key.meta) {
+        inputPrompt = {
+          ...inputPrompt,
+          value: `${inputPrompt.value}${sequence}`,
+        }
+        void render()
+      }
     }
 
     const onFilterKeypress = (sequence: string | undefined, key: readline.Key) => {
@@ -367,6 +458,11 @@ export async function startInteractiveLog(
     const onKeypress = (sequence: string | undefined, key: readline.Key) => {
       if ((key.ctrl && key.name === 'c') || key.name === 'q') {
         cleanup()
+        return
+      }
+
+      if (inputPrompt) {
+        onPromptKeypress(sequence, key)
         return
       }
 
@@ -418,6 +514,42 @@ export async function startInteractiveLog(
             message: 'Refreshed branch overview',
           }
         }, false)
+      } else if (key.name === 'n') {
+        const ref = selectedRef()
+
+        if (ref) {
+          startInputPrompt({
+            kind: 'create-branch',
+            label: `New branch from ${ref}`,
+            value: '',
+            sourceRef: ref,
+          })
+        }
+      } else if (key.name === 'm' && focus === 'branches') {
+        const branch = selectedBranch()
+
+        if (branch?.type === 'local') {
+          startInputPrompt({
+            kind: 'rename-branch',
+            label: `Rename ${branch.shortName} to`,
+            value: branch.shortName,
+            sourceRef: branch.shortName,
+            branchName: branch.shortName,
+          })
+        } else {
+          statusMessage = 'Only local branches can be renamed.'
+          void render()
+        }
+      } else if (key.name === 'u' && focus === 'branches') {
+        const branch = selectedBranch()
+        const current = branches?.localBranches.find((entry) => entry.current)
+
+        if (branch?.type === 'remote' && current) {
+          void runBranchAction(() => setUpstream(git, current.shortName, branch.shortName))
+        } else {
+          statusMessage = 'Select a remote branch to set as the current branch upstream.'
+          void render()
+        }
       } else if (key.name === 'up' || key.name === 'k') {
         applyAndRender(applyLogTuiAction(state, { type: 'move', delta: -1 }))
       } else if (key.name === 'down' || key.name === 'j') {
