@@ -1,10 +1,30 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import {
   amendHeadCommit,
+  cherryPickCommit,
+  compareCommits,
+  copyCommitHash,
+  copyCommitMessage,
+  getReflogEntries,
+  getRemoteCommitUrl,
   historyActionTestInternals,
+  openCommitOnRemote,
+  parseReflog,
   rewordHeadCommit,
+  resetToCommit,
+  revertCommit,
+  startInteractiveRebase,
 } from './historyActions'
 
 describe('log history actions', () => {
+  const commit = {
+    hash: 'abcdef1234567890',
+    shortHash: 'abcdef1',
+    message: 'feat: add history actions',
+  }
+
   it('matches full and short selected hashes against HEAD', async () => {
     const git = {
       revparse: jest.fn().mockResolvedValue('abcdef1234567890\n'),
@@ -91,5 +111,177 @@ describe('log history actions', () => {
         'type must be one of feat, fix',
       ],
     })
+  })
+
+  it('copies selected commit hash and message through the clipboard runner', async () => {
+    const clipboard = jest.fn().mockResolvedValue(undefined)
+
+    await expect(copyCommitHash(commit, clipboard)).resolves.toEqual({
+      ok: true,
+      message: 'Copied commit hash abcdef1',
+    })
+    await expect(copyCommitMessage(commit, clipboard)).resolves.toEqual({
+      ok: true,
+      message: 'Copied commit message abcdef1',
+    })
+
+    expect(clipboard).toHaveBeenNthCalledWith(1, commit.hash)
+    expect(clipboard).toHaveBeenNthCalledWith(2, commit.message)
+  })
+
+  it('builds web commit URLs from common remote URL formats', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue('git@github.com:gfargo/coco.git\n'),
+    }
+
+    await expect(getRemoteCommitUrl(git as never, commit.hash)).resolves.toBe(
+      'https://github.com/gfargo/coco/commit/abcdef1234567890'
+    )
+    expect(historyActionTestInternals.normalizeRemoteUrl('https://github.com/gfargo/coco.git')).toBe(
+      'https://github.com/gfargo/coco'
+    )
+  })
+
+  it('opens selected commits on the inferred remote URL', async () => {
+    const openUrl = jest.fn().mockResolvedValue(undefined)
+    const git = {
+      raw: jest.fn().mockResolvedValue('git@github.com:gfargo/coco.git\n'),
+    }
+
+    await expect(openCommitOnRemote(git as never, commit, openUrl)).resolves.toEqual({
+      ok: true,
+      message: 'Opened abcdef1',
+      details: ['https://github.com/gfargo/coco/commit/abcdef1234567890'],
+    })
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/gfargo/coco/commit/abcdef1234567890')
+  })
+
+  it('compares two commits with a lazy diff stat', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue(' src/a.ts | 2 ++\n 1 file changed, 2 insertions(+)\n'),
+    }
+    const target = {
+      hash: 'fedcba9876543210',
+      shortHash: 'fedcba9',
+      message: 'fix: target',
+    }
+
+    await expect(compareCommits(git as never, commit, target)).resolves.toEqual({
+      ok: true,
+      message: 'Compared abcdef1..fedcba9',
+      details: [
+        'src/a.ts | 2 ++',
+        '1 file changed, 2 insertions(+)',
+      ],
+    })
+    expect(git.raw).toHaveBeenCalledWith([
+      'diff',
+      '--stat',
+      '--color=never',
+      'abcdef1234567890..fedcba9876543210',
+    ])
+  })
+
+  it('constructs cherry-pick and revert commands', async () => {
+    const git = {
+      revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+
+    await expect(cherryPickCommit(git as never, commit)).resolves.toEqual({
+      ok: true,
+      message: 'Cherry-picked abcdef1',
+    })
+    await expect(revertCommit(git as never, commit)).resolves.toEqual({
+      ok: true,
+      message: 'Reverted abcdef1',
+    })
+
+    expect(git.raw).toHaveBeenNthCalledWith(1, ['cherry-pick', commit.hash])
+    expect(git.raw).toHaveBeenNthCalledWith(2, ['revert', '--no-edit', commit.hash])
+  })
+
+  it('constructs reset and rebase commands with recovery guidance', async () => {
+    const git = {
+      revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+
+    await expect(resetToCommit(git as never, commit, 'mixed')).resolves.toEqual({
+      ok: true,
+      message: 'Reset current branch to abcdef1 with --mixed',
+      details: [
+        'Recovery: use `git reflog` to find the previous HEAD.',
+        'Then run `git reset --hard HEAD@{n}` if you need to undo this reset.',
+      ],
+    })
+    await expect(startInteractiveRebase(git as never, commit)).resolves.toEqual({
+      ok: true,
+      message: 'Started interactive rebase from abcdef1',
+      details: [
+        'Recovery: use `git rebase --abort` while the rebase is in progress.',
+        'After completion, use `git reflog` to recover the previous HEAD if needed.',
+      ],
+    })
+
+    expect(git.raw).toHaveBeenNthCalledWith(1, ['reset', '--mixed', commit.hash])
+    expect(git.raw).toHaveBeenNthCalledWith(2, ['rebase', '-i', `${commit.hash}^`])
+  })
+
+  it('blocks destructive history edits while another git operation is in progress', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'coco-history-'))
+    const mergeHead = join(tempDir, 'MERGE_HEAD')
+
+    writeFileSync(mergeHead, commit.hash)
+
+    const git = {
+      revparse: jest.fn().mockResolvedValue(mergeHead),
+      raw: jest.fn(),
+    }
+
+    try {
+      await expect(cherryPickCommit(git as never, commit)).resolves.toEqual({
+        ok: false,
+        message: 'Finish or abort the in-progress merge before editing history.',
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+    } finally {
+      rmSync(tempDir, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('parses and loads reflog entries', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue('HEAD@{0}\x1fabc1234\x1fcommit: feat: one\nHEAD@{1}\x1fdef5678\x1freset: moving to HEAD~1\n'),
+    }
+
+    expect(parseReflog('HEAD@{0}\x1fabc1234\x1fcommit: feat: one\n')).toEqual([
+      {
+        selector: 'HEAD@{0}',
+        hash: 'abc1234',
+        subject: 'commit: feat: one',
+      },
+    ])
+    await expect(getReflogEntries(git as never, 2)).resolves.toEqual([
+      {
+        selector: 'HEAD@{0}',
+        hash: 'abc1234',
+        subject: 'commit: feat: one',
+      },
+      {
+        selector: 'HEAD@{1}',
+        hash: 'def5678',
+        subject: 'reset: moving to HEAD~1',
+      },
+    ])
+    expect(git.raw).toHaveBeenCalledWith([
+      'reflog',
+      '--date=short',
+      '--max-count=2',
+      '--pretty=format:%gd%x1f%h%x1f%gs',
+    ])
   })
 })
