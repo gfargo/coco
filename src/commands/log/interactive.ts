@@ -12,6 +12,7 @@ import {
   setUpstream,
 } from './branchActions'
 import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
+import { runCommitWorkflow } from './commitWorkflowActions'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
 import { createPullRequest, openPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
@@ -285,7 +286,7 @@ function renderStatusOverview(
     : []
   const actionLine = ui.pendingRevertFile
     ? `Pending revert: press Z to revert ${ui.pendingRevertFile}`
-    : 'Status actions: space stage/unstage | z revert selected file'
+    : 'Status actions: space stage/unstage | c commit | S split plan | A split apply | z revert'
 
   return [
     `Status: ${overview.stagedCount} staged, ${overview.unstagedCount} unstaged, ${overview.untrackedCount} untracked`,
@@ -635,8 +636,12 @@ export async function startInteractiveLog(
       void render()
     }
 
-    const runBranchAction = async (action: () => Promise<BranchActionResult>, refresh = true) => {
-      statusMessage = 'Running branch action...'
+    const runBranchAction = async (
+      action: () => Promise<BranchActionResult>,
+      refresh = true,
+      runningMessage = 'Running branch action...'
+    ) => {
+      statusMessage = runningMessage
       await render()
       await setActionResult(await action(), refresh)
     }
@@ -811,6 +816,24 @@ export async function startInteractiveLog(
         if (file && pendingRevertFile === file.path) {
           void runBranchAction(() => revertFile(git, file))
         }
+      } else if (key.name === 'c' && focus === 'status') {
+        void runBranchAction(
+          () => runCommitWorkflow({ action: 'commit', git }),
+          true,
+          'Generating commit message...'
+        )
+      } else if (sequence === 'S' && focus === 'status') {
+        void runBranchAction(
+          () => runCommitWorkflow({ action: 'split-plan', git }),
+          true,
+          'Generating commit split plan...'
+        )
+      } else if (sequence === 'A' && focus === 'status') {
+        void runBranchAction(
+          () => runCommitWorkflow({ action: 'split-apply', git }),
+          true,
+          'Applying commit split plan...'
+        )
       } else if (key.name === 'return' && focus === 'branches') {
         const branch = selectedBranch()
 
