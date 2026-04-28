@@ -8,6 +8,7 @@ import { WorktreeOverview } from './statusData'
 import { WorktreeHunkOverview } from './statusHunks'
 import { StashOverview } from './stashData'
 import { WorktreeOverview as WorktreeListOverview } from './worktreeData'
+import { GitOperationOverview } from './operationData'
 
 const rows: GitLogRow[] = [
   {
@@ -195,6 +196,29 @@ const reflog = [
   },
 ]
 
+const operationOverview: GitOperationOverview = {
+  operation: 'merge',
+  conflictedFiles: [
+    {
+      path: 'src/conflict.ts',
+      indexStatus: 'U',
+      worktreeStatus: 'U',
+    },
+  ],
+  conflictMarkers: [
+    {
+      path: 'src/conflict.ts',
+      line: 12,
+      marker: '<<<<<<< HEAD',
+    },
+  ],
+  hooks: {
+    hooksPath: '/repo/.git/hooks',
+    configuredHooks: ['pre-commit', 'commit-msg'],
+  },
+  aiConflictHelpAvailable: true,
+}
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
     const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, worktree, {}, {
@@ -221,8 +245,41 @@ describe('log interactive renderer', () => {
     expect(output).toContain('= compare')
     expect(output).toContain('S split plan')
     expect(output).toContain('A split apply')
+    expect(output).toContain('Operation: unavailable')
     expect(output).toContain('Keys:')
     expect(output).toContain('Commit actions: e amend HEAD | w reword HEAD')
+  })
+
+  it('renders in-progress operation, conflicts, hooks, and no-verify state', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'commits',
+        pendingOperationAction: 'abort',
+        noVerify: true,
+      },
+      {
+        height: 90,
+        width: 140,
+      },
+      {},
+      {},
+      operationOverview
+    )
+
+    expect(output).toContain('Operation: merge in progress | no-verify on')
+    expect(output).toContain('Pending abort: press G to confirm abort merge')
+    expect(output).toContain('Conflicts: 1')
+    expect(output).toContain('UU src/conflict.ts')
+    expect(output).toContain('src/conflict.ts:12 <<<<<<< HEAD')
+    expect(output).toContain('Hooks: pre-commit, commit-msg')
+    expect(output).toContain('AI conflict help: opt-in action planned')
   })
 
   it('renders commit history actions and recovery state', () => {

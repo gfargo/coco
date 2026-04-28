@@ -82,6 +82,30 @@ describe('log commit workflow actions', () => {
     )
   })
 
+  it('passes no-verify into TUI commit workflows', async () => {
+    mockedCommitHandler.mockImplementation(async () => {
+      process.stdout.write('fix: skip hooks\n')
+    })
+    mockedCreateCommit.mockResolvedValue({} as Awaited<ReturnType<typeof createCommit>>)
+
+    await expect(runCommitWorkflow({ action: 'commit', git, noVerify: true })).resolves.toEqual({
+      ok: true,
+      message: 'fix: skip hooks',
+    })
+    expect(mockedCommitHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        noVerify: true,
+      }),
+      expect.anything()
+    )
+    expect(mockedCreateCommit).toHaveBeenCalledWith(
+      'fix: skip hooks',
+      git,
+      undefined,
+      { noVerify: true }
+    )
+  })
+
   it('builds split apply argv for commit split application', async () => {
     mockedCommitHandler.mockImplementation(async () => {
       process.stdout.write('Created 2 split commit(s).\n')

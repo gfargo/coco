@@ -63,6 +63,8 @@ import {
   createLogTuiState,
   getSelectedCommit,
 } from './interactiveState'
+import { abortOperation, continueOperation, skipOperation } from './operationActions'
+import { GitOperationOverview, getGitOperationOverview } from './operationData'
 
 type LogTuiStreams = {
   input?: NodeJS.ReadStream
@@ -114,6 +116,8 @@ type LogTuiRenderUi = {
   pendingResetCommit?: string
   pendingResetMode?: ResetMode
   pendingRebaseCommit?: string
+  pendingOperationAction?: 'continue' | 'abort' | 'skip'
+  noVerify?: boolean
 }
 
 type LogTuiInputKind =
@@ -451,6 +455,53 @@ function renderHistoryOverview(
   ].map((line) => truncate(line, width))
 }
 
+function renderOperationOverview(
+  overview: GitOperationOverview | undefined,
+  ui: LogTuiRenderUi,
+  width: number
+): string[] {
+  if (!overview) {
+    return ['Operation: unavailable']
+  }
+
+  if (overview.operation === 'none' && overview.conflictedFiles.length === 0 && !ui.pendingOperationAction) {
+    return [
+      `Operation: none | no-verify ${ui.noVerify ? 'on' : 'off'}`,
+      'Operation actions: none active | N no-verify',
+    ].map((line) => truncate(line, width))
+  }
+
+  const operation = overview.operation === 'none' ? 'none' : `${overview.operation} in progress`
+  const pendingLine = ui.pendingOperationAction
+    ? `Pending ${ui.pendingOperationAction}: press G to confirm ${ui.pendingOperationAction} ${overview.operation}`
+    : overview.operation === 'none'
+      ? 'Operation actions: none active | N no-verify'
+      : 'Operation actions: g continue | A abort | K skip | N no-verify'
+  const conflictLines = overview.conflictedFiles.slice(0, 5).map((file) => (
+    `  ${file.indexStatus}${file.worktreeStatus} ${file.path}`
+  ))
+  const markerLines = overview.conflictMarkers.slice(0, 5).map((marker) => (
+    `  ${marker.path}:${marker.line} ${marker.marker}`
+  ))
+  const hookLine = overview.hooks.configuredHooks.length
+    ? `Hooks: ${overview.hooks.configuredHooks.slice(0, 5).join(', ')}`
+    : 'Hooks: none configured'
+  const aiLine = overview.aiConflictHelpAvailable
+    ? 'AI conflict help: opt-in action planned; no remote call made automatically'
+    : 'AI conflict help: available when conflicts exist'
+
+  return [
+    `Operation: ${operation} | no-verify ${ui.noVerify ? 'on' : 'off'}`,
+    pendingLine,
+    `Conflicts: ${overview.conflictedFiles.length}`,
+    ...(conflictLines.length ? conflictLines : ['  No conflicted files.']),
+    ...(markerLines.length ? ['Conflict markers:', ...markerLines] : []),
+    hookLine,
+    `Hooks path: ${overview.hooks.hooksPath}`,
+    aiLine,
+  ].map((line) => truncate(line, width))
+}
+
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
     return ['Loading selected commit details...']
@@ -490,7 +541,8 @@ export function renderInteractiveLog(
   ui: LogTuiRenderUi = {},
   options: RenderInteractiveLogOptions = {},
   workspace: RenderInteractiveLogWorkspace = {},
-  history: RenderInteractiveLogHistory = {}
+  history: RenderInteractiveLogHistory = {},
+  operation?: GitOperationOverview
 ): string {
   const height = options.height || process.stdout.rows || DEFAULT_HEIGHT
   const width = options.width || process.stdout.columns || DEFAULT_WIDTH
@@ -521,6 +573,7 @@ export function renderInteractiveLog(
     ).slice(0, 12)
     : []
   const historyLines = renderHistoryOverview(history, ui, width).slice(0, 8)
+  const operationLines = renderOperationOverview(operation, ui, width).slice(0, 12)
   const listHeight = Math.max(4, Math.floor(height * 0.35))
   const detailHeight = Math.max(
     6,
@@ -532,6 +585,7 @@ export function renderInteractiveLog(
       statusLines.length -
       workspaceLines.length -
       historyLines.length -
+      operationLines.length -
       11
   )
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
@@ -552,6 +606,7 @@ export function renderInteractiveLog(
     ...statusLines,
     ...workspaceLines,
     ...historyLines,
+    ...operationLines,
     '',
     ...renderCommitList(state, listHeight, width),
     '',
@@ -581,6 +636,7 @@ export async function startInteractiveLog(
   let stashDiffSummary: string[] | undefined
   let compareBase: HistoryCommitRef | undefined
   let reflog: ReflogEntry[] | undefined
+  let operationOverview: GitOperationOverview | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
   let tagIndex = 0
@@ -603,8 +659,10 @@ export async function startInteractiveLog(
   let pendingResetCommit: string | undefined
   let pendingResetMode: ResetMode | undefined
   let pendingRebaseCommit: string | undefined
+  let pendingOperationAction: 'continue' | 'abort' | 'skip' | undefined
   let inputPrompt: LogTuiInputPrompt | undefined
   let pullRequestDraft = false
+  let noVerify = false
 
   async function loadSelectedDetail(): Promise<GitCommitDetail | undefined> {
     const selected = getSelectedCommit(state)
@@ -625,13 +683,14 @@ export async function startInteractiveLog(
 
   if (!input.isTTY || !output.isTTY) {
     try {
-      [branches, pullRequest, tags, worktree, stashes, worktreeList] = await Promise.all([
+      [branches, pullRequest, tags, worktree, stashes, worktreeList, operationOverview] = await Promise.all([
         getBranchOverview(git),
         getPullRequestOverview(git),
         getTagOverview(git),
         getWorktreeOverview(git),
         getStashOverview(git),
         getWorktreeListOverview(git),
+        getGitOperationOverview(git),
       ])
     } catch {
       branches = undefined
@@ -648,7 +707,9 @@ export async function startInteractiveLog(
         worktree,
         {},
         {},
-        { stashes, worktreeList }
+        { stashes, worktreeList },
+        {},
+        operationOverview
       )}\n`,
       'utf8'
     )
@@ -699,6 +760,8 @@ export async function startInteractiveLog(
         pendingResetCommit,
         pendingResetMode,
         pendingRebaseCommit,
+        pendingOperationAction,
+        noVerify,
       }
 
       output.write(
@@ -713,7 +776,8 @@ export async function startInteractiveLog(
           ui,
           {},
           { stashes, worktreeList, stashDiffSummary },
-          { compareBase, reflog }
+          { compareBase, reflog },
+          operationOverview
         )}\n`,
         'utf8'
       )
@@ -734,7 +798,8 @@ export async function startInteractiveLog(
               ui,
               {},
               { stashes, worktreeList, stashDiffSummary },
-              { compareBase, reflog }
+              { compareBase, reflog },
+              operationOverview
             )}\n`,
             'utf8'
           )
@@ -783,6 +848,10 @@ export async function startInteractiveLog(
       worktreeIndex = Math.max(0, Math.min(worktreeIndex, (worktreeList?.worktrees.length || 1) - 1))
     }
 
+    const refreshOperationOverview = async () => {
+      operationOverview = await getGitOperationOverview(git)
+    }
+
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
       statusDetails = result.details
@@ -798,6 +867,7 @@ export async function startInteractiveLog(
       pendingResetCommit = undefined
       pendingResetMode = undefined
       pendingRebaseCommit = undefined
+      pendingOperationAction = undefined
       inputPrompt = undefined
 
       if (refresh) {
@@ -808,6 +878,7 @@ export async function startInteractiveLog(
           refreshWorktree(),
           refreshStashes(),
           refreshWorktreeList(),
+          refreshOperationOverview(),
         ])
         await refreshStatusHunks()
       }
@@ -957,6 +1028,7 @@ export async function startInteractiveLog(
       pendingResetCommit = undefined
       pendingResetMode = undefined
       pendingRebaseCommit = undefined
+      pendingOperationAction = undefined
       void render()
     }
 
@@ -1143,6 +1215,7 @@ export async function startInteractiveLog(
         pendingResetCommit = undefined
         pendingResetMode = undefined
         pendingRebaseCommit = undefined
+        pendingOperationAction = undefined
         void render()
       } else if ((key.name === 'up' || key.name === 'k') && focus === 'branches') {
         moveBranchSelection(-1)
@@ -1258,6 +1331,41 @@ export async function startInteractiveLog(
         if (selectedWorktree) {
           void runBranchAction(() => Promise.resolve(worktreePathAction(selectedWorktree)), false)
         }
+      } else if (sequence === 'N') {
+        noVerify = !noVerify
+        statusMessage = `Commit no-verify mode: ${noVerify ? 'on' : 'off'}`
+        statusDetails = noVerify
+          ? ['TUI commit actions will pass --no-verify and skip Git hooks.']
+          : ['TUI commit actions will run Git hooks.']
+        void render()
+      } else if (key.name === 'g' && focus === 'commits' && operationOverview && operationOverview.operation !== 'none') {
+        pendingOperationAction = 'continue'
+        statusMessage = `Press G to continue ${operationOverview?.operation}`
+        statusDetails = ['Coco will not continue until you confirm.']
+        void render()
+      } else if (sequence === 'A' && focus === 'commits' && operationOverview && operationOverview.operation !== 'none') {
+        pendingOperationAction = 'abort'
+        statusMessage = `Press G to abort ${operationOverview?.operation}`
+        statusDetails = ['This asks Git to abort the in-progress operation.']
+        void render()
+      } else if (sequence === 'K' && focus === 'commits' && operationOverview && operationOverview.operation !== 'none') {
+        pendingOperationAction = 'skip'
+        statusMessage = `Press G to skip ${operationOverview?.operation}`
+        statusDetails = ['Skip is supported by rebase, cherry-pick, and revert operations.']
+        void render()
+      } else if (sequence === 'G' && focus === 'commits' && pendingOperationAction && operationOverview) {
+        const action = pendingOperationAction
+        const operation = operationOverview.operation
+
+        void runBranchAction(
+          () => action === 'continue'
+            ? continueOperation(git, operation)
+            : action === 'abort'
+              ? abortOperation(git, operation)
+              : skipOperation(git, operation),
+          true,
+          `Running git ${operation} --${action}...`
+        )
       } else if (key.name === 'h' && focus === 'commits') {
         void runBranchAction(() => copyCommitHash(selectedHistoryCommit()), false, 'Copying commit hash...')
       } else if (sequence === 'H' && focus === 'commits') {
@@ -1436,19 +1544,19 @@ export async function startInteractiveLog(
         }
       } else if (key.name === 'c' && focus === 'status') {
         void runBranchAction(
-          () => runCommitWorkflow({ action: 'commit', git }),
+          () => runCommitWorkflow({ action: 'commit', git, noVerify }),
           true,
           'Generating commit message...'
         )
       } else if (sequence === 'S' && focus === 'status') {
         void runBranchAction(
-          () => runCommitWorkflow({ action: 'split-plan', git }),
+          () => runCommitWorkflow({ action: 'split-plan', git, noVerify }),
           true,
           'Generating commit split plan...'
         )
       } else if (sequence === 'A' && focus === 'status') {
         void runBranchAction(
-          () => runCommitWorkflow({ action: 'split-apply', git }),
+          () => runCommitWorkflow({ action: 'split-apply', git, noVerify }),
           true,
           'Applying commit split plan...'
         )
@@ -1675,6 +1783,7 @@ export async function startInteractiveLog(
       refreshWorktree(),
       refreshStashes(),
       refreshWorktreeList(),
+      refreshOperationOverview(),
     ])
       .then(async () => {
         await refreshStatusHunks()
@@ -1688,6 +1797,7 @@ export async function startInteractiveLog(
         statusHunks = undefined
         stashes = undefined
         worktreeList = undefined
+        operationOverview = undefined
       })
     void render()
   })
