@@ -1,0 +1,135 @@
+import { Arguments } from 'yargs'
+import { SimpleGit } from 'simple-git'
+import { handler as commitHandler } from '../commit/handler'
+import { CommitOptions } from '../commit/config'
+import { loadConfig } from '../../lib/config/utils/loadConfig'
+import { createCommit, PreCommitHookError } from '../../lib/simple-git/createCommit'
+import { getRepo } from '../../lib/simple-git/getRepo'
+import { isCommandExitError } from '../../lib/utils/commandExit'
+import { Logger } from '../../lib/utils/logger'
+
+export type CommitWorkflowAction = 'commit' | 'split-plan' | 'split-apply'
+
+export type CommitWorkflowResult = {
+  ok: boolean
+  message: string
+}
+
+type CommitWorkflowInput = {
+  action: CommitWorkflowAction
+  git?: SimpleGit
+}
+
+type CommitWorkflowArgv = Arguments<CommitOptions> & {
+  mode: 'stdout'
+  noDiff: boolean
+  additional?: string
+  append?: string
+  appendTicket?: boolean
+}
+
+function createCommitWorkflowArgv(action: CommitWorkflowAction): CommitWorkflowArgv {
+  const split = action === 'split-plan' || action === 'split-apply'
+  const apply = action === 'split-apply'
+  const plan = action === 'split-plan'
+
+  return {
+    $0: 'coco',
+    _: split ? ['commit', 'split'] : ['commit'],
+    interactive: false,
+    verbose: false,
+    version: false,
+    help: false,
+    mode: 'stdout',
+    openInEditor: false,
+    ignoredFiles: [],
+    ignoredExtensions: [],
+    withPreviousCommits: 0,
+    conventional: false,
+    includeBranchName: true,
+    noVerify: false,
+    noDiff: false,
+    split,
+    plan,
+    apply,
+  } as CommitWorkflowArgv
+}
+
+function formatCommitWorkflowMessage(action: CommitWorkflowAction, output: string): string {
+  const normalized = output.trim()
+
+  if (normalized) {
+    return normalized.split('\n')[0]
+  }
+
+  if (action === 'split-plan') {
+    return 'Generated commit split plan.'
+  }
+
+  if (action === 'split-apply') {
+    return 'Applied commit split plan.'
+  }
+
+  return 'Generated commit message.'
+}
+
+function formatCommitFailure(error: unknown): string {
+  if (error instanceof PreCommitHookError) {
+    return `Commit blocked by hook: ${error.hookOutput.split('\n')[0]}`
+  }
+
+  return (error as Error).message
+}
+
+export async function runCommitWorkflow({
+  action,
+  git = getRepo(),
+}: CommitWorkflowInput): Promise<CommitWorkflowResult> {
+  const argv = createCommitWorkflowArgv(action)
+  const logger = new Logger({ silent: true })
+  const config = loadConfig<CommitOptions, CommitWorkflowArgv>(argv)
+  const originalWrite = process.stdout.write.bind(process.stdout)
+  let output = ''
+
+  process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
+    output += typeof chunk === 'string' ? chunk : chunk.toString()
+
+    const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === 'function')
+    callback?.()
+
+    return true
+  }) as typeof process.stdout.write
+
+  try {
+    await commitHandler(argv, logger)
+    const message = output.trim()
+
+    if (action === 'commit' && message) {
+      await createCommit(message, git, undefined, { noVerify: config.noVerify || false })
+    }
+
+    return {
+      ok: true,
+      message: formatCommitWorkflowMessage(action, output),
+    }
+  } catch (error) {
+    if (isCommandExitError(error)) {
+      return {
+        ok: error.code === 0,
+        message: output.trim() || error.message,
+      }
+    }
+
+    return {
+      ok: false,
+      message: formatCommitFailure(error),
+    }
+  } finally {
+    process.stdout.write = originalWrite
+  }
+}
+
+export const commitWorkflowTestInternals = {
+  createCommitWorkflowArgv,
+  formatCommitWorkflowMessage,
+}

@@ -151,6 +151,9 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Add PR workflow')
     expect(output).toContain('0.33.0')
     expect(output).toContain('Status: 1 staged, 1 unstaged, 1 untracked')
+    expect(output).toContain('c commit')
+    expect(output).toContain('S split plan')
+    expect(output).toContain('A split apply')
     expect(output).toContain('Keys:')
   })
 
