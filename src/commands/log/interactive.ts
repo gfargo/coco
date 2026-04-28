@@ -18,6 +18,7 @@ import { createPullRequest, openPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeFile, WorktreeOverview, getWorktreeOverview } from './statusData'
+import { WorktreeHunkOverview, getWorktreeHunks, stageHunk, unstageHunk } from './statusHunks'
 import {
   createAnnotatedTag,
   createLightweightTag,
@@ -56,6 +57,8 @@ type LogTuiRenderUi = {
   pullRequestDraft?: boolean
   tagIndex?: number
   statusIndex?: number
+  statusHunks?: WorktreeHunkOverview
+  statusHunkIndex?: number
   pendingRevertFile?: string
 }
 
@@ -284,14 +287,28 @@ function renderStatusOverview(
   const hiddenFiles = overview.files.length > files.length
     ? [`  ... ${overview.files.length - files.length} more file(s)`]
     : []
+  const hunkOverview = ui.statusHunks
+  const hunkLines = hunkOverview?.hunks.length
+    ? hunkOverview.hunks.slice(0, 5).map((hunk, index) => {
+      const selected = ui.focus === 'status' && (ui.statusHunkIndex || 0) === index ? '>' : ' '
+      const state = hunk.state === 'staged' ? 'S' : 'U'
+      const preview = hunk.preview ? ` ${hunk.preview}` : ''
+
+      return `${selected} [${state}] ${hunk.header}${preview}`
+    })
+    : []
+  const hiddenHunks = hunkOverview && hunkOverview.hunks.length > hunkLines.length
+    ? [`  ... ${hunkOverview.hunks.length - hunkLines.length} more hunk(s)`]
+    : []
   const actionLine = ui.pendingRevertFile
     ? `Pending revert: press Z to revert ${ui.pendingRevertFile}`
-    : 'Status actions: space stage/unstage | c commit | S split plan | A split apply | z revert'
+    : 'Status actions: space file | enter hunk | [/] hunk select | c commit | S split plan | A split apply | z revert'
 
   return [
     `Status: ${overview.stagedCount} staged, ${overview.unstagedCount} unstaged, ${overview.untrackedCount} untracked`,
     ...(files.length ? files : ['  Worktree clean.']),
     ...hiddenFiles,
+    ...(hunkOverview ? [`Hunks: ${hunkOverview.filePath}`, ...hunkLines, ...hiddenHunks] : []),
     actionLine,
   ].map((line) => truncate(line, width))
 }
@@ -399,10 +416,12 @@ export async function startInteractiveLog(
   let tags: TagOverview | undefined
   let tagRangeSummary: TagRangeSummary | undefined
   let worktree: WorktreeOverview | undefined
+  let statusHunks: WorktreeHunkOverview | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
   let tagIndex = 0
   let statusIndex = 0
+  let statusHunkIndex = 0
   let statusMessage: string | undefined
   let pendingDeleteBranch: string | undefined
   let pendingDeleteTag: string | undefined
@@ -485,6 +504,8 @@ export async function startInteractiveLog(
         pullRequestDraft,
         tagIndex,
         statusIndex,
+        statusHunks,
+        statusHunkIndex,
       }
 
       output.write(
@@ -548,6 +569,11 @@ export async function startInteractiveLog(
       statusIndex = Math.max(0, Math.min(statusIndex, (worktree?.files.length || 1) - 1))
     }
 
+    const refreshStatusHunks = async () => {
+      statusHunks = await getWorktreeHunks(git, worktree?.files[statusIndex])
+      statusHunkIndex = Math.max(0, Math.min(statusHunkIndex, (statusHunks?.hunks.length || 1) - 1))
+    }
+
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
       pendingDeleteBranch = undefined
@@ -563,6 +589,7 @@ export async function startInteractiveLog(
           refreshTags(),
           refreshWorktree(),
         ])
+        await refreshStatusHunks()
       }
 
       await render()
@@ -571,6 +598,7 @@ export async function startInteractiveLog(
     const selectedBranch = () => getBranchList(branches)[branchIndex]
     const selectedTag = () => tags?.tags[tagIndex]
     const selectedStatusFile = (): WorktreeFile | undefined => worktree?.files[statusIndex]
+    const selectedStatusHunk = () => statusHunks?.hunks[statusHunkIndex]
 
     const selectedRef = () => {
       if (focus === 'branches') {
@@ -632,7 +660,16 @@ export async function startInteractiveLog(
       const fileCount = worktree?.files.length || 0
 
       statusIndex = Math.max(0, Math.min(statusIndex + delta, fileCount - 1))
+      statusHunkIndex = 0
+      statusHunks = undefined
       pendingRevertFile = undefined
+      void refreshStatusHunks().then(render)
+    }
+
+    const moveStatusHunkSelection = (delta: number) => {
+      const hunkCount = statusHunks?.hunks.length || 0
+
+      statusHunkIndex = Math.max(0, Math.min(statusHunkIndex + delta, hunkCount - 1))
       void render()
     }
 
@@ -796,6 +833,35 @@ export async function startInteractiveLog(
         moveStatusSelection(-1)
       } else if ((key.name === 'down' || key.name === 'j') && focus === 'status') {
         moveStatusSelection(1)
+      } else if ((sequence === '[' || key.name === 'left') && focus === 'status') {
+        moveStatusHunkSelection(-1)
+      } else if ((sequence === ']' || key.name === 'right') && focus === 'status') {
+        moveStatusHunkSelection(1)
+      } else if (key.name === 'return' && focus === 'status') {
+        const hunk = selectedStatusHunk()
+
+        if (hunk) {
+          void runBranchAction(async () => {
+            if (hunk.state === 'staged') {
+              await unstageHunk(git, hunk)
+
+              return {
+                ok: true,
+                message: `Unstaged hunk in ${hunk.filePath}`,
+              }
+            }
+
+            await stageHunk(git, hunk)
+
+            return {
+              ok: true,
+              message: `Staged hunk in ${hunk.filePath}`,
+            }
+          })
+        } else {
+          statusMessage = 'No selectable hunk for the selected file.'
+          void render()
+        }
       } else if (key.name === 'space' && focus === 'status') {
         const file = selectedStatusFile()
 
@@ -868,6 +934,7 @@ export async function startInteractiveLog(
             refreshTags(),
             refreshWorktree(),
           ])
+          await refreshStatusHunks()
 
           return {
             ok: true,
@@ -1029,14 +1096,16 @@ export async function startInteractiveLog(
       refreshTags(),
       refreshWorktree(),
     ])
-      .then(() => {
-        void render()
+      .then(async () => {
+        await refreshStatusHunks()
+        await render()
       })
       .catch(() => {
         branches = undefined
         pullRequest = undefined
         tags = undefined
         worktree = undefined
+        statusHunks = undefined
       })
     void render()
   })
