@@ -13,6 +13,8 @@ import {
 } from './branchActions'
 import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
+import { createPullRequest, openPullRequest } from './pullRequestActions'
+import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import {
   LogTuiState,
   applyLogTuiAction,
@@ -38,9 +40,10 @@ type LogTuiRenderUi = {
   statusMessage?: string
   pendingDeleteBranch?: string
   inputPrompt?: LogTuiInputPrompt
+  pullRequestDraft?: boolean
 }
 
-type LogTuiInputKind = 'create-branch' | 'rename-branch'
+type LogTuiInputKind = 'create-branch' | 'rename-branch' | 'create-pr-title'
 
 type LogTuiInputPrompt = {
   kind: LogTuiInputKind
@@ -48,6 +51,7 @@ type LogTuiInputPrompt = {
   value: string
   sourceRef: string
   branchName?: string
+  baseRef?: string
 }
 
 const DEFAULT_HEIGHT = 52
@@ -170,6 +174,46 @@ function renderBranchOverview(
   ].map((line) => truncate(line, width))
 }
 
+function renderPullRequestOverview(
+  overview: PullRequestOverview | undefined,
+  ui: LogTuiRenderUi,
+  width: number
+): string[] {
+  if (!overview) {
+    return ['Pull request: unavailable']
+  }
+
+  if (!overview.available || !overview.authenticated) {
+    return [
+      `Pull request: ${overview.message || 'GitHub PR workflow unavailable.'}`,
+    ].map((line) => truncate(line, width))
+  }
+
+  const repo = overview.repository
+    ? `${overview.repository.owner}/${overview.repository.name}`
+    : 'GitHub repository'
+  const draft = ui.pullRequestDraft ? 'draft' : 'ready'
+  const action = 'PR actions: C create | v draft toggle | o open current PR'
+
+  if (!overview.currentPullRequest) {
+    return [
+      `Pull request: no PR for ${overview.currentBranch || '<detached>'} on ${repo}`,
+      `Create mode: ${draft}`,
+      action,
+    ].map((line) => truncate(line, width))
+  }
+
+  const pr = overview.currentPullRequest
+  const prState = `${pr.state}${pr.isDraft ? ' draft' : ''}`
+
+  return [
+    `Pull request: #${pr.number} ${prState} ${pr.headRefName} -> ${pr.baseRefName}`,
+    `Title: ${pr.title}`,
+    `URL: ${pr.url}`,
+    action,
+  ].map((line) => truncate(line, width))
+}
+
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
     return ['Loading selected commit details...']
@@ -202,6 +246,7 @@ export function renderInteractiveLog(
   state: LogTuiState,
   detail?: GitCommitDetail,
   branches?: BranchOverview,
+  pullRequest?: PullRequestOverview,
   ui: LogTuiRenderUi = {},
   options: RenderInteractiveLogOptions = {}
 ): string {
@@ -212,14 +257,15 @@ export function renderInteractiveLog(
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
   const focus = ui.focus || 'commits'
   const help = state.showHelp
-    ? 'Keys: tab focus | up/down move | enter checkout | n new | m rename | u upstream | f fetch | q quit'
+    ? 'Keys: tab focus | up/down move | enter checkout | n branch | C PR | v draft | f fetch | q quit'
     : 'Press ? for help'
   const detailHeader = selected
     ? `Selected: ${selected.shortHash} ${selected.message}`
     : 'Selected: none'
   const branchLines = renderBranchOverview(branches, ui, width).slice(0, 12)
+  const pullRequestLines = renderPullRequestOverview(pullRequest, ui, width).slice(0, 4)
   const listHeight = Math.max(4, Math.floor(height * 0.35))
-  const detailHeight = Math.max(6, height - listHeight - branchLines.length - 10)
+  const detailHeight = Math.max(6, height - listHeight - branchLines.length - pullRequestLines.length - 11)
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
   const filterPrompt = state.filterMode ? `Search: ${state.filter}_` : `Filter: ${filter}`
 
@@ -231,6 +277,7 @@ export function renderInteractiveLog(
     ui.inputPrompt ? truncate(`${ui.inputPrompt.label}: ${ui.inputPrompt.value}_`, width) : '',
     '',
     ...branchLines,
+    ...pullRequestLines,
     '',
     ...renderCommitList(state, listHeight, width),
     '',
@@ -250,11 +297,13 @@ export async function startInteractiveLog(
   let state = createLogTuiState(rows)
   const details = new Map<string, GitCommitDetail>()
   let branches: BranchOverview | undefined
+  let pullRequest: PullRequestOverview | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
   let statusMessage: string | undefined
   let pendingDeleteBranch: string | undefined
   let inputPrompt: LogTuiInputPrompt | undefined
+  let pullRequestDraft = false
 
   async function loadSelectedDetail(): Promise<GitCommitDetail | undefined> {
     const selected = getSelectedCommit(state)
@@ -275,12 +324,18 @@ export async function startInteractiveLog(
 
   if (!input.isTTY || !output.isTTY) {
     try {
-      branches = await getBranchOverview(git)
+      [branches, pullRequest] = await Promise.all([
+        getBranchOverview(git),
+        getPullRequestOverview(git),
+      ])
     } catch {
       branches = undefined
     }
 
-    output.write(`${renderInteractiveLog(state, await loadSelectedDetail(), branches)}\n`, 'utf8')
+    output.write(
+      `${renderInteractiveLog(state, await loadSelectedDetail(), branches, pullRequest)}\n`,
+      'utf8'
+    )
     return
   }
 
@@ -308,15 +363,22 @@ export async function startInteractiveLog(
         statusMessage,
         pendingDeleteBranch,
         inputPrompt,
+        pullRequestDraft,
       }
 
-      output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches, ui)}\n`, 'utf8')
+      output.write(
+        `\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches, pullRequest, ui)}\n`,
+        'utf8'
+      )
 
       try {
         const detail = await loadSelectedDetail()
 
         if (!closed && version === renderVersion) {
-          output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, detail, branches, ui)}\n`, 'utf8')
+          output.write(
+            `\x1b[2J\x1b[H${renderInteractiveLog(state, detail, branches, pullRequest, ui)}\n`,
+            'utf8'
+          )
         }
       } catch (error) {
         reject(error)
@@ -333,13 +395,20 @@ export async function startInteractiveLog(
       branchIndex = Math.max(0, Math.min(branchIndex, getBranchList(branches).length - 1))
     }
 
+    const refreshPullRequest = async () => {
+      pullRequest = await getPullRequestOverview(git)
+    }
+
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
       pendingDeleteBranch = undefined
       inputPrompt = undefined
 
       if (refresh) {
-        await refreshBranches()
+        await Promise.all([
+          refreshBranches(),
+          refreshPullRequest(),
+        ])
       }
 
       await render()
@@ -354,6 +423,33 @@ export async function startInteractiveLog(
 
       return getSelectedCommit(state)?.hash
     }
+
+    const selectedBaseRef = () => {
+      const branch = focus === 'branches' ? selectedBranch() : undefined
+
+      if (branch?.type === 'remote') {
+        return branch.shortName.split('/').slice(1).join('/') || branch.shortName
+      }
+
+      if (branch?.type === 'local' && !branch.current) {
+        return branch.shortName
+      }
+
+      const upstreamDefault = branches?.localBranches
+        .find((entry) => entry.upstream)
+        ?.upstream
+        ?.split('/')
+        .slice(1)
+        .join('/')
+
+      return upstreamDefault || 'main'
+    }
+
+    const generatedPullRequestBody = () => [
+      '## Summary',
+      '',
+      ...state.commits.slice(0, 8).map((commit) => `- ${commit.message}`),
+    ].join('\n')
 
     const moveBranchSelection = (delta: number) => {
       const branchesList = getBranchList(branches)
@@ -396,6 +492,22 @@ export async function startInteractiveLog(
         await runBranchAction(() => createBranch(git, value, prompt.sourceRef))
       } else if (prompt.kind === 'rename-branch' && prompt.branchName) {
         await runBranchAction(() => renameBranch(git, prompt.branchName as string, value))
+      } else if (prompt.kind === 'create-pr-title' && prompt.baseRef) {
+        const head = pullRequest?.currentBranch || branches?.currentBranch
+
+        if (!head) {
+          statusMessage = 'Cannot create pull request without a current branch.'
+          await render()
+          return
+        }
+
+        await runBranchAction(() => createPullRequest({
+          base: prompt.baseRef as string,
+          head,
+          title: value,
+          body: generatedPullRequestBody(),
+          draft: pullRequestDraft,
+        }))
       }
     }
 
@@ -507,11 +619,14 @@ export async function startInteractiveLog(
         }
       } else if (key.name === 'r') {
         void runBranchAction(async () => {
-          await refreshBranches()
+          await Promise.all([
+            refreshBranches(),
+            refreshPullRequest(),
+          ])
 
           return {
             ok: true,
-            message: 'Refreshed branch overview',
+            message: 'Refreshed Git overview',
           }
         }, false)
       } else if (key.name === 'n') {
@@ -550,6 +665,30 @@ export async function startInteractiveLog(
           statusMessage = 'Select a remote branch to set as the current branch upstream.'
           void render()
         }
+      } else if (sequence === 'C') {
+        const baseRef = selectedBaseRef()
+        const title = getSelectedCommit(state)?.message || `Open ${pullRequest?.currentBranch || 'branch'}`
+
+        startInputPrompt({
+          kind: 'create-pr-title',
+          label: `Create ${pullRequestDraft ? 'draft ' : ''}PR into ${baseRef}`,
+          value: title,
+          sourceRef: pullRequest?.currentBranch || branches?.currentBranch || '',
+          baseRef,
+        })
+      } else if (key.name === 'v') {
+        pullRequestDraft = !pullRequestDraft
+        statusMessage = `Pull request create mode: ${pullRequestDraft ? 'draft' : 'ready'}`
+        void render()
+      } else if (key.name === 'o') {
+        const url = pullRequest?.currentPullRequest?.url
+
+        if (url) {
+          void runBranchAction(() => openPullRequest(url), false)
+        } else {
+          statusMessage = 'No current pull request to open.'
+          void render()
+        }
       } else if (key.name === 'up' || key.name === 'k') {
         applyAndRender(applyLogTuiAction(state, { type: 'move', delta: -1 }))
       } else if (key.name === 'down' || key.name === 'j') {
@@ -570,12 +709,16 @@ export async function startInteractiveLog(
     }
 
     input.on('keypress', onKeypress)
-    void refreshBranches()
+    void Promise.all([
+      refreshBranches(),
+      refreshPullRequest(),
+    ])
       .then(() => {
         void render()
       })
       .catch(() => {
         branches = undefined
+        pullRequest = undefined
       })
     void render()
   })
