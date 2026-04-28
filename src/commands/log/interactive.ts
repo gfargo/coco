@@ -17,6 +17,8 @@ import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
 import { amendHeadCommit, rewordHeadCommit } from './historyActions'
 import { createPullRequest, openPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
+import { applyStash, createStash, dropStash, popStash } from './stashActions'
+import { StashEntry, StashOverview, getStashDiffSummary, getStashOverview } from './stashData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeFile, WorktreeOverview, getWorktreeOverview } from './statusData'
 import { WorktreeHunkOverview, getWorktreeHunks, revertHunk, stageHunk, unstageHunk } from './statusHunks'
@@ -28,6 +30,17 @@ import {
   pushTag,
 } from './tagActions'
 import { TagOverview, TagRangeSummary, getTagOverview, getTagRangeSummary } from './tagData'
+import {
+  createBranchWorktree,
+  createWorktree,
+  removeWorktree,
+  worktreePathAction,
+} from './worktreeActions'
+import {
+  WorktreeEntry,
+  WorktreeOverview as WorktreeListOverview,
+  getWorktreeListOverview,
+} from './worktreeData'
 import {
   LogTuiState,
   applyLogTuiAction,
@@ -45,7 +58,14 @@ type RenderInteractiveLogOptions = {
   width?: number
 }
 
-type LogTuiFocus = 'commits' | 'branches' | 'tags' | 'status'
+type RenderInteractiveLogWorkspace = {
+  stashes?: StashOverview
+  worktreeList?: WorktreeListOverview
+  stashDiffSummary?: string[]
+}
+
+type LogTuiFocus = 'commits' | 'branches' | 'tags' | 'status' | 'workspace'
+type WorkspaceSection = 'stashes' | 'worktrees'
 
 type LogTuiRenderUi = {
   focus?: LogTuiFocus
@@ -63,6 +83,11 @@ type LogTuiRenderUi = {
   statusHunkIndex?: number
   pendingRevertFile?: string
   pendingRevertHunk?: string
+  stashIndex?: number
+  worktreeIndex?: number
+  workspaceSection?: WorkspaceSection
+  pendingDropStash?: string
+  pendingRemoveWorktree?: string
 }
 
 type LogTuiInputKind =
@@ -72,6 +97,10 @@ type LogTuiInputKind =
   | 'create-tag'
   | 'create-annotated-tag'
   | 'reword-commit'
+  | 'create-stash'
+  | 'create-worktree'
+  | 'create-branch-worktree-path'
+  | 'create-branch-worktree-branch'
 
 type LogTuiInputPrompt = {
   kind: LogTuiInputKind
@@ -82,6 +111,7 @@ type LogTuiInputPrompt = {
   baseRef?: string
   tagName?: string
   commitHash?: string
+  worktreePath?: string
 }
 
 const DEFAULT_HEIGHT = 70
@@ -325,6 +355,46 @@ function renderStatusOverview(
   ].map((line) => truncate(line, width))
 }
 
+function renderWorkspaceOverview(
+  stashes: StashOverview | undefined,
+  worktrees: WorktreeListOverview | undefined,
+  stashDiffSummary: string[] | undefined,
+  ui: LogTuiRenderUi,
+  width: number
+): string[] {
+  const section = ui.workspaceSection || 'stashes'
+  const stashLines = stashes?.stashes.slice(0, 4).map((stash, index) => {
+    const selected = ui.focus === 'workspace' && section === 'stashes' && (ui.stashIndex || 0) === index ? '>' : ' '
+    const files = stash.files.length ? ` ${stash.files.length} file(s)` : ''
+
+    return `${selected} ${stash.ref} ${stash.branch}: ${stash.message}${files}`
+  }) || []
+  const worktreeLines = worktrees?.worktrees.slice(0, 4).map((worktree, index) => {
+    const selected = ui.focus === 'workspace' && section === 'worktrees' && (ui.worktreeIndex || 0) === index ? '>' : ' '
+    const marker = worktree.current ? '*' : ' '
+    const branch = worktree.branch || (worktree.detached ? '<detached>' : '<unknown>')
+    const dirty = worktree.dirty ? 'dirty' : 'clean'
+
+    return `${selected}${marker} ${branch} ${dirty} ${worktree.path}`
+  }) || []
+  const actionLine = ui.pendingDropStash
+    ? `Pending stash drop: press D to drop ${ui.pendingDropStash}`
+    : ui.pendingRemoveWorktree
+      ? `Pending worktree remove: press X to remove ${ui.pendingRemoveWorktree}`
+      : 'Workspace actions: [/] section | s stash | a apply | P pop | d drop | i inspect | w worktree | B branch+worktree | x remove | o path'
+  const diffLines = stashDiffSummary?.slice(0, 3).map((line) => `  ${line}`) || []
+
+  return [
+    `Workspace: ${section}`,
+    'Stashes:',
+    ...(stashLines.length ? stashLines : ['  No stashes found.']),
+    'Worktrees:',
+    ...(worktreeLines.length ? worktreeLines : ['  No linked worktrees found.']),
+    ...diffLines,
+    actionLine,
+  ].map((line) => truncate(line, width))
+}
+
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
     return ['Loading selected commit details...']
@@ -362,7 +432,8 @@ export function renderInteractiveLog(
   tagRangeSummary?: TagRangeSummary,
   worktree?: WorktreeOverview,
   ui: LogTuiRenderUi = {},
-  options: RenderInteractiveLogOptions = {}
+  options: RenderInteractiveLogOptions = {},
+  workspace: RenderInteractiveLogWorkspace = {}
 ): string {
   const height = options.height || process.stdout.rows || DEFAULT_HEIGHT
   const width = options.width || process.stdout.columns || DEFAULT_WIDTH
@@ -383,6 +454,15 @@ export function renderInteractiveLog(
   const pullRequestLines = renderPullRequestOverview(pullRequest, ui, width).slice(0, 4)
   const tagLines = renderTagOverview(tags, tagRangeSummary, ui, width).slice(0, 10)
   const statusLines = renderStatusOverview(worktree, ui, width).slice(0, 10)
+  const workspaceLines = workspace.stashes || workspace.worktreeList
+    ? renderWorkspaceOverview(
+      workspace.stashes,
+      workspace.worktreeList,
+      workspace.stashDiffSummary,
+      ui,
+      width
+    ).slice(0, 12)
+    : []
   const listHeight = Math.max(4, Math.floor(height * 0.35))
   const detailHeight = Math.max(
     6,
@@ -392,6 +472,7 @@ export function renderInteractiveLog(
       pullRequestLines.length -
       tagLines.length -
       statusLines.length -
+      workspaceLines.length -
       11
   )
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
@@ -410,6 +491,7 @@ export function renderInteractiveLog(
     ...pullRequestLines,
     ...tagLines,
     ...statusLines,
+    ...workspaceLines,
     '',
     ...renderCommitList(state, listHeight, width),
     '',
@@ -434,11 +516,17 @@ export async function startInteractiveLog(
   let tagRangeSummary: TagRangeSummary | undefined
   let worktree: WorktreeOverview | undefined
   let statusHunks: WorktreeHunkOverview | undefined
+  let stashes: StashOverview | undefined
+  let worktreeList: WorktreeListOverview | undefined
+  let stashDiffSummary: string[] | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
   let tagIndex = 0
   let statusIndex = 0
   let statusHunkIndex = 0
+  let stashIndex = 0
+  let worktreeIndex = 0
+  let workspaceSection: WorkspaceSection = 'stashes'
   let statusMessage: string | undefined
   let statusDetails: string[] | undefined
   let pendingDeleteBranch: string | undefined
@@ -446,6 +534,8 @@ export async function startInteractiveLog(
   let pendingDeleteRemoteTag: string | undefined
   let pendingRevertFile: string | undefined
   let pendingRevertHunk: string | undefined
+  let pendingDropStash: string | undefined
+  let pendingRemoveWorktree: string | undefined
   let inputPrompt: LogTuiInputPrompt | undefined
   let pullRequestDraft = false
 
@@ -468,11 +558,13 @@ export async function startInteractiveLog(
 
   if (!input.isTTY || !output.isTTY) {
     try {
-      [branches, pullRequest, tags, worktree] = await Promise.all([
+      [branches, pullRequest, tags, worktree, stashes, worktreeList] = await Promise.all([
         getBranchOverview(git),
         getPullRequestOverview(git),
         getTagOverview(git),
         getWorktreeOverview(git),
+        getStashOverview(git),
+        getWorktreeListOverview(git),
       ])
     } catch {
       branches = undefined
@@ -486,7 +578,10 @@ export async function startInteractiveLog(
         pullRequest,
         tags,
         tagRangeSummary,
-        worktree
+        worktree,
+        {},
+        {},
+        { stashes, worktreeList }
       )}\n`,
       'utf8'
     )
@@ -527,6 +622,11 @@ export async function startInteractiveLog(
         statusIndex,
         statusHunks,
         statusHunkIndex,
+        stashIndex,
+        worktreeIndex,
+        workspaceSection,
+        pendingDropStash,
+        pendingRemoveWorktree,
       }
 
       output.write(
@@ -538,7 +638,9 @@ export async function startInteractiveLog(
           tags,
           tagRangeSummary,
           worktree,
-          ui
+          ui,
+          {},
+          { stashes, worktreeList, stashDiffSummary }
         )}\n`,
         'utf8'
       )
@@ -556,7 +658,9 @@ export async function startInteractiveLog(
               tags,
               tagRangeSummary,
               worktree,
-              ui
+              ui,
+              {},
+              { stashes, worktreeList, stashDiffSummary }
             )}\n`,
             'utf8'
           )
@@ -595,6 +699,16 @@ export async function startInteractiveLog(
       statusHunkIndex = Math.max(0, Math.min(statusHunkIndex, (statusHunks?.hunks.length || 1) - 1))
     }
 
+    const refreshStashes = async () => {
+      stashes = await getStashOverview(git)
+      stashIndex = Math.max(0, Math.min(stashIndex, (stashes?.stashes.length || 1) - 1))
+    }
+
+    const refreshWorktreeList = async () => {
+      worktreeList = await getWorktreeListOverview(git)
+      worktreeIndex = Math.max(0, Math.min(worktreeIndex, (worktreeList?.worktrees.length || 1) - 1))
+    }
+
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
       statusDetails = result.details
@@ -603,6 +717,8 @@ export async function startInteractiveLog(
       pendingDeleteRemoteTag = undefined
       pendingRevertFile = undefined
       pendingRevertHunk = undefined
+      pendingDropStash = undefined
+      pendingRemoveWorktree = undefined
       inputPrompt = undefined
 
       if (refresh) {
@@ -611,6 +727,8 @@ export async function startInteractiveLog(
           refreshPullRequest(),
           refreshTags(),
           refreshWorktree(),
+          refreshStashes(),
+          refreshWorktreeList(),
         ])
         await refreshStatusHunks()
       }
@@ -622,6 +740,8 @@ export async function startInteractiveLog(
     const selectedTag = () => tags?.tags[tagIndex]
     const selectedStatusFile = (): WorktreeFile | undefined => worktree?.files[statusIndex]
     const selectedStatusHunk = () => statusHunks?.hunks[statusHunkIndex]
+    const selectedStash = (): StashEntry | undefined => stashes?.stashes[stashIndex]
+    const selectedWorkspaceWorktree = (): WorktreeEntry | undefined => worktreeList?.worktrees[worktreeIndex]
 
     const selectedRef = () => {
       if (focus === 'branches') {
@@ -697,6 +817,30 @@ export async function startInteractiveLog(
       void render()
     }
 
+    const moveWorkspaceSelection = (delta: number) => {
+      if (workspaceSection === 'stashes') {
+        const stashCount = stashes?.stashes.length || 0
+
+        stashIndex = Math.max(0, Math.min(stashIndex + delta, stashCount - 1))
+        pendingDropStash = undefined
+        stashDiffSummary = undefined
+      } else {
+        const worktreeCount = worktreeList?.worktrees.length || 0
+
+        worktreeIndex = Math.max(0, Math.min(worktreeIndex + delta, worktreeCount - 1))
+        pendingRemoveWorktree = undefined
+      }
+
+      void render()
+    }
+
+    const toggleWorkspaceSection = () => {
+      workspaceSection = workspaceSection === 'stashes' ? 'worktrees' : 'stashes'
+      pendingDropStash = undefined
+      pendingRemoveWorktree = undefined
+      void render()
+    }
+
     const runBranchAction = async (
       action: () => Promise<BranchActionResult>,
       refresh = true,
@@ -716,6 +860,8 @@ export async function startInteractiveLog(
       pendingDeleteRemoteTag = undefined
       pendingRevertFile = undefined
       pendingRevertHunk = undefined
+      pendingDropStash = undefined
+      pendingRemoveWorktree = undefined
       void render()
     }
 
@@ -766,6 +912,28 @@ export async function startInteractiveLog(
           () => rewordHeadCommit(git, prompt.commitHash as string, value),
           true,
           'Rewording HEAD commit...'
+        )
+      } else if (prompt.kind === 'create-stash') {
+        await runBranchAction(() => createStash(git, value), true, 'Creating stash...')
+      } else if (prompt.kind === 'create-worktree') {
+        await runBranchAction(
+          () => createWorktree(git, value, prompt.sourceRef),
+          true,
+          'Creating worktree...'
+        )
+      } else if (prompt.kind === 'create-branch-worktree-path') {
+        startInputPrompt({
+          kind: 'create-branch-worktree-branch',
+          label: `New branch for ${value}`,
+          value: '',
+          sourceRef: prompt.sourceRef,
+          worktreePath: value,
+        })
+      } else if (prompt.kind === 'create-branch-worktree-branch' && prompt.worktreePath) {
+        await runBranchAction(
+          () => createBranchWorktree(git, prompt.worktreePath as string, value, prompt.sourceRef),
+          true,
+          'Creating branch worktree...'
         )
       }
     }
@@ -850,12 +1018,16 @@ export async function startInteractiveLog(
             ? 'tags'
             : focus === 'tags'
               ? 'status'
-              : 'commits'
+              : focus === 'status'
+                ? 'workspace'
+                : 'commits'
         pendingDeleteBranch = undefined
         pendingDeleteTag = undefined
         pendingDeleteRemoteTag = undefined
         pendingRevertFile = undefined
         pendingRevertHunk = undefined
+        pendingDropStash = undefined
+        pendingRemoveWorktree = undefined
         void render()
       } else if ((key.name === 'up' || key.name === 'k') && focus === 'branches') {
         moveBranchSelection(-1)
@@ -869,10 +1041,108 @@ export async function startInteractiveLog(
         moveStatusSelection(-1)
       } else if ((key.name === 'down' || key.name === 'j') && focus === 'status') {
         moveStatusSelection(1)
+      } else if ((key.name === 'up' || key.name === 'k') && focus === 'workspace') {
+        moveWorkspaceSelection(-1)
+      } else if ((key.name === 'down' || key.name === 'j') && focus === 'workspace') {
+        moveWorkspaceSelection(1)
+      } else if ((sequence === '[' || key.name === 'left') && focus === 'workspace') {
+        toggleWorkspaceSection()
+      } else if ((sequence === ']' || key.name === 'right') && focus === 'workspace') {
+        toggleWorkspaceSection()
       } else if ((sequence === '[' || key.name === 'left') && focus === 'status') {
         moveStatusHunkSelection(-1)
       } else if ((sequence === ']' || key.name === 'right') && focus === 'status') {
         moveStatusHunkSelection(1)
+      } else if (key.name === 's' && focus === 'workspace') {
+        startInputPrompt({
+          kind: 'create-stash',
+          label: 'Create stash message',
+          value: '',
+          sourceRef: 'HEAD',
+        })
+      } else if (key.name === 'a' && focus === 'workspace' && workspaceSection === 'stashes') {
+        const stash = selectedStash()
+
+        if (stash) {
+          void runBranchAction(() => applyStash(git, stash), true, 'Applying stash...')
+        }
+      } else if (sequence === 'P' && focus === 'workspace' && workspaceSection === 'stashes') {
+        const stash = selectedStash()
+
+        if (stash) {
+          void runBranchAction(() => popStash(git, stash), true, 'Popping stash...')
+        }
+      } else if (key.name === 'd' && focus === 'workspace' && workspaceSection === 'stashes') {
+        const stash = selectedStash()
+
+        if (stash) {
+          pendingDropStash = stash.ref
+          statusMessage = `Press D to confirm dropping ${stash.ref}`
+          statusDetails = undefined
+          void render()
+        }
+      } else if (sequence === 'D' && focus === 'workspace' && workspaceSection === 'stashes') {
+        const stash = selectedStash()
+
+        if (stash && pendingDropStash === stash.ref) {
+          void runBranchAction(() => dropStash(git, stash), true, 'Dropping stash...')
+        }
+      } else if (key.name === 'i' && focus === 'workspace' && workspaceSection === 'stashes') {
+        const stash = selectedStash()
+
+        if (stash) {
+          void runBranchAction(async () => {
+            stashDiffSummary = await getStashDiffSummary(git, stash.ref)
+
+            return {
+              ok: true,
+              message: `Inspecting ${stash.ref}`,
+            }
+          }, false, 'Loading stash diff...')
+        }
+      } else if (key.name === 'w' && focus === 'workspace') {
+        const ref = selectedRef()
+
+        if (ref) {
+          startInputPrompt({
+            kind: 'create-worktree',
+            label: `New worktree path from ${ref}`,
+            value: '',
+            sourceRef: ref,
+          })
+        }
+      } else if (sequence === 'B' && focus === 'workspace') {
+        const ref = selectedRef()
+
+        if (ref) {
+          startInputPrompt({
+            kind: 'create-branch-worktree-path',
+            label: `New branch worktree path from ${ref}`,
+            value: '',
+            sourceRef: ref,
+          })
+        }
+      } else if (key.name === 'x' && focus === 'workspace' && workspaceSection === 'worktrees') {
+        const selectedWorktree = selectedWorkspaceWorktree()
+
+        if (selectedWorktree) {
+          pendingRemoveWorktree = selectedWorktree.path
+          statusMessage = `Press X to confirm removing ${selectedWorktree.path}`
+          statusDetails = undefined
+          void render()
+        }
+      } else if (sequence === 'X' && focus === 'workspace' && workspaceSection === 'worktrees') {
+        const selectedWorktree = selectedWorkspaceWorktree()
+
+        if (selectedWorktree && pendingRemoveWorktree === selectedWorktree.path) {
+          void runBranchAction(() => removeWorktree(git, selectedWorktree), true, 'Removing worktree...')
+        }
+      } else if (key.name === 'o' && focus === 'workspace' && workspaceSection === 'worktrees') {
+        const selectedWorktree = selectedWorkspaceWorktree()
+
+        if (selectedWorktree) {
+          void runBranchAction(() => Promise.resolve(worktreePathAction(selectedWorktree)), false)
+        }
       } else if (key.name === 'return' && focus === 'status') {
         const hunk = selectedStatusHunk()
 
@@ -1175,6 +1445,8 @@ export async function startInteractiveLog(
       refreshPullRequest(),
       refreshTags(),
       refreshWorktree(),
+      refreshStashes(),
+      refreshWorktreeList(),
     ])
       .then(async () => {
         await refreshStatusHunks()
@@ -1186,6 +1458,8 @@ export async function startInteractiveLog(
         tags = undefined
         worktree = undefined
         statusHunks = undefined
+        stashes = undefined
+        worktreeList = undefined
       })
     void render()
   })

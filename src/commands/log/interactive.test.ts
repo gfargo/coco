@@ -6,6 +6,8 @@ import { PullRequestOverview } from './pullRequestData'
 import { TagOverview, TagRangeSummary } from './tagData'
 import { WorktreeOverview } from './statusData'
 import { WorktreeHunkOverview } from './statusHunks'
+import { StashOverview } from './stashData'
+import { WorktreeOverview as WorktreeListOverview } from './worktreeData'
 
 const rows: GitLogRow[] = [
   {
@@ -148,6 +150,43 @@ const statusHunks = {
   ],
 } as WorktreeHunkOverview
 
+const stashOverview: StashOverview = {
+  stashes: [
+    {
+      ref: 'stash@{0}',
+      hash: 'abc123',
+      date: '2026-04-28 09:00:00 -0400',
+      branch: 'main',
+      message: 'save local edits',
+      files: ['src/a.ts', 'src/b.ts'],
+    },
+  ],
+}
+
+const worktreeList: WorktreeListOverview = {
+  currentPath: '/repo',
+  worktrees: [
+    {
+      path: '/repo',
+      head: 'abc123',
+      branch: 'main',
+      detached: false,
+      bare: false,
+      current: true,
+      dirty: false,
+    },
+    {
+      path: '/repo-feature',
+      head: 'def456',
+      branch: 'feature/log',
+      detached: false,
+      bare: false,
+      current: false,
+      dirty: true,
+    },
+  ],
+}
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
     const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, worktree, {}, {
@@ -228,6 +267,70 @@ describe('log interactive renderer', () => {
 
     expect(output).toContain('Pending hunk revert: press Z to revert selected hunk')
     expect(output).toContain('> [U] @@ -1,1 +1,1 @@ -old +new')
+  })
+
+  it('renders stash and worktree workspace controls', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'workspace',
+        workspaceSection: 'stashes',
+        stashIndex: 0,
+      },
+      {
+        height: 80,
+        width: 140,
+      },
+      {
+        stashes: stashOverview,
+        worktreeList,
+        stashDiffSummary: [' src/a.ts | 2 +-', ' 1 file changed'],
+      }
+    )
+
+    expect(output).toContain('Focus: workspace')
+    expect(output).toContain('Workspace: stashes')
+    expect(output).toContain('> stash@{0} main: save local edits 2 file(s)')
+    expect(output).toContain('  feature/log dirty /repo-feature')
+    expect(output).toContain('src/a.ts | 2 +-')
+    expect(output).toContain('s stash')
+    expect(output).toContain('B branch+worktree')
+  })
+
+  it('renders workspace destructive confirmations', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'workspace',
+        workspaceSection: 'worktrees',
+        worktreeIndex: 1,
+        pendingRemoveWorktree: '/repo-feature',
+      },
+      {
+        height: 80,
+        width: 140,
+      },
+      {
+        stashes: stashOverview,
+        worktreeList,
+      }
+    )
+
+    expect(output).toContain('Workspace: worktrees')
+    expect(output).toContain('>  feature/log dirty /repo-feature')
+    expect(output).toContain('Pending worktree remove: press X to remove /repo-feature')
   })
 
   it('renders branch focus, status, and pending delete prompts', () => {
