@@ -1,5 +1,13 @@
 import readline from 'readline'
 import { SimpleGit } from 'simple-git'
+import {
+  BranchActionResult,
+  checkoutBranch,
+  deleteBranch,
+  fetchRemotes,
+  pullCurrentBranch,
+  pushCurrentBranch,
+} from './branchActions'
 import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
 import {
@@ -19,7 +27,16 @@ type RenderInteractiveLogOptions = {
   width?: number
 }
 
-const DEFAULT_HEIGHT = 40
+type LogTuiFocus = 'commits' | 'branches'
+
+type LogTuiRenderUi = {
+  focus?: LogTuiFocus
+  branchIndex?: number
+  statusMessage?: string
+  pendingDeleteBranch?: string
+}
+
+const DEFAULT_HEIGHT = 52
 const DEFAULT_WIDTH = 120
 
 function truncate(value: string, width: number): string {
@@ -84,20 +101,39 @@ function formatDivergence(branch: BranchRef): string {
   return `+${branch.ahead}/-${branch.behind} vs ${branch.upstream}`
 }
 
-function renderBranchOverview(overview: BranchOverview | undefined, width: number): string[] {
+function getBranchList(overview: BranchOverview | undefined): BranchRef[] {
+  if (!overview) {
+    return []
+  }
+
+  return [...overview.localBranches, ...overview.remoteBranches]
+}
+
+function renderBranchOverview(
+  overview: BranchOverview | undefined,
+  ui: LogTuiRenderUi,
+  width: number
+): string[] {
   if (!overview) {
     return ['Branches: unavailable']
   }
 
   const dirty = overview.dirty ? 'dirty worktree' : 'clean worktree'
   const current = overview.localBranches.find((branch) => branch.current)
+  const selectedBranches = getBranchList(overview)
+  const isBranchFocused = ui.focus === 'branches'
   const localBranches = overview.localBranches
     .slice(0, 6)
     .map((branch) => {
       const marker = branch.current ? '*' : ' '
-      return `${marker} ${branch.shortName} ${formatDivergence(branch)}`
+      const selected = isBranchFocused && selectedBranches[ui.branchIndex || 0] === branch ? '>' : ' '
+      return `${selected}${marker} ${branch.shortName} ${formatDivergence(branch)}`
     })
-  const remoteBranches = overview.remoteBranches.slice(0, 6).map((branch) => `  ${branch.shortName}`)
+  const remoteBranches = overview.remoteBranches.slice(0, 6).map((branch) => {
+    const selected = isBranchFocused && selectedBranches[ui.branchIndex || 0] === branch ? '>' : ' '
+
+    return `${selected}  ${branch.shortName}`
+  })
   const hiddenLocal = overview.localBranches.length > localBranches.length
     ? [`  ... ${overview.localBranches.length - localBranches.length} more local branch(es)`]
     : []
@@ -108,6 +144,9 @@ function renderBranchOverview(overview: BranchOverview | undefined, width: numbe
   return [
     `Branches: ${overview.currentBranch || '<detached>'} | ${dirty}`,
     current ? `Upstream: ${formatDivergence(current)}` : 'Upstream: none',
+    ui.pendingDeleteBranch
+      ? `Pending delete: press D to delete ${ui.pendingDeleteBranch}`
+      : 'Branch actions: tab focus | enter checkout/track | f fetch | p push | P pull | d delete',
     'Local:',
     ...(localBranches.length ? localBranches : ['  No local branches found.']),
     'Remote:',
@@ -149,6 +188,7 @@ export function renderInteractiveLog(
   state: LogTuiState,
   detail?: GitCommitDetail,
   branches?: BranchOverview,
+  ui: LogTuiRenderUi = {},
   options: RenderInteractiveLogOptions = {}
 ): string {
   const height = options.height || process.stdout.rows || DEFAULT_HEIGHT
@@ -156,13 +196,14 @@ export function renderInteractiveLog(
   const selected = getSelectedCommit(state)
   const filter = state.filter ? state.filter : '<none>'
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
+  const focus = ui.focus || 'commits'
   const help = state.showHelp
-    ? 'Keys: up/down or j/k move | / search | g graph | ? help | q quit'
+    ? 'Keys: tab focus | up/down or j/k move | / search | enter checkout | g graph | f fetch | q quit'
     : 'Press ? for help'
   const detailHeader = selected
     ? `Selected: ${selected.shortHash} ${selected.message}`
     : 'Selected: none'
-  const branchLines = renderBranchOverview(branches, width).slice(0, 12)
+  const branchLines = renderBranchOverview(branches, ui, width).slice(0, 12)
   const listHeight = Math.max(4, Math.floor(height * 0.35))
   const detailHeight = Math.max(6, height - listHeight - branchLines.length - 10)
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
@@ -170,8 +211,9 @@ export function renderInteractiveLog(
 
   return [
     'coco log',
-    `${state.filteredCommits.length}/${state.commits.length} commits | ${filterPrompt} | ${graphMode}`,
+    `${state.filteredCommits.length}/${state.commits.length} commits | Focus: ${focus} | ${filterPrompt} | ${graphMode}`,
     help,
+    ui.statusMessage ? truncate(`Status: ${ui.statusMessage}`, width) : '',
     '',
     ...branchLines,
     '',
@@ -193,6 +235,10 @@ export async function startInteractiveLog(
   let state = createLogTuiState(rows)
   const details = new Map<string, GitCommitDetail>()
   let branches: BranchOverview | undefined
+  let focus: LogTuiFocus = 'commits'
+  let branchIndex = 0
+  let statusMessage: string | undefined
+  let pendingDeleteBranch: string | undefined
 
   async function loadSelectedDetail(): Promise<GitCommitDetail | undefined> {
     const selected = getSelectedCommit(state)
@@ -240,13 +286,20 @@ export async function startInteractiveLog(
 
     const render = async () => {
       const version = ++renderVersion
-      output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches)}\n`, 'utf8')
+      const ui = {
+        focus,
+        branchIndex,
+        statusMessage,
+        pendingDeleteBranch,
+      }
+
+      output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches, ui)}\n`, 'utf8')
 
       try {
         const detail = await loadSelectedDetail()
 
         if (!closed && version === renderVersion) {
-          output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, detail, branches)}\n`, 'utf8')
+          output.write(`\x1b[2J\x1b[H${renderInteractiveLog(state, detail, branches, ui)}\n`, 'utf8')
         }
       } catch (error) {
         reject(error)
@@ -256,6 +309,38 @@ export async function startInteractiveLog(
     const applyAndRender = (nextState: LogTuiState) => {
       state = nextState
       void render()
+    }
+
+    const refreshBranches = async () => {
+      branches = await getBranchOverview(git)
+      branchIndex = Math.max(0, Math.min(branchIndex, getBranchList(branches).length - 1))
+    }
+
+    const setActionResult = async (result: BranchActionResult, refresh = true) => {
+      statusMessage = result.message
+      pendingDeleteBranch = undefined
+
+      if (refresh) {
+        await refreshBranches()
+      }
+
+      await render()
+    }
+
+    const selectedBranch = () => getBranchList(branches)[branchIndex]
+
+    const moveBranchSelection = (delta: number) => {
+      const branchesList = getBranchList(branches)
+
+      branchIndex = Math.max(0, Math.min(branchIndex + delta, branchesList.length - 1))
+      pendingDeleteBranch = undefined
+      void render()
+    }
+
+    const runBranchAction = async (action: () => Promise<BranchActionResult>, refresh = true) => {
+      statusMessage = 'Running branch action...'
+      await render()
+      await setActionResult(await action(), refresh)
     }
 
     const onFilterKeypress = (sequence: string | undefined, key: readline.Key) => {
@@ -290,7 +375,50 @@ export async function startInteractiveLog(
         return
       }
 
-      if (key.name === 'up' || key.name === 'k') {
+      if (key.name === 'tab') {
+        focus = focus === 'commits' ? 'branches' : 'commits'
+        pendingDeleteBranch = undefined
+        void render()
+      } else if ((key.name === 'up' || key.name === 'k') && focus === 'branches') {
+        moveBranchSelection(-1)
+      } else if ((key.name === 'down' || key.name === 'j') && focus === 'branches') {
+        moveBranchSelection(1)
+      } else if (key.name === 'return' && focus === 'branches') {
+        const branch = selectedBranch()
+
+        if (branch) {
+          void runBranchAction(() => checkoutBranch(git, branch))
+        }
+      } else if (key.name === 'f') {
+        void runBranchAction(() => fetchRemotes(git))
+      } else if (key.name === 'p' && sequence !== 'P') {
+        void runBranchAction(() => pushCurrentBranch(git))
+      } else if (sequence === 'P') {
+        void runBranchAction(() => pullCurrentBranch(git))
+      } else if (key.name === 'd' && focus === 'branches') {
+        const branch = selectedBranch()
+
+        if (branch) {
+          pendingDeleteBranch = branch.shortName
+          statusMessage = `Press D to confirm deleting ${branch.shortName}`
+          void render()
+        }
+      } else if (sequence === 'D' && focus === 'branches') {
+        const branch = selectedBranch()
+
+        if (branch && pendingDeleteBranch === branch.shortName) {
+          void runBranchAction(() => deleteBranch(git, branch))
+        }
+      } else if (key.name === 'r') {
+        void runBranchAction(async () => {
+          await refreshBranches()
+
+          return {
+            ok: true,
+            message: 'Refreshed branch overview',
+          }
+        }, false)
+      } else if (key.name === 'up' || key.name === 'k') {
         applyAndRender(applyLogTuiAction(state, { type: 'move', delta: -1 }))
       } else if (key.name === 'down' || key.name === 'j') {
         applyAndRender(applyLogTuiAction(state, { type: 'move', delta: 1 }))
@@ -310,9 +438,8 @@ export async function startInteractiveLog(
     }
 
     input.on('keypress', onKeypress)
-    void getBranchOverview(git)
-      .then((overview) => {
-        branches = overview
+    void refreshBranches()
+      .then(() => {
         void render()
       })
       .catch(() => {
