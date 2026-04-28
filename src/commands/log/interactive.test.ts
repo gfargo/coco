@@ -168,9 +168,12 @@ describe('log interactive renderer', () => {
     expect(output).toContain('0.33.0')
     expect(output).toContain('Status: 1 staged, 1 unstaged, 1 untracked')
     expect(output).toContain('c commit')
+    expect(output).toContain('e amend')
+    expect(output).toContain('w reword')
     expect(output).toContain('S split plan')
     expect(output).toContain('A split apply')
     expect(output).toContain('Keys:')
+    expect(output).toContain('Commit actions: e amend HEAD | w reword HEAD')
   })
 
   it('renders selected file hunks and hunk staging controls', () => {
@@ -265,6 +268,35 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Pull request: no PR for feature/log-prs')
   })
 
+  it('renders reword prompts as a focused commit action', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'commits',
+        inputPrompt: {
+          kind: 'reword-commit',
+          label: 'Reword HEAD',
+          value: 'feat: updated title',
+          sourceRef: 'abc1234',
+          commitHash: 'abc1234',
+        },
+      },
+      {
+        height: 70,
+        width: 120,
+      }
+    )
+
+    expect(output).toContain('Reword HEAD: feat: updated title_')
+    expect(output).toContain('Commit actions: e amend HEAD | w reword HEAD')
+  })
+
   it('renders PR create prompts and draft mode', () => {
     const output = renderInteractiveLog(
       createLogTuiState(rows),
@@ -344,6 +376,5 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Focus: status')
     expect(output).toContain('>  M unstaged.ts')
     expect(output).toContain('Pending revert: press Z to revert unstaged.ts')
-    expect(output).toContain('space stage')
   })
 })

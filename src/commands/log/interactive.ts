@@ -14,6 +14,7 @@ import {
 import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
 import { runCommitWorkflow } from './commitWorkflowActions'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
+import { amendHeadCommit, rewordHeadCommit } from './historyActions'
 import { createPullRequest, openPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
@@ -62,7 +63,13 @@ type LogTuiRenderUi = {
   pendingRevertFile?: string
 }
 
-type LogTuiInputKind = 'create-branch' | 'rename-branch' | 'create-pr-title' | 'create-tag' | 'create-annotated-tag'
+type LogTuiInputKind =
+  | 'create-branch'
+  | 'rename-branch'
+  | 'create-pr-title'
+  | 'create-tag'
+  | 'create-annotated-tag'
+  | 'reword-commit'
 
 type LogTuiInputPrompt = {
   kind: LogTuiInputKind
@@ -72,6 +79,7 @@ type LogTuiInputPrompt = {
   branchName?: string
   baseRef?: string
   tagName?: string
+  commitHash?: string
 }
 
 const DEFAULT_HEIGHT = 70
@@ -359,8 +367,11 @@ export function renderInteractiveLog(
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
   const focus = ui.focus || 'commits'
   const help = state.showHelp
-    ? 'Keys: tab focus | up/down move | space stage | n branch | t tag | C PR | f fetch | q quit'
+    ? 'Keys: tab focus | up/down move | n branch | t tag | C PR | c commit | e amend | w reword | q quit'
     : 'Press ? for help'
+  const commitActions = focus === 'commits'
+    ? 'Commit actions: e amend HEAD | w reword HEAD'
+    : ''
   const detailHeader = selected
     ? `Selected: ${selected.shortHash} ${selected.message}`
     : 'Selected: none'
@@ -386,6 +397,7 @@ export function renderInteractiveLog(
     'coco log',
     `${state.filteredCommits.length}/${state.commits.length} commits | Focus: ${focus} | ${filterPrompt} | ${graphMode}`,
     help,
+    commitActions,
     ui.statusMessage ? truncate(`Status: ${ui.statusMessage}`, width) : '',
     ui.inputPrompt ? truncate(`${ui.inputPrompt.label}: ${ui.inputPrompt.value}_`, width) : '',
     '',
@@ -733,6 +745,12 @@ export async function startInteractiveLog(
         await runBranchAction(() => createLightweightTag(git, value, prompt.sourceRef))
       } else if (prompt.kind === 'create-annotated-tag') {
         await runBranchAction(() => createAnnotatedTag(git, value, prompt.sourceRef, `release ${value}`))
+      } else if (prompt.kind === 'reword-commit' && prompt.commitHash) {
+        await runBranchAction(
+          () => rewordHeadCommit(git, prompt.commitHash as string, value),
+          true,
+          'Rewording HEAD commit...'
+        )
       }
     }
 
@@ -900,6 +918,26 @@ export async function startInteractiveLog(
           true,
           'Applying commit split plan...'
         )
+      } else if (key.name === 'e') {
+        const selected = getSelectedCommit(state)
+
+        void runBranchAction(
+          () => amendHeadCommit(git, selected?.hash),
+          true,
+          'Amending HEAD commit...'
+        )
+      } else if (key.name === 'w') {
+        const selected = getSelectedCommit(state)
+
+        if (selected) {
+          startInputPrompt({
+            kind: 'reword-commit',
+            label: 'Reword HEAD',
+            value: selected.message,
+            sourceRef: selected.hash,
+            commitHash: selected.hash,
+          })
+        }
       } else if (key.name === 'return' && focus === 'branches') {
         const branch = selectedBranch()
 
