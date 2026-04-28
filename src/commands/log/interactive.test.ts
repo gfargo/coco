@@ -4,6 +4,7 @@ import { renderInteractiveLog } from './interactive'
 import { BranchOverview } from './branchData'
 import { PullRequestOverview } from './pullRequestData'
 import { TagOverview, TagRangeSummary } from './tagData'
+import { WorktreeOverview } from './statusData'
 
 const rows: GitLogRow[] = [
   {
@@ -105,9 +106,35 @@ const tagRangeSummary: TagRangeSummary = {
   changedFiles: ['src/commands/log/interactive.ts'],
 }
 
+const worktree: WorktreeOverview = {
+  stagedCount: 1,
+  unstagedCount: 1,
+  untrackedCount: 1,
+  files: [
+    {
+      path: 'staged.ts',
+      indexStatus: 'M',
+      worktreeStatus: ' ',
+      state: 'staged',
+    },
+    {
+      path: 'unstaged.ts',
+      indexStatus: ' ',
+      worktreeStatus: 'M',
+      state: 'unstaged',
+    },
+    {
+      path: 'new.ts',
+      indexStatus: '?',
+      worktreeStatus: '?',
+      state: 'untracked',
+    },
+  ],
+}
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
-    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, {}, {
+    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, worktree, {}, {
       height: 70,
       width: 100,
     })
@@ -123,6 +150,7 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Pull request: #123 OPEN feature/log-prs -> main')
     expect(output).toContain('Add PR workflow')
     expect(output).toContain('0.33.0')
+    expect(output).toContain('Status: 1 staged, 1 unstaged, 1 untracked')
     expect(output).toContain('Keys:')
   })
 
@@ -134,6 +162,7 @@ describe('log interactive renderer', () => {
       pullRequest,
       tags,
       undefined,
+      worktree,
       {
         focus: 'branches',
         branchIndex: 0,
@@ -165,6 +194,7 @@ describe('log interactive renderer', () => {
       },
       tags,
       undefined,
+      worktree,
       {
         focus: 'branches',
         branchIndex: 0,
@@ -196,6 +226,7 @@ describe('log interactive renderer', () => {
       pullRequest,
       tags,
       undefined,
+      worktree,
       {
         inputPrompt: {
           kind: 'create-pr-title',
@@ -225,6 +256,7 @@ describe('log interactive renderer', () => {
       pullRequest,
       tags,
       tagRangeSummary,
+      worktree,
       {
         focus: 'tags',
         tagIndex: 0,
@@ -240,5 +272,31 @@ describe('log interactive renderer', () => {
     expect(output).toContain('> 0.33.0 2026-04-27 abc1234 release v0.33.0')
     expect(output).toContain('Pending tag delete: press X to delete 0.33.0')
     expect(output).toContain('Range 0.33.0..HEAD: 4 commits, 1 authors, 1 files')
+  })
+
+  it('renders status focus and revert confirmation', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'status',
+        statusIndex: 1,
+        pendingRevertFile: 'unstaged.ts',
+      },
+      {
+        height: 70,
+        width: 100,
+      }
+    )
+
+    expect(output).toContain('Focus: status')
+    expect(output).toContain('>  M unstaged.ts')
+    expect(output).toContain('Pending revert: press Z to revert unstaged.ts')
+    expect(output).toContain('space stage')
   })
 })

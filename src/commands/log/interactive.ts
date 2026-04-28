@@ -15,6 +15,8 @@ import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
 import { createPullRequest, openPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
+import { revertFile, stageFile, unstageFile } from './statusActions'
+import { WorktreeFile, WorktreeOverview, getWorktreeOverview } from './statusData'
 import {
   createAnnotatedTag,
   createLightweightTag,
@@ -40,7 +42,7 @@ type RenderInteractiveLogOptions = {
   width?: number
 }
 
-type LogTuiFocus = 'commits' | 'branches' | 'tags'
+type LogTuiFocus = 'commits' | 'branches' | 'tags' | 'status'
 
 type LogTuiRenderUi = {
   focus?: LogTuiFocus
@@ -52,6 +54,8 @@ type LogTuiRenderUi = {
   inputPrompt?: LogTuiInputPrompt
   pullRequestDraft?: boolean
   tagIndex?: number
+  statusIndex?: number
+  pendingRevertFile?: string
 }
 
 type LogTuiInputKind = 'create-branch' | 'rename-branch' | 'create-pr-title' | 'create-tag' | 'create-annotated-tag'
@@ -262,6 +266,35 @@ function renderTagOverview(
   ].map((line) => truncate(line, width))
 }
 
+function renderStatusOverview(
+  overview: WorktreeOverview | undefined,
+  ui: LogTuiRenderUi,
+  width: number
+): string[] {
+  if (!overview) {
+    return ['Status: unavailable']
+  }
+
+  const files = overview.files.slice(0, 8).map((file, index) => {
+    const selected = ui.focus === 'status' && (ui.statusIndex || 0) === index ? '>' : ' '
+
+    return `${selected} ${file.indexStatus}${file.worktreeStatus} ${file.path}`
+  })
+  const hiddenFiles = overview.files.length > files.length
+    ? [`  ... ${overview.files.length - files.length} more file(s)`]
+    : []
+  const actionLine = ui.pendingRevertFile
+    ? `Pending revert: press Z to revert ${ui.pendingRevertFile}`
+    : 'Status actions: space stage/unstage | z revert selected file'
+
+  return [
+    `Status: ${overview.stagedCount} staged, ${overview.unstagedCount} unstaged, ${overview.untrackedCount} untracked`,
+    ...(files.length ? files : ['  Worktree clean.']),
+    ...hiddenFiles,
+    actionLine,
+  ].map((line) => truncate(line, width))
+}
+
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
     return ['Loading selected commit details...']
@@ -297,6 +330,7 @@ export function renderInteractiveLog(
   pullRequest?: PullRequestOverview,
   tags?: TagOverview,
   tagRangeSummary?: TagRangeSummary,
+  worktree?: WorktreeOverview,
   ui: LogTuiRenderUi = {},
   options: RenderInteractiveLogOptions = {}
 ): string {
@@ -307,7 +341,7 @@ export function renderInteractiveLog(
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
   const focus = ui.focus || 'commits'
   const help = state.showHelp
-    ? 'Keys: tab focus | up/down move | enter checkout | n branch | t tag | C PR | f fetch | q quit'
+    ? 'Keys: tab focus | up/down move | space stage | n branch | t tag | C PR | f fetch | q quit'
     : 'Press ? for help'
   const detailHeader = selected
     ? `Selected: ${selected.shortHash} ${selected.message}`
@@ -315,10 +349,17 @@ export function renderInteractiveLog(
   const branchLines = renderBranchOverview(branches, ui, width).slice(0, 12)
   const pullRequestLines = renderPullRequestOverview(pullRequest, ui, width).slice(0, 4)
   const tagLines = renderTagOverview(tags, tagRangeSummary, ui, width).slice(0, 10)
+  const statusLines = renderStatusOverview(worktree, ui, width).slice(0, 10)
   const listHeight = Math.max(4, Math.floor(height * 0.35))
   const detailHeight = Math.max(
     6,
-    height - listHeight - branchLines.length - pullRequestLines.length - tagLines.length - 11
+    height -
+      listHeight -
+      branchLines.length -
+      pullRequestLines.length -
+      tagLines.length -
+      statusLines.length -
+      11
   )
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
   const filterPrompt = state.filterMode ? `Search: ${state.filter}_` : `Filter: ${filter}`
@@ -333,6 +374,7 @@ export function renderInteractiveLog(
     ...branchLines,
     ...pullRequestLines,
     ...tagLines,
+    ...statusLines,
     '',
     ...renderCommitList(state, listHeight, width),
     '',
@@ -355,13 +397,16 @@ export async function startInteractiveLog(
   let pullRequest: PullRequestOverview | undefined
   let tags: TagOverview | undefined
   let tagRangeSummary: TagRangeSummary | undefined
+  let worktree: WorktreeOverview | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
   let tagIndex = 0
+  let statusIndex = 0
   let statusMessage: string | undefined
   let pendingDeleteBranch: string | undefined
   let pendingDeleteTag: string | undefined
   let pendingDeleteRemoteTag: string | undefined
+  let pendingRevertFile: string | undefined
   let inputPrompt: LogTuiInputPrompt | undefined
   let pullRequestDraft = false
 
@@ -384,17 +429,26 @@ export async function startInteractiveLog(
 
   if (!input.isTTY || !output.isTTY) {
     try {
-      [branches, pullRequest, tags] = await Promise.all([
+      [branches, pullRequest, tags, worktree] = await Promise.all([
         getBranchOverview(git),
         getPullRequestOverview(git),
         getTagOverview(git),
+        getWorktreeOverview(git),
       ])
     } catch {
       branches = undefined
     }
 
     output.write(
-      `${renderInteractiveLog(state, await loadSelectedDetail(), branches, pullRequest, tags, tagRangeSummary)}\n`,
+      `${renderInteractiveLog(
+        state,
+        await loadSelectedDetail(),
+        branches,
+        pullRequest,
+        tags,
+        tagRangeSummary,
+        worktree
+      )}\n`,
       'utf8'
     )
     return
@@ -425,13 +479,24 @@ export async function startInteractiveLog(
         pendingDeleteBranch,
         pendingDeleteTag,
         pendingDeleteRemoteTag,
+        pendingRevertFile,
         inputPrompt,
         pullRequestDraft,
         tagIndex,
+        statusIndex,
       }
 
       output.write(
-        `\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches, pullRequest, tags, tagRangeSummary, ui)}\n`,
+        `\x1b[2J\x1b[H${renderInteractiveLog(
+          state,
+          undefined,
+          branches,
+          pullRequest,
+          tags,
+          tagRangeSummary,
+          worktree,
+          ui
+        )}\n`,
         'utf8'
       )
 
@@ -440,7 +505,16 @@ export async function startInteractiveLog(
 
         if (!closed && version === renderVersion) {
           output.write(
-            `\x1b[2J\x1b[H${renderInteractiveLog(state, detail, branches, pullRequest, tags, tagRangeSummary, ui)}\n`,
+            `\x1b[2J\x1b[H${renderInteractiveLog(
+              state,
+              detail,
+              branches,
+              pullRequest,
+              tags,
+              tagRangeSummary,
+              worktree,
+              ui
+            )}\n`,
             'utf8'
           )
         }
@@ -468,11 +542,17 @@ export async function startInteractiveLog(
       tagIndex = Math.max(0, Math.min(tagIndex, (tags?.tags.length || 1) - 1))
     }
 
+    const refreshWorktree = async () => {
+      worktree = await getWorktreeOverview(git)
+      statusIndex = Math.max(0, Math.min(statusIndex, (worktree?.files.length || 1) - 1))
+    }
+
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
       pendingDeleteBranch = undefined
       pendingDeleteTag = undefined
       pendingDeleteRemoteTag = undefined
+      pendingRevertFile = undefined
       inputPrompt = undefined
 
       if (refresh) {
@@ -480,6 +560,7 @@ export async function startInteractiveLog(
           refreshBranches(),
           refreshPullRequest(),
           refreshTags(),
+          refreshWorktree(),
         ])
       }
 
@@ -488,6 +569,7 @@ export async function startInteractiveLog(
 
     const selectedBranch = () => getBranchList(branches)[branchIndex]
     const selectedTag = () => tags?.tags[tagIndex]
+    const selectedStatusFile = (): WorktreeFile | undefined => worktree?.files[statusIndex]
 
     const selectedRef = () => {
       if (focus === 'branches') {
@@ -545,6 +627,14 @@ export async function startInteractiveLog(
       void render()
     }
 
+    const moveStatusSelection = (delta: number) => {
+      const fileCount = worktree?.files.length || 0
+
+      statusIndex = Math.max(0, Math.min(statusIndex + delta, fileCount - 1))
+      pendingRevertFile = undefined
+      void render()
+    }
+
     const runBranchAction = async (action: () => Promise<BranchActionResult>, refresh = true) => {
       statusMessage = 'Running branch action...'
       await render()
@@ -557,6 +647,7 @@ export async function startInteractiveLog(
       pendingDeleteBranch = undefined
       pendingDeleteTag = undefined
       pendingDeleteRemoteTag = undefined
+      pendingRevertFile = undefined
       void render()
     }
 
@@ -676,10 +767,17 @@ export async function startInteractiveLog(
       }
 
       if (key.name === 'tab') {
-        focus = focus === 'commits' ? 'branches' : focus === 'branches' ? 'tags' : 'commits'
+        focus = focus === 'commits'
+          ? 'branches'
+          : focus === 'branches'
+            ? 'tags'
+            : focus === 'tags'
+              ? 'status'
+              : 'commits'
         pendingDeleteBranch = undefined
         pendingDeleteTag = undefined
         pendingDeleteRemoteTag = undefined
+        pendingRevertFile = undefined
         void render()
       } else if ((key.name === 'up' || key.name === 'k') && focus === 'branches') {
         moveBranchSelection(-1)
@@ -689,6 +787,30 @@ export async function startInteractiveLog(
         moveTagSelection(-1)
       } else if ((key.name === 'down' || key.name === 'j') && focus === 'tags') {
         moveTagSelection(1)
+      } else if ((key.name === 'up' || key.name === 'k') && focus === 'status') {
+        moveStatusSelection(-1)
+      } else if ((key.name === 'down' || key.name === 'j') && focus === 'status') {
+        moveStatusSelection(1)
+      } else if (key.name === 'space' && focus === 'status') {
+        const file = selectedStatusFile()
+
+        if (file) {
+          void runBranchAction(() => file.state === 'staged' ? unstageFile(git, file) : stageFile(git, file))
+        }
+      } else if (key.name === 'z' && focus === 'status') {
+        const file = selectedStatusFile()
+
+        if (file) {
+          pendingRevertFile = file.path
+          statusMessage = `Press Z to confirm reverting ${file.path}`
+          void render()
+        }
+      } else if (sequence === 'Z' && focus === 'status') {
+        const file = selectedStatusFile()
+
+        if (file && pendingRevertFile === file.path) {
+          void runBranchAction(() => revertFile(git, file))
+        }
       } else if (key.name === 'return' && focus === 'branches') {
         const branch = selectedBranch()
 
@@ -721,6 +843,7 @@ export async function startInteractiveLog(
             refreshBranches(),
             refreshPullRequest(),
             refreshTags(),
+            refreshWorktree(),
           ])
 
           return {
@@ -881,6 +1004,7 @@ export async function startInteractiveLog(
       refreshBranches(),
       refreshPullRequest(),
       refreshTags(),
+      refreshWorktree(),
     ])
       .then(() => {
         void render()
@@ -889,6 +1013,7 @@ export async function startInteractiveLog(
         branches = undefined
         pullRequest = undefined
         tags = undefined
+        worktree = undefined
       })
     void render()
   })
