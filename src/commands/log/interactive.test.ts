@@ -2,6 +2,7 @@ import { GitCommitDetail, GitLogRow } from './data'
 import { createLogTuiState } from './interactiveState'
 import { renderInteractiveLog } from './interactive'
 import { BranchOverview } from './branchData'
+import { PullRequestOverview } from './pullRequestData'
 
 const rows: GitLogRow[] = [
   {
@@ -65,9 +66,28 @@ const branches: BranchOverview = {
   ],
 }
 
+const pullRequest: PullRequestOverview = {
+  available: true,
+  authenticated: true,
+  repository: {
+    owner: 'gfargo',
+    name: 'coco',
+  },
+  currentBranch: 'feature/log-prs',
+  currentPullRequest: {
+    number: 123,
+    title: 'Add PR workflow',
+    url: 'https://github.com/gfargo/coco/pull/123',
+    state: 'OPEN',
+    isDraft: false,
+    headRefName: 'feature/log-prs',
+    baseRefName: 'main',
+  },
+}
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
-    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, {}, {
+    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, {}, {
       height: 52,
       width: 100,
     })
@@ -80,6 +100,8 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Branches: main | dirty worktree')
     expect(output).toContain('* main +1/-2 vs origin/main')
     expect(output).toContain('origin/main')
+    expect(output).toContain('Pull request: #123 OPEN feature/log-prs -> main')
+    expect(output).toContain('Add PR workflow')
     expect(output).toContain('Keys:')
   })
 
@@ -88,6 +110,7 @@ describe('log interactive renderer', () => {
       createLogTuiState(rows),
       detail,
       branches,
+      pullRequest,
       {
         focus: 'branches',
         branchIndex: 0,
@@ -112,6 +135,12 @@ describe('log interactive renderer', () => {
       detail,
       branches,
       {
+        available: true,
+        authenticated: true,
+        currentBranch: 'feature/log-prs',
+        message: 'No pull request found for feature/log-prs.',
+      },
+      {
         focus: 'branches',
         branchIndex: 0,
         inputPrompt: {
@@ -129,7 +158,35 @@ describe('log interactive renderer', () => {
     )
 
     expect(output).toContain('Rename main to: feature/main_')
-    expect(output).toContain('n new')
-    expect(output).toContain('u upstream')
+    expect(output).toContain('n branch')
+    expect(output).toContain('enter checkout')
+    expect(output).toContain('Pull request: no PR for feature/log-prs')
+  })
+
+  it('renders PR create prompts and draft mode', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      {
+        inputPrompt: {
+          kind: 'create-pr-title',
+          label: 'Create draft PR into main',
+          value: 'Add PR workflow',
+          sourceRef: 'feature/log-prs',
+          baseRef: 'main',
+        },
+        pullRequestDraft: true,
+      },
+      {
+        height: 52,
+        width: 100,
+      }
+    )
+
+    expect(output).toContain('Create draft PR into main: Add PR workflow_')
+    expect(output).toContain('C PR')
+    expect(output).toContain('v draft')
   })
 })
