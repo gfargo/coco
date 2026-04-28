@@ -16,6 +16,14 @@ import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
 import { createPullRequest, openPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import {
+  createAnnotatedTag,
+  createLightweightTag,
+  deleteLocalTag,
+  deleteRemoteTag,
+  pushTag,
+} from './tagActions'
+import { TagOverview, TagRangeSummary, getTagOverview, getTagRangeSummary } from './tagData'
+import {
   LogTuiState,
   applyLogTuiAction,
   createLogTuiState,
@@ -32,18 +40,21 @@ type RenderInteractiveLogOptions = {
   width?: number
 }
 
-type LogTuiFocus = 'commits' | 'branches'
+type LogTuiFocus = 'commits' | 'branches' | 'tags'
 
 type LogTuiRenderUi = {
   focus?: LogTuiFocus
   branchIndex?: number
   statusMessage?: string
   pendingDeleteBranch?: string
+  pendingDeleteTag?: string
+  pendingDeleteRemoteTag?: string
   inputPrompt?: LogTuiInputPrompt
   pullRequestDraft?: boolean
+  tagIndex?: number
 }
 
-type LogTuiInputKind = 'create-branch' | 'rename-branch' | 'create-pr-title'
+type LogTuiInputKind = 'create-branch' | 'rename-branch' | 'create-pr-title' | 'create-tag' | 'create-annotated-tag'
 
 type LogTuiInputPrompt = {
   kind: LogTuiInputKind
@@ -52,9 +63,10 @@ type LogTuiInputPrompt = {
   sourceRef: string
   branchName?: string
   baseRef?: string
+  tagName?: string
 }
 
-const DEFAULT_HEIGHT = 52
+const DEFAULT_HEIGHT = 70
 const DEFAULT_WIDTH = 120
 
 function truncate(value: string, width: number): string {
@@ -214,6 +226,42 @@ function renderPullRequestOverview(
   ].map((line) => truncate(line, width))
 }
 
+function renderTagOverview(
+  overview: TagOverview | undefined,
+  summary: TagRangeSummary | undefined,
+  ui: LogTuiRenderUi,
+  width: number
+): string[] {
+  if (!overview) {
+    return ['Tags: unavailable']
+  }
+
+  const tags = overview.tags.slice(0, 6).map((tag, index) => {
+    const selected = ui.focus === 'tags' && (ui.tagIndex || 0) === index ? '>' : ' '
+
+    return `${selected} ${tag.name} ${tag.date} ${tag.hash} ${tag.subject}`
+  })
+  const hiddenTags = overview.tags.length > tags.length
+    ? [`  ... ${overview.tags.length - tags.length} more tag(s)`]
+    : []
+  const deletePrompt = ui.pendingDeleteTag
+    ? `Pending tag delete: press X to delete ${ui.pendingDeleteTag}`
+    : ui.pendingDeleteRemoteTag
+      ? `Pending remote tag delete: press Y to delete origin/${ui.pendingDeleteRemoteTag}`
+      : 'Tag actions: t tag | a annotated | s push | x delete local | y delete remote | R range'
+  const summaryLine = summary
+    ? `Range ${summary.from}..${summary.to}: ${summary.commitCount} commits, ${summary.authors.length} authors, ${summary.changedFiles.length} files`
+    : 'Range: select a tag and press R to compare with HEAD'
+
+  return [
+    'Tags:',
+    ...(tags.length ? tags : ['  No tags found.']),
+    ...hiddenTags,
+    deletePrompt,
+    summaryLine,
+  ].map((line) => truncate(line, width))
+}
+
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
     return ['Loading selected commit details...']
@@ -247,6 +295,8 @@ export function renderInteractiveLog(
   detail?: GitCommitDetail,
   branches?: BranchOverview,
   pullRequest?: PullRequestOverview,
+  tags?: TagOverview,
+  tagRangeSummary?: TagRangeSummary,
   ui: LogTuiRenderUi = {},
   options: RenderInteractiveLogOptions = {}
 ): string {
@@ -257,15 +307,19 @@ export function renderInteractiveLog(
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
   const focus = ui.focus || 'commits'
   const help = state.showHelp
-    ? 'Keys: tab focus | up/down move | enter checkout | n branch | C PR | v draft | f fetch | q quit'
+    ? 'Keys: tab focus | up/down move | enter checkout | n branch | t tag | C PR | f fetch | q quit'
     : 'Press ? for help'
   const detailHeader = selected
     ? `Selected: ${selected.shortHash} ${selected.message}`
     : 'Selected: none'
   const branchLines = renderBranchOverview(branches, ui, width).slice(0, 12)
   const pullRequestLines = renderPullRequestOverview(pullRequest, ui, width).slice(0, 4)
+  const tagLines = renderTagOverview(tags, tagRangeSummary, ui, width).slice(0, 10)
   const listHeight = Math.max(4, Math.floor(height * 0.35))
-  const detailHeight = Math.max(6, height - listHeight - branchLines.length - pullRequestLines.length - 11)
+  const detailHeight = Math.max(
+    6,
+    height - listHeight - branchLines.length - pullRequestLines.length - tagLines.length - 11
+  )
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
   const filterPrompt = state.filterMode ? `Search: ${state.filter}_` : `Filter: ${filter}`
 
@@ -278,6 +332,7 @@ export function renderInteractiveLog(
     '',
     ...branchLines,
     ...pullRequestLines,
+    ...tagLines,
     '',
     ...renderCommitList(state, listHeight, width),
     '',
@@ -298,10 +353,15 @@ export async function startInteractiveLog(
   const details = new Map<string, GitCommitDetail>()
   let branches: BranchOverview | undefined
   let pullRequest: PullRequestOverview | undefined
+  let tags: TagOverview | undefined
+  let tagRangeSummary: TagRangeSummary | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
+  let tagIndex = 0
   let statusMessage: string | undefined
   let pendingDeleteBranch: string | undefined
+  let pendingDeleteTag: string | undefined
+  let pendingDeleteRemoteTag: string | undefined
   let inputPrompt: LogTuiInputPrompt | undefined
   let pullRequestDraft = false
 
@@ -324,16 +384,17 @@ export async function startInteractiveLog(
 
   if (!input.isTTY || !output.isTTY) {
     try {
-      [branches, pullRequest] = await Promise.all([
+      [branches, pullRequest, tags] = await Promise.all([
         getBranchOverview(git),
         getPullRequestOverview(git),
+        getTagOverview(git),
       ])
     } catch {
       branches = undefined
     }
 
     output.write(
-      `${renderInteractiveLog(state, await loadSelectedDetail(), branches, pullRequest)}\n`,
+      `${renderInteractiveLog(state, await loadSelectedDetail(), branches, pullRequest, tags, tagRangeSummary)}\n`,
       'utf8'
     )
     return
@@ -362,12 +423,15 @@ export async function startInteractiveLog(
         branchIndex,
         statusMessage,
         pendingDeleteBranch,
+        pendingDeleteTag,
+        pendingDeleteRemoteTag,
         inputPrompt,
         pullRequestDraft,
+        tagIndex,
       }
 
       output.write(
-        `\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches, pullRequest, ui)}\n`,
+        `\x1b[2J\x1b[H${renderInteractiveLog(state, undefined, branches, pullRequest, tags, tagRangeSummary, ui)}\n`,
         'utf8'
       )
 
@@ -376,7 +440,7 @@ export async function startInteractiveLog(
 
         if (!closed && version === renderVersion) {
           output.write(
-            `\x1b[2J\x1b[H${renderInteractiveLog(state, detail, branches, pullRequest, ui)}\n`,
+            `\x1b[2J\x1b[H${renderInteractiveLog(state, detail, branches, pullRequest, tags, tagRangeSummary, ui)}\n`,
             'utf8'
           )
         }
@@ -399,15 +463,23 @@ export async function startInteractiveLog(
       pullRequest = await getPullRequestOverview(git)
     }
 
+    const refreshTags = async () => {
+      tags = await getTagOverview(git)
+      tagIndex = Math.max(0, Math.min(tagIndex, (tags?.tags.length || 1) - 1))
+    }
+
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
       pendingDeleteBranch = undefined
+      pendingDeleteTag = undefined
+      pendingDeleteRemoteTag = undefined
       inputPrompt = undefined
 
       if (refresh) {
         await Promise.all([
           refreshBranches(),
           refreshPullRequest(),
+          refreshTags(),
         ])
       }
 
@@ -415,10 +487,15 @@ export async function startInteractiveLog(
     }
 
     const selectedBranch = () => getBranchList(branches)[branchIndex]
+    const selectedTag = () => tags?.tags[tagIndex]
 
     const selectedRef = () => {
       if (focus === 'branches') {
         return selectedBranch()?.shortName
+      }
+
+      if (focus === 'tags') {
+        return selectedTag()?.name
       }
 
       return getSelectedCommit(state)?.hash
@@ -459,6 +536,15 @@ export async function startInteractiveLog(
       void render()
     }
 
+    const moveTagSelection = (delta: number) => {
+      const tagCount = tags?.tags.length || 0
+
+      tagIndex = Math.max(0, Math.min(tagIndex + delta, tagCount - 1))
+      pendingDeleteTag = undefined
+      pendingDeleteRemoteTag = undefined
+      void render()
+    }
+
     const runBranchAction = async (action: () => Promise<BranchActionResult>, refresh = true) => {
       statusMessage = 'Running branch action...'
       await render()
@@ -469,6 +555,8 @@ export async function startInteractiveLog(
       inputPrompt = prompt
       statusMessage = undefined
       pendingDeleteBranch = undefined
+      pendingDeleteTag = undefined
+      pendingDeleteRemoteTag = undefined
       void render()
     }
 
@@ -508,6 +596,10 @@ export async function startInteractiveLog(
           body: generatedPullRequestBody(),
           draft: pullRequestDraft,
         }))
+      } else if (prompt.kind === 'create-tag') {
+        await runBranchAction(() => createLightweightTag(git, value, prompt.sourceRef))
+      } else if (prompt.kind === 'create-annotated-tag') {
+        await runBranchAction(() => createAnnotatedTag(git, value, prompt.sourceRef, `release ${value}`))
       }
     }
 
@@ -584,13 +676,19 @@ export async function startInteractiveLog(
       }
 
       if (key.name === 'tab') {
-        focus = focus === 'commits' ? 'branches' : 'commits'
+        focus = focus === 'commits' ? 'branches' : focus === 'branches' ? 'tags' : 'commits'
         pendingDeleteBranch = undefined
+        pendingDeleteTag = undefined
+        pendingDeleteRemoteTag = undefined
         void render()
       } else if ((key.name === 'up' || key.name === 'k') && focus === 'branches') {
         moveBranchSelection(-1)
       } else if ((key.name === 'down' || key.name === 'j') && focus === 'branches') {
         moveBranchSelection(1)
+      } else if ((key.name === 'up' || key.name === 'k') && focus === 'tags') {
+        moveTagSelection(-1)
+      } else if ((key.name === 'down' || key.name === 'j') && focus === 'tags') {
+        moveTagSelection(1)
       } else if (key.name === 'return' && focus === 'branches') {
         const branch = selectedBranch()
 
@@ -622,11 +720,12 @@ export async function startInteractiveLog(
           await Promise.all([
             refreshBranches(),
             refreshPullRequest(),
+            refreshTags(),
           ])
 
           return {
             ok: true,
-            message: 'Refreshed Git overview',
+          message: 'Refreshed Git overview',
           }
         }, false)
       } else if (key.name === 'n') {
@@ -664,6 +763,75 @@ export async function startInteractiveLog(
         } else {
           statusMessage = 'Select a remote branch to set as the current branch upstream.'
           void render()
+        }
+      } else if (key.name === 't') {
+        const target = selectedRef()
+
+        if (target) {
+          startInputPrompt({
+            kind: 'create-tag',
+            label: `Create tag at ${target}`,
+            value: '',
+            sourceRef: target,
+          })
+        }
+      } else if (key.name === 'a') {
+        const target = selectedRef()
+
+        if (target) {
+          startInputPrompt({
+            kind: 'create-annotated-tag',
+            label: `Create annotated tag at ${target}`,
+            value: '',
+            sourceRef: target,
+          })
+        }
+      } else if (key.name === 's' && focus === 'tags') {
+        const tag = selectedTag()
+
+        if (tag) {
+          void runBranchAction(() => pushTag(git, tag.name))
+        }
+      } else if (key.name === 'x' && focus === 'tags') {
+        const tag = selectedTag()
+
+        if (tag) {
+          pendingDeleteTag = tag.name
+          statusMessage = `Press X to confirm deleting local tag ${tag.name}`
+          void render()
+        }
+      } else if (sequence === 'X' && focus === 'tags') {
+        const tag = selectedTag()
+
+        if (tag && pendingDeleteTag === tag.name) {
+          void runBranchAction(() => deleteLocalTag(git, tag.name))
+        }
+      } else if (key.name === 'y' && focus === 'tags') {
+        const tag = selectedTag()
+
+        if (tag) {
+          pendingDeleteRemoteTag = tag.name
+          statusMessage = `Press Y to confirm deleting remote tag ${tag.name}`
+          void render()
+        }
+      } else if (sequence === 'Y' && focus === 'tags') {
+        const tag = selectedTag()
+
+        if (tag && pendingDeleteRemoteTag === tag.name) {
+          void runBranchAction(() => deleteRemoteTag(git, tag.name))
+        }
+      } else if (sequence === 'R' && focus === 'tags') {
+        const tag = selectedTag()
+
+        if (tag) {
+          void runBranchAction(async () => {
+            tagRangeSummary = await getTagRangeSummary(git, tag.name)
+
+            return {
+              ok: true,
+              message: `Compared ${tag.name}..HEAD`,
+            }
+          }, false)
         }
       } else if (sequence === 'C') {
         const baseRef = selectedBaseRef()
@@ -712,6 +880,7 @@ export async function startInteractiveLog(
     void Promise.all([
       refreshBranches(),
       refreshPullRequest(),
+      refreshTags(),
     ])
       .then(() => {
         void render()
@@ -719,6 +888,7 @@ export async function startInteractiveLog(
       .catch(() => {
         branches = undefined
         pullRequest = undefined
+        tags = undefined
       })
     void render()
   })

@@ -3,6 +3,7 @@ import { createLogTuiState } from './interactiveState'
 import { renderInteractiveLog } from './interactive'
 import { BranchOverview } from './branchData'
 import { PullRequestOverview } from './pullRequestData'
+import { TagOverview, TagRangeSummary } from './tagData'
 
 const rows: GitLogRow[] = [
   {
@@ -85,10 +86,29 @@ const pullRequest: PullRequestOverview = {
   },
 }
 
+const tags: TagOverview = {
+  tags: [
+    {
+      name: '0.33.0',
+      hash: 'abc1234',
+      date: '2026-04-27',
+      subject: 'release v0.33.0',
+    },
+  ],
+}
+
+const tagRangeSummary: TagRangeSummary = {
+  from: '0.33.0',
+  to: 'HEAD',
+  commitCount: 4,
+  authors: ['Coco Test'],
+  changedFiles: ['src/commands/log/interactive.ts'],
+}
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
-    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, {}, {
-      height: 52,
+    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, {}, {
+      height: 70,
       width: 100,
     })
 
@@ -102,6 +122,7 @@ describe('log interactive renderer', () => {
     expect(output).toContain('origin/main')
     expect(output).toContain('Pull request: #123 OPEN feature/log-prs -> main')
     expect(output).toContain('Add PR workflow')
+    expect(output).toContain('0.33.0')
     expect(output).toContain('Keys:')
   })
 
@@ -111,6 +132,8 @@ describe('log interactive renderer', () => {
       detail,
       branches,
       pullRequest,
+      tags,
+      undefined,
       {
         focus: 'branches',
         branchIndex: 0,
@@ -118,7 +141,7 @@ describe('log interactive renderer', () => {
         pendingDeleteBranch: 'main',
       },
       {
-        height: 52,
+        height: 70,
         width: 100,
       }
     )
@@ -140,6 +163,8 @@ describe('log interactive renderer', () => {
         currentBranch: 'feature/log-prs',
         message: 'No pull request found for feature/log-prs.',
       },
+      tags,
+      undefined,
       {
         focus: 'branches',
         branchIndex: 0,
@@ -152,7 +177,7 @@ describe('log interactive renderer', () => {
         },
       },
       {
-        height: 52,
+        height: 70,
         width: 100,
       }
     )
@@ -169,6 +194,8 @@ describe('log interactive renderer', () => {
       detail,
       branches,
       pullRequest,
+      tags,
+      undefined,
       {
         inputPrompt: {
           kind: 'create-pr-title',
@@ -180,7 +207,7 @@ describe('log interactive renderer', () => {
         pullRequestDraft: true,
       },
       {
-        height: 52,
+        height: 70,
         width: 100,
       }
     )
@@ -188,5 +215,30 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Create draft PR into main: Add PR workflow_')
     expect(output).toContain('C PR')
     expect(output).toContain('v draft')
+  })
+
+  it('renders tag focus, delete prompts, and release range summaries', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      tagRangeSummary,
+      {
+        focus: 'tags',
+        tagIndex: 0,
+        pendingDeleteTag: '0.33.0',
+      },
+      {
+        height: 60,
+        width: 100,
+      }
+    )
+
+    expect(output).toContain('Focus: tags')
+    expect(output).toContain('> 0.33.0 2026-04-27 abc1234 release v0.33.0')
+    expect(output).toContain('Pending tag delete: press X to delete 0.33.0')
+    expect(output).toContain('Range 0.33.0..HEAD: 4 commits, 1 authors, 1 files')
   })
 })
