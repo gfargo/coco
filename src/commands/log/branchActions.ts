@@ -4,6 +4,7 @@ import { BranchRef } from './branchData'
 export type BranchActionResult = {
   ok: boolean
   message: string
+  details?: string[]
 }
 
 function localNameFromRemote(remoteBranch: string): string {

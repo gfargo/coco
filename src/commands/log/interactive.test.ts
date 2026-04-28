@@ -204,6 +204,32 @@ describe('log interactive renderer', () => {
     expect(output).toContain('[/] hunk select')
   })
 
+  it('renders selected hunk revert confirmation without extra chrome', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'status',
+        statusIndex: 1,
+        statusHunks,
+        statusHunkIndex: 0,
+        pendingRevertHunk: 'unstaged.ts::unstaged-hunk-1',
+      },
+      {
+        height: 70,
+        width: 120,
+      }
+    )
+
+    expect(output).toContain('Pending hunk revert: press Z to revert selected hunk')
+    expect(output).toContain('> [U] @@ -1,1 +1,1 @@ -old +new')
+  })
+
   it('renders branch focus, status, and pending delete prompts', () => {
     const output = renderInteractiveLog(
       createLogTuiState(rows),
@@ -229,6 +255,34 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Status: Press D to confirm deleting main')
     expect(output).toContain('Pending delete: press D to delete main')
     expect(output).toContain('>* main +1/-2 vs origin/main')
+  })
+
+  it('renders concise action feedback details below the status line', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'status',
+        statusMessage: 'Commit blocked by hook: eslint failed',
+        statusDetails: [
+          'src/file.ts:1:1 error no-unused-vars',
+          'Run npm run lint before committing',
+        ],
+      },
+      {
+        height: 70,
+        width: 120,
+      }
+    )
+
+    expect(output).toContain('Status: Commit blocked by hook: eslint failed')
+    expect(output).toContain('  src/file.ts:1:1 error no-unused-vars')
+    expect(output).toContain('  Run npm run lint before committing')
   })
 
   it('renders branch input prompts for create and rename actions', () => {

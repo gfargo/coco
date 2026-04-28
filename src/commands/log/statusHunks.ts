@@ -60,17 +60,12 @@ function patchForHunk(hunk: WorktreeHunk): string {
   })
 }
 
-async function applyPatchToIndex(
+async function applyPatch(
   git: SimpleGit,
   patch: string,
-  options: { reverse?: boolean } = {}
+  args: string[],
 ): Promise<void> {
   const cwd = await git.revparse(['--show-toplevel'])
-  const args = ['apply', '--cached', '-']
-
-  if (options.reverse) {
-    args.splice(2, 0, '--reverse')
-  }
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn('git', args, {
@@ -90,12 +85,26 @@ async function applyPatchToIndex(
         return
       }
 
-      reject(new Error(`Failed to apply hunk to index: ${stderr.trim()}`))
+      reject(new Error(`Failed to apply hunk patch: ${stderr.trim()}`))
     })
 
     child.stdin.write(patch)
     child.stdin.end()
   })
+}
+
+async function applyPatchToIndex(
+  git: SimpleGit,
+  patch: string,
+  options: { reverse?: boolean } = {}
+): Promise<void> {
+  const args = ['apply', '--cached', '-']
+
+  if (options.reverse) {
+    args.splice(2, 0, '--reverse')
+  }
+
+  await applyPatch(git, patch, args)
 }
 
 export async function getWorktreeHunks(
@@ -139,7 +148,20 @@ export async function unstageHunk(git: SimpleGit, hunk: WorktreeHunk): Promise<v
   await applyPatchToIndex(git, patchForHunk(hunk), { reverse: true })
 }
 
+export async function revertHunk(git: SimpleGit, hunk: WorktreeHunk): Promise<void> {
+  const patch = patchForHunk(hunk)
+
+  if (hunk.state === 'staged') {
+    await applyPatch(git, patch, ['apply', '--reverse', '-'])
+    await applyPatchToIndex(git, patch, { reverse: true })
+    return
+  }
+
+  await applyPatch(git, patch, ['apply', '--reverse', '-'])
+}
+
 export const statusHunkTestInternals = {
+  applyPatch,
   parseHunks,
   patchForHunk,
 }

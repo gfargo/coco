@@ -13,6 +13,7 @@ export type CommitWorkflowAction = 'commit' | 'split-plan' | 'split-apply'
 export type CommitWorkflowResult = {
   ok: boolean
   message: string
+  details?: string[]
 }
 
 type CommitWorkflowInput = {
@@ -73,12 +74,31 @@ function formatCommitWorkflowMessage(action: CommitWorkflowAction, output: strin
   return 'Generated commit message.'
 }
 
-function formatCommitFailure(error: unknown): string {
+function compactOutputLines(output: string): string[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function formatCommitFailure(error: unknown): CommitWorkflowResult {
   if (error instanceof PreCommitHookError) {
-    return `Commit blocked by hook: ${error.hookOutput.split('\n')[0]}`
+    const details = compactOutputLines(error.hookOutput)
+
+    return {
+      ok: false,
+      message: `Commit blocked by hook: ${details[0] || 'hook failed'}`,
+      details: details.slice(1, 6),
+    }
   }
 
-  return (error as Error).message
+  const details = compactOutputLines((error as Error).message)
+
+  return {
+    ok: false,
+    message: details[0] || 'Commit action failed.',
+    details: details.slice(1, 6),
+  }
 }
 
 export async function runCommitWorkflow({
@@ -114,22 +134,24 @@ export async function runCommitWorkflow({
     }
   } catch (error) {
     if (isCommandExitError(error)) {
+      const lines = compactOutputLines(output || error.message)
+
       return {
         ok: error.code === 0,
-        message: output.trim() || error.message,
+        message: lines[0] || error.message,
+        details: lines.slice(1, 6),
       }
     }
 
-    return {
-      ok: false,
-      message: formatCommitFailure(error),
-    }
+    return formatCommitFailure(error)
   } finally {
     process.stdout.write = originalWrite
   }
 }
 
 export const commitWorkflowTestInternals = {
+  compactOutputLines,
   createCommitWorkflowArgv,
+  formatCommitFailure,
   formatCommitWorkflowMessage,
 }

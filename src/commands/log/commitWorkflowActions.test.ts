@@ -113,4 +113,42 @@ describe('log commit workflow actions', () => {
       'Applied commit split plan.'
     )
   })
+
+  it('returns hook output as structured feedback details', async () => {
+    mockedCommitHandler.mockImplementation(async () => {
+      process.stdout.write('feat: generated message\n')
+    })
+    mockedCreateCommit.mockRejectedValue(new Error([
+      'Pre-commit hook failed',
+      'eslint failed',
+      'src/file.ts:1:1 error',
+    ].join('\n')))
+
+    await expect(runCommitWorkflow({ action: 'commit', git })).resolves.toEqual({
+      ok: false,
+      message: 'Pre-commit hook failed',
+      details: [
+        'eslint failed',
+        'src/file.ts:1:1 error',
+      ],
+    })
+  })
+
+  it('splits command-exit output into a status message and details', async () => {
+    mockedCommitHandler.mockImplementation(async () => {
+      process.stdout.write('Commitlint failed\nsubject may not be empty\nbody may not be empty\n')
+
+      const { CommandExitError } = await import('../../lib/utils/commandExit')
+      throw new CommandExitError(1)
+    })
+
+    await expect(runCommitWorkflow({ action: 'commit', git })).resolves.toEqual({
+      ok: false,
+      message: 'Commitlint failed',
+      details: [
+        'subject may not be empty',
+        'body may not be empty',
+      ],
+    })
+  })
 })
