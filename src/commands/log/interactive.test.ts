@@ -5,6 +5,7 @@ import { BranchOverview } from './branchData'
 import { PullRequestOverview } from './pullRequestData'
 import { TagOverview, TagRangeSummary } from './tagData'
 import { WorktreeOverview } from './statusData'
+import { WorktreeHunkOverview } from './statusHunks'
 
 const rows: GitLogRow[] = [
   {
@@ -132,11 +133,26 @@ const worktree: WorktreeOverview = {
   ],
 }
 
+const statusHunks = {
+  filePath: 'unstaged.ts',
+  hunks: [
+    {
+      id: 'unstaged.ts::unstaged-hunk-1',
+      filePath: 'unstaged.ts',
+      state: 'unstaged',
+      header: '@@ -1,1 +1,1 @@',
+      preview: '-old +new',
+      patch: {},
+      hunk: {},
+    },
+  ],
+} as WorktreeHunkOverview
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
     const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, worktree, {}, {
       height: 70,
-      width: 100,
+      width: 140,
     })
 
     expect(output).toContain('coco log')
@@ -155,6 +171,34 @@ describe('log interactive renderer', () => {
     expect(output).toContain('S split plan')
     expect(output).toContain('A split apply')
     expect(output).toContain('Keys:')
+  })
+
+  it('renders selected file hunks and hunk staging controls', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'status',
+        statusIndex: 1,
+        statusHunks,
+        statusHunkIndex: 0,
+      },
+      {
+        height: 70,
+        width: 120,
+      }
+    )
+
+    expect(output).toContain('Focus: status')
+    expect(output).toContain('Hunks: unstaged.ts')
+    expect(output).toContain('> [U] @@ -1,1 +1,1 @@ -old +new')
+    expect(output).toContain('enter hunk')
+    expect(output).toContain('[/] hunk select')
   })
 
   it('renders branch focus, status, and pending delete prompts', () => {
