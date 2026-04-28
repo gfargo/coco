@@ -187,6 +187,14 @@ const worktreeList: WorktreeListOverview = {
   ],
 }
 
+const reflog = [
+  {
+    selector: 'HEAD@{0}',
+    hash: 'abc1234',
+    subject: 'commit: feat: add interactive log',
+  },
+]
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
     const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, worktree, {}, {
@@ -209,10 +217,48 @@ describe('log interactive renderer', () => {
     expect(output).toContain('c commit')
     expect(output).toContain('e amend')
     expect(output).toContain('w reword')
+    expect(output).toContain('h hash')
+    expect(output).toContain('= compare')
     expect(output).toContain('S split plan')
     expect(output).toContain('A split apply')
     expect(output).toContain('Keys:')
     expect(output).toContain('Commit actions: e amend HEAD | w reword HEAD')
+  })
+
+  it('renders commit history actions and recovery state', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'commits',
+        pendingResetCommit: 'abc1234',
+        pendingResetMode: 'mixed',
+      },
+      {
+        height: 80,
+        width: 140,
+      },
+      {},
+      {
+        compareBase: {
+          hash: 'abc1234',
+          shortHash: 'abc1234',
+          message: 'feat: add interactive log',
+        },
+        reflog,
+      }
+    )
+
+    expect(output).toContain('History:')
+    expect(output).toContain('Pending reset: press X to reset --mixed to abc1234')
+    expect(output).toContain('Compare base: abc1234 feat: add interactive log')
+    expect(output).toContain('Reflog:')
+    expect(output).toContain('HEAD@{0} abc1234 commit: feat: add interactive log')
   })
 
   it('renders selected file hunks and hunk staging controls', () => {

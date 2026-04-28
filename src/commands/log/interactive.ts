@@ -14,7 +14,23 @@ import {
 import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
 import { runCommitWorkflow } from './commitWorkflowActions'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
-import { amendHeadCommit, rewordHeadCommit } from './historyActions'
+import {
+  HistoryCommitRef,
+  ReflogEntry,
+  ResetMode,
+  amendHeadCommit,
+  cherryPickCommit,
+  compareCommits,
+  copyCommitHash,
+  copyCommitMessage,
+  getReflogEntries,
+  isResetMode,
+  openCommitOnRemote,
+  resetToCommit,
+  revertCommit,
+  rewordHeadCommit,
+  startInteractiveRebase,
+} from './historyActions'
 import { createPullRequest, openPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { applyStash, createStash, dropStash, popStash } from './stashActions'
@@ -64,6 +80,11 @@ type RenderInteractiveLogWorkspace = {
   stashDiffSummary?: string[]
 }
 
+type RenderInteractiveLogHistory = {
+  compareBase?: HistoryCommitRef
+  reflog?: ReflogEntry[]
+}
+
 type LogTuiFocus = 'commits' | 'branches' | 'tags' | 'status' | 'workspace'
 type WorkspaceSection = 'stashes' | 'worktrees'
 
@@ -88,6 +109,11 @@ type LogTuiRenderUi = {
   workspaceSection?: WorkspaceSection
   pendingDropStash?: string
   pendingRemoveWorktree?: string
+  pendingCherryPick?: string
+  pendingRevertCommit?: string
+  pendingResetCommit?: string
+  pendingResetMode?: ResetMode
+  pendingRebaseCommit?: string
 }
 
 type LogTuiInputKind =
@@ -101,6 +127,7 @@ type LogTuiInputKind =
   | 'create-worktree'
   | 'create-branch-worktree-path'
   | 'create-branch-worktree-branch'
+  | 'reset-mode'
 
 type LogTuiInputPrompt = {
   kind: LogTuiInputKind
@@ -395,6 +422,35 @@ function renderWorkspaceOverview(
   ].map((line) => truncate(line, width))
 }
 
+function renderHistoryOverview(
+  history: RenderInteractiveLogHistory,
+  ui: LogTuiRenderUi,
+  width: number
+): string[] {
+  const pendingLine = ui.pendingCherryPick
+    ? `Pending cherry-pick: press Y to cherry-pick ${ui.pendingCherryPick}`
+    : ui.pendingRevertCommit
+      ? `Pending revert: press V to revert ${ui.pendingRevertCommit}`
+      : ui.pendingResetCommit && ui.pendingResetMode
+        ? `Pending reset: press X to reset --${ui.pendingResetMode} to ${ui.pendingResetCommit}`
+        : ui.pendingRebaseCommit
+          ? `Pending rebase: press B to start rebase from ${ui.pendingRebaseCommit}`
+          : undefined
+  const compareLine = history.compareBase
+    ? `Compare base: ${history.compareBase.shortHash} ${history.compareBase.message}`
+    : 'Compare: press = on a commit, then = on another commit'
+  const reflogLines = history.reflog?.slice(0, 5).map((entry) => (
+    `  ${entry.selector} ${entry.hash} ${entry.subject}`
+  )) || []
+
+  return [
+    'History:',
+    pendingLine || 'History actions: h hash | H message | O open | = compare | y cherry-pick | V revert | ! reset | B rebase | F reflog',
+    compareLine,
+    ...(reflogLines.length ? ['Reflog:', ...reflogLines] : []),
+  ].map((line) => truncate(line, width))
+}
+
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
     return ['Loading selected commit details...']
@@ -433,7 +489,8 @@ export function renderInteractiveLog(
   worktree?: WorktreeOverview,
   ui: LogTuiRenderUi = {},
   options: RenderInteractiveLogOptions = {},
-  workspace: RenderInteractiveLogWorkspace = {}
+  workspace: RenderInteractiveLogWorkspace = {},
+  history: RenderInteractiveLogHistory = {}
 ): string {
   const height = options.height || process.stdout.rows || DEFAULT_HEIGHT
   const width = options.width || process.stdout.columns || DEFAULT_WIDTH
@@ -442,10 +499,10 @@ export function renderInteractiveLog(
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
   const focus = ui.focus || 'commits'
   const help = state.showHelp
-    ? 'Keys: tab focus | up/down move | n branch | t tag | C PR | c commit | e amend | w reword | q quit'
+    ? 'Keys: tab focus | up/down move | n branch | t tag | C PR | c commit | history h/H/O/= | q quit'
     : 'Press ? for help'
   const commitActions = focus === 'commits'
-    ? 'Commit actions: e amend HEAD | w reword HEAD'
+    ? 'Commit actions: e amend HEAD | w reword HEAD | h hash | H message | O open | = compare'
     : ''
   const detailHeader = selected
     ? `Selected: ${selected.shortHash} ${selected.message}`
@@ -463,6 +520,7 @@ export function renderInteractiveLog(
       width
     ).slice(0, 12)
     : []
+  const historyLines = renderHistoryOverview(history, ui, width).slice(0, 8)
   const listHeight = Math.max(4, Math.floor(height * 0.35))
   const detailHeight = Math.max(
     6,
@@ -473,6 +531,7 @@ export function renderInteractiveLog(
       tagLines.length -
       statusLines.length -
       workspaceLines.length -
+      historyLines.length -
       11
   )
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
@@ -492,6 +551,7 @@ export function renderInteractiveLog(
     ...tagLines,
     ...statusLines,
     ...workspaceLines,
+    ...historyLines,
     '',
     ...renderCommitList(state, listHeight, width),
     '',
@@ -519,6 +579,8 @@ export async function startInteractiveLog(
   let stashes: StashOverview | undefined
   let worktreeList: WorktreeListOverview | undefined
   let stashDiffSummary: string[] | undefined
+  let compareBase: HistoryCommitRef | undefined
+  let reflog: ReflogEntry[] | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
   let tagIndex = 0
@@ -536,6 +598,11 @@ export async function startInteractiveLog(
   let pendingRevertHunk: string | undefined
   let pendingDropStash: string | undefined
   let pendingRemoveWorktree: string | undefined
+  let pendingCherryPick: string | undefined
+  let pendingRevertCommit: string | undefined
+  let pendingResetCommit: string | undefined
+  let pendingResetMode: ResetMode | undefined
+  let pendingRebaseCommit: string | undefined
   let inputPrompt: LogTuiInputPrompt | undefined
   let pullRequestDraft = false
 
@@ -627,6 +694,11 @@ export async function startInteractiveLog(
         workspaceSection,
         pendingDropStash,
         pendingRemoveWorktree,
+        pendingCherryPick,
+        pendingRevertCommit,
+        pendingResetCommit,
+        pendingResetMode,
+        pendingRebaseCommit,
       }
 
       output.write(
@@ -640,7 +712,8 @@ export async function startInteractiveLog(
           worktree,
           ui,
           {},
-          { stashes, worktreeList, stashDiffSummary }
+          { stashes, worktreeList, stashDiffSummary },
+          { compareBase, reflog }
         )}\n`,
         'utf8'
       )
@@ -660,7 +733,8 @@ export async function startInteractiveLog(
               worktree,
               ui,
               {},
-              { stashes, worktreeList, stashDiffSummary }
+              { stashes, worktreeList, stashDiffSummary },
+              { compareBase, reflog }
             )}\n`,
             'utf8'
           )
@@ -719,6 +793,11 @@ export async function startInteractiveLog(
       pendingRevertHunk = undefined
       pendingDropStash = undefined
       pendingRemoveWorktree = undefined
+      pendingCherryPick = undefined
+      pendingRevertCommit = undefined
+      pendingResetCommit = undefined
+      pendingResetMode = undefined
+      pendingRebaseCommit = undefined
       inputPrompt = undefined
 
       if (refresh) {
@@ -742,6 +821,17 @@ export async function startInteractiveLog(
     const selectedStatusHunk = () => statusHunks?.hunks[statusHunkIndex]
     const selectedStash = (): StashEntry | undefined => stashes?.stashes[stashIndex]
     const selectedWorkspaceWorktree = (): WorktreeEntry | undefined => worktreeList?.worktrees[worktreeIndex]
+    const selectedHistoryCommit = (): HistoryCommitRef | undefined => {
+      const selected = getSelectedCommit(state)
+
+      return selected
+        ? {
+          hash: selected.hash,
+          shortHash: selected.shortHash,
+          message: selected.message,
+        }
+        : undefined
+    }
 
     const selectedRef = () => {
       if (focus === 'branches') {
@@ -862,6 +952,11 @@ export async function startInteractiveLog(
       pendingRevertHunk = undefined
       pendingDropStash = undefined
       pendingRemoveWorktree = undefined
+      pendingCherryPick = undefined
+      pendingRevertCommit = undefined
+      pendingResetCommit = undefined
+      pendingResetMode = undefined
+      pendingRebaseCommit = undefined
       void render()
     }
 
@@ -882,7 +977,22 @@ export async function startInteractiveLog(
         return
       }
 
-      if (prompt.kind === 'create-branch') {
+      if (prompt.kind === 'reset-mode' && prompt.commitHash) {
+        if (!isResetMode(value)) {
+          statusMessage = 'Reset cancelled: mode must be soft, mixed, or hard.'
+          statusDetails = undefined
+          await render()
+          return
+        }
+
+        pendingResetCommit = prompt.commitHash
+        pendingResetMode = value
+        statusMessage = `Press X to confirm reset --${value} to ${prompt.commitHash}`
+        statusDetails = [
+          'This moves the current branch. Use reflog to recover the previous HEAD.',
+        ]
+        await render()
+      } else if (prompt.kind === 'create-branch') {
         await runBranchAction(() => createBranch(git, value, prompt.sourceRef))
       } else if (prompt.kind === 'rename-branch' && prompt.branchName) {
         await runBranchAction(() => renameBranch(git, prompt.branchName as string, value))
@@ -1028,6 +1138,11 @@ export async function startInteractiveLog(
         pendingRevertHunk = undefined
         pendingDropStash = undefined
         pendingRemoveWorktree = undefined
+        pendingCherryPick = undefined
+        pendingRevertCommit = undefined
+        pendingResetCommit = undefined
+        pendingResetMode = undefined
+        pendingRebaseCommit = undefined
         void render()
       } else if ((key.name === 'up' || key.name === 'k') && focus === 'branches') {
         moveBranchSelection(-1)
@@ -1143,6 +1258,117 @@ export async function startInteractiveLog(
         if (selectedWorktree) {
           void runBranchAction(() => Promise.resolve(worktreePathAction(selectedWorktree)), false)
         }
+      } else if (key.name === 'h' && focus === 'commits') {
+        void runBranchAction(() => copyCommitHash(selectedHistoryCommit()), false, 'Copying commit hash...')
+      } else if (sequence === 'H' && focus === 'commits') {
+        void runBranchAction(
+          () => copyCommitMessage(selectedHistoryCommit()),
+          false,
+          'Copying commit message...'
+        )
+      } else if (sequence === 'O' && focus === 'commits') {
+        void runBranchAction(
+          () => openCommitOnRemote(git, selectedHistoryCommit()),
+          false,
+          'Opening selected commit...'
+        )
+      } else if (sequence === '=' && focus === 'commits') {
+        const commit = selectedHistoryCommit()
+
+        if (!compareBase && commit) {
+          compareBase = commit
+          statusMessage = `Compare base set to ${commit.shortHash}`
+          statusDetails = ['Move to another commit and press = again to compare.']
+          void render()
+        } else if (commit) {
+          const base = compareBase
+          compareBase = undefined
+          void runBranchAction(
+            () => compareCommits(git, base, commit),
+            false,
+            'Comparing selected commits...'
+          )
+        }
+      } else if (key.name === 'y' && focus === 'commits') {
+        const commit = selectedHistoryCommit()
+
+        if (commit) {
+          pendingCherryPick = commit.hash
+          statusMessage = `Press Y to confirm cherry-picking ${commit.shortHash}`
+          statusDetails = ['This applies the selected commit onto the current branch.']
+          void render()
+        }
+      } else if (sequence === 'Y' && focus === 'commits') {
+        const commit = selectedHistoryCommit()
+
+        if (commit && pendingCherryPick === commit.hash) {
+          void runBranchAction(
+            () => cherryPickCommit(git, commit),
+            true,
+            'Cherry-picking selected commit...'
+          )
+        }
+      } else if (sequence === 'V' && focus === 'commits') {
+        const commit = selectedHistoryCommit()
+
+        if (commit && pendingRevertCommit === commit.hash) {
+          void runBranchAction(
+            () => revertCommit(git, commit),
+            true,
+            'Reverting selected commit...'
+          )
+        } else if (commit) {
+          pendingRevertCommit = commit.hash
+          statusMessage = `Press V again to confirm reverting ${commit.shortHash}`
+          statusDetails = ['This creates a new commit that reverses the selected commit.']
+          void render()
+        }
+      } else if (sequence === '!' && focus === 'commits') {
+        const commit = selectedHistoryCommit()
+
+        if (commit) {
+          startInputPrompt({
+            kind: 'reset-mode',
+            label: `Reset ${commit.shortHash} mode (soft|mixed|hard)`,
+            value: 'mixed',
+            sourceRef: commit.hash,
+            commitHash: commit.hash,
+          })
+        }
+      } else if (sequence === 'X' && focus === 'commits') {
+        const commit = selectedHistoryCommit()
+
+        if (commit && pendingResetCommit === commit.hash && pendingResetMode) {
+          void runBranchAction(
+            () => resetToCommit(git, commit, pendingResetMode as ResetMode),
+            true,
+            `Resetting current branch --${pendingResetMode}...`
+          )
+        }
+      } else if (sequence === 'B' && focus === 'commits') {
+        const commit = selectedHistoryCommit()
+
+        if (commit && pendingRebaseCommit === commit.hash) {
+          void runBranchAction(
+            () => startInteractiveRebase(git, commit),
+            true,
+            'Starting interactive rebase...'
+          )
+        } else if (commit) {
+          pendingRebaseCommit = commit.hash
+          statusMessage = `Press B again to start interactive rebase from ${commit.shortHash}`
+          statusDetails = ['Use `git rebase --abort` if the rebase needs to be cancelled.']
+          void render()
+        }
+      } else if (sequence === 'F' && focus === 'commits') {
+        void runBranchAction(async () => {
+          reflog = await getReflogEntries(git)
+
+          return {
+            ok: true,
+            message: 'Loaded reflog recovery view',
+          }
+        }, false, 'Loading reflog...')
       } else if (key.name === 'return' && focus === 'status') {
         const hunk = selectedStatusHunk()
 
@@ -1279,6 +1505,8 @@ export async function startInteractiveLog(
             refreshPullRequest(),
             refreshTags(),
             refreshWorktree(),
+            refreshStashes(),
+            refreshWorktreeList(),
           ])
           await refreshStatusHunks()
 
