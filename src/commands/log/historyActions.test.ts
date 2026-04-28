@@ -72,4 +72,24 @@ describe('log history actions', () => {
     })
     expect(git.raw).not.toHaveBeenCalled()
   })
+
+  it('returns hook and validation failures as structured details', async () => {
+    const git = {
+      revparse: jest.fn().mockResolvedValue('abcdef1234567890'),
+      raw: jest.fn().mockRejectedValue(new Error([
+        'commit-msg hook failed',
+        'subject must be lower-case',
+        'type must be one of feat, fix',
+      ].join('\n'))),
+    }
+
+    await expect(amendHeadCommit(git as never, 'abcdef1')).resolves.toEqual({
+      ok: false,
+      message: 'commit-msg hook failed',
+      details: [
+        'subject must be lower-case',
+        'type must be one of feat, fix',
+      ],
+    })
+  })
 })

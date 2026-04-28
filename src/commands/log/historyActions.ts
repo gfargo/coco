@@ -1,6 +1,13 @@
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
 
+function compactOutputLines(output: string): string[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
   try {
     await action()
@@ -10,9 +17,12 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
       message: successMessage,
     }
   } catch (error) {
+    const lines = compactOutputLines((error as Error).message)
+
     return {
       ok: false,
-      message: (error as Error).message,
+      message: lines[0] || 'History action failed.',
+      details: lines.slice(1, 6),
     }
   }
 }
@@ -70,5 +80,6 @@ export async function rewordHeadCommit(
 }
 
 export const historyActionTestInternals = {
+  compactOutputLines,
   isHeadCommit,
 }

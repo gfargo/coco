@@ -19,7 +19,7 @@ import { createPullRequest, openPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeFile, WorktreeOverview, getWorktreeOverview } from './statusData'
-import { WorktreeHunkOverview, getWorktreeHunks, stageHunk, unstageHunk } from './statusHunks'
+import { WorktreeHunkOverview, getWorktreeHunks, revertHunk, stageHunk, unstageHunk } from './statusHunks'
 import {
   createAnnotatedTag,
   createLightweightTag,
@@ -51,6 +51,7 @@ type LogTuiRenderUi = {
   focus?: LogTuiFocus
   branchIndex?: number
   statusMessage?: string
+  statusDetails?: string[]
   pendingDeleteBranch?: string
   pendingDeleteTag?: string
   pendingDeleteRemoteTag?: string
@@ -61,6 +62,7 @@ type LogTuiRenderUi = {
   statusHunks?: WorktreeHunkOverview
   statusHunkIndex?: number
   pendingRevertFile?: string
+  pendingRevertHunk?: string
 }
 
 type LogTuiInputKind =
@@ -310,6 +312,8 @@ function renderStatusOverview(
     : []
   const actionLine = ui.pendingRevertFile
     ? `Pending revert: press Z to revert ${ui.pendingRevertFile}`
+    : ui.pendingRevertHunk
+      ? 'Pending hunk revert: press Z to revert selected hunk'
     : 'Status actions: space file | enter hunk | [/] hunk select | c commit | S split plan | A split apply | z revert'
 
   return [
@@ -399,6 +403,7 @@ export function renderInteractiveLog(
     help,
     commitActions,
     ui.statusMessage ? truncate(`Status: ${ui.statusMessage}`, width) : '',
+    ...(ui.statusDetails || []).slice(0, 4).map((line) => truncate(`  ${line}`, width)),
     ui.inputPrompt ? truncate(`${ui.inputPrompt.label}: ${ui.inputPrompt.value}_`, width) : '',
     '',
     ...branchLines,
@@ -435,10 +440,12 @@ export async function startInteractiveLog(
   let statusIndex = 0
   let statusHunkIndex = 0
   let statusMessage: string | undefined
+  let statusDetails: string[] | undefined
   let pendingDeleteBranch: string | undefined
   let pendingDeleteTag: string | undefined
   let pendingDeleteRemoteTag: string | undefined
   let pendingRevertFile: string | undefined
+  let pendingRevertHunk: string | undefined
   let inputPrompt: LogTuiInputPrompt | undefined
   let pullRequestDraft = false
 
@@ -508,10 +515,12 @@ export async function startInteractiveLog(
         focus,
         branchIndex,
         statusMessage,
+        statusDetails,
         pendingDeleteBranch,
         pendingDeleteTag,
         pendingDeleteRemoteTag,
         pendingRevertFile,
+        pendingRevertHunk,
         inputPrompt,
         pullRequestDraft,
         tagIndex,
@@ -588,10 +597,12 @@ export async function startInteractiveLog(
 
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
+      statusDetails = result.details
       pendingDeleteBranch = undefined
       pendingDeleteTag = undefined
       pendingDeleteRemoteTag = undefined
       pendingRevertFile = undefined
+      pendingRevertHunk = undefined
       inputPrompt = undefined
 
       if (refresh) {
@@ -675,6 +686,7 @@ export async function startInteractiveLog(
       statusHunkIndex = 0
       statusHunks = undefined
       pendingRevertFile = undefined
+      pendingRevertHunk = undefined
       void refreshStatusHunks().then(render)
     }
 
@@ -698,10 +710,12 @@ export async function startInteractiveLog(
     const startInputPrompt = (prompt: LogTuiInputPrompt) => {
       inputPrompt = prompt
       statusMessage = undefined
+      statusDetails = undefined
       pendingDeleteBranch = undefined
       pendingDeleteTag = undefined
       pendingDeleteRemoteTag = undefined
       pendingRevertFile = undefined
+      pendingRevertHunk = undefined
       void render()
     }
 
@@ -717,6 +731,7 @@ export async function startInteractiveLog(
 
       if (!value) {
         statusMessage = 'Branch action cancelled: empty value'
+        statusDetails = undefined
         await render()
         return
       }
@@ -730,6 +745,7 @@ export async function startInteractiveLog(
 
         if (!head) {
           statusMessage = 'Cannot create pull request without a current branch.'
+          statusDetails = undefined
           await render()
           return
         }
@@ -767,6 +783,7 @@ export async function startInteractiveLog(
       if (key.name === 'escape') {
         inputPrompt = undefined
         statusMessage = 'Branch action cancelled'
+        statusDetails = undefined
         void render()
         return
       }
@@ -838,6 +855,7 @@ export async function startInteractiveLog(
         pendingDeleteTag = undefined
         pendingDeleteRemoteTag = undefined
         pendingRevertFile = undefined
+        pendingRevertHunk = undefined
         void render()
       } else if ((key.name === 'up' || key.name === 'k') && focus === 'branches') {
         moveBranchSelection(-1)
@@ -878,6 +896,7 @@ export async function startInteractiveLog(
           })
         } else {
           statusMessage = 'No selectable hunk for the selected file.'
+          statusDetails = undefined
           void render()
         }
       } else if (key.name === 'space' && focus === 'status') {
@@ -888,16 +907,35 @@ export async function startInteractiveLog(
         }
       } else if (key.name === 'z' && focus === 'status') {
         const file = selectedStatusFile()
+        const hunk = selectedStatusHunk()
 
-        if (file) {
+        if (hunk) {
+          pendingRevertHunk = hunk.id
+          pendingRevertFile = undefined
+          statusMessage = `Press Z to confirm reverting hunk in ${hunk.filePath}`
+          statusDetails = undefined
+          void render()
+        } else if (file) {
           pendingRevertFile = file.path
+          pendingRevertHunk = undefined
           statusMessage = `Press Z to confirm reverting ${file.path}`
+          statusDetails = undefined
           void render()
         }
       } else if (sequence === 'Z' && focus === 'status') {
         const file = selectedStatusFile()
+        const hunk = selectedStatusHunk()
 
-        if (file && pendingRevertFile === file.path) {
+        if (hunk && pendingRevertHunk === hunk.id) {
+          void runBranchAction(async () => {
+            await revertHunk(git, hunk)
+
+            return {
+              ok: true,
+              message: `Reverted hunk in ${hunk.filePath}`,
+            }
+          })
+        } else if (file && pendingRevertFile === file.path) {
           void runBranchAction(() => revertFile(git, file))
         }
       } else if (key.name === 'c' && focus === 'status') {
@@ -1003,6 +1041,7 @@ export async function startInteractiveLog(
           })
         } else {
           statusMessage = 'Only local branches can be renamed.'
+          statusDetails = undefined
           void render()
         }
       } else if (key.name === 'u' && focus === 'branches') {
@@ -1013,6 +1052,7 @@ export async function startInteractiveLog(
           void runBranchAction(() => setUpstream(git, current.shortName, branch.shortName))
         } else {
           statusMessage = 'Select a remote branch to set as the current branch upstream.'
+          statusDetails = undefined
           void render()
         }
       } else if (key.name === 't') {
@@ -1098,6 +1138,7 @@ export async function startInteractiveLog(
       } else if (key.name === 'v') {
         pullRequestDraft = !pullRequestDraft
         statusMessage = `Pull request create mode: ${pullRequestDraft ? 'draft' : 'ready'}`
+        statusDetails = undefined
         void render()
       } else if (key.name === 'o') {
         const url = pullRequest?.currentPullRequest?.url
@@ -1106,6 +1147,7 @@ export async function startInteractiveLog(
           void runBranchAction(() => openPullRequest(url), false)
         } else {
           statusMessage = 'No current pull request to open.'
+          statusDetails = undefined
           void render()
         }
       } else if (key.name === 'up' || key.name === 'k') {

@@ -2,6 +2,7 @@ import { EventEmitter } from 'events'
 import { spawn } from 'child_process'
 import {
   getWorktreeHunks,
+  revertHunk,
   stageHunk,
   statusHunkTestInternals,
   unstageHunk,
@@ -123,6 +124,43 @@ describe('log status hunks', () => {
     await unstagePromise
 
     expect(mockedSpawn).toHaveBeenNthCalledWith(1, 'git', ['apply', '--cached', '-'], {
+      cwd: '/repo',
+      stdio: ['pipe', 'ignore', 'pipe'],
+    })
+    expect(mockedSpawn).toHaveBeenNthCalledWith(2, 'git', ['apply', '--cached', '--reverse', '-'], {
+      cwd: '/repo',
+      stdio: ['pipe', 'ignore', 'pipe'],
+    })
+  })
+
+  it('reverts unstaged hunks from the worktree', async () => {
+    const git = createGit()
+    const child = mockSpawnSuccess()
+    const [unstagedHunk] = statusHunkTestInternals.parseHunks('src/file.ts', 'unstaged', diff)
+
+    const revertPromise = revertHunk(git as never, unstagedHunk)
+    setImmediate(() => child.emit('close', 0))
+    await revertPromise
+
+    expect(mockedSpawn).toHaveBeenCalledWith('git', ['apply', '--reverse', '-'], {
+      cwd: '/repo',
+      stdio: ['pipe', 'ignore', 'pipe'],
+    })
+  })
+
+  it('reverts staged hunks from the worktree and index', async () => {
+    const git = createGit()
+    const child = mockSpawnSuccess()
+    const [stagedHunk] = statusHunkTestInternals.parseHunks('src/file.ts', 'staged', diff)
+
+    const revertPromise = revertHunk(git as never, stagedHunk)
+    setImmediate(() => {
+      child.emit('close', 0)
+      setImmediate(() => child.emit('close', 0))
+    })
+    await revertPromise
+
+    expect(mockedSpawn).toHaveBeenNthCalledWith(1, 'git', ['apply', '--reverse', '-'], {
       cwd: '/repo',
       stdio: ['pipe', 'ignore', 'pipe'],
     })
