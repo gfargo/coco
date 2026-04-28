@@ -105,4 +105,31 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Pending delete: press D to delete main')
     expect(output).toContain('>* main +1/-2 vs origin/main')
   })
+
+  it('renders branch input prompts for create and rename actions', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      {
+        focus: 'branches',
+        branchIndex: 0,
+        inputPrompt: {
+          kind: 'rename-branch',
+          label: 'Rename main to',
+          value: 'feature/main',
+          sourceRef: 'main',
+          branchName: 'main',
+        },
+      },
+      {
+        height: 52,
+        width: 100,
+      }
+    )
+
+    expect(output).toContain('Rename main to: feature/main_')
+    expect(output).toContain('n new')
+    expect(output).toContain('u upstream')
+  })
 })
