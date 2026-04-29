@@ -24,6 +24,11 @@ import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { StashOverview, getStashOverview } from './stashData'
 import { WorktreeOverview, getWorktreeOverview } from './statusData'
 import { TagOverview, getTagOverview } from './tagData'
+import {
+  LogInkWorkflowAction,
+  getLogInkWorkflowActions,
+  getLogInkWorkflowSections,
+} from './inkWorkflows'
 import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from './worktreeData'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
@@ -302,6 +307,18 @@ function sidebarLines(context: LogInkContext, tab: LogInkSidebarTab, width: numb
     : ['No linked worktrees']
 }
 
+function getWorkflowActionByKey(inputValue: string): LogInkWorkflowAction | undefined {
+  return getLogInkWorkflowActions().find((action) => action.key === inputValue)
+}
+
+function getWorkflowActionById(id: string | undefined): LogInkWorkflowAction | undefined {
+  if (!id) {
+    return undefined
+  }
+
+  return getLogInkWorkflowActions().find((action) => action.id === id)
+}
+
 export async function startInkInteractiveLog(
   git: SimpleGit,
   rows: GitLogRow[],
@@ -410,6 +427,25 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
+    if (state.pendingConfirmationId) {
+      if (inputValue === 'y') {
+        const action = getWorkflowActionById(state.pendingConfirmationId)
+
+        dispatch({ type: 'setPendingConfirmation', value: undefined })
+        dispatch({
+          type: 'setStatus',
+          value: action
+            ? `${action.label} queued for workflow execution`
+            : 'workflow action queued',
+        })
+      } else if (inputValue === 'n' || key.escape) {
+        dispatch({ type: 'setPendingConfirmation', value: undefined })
+        dispatch({ type: 'setStatus', value: 'workflow action cancelled' })
+      }
+
+      return
+    }
+
     if (key.escape && state.showHelp) {
       dispatch({ type: 'toggleHelp' })
       return
@@ -442,6 +478,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({ type: 'page', delta: -10 })
     } else if (key.pageDown) {
       dispatch({ type: 'page', delta: 10 })
+    } else {
+      const workflowAction = getWorkflowActionByKey(inputValue)
+
+      if (workflowAction?.requiresConfirmation) {
+        dispatch({ type: 'setPendingConfirmation', value: workflowAction.id })
+      } else if (workflowAction) {
+        dispatch({ type: 'setWorkflowAction', value: workflowAction.id })
+        dispatch({ type: 'setStatus', value: `${workflowAction.label} selected` })
+      }
     }
   })
 
@@ -467,7 +512,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     h(Box, { flexDirection: 'row', height: bodyRows },
       renderSidebar(h, { Box, Text }, state, context, sidebarWidth, theme),
       renderCommitPanel(h, { Box, Text }, state, bodyRows, theme),
-      renderDetailPanel(h, { Box, Text }, state, detail, detailLoading, detailWidth, theme)
+      renderDetailPanel(h, { Box, Text }, state, context, detail, detailLoading, detailWidth, theme)
     ),
     renderFooter(h, { Box, Text }, state, theme)
   )
@@ -576,6 +621,7 @@ function renderDetailPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
   state: LogInkState,
+  context: LogInkContext,
   detail: GitCommitDetail | undefined,
   loading: boolean,
   width: number,
@@ -592,7 +638,15 @@ function renderDetailPanel(
     return renderCommandPalette(h, components, width, theme, focused)
   }
 
+  if (state.pendingConfirmationId) {
+    return renderConfirmationPanel(h, components, state, width, theme, focused)
+  }
+
   const selected = getSelectedInkCommit(state)
+  const workflowSections = getLogInkWorkflowSections({
+    ...context,
+    selectedCommit: selected,
+  })
   const lines = detail
     ? [
       detail.message,
@@ -606,6 +660,12 @@ function renderDetailPanel(
       '',
       'Changed files:',
       ...(detail.files.length ? detail.files.slice(0, 12).map(formatChangedFile) : ['No changed files found.']),
+      '',
+      'Workflows:',
+      ...workflowSections.flatMap((section) => [
+        section.title,
+        ...section.lines.slice(0, 3).map((line) => `  ${line}`),
+      ]).slice(0, 14),
     ]
     : [
       selected?.message || 'No commit selected.',
@@ -625,6 +685,35 @@ function renderDetailPanel(
     key: `detail-${index}`,
     dimColor: index > 1 && line !== 'Changed files:',
   }, truncate(line, width - 4))))
+}
+
+function renderConfirmationPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const action = getWorkflowActionById(state.pendingConfirmationId)
+  const label = action?.label || 'Workflow action'
+  const warning = action?.kind === 'ai'
+    ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`
+    : 'Destructive Git action requires confirmation.'
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle('Confirm', focused)),
+  h(Text, undefined, truncate(label, width - 4)),
+  h(Text, { dimColor: true }, truncate(warning, width - 4)),
+  h(Text, undefined, ''),
+  h(Text, undefined, 'Press y to confirm or n/Esc to cancel.'))
 }
 
 function renderHelpPanel(
@@ -667,6 +756,7 @@ function renderCommandPalette(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const commands = getLogInkCommandPaletteItems()
+  const workflowActions = getLogInkWorkflowActions()
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -680,7 +770,20 @@ function renderCommandPalette(
   h(Text, undefined, ''),
   ...commands.map((command) => h(Text, {
     key: command.id,
-  }, truncate(`${command.keys.padEnd(12)} ${command.label} - ${command.description}`, width - 4))))
+  }, truncate(`${command.keys.padEnd(12)} ${command.label} - ${command.description}`, width - 4))),
+  h(Text, undefined, ''),
+  h(Text, { bold: true }, 'Workflow actions'),
+  ...workflowActions.map((action) => {
+    const marker = action.kind === 'ai'
+      ? `[AI ~${action.estimatedTokens || '?'} tokens]`
+      : action.requiresConfirmation
+        ? '[confirm]'
+        : '[action]'
+
+    return h(Text, {
+      key: action.id,
+    }, truncate(`${action.key.padEnd(4)} ${marker} ${action.label}`, width - 4))
+  }))
 }
 
 function renderFooter(
