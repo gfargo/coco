@@ -25,13 +25,12 @@ import {
   copyCommitMessage,
   getReflogEntries,
   isResetMode,
-  openCommitOnRemote,
   resetToCommit,
   revertCommit,
   rewordHeadCommit,
   startInteractiveRebase,
 } from './historyActions'
-import { createPullRequest, openPullRequest } from './pullRequestActions'
+import { createPullRequest } from './pullRequestActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { applyStash, createStash, dropStash, popStash } from './stashActions'
 import { StashEntry, StashOverview, getStashDiffSummary, getStashOverview } from './stashData'
@@ -65,6 +64,8 @@ import {
 } from './interactiveState'
 import { abortOperation, continueOperation, skipOperation } from './operationActions'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
+import { openProviderUrl } from './providerActions'
+import { ProviderOverview, getProviderOverview, providerBranchName } from './providerData'
 
 type LogTuiStreams = {
   input?: NodeJS.ReadStream
@@ -85,6 +86,7 @@ type RenderInteractiveLogWorkspace = {
 type RenderInteractiveLogHistory = {
   compareBase?: HistoryCommitRef
   reflog?: ReflogEntry[]
+  providerCompareBase?: string
 }
 
 type LogTuiFocus = 'commits' | 'branches' | 'tags' | 'status' | 'workspace'
@@ -302,6 +304,52 @@ function renderPullRequestOverview(
     `Title: ${pr.title}`,
     `URL: ${pr.url}`,
     action,
+  ].map((line) => truncate(line, width))
+}
+
+function renderProviderOverview(
+  overview: ProviderOverview | undefined,
+  history: RenderInteractiveLogHistory,
+  width: number
+): string[] {
+  if (!overview) {
+    return ['Provider: unavailable']
+  }
+
+  const repository = overview.repository
+  const repoName = repository.owner && repository.name
+    ? `${repository.owner}/${repository.name}`
+    : repository.message || 'unsupported remote'
+
+  if (repository.provider === 'unsupported' || !repository.webUrl) {
+    return [
+      `Provider: ${repoName} | ${overview.message || repository.message || 'unsupported remote'}`,
+    ].map((line) => truncate(line, width))
+  }
+
+  const defaultBranch = repository.defaultBranch || '<unknown>'
+  const auth = overview.authenticated ? 'authenticated' : 'offline'
+  const pr = overview.currentPullRequest
+  const checks = pr?.statusCheckRollup?.length
+    ? pr.statusCheckRollup
+      .slice(0, 3)
+      .map((check) => `${check.name}:${check.conclusion || check.status || 'pending'}`)
+      .join(', ')
+    : undefined
+  const prLine = pr
+    ? `Provider PR: #${pr.number} ${pr.state}${pr.isDraft ? ' draft' : ''} review ${pr.reviewDecision || '<unknown>'}`
+    : `Provider PR: ${overview.message || 'none for current branch'}`
+  const compareLine = history.providerCompareBase
+    ? `Provider compare base: ${history.providerCompareBase}`
+    : 'Provider compare: press U on a ref, then U on another ref'
+
+  return [
+    `Provider: ${repository.provider} ${repoName} | default ${defaultBranch} | ${auth}`,
+    repository.webUrl ? `Repository: ${repository.webUrl}` : `Provider fallback: ${overview.message || repository.message || 'unsupported'}`,
+    prLine,
+    checks ? `Checks: ${checks}` : 'Checks: unavailable',
+    compareLine,
+    'Provider actions: R repo | L branch | O commit | U compare | o PR',
   ].map((line) => truncate(line, width))
 }
 
@@ -542,7 +590,8 @@ export function renderInteractiveLog(
   options: RenderInteractiveLogOptions = {},
   workspace: RenderInteractiveLogWorkspace = {},
   history: RenderInteractiveLogHistory = {},
-  operation?: GitOperationOverview
+  operation?: GitOperationOverview,
+  provider?: ProviderOverview
 ): string {
   const height = options.height || process.stdout.rows || DEFAULT_HEIGHT
   const width = options.width || process.stdout.columns || DEFAULT_WIDTH
@@ -561,6 +610,7 @@ export function renderInteractiveLog(
     : 'Selected: none'
   const branchLines = renderBranchOverview(branches, ui, width).slice(0, 12)
   const pullRequestLines = renderPullRequestOverview(pullRequest, ui, width).slice(0, 4)
+  const providerLines = renderProviderOverview(provider, history, width).slice(0, 6)
   const tagLines = renderTagOverview(tags, tagRangeSummary, ui, width).slice(0, 10)
   const statusLines = renderStatusOverview(worktree, ui, width).slice(0, 10)
   const workspaceLines = workspace.stashes || workspace.worktreeList
@@ -581,6 +631,7 @@ export function renderInteractiveLog(
       listHeight -
       branchLines.length -
       pullRequestLines.length -
+      providerLines.length -
       tagLines.length -
       statusLines.length -
       workspaceLines.length -
@@ -602,6 +653,7 @@ export function renderInteractiveLog(
     '',
     ...branchLines,
     ...pullRequestLines,
+    ...providerLines,
     ...tagLines,
     ...statusLines,
     ...workspaceLines,
@@ -635,8 +687,10 @@ export async function startInteractiveLog(
   let worktreeList: WorktreeListOverview | undefined
   let stashDiffSummary: string[] | undefined
   let compareBase: HistoryCommitRef | undefined
+  let providerCompareBase: string | undefined
   let reflog: ReflogEntry[] | undefined
   let operationOverview: GitOperationOverview | undefined
+  let providerOverview: ProviderOverview | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
   let tagIndex = 0
@@ -683,7 +737,7 @@ export async function startInteractiveLog(
 
   if (!input.isTTY || !output.isTTY) {
     try {
-      [branches, pullRequest, tags, worktree, stashes, worktreeList, operationOverview] = await Promise.all([
+      [branches, pullRequest, tags, worktree, stashes, worktreeList, operationOverview, providerOverview] = await Promise.all([
         getBranchOverview(git),
         getPullRequestOverview(git),
         getTagOverview(git),
@@ -691,6 +745,7 @@ export async function startInteractiveLog(
         getStashOverview(git),
         getWorktreeListOverview(git),
         getGitOperationOverview(git),
+        getProviderOverview(git),
       ])
     } catch {
       branches = undefined
@@ -709,7 +764,8 @@ export async function startInteractiveLog(
         {},
         { stashes, worktreeList },
         {},
-        operationOverview
+        operationOverview,
+        providerOverview
       )}\n`,
       'utf8'
     )
@@ -776,8 +832,9 @@ export async function startInteractiveLog(
           ui,
           {},
           { stashes, worktreeList, stashDiffSummary },
-          { compareBase, reflog },
-          operationOverview
+          { compareBase, reflog, providerCompareBase },
+          operationOverview,
+          providerOverview
         )}\n`,
         'utf8'
       )
@@ -798,8 +855,9 @@ export async function startInteractiveLog(
               ui,
               {},
               { stashes, worktreeList, stashDiffSummary },
-              { compareBase, reflog },
-              operationOverview
+              { compareBase, reflog, providerCompareBase },
+              operationOverview,
+              providerOverview
             )}\n`,
             'utf8'
           )
@@ -852,6 +910,10 @@ export async function startInteractiveLog(
       operationOverview = await getGitOperationOverview(git)
     }
 
+    const refreshProviderOverview = async () => {
+      providerOverview = await getProviderOverview(git)
+    }
+
     const setActionResult = async (result: BranchActionResult, refresh = true) => {
       statusMessage = result.message
       statusDetails = result.details
@@ -879,6 +941,7 @@ export async function startInteractiveLog(
           refreshStashes(),
           refreshWorktreeList(),
           refreshOperationOverview(),
+          refreshProviderOverview(),
         ])
         await refreshStatusHunks()
       }
@@ -907,6 +970,18 @@ export async function startInteractiveLog(
     const selectedRef = () => {
       if (focus === 'branches') {
         return selectedBranch()?.shortName
+      }
+
+      if (focus === 'tags') {
+        return selectedTag()?.name
+      }
+
+      return getSelectedCommit(state)?.hash
+    }
+
+    const selectedProviderRef = () => {
+      if (focus === 'branches') {
+        return providerBranchName(selectedBranch())
       }
 
       if (focus === 'tags') {
@@ -1366,6 +1441,53 @@ export async function startInteractiveLog(
           true,
           `Running git ${operation} --${action}...`
         )
+      } else if (sequence === 'R' && focus !== 'tags') {
+        void runBranchAction(
+          () => openProviderUrl(providerOverview?.repository, { type: 'repo' }),
+          false,
+          'Opening provider repository...'
+        )
+      } else if (sequence === 'L' && focus === 'branches') {
+        const branch = providerBranchName(selectedBranch())
+
+        if (branch) {
+          void runBranchAction(
+            () => openProviderUrl(providerOverview?.repository, { type: 'branch', branch }),
+            false,
+            'Opening provider branch...'
+          )
+        }
+      } else if (sequence === 'O' && focus === 'commits') {
+        const commit = selectedHistoryCommit()
+
+        if (commit) {
+          void runBranchAction(
+            () => openProviderUrl(providerOverview?.repository, { type: 'commit', commit: commit.hash }),
+            false,
+            'Opening selected commit...'
+          )
+        }
+      } else if (sequence === 'U') {
+        const ref = selectedProviderRef()
+
+        if (!providerCompareBase && ref) {
+          providerCompareBase = ref
+          statusMessage = `Provider compare base set to ${ref}`
+          statusDetails = ['Move to another ref and press U again to open a compare URL.']
+          void render()
+        } else if (ref) {
+          const base = providerCompareBase
+          providerCompareBase = undefined
+          void runBranchAction(
+            () => openProviderUrl(providerOverview?.repository, {
+              type: 'compare',
+              base: base as string,
+              head: ref,
+            }),
+            false,
+            'Opening provider compare URL...'
+          )
+        }
       } else if (key.name === 'h' && focus === 'commits') {
         void runBranchAction(() => copyCommitHash(selectedHistoryCommit()), false, 'Copying commit hash...')
       } else if (sequence === 'H' && focus === 'commits') {
@@ -1373,12 +1495,6 @@ export async function startInteractiveLog(
           () => copyCommitMessage(selectedHistoryCommit()),
           false,
           'Copying commit message...'
-        )
-      } else if (sequence === 'O' && focus === 'commits') {
-        void runBranchAction(
-          () => openCommitOnRemote(git, selectedHistoryCommit()),
-          false,
-          'Opening selected commit...'
         )
       } else if (sequence === '=' && focus === 'commits') {
         const commit = selectedHistoryCommit()
@@ -1747,10 +1863,14 @@ export async function startInteractiveLog(
         statusDetails = undefined
         void render()
       } else if (key.name === 'o') {
-        const url = pullRequest?.currentPullRequest?.url
+        const number = providerOverview?.currentPullRequest?.number || pullRequest?.currentPullRequest?.number
 
-        if (url) {
-          void runBranchAction(() => openPullRequest(url), false)
+        if (number) {
+          void runBranchAction(
+            () => openProviderUrl(providerOverview?.repository, { type: 'pull-request', number }),
+            false,
+            'Opening pull request...'
+          )
         } else {
           statusMessage = 'No current pull request to open.'
           statusDetails = undefined
@@ -1784,6 +1904,7 @@ export async function startInteractiveLog(
       refreshStashes(),
       refreshWorktreeList(),
       refreshOperationOverview(),
+      refreshProviderOverview(),
     ])
       .then(async () => {
         await refreshStatusHunks()
@@ -1798,6 +1919,7 @@ export async function startInteractiveLog(
         stashes = undefined
         worktreeList = undefined
         operationOverview = undefined
+        providerOverview = undefined
       })
     void render()
   })

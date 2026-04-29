@@ -2,6 +2,7 @@ import { execFile, spawn } from 'child_process'
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
 import { getInProgressOperationType } from './operationData'
+import { buildProviderUrl, getProviderOverview } from './providerData'
 
 function compactOutputLines(output: string): string[] {
   return output
@@ -240,6 +241,19 @@ export async function getRemoteCommitUrl(
   commitHash: string,
   remote = 'origin'
 ): Promise<string | undefined> {
+  try {
+    const provider = await getProviderOverview(git)
+
+    if (provider.repository.remote === remote) {
+      return buildProviderUrl(provider.repository, {
+        type: 'commit',
+        commit: commitHash,
+      })
+    }
+  } catch {
+    // Fall back to direct remote URL parsing for older mocks and unsupported providers.
+  }
+
   const remoteUrl = await git.raw(['remote', 'get-url', remote])
   const webUrl = normalizeRemoteUrl(remoteUrl)
 
