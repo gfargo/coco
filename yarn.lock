@@ -1368,13 +1368,12 @@
     p-queue "^6.6.2"
     zod "^3.25.76 || ^4"
 
-"@langchain/ollama@^0.2.0":
-  version "0.2.4"
-  resolved "https://registry.npmjs.org/@langchain/ollama/-/ollama-0.2.4.tgz"
-  integrity sha512-XThDrZurNPcUO6sasN13rkes1aGgu5gWAtDkkyIGT3ZeMOvrYgPKGft+bbhvsigTIH9C01TfPzrSp8LAmvHIjA==
+"@langchain/ollama@^1.2.7":
+  version "1.2.7"
+  resolved "https://registry.yarnpkg.com/@langchain/ollama/-/ollama-1.2.7.tgz#a1d6ed8105ebcefdb7d30ebf7daa0f35c7a32e31"
+  integrity sha512-7Gu17q1dn4nKGB3ZYJyaaL8H/2k7LHvcL6V25S8cVDniTTSvd0fWzI5MzPJvbf9WPxBhvmf+rDDLAhOWljHEtQ==
   dependencies:
-    ollama "^0.5.17"
-    uuid "^10.0.0"
+    ollama "^0.6.3"
 
 "@langchain/openai@1.2.13":
   version "1.2.13"
@@ -4590,10 +4589,10 @@ ohash@^2.0.11:
   resolved "https://registry.npmjs.org/ohash/-/ohash-2.0.11.tgz"
   integrity sha512-RdR9FQrFwNBNXAr4GixM8YaRZRJ5PUWbKYbE5eOsrwAjJW0q2REGcf79oYPsLyskQCZG1PLN+S/K1V00joZAoQ==
 
-ollama@^0.5.17:
-  version "0.5.18"
-  resolved "https://registry.npmjs.org/ollama/-/ollama-0.5.18.tgz"
-  integrity sha512-lTFqTf9bo7Cd3hpF6CviBe/DEhewjoZYd9N/uCe7O20qYTvGqrNOFOBDj3lbZgFWHUgDv5EeyusYxsZSLS8nvg==
+ollama@^0.6.3:
+  version "0.6.3"
+  resolved "https://registry.yarnpkg.com/ollama/-/ollama-0.6.3.tgz#b188573dd0ccb3b4759c1f8fa85067cb17f6673c"
+  integrity sha512-KEWEhIqE5wtfzEIZbDCLH51VFZ6Z3ZSa6sIOg/E/tBV8S51flyqBOXi+bRxlOYKDf8i327zG9eSTb8IJxvm3Zg==
   dependencies:
     whatwg-fetch "^3.6.20"
 
