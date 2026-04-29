@@ -8,6 +8,13 @@ import {
   getLogInkFooterHints,
   getLogInkHelpSections,
 } from './inkKeymap'
+import {
+  LOG_INK_DEFAULT_COLUMNS,
+  LOG_INK_DEFAULT_ROWS,
+  LOG_INK_MIN_COLUMNS,
+  LOG_INK_MIN_ROWS,
+  getLogInkLayout,
+} from './inkLayout'
 import { createLogInkTheme, LogInkTheme } from './inkTheme'
 import {
   LogInkSidebarTab,
@@ -103,11 +110,6 @@ type LogInkComponentDeps = LogInkRuntime & {
   rows: GitLogRow[]
   theme: LogInkTheme
 }
-
-const MIN_COLUMNS = 80
-const MIN_ROWS = 24
-const DEFAULT_COLUMNS = 120
-const DEFAULT_ROWS = 40
 
 function truncate(value: string, width: number): string {
   if (width < 1) {
@@ -364,8 +366,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const h = React.createElement
   const { exit } = useApp()
   const windowSize = useWindowSize()
-  const columns = windowSize.columns || process.stdout.columns || DEFAULT_COLUMNS
-  const terminalRows = windowSize.rows || process.stdout.rows || DEFAULT_ROWS
+  const layout = getLogInkLayout({
+    columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
+    rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
+  })
   const [state, setState] = React.useState<LogInkState>(() => createLogInkState(rows))
   const [context, setContext] = React.useState<LogInkContext>(initialContext)
   const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
@@ -490,29 +494,25 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   })
 
-  if (columns < MIN_COLUMNS || terminalRows < MIN_ROWS) {
+  if (layout.tooSmall) {
     return h(Box, {
       flexDirection: 'column',
-      height: terminalRows,
+      height: layout.rows,
       paddingX: 1,
       paddingY: 1,
     },
     h(Text, { bold: true }, 'coco log -i'),
-    h(Text, undefined, `Terminal too small: ${columns}x${terminalRows}`),
-    h(Text, { dimColor: true }, `Minimum size is ${MIN_COLUMNS}x${MIN_ROWS}.`),
+    h(Text, undefined, `Terminal too small: ${layout.columns}x${layout.rows}`),
+    h(Text, { dimColor: true }, `Minimum size is ${LOG_INK_MIN_COLUMNS}x${LOG_INK_MIN_ROWS}.`),
     h(Text, { dimColor: true }, 'Resize the terminal or run plain coco log.'))
   }
 
-  const bodyRows = Math.max(8, terminalRows - 5)
-  const sidebarWidth = Math.max(22, Math.min(34, Math.floor(columns * 0.24)))
-  const detailWidth = Math.max(30, Math.min(56, Math.floor(columns * 0.34)))
-
-  return h(Box, { flexDirection: 'column', height: terminalRows },
-    renderHeader(h, { Box, Text }, state, context, columns, theme),
-    h(Box, { flexDirection: 'row', height: bodyRows },
-      renderSidebar(h, { Box, Text }, state, context, sidebarWidth, theme),
-      renderCommitPanel(h, { Box, Text }, state, bodyRows, theme),
-      renderDetailPanel(h, { Box, Text }, state, context, detail, detailLoading, detailWidth, theme)
+  return h(Box, { flexDirection: 'column', height: layout.rows },
+    renderHeader(h, { Box, Text }, state, context, layout.columns, theme),
+    h(Box, { flexDirection: 'row', height: layout.bodyRows },
+      renderSidebar(h, { Box, Text }, state, context, layout.sidebarWidth, theme),
+      renderCommitPanel(h, { Box, Text }, state, layout.bodyRows, theme),
+      renderDetailPanel(h, { Box, Text }, state, context, detail, detailLoading, layout.detailWidth, theme)
     ),
     renderFooter(h, { Box, Text }, state, theme)
   )
