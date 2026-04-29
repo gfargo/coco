@@ -9,6 +9,7 @@ import { WorktreeHunkOverview } from './statusHunks'
 import { StashOverview } from './stashData'
 import { WorktreeOverview as WorktreeListOverview } from './worktreeData'
 import { GitOperationOverview } from './operationData'
+import { ProviderOverview } from './providerData'
 
 const rows: GitLogRow[] = [
   {
@@ -219,6 +220,32 @@ const operationOverview: GitOperationOverview = {
   aiConflictHelpAvailable: true,
 }
 
+const providerOverview: ProviderOverview = {
+  authenticated: true,
+  currentBranch: 'feature/log-prs',
+  repository: {
+    provider: 'github',
+    remote: 'origin',
+    owner: 'gfargo',
+    name: 'coco',
+    webUrl: 'https://github.com/gfargo/coco',
+    defaultBranch: 'main',
+  },
+  currentPullRequest: {
+    number: 123,
+    title: 'Add PR workflow',
+    state: 'OPEN',
+    isDraft: false,
+    reviewDecision: 'APPROVED',
+    statusCheckRollup: [
+      {
+        name: 'test',
+        conclusion: 'SUCCESS',
+      },
+    ],
+  },
+}
+
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
     const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, worktree, {}, {
@@ -248,6 +275,38 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Operation: unavailable')
     expect(output).toContain('Keys:')
     expect(output).toContain('Commit actions: e amend HEAD | w reword HEAD')
+  })
+
+  it('renders provider context, checks, and compare state', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'commits',
+      },
+      {
+        height: 90,
+        width: 140,
+      },
+      {},
+      {
+        providerCompareBase: 'main',
+      },
+      undefined,
+      providerOverview
+    )
+
+    expect(output).toContain('Provider: github gfargo/coco | default main | authenticated')
+    expect(output).toContain('Repository: https://github.com/gfargo/coco')
+    expect(output).toContain('Provider PR: #123 OPEN review APPROVED')
+    expect(output).toContain('Checks: test:SUCCESS')
+    expect(output).toContain('Provider compare base: main')
+    expect(output).toContain('Provider actions: R repo | L branch | O commit | U compare | o PR')
   })
 
   it('renders in-progress operation, conflicts, hooks, and no-verify state', () => {
