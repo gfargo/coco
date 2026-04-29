@@ -1,4 +1,4 @@
-import { select } from '@inquirer/prompts'
+import { selectPrompt } from './inquirerPrompts'
 
 export type ReviewDecision =
   | 'approve'
@@ -29,7 +29,11 @@ export async function getUserReviewDecision({
   enableModifyPrompt = true,
   selectLabel,
 }: GetUserReviewDecisionInput): Promise<ReviewDecision> {
-  const choices = [
+  const choices: Array<{
+    name: string
+    value: ReviewDecision
+    description: string
+  }> = [
     {
       name: labels?.approve || '✨ Looks good!',
       value: 'approve',
@@ -80,8 +84,8 @@ export async function getUserReviewDecision({
     description: descriptions?.cancel || `Cancel the ${label}`,
   })
 
-  return (await select({
+  return await selectPrompt<ReviewDecision>({
     message: selectLabel || `Would you like to make any changes to the ${label}?`,
     choices,
-  })) as ReviewDecision
+  })
 }

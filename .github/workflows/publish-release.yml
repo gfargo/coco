@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.12.0
+          node-version: 22.13.0
           cache: yarn
           cache-dependency-path: yarn.lock
 
@@ -54,7 +54,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.12.0
+          node-version: 22.13.0
           registry-url: https://registry.npmjs.org
           cache: yarn
           cache-dependency-path: yarn.lock

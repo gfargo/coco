@@ -1,7 +1,7 @@
-import { select } from '@inquirer/prompts'
 import { ValidationResult } from '../utils/commitlintValidator'
 import { Logger } from '../utils/logger'
 import { editResult } from './editResult'
+import { selectPrompt } from './inquirerPrompts'
 
 export interface ValidationHandlerOptions {
   logger: Logger
@@ -52,7 +52,7 @@ export async function handleValidationErrors(
   }
 
   // In interactive mode, offer options to the user
-  const choice = await select({
+  const choice = await selectPrompt<'retry' | 'edit' | 'abort'>({
     message: 'How would you like to proceed?:',
     choices: [
       {

@@ -541,8 +541,8 @@ IMPORTANT RULES:
             logger.log(SEPERATOR)
 
             if (INTERACTIVE) {
-              const { select } = await import('@inquirer/prompts')
-              const choice = await select({
+              const { selectPrompt } = await import('../../lib/ui/inquirerPrompts')
+              const choice = await selectPrompt<'retry' | 'skip' | 'abort'>({
                 message: 'How would you like to proceed?',
                 choices: [
                   {

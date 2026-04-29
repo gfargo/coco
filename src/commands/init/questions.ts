@@ -1,6 +1,12 @@
-import { confirm, editor, input, password, select } from '@inquirer/prompts'
 import { ANTHROPIC_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
+import {
+  confirmPrompt,
+  editorPrompt,
+  inputPrompt,
+  passwordPrompt,
+  selectPrompt,
+} from '../../lib/ui/inquirerPrompts'
 import { commandExit } from '../../lib/utils/commandExit'
 import { execPromise } from '../../lib/utils/execPromise'
 import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
@@ -12,7 +18,7 @@ export const questions = {
    * @description configure coco globally for the current user or project?
    */
   whatScope: async (): Promise<InstallationScope> =>
-    await select({
+    await selectPrompt<InstallationScope>({
       message: 'configure coco globally for the current user or for the current directory?',
       choices: [
         {
@@ -28,7 +34,7 @@ export const questions = {
       ],
     }),
   selectLLMProvider: async (): Promise<LLMProvider> =>
-    await select({
+    await selectPrompt<LLMProvider>({
       message: 'select language model provider:',
       choices: [
         {
@@ -92,7 +98,7 @@ export const questions = {
       ]
     }
 
-    return await select({
+    return await selectPrompt<LLMModel>({
       message: 'select language model:',
       choices: availableModels,
     })
@@ -104,7 +110,7 @@ export const questions = {
    * @returns 'interactive' | 'stdout'
    */
   selectMode: async (): Promise<'interactive' | 'stdout'> =>
-    await select({
+    await selectPrompt<'interactive' | 'stdout'>({
       message: 'select mode:',
       choices: [
         {
@@ -127,7 +133,7 @@ export const questions = {
     const envVarValue = process.env[envVarName];
   
     if (envVarValue) {
-      const useExisting = await confirm({
+      const useExisting = await confirmPrompt({
         message: `Use existing ${envVarName} env var?`,
         default: true,
       });
@@ -137,7 +143,7 @@ export const questions = {
       }
     }
   
-    return await password({
+    return await passwordPrompt({
       message: `Enter your ${keyName} API key:`,
       validate(input) {
         return input.length > 0 ? true : 'API key cannot be empty';
@@ -146,7 +152,7 @@ export const questions = {
   },
 
   inputTokenLimit: async (): Promise<number> => {
-    const tokenLimit = await input({
+    const tokenLimit = await inputPrompt({
       message: 'maximum number of tokens for generating commit messages:',
       default: '300',
     })
@@ -155,7 +161,7 @@ export const questions = {
   },
 
   inputModelTemperature: async (): Promise<number> => {
-    const temperature = await input({
+    const temperature = await inputPrompt({
       message: 'model temperature for generating commit messages:',
       default: '0.36',
     })
@@ -163,14 +169,14 @@ export const questions = {
   },
 
   inputOllamaEndpoint: async (): Promise<string> => {
-    return await input({
+    return await inputPrompt({
       message: 'Ollama endpoint (e.g., http://localhost:11434):',
       default: 'http://localhost:11434',
     })
   },
 
   inputRequestTimeout: async (): Promise<number> => {
-    const timeout = await input({
+    const timeout = await inputPrompt({
       message: 'Request timeout in milliseconds:',
       default: '30000',
     })
@@ -178,7 +184,7 @@ export const questions = {
   },
 
   inputRequestMaxRetries: async (): Promise<number> => {
-    const maxRetries = await input({
+    const maxRetries = await inputPrompt({
       message: 'Maximum number of request retries:',
       default: '3',
     })
@@ -186,33 +192,33 @@ export const questions = {
   },
 
   inputServiceFields: async (): Promise<string> => {
-    return await editor({
+    return await editorPrompt({
       message: 'Enter additional service fields as a JSON string (optional):',
       default: '{}',
     })
   },
 
   selectDefaultGitBranch: async (): Promise<string> =>
-    (await input({
+    (await inputPrompt({
       message: 'default branch for the repository:',
       default: 'main',
     })) || 'main',
 
   configureAdvancedOptions: async (): Promise<boolean> =>
-    await confirm({
+    await confirmPrompt({
       message: 'would you like to configure advanced options?',
       default: false,
     }),
 
   enableVerboseMode: async (): Promise<boolean> =>
-    await confirm({
+    await confirmPrompt({
       message: 'enable verbose logging:',
       default: false,
     }),
 
   whatFilesToIgnore: async (): Promise<string[]> =>
     (
-      await input({
+      await inputPrompt({
         message: 'paths of files to be excluded when generating commit messages (comma-separated):',
         default: 'package-lock.json,yarn.lock,pnpm-lock.yaml,bun.lockb',
       })
@@ -222,7 +228,7 @@ export const questions = {
 
   whatExtensionsToIgnore: async (): Promise<string[]> =>
     (
-      await input({
+      await inputPrompt({
         message:
           'file extensions to be excluded when generating commit messages (comma-separated):',
         default: '.map, .lock',
@@ -232,13 +238,13 @@ export const questions = {
       ?.map((ext: string) => ext.trim()) || [],
 
   modifyCommitPrompt: async (): Promise<string> =>
-    await editor({
+    await editorPrompt({
       message: 'modify default commit message prompt:',
       default: COMMIT_PROMPT.template as string,
     }),
 
   selectProjectConfigFileType: async (): Promise<ProjectConfigFileName> =>
-    await select({
+    await selectPrompt<ProjectConfigFileName>({
       message: 'where would you like to store the project config?',
       choices: [
         {
@@ -253,7 +259,7 @@ export const questions = {
     }),
 
   setupCommitlint: async (): Promise<boolean> =>
-    await confirm({
+    await confirmPrompt({
       message: 'set up commitlint for conventional commits support?',
       default: true,
     }),

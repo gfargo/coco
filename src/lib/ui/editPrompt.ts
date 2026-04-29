@@ -1,13 +1,13 @@
-import { editor } from '@inquirer/prompts'
 import { COMMIT_PROMPT } from '../../commands/commit/prompt'
 import { validatePromptTemplate } from '../langchain/utils/validatePromptTemplate'
 import { GenerateReviewLoopOptions } from './generateAndReviewLoop'
+import { editorPrompt } from './inquirerPrompts'
 
 export async function editPrompt(options: GenerateReviewLoopOptions): Promise<string> {
-  return await editor({
+  return await editorPrompt({
     message: 'Edit the prompt',
     default: options.prompt?.length ? options.prompt : COMMIT_PROMPT.template as string,
-    waitForUseInput: false,
+    waitForUserInput: false,
     postfix: 'Press ENTER to continue',
     validate: (text) => {
       try {
