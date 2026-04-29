@@ -1,9 +1,9 @@
-import { confirm } from '@inquirer/prompts'
 import { appendToEnvFile } from '../../lib/config/services/env'
 import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToProjectJsonConfig } from '../../lib/config/services/project'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
 import { LOGO } from '../../lib/ui/helpers'
+import { confirmPrompt } from '../../lib/ui/inquirerPrompts'
 import { logResult } from '../../lib/ui/logResult'
 import { installNpmPackage } from '../../lib/utils/installPackage'
 
@@ -103,7 +103,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         maxRetries: await questions.inputRequestMaxRetries(),
       }
 
-      const promptForServiceFields = await confirm({
+      const promptForServiceFields = await confirmPrompt({
         message: 'would you like to configure additional service fields (advanced)?',
         default: false,
       })
@@ -121,7 +121,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         }
       }
 
-      const promptForIgnores = await confirm({
+      const promptForIgnores = await confirmPrompt({
         message: 'would you like to configure ignored files and extensions?',
         default: false,
       })
@@ -131,7 +131,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         config.ignoredExtensions = await questions.whatExtensionsToIgnore()
       }
 
-      const promptForCommitPrompt = await confirm({
+      const promptForCommitPrompt = await confirmPrompt({
         message: 'would you like to configure the commit message prompt?',
         default: false,
       })
@@ -150,7 +150,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     approvalMessage = 'looking good? (API key hidden for security)'
   }
 
-  const isApproved = await confirm({
+  const isApproved = await confirmPrompt({
     message: approvalMessage,
   })
 

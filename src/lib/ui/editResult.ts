@@ -1,15 +1,15 @@
-import { editor } from '@inquirer/prompts'
 import { GenerateReviewLoopOptions } from './generateAndReviewLoop'
+import { editorPrompt } from './inquirerPrompts'
 
 export async function editResult(
   result: string,
   options: GenerateReviewLoopOptions
 ): Promise<string> {
   if (options.openInEditor) {
-    return await editor({
+    return await editorPrompt({
       message: 'Edit the commit message',
       default: result,
-      waitForUseInput: false,
+      waitForUserInput: false,
       validate: (text) => (text ? true : 'Commit message cannot be empty'),
     })
   }

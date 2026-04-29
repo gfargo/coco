@@ -1,8 +1,8 @@
-import { confirm } from '@inquirer/prompts'
 import { findProjectRoot } from '../utils/findProjectRoot'
 import { installNpmPackage } from '../utils/installPackage'
 import { isPackageInstalled } from '../utils/isPackageInstalled'
 import { Logger } from '../utils/logger'
+import { confirmPrompt } from './inquirerPrompts'
 
 // TODO: QoL improvement to import this from `package.json`
 const packageName = 'git-coco'
@@ -19,7 +19,7 @@ export async function checkAndHandlePackageInstallation({
   try {
     // Global installation
     if (global) {
-      const shouldInstall = await confirm({
+      const shouldInstall = await confirmPrompt({
         message: `Would you like to install/update '${packageName}' globally at this time?`,
         default: true,
       })
@@ -39,12 +39,12 @@ export async function checkAndHandlePackageInstallation({
     let shouldInstall = false
 
     if (isPackageInstalled(packageName, projectRoot)) {
-      shouldInstall = await confirm({
+      shouldInstall = await confirmPrompt({
         message: `'${packageName}' is already installed in '${projectRoot}/package.json', would you like to update?`,
         default: shouldInstall,
       })
     } else {
-      shouldInstall = await confirm({
+      shouldInstall = await confirmPrompt({
         message: `'${packageName}' is not installed in '${projectRoot}/package.json', would you like to install?`,
         default: shouldInstall,
       })

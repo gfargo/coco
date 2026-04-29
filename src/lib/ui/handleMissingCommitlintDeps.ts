@@ -1,5 +1,5 @@
-import { select } from '@inquirer/prompts'
 import { Logger } from '../utils/logger'
+import { selectPrompt } from './inquirerPrompts'
 
 export interface MissingDependencyOptions {
   logger: Logger
@@ -37,7 +37,7 @@ export async function handleMissingCommitlintDeps(
   })
   logger.log('')
 
-  const choice = await select({
+  const choice = await selectPrompt<MissingDependencyAction>({
     message: 'How would you like to proceed?',
     choices: [
       {

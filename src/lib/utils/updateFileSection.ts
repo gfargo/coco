@@ -1,6 +1,6 @@
 import fs from 'fs'
-import { confirm } from '@inquirer/prompts'
 import { ConfirmMessage } from '../types'
+import { confirmPrompt } from '../ui/inquirerPrompts'
 
 type UpdateFileSectionInput = {
   filePath: string
@@ -29,7 +29,7 @@ export async function updateFileSection({
       foundSection = true
 
       if (confirmUpdate) {
-        const confirmOverwrite = await confirm({
+        const confirmOverwrite = await confirmPrompt({
           message: typeof confirmMessage === 'function' ? confirmMessage(filePath) : confirmMessage,
           default: false,
         })

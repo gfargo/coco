@@ -2,7 +2,7 @@
 
 Recommended required checks for `main`:
 
-- `Release gate (Node 22.12.0)`
+- `Release gate (Node 22.13.0)`
 - `Release gate (Node 24.x)`
 - `DevSkim`
 

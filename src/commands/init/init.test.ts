@@ -1,4 +1,3 @@
-import { confirm } from '@inquirer/prompts'
 import { handler } from './handler'
 import { questions } from './questions'
 import { InitOptions } from './config'
@@ -14,9 +13,10 @@ import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig
 import { getProjectConfigFilePath } from '../../lib/utils/getProjectConfigFilePath'
 import { installNpmPackage } from '../../lib/utils/installPackage'
 import { Logger } from '../../lib/utils/logger'
+import { confirmPrompt } from '../../lib/ui/inquirerPrompts'
 
-jest.mock('@inquirer/prompts', () => ({
-  confirm: jest.fn(),
+jest.mock('../../lib/ui/inquirerPrompts', () => ({
+  confirmPrompt: jest.fn(),
 }))
 jest.mock('../../lib/config/services/env')
 jest.mock('../../lib/config/services/git')
@@ -29,7 +29,7 @@ jest.mock('../../lib/utils/getPathToUsersGitConfig')
 jest.mock('../../lib/utils/getProjectConfigFilePath')
 jest.mock('../../lib/utils/installPackage')
 
-const mockConfirm = confirm as jest.MockedFunction<typeof confirm>
+const mockConfirm = confirmPrompt as jest.MockedFunction<typeof confirmPrompt>
 const mockAppendToEnvFile = appendToEnvFile as jest.MockedFunction<typeof appendToEnvFile>
 const mockAppendToGitConfig = appendToGitConfig as jest.MockedFunction<typeof appendToGitConfig>
 const mockAppendToProjectJsonConfig = appendToProjectJsonConfig as jest.MockedFunction<
