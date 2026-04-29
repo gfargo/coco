@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { spawnSync } from 'child_process'
@@ -7,12 +7,15 @@ type CommandCheck = {
   command: string
   args: string[]
   label: string
+  cwd?: string
+  env?: NodeJS.ProcessEnv
 }
 
-function runCheck({ command, args, label }: CommandCheck): string {
+function runCheck({ command, args, label, cwd = process.cwd(), env }: CommandCheck): string {
   const result = spawnSync(command, args, {
-    cwd: process.cwd(),
+    cwd,
     encoding: 'utf-8',
+    env: env ? { ...process.env, ...env } : process.env,
   })
 
   if (result.error) {
@@ -40,6 +43,12 @@ function assertHelpOutput(label: string, output: string): void {
   }
 }
 
+function assertOutputIncludes(label: string, output: string, expected: string): void {
+  if (!output.includes(expected)) {
+    throw new Error(`${label} did not include ${expected}:\n${output}`)
+  }
+}
+
 function runHelpCheck(check: CommandCheck): void {
   const output = runCheck(check)
   assertHelpOutput(check.label, output)
@@ -54,6 +63,45 @@ function packagedBinPath(prefix: string): string {
   return process.platform === 'win32'
     ? join(prefix, 'coco.cmd')
     : join(prefix, 'bin', 'coco')
+}
+
+function createSmokeRepo(root: string): string {
+  const repo = join(root, 'repo')
+
+  mkdirSync(repo)
+  runCheck({
+    command: 'git',
+    args: ['init', '--initial-branch=main'],
+    cwd: repo,
+    label: 'smoke repo init',
+  })
+  runCheck({
+    command: 'git',
+    args: ['config', 'user.name', 'Coco Smoke'],
+    cwd: repo,
+    label: 'smoke repo user name',
+  })
+  runCheck({
+    command: 'git',
+    args: ['config', 'user.email', 'smoke@example.com'],
+    cwd: repo,
+    label: 'smoke repo user email',
+  })
+  writeFileSync(join(repo, 'README.md'), '# Smoke repo\n', 'utf8')
+  runCheck({
+    command: 'git',
+    args: ['add', 'README.md'],
+    cwd: repo,
+    label: 'smoke repo add',
+  })
+  runCheck({
+    command: 'git',
+    args: ['commit', '-m', 'feat: smoke log command'],
+    cwd: repo,
+    label: 'smoke repo commit',
+  })
+
+  return repo
 }
 
 const tempRoot = mkdtempSync(join(tmpdir(), 'coco-cli-smoke-'))
@@ -117,6 +165,32 @@ try {
     label: 'packaged init dry run',
   })
   console.log('✓ packaged init dry run')
+
+  const smokeRepo = createSmokeRepo(tempRoot)
+  const logOutput = runCheck({
+    command: packagedBinPath(prefix),
+    args: ['log', '--limit', '1'],
+    cwd: smokeRepo,
+    label: 'packaged log command',
+    env: { NO_COLOR: '1' },
+  })
+  assertOutputIncludes('packaged log command', logOutput, 'feat: smoke log command')
+  console.log('✓ packaged log command')
+
+  const interactiveLogOutput = runCheck({
+    command: packagedBinPath(prefix),
+    args: ['log', '--interactive', '--limit', '1'],
+    cwd: smokeRepo,
+    label: 'packaged non-TTY interactive log command',
+    env: { NO_COLOR: '1' },
+  })
+  assertOutputIncludes('packaged non-TTY interactive log command', interactiveLogOutput, 'coco log')
+  assertOutputIncludes(
+    'packaged non-TTY interactive log command',
+    interactiveLogOutput,
+    'feat: smoke log command'
+  )
+  console.log('✓ packaged non-TTY interactive log command')
 } finally {
   rmSync(tempRoot, { recursive: true, force: true })
 }
