@@ -2,7 +2,7 @@ import { CommandHandler } from '../../lib/types'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { handleResult } from '../../lib/ui/handleResult'
 import { getCommitDetail, getLogRows } from './data'
-import { startInteractiveLog } from './interactive'
+import { startInkInteractiveLog } from './inkRuntime'
 import { formatCommitDetail, formatLogJson, formatLogTable } from './render'
 import { LogArgv } from './config'
 
@@ -22,7 +22,7 @@ export const handler: CommandHandler<LogArgv> = async (argv) => {
   const rows = await getLogRows(git, argv)
 
   if (argv.interactive && format === 'table') {
-    await startInteractiveLog(git, rows)
+    await startInkInteractiveLog(git, rows)
     return
   }
 

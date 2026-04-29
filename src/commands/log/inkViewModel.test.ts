@@ -1,0 +1,122 @@
+import { GitLogRow } from './data'
+import {
+  applyLogInkAction,
+  createLogInkState,
+  getLogInkSidebarTabs,
+  getSelectedInkCommit,
+} from './inkViewModel'
+
+const rows: GitLogRow[] = [
+  {
+    type: 'commit',
+    graph: '*',
+    shortHash: 'abc1234',
+    hash: 'abc123456789',
+    date: '2026-04-27',
+    author: 'Coco Test',
+    refs: ['HEAD -> main', 'tag: 0.33.0'],
+    message: 'feat: add interactive log',
+  },
+  {
+    type: 'commit',
+    graph: '*',
+    shortHash: 'def5678',
+    hash: 'def567890123',
+    date: '2026-04-28',
+    author: 'Griffen Fargo',
+    refs: ['feature/ink'],
+    message: 'fix: polish detail panel',
+  },
+]
+
+describe('log Ink view model', () => {
+  it('creates a calm browsing state from parsed rows', () => {
+    const state = createLogInkState(rows)
+
+    expect(state.commits).toHaveLength(2)
+    expect(state.filteredCommits).toHaveLength(2)
+    expect(state.focus).toBe('commits')
+    expect(state.sidebarTab).toBe('status')
+    expect(state.showHelp).toBe(false)
+    expect(state.showCommandPalette).toBe(false)
+  })
+
+  it('moves selected commits and clamps at list bounds', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'move', delta: 1 })
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('def5678')
+
+    state = applyLogInkAction(state, { type: 'move', delta: 10 })
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('def5678')
+
+    state = applyLogInkAction(state, { type: 'move', delta: -10 })
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
+  })
+
+  it('filters by message, author, hash, and refs', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'setFilter', value: 'polish' })
+    expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['def5678'])
+
+    state = applyLogInkAction(state, { type: 'setFilter', value: 'coco test' })
+    expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['abc1234'])
+
+    state = applyLogInkAction(state, { type: 'setFilter', value: '0.33.0' })
+    expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['abc1234'])
+
+    state = applyLogInkAction(state, { type: 'setFilter', value: 'def567890' })
+    expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['def5678'])
+  })
+
+  it('edits search text through append, backspace, and clear actions', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'appendFilter', value: 'f' })
+    state = applyLogInkAction(state, { type: 'appendFilter', value: 'e' })
+    state = applyLogInkAction(state, { type: 'appendFilter', value: 'a' })
+    expect(state.filter).toBe('fea')
+
+    state = applyLogInkAction(state, { type: 'backspaceFilter' })
+    expect(state.filter).toBe('fe')
+
+    state = applyLogInkAction(state, { type: 'toggleFilterMode' })
+    state = applyLogInkAction(state, { type: 'clearFilter' })
+    expect(state.filter).toBe('')
+    expect(state.filterMode).toBe(false)
+  })
+
+  it('cycles focus and sidebar tabs predictably', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'focusNext' })
+    expect(state.focus).toBe('detail')
+
+    state = applyLogInkAction(state, { type: 'focusNext' })
+    expect(state.focus).toBe('sidebar')
+
+    state = applyLogInkAction(state, { type: 'focusPrevious' })
+    expect(state.focus).toBe('detail')
+
+    expect(getLogInkSidebarTabs()).toEqual(['status', 'branches', 'tags', 'stashes', 'worktrees'])
+
+    state = applyLogInkAction(state, { type: 'nextSidebarTab' })
+    expect(state.sidebarTab).toBe('branches')
+
+    state = applyLogInkAction(state, { type: 'previousSidebarTab' })
+    expect(state.sidebarTab).toBe('status')
+  })
+
+  it('toggles graph, help, and command palette overlays', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'toggleGraph' })
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    state = applyLogInkAction(state, { type: 'toggleCommandPalette' })
+
+    expect(state.fullGraph).toBe(true)
+    expect(state.showHelp).toBe(false)
+    expect(state.showCommandPalette).toBe(true)
+  })
+})
