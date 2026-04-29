@@ -28,6 +28,13 @@ export type LogInkHelpSection = {
   bindings: LogInkKeyBinding[]
 }
 
+export type LogInkCommandPaletteItem = {
+  id: LogInkCommandId
+  keys: string
+  label: string
+  description: string
+}
+
 export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
   {
     id: 'moveUp',
@@ -178,4 +185,13 @@ export function getLogInkHelpSections(): LogInkHelpSection[] {
       ),
     },
   ]
+}
+
+export function getLogInkCommandPaletteItems(): LogInkCommandPaletteItem[] {
+  return LOG_INK_KEY_BINDINGS.map((binding) => ({
+    id: binding.id,
+    keys: formatBindingKeys(binding),
+    label: binding.label,
+    description: binding.description,
+  }))
 }
