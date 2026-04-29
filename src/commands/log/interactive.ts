@@ -1,6 +1,12 @@
 import readline from 'readline'
 import { SimpleGit } from 'simple-git'
 import {
+  LogAiAction,
+  LogAiActionImpact,
+  estimateLogAiActionImpact,
+  runLogAiAction,
+} from './aiActions'
+import {
   BranchActionResult,
   checkoutBranch,
   createBranch,
@@ -89,6 +95,12 @@ type RenderInteractiveLogHistory = {
   providerCompareBase?: string
 }
 
+type RenderInteractiveLogAi = {
+  pendingAction?: LogAiAction
+  impact?: LogAiActionImpact
+  draft?: string
+}
+
 type LogTuiFocus = 'commits' | 'branches' | 'tags' | 'status' | 'workspace'
 type WorkspaceSection = 'stashes' | 'worktrees'
 
@@ -120,6 +132,7 @@ type LogTuiRenderUi = {
   pendingRebaseCommit?: string
   pendingOperationAction?: 'continue' | 'abort' | 'skip'
   noVerify?: boolean
+  pendingAiAction?: LogAiAction
 }
 
 type LogTuiInputKind =
@@ -550,6 +563,30 @@ function renderOperationOverview(
   ].map((line) => truncate(line, width))
 }
 
+function renderAiOverview(
+  ai: RenderInteractiveLogAi,
+  width: number
+): string[] {
+  if (!ai.pendingAction && !ai.draft) {
+    return []
+  }
+
+  const impact = ai.impact
+  const pendingLine = ai.pendingAction && impact
+    ? `Pending AI ${impact.label}: press ${ai.pendingAction === 'summarize-range' ? 'M' : ai.pendingAction === 'release-notes' ? 'J' : ai.pendingAction === 'risk-review' ? 'W' : 'I'} to run | ~${impact.estimatedTokens} tokens${impact.large ? ' large' : ''}`
+    : 'AI actions: I commit summary | M range summary | J release notes | W risk review'
+  const draftLines = ai.draft
+    ? ai.draft.split('\n').slice(0, 4).map((line) => `  ${line}`)
+    : []
+
+  return [
+    'Coco AI:',
+    pendingLine,
+    'AI calls are opt-in; large actions show token awareness before running.',
+    ...(draftLines.length ? ['AI draft:', ...draftLines] : []),
+  ].map((line) => truncate(line, width))
+}
+
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
     return ['Loading selected commit details...']
@@ -591,7 +628,8 @@ export function renderInteractiveLog(
   workspace: RenderInteractiveLogWorkspace = {},
   history: RenderInteractiveLogHistory = {},
   operation?: GitOperationOverview,
-  provider?: ProviderOverview
+  provider?: ProviderOverview,
+  ai: RenderInteractiveLogAi = {}
 ): string {
   const height = options.height || process.stdout.rows || DEFAULT_HEIGHT
   const width = options.width || process.stdout.columns || DEFAULT_WIDTH
@@ -600,7 +638,7 @@ export function renderInteractiveLog(
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
   const focus = ui.focus || 'commits'
   const help = state.showHelp
-    ? 'Keys: tab focus | up/down move | n branch | t tag | C PR | c commit | history h/H/O/= | q quit'
+    ? 'Keys: tab focus | up/down move | n branch | t tag | C PR | c commit | AI I/M/J/W | q quit'
     : 'Press ? for help'
   const commitActions = focus === 'commits'
     ? 'Commit actions: e amend HEAD | w reword HEAD | h hash | H message | O open | = compare'
@@ -624,6 +662,7 @@ export function renderInteractiveLog(
     : []
   const historyLines = renderHistoryOverview(history, ui, width).slice(0, 8)
   const operationLines = renderOperationOverview(operation, ui, width).slice(0, 12)
+  const aiLines = renderAiOverview(ai, width).slice(0, 8)
   const listHeight = Math.max(4, Math.floor(height * 0.35))
   const detailHeight = Math.max(
     6,
@@ -637,6 +676,7 @@ export function renderInteractiveLog(
       workspaceLines.length -
       historyLines.length -
       operationLines.length -
+      aiLines.length -
       11
   )
   const detailLines = renderDetail(detail, width).slice(0, detailHeight)
@@ -659,6 +699,7 @@ export function renderInteractiveLog(
     ...workspaceLines,
     ...historyLines,
     ...operationLines,
+    ...aiLines,
     '',
     ...renderCommitList(state, listHeight, width),
     '',
@@ -691,6 +732,9 @@ export async function startInteractiveLog(
   let reflog: ReflogEntry[] | undefined
   let operationOverview: GitOperationOverview | undefined
   let providerOverview: ProviderOverview | undefined
+  let pendingAiAction: LogAiAction | undefined
+  let aiImpact: LogAiActionImpact | undefined
+  let aiDraft: string | undefined
   let focus: LogTuiFocus = 'commits'
   let branchIndex = 0
   let tagIndex = 0
@@ -818,6 +862,7 @@ export async function startInteractiveLog(
         pendingRebaseCommit,
         pendingOperationAction,
         noVerify,
+        pendingAiAction,
       }
 
       output.write(
@@ -834,7 +879,12 @@ export async function startInteractiveLog(
           { stashes, worktreeList, stashDiffSummary },
           { compareBase, reflog, providerCompareBase },
           operationOverview,
-          providerOverview
+          providerOverview,
+          {
+            pendingAction: pendingAiAction,
+            impact: aiImpact,
+            draft: aiDraft,
+          }
         )}\n`,
         'utf8'
       )
@@ -857,7 +907,12 @@ export async function startInteractiveLog(
               { stashes, worktreeList, stashDiffSummary },
               { compareBase, reflog, providerCompareBase },
               operationOverview,
-              providerOverview
+              providerOverview,
+              {
+                pendingAction: pendingAiAction,
+                impact: aiImpact,
+                draft: aiDraft,
+              }
             )}\n`,
             'utf8'
           )
@@ -930,6 +985,8 @@ export async function startInteractiveLog(
       pendingResetMode = undefined
       pendingRebaseCommit = undefined
       pendingOperationAction = undefined
+      pendingAiAction = undefined
+      aiImpact = undefined
       inputPrompt = undefined
 
       if (refresh) {
@@ -965,6 +1022,47 @@ export async function startInteractiveLog(
           message: selected.message,
         }
         : undefined
+    }
+
+    const aiActionContext = () => ({
+      selectedCommit: selectedHistoryCommit(),
+      compareBase,
+      selectedTag: selectedTag()?.name,
+      tagRangeSummary,
+      defaultBranch: providerOverview?.repository.defaultBranch || selectedBaseRef(),
+    })
+
+    const prepareOrRunAiAction = (action: LogAiAction, confirmKey: string) => {
+      const context = aiActionContext()
+
+      if (pendingAiAction !== action) {
+        pendingAiAction = action
+        aiImpact = estimateLogAiActionImpact(action, context)
+        statusMessage = `Press ${confirmKey} to run AI ${aiImpact.label}`
+        statusDetails = [
+          `Estimated prompt impact: ~${aiImpact.estimatedTokens} tokens${aiImpact.large ? ' (large)' : ''}.`,
+          'Generated text will be shown as an editable draft before you use it.',
+        ]
+        void render()
+        return
+      }
+
+      statusMessage = `Running AI ${aiImpact?.label || action}...`
+      void render()
+      void runLogAiAction(action, context).then(async (result) => {
+        statusMessage = result.message
+        statusDetails = result.details
+        aiDraft = result.editable
+        pendingAiAction = undefined
+        aiImpact = undefined
+        await render()
+      }).catch(async (error) => {
+        statusMessage = (error as Error).message
+        statusDetails = undefined
+        pendingAiAction = undefined
+        aiImpact = undefined
+        await render()
+      })
     }
 
     const selectedRef = () => {
@@ -1104,6 +1202,8 @@ export async function startInteractiveLog(
       pendingResetMode = undefined
       pendingRebaseCommit = undefined
       pendingOperationAction = undefined
+      pendingAiAction = undefined
+      aiImpact = undefined
       void render()
     }
 
@@ -1291,6 +1391,8 @@ export async function startInteractiveLog(
         pendingResetMode = undefined
         pendingRebaseCommit = undefined
         pendingOperationAction = undefined
+        pendingAiAction = undefined
+        aiImpact = undefined
         void render()
       } else if ((key.name === 'up' || key.name === 'k') && focus === 'branches') {
         moveBranchSelection(-1)
@@ -1488,6 +1590,14 @@ export async function startInteractiveLog(
             'Opening provider compare URL...'
           )
         }
+      } else if (sequence === 'I') {
+        prepareOrRunAiAction('summarize-commit', 'I')
+      } else if (sequence === 'M') {
+        prepareOrRunAiAction('summarize-range', 'M')
+      } else if (sequence === 'J') {
+        prepareOrRunAiAction('release-notes', 'J')
+      } else if (sequence === 'W') {
+        prepareOrRunAiAction('risk-review', 'W')
       } else if (key.name === 'h' && focus === 'commits') {
         void runBranchAction(() => copyCommitHash(selectedHistoryCommit()), false, 'Copying commit hash...')
       } else if (sequence === 'H' && focus === 'commits') {
