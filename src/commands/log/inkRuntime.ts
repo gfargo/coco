@@ -3,6 +3,14 @@ import { SimpleGit } from 'simple-git'
 import { BranchOverview, getBranchOverview } from './branchData'
 import { GitCommitDetail, GitLogCommitRow, GitLogRow, getCommitDetail } from './data'
 import {
+  LogInkContextKey,
+  LogInkContextStatus,
+  createLogInkContextStatus,
+  isLogInkContextKeyLoading,
+  isLogInkContextLoading,
+  updateLogInkContextStatus,
+} from './inkContext'
+import {
   formatBindingKeys,
   getLogInkCommandPaletteItems,
   getLogInkFooterHints,
@@ -106,7 +114,6 @@ type LogInkKey = {
 
 type LogInkComponentDeps = LogInkRuntime & {
   git: SimpleGit
-  initialContext: LogInkContext
   rows: GitLogRow[]
   theme: LogInkTheme
 }
@@ -174,6 +181,46 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
     worktree,
     worktreeList,
   }
+}
+
+function loadLogInkContextEntries(git: SimpleGit): Array<{
+  key: LogInkContextKey
+  load: () => Promise<LogInkContext[LogInkContextKey] | undefined>
+}> {
+  return [
+    {
+      key: 'branches',
+      load: () => safe(getBranchOverview(git)),
+    },
+    {
+      key: 'pullRequest',
+      load: () => safe(getPullRequestOverview(git)),
+    },
+    {
+      key: 'tags',
+      load: () => safe(getTagOverview(git)),
+    },
+    {
+      key: 'worktree',
+      load: () => safe(getWorktreeOverview(git)),
+    },
+    {
+      key: 'stashes',
+      load: () => safe(getStashOverview(git)),
+    },
+    {
+      key: 'worktreeList',
+      load: () => safe(getWorktreeListOverview(git)),
+    },
+    {
+      key: 'operation',
+      load: () => safe(getGitOperationOverview(git)),
+    },
+    {
+      key: 'provider',
+      load: () => safe(getProviderOverview(git)),
+    },
+  ]
 }
 
 async function loadInkRuntime(): Promise<LogInkRuntime> {
@@ -244,9 +291,18 @@ function formatDivergence(branch: BranchOverview['localBranches'][number]): stri
   return `+${branch.ahead}/-${branch.behind} ${branch.upstream}`
 }
 
-function sidebarLines(context: LogInkContext, tab: LogInkSidebarTab, width: number): string[] {
+function sidebarLines(
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  tab: LogInkSidebarTab,
+  width: number
+): string[] {
   if (tab === 'status') {
     const worktree = context.worktree
+
+    if (isLogInkContextKeyLoading(contextStatus, 'worktree')) {
+      return ['Loading status...']
+    }
 
     if (!worktree) {
       return ['Status unavailable']
@@ -266,6 +322,10 @@ function sidebarLines(context: LogInkContext, tab: LogInkSidebarTab, width: numb
   if (tab === 'branches') {
     const branches = context.branches
 
+    if (isLogInkContextKeyLoading(contextStatus, 'branches')) {
+      return ['Loading branches...']
+    }
+
     if (!branches) {
       return ['Branches unavailable']
     }
@@ -284,6 +344,10 @@ function sidebarLines(context: LogInkContext, tab: LogInkSidebarTab, width: numb
   }
 
   if (tab === 'tags') {
+    if (isLogInkContextKeyLoading(contextStatus, 'tags')) {
+      return ['Loading tags...']
+    }
+
     return context.tags?.tags.length
       ? context.tags.tags.slice(0, 12).map((tag) =>
         `${truncate(tag.name, 16)} ${truncate(tag.subject, Math.max(8, width - 18))}`
@@ -292,11 +356,19 @@ function sidebarLines(context: LogInkContext, tab: LogInkSidebarTab, width: numb
   }
 
   if (tab === 'stashes') {
+    if (isLogInkContextKeyLoading(contextStatus, 'stashes')) {
+      return ['Loading stashes...']
+    }
+
     return context.stashes?.stashes.length
       ? context.stashes.stashes.slice(0, 12).map((stash) =>
         `${stash.ref} ${truncate(stash.message, Math.max(8, width - stash.ref.length - 1))}`
       )
       : ['No stashes found']
+  }
+
+  if (isLogInkContextKeyLoading(contextStatus, 'worktreeList')) {
+    return ['Loading worktrees...']
   }
 
   return context.worktreeList?.worktrees.length
@@ -335,14 +407,10 @@ export async function startInkInteractiveLog(
     return
   }
 
-  const [runtime, initialContext] = await Promise.all([
-    loadInkRuntime(),
-    loadLogInkContext(git),
-  ])
+  const runtime = await loadInkRuntime()
   const { ink, React } = runtime
   const app = React.createElement(LogInkApp, {
     git,
-    initialContext,
     ink,
     React,
     rows,
@@ -361,7 +429,7 @@ export async function startInkInteractiveLog(
 }
 
 function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { git, initialContext, ink, React, rows, theme } = deps
+  const { git, ink, React, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -371,7 +439,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
   })
   const [state, setState] = React.useState<LogInkState>(() => createLogInkState(rows))
-  const [context, setContext] = React.useState<LogInkContext>(initialContext)
+  const [context, setContext] = React.useState<LogInkContext>({})
+  const [contextStatus, setContextStatus] = React.useState<LogInkContextStatus>(() =>
+    createLogInkContextStatus('loading')
+  )
   const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const selected = getSelectedInkCommit(state)
@@ -382,9 +453,33 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   const refreshContext = React.useCallback(async () => {
     dispatch({ type: 'setStatus', value: 'refreshing repository context' })
+    setContextStatus(createLogInkContextStatus('loading'))
     setContext(await loadLogInkContext(git))
+    setContextStatus(createLogInkContextStatus('ready'))
     dispatch({ type: 'setStatus', value: 'repository context refreshed' })
   }, [dispatch, git])
+
+  React.useEffect(() => {
+    let active = true
+
+    loadLogInkContextEntries(git).forEach(({ key, load }) => {
+      void load().then((value) => {
+        if (!active) {
+          return
+        }
+
+        setContext((current) => ({
+          ...current,
+          [key]: value,
+        }))
+        setContextStatus((current) => updateLogInkContextStatus(current, key, 'ready'))
+      })
+    })
+
+    return () => {
+      active = false
+    }
+  }, [git])
 
   React.useEffect(() => {
     let active = true
@@ -508,11 +603,21 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }
 
   return h(Box, { flexDirection: 'column', height: layout.rows },
-    renderHeader(h, { Box, Text }, state, context, layout.columns, theme),
+    renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme),
     h(Box, { flexDirection: 'row', height: layout.bodyRows },
-      renderSidebar(h, { Box, Text }, state, context, layout.sidebarWidth, theme),
+      renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, theme),
       renderCommitPanel(h, { Box, Text }, state, layout.bodyRows, theme),
-      renderDetailPanel(h, { Box, Text }, state, context, detail, detailLoading, layout.detailWidth, theme)
+      renderDetailPanel(
+        h,
+        { Box, Text },
+        state,
+        context,
+        contextStatus,
+        detail,
+        detailLoading,
+        layout.detailWidth,
+        theme
+      )
     ),
     renderFooter(h, { Box, Text }, state, theme)
   )
@@ -523,6 +628,7 @@ function renderHeader(
   components: LogInkComponents,
   state: LogInkState,
   context: LogInkContext,
+  contextStatus: LogInkContextStatus,
   columns: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
@@ -538,7 +644,8 @@ function renderHeader(
       ? `PR #${context.pullRequest.currentPullRequest.number} ${context.pullRequest.currentPullRequest.state}`
       : 'no PR'
   const search = state.filterMode ? `search: ${state.filter}_` : state.filter ? `filter: ${state.filter}` : ''
-  const title = truncate(`coco log  ${repo}  ${branch}  ${dirty}  ${pr}`, columns - 2)
+  const loading = isLogInkContextLoading(contextStatus) ? '  loading context' : ''
+  const title = truncate(`coco log  ${repo}  ${branch}  ${dirty}  ${pr}${loading}`, columns - 2)
 
   return h(Box, {
     borderColor: theme.colors.border,
@@ -555,12 +662,13 @@ function renderSidebar(
   components: LogInkComponents,
   state: LogInkState,
   context: LogInkContext,
+  contextStatus: LogInkContextStatus,
   width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
-  const lines = sidebarLines(context, state.sidebarTab, width - 4)
+  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4)
   const tabs = getLogInkSidebarTabs()
 
   return h(Box, {
@@ -622,6 +730,7 @@ function renderDetailPanel(
   components: LogInkComponents,
   state: LogInkState,
   context: LogInkContext,
+  contextStatus: LogInkContextStatus,
   detail: GitCommitDetail | undefined,
   loading: boolean,
   width: number,
@@ -645,6 +754,7 @@ function renderDetailPanel(
   const selected = getSelectedInkCommit(state)
   const workflowSections = getLogInkWorkflowSections({
     ...context,
+    contextLoading: isLogInkContextLoading(contextStatus),
     selectedCommit: selected,
   })
   const lines = detail

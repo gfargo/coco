@@ -10,6 +10,7 @@ import { WorktreeOverview as WorktreeListOverview } from './worktreeData'
 
 export type LogInkWorkflowContext = {
   branches?: BranchOverview
+  contextLoading?: boolean
   operation?: GitOperationOverview
   provider?: ProviderOverview
   pullRequest?: PullRequestOverview
@@ -44,6 +45,7 @@ function countLabel(count: number, singular: string, plural = `${singular}s`): s
 export function getLogInkWorkflowSections(context: LogInkWorkflowContext): LogInkWorkflowSection[] {
   const currentBranch = context.branches?.currentBranch || context.provider?.currentBranch || '<detached>'
   const dirty = context.branches?.dirty ? 'dirty worktree' : 'clean worktree'
+  const loading = context.contextLoading
   const currentPullRequest = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
   const repository = context.provider?.repository
   const repoName = repository?.owner && repository.name
@@ -58,7 +60,9 @@ export function getLogInkWorkflowSections(context: LogInkWorkflowContext): LogIn
       lines: [
         `Current: ${currentBranch}`,
         `State: ${dirty}`,
-        context.branches
+        loading && !context.branches
+          ? 'Branch data loading'
+          : context.branches
           ? `${countLabel(context.branches.localBranches.length, 'local branch', 'local branches')} | ${countLabel(context.branches.remoteBranches.length, 'remote branch', 'remote branches')}`
           : 'Branch data unavailable',
       ],
@@ -67,7 +71,9 @@ export function getLogInkWorkflowSections(context: LogInkWorkflowContext): LogIn
       title: 'Provider / PR',
       lines: [
         `Repository: ${repoName}`,
-        currentPullRequest
+        loading && !context.provider && !context.pullRequest
+          ? 'Provider and pull request data loading'
+          : currentPullRequest
           ? `PR #${currentPullRequest.number} ${currentPullRequest.state}${currentPullRequest.isDraft ? ' draft' : ''}`
           : 'No pull request detected for current branch',
         context.provider?.authenticated === false ? 'Provider auth: offline' : 'Provider auth: available',
@@ -75,7 +81,9 @@ export function getLogInkWorkflowSections(context: LogInkWorkflowContext): LogIn
     },
     {
       title: 'Status',
-      lines: worktree
+      lines: loading && !worktree
+        ? ['Status data loading']
+        : worktree
         ? [
           `${countLabel(worktree.stagedCount, 'staged file')}`,
           `${countLabel(worktree.unstagedCount, 'unstaged file')}`,
@@ -86,17 +94,21 @@ export function getLogInkWorkflowSections(context: LogInkWorkflowContext): LogIn
     {
       title: 'Tags / Stashes / Worktrees',
       lines: [
-        context.tags ? countLabel(context.tags.tags.length, 'tag') : 'Tags unavailable',
-        context.stashes ? countLabel(context.stashes.stashes.length, 'stash', 'stashes') : 'Stashes unavailable',
+        loading && !context.tags ? 'Tags loading' : context.tags ? countLabel(context.tags.tags.length, 'tag') : 'Tags unavailable',
+        loading && !context.stashes ? 'Stashes loading' : context.stashes ? countLabel(context.stashes.stashes.length, 'stash', 'stashes') : 'Stashes unavailable',
         context.worktreeList
           ? countLabel(context.worktreeList.worktrees.length, 'worktree')
-          : 'Worktrees unavailable',
+          : loading
+            ? 'Worktrees loading'
+            : 'Worktrees unavailable',
       ],
     },
     {
       title: 'Operation / AI',
       lines: [
-        operation?.operation
+        loading && !operation
+          ? 'Operation data loading'
+          : operation?.operation
           ? `${operation.operation} in progress with ${countLabel(operation.conflictedFiles.length, 'conflict')}`
           : 'No merge, rebase, cherry-pick, or revert in progress',
         context.selectedCommit
