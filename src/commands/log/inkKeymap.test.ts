@@ -24,7 +24,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showCommandPalette: true,
       showHelp: false,
-    })).toEqual([': close', 'r refresh', 'g graph', '? help', 'q quit'])
+    })).toEqual([': close', 'D/T/X confirm', 'I/M AI', '? help', 'q quit'])
   })
 
   it('derives help from the same binding source', () => {
@@ -46,6 +46,9 @@ describe('log Ink keymap', () => {
     expect(palette.find((item) => item.id === 'commandPalette')).toMatchObject({
       keys: ':',
       label: 'commands',
+    })
+    expect(palette.find((item) => item.id === 'workflowActions')).toMatchObject({
+      label: 'workflows',
     })
   })
 })

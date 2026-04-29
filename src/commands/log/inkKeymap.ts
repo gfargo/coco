@@ -14,6 +14,7 @@ export type LogInkCommandId =
   | 'refresh'
   | 'search'
   | 'toggleGraph'
+  | 'workflowActions'
 
 export type LogInkKeyBinding = {
   id: LogInkCommandId
@@ -121,6 +122,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'workflowActions',
+    keys: ['D', 'T', 'X', 'W', 'A', 'I', 'M'],
+    label: 'workflows',
+    description: 'Open workflow actions with confirmation for destructive or AI operations.',
+    contexts: ['normal', 'sidebar', 'detail'],
+  },
+  {
     id: 'quit',
     keys: ['q', 'ctrl+c'],
     label: 'quit',
@@ -150,7 +158,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): stri
   }
 
   if (options.showCommandPalette) {
-    return [': close', 'r refresh', 'g graph', '? help', 'q quit']
+    return [': close', 'D/T/X confirm', 'I/M AI', '? help', 'q quit']
   }
 
   if (options.focus === 'sidebar') {
@@ -181,7 +189,7 @@ export function getLogInkHelpSections(): LogInkHelpSection[] {
     {
       title: 'Global',
       bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
-        ['help', 'commandPalette', 'quit'].includes(binding.id)
+        ['help', 'commandPalette', 'workflowActions', 'quit'].includes(binding.id)
       ),
     },
   ]

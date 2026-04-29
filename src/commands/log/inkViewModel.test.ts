@@ -119,4 +119,19 @@ describe('log Ink view model', () => {
     expect(state.showHelp).toBe(false)
     expect(state.showCommandPalette).toBe(true)
   })
+
+  it('tracks workflow action and confirmation state', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'setWorkflowAction', value: 'checkout-branch' })
+    expect(state.workflowActionId).toBe('checkout-branch')
+    expect(state.pendingConfirmationId).toBeUndefined()
+
+    state = applyLogInkAction(state, { type: 'setPendingConfirmation', value: 'delete-branch' })
+    expect(state.pendingConfirmationId).toBe('delete-branch')
+    expect(state.workflowActionId).toBeUndefined()
+
+    state = applyLogInkAction(state, { type: 'setPendingConfirmation', value: undefined })
+    expect(state.pendingConfirmationId).toBeUndefined()
+  })
 })

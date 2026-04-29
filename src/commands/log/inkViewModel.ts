@@ -14,6 +14,8 @@ export type LogInkState = {
   fullGraph: boolean
   showHelp: boolean
   showCommandPalette: boolean
+  workflowActionId?: string
+  pendingConfirmationId?: string
   focus: LogInkFocus
   sidebarTab: LogInkSidebarTab
   statusMessage?: string
@@ -33,6 +35,8 @@ export type LogInkAction =
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'setStatus'; value?: string }
+  | { type: 'setWorkflowAction'; value?: string }
+  | { type: 'setPendingConfirmation'; value?: string }
   | { type: 'toggleFilterMode' }
   | { type: 'toggleGraph' }
   | { type: 'toggleHelp' }
@@ -105,6 +109,8 @@ export function createLogInkState(rows: GitLogRow[]): LogInkState {
     fullGraph: false,
     showHelp: false,
     showCommandPalette: false,
+    workflowActionId: undefined,
+    pendingConfirmationId: undefined,
     focus: 'commits',
     sidebarTab: 'status',
   }
@@ -171,6 +177,18 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         statusMessage: action.value,
+      }
+    case 'setWorkflowAction':
+      return {
+        ...state,
+        workflowActionId: action.value,
+        pendingConfirmationId: undefined,
+      }
+    case 'setPendingConfirmation':
+      return {
+        ...state,
+        pendingConfirmationId: action.value,
+        workflowActionId: action.value ? undefined : state.workflowActionId,
       }
     case 'toggleFilterMode':
       return {
