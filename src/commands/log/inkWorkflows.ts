@@ -205,3 +205,19 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     },
   ]
 }
+
+export function getLogInkWorkflowActionByKey(
+  inputValue: string
+): LogInkWorkflowAction | undefined {
+  return getLogInkWorkflowActions().find((action) => action.key === inputValue)
+}
+
+export function getLogInkWorkflowActionById(
+  id: string | undefined
+): LogInkWorkflowAction | undefined {
+  if (!id) {
+    return undefined
+  }
+
+  return getLogInkWorkflowActions().find((action) => action.id === id)
+}
