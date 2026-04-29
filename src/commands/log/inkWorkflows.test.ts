@@ -48,4 +48,17 @@ describe('log Ink workflows', () => {
     expect(destructive.every((action) => action.requiresConfirmation)).toBe(true)
     expect(ai.every((action) => action.requiresConfirmation && action.estimatedTokens)).toBe(true)
   })
+
+  it('reports loading states while optional repository context hydrates', () => {
+    const sections = getLogInkWorkflowSections({
+      contextLoading: true,
+    })
+    const text = sections.flatMap((section) => section.lines).join('\n')
+
+    expect(text).toContain('Branch data loading')
+    expect(text).toContain('Provider and pull request data loading')
+    expect(text).toContain('Status data loading')
+    expect(text).toContain('Tags loading')
+    expect(text).toContain('Operation data loading')
+  })
 })
