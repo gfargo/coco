@@ -1,4 +1,9 @@
-import { getLogInkWorkflowActions, getLogInkWorkflowSections } from './inkWorkflows'
+import {
+  getLogInkWorkflowActionById,
+  getLogInkWorkflowActionByKey,
+  getLogInkWorkflowActions,
+  getLogInkWorkflowSections,
+} from './inkWorkflows'
 
 describe('log Ink workflows', () => {
   it('builds workflow sections from available repository context', () => {
@@ -47,6 +52,8 @@ describe('log Ink workflows', () => {
     expect(destructive.length).toBeGreaterThan(0)
     expect(destructive.every((action) => action.requiresConfirmation)).toBe(true)
     expect(ai.every((action) => action.requiresConfirmation && action.estimatedTokens)).toBe(true)
+    expect(getLogInkWorkflowActionByKey('D')?.id).toBe('delete-branch')
+    expect(getLogInkWorkflowActionById('ai-commit-summary')?.key).toBe('I')
   })
 
   it('reports loading states while optional repository context hydrates', () => {

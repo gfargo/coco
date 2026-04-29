@@ -16,6 +16,7 @@ import {
   getLogInkFooterHints,
   getLogInkHelpSections,
 } from './inkKeymap'
+import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import {
   LOG_INK_DEFAULT_COLUMNS,
   LOG_INK_DEFAULT_ROWS,
@@ -40,11 +41,12 @@ import { StashOverview, getStashOverview } from './stashData'
 import { WorktreeOverview, getWorktreeOverview } from './statusData'
 import { TagOverview, getTagOverview } from './tagData'
 import {
-  LogInkWorkflowAction,
+  getLogInkWorkflowActionById,
   getLogInkWorkflowActions,
   getLogInkWorkflowSections,
 } from './inkWorkflows'
 import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from './worktreeData'
+import { canStartLogInkTui, getLogInkRenderOptions } from './inkTerminal'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
 const dynamicImport = new Function('specifier', 'return import(specifier)') as DynamicImport
@@ -86,7 +88,7 @@ type LogInkRuntime = {
     useApp: () => {
       exit: () => void
     }
-    useInput: (handler: (input: string, key: LogInkKey) => void) => void
+    useInput: (handler: (input: string, key: LogInkInputKey) => void) => void
     useWindowSize: () => {
       columns: number
       rows: number
@@ -96,21 +98,6 @@ type LogInkRuntime = {
 }
 
 type LogInkComponents = Pick<LogInkRuntime['ink'], 'Box' | 'Text'>
-
-type LogInkKey = {
-  backspace?: boolean
-  ctrl?: boolean
-  delete?: boolean
-  downArrow?: boolean
-  escape?: boolean
-  meta?: boolean
-  pageDown?: boolean
-  pageUp?: boolean
-  return?: boolean
-  shift?: boolean
-  tab?: boolean
-  upArrow?: boolean
-}
 
 type LogInkComponentDeps = LogInkRuntime & {
   git: SimpleGit
@@ -381,18 +368,6 @@ function sidebarLines(
     : ['No linked worktrees']
 }
 
-function getWorkflowActionByKey(inputValue: string): LogInkWorkflowAction | undefined {
-  return getLogInkWorkflowActions().find((action) => action.key === inputValue)
-}
-
-function getWorkflowActionById(id: string | undefined): LogInkWorkflowAction | undefined {
-  if (!id) {
-    return undefined
-  }
-
-  return getLogInkWorkflowActions().find((action) => action.id === id)
-}
-
 export async function startInkInteractiveLog(
   git: SimpleGit,
   rows: GitLogRow[],
@@ -402,7 +377,7 @@ export async function startInkInteractiveLog(
   const output = streams.output || process.stdout
   const error = streams.error || process.stderr
 
-  if (!input.isTTY || !output.isTTY) {
+  if (!canStartLogInkTui(input, output)) {
     await startInteractiveLog(git, rows, { input, output })
     return
   }
@@ -416,14 +391,7 @@ export async function startInkInteractiveLog(
     rows,
     theme: createLogInkTheme(),
   })
-  const instance = ink.render(app, {
-    exitOnCtrlC: true,
-    patchConsole: false,
-    stdin: input,
-    stdout: output,
-    stderr: error,
-    alternateScreen: true,
-  })
+  const instance = ink.render(app, getLogInkRenderOptions({ input, output, error }))
 
   await instance.waitUntilExit()
 }
@@ -506,87 +474,16 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [git, selected?.hash])
 
-  useInput((inputValue: string, key: LogInkKey) => {
-    if (key.ctrl && inputValue === 'c') {
-      exit()
-      return
-    }
-
-    if (state.filterMode) {
-      if (key.return || key.escape) {
-        dispatch({ type: 'toggleFilterMode' })
-      } else if (key.backspace || key.delete) {
-        dispatch({ type: 'backspaceFilter' })
-      } else if (key.ctrl && inputValue === 'u') {
-        dispatch({ type: 'clearFilter' })
-      } else if (inputValue && !key.ctrl && !key.meta) {
-        dispatch({ type: 'appendFilter', value: inputValue })
+  useInput((inputValue: string, key: LogInkInputKey) => {
+    getLogInkInputEvents(state, inputValue, key).forEach((event) => {
+      if (event.type === 'exit') {
+        exit()
+      } else if (event.type === 'refreshContext') {
+        void refreshContext()
+      } else {
+        dispatch(event.action)
       }
-
-      return
-    }
-
-    if (state.pendingConfirmationId) {
-      if (inputValue === 'y') {
-        const action = getWorkflowActionById(state.pendingConfirmationId)
-
-        dispatch({ type: 'setPendingConfirmation', value: undefined })
-        dispatch({
-          type: 'setStatus',
-          value: action
-            ? `${action.label} queued for workflow execution`
-            : 'workflow action queued',
-        })
-      } else if (inputValue === 'n' || key.escape) {
-        dispatch({ type: 'setPendingConfirmation', value: undefined })
-        dispatch({ type: 'setStatus', value: 'workflow action cancelled' })
-      }
-
-      return
-    }
-
-    if (key.escape && state.showHelp) {
-      dispatch({ type: 'toggleHelp' })
-      return
-    }
-
-    if (key.escape && state.showCommandPalette) {
-      dispatch({ type: 'toggleCommandPalette' })
-      return
-    }
-
-    if (inputValue === 'q') {
-      exit()
-    } else if (inputValue === '?') {
-      dispatch({ type: 'toggleHelp' })
-    } else if (inputValue === '/') {
-      dispatch({ type: 'toggleFilterMode' })
-    } else if (inputValue === 'g') {
-      dispatch({ type: 'toggleGraph' })
-    } else if (inputValue === 'r') {
-      void refreshContext()
-    } else if (inputValue === ':') {
-      dispatch({ type: 'toggleCommandPalette' })
-    } else if (key.tab) {
-      dispatch({ type: key.shift ? 'focusPrevious' : 'focusNext' })
-    } else if (key.upArrow || inputValue === 'k') {
-      dispatch(state.focus === 'sidebar' ? { type: 'previousSidebarTab' } : { type: 'move', delta: -1 })
-    } else if (key.downArrow || inputValue === 'j') {
-      dispatch(state.focus === 'sidebar' ? { type: 'nextSidebarTab' } : { type: 'move', delta: 1 })
-    } else if (key.pageUp) {
-      dispatch({ type: 'page', delta: -10 })
-    } else if (key.pageDown) {
-      dispatch({ type: 'page', delta: 10 })
-    } else {
-      const workflowAction = getWorkflowActionByKey(inputValue)
-
-      if (workflowAction?.requiresConfirmation) {
-        dispatch({ type: 'setPendingConfirmation', value: workflowAction.id })
-      } else if (workflowAction) {
-        dispatch({ type: 'setWorkflowAction', value: workflowAction.id })
-        dispatch({ type: 'setStatus', value: `${workflowAction.label} selected` })
-      }
-    }
+    })
   })
 
   if (layout.tooSmall) {
@@ -806,7 +703,7 @@ function renderConfirmationPanel(
   focused: boolean
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
-  const action = getWorkflowActionById(state.pendingConfirmationId)
+  const action = getLogInkWorkflowActionById(state.pendingConfirmationId)
   const label = action?.label || 'Workflow action'
   const warning = action?.kind === 'ai'
     ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`
