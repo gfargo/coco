@@ -309,6 +309,47 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Provider actions: R repo | L branch | O commit | U compare | o PR')
   })
 
+  it('renders opt-in AI impact and editable drafts', () => {
+    const output = renderInteractiveLog(
+      createLogTuiState(rows),
+      detail,
+      branches,
+      pullRequest,
+      tags,
+      undefined,
+      worktree,
+      {
+        focus: 'commits',
+        pendingAiAction: 'summarize-commit',
+      },
+      {
+        height: 90,
+        width: 140,
+      },
+      {},
+      {},
+      undefined,
+      undefined,
+      {
+        pendingAction: 'summarize-commit',
+        impact: {
+          action: 'summarize-commit',
+          label: 'summarize commit',
+          estimatedTokens: 512,
+          large: false,
+          requiresConfirmation: true,
+        },
+        draft: 'Generated summary\n- Important change',
+      }
+    )
+
+    expect(output).toContain('Coco AI:')
+    expect(output).toContain('Pending AI summarize commit: press I to run | ~512 tokens')
+    expect(output).toContain('AI calls are opt-in')
+    expect(output).toContain('AI draft:')
+    expect(output).toContain('Generated summary')
+  })
+
   it('renders in-progress operation, conflicts, hooks, and no-verify state', () => {
     const output = renderInteractiveLog(
       createLogTuiState(rows),

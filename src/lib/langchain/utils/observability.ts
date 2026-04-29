@@ -88,11 +88,11 @@ function recordLlmTelemetry(metadata: LlmCallMetadata): void {
   telemetryByCommand.set(command, current)
 }
 
-export function logLlmTelemetrySummary(logger: Logger | undefined, command: string): void {
-  if (!logger) return
+export function logLlmTelemetrySummary(logger: Logger | undefined, command: string): string | undefined {
+  if (!logger) return undefined
 
   const summary = telemetryByCommand.get(command)
-  if (!summary || summary.calls === 0) return
+  if (!summary || summary.calls === 0) return undefined
 
   const fields = [
     `command=${command}`,
@@ -104,9 +104,11 @@ export function logLlmTelemetrySummary(logger: Logger | undefined, command: stri
     summary.tasks.size > 0 ? `tasks=${[...summary.tasks].join(',')}` : undefined,
     summary.models.size > 0 ? `models=${[...summary.models].join(',')}` : undefined,
   ].filter(Boolean)
+  const message = `[llm:summary] ${fields.join(' ')}`
 
-  logger.verbose(`[llm:summary] ${fields.join(' ')}`, { color: 'cyan' })
+  logger.verbose(message, { color: 'cyan' })
   telemetryByCommand.delete(command)
+  return message
 }
 
 export function resetLlmTelemetry(): void {

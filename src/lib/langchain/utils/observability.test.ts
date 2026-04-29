@@ -62,9 +62,9 @@ describe('LLM observability utilities', () => {
       elapsedMs: 10,
     })
 
-    logLlmTelemetrySummary(logger, 'commit')
-    logLlmTelemetrySummary(logger, 'commit')
+    const summary = logLlmTelemetrySummary(logger, 'commit')
 
+    expect(summary).toBe('[llm:summary] command=commit calls=2 promptTokens=150 elapsedMs=35 inputDocuments=1 inputChunks=3 tasks=summarize-large-file,commit-message models=gpt-4.1-nano,gpt-4.1-mini')
     expect(logger.verbose).toHaveBeenCalledWith(
       '[llm:summary] command=commit calls=2 promptTokens=150 elapsedMs=35 inputDocuments=1 inputChunks=3 tasks=summarize-large-file,commit-message models=gpt-4.1-nano,gpt-4.1-mini',
       { color: 'cyan' }
