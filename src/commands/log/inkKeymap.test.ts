@@ -1,4 +1,9 @@
-import { getLogInkFooterHints, getLogInkHelpSections } from './inkKeymap'
+import {
+  LOG_INK_KEY_BINDINGS,
+  getLogInkCommandPaletteItems,
+  getLogInkFooterHints,
+  getLogInkHelpSections,
+} from './inkKeymap'
 
 describe('log Ink keymap', () => {
   it('keeps footer hints short and contextual', () => {
@@ -32,5 +37,15 @@ describe('log Ink keymap', () => {
     expect(helpText).toContain('g Toggle compact and full graph display.')
     expect(helpText).toContain('q/ctrl+c Quit the interactive log.')
     expect(helpText).toContain('tab Move focus to the next panel.')
+  })
+
+  it('derives command palette entries from the shared keymap', () => {
+    const palette = getLogInkCommandPaletteItems()
+
+    expect(palette.map((item) => item.id)).toEqual(LOG_INK_KEY_BINDINGS.map((binding) => binding.id))
+    expect(palette.find((item) => item.id === 'commandPalette')).toMatchObject({
+      keys: ':',
+      label: 'commands',
+    })
   })
 })

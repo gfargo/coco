@@ -4,6 +4,7 @@ import { BranchOverview, getBranchOverview } from './branchData'
 import { GitCommitDetail, GitLogCommitRow, GitLogRow, getCommitDetail } from './data'
 import {
   formatBindingKeys,
+  getLogInkCommandPaletteItems,
   getLogInkFooterHints,
   getLogInkHelpSections,
 } from './inkKeymap'
@@ -409,7 +410,12 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
-    if (state.showCommandPalette && key.escape) {
+    if (key.escape && state.showHelp) {
+      dispatch({ type: 'toggleHelp' })
+      return
+    }
+
+    if (key.escape && state.showCommandPalette) {
       dispatch({ type: 'toggleCommandPalette' })
       return
     }
@@ -660,14 +666,7 @@ function renderCommandPalette(
   focused: boolean
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
-  const commands = [
-    ['/', 'Search commits'],
-    ['g', 'Toggle graph density'],
-    ['r', 'Refresh repository context'],
-    ['tab', 'Move focus between panels'],
-    ['?', 'Open full help'],
-    ['q', 'Quit'],
-  ]
+  const commands = getLogInkCommandPaletteItems()
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -677,11 +676,11 @@ function renderCommandPalette(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Commands', focused)),
-  h(Text, { dimColor: true }, 'Less common actions will live here as workflows return.'),
+  h(Text, { dimColor: true }, 'Every command is sourced from the shared keymap.'),
   h(Text, undefined, ''),
-  ...commands.map(([key, label]) => h(Text, {
-    key,
-  }, truncate(`${key.padEnd(8)} ${label}`, width - 4))))
+  ...commands.map((command) => h(Text, {
+    key: command.id,
+  }, truncate(`${command.keys.padEnd(12)} ${command.label} - ${command.description}`, width - 4))))
 }
 
 function renderFooter(
