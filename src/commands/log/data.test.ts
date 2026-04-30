@@ -1,6 +1,8 @@
 import { Arguments } from 'yargs'
 import {
   FIELD_SEPARATOR,
+  LOG_DEFAULT_LIMIT,
+  LOG_INTERACTIVE_DEFAULT_LIMIT,
   buildLogArgs,
   getCommitFilePreview,
   getCommitRows,
@@ -29,6 +31,19 @@ describe('log data layer', () => {
     expect(getLogView(argv())).toBe('compact')
     expect(args).toEqual(expect.arrayContaining(['--first-parent', '--no-merges']))
     expect(args).not.toContain('--all')
+    expect(args).toContain(`--max-count=${LOG_DEFAULT_LIMIT}`)
+  })
+
+  it('uses a larger default history window for interactive mode', () => {
+    const args = buildLogArgs(argv({ interactive: true }))
+
+    expect(args).toContain(`--max-count=${LOG_INTERACTIVE_DEFAULT_LIMIT}`)
+  })
+
+  it('preserves an explicit limit in interactive mode', () => {
+    const args = buildLogArgs(argv({ interactive: true, limit: 42 }))
+
+    expect(args).toContain('--max-count=42')
   })
 
   it('uses full topology when all refs are requested', () => {
