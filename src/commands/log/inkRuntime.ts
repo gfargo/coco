@@ -27,6 +27,7 @@ import {
 } from './inkHistoryRows'
 import {
   formatBindingKeys,
+  formatLogInkBreadcrumb,
   getLogInkCommandPaletteItems,
   getLogInkFooterHints,
   getLogInkHelpSections,
@@ -931,7 +932,8 @@ function renderHeader(
       : 'no PR'
   const search = state.filterMode ? `search: ${state.filter}_` : state.filter ? `filter: ${state.filter}` : ''
   const loading = isLogInkContextLoading(contextStatus) ? '  loading context' : ''
-  const view = state.activeView === 'history' ? '' : `  ${state.activeView}`
+  const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
+  const view = breadcrumb ? `  ${breadcrumb}` : ''
   const title = truncate(`${appLabel}  ${repo}  ${branch}  ${dirty}  ${pr}${view}${loading}`, columns - 2)
 
   return h(Box, {
@@ -1193,7 +1195,7 @@ function renderDetailPanel(
   const focused = state.focus === 'detail'
 
   if (state.showHelp) {
-    return renderHelpPanel(h, components, width, theme, focused)
+    return renderHelpPanel(h, components, state, width, theme, focused)
   }
 
   if (state.showCommandPalette) {
@@ -1364,6 +1366,7 @@ function renderConfirmationPanel(
 function renderHelpPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
+  state: LogInkState,
   width: number,
   theme: LogInkTheme,
   focused: boolean
@@ -1373,11 +1376,16 @@ function renderHelpPanel(
     h(Text, { bold: true, key: 'title' }, panelTitle('Help', focused)),
   ]
 
-  for (const section of getLogInkHelpSections()) {
+  const sections = getLogInkHelpSections({
+    activeView: state.activeView,
+    focus: state.focus,
+  })
+
+  for (const section of sections) {
     children.push(h(Text, { key: `${section.title}-spacer` }, ''))
     children.push(h(Text, { bold: true, key: section.title }, section.title))
     section.bindings.forEach((binding) => {
-      children.push(h(Text, { key: binding.id },
+      children.push(h(Text, { key: `${section.title}:${binding.id}` },
         truncate(`${formatBindingKeys(binding).padEnd(14)} ${binding.description}`, width - 4)
       ))
     })
@@ -1446,10 +1454,15 @@ function renderFooter(
     showHelp: state.showHelp,
   })
   const status = state.statusMessage ? `  ${state.statusMessage}` : ''
+  const contextualText = `${hints.contextual.join('   ')}${status}`
+  const globalText = hints.global.join(' · ')
 
   return h(Box, {
+    flexDirection: 'row',
     height: 2,
+    justifyContent: 'space-between',
     paddingX: 1,
   },
-  h(Text, { color: theme.colors.muted, dimColor: true }, `${hints.join('   ')}${status}`))
+  h(Text, { color: theme.colors.muted, dimColor: true }, contextualText),
+  h(Text, { color: theme.colors.muted, dimColor: true }, globalText))
 }
