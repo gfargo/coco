@@ -26,7 +26,10 @@ export type LogInkInputEvent =
 
 export type LogInkInputContext = {
   detailFileCount?: number
+  worktreeHunkOffsets?: number[]
   previewLineCount?: number
+  worktreeDiffLineCount?: number
+  worktreeFileCount?: number
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -107,6 +110,10 @@ export function getLogInkInputEvents(
     return [action({ type: 'toggleCommandPalette' })]
   }
 
+  if (key.escape && state.activeView === 'diff') {
+    return [action({ type: 'setActiveView', value: 'status' })]
+  }
+
   if (inputValue === 'q') {
     return [{ type: 'exit' }]
   }
@@ -177,6 +184,22 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveDetailFile', delta: -1, fileCount: context.detailFileCount })]
     }
 
+    if (state.activeView === 'status' && context.worktreeFileCount) {
+      return [action({
+        type: 'moveWorktreeFile',
+        delta: -1,
+        fileCount: context.worktreeFileCount,
+      })]
+    }
+
+    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+      return [action({
+        type: 'jumpWorktreeHunk',
+        delta: -1,
+        hunkOffsets: context.worktreeHunkOffsets || [],
+      })]
+    }
+
     return [
       action(state.focus === 'sidebar'
         ? { type: 'previousSidebarTab' }
@@ -189,6 +212,22 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveDetailFile', delta: 1, fileCount: context.detailFileCount })]
     }
 
+    if (state.activeView === 'status' && context.worktreeFileCount) {
+      return [action({
+        type: 'moveWorktreeFile',
+        delta: 1,
+        fileCount: context.worktreeFileCount,
+      })]
+    }
+
+    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+      return [action({
+        type: 'jumpWorktreeHunk',
+        delta: 1,
+        hunkOffsets: context.worktreeHunkOffsets || [],
+      })]
+    }
+
     return [
       action(state.focus === 'sidebar'
         ? { type: 'nextSidebarTab' }
@@ -197,6 +236,14 @@ export function getLogInkInputEvents(
   }
 
   if (key.pageUp) {
+    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+      return [action({
+        type: 'pageWorktreeDiff',
+        delta: -8,
+        lineCount: context.worktreeDiffLineCount,
+      })]
+    }
+
     if (state.focus === 'detail' && context.previewLineCount) {
       return [action({
         type: 'pageDetailPreview',
@@ -209,6 +256,14 @@ export function getLogInkInputEvents(
   }
 
   if (key.pageDown) {
+    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+      return [action({
+        type: 'pageWorktreeDiff',
+        delta: 8,
+        lineCount: context.worktreeDiffLineCount,
+      })]
+    }
+
     if (state.focus === 'detail' && context.previewLineCount) {
       return [action({
         type: 'pageDetailPreview',
@@ -218,6 +273,10 @@ export function getLogInkInputEvents(
     }
 
     return [action({ type: 'page', delta: 10 })]
+  }
+
+  if (key.return && state.activeView === 'status' && context.worktreeFileCount) {
+    return [action({ type: 'setActiveView', value: 'diff' })]
   }
 
   const workflowAction = getLogInkWorkflowActionByKey(inputValue)

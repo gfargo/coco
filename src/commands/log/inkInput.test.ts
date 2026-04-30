@@ -163,6 +163,28 @@ describe('log Ink input interactions', () => {
     expect(state.diffPreviewOffset).toBe(0)
   })
 
+  it('opens and scrolls the worktree diff surface from status view', () => {
+    let state = createLogInkState(rows, { activeView: 'status' })
+
+    state = applyInput(state, 'j', {}, { worktreeFileCount: 3 })
+    expect(state.selectedWorktreeFileIndex).toBe(1)
+
+    state = applyInput(state, '', { return: true }, { worktreeFileCount: 3 })
+    expect(state.activeView).toBe('diff')
+
+    state = applyInput(state, '', { pageDown: true }, { worktreeDiffLineCount: 30 })
+    expect(state.worktreeDiffOffset).toBe(8)
+
+    state = applyInput(state, 'j', {}, {
+      worktreeDiffLineCount: 30,
+      worktreeHunkOffsets: [2, 12, 20],
+    })
+    expect(state.worktreeDiffOffset).toBe(12)
+
+    state = applyInput(state, '', { escape: true })
+    expect(state.activeView).toBe('status')
+  })
+
   it('clears pending key chords after unrelated actions', () => {
     let state = createLogInkState(rows)
 

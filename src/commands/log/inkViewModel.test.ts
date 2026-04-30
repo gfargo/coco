@@ -48,7 +48,9 @@ describe('log Ink view model', () => {
     expect(state.activeView).toBe('history')
     expect(state.filteredCommits).toHaveLength(3)
     expect(state.selectedFileIndex).toBe(0)
+    expect(state.selectedWorktreeFileIndex).toBe(0)
     expect(state.diffPreviewOffset).toBe(0)
+    expect(state.worktreeDiffOffset).toBe(0)
     expect(state.focus).toBe('commits')
     expect(state.sidebarTab).toBe('status')
     expect(state.showHelp).toBe(false)
@@ -193,6 +195,28 @@ describe('log Ink view model', () => {
     state = applyLogInkAction(state, { type: 'move', delta: 1 })
     expect(state.selectedFileIndex).toBe(0)
     expect(state.diffPreviewOffset).toBe(0)
+  })
+
+  it('tracks worktree file selection and diff paging', () => {
+    let state = createLogInkState(rows, { activeView: 'status' })
+
+    state = applyLogInkAction(state, { type: 'moveWorktreeFile', delta: 2, fileCount: 4 })
+    expect(state.selectedWorktreeFileIndex).toBe(2)
+    expect(state.activeView).toBe('status')
+
+    state = applyLogInkAction(state, { type: 'setActiveView', value: 'diff' })
+    state = applyLogInkAction(state, { type: 'pageWorktreeDiff', delta: 8, lineCount: 20 })
+    expect(state.worktreeDiffOffset).toBe(8)
+
+    state = applyLogInkAction(state, {
+      type: 'jumpWorktreeHunk',
+      delta: 1,
+      hunkOffsets: [3, 12],
+    })
+    expect(state.worktreeDiffOffset).toBe(12)
+
+    state = applyLogInkAction(state, { type: 'setActiveView', value: 'status' })
+    expect(state.worktreeDiffOffset).toBe(0)
   })
 
   it('toggles graph, help, and command palette overlays', () => {

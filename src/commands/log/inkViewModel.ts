@@ -16,7 +16,9 @@ export type LogInkState = {
   filteredCommits: GitLogCommitRow[]
   selectedIndex: number
   selectedFileIndex: number
+  selectedWorktreeFileIndex: number
   diffPreviewOffset: number
+  worktreeDiffOffset: number
   filter: string
   filterMode: boolean
   fullGraph: boolean
@@ -39,14 +41,17 @@ export type LogInkAction =
   | { type: 'focusPrevious' }
   | { type: 'move'; delta: number }
   | { type: 'moveDetailFile'; delta: number; fileCount: number }
+  | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
   | { type: 'moveToBottom' }
   | { type: 'moveToTop' }
   | { type: 'nextSidebarTab' }
   | { type: 'page'; delta: number }
   | { type: 'pageDetailPreview'; delta: number; previewLineCount: number }
+  | { type: 'pageWorktreeDiff'; delta: number; lineCount: number }
   | { type: 'previousSidebarTab' }
   | { type: 'setFilter'; value: string }
   | { type: 'setActiveView'; value: LogInkView }
+  | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
@@ -214,6 +219,20 @@ function appendRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
   }
 }
 
+function nextHunkOffset(currentOffset: number, hunkOffsets: number[], delta: number): number {
+  if (hunkOffsets.length === 0) {
+    return currentOffset
+  }
+
+  if (delta > 0) {
+    return hunkOffsets.find((offset) => offset > currentOffset) ||
+      hunkOffsets[hunkOffsets.length - 1]
+  }
+
+  return [...hunkOffsets].reverse().find((offset) => offset < currentOffset) ||
+    hunkOffsets[0]
+}
+
 export function getLogInkSidebarTabs(): LogInkSidebarTab[] {
   return [...SIDEBAR_TABS]
 }
@@ -231,7 +250,9 @@ export function createLogInkState(
     filteredCommits: commits,
     selectedIndex: 0,
     selectedFileIndex: 0,
+    selectedWorktreeFileIndex: 0,
     diffPreviewOffset: 0,
+    worktreeDiffOffset: 0,
     filter: '',
     filterMode: false,
     fullGraph: false,
@@ -289,6 +310,17 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         diffPreviewOffset: 0,
         pendingKey: undefined,
       }
+    case 'moveWorktreeFile':
+      return {
+        ...state,
+        activeView: 'status',
+        selectedWorktreeFileIndex: clampIndex(
+          state.selectedWorktreeFileIndex + action.delta,
+          action.fileCount
+        ),
+        worktreeDiffOffset: 0,
+        pendingKey: undefined,
+      }
     case 'moveToBottom':
       return {
         ...state,
@@ -328,6 +360,22 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ),
         pendingKey: undefined,
       }
+    case 'pageWorktreeDiff':
+      return {
+        ...state,
+        worktreeDiffOffset: clampIndex(state.worktreeDiffOffset + action.delta, action.lineCount),
+        pendingKey: undefined,
+      }
+    case 'jumpWorktreeHunk':
+      return {
+        ...state,
+        worktreeDiffOffset: nextHunkOffset(
+          state.worktreeDiffOffset,
+          action.hunkOffsets,
+          action.delta
+        ),
+        pendingKey: undefined,
+      }
     case 'previousSidebarTab':
       return {
         ...state,
@@ -340,6 +388,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         activeView: action.value,
+        worktreeDiffOffset: action.value === 'diff' ? state.worktreeDiffOffset : 0,
         pendingKey: undefined,
       }
     case 'setFocus':

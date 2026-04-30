@@ -58,6 +58,7 @@ import {
   getLogInkWorkflowSections,
 } from './inkWorkflows'
 import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from './worktreeData'
+import { WorktreeFileDiff, getWorktreeFileDiff } from './worktreeDiffData'
 import { canStartLogInkTui, getLogInkRenderOptions } from './inkTerminal'
 import { LogArgv } from './config'
 
@@ -441,6 +442,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
   const [filePreviewLoading, setFilePreviewLoading] = React.useState(false)
+  const [worktreeDiff, setWorktreeDiff] = React.useState<WorktreeFileDiff | undefined>(undefined)
+  const [worktreeDiffLoading, setWorktreeDiffLoading] = React.useState(false)
   const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
     Boolean(logArgv?.interactive && !logArgv.limit) &&
     getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
@@ -451,6 +454,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const mountedRef = React.useRef(true)
   const selected = getSelectedInkCommit(state)
   const selectedDetailFile = detail?.files[state.selectedFileIndex]
+  const selectedWorktreeFile = context.worktree?.files[state.selectedWorktreeFileIndex]
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
@@ -510,6 +514,38 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       active = false
     }
   }, [git, selected?.hash])
+
+  React.useEffect(() => {
+    let active = true
+
+    async function loadWorktreeDiff(): Promise<void> {
+      if (state.activeView !== 'diff' || !selectedWorktreeFile) {
+        setWorktreeDiff(undefined)
+        setWorktreeDiffLoading(false)
+        return
+      }
+
+      setWorktreeDiffLoading(true)
+      const nextDiff = await safe(getWorktreeFileDiff(git, selectedWorktreeFile))
+
+      if (active) {
+        setWorktreeDiff(nextDiff)
+        setWorktreeDiffLoading(false)
+      }
+    }
+
+    void loadWorktreeDiff()
+
+    return () => {
+      active = false
+    }
+  }, [
+    git,
+    selectedWorktreeFile?.indexStatus,
+    selectedWorktreeFile?.path,
+    selectedWorktreeFile?.worktreeStatus,
+    state.activeView,
+  ])
 
   React.useEffect(() => {
     let active = true
@@ -613,6 +649,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
       previewLineCount: filePreview?.hunks.length,
+      worktreeDiffLineCount: worktreeDiff?.lines.length,
+      worktreeFileCount: context.worktree?.files.length,
+      worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
     }).forEach((event) => {
       if (event.type === 'exit') {
         exit()
@@ -647,6 +686,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         state,
         context,
         contextStatus,
+        worktreeDiff,
+        worktreeDiffLoading,
         layout.bodyRows,
         theme,
         hasMoreCommits,
@@ -739,6 +780,8 @@ function renderMainPanel(
   state: LogInkState,
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
+  worktreeDiff: WorktreeFileDiff | undefined,
+  worktreeDiffLoading: boolean,
   bodyRows: number,
   theme: LogInkTheme,
   hasMoreCommits: boolean,
@@ -749,7 +792,17 @@ function renderMainPanel(
   }
 
   if (state.activeView === 'diff') {
-    return renderDiffSurface(h, components, state, context, contextStatus, bodyRows, theme)
+    return renderDiffSurface(
+      h,
+      components,
+      state,
+      context,
+      contextStatus,
+      worktreeDiff,
+      worktreeDiffLoading,
+      bodyRows,
+      theme
+    )
   }
 
   return renderCommitPanel(
@@ -824,12 +877,18 @@ function renderStatusSurface(
   const focused = state.focus === 'commits'
   const worktree = context.worktree
   const listRows = Math.max(4, bodyRows - 5)
+  const selectedIndex = state.selectedWorktreeFileIndex
   const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
     ? ['Loading worktree status...']
     : worktree?.files.length
-      ? worktree.files.slice(0, listRows).map((file) =>
-        `${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
-      )
+      ? worktree.files
+        .slice(Math.max(0, selectedIndex - Math.floor(listRows / 2)))
+        .slice(0, listRows)
+        .map((file, offset) => {
+          const index = Math.max(0, selectedIndex - Math.floor(listRows / 2)) + offset
+
+          return `${index === selectedIndex ? '>' : ' '} ${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
+        })
       : ['Worktree clean']
 
   return h(Box, {
@@ -857,21 +916,31 @@ function renderDiffSurface(
   state: LogInkState,
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
+  worktreeDiff: WorktreeFileDiff | undefined,
+  worktreeDiffLoading: boolean,
   bodyRows: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree
-  const firstFile = worktree?.files[0]
+  const selectedFile = worktree?.files[state.selectedWorktreeFileIndex]
+  const visibleRows = Math.max(4, bodyRows - 4)
+  const diffLines = worktreeDiff?.lines || []
+  const visibleDiffLines = diffLines.slice(
+    state.worktreeDiffOffset,
+    state.worktreeDiffOffset + visibleRows
+  )
   const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
     ? ['Loading file context...']
-    : firstFile
+    : worktreeDiffLoading
+      ? [`Loading diff for ${selectedFile?.path || 'selected file'}...`]
+      : selectedFile
       ? [
-        `Selected file: ${firstFile.path}`,
+        `Selected file: ${selectedFile.path}`,
+        `Lines ${Math.min(state.worktreeDiffOffset + 1, diffLines.length || 1)}-${Math.min(state.worktreeDiffOffset + visibleDiffLines.length, diffLines.length)}/${diffLines.length}`,
         '',
-        'Dedicated diff rendering lands in the next slice.',
-        'This surface keeps large patches out of the right inspector.',
+        ...visibleDiffLines,
       ]
       : ['No changed file selected.']
 
@@ -884,7 +953,7 @@ function renderDiffSurface(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Diff', focused)),
-    h(Text, { dimColor: true }, `${Math.max(0, bodyRows - 4)} visible rows`)
+    h(Text, { dimColor: true }, selectedFile ? selectedFile.path : 'no file')
   ),
   ...lines.map((line, index) => h(Text, {
     key: `diff-surface-${index}`,
