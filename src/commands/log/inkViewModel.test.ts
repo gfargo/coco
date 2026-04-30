@@ -143,6 +143,30 @@ describe('log Ink view model', () => {
     expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
   })
 
+  it('appends older rows while preserving the selected commit', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'move', delta: 1 })
+    state = applyLogInkAction(state, {
+      type: 'appendRows',
+      rows: [
+        {
+          type: 'commit',
+          graph: '*',
+          shortHash: '9999999',
+          hash: '999999900000',
+          date: '2026-04-25',
+          author: 'Coco Test',
+          refs: [],
+          message: 'chore: older commit',
+        },
+      ],
+    })
+
+    expect(state.commits).toHaveLength(4)
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('def5678')
+  })
+
   it('tracks selected changed files and diff preview paging', () => {
     let state = createLogInkState(rows)
 

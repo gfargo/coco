@@ -6,8 +6,11 @@ import {
   GitCommitFilePreview,
   GitLogCommitRow,
   GitLogRow,
+  LOG_INTERACTIVE_DEFAULT_LIMIT,
   getCommitDetail,
   getCommitFilePreview,
+  getCommitRows,
+  getLogRows,
 } from './data'
 import {
   LogInkContextKey,
@@ -55,6 +58,7 @@ import {
 } from './inkWorkflows'
 import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from './worktreeData'
 import { canStartLogInkTui, getLogInkRenderOptions } from './inkTerminal'
+import { LogArgv } from './config'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
 const dynamicImport = new Function('specifier', 'return import(specifier)') as DynamicImport
@@ -66,6 +70,7 @@ type LogInkStreams = {
 }
 
 type LogInkOptions = {
+  logArgv?: LogArgv
   theme?: LogInkThemeConfig
 }
 
@@ -113,6 +118,7 @@ type LogInkComponents = Pick<LogInkRuntime['ink'], 'Box' | 'Text'>
 
 type LogInkComponentDeps = LogInkRuntime & {
   git: SimpleGit
+  logArgv?: LogArgv
   rows: GitLogRow[]
   theme: LogInkTheme
 }
@@ -393,6 +399,7 @@ export async function startInkInteractiveLog(
   const app = React.createElement(LogInkApp, {
     git,
     ink,
+    logArgv: options.logArgv,
     React,
     rows,
     theme: createLogInkTheme(options.theme),
@@ -403,7 +410,7 @@ export async function startInkInteractiveLog(
 }
 
 function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { git, ink, React, rows, theme } = deps
+  const { git, ink, logArgv, React, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -421,6 +428,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
   const [filePreviewLoading, setFilePreviewLoading] = React.useState(false)
+  const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
+    Boolean(logArgv?.interactive && !logArgv.limit) &&
+    getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
+  ))
+  const [loadingMoreCommits, setLoadingMoreCommits] = React.useState(false)
+  const loadingMoreCommitsRef = React.useRef(false)
+  const loadMoreRequestRef = React.useRef(0)
+  const mountedRef = React.useRef(true)
   const selected = getSelectedInkCommit(state)
   const selectedDetailFile = detail?.files[state.selectedFileIndex]
 
@@ -508,6 +523,79 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [git, selected?.hash, selectedDetailFile?.path, selectedDetailFile?.oldPath])
 
+  React.useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  React.useEffect(() => {
+    loadingMoreCommitsRef.current = loadingMoreCommits
+  }, [loadingMoreCommits])
+
+  React.useEffect(() => {
+    const remaining = state.filteredCommits.length - state.selectedIndex - 1
+
+    async function loadMoreCommits(): Promise<void> {
+      if (!logArgv || logArgv.limit || loadingMoreCommitsRef.current || !hasMoreCommits) {
+        return
+      }
+
+      if (state.filteredCommits.length === 0 || remaining > 20) {
+        return
+      }
+
+      loadingMoreCommitsRef.current = true
+      const requestId = loadMoreRequestRef.current + 1
+      loadMoreRequestRef.current = requestId
+      setLoadingMoreCommits(true)
+      dispatch({ type: 'setStatus', value: 'loading older commits' })
+      const nextRows = await safe(
+        getLogRows(git, logArgv, {
+          limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+          skip: state.commits.length,
+        })
+      )
+
+      if (!mountedRef.current || loadMoreRequestRef.current !== requestId) {
+        return
+      }
+
+      loadingMoreCommitsRef.current = false
+      setLoadingMoreCommits(false)
+
+      const nextCommitCount = nextRows ? getCommitRows(nextRows).length : 0
+
+      if (!nextRows) {
+        dispatch({ type: 'setStatus', value: 'failed to load older commits' })
+        return
+      }
+
+      if (nextRows?.length) {
+        dispatch({ type: 'appendRows', rows: nextRows })
+      }
+
+      setHasMoreCommits(nextCommitCount >= LOG_INTERACTIVE_DEFAULT_LIMIT)
+      dispatch({
+        type: 'setStatus',
+        value: nextCommitCount
+          ? `loaded ${nextCommitCount} older commits`
+          : 'end of history',
+      })
+    }
+
+    void loadMoreCommits()
+  }, [
+    dispatch,
+    git,
+    hasMoreCommits,
+    loadingMoreCommits,
+    logArgv,
+    state.commits.length,
+    state.filteredCommits.length,
+    state.selectedIndex,
+  ])
+
   useInput((inputValue: string, key: LogInkInputKey) => {
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
@@ -540,7 +628,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme),
     h(Box, { flexDirection: 'row', height: layout.bodyRows },
       renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, theme),
-      renderCommitPanel(h, { Box, Text }, state, layout.bodyRows, theme),
+      renderCommitPanel(
+        h,
+        { Box, Text },
+        state,
+        layout.bodyRows,
+        theme,
+        hasMoreCommits,
+        loadingMoreCommits
+      ),
       renderDetailPanel(
         h,
         { Box, Text },
@@ -625,12 +721,19 @@ function renderCommitPanel(
   components: LogInkComponents,
   state: LogInkState,
   bodyRows: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  hasMoreCommits: boolean,
+  loadingMoreCommits: boolean
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const listRows = Math.max(3, bodyRows - 4)
   const visible = getVisibleCommits(state, listRows)
+  const loadState = loadingMoreCommits
+    ? 'loading older commits'
+    : hasMoreCommits
+      ? 'more below'
+      : 'loaded'
   const title = `${state.filteredCommits.length}/${state.commits.length} commits`
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
 
@@ -643,7 +746,7 @@ function renderCommitPanel(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Commits', focused)),
-    h(Text, { dimColor: true }, `${title} | ${graphMode}`)
+    h(Text, { dimColor: true }, `${title} | ${graphMode} | ${loadState}`)
   ),
   visible.commits.length === 0
     ? h(Text, { dimColor: true }, 'No commits match the current filter.')

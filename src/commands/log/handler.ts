@@ -26,6 +26,7 @@ export const handler: CommandHandler<LogArgv> = async (argv) => {
 
   if (argv.interactive && format === 'table') {
     await startInkInteractiveLog(git, rows, {}, {
+      logArgv: argv,
       theme: config.logTui?.theme,
     })
     return
