@@ -11,7 +11,7 @@ describe('log Ink keymap', () => {
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual(['↑/↓ move', '/ search', 'tab focus', 'g graph', '? help'])
+    })).toEqual(['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next', '? help'])
 
     expect(getLogInkFooterHints({
       filterMode: true,
@@ -35,6 +35,9 @@ describe('log Ink keymap', () => {
 
     expect(helpText).toContain('/ Filter commits')
     expect(helpText).toContain('g Toggle compact and full graph display.')
+    expect(helpText).toContain('gg Jump to the first visible commit.')
+    expect(helpText).toContain('G Jump to the last visible commit.')
+    expect(helpText).toContain('[ Move to the previous repository sidebar tab.')
     expect(helpText).toContain('q/ctrl+c Quit the interactive log.')
     expect(helpText).toContain('tab Move focus to the next panel.')
   })

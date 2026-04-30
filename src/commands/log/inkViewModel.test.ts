@@ -4,6 +4,7 @@ import {
   createLogInkState,
   getLogInkSidebarTabs,
   getSelectedInkCommit,
+  scoreLogInkCommitFilter,
 } from './inkViewModel'
 
 const rows: GitLogRow[] = [
@@ -27,14 +28,24 @@ const rows: GitLogRow[] = [
     refs: ['feature/ink'],
     message: 'fix: polish detail panel',
   },
+  {
+    type: 'commit',
+    graph: '*',
+    shortHash: 'fed9999',
+    hash: 'fed999900000',
+    date: '2026-04-29',
+    author: 'Feature Author',
+    refs: ['feature/polish'],
+    message: 'feat: polish commit browser',
+  },
 ]
 
 describe('log Ink view model', () => {
   it('creates a calm browsing state from parsed rows', () => {
     const state = createLogInkState(rows)
 
-    expect(state.commits).toHaveLength(2)
-    expect(state.filteredCommits).toHaveLength(2)
+    expect(state.commits).toHaveLength(3)
+    expect(state.filteredCommits).toHaveLength(3)
     expect(state.focus).toBe('commits')
     expect(state.sidebarTab).toBe('status')
     expect(state.showHelp).toBe(false)
@@ -48,7 +59,7 @@ describe('log Ink view model', () => {
     expect(getSelectedInkCommit(state)?.shortHash).toBe('def5678')
 
     state = applyLogInkAction(state, { type: 'move', delta: 10 })
-    expect(getSelectedInkCommit(state)?.shortHash).toBe('def5678')
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('fed9999')
 
     state = applyLogInkAction(state, { type: 'move', delta: -10 })
     expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
@@ -58,7 +69,7 @@ describe('log Ink view model', () => {
     let state = createLogInkState(rows)
 
     state = applyLogInkAction(state, { type: 'setFilter', value: 'polish' })
-    expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['def5678'])
+    expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['def5678', 'fed9999'])
 
     state = applyLogInkAction(state, { type: 'setFilter', value: 'coco test' })
     expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['abc1234'])
@@ -68,6 +79,14 @@ describe('log Ink view model', () => {
 
     state = applyLogInkAction(state, { type: 'setFilter', value: 'def567890' })
     expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['def5678'])
+  })
+
+  it('uses fuzzy ranking when filtering commits', () => {
+    const state = applyLogInkAction(createLogInkState(rows), { type: 'setFilter', value: 'pcb' })
+
+    expect(state.filteredCommits.map((commit) => commit.shortHash)).toEqual(['fed9999'])
+    expect(scoreLogInkCommitFilter(rows[2] as typeof rows[number] & { type: 'commit' }, 'commit browser')).toBeDefined()
+    expect(scoreLogInkCommitFilter(rows[1] as typeof rows[number] & { type: 'commit' }, 'commit browser')).toBeUndefined()
   })
 
   it('edits search text through append, backspace, and clear actions', () => {
@@ -106,6 +125,20 @@ describe('log Ink view model', () => {
 
     state = applyLogInkAction(state, { type: 'previousSidebarTab' })
     expect(state.sidebarTab).toBe('status')
+
+    state = applyLogInkAction(state, { type: 'setSidebarTab', value: 'worktrees' })
+    expect(state.sidebarTab).toBe('worktrees')
+    expect(state.focus).toBe('sidebar')
+  })
+
+  it('jumps to list boundaries', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'moveToBottom' })
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('fed9999')
+
+    state = applyLogInkAction(state, { type: 'moveToTop' })
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
   })
 
   it('toggles graph, help, and command palette overlays', () => {
