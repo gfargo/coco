@@ -1,6 +1,10 @@
 import { handler as commitHandler } from '../commit/handler'
 import { createCommit } from '../../lib/simple-git/createCommit'
-import { commitWorkflowTestInternals, runCommitWorkflow } from './commitWorkflowActions'
+import {
+  commitWorkflowTestInternals,
+  runCommitDraftWorkflow,
+  runCommitWorkflow,
+} from './commitWorkflowActions'
 
 jest.mock('../commit/handler', () => ({
   handler: jest.fn(),
@@ -80,6 +84,19 @@ describe('log commit workflow actions', () => {
       }),
       expect.anything()
     )
+  })
+
+  it('generates commit drafts without creating commits', async () => {
+    mockedCommitHandler.mockImplementation(async () => {
+      process.stdout.write('feat: draft message\n\nDraft body.\n')
+    })
+
+    await expect(runCommitDraftWorkflow()).resolves.toEqual({
+      ok: true,
+      message: 'feat: draft message',
+      draft: 'feat: draft message\n\nDraft body.',
+    })
+    expect(mockedCreateCommit).not.toHaveBeenCalled()
   })
 
   it('passes no-verify into TUI commit workflows', async () => {

@@ -31,14 +31,14 @@ describe('log Ink keymap', () => {
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual(['↑/↓ files', 'enter diff', 'space stage', 'z revert', '? help'])
+    })).toEqual(['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose'])
 
     expect(getLogInkFooterHints({
       activeView: 'diff',
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual(['j/k hunks', 'space stage', 'z revert', 'esc files', '? help'])
+    })).toEqual(['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files'])
 
     expect(getLogInkFooterHints({
       filterMode: false,
@@ -60,6 +60,8 @@ describe('log Ink keymap', () => {
     expect(helpText).toContain('G Jump to the last visible commit.')
     expect(helpText).toContain('[ Move to the previous repository sidebar tab.')
     expect(helpText).toContain('z Ask to revert the selected file or hunk.')
+    expect(helpText).toContain('e Edit the manual commit summary or body.')
+    expect(helpText).toContain('c Create a commit from staged changes with the current draft.')
     expect(helpText).toContain('q/ctrl+c Quit the interactive log.')
     expect(helpText).toContain('tab Move focus to the next panel.')
   })

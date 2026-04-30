@@ -27,6 +27,8 @@ export type LogInkInputEvent =
   | { type: 'toggleSelectedHunkStage' }
   | { type: 'revertSelectedFile' }
   | { type: 'revertSelectedHunk' }
+  | { type: 'createManualCommit' }
+  | { type: 'runAiCommitDraft' }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -61,6 +63,41 @@ export function getLogInkInputEvents(
     return [{ type: 'exit' }]
   }
 
+  if (state.commitCompose.editing) {
+    if (key.escape) {
+      return [action({ type: 'commitCompose', action: { type: 'setEditing', value: false } })]
+    }
+
+    if (key.tab) {
+      return [action({ type: 'commitCompose', action: { type: 'toggleField' } })]
+    }
+
+    if (key.return) {
+      return [
+        action({
+          type: 'commitCompose',
+          action: state.commitCompose.field === 'summary'
+            ? { type: 'setField', value: 'body' }
+            : { type: 'setEditing', value: false },
+        }),
+      ]
+    }
+
+    if (key.backspace || key.delete) {
+      return [action({ type: 'commitCompose', action: { type: 'backspace' } })]
+    }
+
+    if (key.ctrl && inputValue === 'u') {
+      return [action({ type: 'commitCompose', action: { type: 'clearField' } })]
+    }
+
+    if (inputValue && !key.ctrl && !key.meta) {
+      return [action({ type: 'commitCompose', action: { type: 'append', value: inputValue } })]
+    }
+
+    return []
+  }
+
   if (state.filterMode) {
     if (key.return || key.escape) {
       return [action({ type: 'toggleFilterMode' })]
@@ -84,6 +121,13 @@ export function getLogInkInputEvents(
   if (state.pendingConfirmationId) {
     if (inputValue === 'y') {
       const workflowAction = getLogInkWorkflowActionById(state.pendingConfirmationId)
+
+      if (workflowAction?.id === 'ai-commit-summary') {
+        return [
+          { type: 'runAiCommitDraft' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
 
       return [
         action({ type: 'setPendingConfirmation', value: undefined }),
@@ -317,6 +361,14 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'z' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
     return [action({ type: 'setPendingMutationConfirmation', value: 'revert-hunk' })]
+  }
+
+  if (inputValue === 'e' && (state.activeView === 'status' || state.activeView === 'diff')) {
+    return [action({ type: 'commitCompose', action: { type: 'setEditing', value: true } })]
+  }
+
+  if (inputValue === 'c' && (state.activeView === 'status' || state.activeView === 'diff')) {
+    return [{ type: 'createManualCommit' }]
   }
 
   const workflowAction = getLogInkWorkflowActionByKey(inputValue)

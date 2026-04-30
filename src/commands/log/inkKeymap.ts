@@ -3,6 +3,8 @@ import { LogInkFocus, LogInkView } from './inkViewModel'
 export type LogInkCommandId =
   | 'clearSearch'
   | 'commandPalette'
+  | 'commit'
+  | 'editCommit'
   | 'focusNext'
   | 'focusPrevious'
   | 'help'
@@ -164,6 +166,20 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['commits'],
   },
   {
+    id: 'editCommit',
+    keys: ['e'],
+    label: 'edit commit',
+    description: 'Edit the manual commit summary or body.',
+    contexts: ['commits'],
+  },
+  {
+    id: 'commit',
+    keys: ['c'],
+    label: 'commit',
+    description: 'Create a commit from staged changes with the current draft.',
+    contexts: ['commits'],
+  },
+  {
     id: 'help',
     keys: ['?'],
     label: 'help',
@@ -227,11 +243,11 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): stri
   }
 
   if (options.activeView === 'status') {
-    return ['↑/↓ files', 'enter diff', 'space stage', 'z revert', '? help']
+    return ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose']
   }
 
   if (options.activeView === 'diff') {
-    return ['j/k hunks', 'space stage', 'z revert', 'esc files', '? help']
+    return ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files']
   }
 
   return ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next', '? help']
@@ -262,6 +278,12 @@ export function getLogInkHelpSections(): LogInkHelpSection[] {
       title: 'Browsing',
       bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
         ['search', 'clearSearch', 'toggleGraph', 'refresh', 'revertSelection'].includes(binding.id)
+      ),
+    },
+    {
+      title: 'Commit',
+      bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
+        ['editCommit', 'commit'].includes(binding.id)
       ),
     },
     {
