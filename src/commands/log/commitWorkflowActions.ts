@@ -14,6 +14,7 @@ export type CommitWorkflowResult = {
   ok: boolean
   message: string
   details?: string[]
+  draft?: string
 }
 
 type CommitWorkflowInput = {
@@ -143,6 +144,48 @@ export async function runCommitWorkflow({
         ok: error.code === 0,
         message: lines[0] || error.message,
         details: lines.slice(1, 6),
+      }
+    }
+
+    return formatCommitFailure(error)
+  } finally {
+    process.stdout.write = originalWrite
+  }
+}
+
+export async function runCommitDraftWorkflow(): Promise<CommitWorkflowResult> {
+  const argv = createCommitWorkflowArgv('commit')
+  const logger = new Logger({ silent: true })
+  const originalWrite = process.stdout.write.bind(process.stdout)
+  let output = ''
+
+  process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
+    output += typeof chunk === 'string' ? chunk : chunk.toString()
+
+    const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === 'function')
+    callback?.()
+
+    return true
+  }) as typeof process.stdout.write
+
+  try {
+    await commitHandler(argv, logger)
+    const draft = output.trim()
+
+    return {
+      ok: Boolean(draft),
+      message: draft ? formatCommitWorkflowMessage('commit', draft) : 'AI draft was empty.',
+      draft,
+    }
+  } catch (error) {
+    if (isCommandExitError(error)) {
+      const lines = compactOutputLines(output || error.message)
+
+      return {
+        ok: error.code === 0,
+        message: lines[0] || error.message,
+        details: lines.slice(1, 6),
+        draft: output.trim(),
       }
     }
 

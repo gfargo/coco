@@ -259,6 +259,30 @@ describe('log Ink input interactions', () => {
     ])
   })
 
+  it('edits commit compose fields and emits commit events', () => {
+    let state = createLogInkState(rows, { activeView: 'status' })
+
+    state = applyInput(state, 'e')
+    expect(state.commitCompose.editing).toBe(true)
+
+    state = applyInput(state, 'f')
+    state = applyInput(state, 'e')
+    state = applyInput(state, 'a')
+    state = applyInput(state, 't')
+    expect(state.commitCompose.summary).toBe('feat')
+
+    state = applyInput(state, '', { return: true })
+    expect(state.commitCompose.field).toBe('body')
+
+    state = applyInput(state, 'body')
+    expect(state.commitCompose.body).toBe('body')
+
+    state = applyInput(state, '', { escape: true })
+    expect(state.commitCompose.editing).toBe(false)
+
+    expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'createManualCommit' }])
+  })
+
   it('clears pending key chords after unrelated actions', () => {
     let state = createLogInkState(rows)
 
@@ -289,8 +313,12 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'I')
     expect(state.pendingConfirmationId).toBe('ai-commit-summary')
 
-    state = applyInput(state, 'y')
-    expect(state.pendingConfirmationId).toBeUndefined()
-    expect(state.statusMessage).toBe('AI commit summary queued for workflow execution')
+    expect(getLogInkInputEvents(state, 'y')).toEqual([
+      { type: 'runAiCommitDraft' },
+      {
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: undefined },
+      },
+    ])
   })
 })

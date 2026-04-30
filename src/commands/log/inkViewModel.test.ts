@@ -51,6 +51,7 @@ describe('log Ink view model', () => {
     expect(state.selectedWorktreeFileIndex).toBe(0)
     expect(state.diffPreviewOffset).toBe(0)
     expect(state.worktreeDiffOffset).toBe(0)
+    expect(state.commitCompose.summary).toBe('')
     expect(state.focus).toBe('commits')
     expect(state.sidebarTab).toBe('status')
     expect(state.showHelp).toBe(false)
@@ -220,6 +221,22 @@ describe('log Ink view model', () => {
     state = applyLogInkAction(state, { type: 'setActiveView', value: 'status' })
     expect(state.worktreeDiffOffset).toBe(0)
     expect(state.selectedWorktreeHunkIndex).toBe(0)
+  })
+
+  it('stores commit compose state in the shared view model', () => {
+    let state = createLogInkState(rows, { activeView: 'status' })
+
+    state = applyLogInkAction(state, {
+      type: 'commitCompose',
+      action: { type: 'setEditing', value: true },
+    })
+    state = applyLogInkAction(state, {
+      type: 'commitCompose',
+      action: { type: 'append', value: 'feat: compose commit' },
+    })
+
+    expect(state.commitCompose.editing).toBe(true)
+    expect(state.commitCompose.summary).toBe('feat: compose commit')
   })
 
   it('toggles graph, help, and command palette overlays', () => {

@@ -1,6 +1,8 @@
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { BranchOverview, getBranchOverview } from './branchData'
+import { createManualCommit } from './commitCompose'
+import { runCommitDraftWorkflow } from './commitWorkflowActions'
 import {
   GitCommitDetail,
   GitCommitFilePreview,
@@ -688,6 +690,59 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [dispatch, git, refreshWorktreeContext, state.selectedWorktreeHunkIndex, worktreeHunks])
 
+  const createCommitFromCompose = React.useCallback(async () => {
+    const stagedCount = context.worktree?.stagedCount || 0
+
+    if (!stagedCount) {
+      dispatch({ type: 'setStatus', value: 'stage changes before committing' })
+      return
+    }
+
+    dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: true } })
+    dispatch({ type: 'setStatus', value: 'creating commit' })
+    const result = await createManualCommit({
+      git,
+      summary: state.commitCompose.summary,
+      body: state.commitCompose.body,
+    })
+
+    dispatch({
+      type: 'commitCompose',
+      action: { type: 'setResult', message: result.message, details: result.details },
+    })
+    dispatch({ type: 'setStatus', value: result.message })
+
+    if (result.ok) {
+      dispatch({ type: 'commitCompose', action: { type: 'reset' } })
+      await refreshWorktreeContext()
+    }
+  }, [
+    context.worktree?.stagedCount,
+    dispatch,
+    git,
+    refreshWorktreeContext,
+    state.commitCompose.body,
+    state.commitCompose.summary,
+  ])
+
+  const runAiCommitDraft = React.useCallback(async () => {
+    dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: true } })
+    dispatch({ type: 'setStatus', value: 'generating AI commit draft' })
+    const result = await runCommitDraftWorkflow()
+
+    if (result.ok && result.draft) {
+      dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: result.draft } })
+      dispatch({ type: 'setStatus', value: 'AI draft ready for editing' })
+      return
+    }
+
+    dispatch({
+      type: 'commitCompose',
+      action: { type: 'setResult', message: result.message, details: result.details },
+    })
+    dispatch({ type: 'setStatus', value: result.message })
+  }, [dispatch])
+
   React.useEffect(() => {
     let active = true
 
@@ -806,6 +861,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void revertSelectedFile()
       } else if (event.type === 'revertSelectedHunk') {
         void revertSelectedHunk()
+      } else if (event.type === 'createManualCommit') {
+        void createCommitFromCompose()
+      } else if (event.type === 'runAiCommitDraft') {
+        void runAiCommitDraft()
       } else {
         dispatch(event.action)
       }
@@ -960,7 +1019,7 @@ function renderMainPanel(
     )
   }
 
-  return renderCommitPanel(
+  return renderHistoryPanel(
     h,
     components,
     state,
@@ -971,7 +1030,7 @@ function renderMainPanel(
   )
 }
 
-function renderCommitPanel(
+function renderHistoryPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
   state: LogInkState,
@@ -1152,6 +1211,10 @@ function renderDetailPanel(
     return renderConfirmationPanel(h, components, state, width, theme, focused)
   }
 
+  if (state.activeView === 'status' || state.activeView === 'diff') {
+    return renderCommitPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+
   const selected = getSelectedInkCommit(state)
   const selectedFile = detail?.files[state.selectedFileIndex]
   const previewWindow = filePreview?.hunks.slice(state.diffPreviewOffset, state.diffPreviewOffset + 8)
@@ -1215,6 +1278,57 @@ function renderDetailPanel(
   ...lines.map((line, index) => h(Text, {
     key: `detail-${index}`,
     dimColor: index > 1 && line !== 'Changed files:',
+  }, truncate(line, width - 4))))
+}
+
+function renderCommitPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const compose = state.commitCompose
+  const loading = compose.loading
+  const stagedCount = context.worktree?.stagedCount || 0
+  const unstagedCount = context.worktree?.unstagedCount || 0
+  const statusLine = isLogInkContextKeyLoading(contextStatus, 'worktree')
+    ? 'Status loading'
+    : `${stagedCount} staged | ${unstagedCount} unstaged`
+  const summaryCursor = compose.editing && compose.field === 'summary' ? '_' : ''
+  const bodyCursor = compose.editing && compose.field === 'body' ? '_' : ''
+  const bodyLines = compose.body ? compose.body.split('\n').slice(0, 4) : ['<empty>']
+  const lines = [
+    statusLine,
+    '',
+    `${compose.field === 'summary' && compose.editing ? '>' : ' '} Summary: ${compose.summary || '<empty>'}${summaryCursor}`,
+    `${compose.field === 'body' && compose.editing ? '>' : ' '} Body:`,
+    ...bodyLines.map((line) => `  ${line}${bodyCursor && line === bodyLines[bodyLines.length - 1] ? bodyCursor : ''}`),
+    '',
+    loading
+      ? 'Working...'
+      : compose.editing
+        ? 'Enter/tab edits fields, Esc exits edit mode.'
+        : 'e edit | c commit | I AI draft',
+    ...(compose.message ? ['', compose.message] : []),
+    ...(compose.details || []).map((line) => `  ${line}`),
+  ]
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle('Commit', focused)),
+  ...lines.map((line, index) => h(Text, {
+    key: `commit-${index}`,
+    dimColor: index < 2 || line.startsWith('  ') || line === '<empty>',
   }, truncate(line, width - 4))))
 }
 

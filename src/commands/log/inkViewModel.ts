@@ -1,4 +1,10 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from './data'
+import {
+  CommitComposeAction,
+  CommitComposeState,
+  applyCommitComposeAction,
+  createCommitComposeState,
+} from './commitCompose'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
@@ -19,6 +25,7 @@ export type LogInkState = {
   selectedFileIndex: number
   selectedWorktreeFileIndex: number
   selectedWorktreeHunkIndex: number
+  commitCompose: CommitComposeState
   diffPreviewOffset: number
   worktreeDiffOffset: number
   filter: string
@@ -40,6 +47,7 @@ export type LogInkAction =
   | { type: 'appendFilter'; value: string }
   | { type: 'backspaceFilter' }
   | { type: 'clearFilter' }
+  | { type: 'commitCompose'; action: CommitComposeAction }
   | { type: 'focusNext' }
   | { type: 'focusPrevious' }
   | { type: 'move'; delta: number }
@@ -262,6 +270,7 @@ export function createLogInkState(
     selectedFileIndex: 0,
     selectedWorktreeFileIndex: 0,
     selectedWorktreeHunkIndex: 0,
+    commitCompose: createCommitComposeState(),
     diffPreviewOffset: 0,
     worktreeDiffOffset: 0,
     filter: '',
@@ -295,6 +304,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         filterMode: false,
       }, '')
+    case 'commitCompose':
+      return {
+        ...state,
+        commitCompose: applyCommitComposeAction(state.commitCompose, action.action),
+        pendingKey: undefined,
+      }
     case 'focusNext':
       return {
         ...state,
