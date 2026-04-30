@@ -18,7 +18,7 @@ An AI-powered git assistant that generates meaningful commit messages, creates c
 - 📋 **Conventional Commits** - Full support with automatic validation and formatting  
 - 🔧 **Commitlint Integration** - Seamless integration with your existing commitlint configuration
 - 🏠 **Local AI Support** - Run completely offline with Ollama (no API costs, full privacy)
-- 🖥️ **Interactive Git Log TUI** - Browse commits, refs, changed files, and hunk previews from `coco log -i`
+- 🖥️ **Coco UI Git Workstation** - Browse history, inspect status/diffs, stage hunks, and compose commits from `coco ui`
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
 - 👥 **Team Ready** - Shared configurations and enterprise deployment
 
@@ -46,6 +46,7 @@ coco -i
 - **`coco recap`** - Summarize recent changes and activity
 - **`coco review`** - AI-powered code review of your changes
 - **`coco log`** - Explore commit history with graph, filters, JSON output, and commit details
+- **`coco ui`** - Open the full-screen Git workstation TUI
 - **`coco init`** - Interactive setup wizard
 
 ## Usage Examples
@@ -89,6 +90,8 @@ coco recap --yesterday
 coco review
 
 # Explore commit history
+coco ui
+coco ui --view status
 coco log --limit 20
 coco log -i
 coco log --view full --limit 20
@@ -142,7 +145,8 @@ For comprehensive guides, advanced usage, and detailed configuration options, vi
 - **[Getting Started](https://github.com/gfargo/coco/wiki/Getting-Started)** - Complete beginner's guide from installation to first commit
 - **[Command Reference](https://github.com/gfargo/coco/wiki/Command-Reference)** - Detailed command options and examples
 - **[Configuration Overview](https://github.com/gfargo/coco/wiki/Config-Overview)** - All configuration options and setup methods
-- **[Interactive Log TUI](https://github.com/gfargo/coco/wiki/Interactive-Log-TUI)** - Full-screen `coco log -i` guide, keybindings, themes, and detail previews
+- **[Coco UI](https://github.com/gfargo/coco/wiki/Coco-UI)** - GitKraken-style terminal workstation guide
+- **[Interactive Log TUI](https://github.com/gfargo/coco/wiki/Interactive-Log-TUI)** - History-focused `coco log -i` guide
 - **[Team Collaboration](https://github.com/gfargo/coco/wiki/Team-Collaboration)** - Enterprise deployment and team adoption strategies
 
 **Advanced Resources:**
