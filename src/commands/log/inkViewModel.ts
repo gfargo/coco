@@ -3,8 +3,14 @@ import { GitLogCommitRow, GitLogRow, getCommitRows } from './data'
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
+export type LogInkView = 'history' | 'status' | 'diff'
+
+export type CreateLogInkStateOptions = {
+  activeView?: LogInkView
+}
 
 export type LogInkState = {
+  activeView: LogInkView
   rows: GitLogRow[]
   commits: GitLogCommitRow[]
   filteredCommits: GitLogCommitRow[]
@@ -40,6 +46,7 @@ export type LogInkAction =
   | { type: 'pageDetailPreview'; delta: number; previewLineCount: number }
   | { type: 'previousSidebarTab' }
   | { type: 'setFilter'; value: string }
+  | { type: 'setActiveView'; value: LogInkView }
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
@@ -211,10 +218,14 @@ export function getLogInkSidebarTabs(): LogInkSidebarTab[] {
   return [...SIDEBAR_TABS]
 }
 
-export function createLogInkState(rows: GitLogRow[]): LogInkState {
+export function createLogInkState(
+  rows: GitLogRow[],
+  options: CreateLogInkStateOptions = {}
+): LogInkState {
   const commits = getCommitRows(rows)
 
   return {
+    activeView: options.activeView || 'history',
     rows,
     commits,
     filteredCommits: commits,
@@ -325,6 +336,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       }
     case 'setFilter':
       return withFilter(state, action.value)
+    case 'setActiveView':
+      return {
+        ...state,
+        activeView: action.value,
+        pendingKey: undefined,
+      }
     case 'setFocus':
       return {
         ...state,

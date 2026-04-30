@@ -8,6 +8,7 @@ import {
 describe('log Ink keymap', () => {
   it('keeps footer hints short and contextual', () => {
     expect(getLogInkFooterHints({
+      activeView: 'history',
       filterMode: false,
       focus: 'commits',
       showHelp: false,
@@ -24,6 +25,20 @@ describe('log Ink keymap', () => {
       focus: 'detail',
       showHelp: false,
     })).toEqual(['↑/↓ files', 'pgup/pgdn diff', 'tab focus', '? help', 'q quit'])
+
+    expect(getLogInkFooterHints({
+      activeView: 'status',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    })).toEqual(['↑/↓ files', 'enter diff', 'space stage', 'r refresh', '? help'])
+
+    expect(getLogInkFooterHints({
+      activeView: 'diff',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    })).toEqual(['pgup/pgdn diff', 'j/k hunks', 'space stage', 'esc files', '? help'])
 
     expect(getLogInkFooterHints({
       filterMode: false,

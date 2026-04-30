@@ -1,4 +1,4 @@
-import { LogInkFocus } from './inkViewModel'
+import { LogInkFocus, LogInkView } from './inkViewModel'
 
 export type LogInkCommandId =
   | 'clearSearch'
@@ -186,6 +186,7 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
 ]
 
 export type GetLogInkFooterHintsOptions = {
+  activeView?: LogInkView
   filterMode: boolean
   focus: LogInkFocus
   showHelp: boolean
@@ -215,6 +216,14 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): stri
 
   if (options.focus === 'detail') {
     return ['↑/↓ files', 'pgup/pgdn diff', 'tab focus', '? help', 'q quit']
+  }
+
+  if (options.activeView === 'status') {
+    return ['↑/↓ files', 'enter diff', 'space stage', 'r refresh', '? help']
+  }
+
+  if (options.activeView === 'diff') {
+    return ['pgup/pgdn diff', 'j/k hunks', 'space stage', 'esc files', '? help']
   }
 
   return ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next', '? help']
