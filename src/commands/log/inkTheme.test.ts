@@ -18,4 +18,27 @@ describe('log Ink theme', () => {
     expect(theme.borderStyle).toBe('classic')
     expect(theme.colors).toEqual({})
   })
+
+  it('supports configurable presets and token overrides', () => {
+    const theme = createLogInkTheme({
+      borderStyle: 'single',
+      colors: {
+        accent: '#ffffff',
+      },
+      noColor: false,
+      preset: 'catppuccin',
+      term: 'xterm-256color',
+    })
+
+    expect(theme.borderStyle).toBe('single')
+    expect(theme.colors.focusBorder).toBe('#89dceb')
+    expect(theme.colors.accent).toBe('#ffffff')
+  })
+
+  it('treats the monochrome preset as a no-color theme', () => {
+    const theme = createLogInkTheme({ noColor: false, preset: 'monochrome' })
+
+    expect(theme.noColor).toBe(true)
+    expect(theme.colors).toEqual({})
+  })
 })

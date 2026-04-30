@@ -46,6 +46,8 @@ describe('log Ink view model', () => {
 
     expect(state.commits).toHaveLength(3)
     expect(state.filteredCommits).toHaveLength(3)
+    expect(state.selectedFileIndex).toBe(0)
+    expect(state.diffPreviewOffset).toBe(0)
     expect(state.focus).toBe('commits')
     expect(state.sidebarTab).toBe('status')
     expect(state.showHelp).toBe(false)
@@ -139,6 +141,23 @@ describe('log Ink view model', () => {
 
     state = applyLogInkAction(state, { type: 'moveToTop' })
     expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
+  })
+
+  it('tracks selected changed files and diff preview paging', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'moveDetailFile', delta: 2, fileCount: 3 })
+    expect(state.selectedFileIndex).toBe(2)
+
+    state = applyLogInkAction(state, { type: 'moveDetailFile', delta: 1, fileCount: 3 })
+    expect(state.selectedFileIndex).toBe(2)
+
+    state = applyLogInkAction(state, { type: 'pageDetailPreview', delta: 10, previewLineCount: 20 })
+    expect(state.diffPreviewOffset).toBe(10)
+
+    state = applyLogInkAction(state, { type: 'move', delta: 1 })
+    expect(state.selectedFileIndex).toBe(0)
+    expect(state.diffPreviewOffset).toBe(0)
   })
 
   it('toggles graph, help, and command palette overlays', () => {

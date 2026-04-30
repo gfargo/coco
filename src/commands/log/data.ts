@@ -26,10 +26,29 @@ export type GitLogRow = GitLogCommitRow | GitLogGraphRow
 export type GitCommitDetail = Omit<GitLogCommitRow, 'type' | 'graph'> & {
   body: string
   files: Array<{
+    additions?: number
+    binary?: boolean
+    deletions?: number
     status: string
     path: string
     oldPath?: string
   }>
+  stats: {
+    filesChanged: number
+    insertions: number
+    deletions: number
+  }
+}
+
+export type GitCommitFilePreview = {
+  path: string
+  oldPath?: string
+  stats: {
+    additions?: number
+    binary?: boolean
+    deletions?: number
+  }
+  hunks: string[]
 }
 
 export function toArray(value: string | string[] | undefined): string[] {
@@ -107,7 +126,49 @@ export function parseLogOutput(output: string): GitLogRow[] {
     })
 }
 
-function parseNameStatus(output: string): GitCommitDetail['files'] {
+type ParsedNumstat = {
+  additions?: number
+  binary?: boolean
+  deletions?: number
+  path: string
+}
+
+function parseNumericStat(value: string): number | undefined {
+  return value === '-' ? undefined : Number(value)
+}
+
+function parseNumstat(output: string): ParsedNumstat[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [additions, deletions, path] = line.split('\t')
+
+      return {
+        additions: parseNumericStat(additions),
+        binary: additions === '-' || deletions === '-',
+        deletions: parseNumericStat(deletions),
+        path,
+      }
+    })
+}
+
+function summarizeNumstat(entries: ParsedNumstat[]): GitCommitDetail['stats'] {
+  return entries.reduce<GitCommitDetail['stats']>((summary, entry) => ({
+    filesChanged: summary.filesChanged + 1,
+    insertions: summary.insertions + (entry.additions || 0),
+    deletions: summary.deletions + (entry.deletions || 0),
+  }), {
+    filesChanged: 0,
+    insertions: 0,
+    deletions: 0,
+  })
+}
+
+function parseNameStatus(output: string, numstat: ParsedNumstat[] = []): GitCommitDetail['files'] {
+  const statsByPath = new Map(numstat.map((entry) => [entry.path, entry]))
+
   return output
     .split('\n')
     .map((line) => line.trim())
@@ -116,24 +177,34 @@ function parseNameStatus(output: string): GitCommitDetail['files'] {
       const [status, firstPath, secondPath] = line.split('\t')
 
       if (status.startsWith('R') || status.startsWith('C')) {
+        const stats = statsByPath.get(secondPath) || statsByPath.get(`${firstPath} => ${secondPath}`)
+
         return {
+          additions: stats?.additions,
+          binary: stats?.binary,
+          deletions: stats?.deletions,
           status,
           oldPath: firstPath,
           path: secondPath,
         }
       }
+      const stats = statsByPath.get(firstPath)
 
       return {
+        additions: stats?.additions,
+        binary: stats?.binary,
+        deletions: stats?.deletions,
         status,
         path: firstPath,
       }
     })
 }
 
-export function parseCommitDetail(metadata: string, files: string): GitCommitDetail {
+export function parseCommitDetail(metadata: string, files: string, numstatOutput = ''): GitCommitDetail {
   const [hash, shortHash, date, author, refs, message, body = ''] = metadata
     .trimEnd()
     .split(FIELD_SEPARATOR)
+  const numstat = parseNumstat(numstatOutput)
 
   return {
     shortHash,
@@ -143,7 +214,8 @@ export function parseCommitDetail(metadata: string, files: string): GitCommitDet
     refs: cleanRefs(refs),
     message,
     body: body.trim(),
-    files: parseNameStatus(files),
+    files: parseNameStatus(files, numstat),
+    stats: summarizeNumstat(numstat),
   }
 }
 
@@ -200,22 +272,71 @@ export async function getLogRows(git: SimpleGit, argv: LogArgv): Promise<GitLogR
 }
 
 export async function getCommitDetail(git: SimpleGit, commit: string): Promise<GitCommitDetail> {
-  const metadata = await git.raw([
-    'show',
-    '--no-patch',
-    '--date=short',
-    '--color=never',
-    `--pretty=format:${DETAIL_FORMAT}`,
-    commit,
+  const [metadata, files, numstat] = await Promise.all([
+    git.raw([
+      'show',
+      '--no-patch',
+      '--date=short',
+      '--color=never',
+      `--pretty=format:${DETAIL_FORMAT}`,
+      commit,
+    ]),
+    git.raw([
+      'show',
+      '--name-status',
+      '--format=',
+      '--find-renames',
+      '--color=never',
+      commit,
+    ]),
+    git.raw([
+      'show',
+      '--numstat',
+      '--format=',
+      '--find-renames',
+      '--color=never',
+      commit,
+    ]),
   ])
-  const files = await git.raw([
+
+  return parseCommitDetail(metadata, files, numstat)
+}
+
+export async function getCommitFilePreview(
+  git: SimpleGit,
+  commit: string,
+  file: GitCommitDetail['files'][number],
+  limit = 40
+): Promise<GitCommitFilePreview> {
+  const paths = file.oldPath ? [file.oldPath, file.path] : [file.path]
+  const patch = await git.raw([
     'show',
-    '--name-status',
     '--format=',
     '--find-renames',
     '--color=never',
+    '--unified=3',
     commit,
+    '--',
+    ...paths,
   ])
+  const hunks = patch
+    .split('\n')
+    .filter((line) => (
+      line.startsWith('@@') ||
+      line.startsWith('+') ||
+      line.startsWith('-') ||
+      line.startsWith(' ')
+    ))
+    .slice(0, limit)
 
-  return parseCommitDetail(metadata, files)
+  return {
+    path: file.path,
+    oldPath: file.oldPath,
+    stats: {
+      additions: file.additions,
+      binary: file.binary,
+      deletions: file.deletions,
+    },
+    hunks,
+  }
 }

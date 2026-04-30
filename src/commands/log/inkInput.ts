@@ -24,6 +24,11 @@ export type LogInkInputEvent =
   | { type: 'exit' }
   | { type: 'refreshContext' }
 
+export type LogInkInputContext = {
+  detailFileCount?: number
+  previewLineCount?: number
+}
+
 function action(actionValue: LogInkAction): LogInkInputEvent {
   return {
     type: 'action',
@@ -42,7 +47,8 @@ const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
 export function getLogInkInputEvents(
   state: LogInkState,
   inputValue: string,
-  key: LogInkInputKey = {}
+  key: LogInkInputKey = {},
+  context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
   if (key.ctrl && inputValue === 'c') {
     return [{ type: 'exit' }]
@@ -167,6 +173,10 @@ export function getLogInkInputEvents(
   }
 
   if (key.upArrow || inputValue === 'k') {
+    if (state.focus === 'detail' && context.detailFileCount) {
+      return [action({ type: 'moveDetailFile', delta: -1, fileCount: context.detailFileCount })]
+    }
+
     return [
       action(state.focus === 'sidebar'
         ? { type: 'previousSidebarTab' }
@@ -175,6 +185,10 @@ export function getLogInkInputEvents(
   }
 
   if (key.downArrow || inputValue === 'j') {
+    if (state.focus === 'detail' && context.detailFileCount) {
+      return [action({ type: 'moveDetailFile', delta: 1, fileCount: context.detailFileCount })]
+    }
+
     return [
       action(state.focus === 'sidebar'
         ? { type: 'nextSidebarTab' }
@@ -183,10 +197,26 @@ export function getLogInkInputEvents(
   }
 
   if (key.pageUp) {
+    if (state.focus === 'detail' && context.previewLineCount) {
+      return [action({
+        type: 'pageDetailPreview',
+        delta: -8,
+        previewLineCount: context.previewLineCount,
+      })]
+    }
+
     return [action({ type: 'page', delta: -10 })]
   }
 
   if (key.pageDown) {
+    if (state.focus === 'detail' && context.previewLineCount) {
+      return [action({
+        type: 'pageDetailPreview',
+        delta: 8,
+        previewLineCount: context.previewLineCount,
+      })]
+    }
+
     return [action({ type: 'page', delta: 10 })]
   }
 

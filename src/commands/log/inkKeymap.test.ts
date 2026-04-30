@@ -21,6 +21,12 @@ describe('log Ink keymap', () => {
 
     expect(getLogInkFooterHints({
       filterMode: false,
+      focus: 'detail',
+      showHelp: false,
+    })).toEqual(['↑/↓ files', 'pgup/pgdn diff', 'tab focus', '? help', 'q quit'])
+
+    expect(getLogInkFooterHints({
+      filterMode: false,
       focus: 'commits',
       showCommandPalette: true,
       showHelp: false,

@@ -113,6 +113,17 @@ export const schema = {
               "approval-mode": "auto-edit"
             }
           ]
+        },
+        "logTui": {
+          "type": "object",
+          "properties": {
+            "theme": {
+              "$ref": "#/definitions/LogInkThemeConfig",
+              "description": "Theme settings for `coco log -i`."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Interactive log TUI settings."
         }
       },
       "required": [
@@ -2106,6 +2117,83 @@ export const schema = {
         "authentication",
         "model",
         "provider"
+      ]
+    },
+    "LogInkThemeConfig": {
+      "type": "object",
+      "properties": {
+        "ascii": {
+          "type": "boolean"
+        },
+        "borderStyle": {
+          "$ref": "#/definitions/LogInkBorderStyle"
+        },
+        "colors": {
+          "$ref": "#/definitions/LogInkThemeColors"
+        },
+        "preset": {
+          "$ref": "#/definitions/LogInkThemePreset"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LogInkBorderStyle": {
+      "type": "string",
+      "enum": [
+        "round",
+        "single",
+        "classic"
+      ]
+    },
+    "LogInkThemeColors": {
+      "type": "object",
+      "properties": {
+        "accent": {
+          "type": "string"
+        },
+        "border": {
+          "type": "string"
+        },
+        "danger": {
+          "type": "string"
+        },
+        "focusBorder": {
+          "type": "string"
+        },
+        "gitAdded": {
+          "type": "string"
+        },
+        "gitDeleted": {
+          "type": "string"
+        },
+        "gitModified": {
+          "type": "string"
+        },
+        "info": {
+          "type": "string"
+        },
+        "muted": {
+          "type": "string"
+        },
+        "selection": {
+          "type": "string"
+        },
+        "success": {
+          "type": "string"
+        },
+        "warning": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LogInkThemePreset": {
+      "type": "string",
+      "enum": [
+        "default",
+        "monochrome",
+        "catppuccin",
+        "gruvbox"
       ]
     }
   }

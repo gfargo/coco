@@ -24,6 +24,11 @@ export const DEFAULT_CONFIG: Config = {
   mode: 'stdout',
   verbose: false,
   defaultBranch: 'main',
+  logTui: {
+    theme: {
+      preset: 'default',
+    },
+  },
   service: getDefaultServiceConfigFromAlias('openai'),
   summarizePrompt: SUMMARIZE_PROMPT.template as string,
   ignoredFiles: DEFAULT_IGNORED_FILES,

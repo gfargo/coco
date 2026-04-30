@@ -38,9 +38,10 @@ const rows: GitLogRow[] = [
 function applyInput(
   state = createLogInkState(rows),
   inputValue: string,
-  key: Parameters<typeof getLogInkInputEvents>[2] = {}
+  key: Parameters<typeof getLogInkInputEvents>[2] = {},
+  context: Parameters<typeof getLogInkInputEvents>[3] = {}
 ) {
-  return getLogInkInputEvents(state, inputValue, key)
+  return getLogInkInputEvents(state, inputValue, key, context)
     .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
     .reduce((current, event) => applyLogInkAction(current, event.action), state)
 }
@@ -145,6 +146,21 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 'g')
     expect(state.selectedIndex).toBe(0)
+  })
+
+  it('moves detail file selection and diff preview pages when detail is focused', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'setFocus', value: 'detail' })
+    state = applyInput(state, 'j', {}, { detailFileCount: 3, previewLineCount: 30 })
+    expect(state.selectedFileIndex).toBe(1)
+
+    state = applyInput(state, '', { pageDown: true }, { detailFileCount: 3, previewLineCount: 30 })
+    expect(state.diffPreviewOffset).toBe(8)
+
+    state = applyInput(state, 'k', {}, { detailFileCount: 3, previewLineCount: 30 })
+    expect(state.selectedFileIndex).toBe(0)
+    expect(state.diffPreviewOffset).toBe(0)
   })
 
   it('clears pending key chords after unrelated actions', () => {

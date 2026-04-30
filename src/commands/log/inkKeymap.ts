@@ -214,7 +214,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): stri
   }
 
   if (options.focus === 'detail') {
-    return ['tab focus', 'g graph', 'r refresh', '? help', 'q quit']
+    return ['↑/↓ files', 'pgup/pgdn diff', 'tab focus', '? help', 'q quit']
   }
 
   return ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next', '? help']

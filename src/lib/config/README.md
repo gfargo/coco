@@ -83,6 +83,12 @@ This directory contains configuration files and services for the application. Th
   "ignoredFiles": ["node_modules", ".git"],
   "ignoredExtensions": [".log", ".tmp"],
   "defaultBranch": "main",
+  "logTui": {
+    "theme": {
+      "preset": "catppuccin",
+      "borderStyle": "round"
+    }
+  },
   "service": {
     "provider": "openai",
     "model": "gpt-3.5-turbo",
