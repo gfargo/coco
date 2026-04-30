@@ -1,4 +1,5 @@
 import { BaseCommandOptions } from '../../commands/types'
+import { LogInkThemeConfig } from '../../commands/log/inkTheme'
 import { LLMService } from '../langchain/types'
 
 type BaseConfig = {
@@ -90,6 +91,16 @@ type BaseConfig = {
    * @example { "model": "o4-mini", "approval-mode": "auto-edit" }
    */
   autoFixToolOptions?: Record<string, string>
+
+  /**
+   * Interactive log TUI settings.
+   */
+  logTui?: {
+    /**
+     * Theme settings for `coco log -i`.
+     */
+    theme?: LogInkThemeConfig
+  }
 }
 
 export type ConfigWithServiceObject = BaseConfig &

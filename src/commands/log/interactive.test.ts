@@ -34,10 +34,18 @@ const detail: GitCommitDetail = {
   body: 'Adds the first terminal UI.',
   files: [
     {
+      additions: 12,
+      binary: false,
+      deletions: 1,
       status: 'A',
       path: 'src/commands/log/interactive.ts',
     },
   ],
+  stats: {
+    deletions: 1,
+    filesChanged: 1,
+    insertions: 12,
+  },
 }
 
 const branches: BranchOverview = {

@@ -1,7 +1,14 @@
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { BranchOverview, getBranchOverview } from './branchData'
-import { GitCommitDetail, GitLogCommitRow, GitLogRow, getCommitDetail } from './data'
+import {
+  GitCommitDetail,
+  GitCommitFilePreview,
+  GitLogCommitRow,
+  GitLogRow,
+  getCommitDetail,
+  getCommitFilePreview,
+} from './data'
 import {
   LogInkContextKey,
   LogInkContextStatus,
@@ -24,7 +31,8 @@ import {
   LOG_INK_MIN_ROWS,
   getLogInkLayout,
 } from './inkLayout'
-import { createLogInkTheme, LogInkTheme } from './inkTheme'
+import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from './inkTheme'
+import { truncateCells } from './inkText'
 import {
   LogInkSidebarTab,
   LogInkState,
@@ -55,6 +63,10 @@ type LogInkStreams = {
   input?: NodeJS.ReadStream
   output?: NodeJS.WriteStream
   error?: NodeJS.WriteStream
+}
+
+type LogInkOptions = {
+  theme?: LogInkThemeConfig
 }
 
 type LogInkContext = {
@@ -105,21 +117,7 @@ type LogInkComponentDeps = LogInkRuntime & {
   theme: LogInkTheme
 }
 
-function truncate(value: string, width: number): string {
-  if (width < 1) {
-    return ''
-  }
-
-  if (value.length <= width) {
-    return value
-  }
-
-  if (width <= 3) {
-    return value.slice(0, width)
-  }
-
-  return `${value.slice(0, width - 3)}...`
-}
+const truncate = truncateCells
 
 function compactHash(hash: string | undefined): string {
   return hash ? hash.slice(0, 7) : '<none>'
@@ -130,11 +128,18 @@ function formatRefs(commit: GitLogCommitRow): string {
 }
 
 function formatChangedFile(file: GitCommitDetail['files'][number]): string {
+  const stats = file.binary
+    ? 'bin'
+    : file.additions !== undefined || file.deletions !== undefined
+      ? `+${file.additions || 0}/-${file.deletions || 0}`
+      : ''
+  const suffix = stats ? ` ${stats}` : ''
+
   if (file.oldPath) {
-    return `${file.status} ${file.oldPath} -> ${file.path}`
+    return `${file.status} ${file.oldPath} -> ${file.path}${suffix}`
   }
 
-  return `${file.status} ${file.path}`
+  return `${file.status} ${file.path}${suffix}`
 }
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -371,7 +376,8 @@ function sidebarLines(
 export async function startInkInteractiveLog(
   git: SimpleGit,
   rows: GitLogRow[],
-  streams: LogInkStreams = {}
+  streams: LogInkStreams = {},
+  options: LogInkOptions = {}
 ): Promise<void> {
   const input = streams.input || process.stdin
   const output = streams.output || process.stdout
@@ -389,7 +395,7 @@ export async function startInkInteractiveLog(
     ink,
     React,
     rows,
-    theme: createLogInkTheme(),
+    theme: createLogInkTheme(options.theme),
   })
   const instance = ink.render(app, getLogInkRenderOptions({ input, output, error }))
 
@@ -413,7 +419,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   )
   const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
   const [detailLoading, setDetailLoading] = React.useState(false)
+  const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
+  const [filePreviewLoading, setFilePreviewLoading] = React.useState(false)
   const selected = getSelectedInkCommit(state)
+  const selectedDetailFile = detail?.files[state.selectedFileIndex]
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
@@ -474,8 +483,36 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [git, selected?.hash])
 
+  React.useEffect(() => {
+    let active = true
+
+    async function loadPreview(): Promise<void> {
+      if (!selected || !selectedDetailFile) {
+        setFilePreview(undefined)
+        return
+      }
+
+      setFilePreviewLoading(true)
+      const nextPreview = await safe(getCommitFilePreview(git, selected.hash, selectedDetailFile))
+
+      if (active) {
+        setFilePreview(nextPreview)
+        setFilePreviewLoading(false)
+      }
+    }
+
+    void loadPreview()
+
+    return () => {
+      active = false
+    }
+  }, [git, selected?.hash, selectedDetailFile?.path, selectedDetailFile?.oldPath])
+
   useInput((inputValue: string, key: LogInkInputKey) => {
-    getLogInkInputEvents(state, inputValue, key).forEach((event) => {
+    getLogInkInputEvents(state, inputValue, key, {
+      detailFileCount: detail?.files.length,
+      previewLineCount: filePreview?.hunks.length,
+    }).forEach((event) => {
       if (event.type === 'exit') {
         exit()
       } else if (event.type === 'refreshContext') {
@@ -512,6 +549,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         contextStatus,
         detail,
         detailLoading,
+        filePreview,
+        filePreviewLoading,
         layout.detailWidth,
         theme
       )
@@ -630,6 +669,8 @@ function renderDetailPanel(
   contextStatus: LogInkContextStatus,
   detail: GitCommitDetail | undefined,
   loading: boolean,
+  filePreview: GitCommitFilePreview | undefined,
+  filePreviewLoading: boolean,
   width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
@@ -649,6 +690,11 @@ function renderDetailPanel(
   }
 
   const selected = getSelectedInkCommit(state)
+  const selectedFile = detail?.files[state.selectedFileIndex]
+  const previewWindow = filePreview?.hunks.slice(state.diffPreviewOffset, state.diffPreviewOffset + 8)
+  const statLine = detail
+    ? `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
+    : ''
   const workflowSections = getLogInkWorkflowSections({
     ...context,
     contextLoading: isLogInkContextLoading(contextStatus),
@@ -662,11 +708,26 @@ function renderDetailPanel(
       `Author: ${detail.author}`,
       `Date: ${detail.date}`,
       detail.refs.length ? `Refs: ${detail.refs.join(', ')}` : 'Refs: none',
+      statLine,
       '',
       ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']),
       '',
       'Changed files:',
-      ...(detail.files.length ? detail.files.slice(0, 12).map(formatChangedFile) : ['No changed files found.']),
+      ...(detail.files.length
+        ? detail.files.slice(0, 8).map((file, index) =>
+          `${index === state.selectedFileIndex ? '>' : ' '} ${formatChangedFile(file)}`
+        )
+        : ['No changed files found.']),
+      '',
+      selectedFile
+        ? `Preview: ${formatChangedFile(selectedFile)}`
+        : 'Preview: no file selected',
+      filePreviewLoading
+        ? 'Loading diff preview...'
+        : previewWindow?.length
+          ? `Lines ${state.diffPreviewOffset + 1}-${state.diffPreviewOffset + previewWindow.length}/${filePreview?.hunks.length || 0}`
+          : 'No hunk preview available.',
+      ...(previewWindow || []).map((line) => `  ${line}`),
       '',
       'Workflows:',
       ...workflowSections.flatMap((section) => [

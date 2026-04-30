@@ -9,6 +9,8 @@ export type LogInkState = {
   commits: GitLogCommitRow[]
   filteredCommits: GitLogCommitRow[]
   selectedIndex: number
+  selectedFileIndex: number
+  diffPreviewOffset: number
   filter: string
   filterMode: boolean
   fullGraph: boolean
@@ -29,10 +31,12 @@ export type LogInkAction =
   | { type: 'focusNext' }
   | { type: 'focusPrevious' }
   | { type: 'move'; delta: number }
+  | { type: 'moveDetailFile'; delta: number; fileCount: number }
   | { type: 'moveToBottom' }
   | { type: 'moveToTop' }
   | { type: 'nextSidebarTab' }
   | { type: 'page'; delta: number }
+  | { type: 'pageDetailPreview'; delta: number; previewLineCount: number }
   | { type: 'previousSidebarTab' }
   | { type: 'setFilter'; value: string }
   | { type: 'setFocus'; value: LogInkFocus }
@@ -167,6 +171,8 @@ function withFilter(state: LogInkState, filter: string): LogInkState {
     filter,
     filteredCommits,
     selectedIndex: clampIndex(state.selectedIndex, filteredCommits.length),
+    selectedFileIndex: 0,
+    diffPreviewOffset: 0,
     pendingKey: undefined,
   }
 }
@@ -183,6 +189,8 @@ export function createLogInkState(rows: GitLogRow[]): LogInkState {
     commits,
     filteredCommits: commits,
     selectedIndex: 0,
+    selectedFileIndex: 0,
+    diffPreviewOffset: 0,
     filter: '',
     filterMode: false,
     fullGraph: false,
@@ -227,18 +235,31 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedIndex: clampIndex(state.selectedIndex + action.delta, state.filteredCommits.length),
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
+        pendingKey: undefined,
+      }
+    case 'moveDetailFile':
+      return {
+        ...state,
+        selectedFileIndex: clampIndex(state.selectedFileIndex + action.delta, action.fileCount),
+        diffPreviewOffset: 0,
         pendingKey: undefined,
       }
     case 'moveToBottom':
       return {
         ...state,
         selectedIndex: clampIndex(state.filteredCommits.length - 1, state.filteredCommits.length),
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
         pendingKey: undefined,
       }
     case 'moveToTop':
       return {
         ...state,
         selectedIndex: 0,
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
         pendingKey: undefined,
       }
     case 'nextSidebarTab':
@@ -251,6 +272,17 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedIndex: clampIndex(state.selectedIndex + action.delta, state.filteredCommits.length),
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
+        pendingKey: undefined,
+      }
+    case 'pageDetailPreview':
+      return {
+        ...state,
+        diffPreviewOffset: clampIndex(
+          state.diffPreviewOffset + action.delta,
+          action.previewLineCount
+        ),
         pendingKey: undefined,
       }
     case 'previousSidebarTab':

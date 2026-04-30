@@ -2,6 +2,7 @@ import { Arguments } from 'yargs'
 import {
   FIELD_SEPARATOR,
   buildLogArgs,
+  getCommitFilePreview,
   getCommitRows,
   getLogView,
   parseCommitDetail,
@@ -91,7 +92,8 @@ describe('log data layer', () => {
         'feat: add details',
         'Detailed body',
       ].join(FIELD_SEPARATOR),
-      ['A\tREADME.md', 'R100\told.ts\tnew.ts'].join('\n')
+      ['A\tREADME.md', 'R100\told.ts\tnew.ts'].join('\n'),
+      ['10\t2\tREADME.md', '3\t1\tnew.ts'].join('\n')
     )
 
     expect(detail).toEqual(expect.objectContaining({
@@ -100,15 +102,67 @@ describe('log data layer', () => {
       body: 'Detailed body',
       files: [
         {
+          additions: 10,
+          binary: false,
+          deletions: 2,
           status: 'A',
           path: 'README.md',
         },
         {
+          additions: 3,
+          binary: false,
+          deletions: 1,
           status: 'R100',
           oldPath: 'old.ts',
           path: 'new.ts',
         },
       ],
+      stats: {
+        deletions: 3,
+        filesChanged: 2,
+        insertions: 13,
+      },
     }))
+  })
+
+  it('loads a bounded selected-file hunk preview', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue([
+        'diff --git a/src/file.ts b/src/file.ts',
+        '@@ -1,2 +1,2 @@',
+        '-old line',
+        '+new line',
+        ' context',
+      ].join('\n')),
+    }
+
+    const preview = await getCommitFilePreview(git as never, 'abc1234', {
+      additions: 1,
+      binary: false,
+      deletions: 1,
+      path: 'src/file.ts',
+      status: 'M',
+    })
+
+    expect(git.raw).toHaveBeenCalledWith([
+      'show',
+      '--format=',
+      '--find-renames',
+      '--color=never',
+      '--unified=3',
+      'abc1234',
+      '--',
+      'src/file.ts',
+    ])
+    expect(preview).toEqual({
+      hunks: ['@@ -1,2 +1,2 @@', '-old line', '+new line', ' context'],
+      oldPath: undefined,
+      path: 'src/file.ts',
+      stats: {
+        additions: 1,
+        binary: false,
+        deletions: 1,
+      },
+    })
   })
 })
