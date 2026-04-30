@@ -17,7 +17,16 @@ export type CreateLogInkStateOptions = {
 }
 
 export type LogInkState = {
+  /**
+   * Top of `viewStack`. Maintained as a denormalized field so existing call
+   * sites can read the active view without dereferencing the stack.
+   */
   activeView: LogInkView
+  /**
+   * Navigation stack. Always non-empty; bottom is the root view, top is
+   * `activeView`. Push/pop/replace actions keep both fields in sync.
+   */
+  viewStack: LogInkView[]
   rows: GitLogRow[]
   commits: GitLogCommitRow[]
   filteredCommits: GitLogCommitRow[]
@@ -62,6 +71,13 @@ export type LogInkAction =
   | { type: 'previousSidebarTab' }
   | { type: 'setFilter'; value: string }
   | { type: 'setActiveView'; value: LogInkView }
+  | { type: 'pushView'; value: LogInkView }
+  | { type: 'popView' }
+  | { type: 'replaceView'; value: LogInkView }
+  | { type: 'navigateHome' }
+  | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number }
+  | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
+  | { type: 'navigateOpenComposeForFile'; fileIndex: number }
   | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'setPendingKey'; value?: string }
@@ -188,6 +204,61 @@ function cycleValue<T>(values: T[], current: T, delta: number): T {
   return values[nextIndex]
 }
 
+const HOME_VIEW: LogInkView = 'history'
+
+function topOfStack(stack: LogInkView[]): LogInkView {
+  return stack[stack.length - 1]
+}
+
+function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
+  if (topOfStack(state.viewStack) === value) {
+    return { ...state, pendingKey: undefined }
+  }
+
+  const viewStack = [...state.viewStack, value]
+  return {
+    ...state,
+    activeView: value,
+    viewStack,
+    worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
+    selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
+    pendingKey: undefined,
+  }
+}
+
+function withPoppedView(state: LogInkState): LogInkState {
+  if (state.viewStack.length <= 1) {
+    return { ...state, pendingKey: undefined }
+  }
+
+  const viewStack = state.viewStack.slice(0, -1)
+  const next = topOfStack(viewStack)
+  return {
+    ...state,
+    activeView: next,
+    viewStack,
+    worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
+    selectedWorktreeHunkIndex: next === 'diff' ? state.selectedWorktreeHunkIndex : 0,
+    pendingKey: undefined,
+  }
+}
+
+function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
+  if (topOfStack(state.viewStack) === value) {
+    return { ...state, pendingKey: undefined }
+  }
+
+  const viewStack = [...state.viewStack.slice(0, -1), value]
+  return {
+    ...state,
+    activeView: value,
+    viewStack,
+    worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
+    selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
+    pendingKey: undefined,
+  }
+}
+
 function withFilter(state: LogInkState, filter: string): LogInkState {
   const filteredCommits = filterCommits(state.commits, filter)
 
@@ -260,9 +331,11 @@ export function createLogInkState(
   options: CreateLogInkStateOptions = {}
 ): LogInkState {
   const commits = getCommitRows(rows)
+  const initialView: LogInkView = options.activeView || 'history'
 
   return {
-    activeView: options.activeView || 'history',
+    activeView: initialView,
+    viewStack: [initialView],
     rows,
     commits,
     filteredCommits: commits,
@@ -337,18 +410,18 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         diffPreviewOffset: 0,
         pendingKey: undefined,
       }
-    case 'moveWorktreeFile':
+    case 'moveWorktreeFile': {
+      const next = withReplacedView(state, 'status')
       return {
-        ...state,
-        activeView: 'status',
+        ...next,
         selectedWorktreeFileIndex: clampIndex(
           state.selectedWorktreeFileIndex + action.delta,
           action.fileCount
         ),
         selectedWorktreeHunkIndex: 0,
         worktreeDiffOffset: 0,
-        pendingKey: undefined,
       }
+    }
     case 'moveToBottom':
       return {
         ...state,
@@ -418,13 +491,56 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     case 'setFilter':
       return withFilter(state, action.value)
     case 'setActiveView':
+      return withReplacedView(state, action.value)
+    case 'pushView':
+      return withPushedView(state, action.value)
+    case 'popView':
+      return withPoppedView(state)
+    case 'replaceView':
+      return withReplacedView(state, action.value)
+    case 'navigateHome': {
+      if (state.viewStack.length === 1 && topOfStack(state.viewStack) === HOME_VIEW) {
+        return { ...state, pendingKey: undefined }
+      }
       return {
         ...state,
-        activeView: action.value,
-        worktreeDiffOffset: action.value === 'diff' ? state.worktreeDiffOffset : 0,
-        selectedWorktreeHunkIndex: action.value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
+        activeView: HOME_VIEW,
+        viewStack: [HOME_VIEW],
+        worktreeDiffOffset: 0,
+        selectedWorktreeHunkIndex: 0,
         pendingKey: undefined,
       }
+    }
+    case 'navigateOpenDiffForCommit': {
+      const next = withPushedView(state, 'diff')
+      const filteredCommits = state.filteredCommits
+      const idx = filteredCommits.findIndex((commit) => commit.hash === action.sha)
+      const selectedIndex = idx >= 0 ? idx : action.commitIndex
+      return {
+        ...next,
+        selectedIndex: clampIndex(selectedIndex, filteredCommits.length),
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
+      }
+    }
+    case 'navigateOpenDiffForWorktreeFile': {
+      const next = withPushedView(state, 'diff')
+      return {
+        ...next,
+        selectedWorktreeFileIndex: Math.max(0, action.fileIndex),
+        selectedWorktreeHunkIndex: 0,
+        worktreeDiffOffset: 0,
+      }
+    }
+    case 'navigateOpenComposeForFile': {
+      const next = withPushedView(state, 'status')
+      return {
+        ...next,
+        selectedWorktreeFileIndex: Math.max(0, action.fileIndex),
+        selectedWorktreeHunkIndex: 0,
+        worktreeDiffOffset: 0,
+      }
+    }
     case 'setFocus':
       return {
         ...state,
@@ -504,4 +620,65 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     default:
       return state
   }
+}
+
+/**
+ * Navigation intents — high-level transitions the rest of the app calls
+ * instead of pushing/popping the view stack directly. Each intent returns
+ * either a `LogInkAction` to dispatch, or `null` if the intent is not
+ * applicable (e.g. compose with a clean working tree, or a commit sha that
+ * is not in the current view).
+ *
+ * Future phases of the TUI shell (palette, cross-view keymaps) enumerate
+ * these intents to drive the UI.
+ */
+
+export function intentGoHome(state: LogInkState): LogInkAction | null {
+  if (state.viewStack.length === 1 && state.activeView === HOME_VIEW) {
+    return null
+  }
+  return { type: 'navigateHome' }
+}
+
+export function intentOpenDiffForCommit(
+  state: LogInkState,
+  sha: string
+): LogInkAction | null {
+  const filteredIndex = state.filteredCommits.findIndex((commit) => commit.hash === sha)
+
+  if (filteredIndex < 0) {
+    return null
+  }
+
+  return { type: 'navigateOpenDiffForCommit', sha, commitIndex: filteredIndex }
+}
+
+export function intentOpenDiffForWorktreeFile(
+  path: string,
+  worktreeFiles: string[]
+): LogInkAction | null {
+  const idx = worktreeFiles.indexOf(path)
+
+  if (idx < 0) {
+    return null
+  }
+
+  return { type: 'navigateOpenDiffForWorktreeFile', fileIndex: idx }
+}
+
+export function intentOpenComposeForFile(
+  path: string,
+  worktreeFiles: string[]
+): LogInkAction | null {
+  if (worktreeFiles.length === 0) {
+    return null
+  }
+
+  const idx = worktreeFiles.indexOf(path)
+
+  if (idx < 0) {
+    return null
+  }
+
+  return { type: 'navigateOpenComposeForFile', fileIndex: idx }
 }
