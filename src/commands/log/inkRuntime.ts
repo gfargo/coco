@@ -6,7 +6,6 @@ import { runCommitDraftWorkflow } from './commitWorkflowActions'
 import {
   GitCommitDetail,
   GitCommitFilePreview,
-  GitLogCommitRow,
   GitLogRow,
   LOG_INTERACTIVE_DEFAULT_LIMIT,
   getCommitDetail,
@@ -22,6 +21,10 @@ import {
   isLogInkContextLoading,
   updateLogInkContextStatus,
 } from './inkContext'
+import {
+  formatInkRefLabels,
+  getVisibleLogInkHistory,
+} from './inkHistoryRows'
 import {
   formatBindingKeys,
   getLogInkCommandPaletteItems,
@@ -143,10 +146,6 @@ const truncate = truncateCells
 
 function compactHash(hash: string | undefined): string {
   return hash ? hash.slice(0, 7) : '<none>'
-}
-
-function formatRefs(commit: GitLogCommitRow): string {
-  return commit.refs.length ? ` [${commit.refs.join(', ')}]` : ''
 }
 
 function formatChangedFile(file: GitCommitDetail['files'][number]): string {
@@ -278,18 +277,6 @@ function sidebarTabLabel(tab: LogInkSidebarTab): string {
       return 'Worktrees'
     default:
       return tab
-  }
-}
-
-function getVisibleCommits(state: LogInkState, visibleRows: number): {
-  commits: GitLogCommitRow[]
-  offset: number
-} {
-  const offset = Math.max(0, state.selectedIndex - Math.floor(visibleRows / 2))
-
-  return {
-    commits: state.filteredCommits.slice(offset, offset + visibleRows),
-    offset,
   }
 }
 
@@ -1042,7 +1029,7 @@ function renderHistoryPanel(
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const listRows = Math.max(3, bodyRows - 4)
-  const visible = getVisibleCommits(state, listRows)
+  const visible = getVisibleLogInkHistory(state, listRows)
   const loadState = loadingMoreCommits
     ? 'loading older commits'
     : hasMoreCommits
@@ -1062,16 +1049,22 @@ function renderHistoryPanel(
     h(Text, { bold: true }, panelTitle('Commits', focused)),
     h(Text, { dimColor: true }, `${title} | ${graphMode} | ${loadState}`)
   ),
-  visible.commits.length === 0
+  visible.items.length === 0
     ? h(Text, { dimColor: true }, 'No commits match the current filter.')
-    : visible.commits.map((commit, offset) => {
-      const index = visible.offset + offset
-      const selected = index === state.selectedIndex
-      const graph = state.fullGraph ? commit.graph || '*' : '*'
-      const row = `${graph.padEnd(state.fullGraph ? 8 : 2)} ${commit.shortHash} ${commit.date} ${commit.message}${formatRefs(commit)}`
+    : visible.items.map((item, index) => {
+      if (item.type === 'graph') {
+        return h(Text, {
+          key: `graph-${index}-${item.graph}`,
+          dimColor: true,
+        }, truncate(item.graph.padEnd(visible.graphWidth), 140))
+      }
+
+      const { commit, selected } = item
+      const graph = item.graph.padEnd(visible.graphWidth)
+      const row = `${graph} ${commit.shortHash} ${commit.date} ${commit.message}${formatInkRefLabels(commit.refs)}`
 
       return h(Text, {
-        key: commit.hash,
+        key: `${commit.hash}-${index}`,
         backgroundColor: selected && !theme.noColor ? theme.colors.selection : undefined,
         inverse: selected,
       }, truncate(row, 140))
