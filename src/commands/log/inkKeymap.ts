@@ -11,9 +11,14 @@ export type LogInkCommandId =
   | 'moveDown'
   | 'moveToBottom'
   | 'moveToTop'
+  | 'navigateBack'
+  | 'navigateDiff'
+  | 'navigateHome'
+  | 'navigateStatus'
   | 'nextMatch'
   | 'nextSidebarTab'
   | 'moveUp'
+  | 'openSelected'
   | 'pageDown'
   | 'pageUp'
   | 'previousMatch'
@@ -146,10 +151,45 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
   },
   {
     id: 'toggleGraph',
-    keys: ['g'],
+    keys: ['\\'],
     label: 'graph',
     description: 'Toggle compact and full graph display.',
     contexts: ['normal', 'commits'],
+  },
+  {
+    id: 'navigateHome',
+    keys: ['gh'],
+    label: 'home',
+    description: 'Jump to the history root view (clears the navigation stack).',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigateStatus',
+    keys: ['gs'],
+    label: 'status',
+    description: 'Push the working-tree status view onto the navigation stack.',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigateDiff',
+    keys: ['gd'],
+    label: 'diff',
+    description: 'Push the diff view for the selected commit or file.',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigateBack',
+    keys: ['<', 'esc'],
+    label: 'back',
+    description: 'Pop the navigation stack and return to the previous view.',
+    contexts: ['normal'],
+  },
+  {
+    id: 'openSelected',
+    keys: ['enter'],
+    label: 'open',
+    description: 'Open the diff for the selected commit (history) or file (status).',
+    contexts: ['commits'],
   },
   {
     id: 'refresh',
@@ -241,9 +281,13 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'focusPrevious',
   'refresh',
   'quit',
+  'navigateHome',
+  'navigateStatus',
+  'navigateDiff',
+  'navigateBack',
 ]
 
-const NORMAL_GLOBAL_HINTS = ['? help', ': cmds', 'q quit']
+const NORMAL_GLOBAL_HINTS = ['g jump', '< back', '? help', ': cmds', 'q quit']
 
 export function formatBindingKeys(binding: LogInkKeyBinding): string {
   return binding.keys.join('/')

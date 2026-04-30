@@ -178,8 +178,8 @@ export function getLogInkInputEvents(
     return [action({ type: 'toggleCommandPalette' })]
   }
 
-  if (key.escape && state.activeView === 'diff') {
-    return [action({ type: 'setActiveView', value: 'status' })]
+  if (key.escape && state.viewStack.length > 1) {
+    return [action({ type: 'popView' })]
   }
 
   if (inputValue === 'q') {
@@ -194,6 +194,27 @@ export function getLogInkInputEvents(
     return [action({ type: 'toggleFilterMode' })]
   }
 
+  if (state.pendingKey === 'g' && inputValue === 'h') {
+    return [
+      action({ type: 'navigateHome' }),
+      action({ type: 'setStatus', value: 'jumped to history' }),
+    ]
+  }
+
+  if (state.pendingKey === 'g' && inputValue === 's') {
+    return [
+      action({ type: 'pushView', value: 'status' }),
+      action({ type: 'setStatus', value: 'jumped to status' }),
+    ]
+  }
+
+  if (state.pendingKey === 'g' && inputValue === 'd') {
+    return [
+      action({ type: 'pushView', value: 'diff' }),
+      action({ type: 'setStatus', value: 'jumped to diff' }),
+    ]
+  }
+
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
       return [
@@ -202,10 +223,15 @@ export function getLogInkInputEvents(
       ]
     }
 
-    return [
-      action({ type: 'toggleGraph' }),
-      action({ type: 'setPendingKey', value: 'g' }),
-    ]
+    return [action({ type: 'setPendingKey', value: 'g' })]
+  }
+
+  if (inputValue === '\\') {
+    return [action({ type: 'toggleGraph' })]
+  }
+
+  if (inputValue === '<') {
+    return [action({ type: 'popView' })]
   }
 
   if (inputValue === 'G') {
@@ -343,8 +369,30 @@ export function getLogInkInputEvents(
     return [action({ type: 'page', delta: 10 })]
   }
 
+  if (
+    key.return &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0
+  ) {
+    const selected = state.filteredCommits[state.selectedIndex]
+    if (selected) {
+      return [
+        action({
+          type: 'navigateOpenDiffForCommit',
+          sha: selected.hash,
+          commitIndex: state.selectedIndex,
+        }),
+        action({ type: 'setStatus', value: `viewing diff for ${selected.shortHash}` }),
+      ]
+    }
+  }
+
   if (key.return && state.activeView === 'status' && context.worktreeFileCount) {
-    return [action({ type: 'setActiveView', value: 'diff' })]
+    return [action({
+      type: 'navigateOpenDiffForWorktreeFile',
+      fileIndex: state.selectedWorktreeFileIndex,
+    })]
   }
 
   if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {

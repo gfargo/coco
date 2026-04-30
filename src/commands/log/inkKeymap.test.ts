@@ -15,7 +15,7 @@ describe('log Ink keymap', () => {
       showHelp: false,
     })).toEqual({
       contextual: ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next'],
-      global: ['? help', ': cmds', 'q quit'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
     expect(getLogInkFooterHints({
@@ -25,7 +25,7 @@ describe('log Ink keymap', () => {
       showHelp: false,
     })).toEqual({
       contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose'],
-      global: ['? help', ': cmds', 'q quit'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
     expect(getLogInkFooterHints({
@@ -35,7 +35,7 @@ describe('log Ink keymap', () => {
       showHelp: false,
     })).toEqual({
       contextual: ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files'],
-      global: ['? help', ': cmds', 'q quit'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
     expect(getLogInkFooterHints({
@@ -44,7 +44,7 @@ describe('log Ink keymap', () => {
       showHelp: false,
     })).toEqual({
       contextual: ['[/] tab', '1-5 jump', 'tab focus'],
-      global: ['? help', ': cmds', 'q quit'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
     expect(getLogInkFooterHints({
@@ -53,7 +53,7 @@ describe('log Ink keymap', () => {
       showHelp: false,
     })).toEqual({
       contextual: ['↑/↓ files', 'pgup/pgdn diff', 'tab focus'],
-      global: ['? help', ': cmds', 'q quit'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
   })
 
@@ -125,7 +125,7 @@ describe('log Ink keymap', () => {
       .join('\n')
 
     expect(helpText).toContain('/ Filter commits')
-    expect(helpText).toContain('g Toggle compact and full graph display.')
+    expect(helpText).toContain('\\ Toggle compact and full graph display.')
     expect(helpText).toContain('gg Jump to the first visible commit.')
     expect(helpText).toContain('G Jump to the last visible commit.')
     expect(helpText).toContain('z Ask to revert the selected file or hunk.')
