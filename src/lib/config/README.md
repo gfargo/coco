@@ -3,6 +3,11 @@
 
 This directory contains configuration files and services for the application. The configurations are used to manage various settings and behaviors of the application.
 
+For user-facing configuration documentation, use the GitHub wiki as the source of truth:
+
+- [Configuration Overview](https://github.com/gfargo/coco/wiki/Config-Overview)
+- [Interactive Log TUI](https://github.com/gfargo/coco/wiki/Interactive-Log-TUI)
+
 ## Files and Directories
 
 - `constants.ts`: Defines constants and default configuration settings.

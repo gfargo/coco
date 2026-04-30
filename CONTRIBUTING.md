@@ -42,9 +42,21 @@ To set up a development environment for Commit Copilot, follow these steps:
 
 1. Fork the Commit Copilot repository on GitHub.
 2. Clone your forked repository to your local machine.
-3. Install the required dependencies using [dependency manager/tool].
-4. Build the project locally and ensure that all tests pass successfully.
+3. Install the required dependencies with `npm install`.
+4. Build the project locally with `npm run build` and ensure that tests pass with `npm test`.
 5. You are now ready to start making changes!
+
+## Documentation
+
+The GitHub wiki is the canonical source for user-facing documentation. The local wiki checkout lives at `.wiki/` and can be managed with:
+
+```bash
+npm run wiki:pull
+npm run wiki:status
+npm run wiki:push
+```
+
+Keep repository docs concise and link to the wiki for detailed guides. Update `README.md` for high-level feature visibility, update the wiki for full user documentation, and regenerate `schema.json` with `npm run build:schema` when configuration types change.
 
 ## Submitting Pull Requests
 
@@ -59,18 +71,6 @@ We welcome and encourage pull requests from the community. To submit a pull requ
 7. Submit a pull request to the `main` branch of the Commit Copilot repository.
 
 Please provide a clear and detailed description of the changes you have made in your pull request. We will review your contribution as soon as possible.
-
-<!-- ## Coding Guidelines
-
-To maintain a consistent codebase, we follow a set of coding guidelines. Please ensure that your code adheres to these guidelines before submitting a pull request. These guidelines include:
-
-- [Style guidelines]
-- [Naming conventions]
-- [Best practices] -->
-
-<!-- ## Documentation
-
-Clear and comprehensive documentation is crucial for any successful project. We appreciate contributions that improve the existing documentation or add new examples, tutorials, or explanations. You can find the project documentation in the [docs](docs/) directory. Please ensure that any changes or additions are well-documented and follow the existing style. -->
 
 ## Community
 

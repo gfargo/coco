@@ -10,7 +10,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/gfargo/coco)](https://github.com/gfargo/coco/tree/main)
 [![Discord](https://img.shields.io/discord/1176716060825767948)](https://discord.gg/KGu9nE9Ejx)
 
-An AI-powered git assistant that generates meaningful commit messages, creates changelogs, and streamlines your development workflow.
+An AI-powered git assistant that generates meaningful commit messages, creates changelogs, explores repository history, and streamlines your development workflow.
 
 **✨ Key Features:**
 
@@ -18,6 +18,7 @@ An AI-powered git assistant that generates meaningful commit messages, creates c
 - 📋 **Conventional Commits** - Full support with automatic validation and formatting  
 - 🔧 **Commitlint Integration** - Seamless integration with your existing commitlint configuration
 - 🏠 **Local AI Support** - Run completely offline with Ollama (no API costs, full privacy)
+- 🖥️ **Interactive Git Log TUI** - Browse commits, refs, changed files, and hunk previews from `coco log -i`
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
 - 👥 **Team Ready** - Shared configurations and enterprise deployment
 
@@ -89,6 +90,7 @@ coco review
 
 # Explore commit history
 coco log --limit 20
+coco log -i
 coco log --view full --limit 20
 coco log --all --limit 20
 coco log --author "Grace Hopper" --path src
@@ -118,6 +120,11 @@ coco init --scope project
 {
   "mode": "interactive",
   "conventionalCommits": true,
+  "logTui": {
+    "theme": {
+      "preset": "catppuccin"
+    }
+  },
   "service": {
     "provider": "openai",
     "model": "gpt-4o"
@@ -135,6 +142,7 @@ For comprehensive guides, advanced usage, and detailed configuration options, vi
 - **[Getting Started](https://github.com/gfargo/coco/wiki/Getting-Started)** - Complete beginner's guide from installation to first commit
 - **[Command Reference](https://github.com/gfargo/coco/wiki/Command-Reference)** - Detailed command options and examples
 - **[Configuration Overview](https://github.com/gfargo/coco/wiki/Config-Overview)** - All configuration options and setup methods
+- **[Interactive Log TUI](https://github.com/gfargo/coco/wiki/Interactive-Log-TUI)** - Full-screen `coco log -i` guide, keybindings, themes, and detail previews
 - **[Team Collaboration](https://github.com/gfargo/coco/wiki/Team-Collaboration)** - Enterprise deployment and team adoption strategies
 
 **Advanced Resources:**
