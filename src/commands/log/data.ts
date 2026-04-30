@@ -7,6 +7,11 @@ const DETAIL_FORMAT = `%H%x1f%h%x1f%ad%x1f%an%x1f%d%x1f%s%x1f%b`
 export const LOG_DEFAULT_LIMIT = 30
 export const LOG_INTERACTIVE_DEFAULT_LIMIT = 300
 
+export type LogRowLoadOptions = {
+  limit?: number
+  skip?: number
+}
+
 export type GitLogCommitRow = {
   type: 'commit'
   graph: string
@@ -61,7 +66,15 @@ export function toArray(value: string | string[] | undefined): string[] {
   return Array.isArray(value) ? value : [value]
 }
 
-function normalizeLimit(limit: number | undefined, interactive: boolean | undefined): number {
+function normalizeLimit(
+  limit: number | undefined,
+  interactive: boolean | undefined,
+  options: LogRowLoadOptions = {}
+): number {
+  if (options.limit !== undefined) {
+    return Math.max(1, Math.floor(options.limit))
+  }
+
   if (!limit || Number.isNaN(limit) || limit < 1) {
     return interactive ? LOG_INTERACTIVE_DEFAULT_LIMIT : LOG_DEFAULT_LIMIT
   }
@@ -221,7 +234,7 @@ export function parseCommitDetail(metadata: string, files: string, numstatOutput
   }
 }
 
-export function buildLogArgs(argv: LogArgv): string[] {
+export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): string[] {
   const view = getLogView(argv)
   const args = [
     'log',
@@ -229,9 +242,13 @@ export function buildLogArgs(argv: LogArgv): string[] {
     '--decorate=short',
     '--date=short',
     '--color=never',
-    `--max-count=${normalizeLimit(argv.limit, argv.interactive)}`,
+    `--max-count=${normalizeLimit(argv.limit, argv.interactive, options)}`,
     `--pretty=format:${LOG_FORMAT}`,
   ]
+
+  if (options.skip && options.skip > 0) {
+    args.push(`--skip=${Math.floor(options.skip)}`)
+  }
 
   if (view === 'compact') {
     args.push('--first-parent')
@@ -269,8 +286,12 @@ export function buildLogArgs(argv: LogArgv): string[] {
   return args
 }
 
-export async function getLogRows(git: SimpleGit, argv: LogArgv): Promise<GitLogRow[]> {
-  return parseLogOutput(await git.raw(buildLogArgs(argv)))
+export async function getLogRows(
+  git: SimpleGit,
+  argv: LogArgv,
+  options: LogRowLoadOptions = {}
+): Promise<GitLogRow[]> {
+  return parseLogOutput(await git.raw(buildLogArgs(argv, options)))
 }
 
 export async function getCommitDetail(git: SimpleGit, commit: string): Promise<GitCommitDetail> {

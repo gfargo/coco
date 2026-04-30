@@ -46,6 +46,13 @@ describe('log data layer', () => {
     expect(args).toContain('--max-count=42')
   })
 
+  it('supports incremental interactive history loading with skip and batch limit', () => {
+    const args = buildLogArgs(argv({ interactive: true }), { limit: 50, skip: 300 })
+
+    expect(args).toContain('--max-count=50')
+    expect(args).toContain('--skip=300')
+  })
+
   it('uses full topology when all refs are requested', () => {
     const args = buildLogArgs(argv({ all: true, view: 'compact' }))
 

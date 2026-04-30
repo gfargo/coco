@@ -25,6 +25,7 @@ export type LogInkState = {
 }
 
 export type LogInkAction =
+  | { type: 'appendRows'; rows: GitLogRow[] }
   | { type: 'appendFilter'; value: string }
   | { type: 'backspaceFilter' }
   | { type: 'clearFilter' }
@@ -177,6 +178,35 @@ function withFilter(state: LogInkState, filter: string): LogInkState {
   }
 }
 
+function appendRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
+  const selected = getSelectedInkCommit(state)
+  const nextRows = [...state.rows, ...rows]
+  const seen = new Set<string>()
+  const commits = getCommitRows(nextRows).filter((commit) => {
+    if (seen.has(commit.hash)) {
+      return false
+    }
+
+    seen.add(commit.hash)
+    return true
+  })
+  const filteredCommits = filterCommits(commits, state.filter)
+  const selectedIndex = selected
+    ? filteredCommits.findIndex((commit) => commit.hash === selected.hash)
+    : state.selectedIndex
+
+  return {
+    ...state,
+    rows: nextRows,
+    commits,
+    filteredCommits,
+    selectedIndex: selectedIndex >= 0
+      ? selectedIndex
+      : clampIndex(state.selectedIndex, filteredCommits.length),
+    pendingKey: undefined,
+  }
+}
+
 export function getLogInkSidebarTabs(): LogInkSidebarTab[] {
   return [...SIDEBAR_TABS]
 }
@@ -210,6 +240,8 @@ export function getSelectedInkCommit(state: LogInkState): GitLogCommitRow | unde
 
 export function applyLogInkAction(state: LogInkState, action: LogInkAction): LogInkState {
   switch (action.type) {
+    case 'appendRows':
+      return appendRows(state, action.rows)
     case 'appendFilter':
       return withFilter(state, `${state.filter}${action.value}`)
     case 'backspaceFilter':
