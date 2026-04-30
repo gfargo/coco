@@ -1,6 +1,4 @@
-import { type OllamaInput } from '@langchain/ollama'
-import { type BaseLLMParams } from '@langchain/core/language_models/llms'
-import { type OpenAIInput, type TiktokenModel } from '@langchain/openai'
+import { type TiktokenModel } from '@langchain/openai'
 
 export type LLMProvider = 'openai' | 'ollama' | 'anthropic'
 export type DynamicModelTask =
@@ -181,8 +179,13 @@ type Authentication =
       }
     }
 
-type OpenAIFields = Partial<OpenAIInput> & BaseLLMParams
-type OllamaFields = Partial<OllamaInput> & BaseLLMParams
+/**
+ * Provider-specific extra options forwarded to the underlying LangChain client.
+ * Decoupled from upstream input types so schema generation stays stable across
+ * langchain releases.
+ */
+type OpenAIFields = Record<string, unknown>
+type OllamaFields = Record<string, unknown>
 
 export type OpenAILLMService = BaseLLMService & {
   provider: 'openai'
