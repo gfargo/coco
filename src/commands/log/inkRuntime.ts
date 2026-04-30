@@ -39,6 +39,7 @@ import { truncateCells } from './inkText'
 import {
   LogInkSidebarTab,
   LogInkState,
+  LogInkView,
   applyLogInkAction,
   createLogInkState,
   getLogInkSidebarTabs,
@@ -71,7 +72,7 @@ type LogInkStreams = {
 
 type LogInkOptions = {
   appLabel?: string
-  initialView?: 'history' | 'status' | 'diff'
+  initialView?: LogInkView
   logArgv?: LogArgv
   theme?: LogInkThemeConfig
 }
@@ -121,7 +122,7 @@ type LogInkComponents = Pick<LogInkRuntime['ink'], 'Box' | 'Text'>
 type LogInkComponentDeps = LogInkRuntime & {
   appLabel: string
   git: SimpleGit
-  initialView: 'history' | 'status' | 'diff'
+  initialView: LogInkView
   logArgv?: LogArgv
   rows: GitLogRow[]
   theme: LogInkTheme
@@ -429,7 +430,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
     rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
   })
-  const [state, setState] = React.useState<LogInkState>(() => createLogInkState(rows))
+  const [state, setState] = React.useState<LogInkState>(() =>
+    createLogInkState(rows, { activeView: initialView })
+  )
   const [context, setContext] = React.useState<LogInkContext>({})
   const [contextStatus, setContextStatus] = React.useState<LogInkContextStatus>(() =>
     createLogInkContextStatus('loading')
@@ -635,13 +638,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }
 
   return h(Box, { flexDirection: 'column', height: layout.rows },
-    renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme, appLabel, initialView),
+    renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme, appLabel),
     h(Box, { flexDirection: 'row', height: layout.bodyRows },
       renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, theme),
-      renderCommitPanel(
+      renderMainPanel(
         h,
         { Box, Text },
         state,
+        context,
+        contextStatus,
         layout.bodyRows,
         theme,
         hasMoreCommits,
@@ -673,8 +678,7 @@ function renderHeader(
   contextStatus: LogInkContextStatus,
   columns: number,
   theme: LogInkTheme,
-  appLabel: string,
-  initialView: 'history' | 'status' | 'diff'
+  appLabel: string
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const branch = context.branches?.currentBranch || context.provider?.currentBranch || '<detached>'
@@ -689,7 +693,7 @@ function renderHeader(
       : 'no PR'
   const search = state.filterMode ? `search: ${state.filter}_` : state.filter ? `filter: ${state.filter}` : ''
   const loading = isLogInkContextLoading(contextStatus) ? '  loading context' : ''
-  const view = initialView === 'history' ? '' : `  ${initialView}`
+  const view = state.activeView === 'history' ? '' : `  ${state.activeView}`
   const title = truncate(`${appLabel}  ${repo}  ${branch}  ${dirty}  ${pr}${view}${loading}`, columns - 2)
 
   return h(Box, {
@@ -727,6 +731,36 @@ function renderSidebar(
   h(Text, { dimColor: true }, tabs.map((tab) => tab === state.sidebarTab ? `[${sidebarTabLabel(tab)}]` : sidebarTabLabel(tab)).join(' ')),
   h(Text, undefined, ''),
   ...lines.map((line, index) => h(Text, { key: `sidebar-${index}` }, truncate(line, width - 4))))
+}
+
+function renderMainPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  theme: LogInkTheme,
+  hasMoreCommits: boolean,
+  loadingMoreCommits: boolean
+): ReactTypes.ReactElement {
+  if (state.activeView === 'status') {
+    return renderStatusSurface(h, components, state, context, contextStatus, bodyRows, theme)
+  }
+
+  if (state.activeView === 'diff') {
+    return renderDiffSurface(h, components, state, context, contextStatus, bodyRows, theme)
+  }
+
+  return renderCommitPanel(
+    h,
+    components,
+    state,
+    bodyRows,
+    theme,
+    hasMoreCommits,
+    loadingMoreCommits
+  )
 }
 
 function renderCommitPanel(
@@ -775,6 +809,87 @@ function renderCommitPanel(
         inverse: selected,
       }, truncate(row, 140))
     }))
+}
+
+function renderStatusSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const worktree = context.worktree
+  const listRows = Math.max(4, bodyRows - 5)
+  const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
+    ? ['Loading worktree status...']
+    : worktree?.files.length
+      ? worktree.files.slice(0, listRows).map((file) =>
+        `${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
+      )
+      : ['Worktree clean']
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexGrow: 1,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Worktree', focused)),
+    h(Text, { dimColor: true }, worktree
+      ? `${worktree.stagedCount} staged | ${worktree.unstagedCount} unstaged | ${worktree.untrackedCount} untracked`
+      : 'status loading')
+  ),
+  ...lines.map((line, index) => h(Text, {
+    key: `status-surface-${index}`,
+    dimColor: index > 0,
+  }, truncate(line, 140))))
+}
+
+function renderDiffSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const worktree = context.worktree
+  const firstFile = worktree?.files[0]
+  const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
+    ? ['Loading file context...']
+    : firstFile
+      ? [
+        `Selected file: ${firstFile.path}`,
+        '',
+        'Dedicated diff rendering lands in the next slice.',
+        'This surface keeps large patches out of the right inspector.',
+      ]
+      : ['No changed file selected.']
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexGrow: 1,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Diff', focused)),
+    h(Text, { dimColor: true }, `${Math.max(0, bodyRows - 4)} visible rows`)
+  ),
+  ...lines.map((line, index) => h(Text, {
+    key: `diff-surface-${index}`,
+    dimColor: index > 1,
+  }, truncate(line, 140))))
 }
 
 function renderDetailPanel(
@@ -864,7 +979,7 @@ function renderDetailPanel(
     width,
     paddingX: 1,
   },
-  h(Text, { bold: true }, panelTitle('Detail', focused)),
+  h(Text, { bold: true }, panelTitle('Inspector', focused)),
   ...lines.map((line, index) => h(Text, {
     key: `detail-${index}`,
     dimColor: index > 1 && line !== 'Changed files:',
@@ -978,6 +1093,7 @@ function renderFooter(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const hints = getLogInkFooterHints({
+    activeView: state.activeView,
     filterMode: state.filterMode,
     focus: state.focus,
     showCommandPalette: state.showCommandPalette,

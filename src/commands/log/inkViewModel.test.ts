@@ -45,6 +45,7 @@ describe('log Ink view model', () => {
     const state = createLogInkState(rows)
 
     expect(state.commits).toHaveLength(3)
+    expect(state.activeView).toBe('history')
     expect(state.filteredCommits).toHaveLength(3)
     expect(state.selectedFileIndex).toBe(0)
     expect(state.diffPreviewOffset).toBe(0)
@@ -52,6 +53,16 @@ describe('log Ink view model', () => {
     expect(state.sidebarTab).toBe('status')
     expect(state.showHelp).toBe(false)
     expect(state.showCommandPalette).toBe(false)
+  })
+
+  it('supports workstation surface selection', () => {
+    let state = createLogInkState(rows, { activeView: 'status' })
+
+    expect(state.activeView).toBe('status')
+
+    state = applyLogInkAction(state, { type: 'setActiveView', value: 'diff' })
+
+    expect(state.activeView).toBe('diff')
   })
 
   it('moves selected commits and clamps at list bounds', () => {
