@@ -8,6 +8,8 @@ import { handler as logHandler } from './log/handler'
 import { LogOptions } from './log/config'
 import { handler as reviewHandler } from './review/handler'
 import { ReviewOptions } from './review/config'
+import { handler as uiHandler } from './ui/handler'
+import { UiOptions } from './ui/config'
 import { loadConfig } from '../lib/config/utils/loadConfig'
 import { executeChain } from '../lib/langchain/utils/executeChain'
 import { executeChainWithSchema } from '../lib/langchain/utils/executeChainWithSchema'
@@ -662,10 +664,38 @@ describe('command integration with temp git repos', () => {
       help: false,
     } as Arguments<LogOptions>, createLogger())
 
-    expect(stdout).toContain('coco log')
+    expect(stdout).toContain('coco ui')
     expect(stdout).toContain('feat: add interactive log coverage')
     expect(stdout).toContain('Changed files:')
     expect(stdout).toContain('src/interactive.ts')
+  })
+
+  it('renders the ui command smoke view in a non-TTY environment', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('src/ui.ts', 'export const ui = true\n')
+    await repo.commitAll('feat: add ui workstation coverage')
+
+    await uiHandler({
+      $0: 'coco',
+      _: ['ui'],
+      all: false,
+      limit: 2,
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+      view: 'history',
+    } as Arguments<UiOptions>, createLogger())
+
+    expect(stdout).toContain('coco ui')
+    expect(stdout).toContain('feat: add ui workstation coverage')
+    expect(stdout).toContain('Changed files:')
+    expect(stdout).toContain('src/ui.ts')
   })
 
   it('prints machine-readable git log output', async () => {

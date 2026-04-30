@@ -159,6 +159,11 @@ try {
     args: ['log', '--help'],
     label: 'packaged log command help',
   })
+  runHelpCheck({
+    command: packagedBinPath(prefix),
+    args: ['ui', '--help'],
+    label: 'packaged ui command help',
+  })
   runCheck({
     command: packagedBinPath(prefix),
     args: ['init', '--dry-run', '--scope', 'project'],
@@ -184,13 +189,24 @@ try {
     label: 'packaged non-TTY interactive log command',
     env: { NO_COLOR: '1' },
   })
-  assertOutputIncludes('packaged non-TTY interactive log command', interactiveLogOutput, 'coco log')
+  assertOutputIncludes('packaged non-TTY interactive log command', interactiveLogOutput, 'coco ui')
   assertOutputIncludes(
     'packaged non-TTY interactive log command',
     interactiveLogOutput,
     'feat: smoke log command'
   )
   console.log('✓ packaged non-TTY interactive log command')
+
+  const uiOutput = runCheck({
+    command: packagedBinPath(prefix),
+    args: ['ui', '--view', 'history', '--limit', '1'],
+    cwd: smokeRepo,
+    label: 'packaged non-TTY ui command',
+    env: { NO_COLOR: '1' },
+  })
+  assertOutputIncludes('packaged non-TTY ui command', uiOutput, 'coco ui')
+  assertOutputIncludes('packaged non-TTY ui command', uiOutput, 'feat: smoke log command')
+  console.log('✓ packaged non-TTY ui command')
 } finally {
   rmSync(tempRoot, { recursive: true, force: true })
 }

@@ -74,11 +74,13 @@ import { openProviderUrl } from './providerActions'
 import { ProviderOverview, getProviderOverview, providerBranchName } from './providerData'
 
 type LogTuiStreams = {
+  appLabel?: string
   input?: NodeJS.ReadStream
   output?: NodeJS.WriteStream
 }
 
 type RenderInteractiveLogOptions = {
+  appLabel?: string
   height?: number
   width?: number
 }
@@ -683,7 +685,7 @@ export function renderInteractiveLog(
   const filterPrompt = state.filterMode ? `Search: ${state.filter}_` : `Filter: ${filter}`
 
   return [
-    'coco log',
+    options.appLabel || 'coco log',
     `${state.filteredCommits.length}/${state.commits.length} commits | Focus: ${focus} | ${filterPrompt} | ${graphMode}`,
     help,
     commitActions,
@@ -716,6 +718,7 @@ export async function startInteractiveLog(
 ): Promise<void> {
   const input = streams.input || process.stdin
   const output = streams.output || process.stdout
+  const appLabel = streams.appLabel
   let state = createLogTuiState(rows)
   const details = new Map<string, GitCommitDetail>()
   let branches: BranchOverview | undefined
@@ -805,7 +808,7 @@ export async function startInteractiveLog(
         tagRangeSummary,
         worktree,
         {},
-        {},
+        { appLabel },
         { stashes, worktreeList },
         {},
         operationOverview,
@@ -875,7 +878,7 @@ export async function startInteractiveLog(
           tagRangeSummary,
           worktree,
           ui,
-          {},
+          { appLabel },
           { stashes, worktreeList, stashDiffSummary },
           { compareBase, reflog, providerCompareBase },
           operationOverview,
@@ -903,7 +906,7 @@ export async function startInteractiveLog(
               tagRangeSummary,
               worktree,
               ui,
-              {},
+              { appLabel },
               { stashes, worktreeList, stashDiffSummary },
               { compareBase, reflog, providerCompareBase },
               operationOverview,

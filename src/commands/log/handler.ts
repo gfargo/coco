@@ -4,7 +4,7 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { handleResult } from '../../lib/ui/handleResult'
 import { getCommitDetail, getLogRows } from './data'
-import { startInkInteractiveLog } from './inkRuntime'
+import { startCocoUiFromLogArgv } from '../ui/handler'
 import { formatCommitDetail, formatLogJson, formatLogTable } from './render'
 import { LogArgv } from './config'
 
@@ -25,9 +25,10 @@ export const handler: CommandHandler<LogArgv> = async (argv) => {
   const rows = await getLogRows(git, argv)
 
   if (argv.interactive && format === 'table') {
-    await startInkInteractiveLog(git, rows, {}, {
-      logArgv: argv,
-      theme: config.logTui?.theme,
+    await startCocoUiFromLogArgv(argv, {
+      config,
+      git,
+      rows,
     })
     return
   }

@@ -6,6 +6,7 @@ import init from './commands/init'
 import log from './commands/log'
 import recap from './commands/recap'
 import review from './commands/review'
+import ui from './commands/ui'
 
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
@@ -13,6 +14,7 @@ import { InitOptions } from './commands/init/config'
 import { LogOptions } from './commands/log/config'
 import { RecapOptions } from './commands/recap/config'
 import { ReviewOptions } from './commands/review/config'
+import { UiOptions } from './commands/ui/config'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
 
@@ -62,6 +64,13 @@ y.command<LogOptions>(
   log.handler
 )
 
+y.command<UiOptions>(
+  ui.command,
+  ui.desc,
+  ui.builder,
+  ui.handler
+)
+
 y.help().parse(process.argv.slice(2))
 
-export { changelog, commit, Config, init, log, recap, types }
+export { changelog, commit, Config, init, log, recap, types, ui }

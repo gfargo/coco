@@ -70,6 +70,8 @@ type LogInkStreams = {
 }
 
 type LogInkOptions = {
+  appLabel?: string
+  initialView?: 'history' | 'status' | 'diff'
   logArgv?: LogArgv
   theme?: LogInkThemeConfig
 }
@@ -117,7 +119,9 @@ type LogInkRuntime = {
 type LogInkComponents = Pick<LogInkRuntime['ink'], 'Box' | 'Text'>
 
 type LogInkComponentDeps = LogInkRuntime & {
+  appLabel: string
   git: SimpleGit
+  initialView: 'history' | 'status' | 'diff'
   logArgv?: LogArgv
   rows: GitLogRow[]
   theme: LogInkTheme
@@ -390,15 +394,21 @@ export async function startInkInteractiveLog(
   const error = streams.error || process.stderr
 
   if (!canStartLogInkTui(input, output)) {
-    await startInteractiveLog(git, rows, { input, output })
+    await startInteractiveLog(git, rows, {
+      appLabel: options.appLabel,
+      input,
+      output,
+    })
     return
   }
 
   const runtime = await loadInkRuntime()
   const { ink, React } = runtime
   const app = React.createElement(LogInkApp, {
+    appLabel: options.appLabel || 'coco log',
     git,
     ink,
+    initialView: options.initialView || 'history',
     logArgv: options.logArgv,
     React,
     rows,
@@ -410,7 +420,7 @@ export async function startInkInteractiveLog(
 }
 
 function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { git, ink, logArgv, React, rows, theme } = deps
+  const { appLabel, git, ink, initialView, logArgv, React, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -618,14 +628,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       paddingX: 1,
       paddingY: 1,
     },
-    h(Text, { bold: true }, 'coco log -i'),
+    h(Text, { bold: true }, appLabel),
     h(Text, undefined, `Terminal too small: ${layout.columns}x${layout.rows}`),
     h(Text, { dimColor: true }, `Minimum size is ${LOG_INK_MIN_COLUMNS}x${LOG_INK_MIN_ROWS}.`),
     h(Text, { dimColor: true }, 'Resize the terminal or run plain coco log.'))
   }
 
   return h(Box, { flexDirection: 'column', height: layout.rows },
-    renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme),
+    renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme, appLabel, initialView),
     h(Box, { flexDirection: 'row', height: layout.bodyRows },
       renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, theme),
       renderCommitPanel(
@@ -662,7 +672,9 @@ function renderHeader(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   columns: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  appLabel: string,
+  initialView: 'history' | 'status' | 'diff'
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const branch = context.branches?.currentBranch || context.provider?.currentBranch || '<detached>'
@@ -677,7 +689,8 @@ function renderHeader(
       : 'no PR'
   const search = state.filterMode ? `search: ${state.filter}_` : state.filter ? `filter: ${state.filter}` : ''
   const loading = isLogInkContextLoading(contextStatus) ? '  loading context' : ''
-  const title = truncate(`coco log  ${repo}  ${branch}  ${dirty}  ${pr}${loading}`, columns - 2)
+  const view = initialView === 'history' ? '' : `  ${initialView}`
+  const title = truncate(`${appLabel}  ${repo}  ${branch}  ${dirty}  ${pr}${view}${loading}`, columns - 2)
 
   return h(Box, {
     borderColor: theme.colors.border,
