@@ -18,6 +18,7 @@ export type LogInkCommandId =
   | 'previousSidebarTab'
   | 'quit'
   | 'refresh'
+  | 'revertSelection'
   | 'search'
   | 'toggleGraph'
   | 'workflowActions'
@@ -156,6 +157,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'revertSelection',
+    keys: ['z'],
+    label: 'revert',
+    description: 'Ask to revert the selected file or hunk.',
+    contexts: ['commits'],
+  },
+  {
     id: 'help',
     keys: ['?'],
     label: 'help',
@@ -219,11 +227,11 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): stri
   }
 
   if (options.activeView === 'status') {
-    return ['↑/↓ files', 'enter diff', 'space stage', 'r refresh', '? help']
+    return ['↑/↓ files', 'enter diff', 'space stage', 'z revert', '? help']
   }
 
   if (options.activeView === 'diff') {
-    return ['pgup/pgdn diff', 'j/k hunks', 'space stage', 'esc files', '? help']
+    return ['j/k hunks', 'space stage', 'z revert', 'esc files', '? help']
   }
 
   return ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next', '? help']
@@ -253,7 +261,7 @@ export function getLogInkHelpSections(): LogInkHelpSection[] {
     {
       title: 'Browsing',
       bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
-        ['search', 'clearSearch', 'toggleGraph', 'refresh'].includes(binding.id)
+        ['search', 'clearSearch', 'toggleGraph', 'refresh', 'revertSelection'].includes(binding.id)
       ),
     },
     {

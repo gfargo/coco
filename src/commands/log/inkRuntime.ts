@@ -50,7 +50,15 @@ import { GitOperationOverview, getGitOperationOverview } from './operationData'
 import { ProviderOverview, getProviderOverview } from './providerData'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { StashOverview, getStashOverview } from './stashData'
+import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeOverview, getWorktreeOverview } from './statusData'
+import {
+  WorktreeHunkOverview,
+  getWorktreeHunks,
+  revertHunk,
+  stageHunk,
+  unstageHunk,
+} from './statusHunks'
 import { TagOverview, getTagOverview } from './tagData'
 import {
   getLogInkWorkflowActionById,
@@ -444,6 +452,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const [filePreviewLoading, setFilePreviewLoading] = React.useState(false)
   const [worktreeDiff, setWorktreeDiff] = React.useState<WorktreeFileDiff | undefined>(undefined)
   const [worktreeDiffLoading, setWorktreeDiffLoading] = React.useState(false)
+  const [worktreeHunks, setWorktreeHunks] = React.useState<WorktreeHunkOverview | undefined>(
+    undefined
+  )
+  const [worktreeHunksLoading, setWorktreeHunksLoading] = React.useState(false)
   const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
     Boolean(logArgv?.interactive && !logArgv.limit) &&
     getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
@@ -467,6 +479,49 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setContextStatus(createLogInkContextStatus('ready'))
     dispatch({ type: 'setStatus', value: 'repository context refreshed' })
   }, [dispatch, git])
+
+  const refreshWorktreeContext = React.useCallback(async () => {
+    setContextStatus((current) => updateLogInkContextStatus(current, 'worktree', 'loading'))
+    const worktree = await safe(getWorktreeOverview(git))
+
+    setContext((current) => ({
+      ...current,
+      worktree,
+    }))
+    setContextStatus((current) => updateLogInkContextStatus(current, 'worktree', 'ready'))
+  }, [git])
+
+  React.useEffect(() => {
+    let active = true
+
+    async function loadWorktreeHunks(): Promise<void> {
+      if (state.activeView !== 'diff' || !selectedWorktreeFile) {
+        setWorktreeHunks(undefined)
+        setWorktreeHunksLoading(false)
+        return
+      }
+
+      setWorktreeHunksLoading(true)
+      const nextHunks = await safe(getWorktreeHunks(git, selectedWorktreeFile))
+
+      if (active) {
+        setWorktreeHunks(nextHunks)
+        setWorktreeHunksLoading(false)
+      }
+    }
+
+    void loadWorktreeHunks()
+
+    return () => {
+      active = false
+    }
+  }, [
+    git,
+    selectedWorktreeFile?.indexStatus,
+    selectedWorktreeFile?.path,
+    selectedWorktreeFile?.worktreeStatus,
+    state.activeView,
+  ])
 
   React.useEffect(() => {
     let active = true
@@ -546,6 +601,92 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     selectedWorktreeFile?.worktreeStatus,
     state.activeView,
   ])
+
+  const toggleSelectedFileStage = React.useCallback(async () => {
+    if (!selectedWorktreeFile) {
+      dispatch({ type: 'setStatus', value: 'no worktree file selected' })
+      return
+    }
+
+    dispatch({ type: 'setStatus', value: 'updating file stage state' })
+    const result = selectedWorktreeFile.state === 'staged'
+      ? await unstageFile(git, selectedWorktreeFile)
+      : await stageFile(git, selectedWorktreeFile)
+
+    dispatch({ type: 'setStatus', value: result.message })
+    await refreshWorktreeContext()
+    setWorktreeDiff(undefined)
+    setWorktreeHunks(undefined)
+  }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile])
+
+  const toggleSelectedHunkStage = React.useCallback(async () => {
+    const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
+
+    if (!selectedHunk) {
+      dispatch({ type: 'setStatus', value: 'no hunk selected' })
+      return
+    }
+
+    dispatch({ type: 'setStatus', value: 'updating hunk stage state' })
+    try {
+      if (selectedHunk.state === 'staged') {
+        await unstageHunk(git, selectedHunk)
+      } else {
+        await stageHunk(git, selectedHunk)
+      }
+
+      dispatch({
+        type: 'setStatus',
+        value: `${selectedHunk.state === 'staged' ? 'Unstaged' : 'Staged'} hunk`,
+      })
+      await refreshWorktreeContext()
+      setWorktreeDiff(undefined)
+      setWorktreeHunks(undefined)
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: (error as Error).message || 'failed to update hunk stage state',
+      })
+    }
+  }, [dispatch, git, refreshWorktreeContext, state.selectedWorktreeHunkIndex, worktreeHunks])
+
+  const revertSelectedFile = React.useCallback(async () => {
+    if (!selectedWorktreeFile) {
+      dispatch({ type: 'setStatus', value: 'no worktree file selected' })
+      return
+    }
+
+    dispatch({ type: 'setStatus', value: 'reverting selected file' })
+    const result = await revertFile(git, selectedWorktreeFile)
+
+    dispatch({ type: 'setStatus', value: result.message })
+    await refreshWorktreeContext()
+    setWorktreeDiff(undefined)
+    setWorktreeHunks(undefined)
+  }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile])
+
+  const revertSelectedHunk = React.useCallback(async () => {
+    const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
+
+    if (!selectedHunk) {
+      dispatch({ type: 'setStatus', value: 'no hunk selected' })
+      return
+    }
+
+    dispatch({ type: 'setStatus', value: 'reverting selected hunk' })
+    try {
+      await revertHunk(git, selectedHunk)
+      dispatch({ type: 'setStatus', value: `Reverted hunk in ${selectedHunk.filePath}` })
+      await refreshWorktreeContext()
+      setWorktreeDiff(undefined)
+      setWorktreeHunks(undefined)
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: (error as Error).message || 'failed to revert hunk',
+      })
+    }
+  }, [dispatch, git, refreshWorktreeContext, state.selectedWorktreeHunkIndex, worktreeHunks])
 
   React.useEffect(() => {
     let active = true
@@ -657,6 +798,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         exit()
       } else if (event.type === 'refreshContext') {
         void refreshContext()
+      } else if (event.type === 'toggleSelectedFileStage') {
+        void toggleSelectedFileStage()
+      } else if (event.type === 'toggleSelectedHunkStage') {
+        void toggleSelectedHunkStage()
+      } else if (event.type === 'revertSelectedFile') {
+        void revertSelectedFile()
+      } else if (event.type === 'revertSelectedHunk') {
+        void revertSelectedHunk()
       } else {
         dispatch(event.action)
       }
@@ -688,6 +837,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         contextStatus,
         worktreeDiff,
         worktreeDiffLoading,
+        worktreeHunks,
+        worktreeHunksLoading,
         layout.bodyRows,
         theme,
         hasMoreCommits,
@@ -782,6 +933,8 @@ function renderMainPanel(
   contextStatus: LogInkContextStatus,
   worktreeDiff: WorktreeFileDiff | undefined,
   worktreeDiffLoading: boolean,
+  worktreeHunks: WorktreeHunkOverview | undefined,
+  worktreeHunksLoading: boolean,
   bodyRows: number,
   theme: LogInkTheme,
   hasMoreCommits: boolean,
@@ -800,6 +953,8 @@ function renderMainPanel(
       contextStatus,
       worktreeDiff,
       worktreeDiffLoading,
+      worktreeHunks,
+      worktreeHunksLoading,
       bodyRows,
       theme
     )
@@ -918,6 +1073,8 @@ function renderDiffSurface(
   contextStatus: LogInkContextStatus,
   worktreeDiff: WorktreeFileDiff | undefined,
   worktreeDiffLoading: boolean,
+  worktreeHunks: WorktreeHunkOverview | undefined,
+  worktreeHunksLoading: boolean,
   bodyRows: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
@@ -927,6 +1084,7 @@ function renderDiffSurface(
   const selectedFile = worktree?.files[state.selectedWorktreeFileIndex]
   const visibleRows = Math.max(4, bodyRows - 4)
   const diffLines = worktreeDiff?.lines || []
+  const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
   const visibleDiffLines = diffLines.slice(
     state.worktreeDiffOffset,
     state.worktreeDiffOffset + visibleRows
@@ -938,6 +1096,11 @@ function renderDiffSurface(
       : selectedFile
       ? [
         `Selected file: ${selectedFile.path}`,
+        worktreeHunksLoading
+          ? 'Hunks loading...'
+          : worktreeHunks?.hunks.length
+            ? `Hunk ${state.selectedWorktreeHunkIndex + 1}/${worktreeHunks.hunks.length} ${selectedHunk?.state || ''}`
+            : 'No stageable hunks for this file.',
         `Lines ${Math.min(state.worktreeDiffOffset + 1, diffLines.length || 1)}-${Math.min(state.worktreeDiffOffset + visibleDiffLines.length, diffLines.length)}/${diffLines.length}`,
         '',
         ...visibleDiffLines,
@@ -985,7 +1148,7 @@ function renderDetailPanel(
     return renderCommandPalette(h, components, width, theme, focused)
   }
 
-  if (state.pendingConfirmationId) {
+  if (state.pendingConfirmationId || state.pendingMutationConfirmation) {
     return renderConfirmationPanel(h, components, state, width, theme, focused)
   }
 
@@ -1065,8 +1228,15 @@ function renderConfirmationPanel(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const action = getLogInkWorkflowActionById(state.pendingConfirmationId)
-  const label = action?.label || 'Workflow action'
-  const warning = action?.kind === 'ai'
+  const mutationLabel = state.pendingMutationConfirmation === 'revert-hunk'
+    ? 'Revert selected hunk'
+    : state.pendingMutationConfirmation === 'revert-file'
+      ? 'Revert selected file'
+      : undefined
+  const label = action?.label || mutationLabel || 'Workflow action'
+  const warning = state.pendingMutationConfirmation
+    ? 'This discards local changes and cannot be undone by Coco.'
+    : action?.kind === 'ai'
     ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`
     : 'Destructive Git action requires confirmation.'
 

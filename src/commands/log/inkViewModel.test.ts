@@ -55,6 +55,7 @@ describe('log Ink view model', () => {
     expect(state.sidebarTab).toBe('status')
     expect(state.showHelp).toBe(false)
     expect(state.showCommandPalette).toBe(false)
+    expect(state.pendingMutationConfirmation).toBeUndefined()
   })
 
   it('supports workstation surface selection', () => {
@@ -214,9 +215,11 @@ describe('log Ink view model', () => {
       hunkOffsets: [3, 12],
     })
     expect(state.worktreeDiffOffset).toBe(12)
+    expect(state.selectedWorktreeHunkIndex).toBe(1)
 
     state = applyLogInkAction(state, { type: 'setActiveView', value: 'status' })
     expect(state.worktreeDiffOffset).toBe(0)
+    expect(state.selectedWorktreeHunkIndex).toBe(0)
   })
 
   it('toggles graph, help, and command palette overlays', () => {
@@ -244,5 +247,15 @@ describe('log Ink view model', () => {
 
     state = applyLogInkAction(state, { type: 'setPendingConfirmation', value: undefined })
     expect(state.pendingConfirmationId).toBeUndefined()
+
+    state = applyLogInkAction(state, {
+      type: 'setPendingMutationConfirmation',
+      value: 'revert-file',
+    })
+    expect(state.pendingMutationConfirmation).toBe('revert-file')
+    expect(state.pendingConfirmationId).toBeUndefined()
+
+    state = applyLogInkAction(state, { type: 'setPendingMutationConfirmation', value: undefined })
+    expect(state.pendingMutationConfirmation).toBeUndefined()
   })
 })

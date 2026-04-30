@@ -180,9 +180,83 @@ describe('log Ink input interactions', () => {
       worktreeHunkOffsets: [2, 12, 20],
     })
     expect(state.worktreeDiffOffset).toBe(12)
+    expect(state.selectedWorktreeHunkIndex).toBe(1)
 
     state = applyInput(state, '', { escape: true })
     expect(state.activeView).toBe('status')
+  })
+
+  it('emits worktree file and hunk mutation events from status and diff views', () => {
+    expect(getLogInkInputEvents(
+      createLogInkState(rows, { activeView: 'status' }),
+      ' ',
+      {},
+      { worktreeFileCount: 1 }
+    )).toEqual([{ type: 'toggleSelectedFileStage' }])
+
+    expect(getLogInkInputEvents(
+      createLogInkState(rows, { activeView: 'diff' }),
+      ' ',
+      {},
+      { worktreeHunkOffsets: [2] }
+    )).toEqual([{ type: 'toggleSelectedHunkStage' }])
+
+    expect(getLogInkInputEvents(
+      createLogInkState(rows, { activeView: 'status' }),
+      'z',
+      {},
+      { worktreeFileCount: 1 }
+    )).toEqual([
+      {
+        type: 'action',
+        action: { type: 'setPendingMutationConfirmation', value: 'revert-file' },
+      },
+    ])
+
+    expect(getLogInkInputEvents(
+      createLogInkState(rows, { activeView: 'diff' }),
+      'z',
+      {},
+      { worktreeHunkOffsets: [2] }
+    )).toEqual([
+      {
+        type: 'action',
+        action: { type: 'setPendingMutationConfirmation', value: 'revert-hunk' },
+      },
+    ])
+  })
+
+  it('confirms or cancels worktree revert actions explicitly', () => {
+    const filePending = applyLogInkAction(createLogInkState(rows), {
+      type: 'setPendingMutationConfirmation',
+      value: 'revert-file',
+    })
+    const hunkPending = applyLogInkAction(createLogInkState(rows), {
+      type: 'setPendingMutationConfirmation',
+      value: 'revert-hunk',
+    })
+
+    expect(getLogInkInputEvents(filePending, 'y')).toEqual([
+      { type: 'revertSelectedFile' },
+      {
+        type: 'action',
+        action: { type: 'setPendingMutationConfirmation', value: undefined },
+      },
+    ])
+    expect(getLogInkInputEvents(hunkPending, 'y')).toEqual([
+      { type: 'revertSelectedHunk' },
+      {
+        type: 'action',
+        action: { type: 'setPendingMutationConfirmation', value: undefined },
+      },
+    ])
+    expect(getLogInkInputEvents(filePending, 'n')).toEqual([
+      {
+        type: 'action',
+        action: { type: 'setPendingMutationConfirmation', value: undefined },
+      },
+      { type: 'action', action: { type: 'setStatus', value: 'revert cancelled' } },
+    ])
   })
 
   it('clears pending key chords after unrelated actions', () => {
