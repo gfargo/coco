@@ -1,4 +1,4 @@
-import { LogInkAction, LogInkState } from './inkViewModel'
+import { LogInkAction, LogInkSidebarTab, LogInkState } from './inkViewModel'
 import {
   getLogInkWorkflowActionById,
   getLogInkWorkflowActionByKey,
@@ -29,6 +29,14 @@ function action(actionValue: LogInkAction): LogInkInputEvent {
     type: 'action',
     action: actionValue,
   }
+}
+
+const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
+  '1': 'status',
+  '2': 'branches',
+  '3': 'tags',
+  '4': 'stashes',
+  '5': 'worktrees',
 }
 
 export function getLogInkInputEvents(
@@ -106,7 +114,32 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === 'g') {
-    return [action({ type: 'toggleGraph' })]
+    if (state.pendingKey === 'g') {
+      return [
+        action({ type: 'moveToTop' }),
+        action({ type: 'setStatus', value: 'jumped to first commit' }),
+      ]
+    }
+
+    return [
+      action({ type: 'toggleGraph' }),
+      action({ type: 'setPendingKey', value: 'g' }),
+    ]
+  }
+
+  if (inputValue === 'G') {
+    return [
+      action({ type: 'moveToBottom' }),
+      action({ type: 'setStatus', value: 'jumped to last commit' }),
+    ]
+  }
+
+  if (inputValue === 'n') {
+    return [action({ type: 'move', delta: 1 })]
+  }
+
+  if (inputValue === 'N') {
+    return [action({ type: 'move', delta: -1 })]
   }
 
   if (inputValue === 'r') {
@@ -115,6 +148,18 @@ export function getLogInkInputEvents(
 
   if (inputValue === ':') {
     return [action({ type: 'toggleCommandPalette' })]
+  }
+
+  if (inputValue === '[') {
+    return [action({ type: 'previousSidebarTab' })]
+  }
+
+  if (inputValue === ']') {
+    return [action({ type: 'nextSidebarTab' })]
+  }
+
+  if (SIDEBAR_TAB_BY_NUMBER[inputValue]) {
+    return [action({ type: 'setSidebarTab', value: SIDEBAR_TAB_BY_NUMBER[inputValue] })]
   }
 
   if (key.tab) {

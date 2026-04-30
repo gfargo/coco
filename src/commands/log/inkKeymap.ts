@@ -7,9 +7,15 @@ export type LogInkCommandId =
   | 'focusPrevious'
   | 'help'
   | 'moveDown'
+  | 'moveToBottom'
+  | 'moveToTop'
+  | 'nextMatch'
+  | 'nextSidebarTab'
   | 'moveUp'
   | 'pageDown'
   | 'pageUp'
+  | 'previousMatch'
+  | 'previousSidebarTab'
   | 'quit'
   | 'refresh'
   | 'search'
@@ -64,6 +70,48 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     label: 'page down',
     description: 'Move a page down in the commit list.',
     contexts: ['commits'],
+  },
+  {
+    id: 'moveToTop',
+    keys: ['gg'],
+    label: 'top',
+    description: 'Jump to the first visible commit.',
+    contexts: ['commits'],
+  },
+  {
+    id: 'moveToBottom',
+    keys: ['G'],
+    label: 'bottom',
+    description: 'Jump to the last visible commit.',
+    contexts: ['commits'],
+  },
+  {
+    id: 'nextMatch',
+    keys: ['n'],
+    label: 'next match',
+    description: 'Move to the next visible search result.',
+    contexts: ['commits'],
+  },
+  {
+    id: 'previousMatch',
+    keys: ['N'],
+    label: 'previous match',
+    description: 'Move to the previous visible search result.',
+    contexts: ['commits'],
+  },
+  {
+    id: 'previousSidebarTab',
+    keys: ['['],
+    label: 'previous tab',
+    description: 'Move to the previous repository sidebar tab.',
+    contexts: ['sidebar'],
+  },
+  {
+    id: 'nextSidebarTab',
+    keys: [']'],
+    label: 'next tab',
+    description: 'Move to the next repository sidebar tab.',
+    contexts: ['sidebar'],
   },
   {
     id: 'focusNext',
@@ -162,14 +210,14 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): stri
   }
 
   if (options.focus === 'sidebar') {
-    return ['↑/↓ tab', 'tab focus', '/ search', '? help', 'q quit']
+    return ['[/] tab', '1-5 jump', 'tab focus', '/ search', '? help']
   }
 
   if (options.focus === 'detail') {
     return ['tab focus', 'g graph', 'r refresh', '? help', 'q quit']
   }
 
-  return ['↑/↓ move', '/ search', 'tab focus', 'g graph', '? help']
+  return ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next', '? help']
 }
 
 export function getLogInkHelpSections(): LogInkHelpSection[] {
@@ -177,7 +225,20 @@ export function getLogInkHelpSections(): LogInkHelpSection[] {
     {
       title: 'Navigation',
       bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
-        ['moveUp', 'moveDown', 'pageUp', 'pageDown', 'focusNext', 'focusPrevious'].includes(binding.id)
+        [
+          'moveUp',
+          'moveDown',
+          'pageUp',
+          'pageDown',
+          'moveToTop',
+          'moveToBottom',
+          'nextMatch',
+          'previousMatch',
+          'focusNext',
+          'focusPrevious',
+          'previousSidebarTab',
+          'nextSidebarTab',
+        ].includes(binding.id)
       ),
     },
     {

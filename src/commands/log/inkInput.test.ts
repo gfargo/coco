@@ -23,6 +23,16 @@ const rows: GitLogRow[] = [
     refs: [],
     message: 'fix: polish log TUI',
   },
+  {
+    type: 'commit',
+    graph: '*',
+    shortHash: 'fed9999',
+    hash: 'fed999900000',
+    date: '2026-05-01',
+    author: 'Coco Test',
+    refs: [],
+    message: 'docs: update log TUI help',
+  },
 ]
 
 function applyInput(
@@ -49,13 +59,14 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, '/')
     expect(state.filterMode).toBe(true)
 
-    state = applyInput(state, 'p')
-    state = applyInput(state, 'o')
-    expect(state.filter).toBe('po')
+    state = applyInput(state, 'f')
+    state = applyInput(state, 'i')
+    state = applyInput(state, 'x')
+    expect(state.filter).toBe('fix')
     expect(state.filteredCommits).toHaveLength(1)
 
     state = applyInput(state, '', { backspace: true })
-    expect(state.filter).toBe('p')
+    expect(state.filter).toBe('fi')
 
     state = applyInput(state, 'u', { ctrl: true })
     expect(state.filter).toBe('')
@@ -85,9 +96,13 @@ describe('log Ink input interactions', () => {
 
     state = applyInput(state, 'g')
     expect(state.fullGraph).toBe(true)
+
+    state = applyInput(state, 'g')
+    expect(state.selectedIndex).toBe(0)
+    expect(state.statusMessage).toBe('jumped to first commit')
   })
 
-  it('moves commits and sidebar tabs with arrows and vim keys', () => {
+  it('moves commits and sidebar tabs with arrows, vim keys, and direct jumps', () => {
     let state = createLogInkState(rows)
 
     state = applyInput(state, 'j')
@@ -102,6 +117,45 @@ describe('log Ink input interactions', () => {
 
     state = applyInput(state, '', { upArrow: true })
     expect(state.sidebarTab).toBe('status')
+
+    state = applyInput(state, ']')
+    expect(state.sidebarTab).toBe('branches')
+
+    state = applyInput(state, '[')
+    expect(state.sidebarTab).toBe('status')
+
+    state = applyInput(state, '5')
+    expect(state.sidebarTab).toBe('worktrees')
+    expect(state.focus).toBe('sidebar')
+  })
+
+  it('supports next/previous match and top/bottom navigation conventions', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'G')
+    expect(state.selectedIndex).toBe(2)
+    expect(state.statusMessage).toBe('jumped to last commit')
+
+    state = applyInput(state, 'N')
+    expect(state.selectedIndex).toBe(1)
+
+    state = applyInput(state, 'n')
+    expect(state.selectedIndex).toBe(2)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'g')
+    expect(state.selectedIndex).toBe(0)
+  })
+
+  it('clears pending key chords after unrelated actions', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
+
+    state = applyInput(state, '?')
+    expect(state.showHelp).toBe(true)
+    expect(state.pendingKey).toBeUndefined()
   })
 
   it('emits refresh event separately from state actions', () => {
