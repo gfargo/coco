@@ -4,6 +4,7 @@ export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
 export type LogInkView = 'history' | 'status' | 'diff'
+export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk'
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
@@ -17,6 +18,7 @@ export type LogInkState = {
   selectedIndex: number
   selectedFileIndex: number
   selectedWorktreeFileIndex: number
+  selectedWorktreeHunkIndex: number
   diffPreviewOffset: number
   worktreeDiffOffset: number
   filter: string
@@ -26,6 +28,7 @@ export type LogInkState = {
   showCommandPalette: boolean
   workflowActionId?: string
   pendingConfirmationId?: string
+  pendingMutationConfirmation?: LogInkMutationConfirmation
   pendingKey?: string
   focus: LogInkFocus
   sidebarTab: LogInkSidebarTab
@@ -58,6 +61,7 @@ export type LogInkAction =
   | { type: 'setStatus'; value?: string }
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string }
+  | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
   | { type: 'toggleFilterMode' }
   | { type: 'toggleGraph' }
   | { type: 'toggleHelp' }
@@ -233,6 +237,12 @@ function nextHunkOffset(currentOffset: number, hunkOffsets: number[], delta: num
     hunkOffsets[0]
 }
 
+function nextHunkIndex(currentOffset: number, hunkOffsets: number[], delta: number): number {
+  const offset = nextHunkOffset(currentOffset, hunkOffsets, delta)
+
+  return Math.max(0, hunkOffsets.indexOf(offset))
+}
+
 export function getLogInkSidebarTabs(): LogInkSidebarTab[] {
   return [...SIDEBAR_TABS]
 }
@@ -251,6 +261,7 @@ export function createLogInkState(
     selectedIndex: 0,
     selectedFileIndex: 0,
     selectedWorktreeFileIndex: 0,
+    selectedWorktreeHunkIndex: 0,
     diffPreviewOffset: 0,
     worktreeDiffOffset: 0,
     filter: '',
@@ -260,6 +271,7 @@ export function createLogInkState(
     showCommandPalette: false,
     workflowActionId: undefined,
     pendingConfirmationId: undefined,
+    pendingMutationConfirmation: undefined,
     pendingKey: undefined,
     focus: 'commits',
     sidebarTab: 'status',
@@ -318,6 +330,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           state.selectedWorktreeFileIndex + action.delta,
           action.fileCount
         ),
+        selectedWorktreeHunkIndex: 0,
         worktreeDiffOffset: 0,
         pendingKey: undefined,
       }
@@ -374,6 +387,11 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           action.hunkOffsets,
           action.delta
         ),
+        selectedWorktreeHunkIndex: nextHunkIndex(
+          state.worktreeDiffOffset,
+          action.hunkOffsets,
+          action.delta
+        ),
         pendingKey: undefined,
       }
     case 'previousSidebarTab':
@@ -389,6 +407,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         activeView: action.value,
         worktreeDiffOffset: action.value === 'diff' ? state.worktreeDiffOffset : 0,
+        selectedWorktreeHunkIndex: action.value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
         pendingKey: undefined,
       }
     case 'setFocus':
@@ -420,12 +439,22 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         workflowActionId: action.value,
         pendingConfirmationId: undefined,
+        pendingMutationConfirmation: undefined,
         pendingKey: undefined,
       }
     case 'setPendingConfirmation':
       return {
         ...state,
         pendingConfirmationId: action.value,
+        workflowActionId: action.value ? undefined : state.workflowActionId,
+        pendingMutationConfirmation: action.value ? undefined : state.pendingMutationConfirmation,
+        pendingKey: undefined,
+      }
+    case 'setPendingMutationConfirmation':
+      return {
+        ...state,
+        pendingMutationConfirmation: action.value,
+        pendingConfirmationId: action.value ? undefined : state.pendingConfirmationId,
         workflowActionId: action.value ? undefined : state.workflowActionId,
         pendingKey: undefined,
       }

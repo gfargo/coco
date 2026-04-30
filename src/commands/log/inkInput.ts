@@ -23,6 +23,10 @@ export type LogInkInputEvent =
   | { type: 'action'; action: LogInkAction }
   | { type: 'exit' }
   | { type: 'refreshContext' }
+  | { type: 'toggleSelectedFileStage' }
+  | { type: 'toggleSelectedHunkStage' }
+  | { type: 'revertSelectedFile' }
+  | { type: 'revertSelectedHunk' }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -96,6 +100,26 @@ export function getLogInkInputEvents(
       return [
         action({ type: 'setPendingConfirmation', value: undefined }),
         action({ type: 'setStatus', value: 'workflow action cancelled' }),
+      ]
+    }
+
+    return []
+  }
+
+  if (state.pendingMutationConfirmation) {
+    if (inputValue === 'y') {
+      return [
+        state.pendingMutationConfirmation === 'revert-hunk'
+          ? { type: 'revertSelectedHunk' }
+          : { type: 'revertSelectedFile' },
+        action({ type: 'setPendingMutationConfirmation', value: undefined }),
+      ]
+    }
+
+    if (inputValue === 'n' || key.escape) {
+      return [
+        action({ type: 'setPendingMutationConfirmation', value: undefined }),
+        action({ type: 'setStatus', value: 'revert cancelled' }),
       ]
     }
 
@@ -277,6 +301,22 @@ export function getLogInkInputEvents(
 
   if (key.return && state.activeView === 'status' && context.worktreeFileCount) {
     return [action({ type: 'setActiveView', value: 'diff' })]
+  }
+
+  if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {
+    return [{ type: 'toggleSelectedFileStage' }]
+  }
+
+  if (inputValue === ' ' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+    return [{ type: 'toggleSelectedHunkStage' }]
+  }
+
+  if (inputValue === 'z' && state.activeView === 'status' && context.worktreeFileCount) {
+    return [action({ type: 'setPendingMutationConfirmation', value: 'revert-file' })]
+  }
+
+  if (inputValue === 'z' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+    return [action({ type: 'setPendingMutationConfirmation', value: 'revert-hunk' })]
   }
 
   const workflowAction = getLogInkWorkflowActionByKey(inputValue)
