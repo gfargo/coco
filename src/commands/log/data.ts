@@ -4,6 +4,8 @@ import { LogArgv, LogView } from './config'
 export const FIELD_SEPARATOR = '\x1f'
 const LOG_FORMAT = `%x1f%h%x1f%H%x1f%ad%x1f%an%x1f%d%x1f%s`
 const DETAIL_FORMAT = `%H%x1f%h%x1f%ad%x1f%an%x1f%d%x1f%s%x1f%b`
+export const LOG_DEFAULT_LIMIT = 30
+export const LOG_INTERACTIVE_DEFAULT_LIMIT = 300
 
 export type GitLogCommitRow = {
   type: 'commit'
@@ -59,9 +61,9 @@ export function toArray(value: string | string[] | undefined): string[] {
   return Array.isArray(value) ? value : [value]
 }
 
-function normalizeLimit(limit: number | undefined): number {
+function normalizeLimit(limit: number | undefined, interactive: boolean | undefined): number {
   if (!limit || Number.isNaN(limit) || limit < 1) {
-    return 30
+    return interactive ? LOG_INTERACTIVE_DEFAULT_LIMIT : LOG_DEFAULT_LIMIT
   }
 
   return Math.floor(limit)
@@ -227,7 +229,7 @@ export function buildLogArgs(argv: LogArgv): string[] {
     '--decorate=short',
     '--date=short',
     '--color=never',
-    `--max-count=${normalizeLimit(argv.limit)}`,
+    `--max-count=${normalizeLimit(argv.limit, argv.interactive)}`,
     `--pretty=format:${LOG_FORMAT}`,
   ]
 

@@ -55,9 +55,8 @@ export const options = {
     default: 'table',
   },
   limit: {
-    description: 'Maximum number of commits to show',
+    description: 'Maximum number of commits to show (defaults to 30, or 300 in interactive mode)',
     type: 'number',
-    default: 30,
     alias: 'n',
   },
   merges: {
