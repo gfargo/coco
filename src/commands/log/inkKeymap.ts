@@ -217,81 +217,161 @@ export type GetLogInkFooterHintsOptions = {
   showCommandPalette?: boolean
 }
 
+/**
+ * Footer hints split into two slots so the chrome can render them in
+ * separate spans:
+ *   `contextual` — what changes with mode, view, or focus.
+ *   `global`     — persistent affordances (help · commands · quit).
+ */
+export type LogInkFooterHints = {
+  contextual: string[]
+  global: string[]
+}
+
+/**
+ * Bindings considered "global" — always available regardless of which view
+ * or pane has focus. Surfaced as a separate group in the help overlay and
+ * always rendered in the footer's global slot.
+ */
+const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
+  'help',
+  'commandPalette',
+  'workflowActions',
+  'focusNext',
+  'focusPrevious',
+  'refresh',
+  'quit',
+]
+
+const NORMAL_GLOBAL_HINTS = ['? help', ': cmds', 'q quit']
+
 export function formatBindingKeys(binding: LogInkKeyBinding): string {
   return binding.keys.join('/')
 }
 
-export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): string[] {
+/**
+ * Render the navigation `viewStack` as a breadcrumb suitable for the
+ * chrome header. A single-frame stack at the root view returns an empty
+ * string so the header stays compact when nothing has been pushed.
+ *
+ * Examples:
+ *   `[history]`             → ''
+ *   `[history, diff]`       → 'history › diff'
+ *   `[status, diff]`        → 'status › diff'
+ *   `[history, diff, status]` → 'history › diff › status'
+ */
+export function formatLogInkBreadcrumb(viewStack: LogInkView[]): string {
+  if (viewStack.length === 0) {
+    return ''
+  }
+
+  if (viewStack.length === 1 && viewStack[0] === 'history') {
+    return ''
+  }
+
+  return viewStack.join(' › ')
+}
+
+export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   if (options.filterMode) {
-    return ['enter apply', 'esc cancel', 'ctrl+u clear', 'q quit']
+    return {
+      contextual: ['enter apply', 'esc cancel', 'ctrl+u clear'],
+      global: ['q quit'],
+    }
   }
 
   if (options.showHelp) {
-    return ['? close', 'tab focus', '/ search', 'q quit']
+    return {
+      contextual: ['? close', 'tab focus', '/ search'],
+      global: ['q quit'],
+    }
   }
 
   if (options.showCommandPalette) {
-    return [': close', 'D/T/X confirm', 'I/M AI', '? help', 'q quit']
+    return {
+      contextual: [': close', 'D/T/X confirm', 'I/M AI'],
+      global: ['? help', 'q quit'],
+    }
   }
 
   if (options.focus === 'sidebar') {
-    return ['[/] tab', '1-5 jump', 'tab focus', '/ search', '? help']
+    return {
+      contextual: ['[/] tab', '1-5 jump', 'tab focus'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
   }
 
   if (options.focus === 'detail') {
-    return ['↑/↓ files', 'pgup/pgdn diff', 'tab focus', '? help', 'q quit']
+    return {
+      contextual: ['↑/↓ files', 'pgup/pgdn diff', 'tab focus'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
   }
 
   if (options.activeView === 'status') {
-    return ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose']
+    return {
+      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
   }
 
   if (options.activeView === 'diff') {
-    return ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files']
+    return {
+      contextual: ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
   }
 
-  return ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next', '? help']
+  return {
+    contextual: ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next'],
+    global: NORMAL_GLOBAL_HINTS,
+  }
 }
 
-export function getLogInkHelpSections(): LogInkHelpSection[] {
+export type GetLogInkHelpSectionsOptions = {
+  activeView: LogInkView
+  focus: LogInkFocus
+}
+
+function bindingMatchesViewContext(
+  binding: LogInkKeyBinding,
+  options: GetLogInkHelpSectionsOptions
+): boolean {
+  if (binding.contexts.includes(options.focus)) {
+    return true
+  }
+
+  if (binding.contexts.includes('normal')) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Help bindings grouped for the persistent help overlay.
+ *
+ * Returns two top-level groups:
+ *   - `Global` — bindings that work from any view or focus.
+ *   - `This view (...)` — bindings relevant to the current view + focus.
+ *
+ * The active-view label is appended so users always know which section
+ * applies to where they currently are.
+ */
+export function getLogInkHelpSections(
+  options: GetLogInkHelpSectionsOptions
+): LogInkHelpSection[] {
+  const globals = LOG_INK_KEY_BINDINGS.filter((binding) =>
+    GLOBAL_BINDING_IDS.includes(binding.id)
+  )
+
+  const viewBindings = LOG_INK_KEY_BINDINGS.filter((binding) =>
+    !GLOBAL_BINDING_IDS.includes(binding.id) && bindingMatchesViewContext(binding, options)
+  )
+
   return [
-    {
-      title: 'Navigation',
-      bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
-        [
-          'moveUp',
-          'moveDown',
-          'pageUp',
-          'pageDown',
-          'moveToTop',
-          'moveToBottom',
-          'nextMatch',
-          'previousMatch',
-          'focusNext',
-          'focusPrevious',
-          'previousSidebarTab',
-          'nextSidebarTab',
-        ].includes(binding.id)
-      ),
-    },
-    {
-      title: 'Browsing',
-      bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
-        ['search', 'clearSearch', 'toggleGraph', 'refresh', 'revertSelection'].includes(binding.id)
-      ),
-    },
-    {
-      title: 'Commit',
-      bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
-        ['editCommit', 'commit'].includes(binding.id)
-      ),
-    },
-    {
-      title: 'Global',
-      bindings: LOG_INK_KEY_BINDINGS.filter((binding) =>
-        ['help', 'commandPalette', 'workflowActions', 'quit'].includes(binding.id)
-      ),
-    },
+    { title: 'Global', bindings: globals },
+    { title: `This view (${options.activeView})`, bindings: viewBindings },
   ]
 }
 
