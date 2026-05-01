@@ -99,6 +99,7 @@ export type LogInkAction =
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
   | { type: 'navigateOpenComposeForFile'; fileIndex: number }
   | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
+  | { type: 'jumpCommitDiffHunk'; delta: number; hunkOffsets: number[] }
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
@@ -333,12 +334,12 @@ function nextHunkOffset(currentOffset: number, hunkOffsets: number[], delta: num
   }
 
   if (delta > 0) {
-    return hunkOffsets.find((offset) => offset > currentOffset) ||
-      hunkOffsets[hunkOffsets.length - 1]
+    const nextOffset = hunkOffsets.find((offset) => offset > currentOffset)
+    return nextOffset === undefined ? currentOffset : nextOffset
   }
 
-  return [...hunkOffsets].reverse().find((offset) => offset < currentOffset) ||
-    hunkOffsets[0]
+  const previousOffset = [...hunkOffsets].reverse().find((offset) => offset < currentOffset)
+  return previousOffset === undefined ? currentOffset : previousOffset
 }
 
 function nextHunkIndex(currentOffset: number, hunkOffsets: number[], delta: number): number {
@@ -526,6 +527,16 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ),
         selectedWorktreeHunkIndex: nextHunkIndex(
           state.worktreeDiffOffset,
+          action.hunkOffsets,
+          action.delta
+        ),
+        pendingKey: undefined,
+      }
+    case 'jumpCommitDiffHunk':
+      return {
+        ...state,
+        diffPreviewOffset: nextHunkOffset(
+          state.diffPreviewOffset,
           action.hunkOffsets,
           action.delta
         ),

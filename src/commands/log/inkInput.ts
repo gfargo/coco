@@ -41,6 +41,12 @@ export type LogInkInputContext = {
   previewLineCount?: number
   worktreeDiffLineCount?: number
   worktreeFileCount?: number
+  /**
+   * `@@` line offsets within `filePreview.hunks` for the selected commit's
+   * file. Lets diff-view j/k/PageUp/PageDown navigate the commit's hunks when
+   * no worktree file is in scope.
+   */
+  commitDiffHunkOffsets?: number[]
   branchCount?: number
   tagCount?: number
   stashCount?: number
@@ -509,6 +515,14 @@ export function getLogInkInputEvents(
       })]
     }
 
+    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: -1,
+        hunkOffsets: context.commitDiffHunkOffsets,
+      })]
+    }
+
     if (state.activeView === 'branches' && context.branchCount) {
       return [action({ type: 'moveBranch', delta: -1, count: context.branchCount })]
     }
@@ -549,6 +563,14 @@ export function getLogInkInputEvents(
       })]
     }
 
+    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: 1,
+        hunkOffsets: context.commitDiffHunkOffsets,
+      })]
+    }
+
     if (state.activeView === 'branches' && context.branchCount) {
       return [action({ type: 'moveBranch', delta: 1, count: context.branchCount })]
     }
@@ -577,6 +599,14 @@ export function getLogInkInputEvents(
       })]
     }
 
+    if (state.activeView === 'diff' && context.previewLineCount) {
+      return [action({
+        type: 'pageDetailPreview',
+        delta: -8,
+        previewLineCount: context.previewLineCount,
+      })]
+    }
+
     if (state.focus === 'detail' && context.previewLineCount) {
       return [action({
         type: 'pageDetailPreview',
@@ -594,6 +624,14 @@ export function getLogInkInputEvents(
         type: 'pageWorktreeDiff',
         delta: 8,
         lineCount: context.worktreeDiffLineCount,
+      })]
+    }
+
+    if (state.activeView === 'diff' && context.previewLineCount) {
+      return [action({
+        type: 'pageDetailPreview',
+        delta: 8,
+        previewLineCount: context.previewLineCount,
       })]
     }
 

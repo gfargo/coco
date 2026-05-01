@@ -875,6 +875,12 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedIndex,
   ])
 
+  const commitDiffHunkOffsets = React.useMemo(() => (
+    filePreview?.hunks
+      .map((line, index) => (line.startsWith('@@') ? index : -1))
+      .filter((index) => index >= 0)
+  ), [filePreview])
+
   useInput((inputValue: string, key: LogInkInputKey) => {
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
@@ -882,6 +888,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       worktreeDiffLineCount: worktreeDiff?.lines.length,
       worktreeFileCount: context.worktree?.files.length,
       worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
+      commitDiffHunkOffsets,
       branchCount: context.branches?.localBranches.length,
       tagCount: context.tags?.tags.length,
       stashCount: context.stashes?.stashes.length,
@@ -935,6 +942,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         worktreeDiffLoading,
         worktreeHunks,
         worktreeHunksLoading,
+        filePreview,
+        filePreviewLoading,
+        commitDiffHunkOffsets,
+        selectedDetailFile,
         layout.bodyRows,
         theme,
         hasMoreCommits,
@@ -1032,6 +1043,10 @@ function renderMainPanel(
   worktreeDiffLoading: boolean,
   worktreeHunks: WorktreeHunkOverview | undefined,
   worktreeHunksLoading: boolean,
+  filePreview: GitCommitFilePreview | undefined,
+  filePreviewLoading: boolean,
+  commitDiffHunkOffsets: number[] | undefined,
+  selectedDetailFile: GitCommitDetail['files'][number] | undefined,
   bodyRows: number,
   theme: LogInkTheme,
   hasMoreCommits: boolean,
@@ -1052,6 +1067,10 @@ function renderMainPanel(
       worktreeDiffLoading,
       worktreeHunks,
       worktreeHunksLoading,
+      filePreview,
+      filePreviewLoading,
+      commitDiffHunkOffsets,
+      selectedDetailFile,
       bodyRows,
       theme
     )
@@ -1464,14 +1483,70 @@ function renderDiffSurface(
   worktreeDiffLoading: boolean,
   worktreeHunks: WorktreeHunkOverview | undefined,
   worktreeHunksLoading: boolean,
+  filePreview: GitCommitFilePreview | undefined,
+  filePreviewLoading: boolean,
+  commitDiffHunkOffsets: number[] | undefined,
+  selectedDetailFile: GitCommitDetail['files'][number] | undefined,
   bodyRows: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree
-  const selectedFile = worktree?.files[state.selectedWorktreeFileIndex]
+  const worktreeFile = worktree?.files[state.selectedWorktreeFileIndex]
   const visibleRows = Math.max(4, bodyRows - 4)
+
+  // When the user opens diff via history → Enter (no worktree file in scope),
+  // render the selected commit's file preview hunks instead of the worktree
+  // surface. j/k/PageUp/PageDown are wired through commitDiffHunkOffsets and
+  // the existing pageDetailPreview action so navigation stays symmetric.
+  const useCommitDiff = !worktreeFile && Boolean(selectedDetailFile)
+
+  if (useCommitDiff) {
+    const previewHunks = filePreview?.hunks || []
+    const visiblePreviewHunks = previewHunks.slice(
+      state.diffPreviewOffset,
+      state.diffPreviewOffset + visibleRows
+    )
+    const hunkCount = commitDiffHunkOffsets?.length || 0
+    const currentHunkIndex = hunkCount > 0
+      ? Math.max(0, [...(commitDiffHunkOffsets || [])]
+          .reverse()
+          .findIndex((offset) => offset <= state.diffPreviewOffset))
+      : 0
+    const currentHunkLabel = hunkCount > 0
+      ? `Hunk ${Math.min(hunkCount - currentHunkIndex, hunkCount)}/${hunkCount}`
+      : 'No hunks for this file.'
+
+    const lines = filePreviewLoading
+      ? [`Loading diff for ${selectedDetailFile?.path || 'selected file'}...`]
+      : previewHunks.length
+        ? [
+          `Selected file: ${selectedDetailFile?.path || ''}`,
+          currentHunkLabel,
+          `Lines ${Math.min(state.diffPreviewOffset + 1, previewHunks.length || 1)}-${Math.min(state.diffPreviewOffset + visiblePreviewHunks.length, previewHunks.length)}/${previewHunks.length}`,
+          '',
+          ...visiblePreviewHunks,
+        ]
+        : ['No diff preview available for this file.']
+
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexGrow: 1,
+      paddingX: 1,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle('Diff', focused)),
+      h(Text, { dimColor: true }, selectedDetailFile?.path || 'no file')
+    ),
+    ...lines.map((line, index) => h(Text, {
+      key: `diff-surface-${index}`,
+      dimColor: index > 1,
+    }, truncate(line, 140))))
+  }
+
   const diffLines = worktreeDiff?.lines || []
   const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
   const visibleDiffLines = diffLines.slice(
@@ -1481,10 +1556,10 @@ function renderDiffSurface(
   const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
     ? ['Loading file context...']
     : worktreeDiffLoading
-      ? [`Loading diff for ${selectedFile?.path || 'selected file'}...`]
-      : selectedFile
+      ? [`Loading diff for ${worktreeFile?.path || 'selected file'}...`]
+      : worktreeFile
       ? [
-        `Selected file: ${selectedFile.path}`,
+        `Selected file: ${worktreeFile.path}`,
         worktreeHunksLoading
           ? 'Hunks loading...'
           : worktreeHunks?.hunks.length
@@ -1505,7 +1580,7 @@ function renderDiffSurface(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Diff', focused)),
-    h(Text, { dimColor: true }, selectedFile ? selectedFile.path : 'no file')
+    h(Text, { dimColor: true }, worktreeFile ? worktreeFile.path : 'no file')
   ),
   ...lines.map((line, index) => h(Text, {
     key: `diff-surface-${index}`,

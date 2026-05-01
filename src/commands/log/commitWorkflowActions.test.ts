@@ -1,4 +1,5 @@
 import { handler as commitHandler } from '../commit/handler'
+import { generateCommitDraft } from '../commit/generateCommitDraft'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import {
   commitWorkflowTestInternals,
@@ -8,6 +9,10 @@ import {
 
 jest.mock('../commit/handler', () => ({
   handler: jest.fn(),
+}))
+
+jest.mock('../commit/generateCommitDraft', () => ({
+  generateCommitDraft: jest.fn(),
 }))
 
 jest.mock('../../lib/simple-git/createCommit', () => ({
@@ -24,12 +29,15 @@ jest.mock('../../lib/simple-git/createCommit', () => ({
 }))
 
 const mockedCommitHandler = commitHandler as jest.MockedFunction<typeof commitHandler>
+const mockedGenerateCommitDraft =
+  generateCommitDraft as jest.MockedFunction<typeof generateCommitDraft>
 const mockedCreateCommit = createCommit as jest.MockedFunction<typeof createCommit>
 const git = {} as Parameters<typeof createCommit>[1]
 
 describe('log commit workflow actions', () => {
   beforeEach(() => {
     mockedCommitHandler.mockReset()
+    mockedGenerateCommitDraft.mockReset()
     mockedCreateCommit.mockReset()
   })
 
@@ -86,17 +94,49 @@ describe('log commit workflow actions', () => {
     )
   })
 
-  it('generates commit drafts without creating commits', async () => {
-    mockedCommitHandler.mockImplementation(async () => {
-      process.stdout.write('feat: draft message\n\nDraft body.\n')
+  it('generates commit drafts without creating commits or invoking the legacy handler', async () => {
+    mockedGenerateCommitDraft.mockResolvedValue({
+      ok: true,
+      draft: 'feat: draft message\n\nDraft body.',
+      warnings: [],
+      validationErrors: [],
     })
 
-    await expect(runCommitDraftWorkflow()).resolves.toEqual({
+    await expect(runCommitDraftWorkflow({ git })).resolves.toEqual({
       ok: true,
       message: 'feat: draft message',
+      details: [],
       draft: 'feat: draft message\n\nDraft body.',
     })
+
+    // Bug 2 (issue #757): the legacy commitHandler must not run inside the
+    // TUI — it leaks ora spinners and Inquirer prompts onto the alt screen.
+    expect(mockedCommitHandler).not.toHaveBeenCalled()
     expect(mockedCreateCommit).not.toHaveBeenCalled()
+    expect(mockedGenerateCommitDraft).toHaveBeenCalledWith(expect.objectContaining({
+      git,
+      argv: expect.objectContaining({
+        _: ['commit'],
+        interactive: false,
+        mode: 'stdout',
+      }),
+    }))
+  })
+
+  it('surfaces validation failures as structured workflow feedback', async () => {
+    mockedGenerateCommitDraft.mockResolvedValue({
+      ok: false,
+      draft: 'foo: bad type',
+      warnings: [],
+      validationErrors: ['type must be one of [feat, fix, ...]', 'subject too long'],
+    })
+
+    await expect(runCommitDraftWorkflow({ git })).resolves.toEqual({
+      ok: false,
+      message: 'type must be one of [feat, fix, ...]',
+      details: ['subject too long'],
+      draft: 'foo: bad type',
+    })
   })
 
   it('passes no-verify into TUI commit workflows', async () => {
