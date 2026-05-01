@@ -74,6 +74,78 @@ describe('log Ink input interactions', () => {
     expect(state.filterMode).toBe(false)
   })
 
+  it('clears the filter on first Esc and exits filter mode on the second', () => {
+    let state = createLogInkState(rows)
+    state = applyInput(state, '/')
+    state = applyInput(state, 'f')
+    state = applyInput(state, 'i')
+    expect(state.filter).toBe('fi')
+    expect(state.filterMode).toBe(true)
+
+    state = applyInput(state, '', { escape: true })
+    expect(state.filter).toBe('')
+    expect(state.filterMode).toBe(true)
+
+    state = applyInput(state, '', { escape: true })
+    expect(state.filterMode).toBe(false)
+  })
+
+  it('q on an unsaved compose draft prompts a discard confirmation instead of exiting', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, {
+      type: 'commitCompose',
+      action: { type: 'append', value: 'feat: in-flight summary' },
+    })
+
+    const events = applyInput(state, 'q')
+    expect(events.pendingMutationConfirmation).toBe('discard-draft')
+
+    // n cancels and keeps the draft
+    state = applyInput(events, 'n')
+    expect(state.pendingMutationConfirmation).toBeUndefined()
+    expect(state.commitCompose.summary).toBe('feat: in-flight summary')
+  })
+
+  it('q with no compose draft exits immediately', () => {
+    const events = getLogInkInputEvents(createLogInkState(rows), 'q')
+    expect(events).toEqual([{ type: 'exit' }])
+  })
+
+  it('confirms discard-draft via y and emits exit', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, {
+      type: 'commitCompose',
+      action: { type: 'append', value: 'feat: ready to ship' },
+    })
+    state = applyInput(state, 'q')
+    expect(state.pendingMutationConfirmation).toBe('discard-draft')
+
+    const events = getLogInkInputEvents(state, 'y')
+    expect(events.find((event) => event.type === 'exit')).toBeDefined()
+  })
+
+  it('snaps promoted-view selection to 0 when the filter changes', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'moveBranch', delta: 5, count: 10 })
+    expect(state.selectedBranchIndex).toBe(5)
+
+    state = applyLogInkAction(state, { type: 'setFilter', value: 'feature' })
+    expect(state.selectedBranchIndex).toBe(0)
+  })
+
+  it('clearFilterText clears the filter input but keeps filterMode active', () => {
+    let state = createLogInkState(rows)
+    state = applyInput(state, '/')
+    state = applyInput(state, 'f')
+    state = applyInput(state, 'o')
+    expect(state.filter).toBe('fo')
+    expect(state.filterMode).toBe(true)
+
+    state = applyLogInkAction(state, { type: 'clearFilterText' })
+    expect(state.filter).toBe('')
+    expect(state.filterMode).toBe(true)
+  })
+
   it('toggles help, command palette, focus, and graph interactions', () => {
     let state = createLogInkState(rows)
 
