@@ -28,7 +28,8 @@ import {
 import {
   formatBindingKeys,
   formatLogInkBreadcrumb,
-  getLogInkCommandPaletteItems,
+  filterLogInkPaletteCommands,
+  getLogInkPaletteCommands,
   getLogInkFooterHints,
   getLogInkHelpSections,
 } from './inkKeymap'
@@ -68,7 +69,6 @@ import {
 import { TagOverview, getTagOverview } from './tagData'
 import {
   getLogInkWorkflowActionById,
-  getLogInkWorkflowActions,
   getLogInkWorkflowSections,
 } from './inkWorkflows'
 import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from './worktreeData'
@@ -1214,6 +1214,14 @@ function renderComposeSurface(
     : []))
 }
 
+function matchesPromotedFilter(haystacks: string[], filter: string): boolean {
+  if (!filter.trim()) {
+    return true
+  }
+  const needle = filter.toLowerCase()
+  return haystacks.some((value) => value.toLowerCase().includes(needle))
+}
+
 function renderBranchesSurface(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -1227,18 +1235,27 @@ function renderBranchesSurface(
   const focused = state.focus === 'commits'
   const branches = context.branches
   const loading = isLogInkContextKeyLoading(contextStatus, 'branches')
-  const localBranches = branches?.localBranches || []
-  const selected = state.selectedBranchIndex
+  const allLocalBranches = branches?.localBranches || []
+  const localBranches = state.filter
+    ? allLocalBranches.filter((branch) =>
+      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter)
+    )
+    : allLocalBranches
+  const selected = Math.max(0, Math.min(state.selectedBranchIndex, Math.max(0, localBranches.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
   const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
   const visible = localBranches.slice(startIndex, startIndex + listRows)
+  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading
     ? 'loading branches'
-    : `${localBranches.length} local | current: ${branches?.currentBranch || '<detached>'}`
+    : `${localBranches.length}/${allLocalBranches.length} local | current: ${branches?.currentBranch || '<detached>'}${filterLabel}`
+  const emptyLabel = state.filter
+    ? `No branches match filter '${state.filter}'`
+    : 'No local branches'
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'branches-loading', dimColor: true }, 'Loading branches...')]
     : localBranches.length === 0
-      ? [h(Text, { key: 'branches-empty', dimColor: true }, 'No local branches')]
+      ? [h(Text, { key: 'branches-empty', dimColor: true }, emptyLabel)]
       : visible.map((branch, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
@@ -1278,16 +1295,23 @@ function renderTagsSurface(
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const loading = isLogInkContextKeyLoading(contextStatus, 'tags')
-  const tags = context.tags?.tags || []
-  const selected = state.selectedTagIndex
+  const allTags = context.tags?.tags || []
+  const tags = state.filter
+    ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
+    : allTags
+  const selected = Math.max(0, Math.min(state.selectedTagIndex, Math.max(0, tags.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
   const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
   const visible = tags.slice(startIndex, startIndex + listRows)
-  const headerRight = loading ? 'loading tags' : `${tags.length} tags`
+  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
+  const headerRight = loading
+    ? 'loading tags'
+    : `${tags.length}/${allTags.length} tags${filterLabel}`
+  const emptyLabel = state.filter ? `No tags match filter '${state.filter}'` : 'No tags found'
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'tags-loading', dimColor: true }, 'Loading tags...')]
     : tags.length === 0
-      ? [h(Text, { key: 'tags-empty', dimColor: true }, 'No tags found')]
+      ? [h(Text, { key: 'tags-empty', dimColor: true }, emptyLabel)]
       : visible.map((tag, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
@@ -1325,16 +1349,27 @@ function renderStashSurface(
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const loading = isLogInkContextKeyLoading(contextStatus, 'stashes')
-  const stashes = context.stashes?.stashes || []
-  const selected = state.selectedStashIndex
+  const allStashes = context.stashes?.stashes || []
+  const stashes = state.filter
+    ? allStashes.filter((stash) =>
+      matchesPromotedFilter([stash.ref, stash.message], state.filter)
+    )
+    : allStashes
+  const selected = Math.max(0, Math.min(state.selectedStashIndex, Math.max(0, stashes.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
   const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
   const visible = stashes.slice(startIndex, startIndex + listRows)
-  const headerRight = loading ? 'loading stashes' : `${stashes.length} stashes`
+  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
+  const headerRight = loading
+    ? 'loading stashes'
+    : `${stashes.length}/${allStashes.length} stashes${filterLabel}`
+  const emptyLabel = state.filter
+    ? `No stashes match filter '${state.filter}'`
+    : 'No stashes'
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'stash-loading', dimColor: true }, 'Loading stashes...')]
     : stashes.length === 0
-      ? [h(Text, { key: 'stash-empty', dimColor: true }, 'No stashes')]
+      ? [h(Text, { key: 'stash-empty', dimColor: true }, emptyLabel)]
       : visible.map((stash, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
@@ -1440,7 +1475,7 @@ function renderDetailPanel(
   }
 
   if (state.showCommandPalette) {
-    return renderCommandPalette(h, components, width, theme, focused)
+    return renderCommandPalette(h, components, state, width, theme, focused)
   }
 
   if (state.pendingConfirmationId || state.pendingMutationConfirmation) {
@@ -1644,13 +1679,54 @@ function renderHelpPanel(
 function renderCommandPalette(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
+  state: LogInkState,
   width: number,
   theme: LogInkTheme,
   focused: boolean
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
-  const commands = getLogInkCommandPaletteItems()
-  const workflowActions = getLogInkWorkflowActions()
+  const all = getLogInkPaletteCommands()
+  const filtered = filterLogInkPaletteCommands(all, state.paletteFilter, state.paletteRecent)
+  const recentSet = new Set(state.paletteRecent)
+  const showingRecent = !state.paletteFilter.trim() && state.paletteRecent.length > 0
+
+  const selectedIndex = filtered.length === 0
+    ? 0
+    : Math.max(0, Math.min(state.paletteSelectedIndex, filtered.length - 1))
+
+  // Slide a window of rows around the selection so the cursor stays visible
+  // even with hundreds of bindings.
+  const listRows = 14
+  const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
+  const visible = filtered.slice(startIndex, startIndex + listRows)
+
+  const inputLine = `> ${state.paletteFilter}_`
+  const matchSummary = filtered.length === 0
+    ? 'no matches'
+    : `${filtered.length} ${filtered.length === 1 ? 'match' : 'matches'}`
+  const hint = '↑/↓ select · enter run · esc close'
+
+  const itemLines = filtered.length === 0
+    ? [h(Text, { key: 'palette-empty', dimColor: true }, 'No commands match the current filter.')]
+    : visible.map((command, offset) => {
+      const index = startIndex + offset
+      const isSelected = index === selectedIndex
+      const cursor = isSelected ? '>' : ' '
+      const recentMarker = showingRecent && recentSet.has(command.id) ? '·' : ' '
+      const kindMarker = command.kind === 'workflow'
+        ? command.workflowKind === 'ai'
+          ? '[AI]'
+          : command.requiresConfirmation
+            ? '[confirm]'
+            : '[action]'
+        : ''
+      const line = `${cursor} ${recentMarker} ${command.keys.padEnd(8)} ${command.label.padEnd(20)} ${kindMarker ? `${kindMarker} ` : ''}${command.description}`
+      return h(Text, {
+        key: `palette-${command.kind}-${command.id}`,
+        bold: isSelected,
+        dimColor: !isSelected,
+      }, truncate(line, width - 4))
+    })
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1659,25 +1735,17 @@ function renderCommandPalette(
     width,
     paddingX: 1,
   },
-  h(Text, { bold: true }, panelTitle('Commands', focused)),
-  h(Text, { dimColor: true }, 'Every command is sourced from the shared keymap.'),
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Command palette', focused)),
+    h(Text, { dimColor: true }, matchSummary)
+  ),
+  h(Text, { color: theme.colors.accent }, truncate(inputLine, width - 4)),
+  h(Text, { dimColor: true }, truncate(hint, width - 4)),
   h(Text, undefined, ''),
-  ...commands.map((command) => h(Text, {
-    key: command.id,
-  }, truncate(`${command.keys.padEnd(12)} ${command.label} - ${command.description}`, width - 4))),
-  h(Text, undefined, ''),
-  h(Text, { bold: true }, 'Workflow actions'),
-  ...workflowActions.map((action) => {
-    const marker = action.kind === 'ai'
-      ? `[AI ~${action.estimatedTokens || '?'} tokens]`
-      : action.requiresConfirmation
-        ? '[confirm]'
-        : '[action]'
-
-    return h(Text, {
-      key: action.id,
-    }, truncate(`${action.key.padEnd(4)} ${marker} ${action.label}`, width - 4))
-  }))
+  ...(showingRecent
+    ? [h(Text, { key: 'palette-recent-hint', dimColor: true }, '· marks recently-used')]
+    : []),
+  ...itemLines)
 }
 
 function renderFooter(

@@ -602,6 +602,113 @@ describe('log Ink input interactions', () => {
     expect(state.fullGraph).toBe(true)
   })
 
+  describe('command palette', () => {
+    function openPalette() {
+      return applyLogInkAction(createLogInkState(rows), { type: 'toggleCommandPalette' })
+    }
+
+    it('intercepts every key while open — no leaks to normal handlers', () => {
+      let state = openPalette()
+      expect(state.showCommandPalette).toBe(true)
+
+      // Pressing 'j' would normally move the commit cursor; while the palette
+      // is open it must append to the filter instead.
+      state = applyInput(state, 'j')
+      expect(state.paletteFilter).toBe('j')
+      expect(state.selectedIndex).toBe(0) // commit cursor untouched
+    })
+
+    it('appends, backspaces, and clears the palette filter', () => {
+      let state = openPalette()
+
+      state = applyInput(state, 'b')
+      state = applyInput(state, 'r')
+      state = applyInput(state, 'a')
+      state = applyInput(state, 'n')
+      state = applyInput(state, 'c')
+      state = applyInput(state, 'h')
+      expect(state.paletteFilter).toBe('branch')
+
+      state = applyInput(state, '', { backspace: true })
+      expect(state.paletteFilter).toBe('branc')
+
+      state = applyInput(state, 'u', { ctrl: true })
+      expect(state.paletteFilter).toBe('')
+    })
+
+    it('moves the palette selection with arrow keys and ctrl+n/ctrl+p', () => {
+      let state = openPalette()
+
+      state = applyInput(state, '', { downArrow: true })
+      expect(state.paletteSelectedIndex).toBe(1)
+
+      state = applyInput(state, 'n', { ctrl: true })
+      expect(state.paletteSelectedIndex).toBe(2)
+
+      state = applyInput(state, '', { upArrow: true })
+      expect(state.paletteSelectedIndex).toBe(1)
+
+      state = applyInput(state, 'p', { ctrl: true })
+      expect(state.paletteSelectedIndex).toBe(0)
+    })
+
+    it('closes on escape without executing anything', () => {
+      let state = openPalette()
+      expect(state.showCommandPalette).toBe(true)
+
+      state = applyInput(state, '', { escape: true })
+      expect(state.showCommandPalette).toBe(false)
+      expect(state.paletteFilter).toBe('')
+      expect(state.paletteSelectedIndex).toBe(0)
+    })
+
+    it('executes the selected command on enter and closes', () => {
+      let state = openPalette()
+
+      // Filter to the home navigation, then run.
+      state = applyInput(state, 'h')
+      state = applyInput(state, 'o')
+      state = applyInput(state, 'm')
+      state = applyInput(state, 'e')
+
+      const events = getLogInkInputEvents(state, '', { return: true })
+      // First the palette records the recent command, then closes, then
+      // dispatches the command's events.
+      expect(events.length).toBeGreaterThan(0)
+      const types = events
+        .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+        .map((event) => event.action.type)
+      expect(types).toContain('recordPaletteRecent')
+      expect(types).toContain('toggleCommandPalette')
+      expect(types).toContain('navigateHome')
+    })
+
+    it('records executed commands in paletteRecent (most recent first, dedup)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'recordPaletteRecent', value: 'navigateStatus' })
+      state = applyLogInkAction(state, { type: 'recordPaletteRecent', value: 'navigateDiff' })
+      state = applyLogInkAction(state, { type: 'recordPaletteRecent', value: 'navigateStatus' })
+
+      // navigateStatus moves to the front; no duplicate.
+      expect(state.paletteRecent).toEqual(['navigateStatus', 'navigateDiff'])
+    })
+
+    it('does not move the palette selection past the filtered command count', () => {
+      let state = openPalette()
+
+      // Filter to a unique label to get exactly one match.
+      state = applyInput(state, 'g')
+      state = applyInput(state, 'r')
+      state = applyInput(state, 'a')
+      state = applyInput(state, 'p')
+      state = applyInput(state, 'h')
+
+      // Only one match (toggleGraph). Down-arrow should clamp at index 0.
+      state = applyInput(state, '', { downArrow: true })
+      expect(state.paletteSelectedIndex).toBe(0)
+    })
+  })
+
   it('gates destructive and AI workflow actions behind confirmation', () => {
     let state = createLogInkState(rows)
 

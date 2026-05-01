@@ -1,4 +1,9 @@
 import { LogInkFocus, LogInkView } from './inkViewModel'
+import {
+  LogInkWorkflowAction,
+  LogInkWorkflowActionKind,
+  getLogInkWorkflowActions,
+} from './inkWorkflows'
 
 export type LogInkCommandId =
   | 'clearSearch'
@@ -490,4 +495,152 @@ export function getLogInkCommandPaletteItems(): LogInkCommandPaletteItem[] {
     label: binding.label,
     description: binding.description,
   }))
+}
+
+/**
+ * Unified palette command type — covers both keybinding-derived commands
+ * (`'binding'`) and workflow actions (`'workflow'`). The palette renderer
+ * iterates these and the executor dispatches the right events for each.
+ */
+export type LogInkPaletteCommandKind = 'binding' | 'workflow'
+
+export type LogInkPaletteCommand = {
+  id: string
+  kind: LogInkPaletteCommandKind
+  keys: string
+  label: string
+  description: string
+  workflowKind?: LogInkWorkflowActionKind
+  requiresConfirmation?: boolean
+}
+
+function bindingToPaletteCommand(binding: LogInkKeyBinding): LogInkPaletteCommand {
+  return {
+    id: binding.id,
+    kind: 'binding',
+    keys: formatBindingKeys(binding),
+    label: binding.label,
+    description: binding.description,
+  }
+}
+
+function workflowToPaletteCommand(action: LogInkWorkflowAction): LogInkPaletteCommand {
+  return {
+    id: action.id,
+    kind: 'workflow',
+    keys: action.key,
+    label: action.label,
+    description: action.description,
+    workflowKind: action.kind,
+    requiresConfirmation: action.requiresConfirmation,
+  }
+}
+
+/**
+ * The full palette command set: every keybinding plus every workflow
+ * action. Phase 6 onwards, both surfaces are filterable and executable
+ * from `:`.
+ */
+export function getLogInkPaletteCommands(): LogInkPaletteCommand[] {
+  return [
+    ...LOG_INK_KEY_BINDINGS.map(bindingToPaletteCommand),
+    ...getLogInkWorkflowActions().map(workflowToPaletteCommand),
+  ]
+}
+
+function paletteSearchableFields(command: LogInkPaletteCommand): string[] {
+  return [command.label, command.description, command.keys, command.id]
+}
+
+function scorePaletteCommand(command: LogInkPaletteCommand, term: string): number | undefined {
+  const normalized = term.trim().toLowerCase()
+  if (!normalized) {
+    return 0
+  }
+
+  let best: number | undefined
+  for (const raw of paletteSearchableFields(command)) {
+    const value = raw.toLowerCase()
+
+    if (value === normalized) {
+      return 1000
+    }
+
+    if (value.startsWith(normalized)) {
+      const fieldScore = 800 - Math.min(value.length - normalized.length, 200)
+      best = best === undefined ? fieldScore : Math.max(best, fieldScore)
+      continue
+    }
+
+    const substringIndex = value.indexOf(normalized)
+    if (substringIndex >= 0) {
+      const fieldScore = 600 - Math.min(substringIndex, 200)
+      best = best === undefined ? fieldScore : Math.max(best, fieldScore)
+      continue
+    }
+
+    let searchIndex = 0
+    let distance = 0
+    let matched = true
+
+    for (const character of normalized) {
+      const nextIndex = value.indexOf(character, searchIndex)
+      if (nextIndex < 0) {
+        matched = false
+        break
+      }
+      distance += nextIndex - searchIndex
+      searchIndex = nextIndex + 1
+    }
+
+    if (matched) {
+      const fieldScore = 300 - Math.min(distance, 200)
+      best = best === undefined ? fieldScore : Math.max(best, fieldScore)
+    }
+  }
+
+  return best
+}
+
+/**
+ * Filter and sort the palette command list by user query.
+ *   - Empty filter: float `recent` IDs to the top, preserve registry order
+ *     for everything else.
+ *   - Non-empty filter: fuzzy score, descending; ties broken by registry
+ *     order. Commands that don't match are dropped.
+ */
+export function filterLogInkPaletteCommands(
+  commands: LogInkPaletteCommand[],
+  filter: string,
+  recent: string[]
+): LogInkPaletteCommand[] {
+  if (!filter.trim()) {
+    if (recent.length === 0) {
+      return [...commands]
+    }
+    const recentIndex = new Map(recent.map((id, index) => [id, index]))
+    const recentCommands: LogInkPaletteCommand[] = []
+    const others: LogInkPaletteCommand[] = []
+    for (const command of commands) {
+      if (recentIndex.has(command.id)) {
+        recentCommands.push(command)
+      } else {
+        others.push(command)
+      }
+    }
+    recentCommands.sort((a, b) => (recentIndex.get(a.id) || 0) - (recentIndex.get(b.id) || 0))
+    return [...recentCommands, ...others]
+  }
+
+  return commands
+    .map((command, index) => ({
+      command,
+      index,
+      score: scorePaletteCommand(command, filter),
+    }))
+    .filter((entry): entry is { command: LogInkPaletteCommand; index: number; score: number } =>
+      entry.score !== undefined
+    )
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.command)
 }

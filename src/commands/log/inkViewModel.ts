@@ -50,6 +50,15 @@ export type LogInkState = {
   fullGraph: boolean
   showHelp: boolean
   showCommandPalette: boolean
+  /**
+   * Command-palette interaction state. `paletteFilter` is the user-typed
+   * fuzzy query. `paletteSelectedIndex` is a cursor into the filtered list.
+   * `paletteRecent` keeps recently-executed command IDs so the palette can
+   * float them to the top when the filter is empty.
+   */
+  paletteFilter: string
+  paletteSelectedIndex: number
+  paletteRecent: string[]
   workflowActionId?: string
   pendingConfirmationId?: string
   pendingMutationConfirmation?: LogInkMutationConfirmation
@@ -97,6 +106,11 @@ export type LogInkAction =
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
+  | { type: 'appendPaletteFilter'; value: string }
+  | { type: 'backspacePaletteFilter' }
+  | { type: 'clearPaletteFilter' }
+  | { type: 'movePaletteSelection'; delta: number; commandCount: number }
+  | { type: 'recordPaletteRecent'; value: string }
   | { type: 'toggleFilterMode' }
   | { type: 'toggleGraph' }
   | { type: 'toggleHelp' }
@@ -357,6 +371,9 @@ export function createLogInkState(
     selectedBranchIndex: 0,
     selectedTagIndex: 0,
     selectedStashIndex: 0,
+    paletteFilter: '',
+    paletteSelectedIndex: 0,
+    paletteRecent: [],
     commitCompose: createCommitComposeState(),
     diffPreviewOffset: 0,
     worktreeDiffOffset: 0,
@@ -642,13 +659,57 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         showCommandPalette: false,
         pendingKey: undefined,
       }
-    case 'toggleCommandPalette':
+    case 'toggleCommandPalette': {
+      const opening = !state.showCommandPalette
       return {
         ...state,
-        showCommandPalette: !state.showCommandPalette,
+        showCommandPalette: opening,
         showHelp: false,
+        // Reset palette interaction state on every open/close so the next
+        // session starts from a clean slate.
+        paletteFilter: '',
+        paletteSelectedIndex: 0,
         pendingKey: undefined,
       }
+    }
+    case 'appendPaletteFilter':
+      return {
+        ...state,
+        paletteFilter: `${state.paletteFilter}${action.value}`,
+        paletteSelectedIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'backspacePaletteFilter':
+      return {
+        ...state,
+        paletteFilter: state.paletteFilter.slice(0, -1),
+        paletteSelectedIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'clearPaletteFilter':
+      return {
+        ...state,
+        paletteFilter: '',
+        paletteSelectedIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'movePaletteSelection':
+      return {
+        ...state,
+        paletteSelectedIndex: clampIndex(
+          state.paletteSelectedIndex + action.delta,
+          action.commandCount
+        ),
+        pendingKey: undefined,
+      }
+    case 'recordPaletteRecent': {
+      const next = [action.value, ...state.paletteRecent.filter((id) => id !== action.value)]
+      return {
+        ...state,
+        paletteRecent: next.slice(0, 8),
+        pendingKey: undefined,
+      }
+    }
     default:
       return state
   }
