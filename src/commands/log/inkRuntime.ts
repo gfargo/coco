@@ -77,6 +77,7 @@ import {
   LogInkRefreshWatcher,
   createRefreshWatcher,
 } from './inkRefreshWatcher'
+import { installTerminalLifecycle } from './inkTerminalLifecycle'
 import {
   LOG_INK_DEFAULT_COLUMNS,
   LOG_INK_DEFAULT_ROWS,
@@ -171,6 +172,7 @@ type LogInkRuntime = {
       }
     ) => {
       waitUntilExit: () => Promise<void>
+      unmount: () => void
     }
     useApp: () => {
       exit: () => void
@@ -193,6 +195,12 @@ type LogInkComponentDeps = LogInkRuntime & {
   logArgv?: LogArgv
   rows: GitLogRow[]
   theme: LogInkTheme
+  /**
+   * Mutable ref the runtime fills with a force-render callback. The
+   * terminal-lifecycle module invokes it on `SIGCONT` so users land on a
+   * painted screen after `fg` instead of an empty alt buffer.
+   */
+  resumeRef?: { current: (() => void) | null }
 }
 
 const truncate = truncateCells
@@ -514,6 +522,11 @@ export async function startInkInteractiveLog(
 
   const runtime = await loadInkRuntime()
   const { ink, React } = runtime
+
+  // Forward declared so the lifecycle handler can call back into the React
+  // tree on SIGCONT to force a repaint after the user `fg`s.
+  let resumeRef: { current: (() => void) | null } = { current: null }
+
   const app = React.createElement(LogInkApp, {
     appLabel: options.appLabel || 'coco log',
     git,
@@ -523,14 +536,26 @@ export async function startInkInteractiveLog(
     React,
     rows,
     theme: createLogInkTheme(options.theme),
+    resumeRef,
   })
   const instance = ink.render(app, getLogInkRenderOptions({ input, output, error }))
 
-  await instance.waitUntilExit()
+  const lifecycle = installTerminalLifecycle({
+    input,
+    output,
+    instance,
+    onResume: () => resumeRef.current?.(),
+  })
+
+  try {
+    await instance.waitUntilExit()
+  } finally {
+    lifecycle.dispose()
+  }
 }
 
 function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, git, ink, initialView, logArgv, React, rows, theme } = deps
+  const { appLabel, git, ink, initialView, logArgv, React, resumeRef, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -539,6 +564,18 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
     rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
   })
+  // Bumping this on SIGCONT forces the existing tree to repaint so users
+  // land on a drawn screen after `fg` instead of an empty alt buffer.
+  const [, setResumeTick] = React.useState(0)
+  React.useEffect(() => {
+    if (!resumeRef) {
+      return
+    }
+    resumeRef.current = () => setResumeTick((tick) => tick + 1)
+    return () => {
+      resumeRef.current = null
+    }
+  }, [resumeRef])
   const [state, setState] = React.useState<LogInkState>(() =>
     createLogInkState(rows, { activeView: initialView })
   )
