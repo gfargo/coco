@@ -107,6 +107,15 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'previousSidebarTab' })]
     case 'nextSidebarTab':
       return [action({ type: 'nextSidebarTab' })]
+    case 'previousHunk':
+    case 'nextHunk':
+      // Palette execution can't reach the live worktree/commit hunk offsets
+      // (those live in runtime state, not the reducer). Surface a hint and
+      // let the user press the keystroke directly in diff view.
+      return [action({
+        type: 'setStatus',
+        value: 'open the diff view and press [ or ] to jump hunks',
+      })]
     case 'focusNext':
       return [action({ type: 'focusNext' })]
     case 'focusPrevious':
@@ -479,10 +488,38 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === '[') {
+    if (state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+      return [action({
+        type: 'jumpWorktreeHunk',
+        delta: -1,
+        hunkOffsets: context.worktreeHunkOffsets,
+      })]
+    }
+    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: -1,
+        hunkOffsets: context.commitDiffHunkOffsets,
+      })]
+    }
     return [action({ type: 'previousSidebarTab' })]
   }
 
   if (inputValue === ']') {
+    if (state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+      return [action({
+        type: 'jumpWorktreeHunk',
+        delta: 1,
+        hunkOffsets: context.worktreeHunkOffsets,
+      })]
+    }
+    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: 1,
+        hunkOffsets: context.commitDiffHunkOffsets,
+      })]
+    }
     return [action({ type: 'nextSidebarTab' })]
   }
 
@@ -507,19 +544,23 @@ export function getLogInkInputEvents(
       })]
     }
 
+    // Diff view: j/k scrolls the visible diff one line. Hunk navigation
+    // moved to ]/[ so single-hunk files (longer than the preview pane)
+    // can scroll bidirectionally instead of getting pinned to a hunk
+    // anchor.
     if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
       return [action({
-        type: 'jumpWorktreeHunk',
+        type: 'pageWorktreeDiff',
         delta: -1,
-        hunkOffsets: context.worktreeHunkOffsets || [],
+        lineCount: context.worktreeDiffLineCount,
       })]
     }
 
-    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+    if (state.activeView === 'diff' && context.previewLineCount) {
       return [action({
-        type: 'jumpCommitDiffHunk',
+        type: 'pageDetailPreview',
         delta: -1,
-        hunkOffsets: context.commitDiffHunkOffsets,
+        previewLineCount: context.previewLineCount,
       })]
     }
 
@@ -557,17 +598,17 @@ export function getLogInkInputEvents(
 
     if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
       return [action({
-        type: 'jumpWorktreeHunk',
+        type: 'pageWorktreeDiff',
         delta: 1,
-        hunkOffsets: context.worktreeHunkOffsets || [],
+        lineCount: context.worktreeDiffLineCount,
       })]
     }
 
-    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+    if (state.activeView === 'diff' && context.previewLineCount) {
       return [action({
-        type: 'jumpCommitDiffHunk',
+        type: 'pageDetailPreview',
         delta: 1,
-        hunkOffsets: context.commitDiffHunkOffsets,
+        previewLineCount: context.previewLineCount,
       })]
     }
 

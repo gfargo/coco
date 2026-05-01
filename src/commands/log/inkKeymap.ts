@@ -24,12 +24,14 @@ export type LogInkCommandId =
   | 'navigateStash'
   | 'navigateStatus'
   | 'navigateTags'
+  | 'nextHunk'
   | 'nextMatch'
   | 'nextSidebarTab'
   | 'moveUp'
   | 'openSelected'
   | 'pageDown'
   | 'pageUp'
+  | 'previousHunk'
   | 'previousMatch'
   | 'previousSidebarTab'
   | 'quit'
@@ -120,15 +122,29 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     id: 'previousSidebarTab',
     keys: ['['],
     label: 'previous tab',
-    description: 'Move to the previous repository sidebar tab.',
+    description: 'Move to the previous repository sidebar tab (outside diff view).',
     contexts: ['sidebar'],
   },
   {
     id: 'nextSidebarTab',
     keys: [']'],
     label: 'next tab',
-    description: 'Move to the next repository sidebar tab.',
+    description: 'Move to the next repository sidebar tab (outside diff view).',
     contexts: ['sidebar'],
+  },
+  {
+    id: 'previousHunk',
+    keys: ['['],
+    label: 'previous hunk',
+    description: 'Jump to the previous diff hunk in the current diff view.',
+    contexts: ['commits'],
+  },
+  {
+    id: 'nextHunk',
+    keys: [']'],
+    label: 'next hunk',
+    description: 'Jump to the next diff hunk in the current diff view.',
+    contexts: ['commits'],
   },
   {
     id: 'focusNext',

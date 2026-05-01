@@ -310,6 +310,39 @@ function panelTitle(title: string, focused: boolean): string {
   return focused ? `${title} *` : title
 }
 
+/**
+ * Map a unified-diff line to the props passed to an Ink `<Text>` so the
+ * standard +/-/@@ prefixes render in their conventional colors. File
+ * headers (`+++`, `---`, `diff --git`, `index`) get a softer treatment so
+ * they don't compete with the actual hunk content.
+ *
+ * `theme.noColor` collapses everything to dim/normal so we stay readable
+ * under `NO_COLOR` and the `monochrome` preset.
+ */
+function diffLineProps(
+  line: string,
+  theme: LogInkTheme
+): { color?: string; dimColor?: boolean } {
+  if (theme.noColor) {
+    return { dimColor: line.startsWith(' ') || line.startsWith('diff ') || line.startsWith('index ') }
+  }
+
+  if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('+++') || line.startsWith('---')) {
+    return { dimColor: true }
+  }
+  if (line.startsWith('@@')) {
+    return { color: theme.colors.accent }
+  }
+  if (line.startsWith('+')) {
+    return { color: theme.colors.gitAdded }
+  }
+  if (line.startsWith('-')) {
+    return { color: theme.colors.gitDeleted }
+  }
+
+  return {}
+}
+
 function sidebarTabLabel(tab: LogInkSidebarTab): string {
   switch (tab) {
     case 'status':
@@ -1233,11 +1266,9 @@ function renderComposeSurface(
   const bodyLines = compose.body
     ? compose.body.split('\n').slice(0, bodyRowsAvailable)
     : ['<empty>']
-  const stateLine = compose.loading
-    ? 'Working...'
-    : compose.editing
-      ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
-      : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
+  const stateLine = compose.editing
+    ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
+    : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
   const stagedFileLines = (worktree?.files || [])
     .filter((file) => file.indexStatus !== ' ' && file.indexStatus !== '?')
     .slice(0, 5)
@@ -1270,7 +1301,15 @@ function renderComposeSurface(
     dimColor: line === '<empty>',
   }, truncate(`  ${line}${bodyCursor && index === bodyLines.length - 1 ? bodyCursor : ''}`, 140))),
   h(Text, undefined, ''),
-  h(Text, { dimColor: true }, stateLine),
+  ...(compose.loading
+    ? [h(Text, {
+      key: 'compose-loading',
+      bold: true,
+      color: theme.noColor ? undefined : theme.colors.accent,
+    }, theme.ascii
+      ? '[...] Generating AI commit draft (this can take a moment)'
+      : '⏳ Generating AI commit draft… (this can take a moment)')]
+    : [h(Text, { dimColor: true }, stateLine)]),
   ...(compose.message ? [h(Text, { key: 'compose-msg' }, truncate(compose.message, 140))] : []),
   ...(compose.details || []).map((line, index) => h(Text, {
     key: `compose-detail-${index}`,
@@ -1518,7 +1557,7 @@ function renderDiffSurface(
       ? `Hunk ${Math.min(hunkCount - currentHunkIndex, hunkCount)}/${hunkCount}`
       : 'No hunks for this file.'
 
-    const lines = filePreviewLoading
+    const headerLines: string[] = filePreviewLoading
       ? [`Loading diff for ${selectedDetailFile?.path || 'selected file'}...`]
       : previewHunks.length
         ? [
@@ -1526,7 +1565,6 @@ function renderDiffSurface(
           currentHunkLabel,
           `Lines ${Math.min(state.diffPreviewOffset + 1, previewHunks.length || 1)}-${Math.min(state.diffPreviewOffset + visiblePreviewHunks.length, previewHunks.length)}/${previewHunks.length}`,
           '',
-          ...visiblePreviewHunks,
         ]
         : ['No diff preview available for this file.']
 
@@ -1541,10 +1579,16 @@ function renderDiffSurface(
       h(Text, { bold: true }, panelTitle('Diff', focused)),
       h(Text, { dimColor: true }, selectedDetailFile?.path || 'no file')
     ),
-    ...lines.map((line, index) => h(Text, {
-      key: `diff-surface-${index}`,
-      dimColor: index > 1,
-    }, truncate(line, 140))))
+    ...headerLines.map((line, index) => h(Text, {
+      key: `diff-surface-header-${index}`,
+      dimColor: index > 0,
+    }, truncate(line, 140))),
+    ...(filePreviewLoading || !previewHunks.length
+      ? []
+      : visiblePreviewHunks.map((line, index) => h(Text, {
+        key: `diff-surface-line-${state.diffPreviewOffset + index}`,
+        ...diffLineProps(line, theme),
+      }, truncate(line, 140)))))
   }
 
   const diffLines = worktreeDiff?.lines || []
@@ -1553,7 +1597,7 @@ function renderDiffSurface(
     state.worktreeDiffOffset,
     state.worktreeDiffOffset + visibleRows
   )
-  const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
+  const headerLines: string[] = isLogInkContextKeyLoading(contextStatus, 'worktree')
     ? ['Loading file context...']
     : worktreeDiffLoading
       ? [`Loading diff for ${worktreeFile?.path || 'selected file'}...`]
@@ -1567,9 +1611,12 @@ function renderDiffSurface(
             : 'No stageable hunks for this file.',
         `Lines ${Math.min(state.worktreeDiffOffset + 1, diffLines.length || 1)}-${Math.min(state.worktreeDiffOffset + visibleDiffLines.length, diffLines.length)}/${diffLines.length}`,
         '',
-        ...visibleDiffLines,
       ]
       : ['No changed file selected.']
+
+  const showDiffLines = Boolean(worktreeFile) &&
+    !worktreeDiffLoading &&
+    !isLogInkContextKeyLoading(contextStatus, 'worktree')
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1582,10 +1629,16 @@ function renderDiffSurface(
     h(Text, { bold: true }, panelTitle('Diff', focused)),
     h(Text, { dimColor: true }, worktreeFile ? worktreeFile.path : 'no file')
   ),
-  ...lines.map((line, index) => h(Text, {
-    key: `diff-surface-${index}`,
-    dimColor: index > 1,
-  }, truncate(line, 140))))
+  ...headerLines.map((line, index) => h(Text, {
+    key: `diff-surface-header-${index}`,
+    dimColor: index > 0,
+  }, truncate(line, 140))),
+  ...(showDiffLines
+    ? visibleDiffLines.map((line, index) => h(Text, {
+      key: `diff-surface-line-${state.worktreeDiffOffset + index}`,
+      ...diffLineProps(line, theme),
+    }, truncate(line, 140)))
+    : []))
 }
 
 function renderDetailPanel(
@@ -1631,46 +1684,63 @@ function renderDetailPanel(
     contextLoading: isLogInkContextLoading(contextStatus),
     selectedCommit: selected,
   })
-  const lines = detail
-    ? [
-      detail.message,
-      '',
-      `Commit: ${compactHash(detail.hash)}`,
-      `Author: ${detail.author}`,
-      `Date: ${detail.date}`,
-      detail.refs.length ? `Refs: ${detail.refs.join(', ')}` : 'Refs: none',
-      statLine,
-      '',
-      ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']),
-      '',
-      'Changed files:',
-      ...(detail.files.length
-        ? detail.files.slice(0, 8).map((file, index) =>
-          `${index === state.selectedFileIndex ? '>' : ' '} ${formatChangedFile(file)}`
-        )
-        : ['No changed files found.']),
-      '',
-      selectedFile
-        ? `Preview: ${formatChangedFile(selectedFile)}`
-        : 'Preview: no file selected',
-      filePreviewLoading
-        ? 'Loading diff preview...'
-        : previewWindow?.length
-          ? `Lines ${state.diffPreviewOffset + 1}-${state.diffPreviewOffset + previewWindow.length}/${filePreview?.hunks.length || 0}`
-          : 'No hunk preview available.',
-      ...(previewWindow || []).map((line) => `  ${line}`),
-      '',
-      'Workflows:',
-      ...workflowSections.flatMap((section) => [
-        section.title,
-        ...section.lines.slice(0, 3).map((line) => `  ${line}`),
-      ]).slice(0, 14),
-    ]
-    : [
+
+  if (!detail) {
+    const fallbackLines = [
       selected?.message || 'No commit selected.',
       '',
       loading ? 'Loading commit details...' : 'Commit details unavailable.',
     ]
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      width,
+      paddingX: 1,
+    },
+    h(Text, { bold: true }, panelTitle('Inspector', focused)),
+    ...fallbackLines.map((line, index) => h(Text, {
+      key: `detail-${index}`,
+      dimColor: index > 1,
+    }, truncate(line, width - 4))))
+  }
+
+  const headerLines = [
+    detail.message,
+    '',
+    `Commit: ${compactHash(detail.hash)}`,
+    `Author: ${detail.author}`,
+    `Date: ${detail.date}`,
+    detail.refs.length ? `Refs: ${detail.refs.join(', ')}` : 'Refs: none',
+    statLine,
+    '',
+    ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']),
+    '',
+    'Changed files:',
+    ...(detail.files.length
+      ? detail.files.slice(0, 8).map((file, index) =>
+        `${index === state.selectedFileIndex ? '>' : ' '} ${formatChangedFile(file)}`
+      )
+      : ['No changed files found.']),
+    '',
+    selectedFile
+      ? `Preview: ${formatChangedFile(selectedFile)}`
+      : 'Preview: no file selected',
+    filePreviewLoading
+      ? 'Loading diff preview...'
+      : previewWindow?.length
+        ? `Lines ${state.diffPreviewOffset + 1}-${state.diffPreviewOffset + previewWindow.length}/${filePreview?.hunks.length || 0}`
+        : 'No hunk preview available.',
+  ]
+  const previewLines = previewWindow || []
+  const trailerLines = [
+    '',
+    'Workflows:',
+    ...workflowSections.flatMap((section) => [
+      section.title,
+      ...section.lines.slice(0, 3).map((line) => `  ${line}`),
+    ]).slice(0, 14),
+  ]
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1680,9 +1750,17 @@ function renderDetailPanel(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Inspector', focused)),
-  ...lines.map((line, index) => h(Text, {
-    key: `detail-${index}`,
+  ...headerLines.map((line, index) => h(Text, {
+    key: `detail-header-${index}`,
     dimColor: index > 1 && line !== 'Changed files:',
+  }, truncate(line, width - 4))),
+  ...previewLines.map((line, index) => h(Text, {
+    key: `detail-preview-${state.diffPreviewOffset + index}`,
+    ...diffLineProps(line, theme),
+  }, truncate(`  ${line}`, width - 4))),
+  ...trailerLines.map((line, index) => h(Text, {
+    key: `detail-trailer-${index}`,
+    dimColor: index > 0,
   }, truncate(line, width - 4))))
 }
 
@@ -1707,21 +1785,21 @@ function renderCommitPanel(
   const summaryCursor = compose.editing && compose.field === 'summary' ? '_' : ''
   const bodyCursor = compose.editing && compose.field === 'body' ? '_' : ''
   const bodyLines = compose.body ? compose.body.split('\n').slice(0, 4) : ['<empty>']
-  const lines = [
+  const headerLines = [
     statusLine,
     '',
     `${compose.field === 'summary' && compose.editing ? '>' : ' '} Summary: ${compose.summary || '<empty>'}${summaryCursor}`,
     `${compose.field === 'body' && compose.editing ? '>' : ' '} Body:`,
     ...bodyLines.map((line) => `  ${line}${bodyCursor && line === bodyLines[bodyLines.length - 1] ? bodyCursor : ''}`),
     '',
-    loading
-      ? 'Working...'
-      : compose.editing
-        ? 'Enter/tab edits fields, Esc exits edit mode.'
-        : 'e edit | c commit | I AI draft',
+  ]
+  const trailerLines = [
     ...(compose.message ? ['', compose.message] : []),
     ...(compose.details || []).map((line) => `  ${line}`),
   ]
+  const stateLine = compose.editing
+    ? 'Enter/tab edits fields, Esc exits edit mode.'
+    : 'e edit | c commit | I AI draft'
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1731,9 +1809,20 @@ function renderCommitPanel(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Commit', focused)),
-  ...lines.map((line, index) => h(Text, {
-    key: `commit-${index}`,
+  ...headerLines.map((line, index) => h(Text, {
+    key: `commit-header-${index}`,
     dimColor: index < 2 || line.startsWith('  ') || line === '<empty>',
+  }, truncate(line, width - 4))),
+  loading
+    ? h(Text, {
+      key: 'commit-loading',
+      bold: true,
+      color: theme.noColor ? undefined : theme.colors.accent,
+    }, truncate(theme.ascii ? '[...] Generating AI draft' : '⏳ Generating AI draft…', width - 4))
+    : h(Text, { key: 'commit-state', dimColor: true }, truncate(stateLine, width - 4)),
+  ...trailerLines.map((line, index) => h(Text, {
+    key: `commit-trailer-${index}`,
+    dimColor: line.startsWith('  '),
   }, truncate(line, width - 4))))
 }
 
