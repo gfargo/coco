@@ -215,6 +215,13 @@ export function getLogInkInputEvents(
     ]
   }
 
+  if (state.pendingKey === 'g' && inputValue === 'c') {
+    return [
+      action({ type: 'pushView', value: 'compose' }),
+      action({ type: 'setStatus', value: 'jumped to compose' }),
+    ]
+  }
+
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
       return [
@@ -411,12 +418,28 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingMutationConfirmation', value: 'revert-hunk' })]
   }
 
-  if (inputValue === 'e' && (state.activeView === 'status' || state.activeView === 'diff')) {
-    return [action({ type: 'commitCompose', action: { type: 'setEditing', value: true } })]
+  if (
+    inputValue === 'e' &&
+    (state.activeView === 'status' || state.activeView === 'diff' || state.activeView === 'compose')
+  ) {
+    const events: LogInkInputEvent[] = []
+    if (state.activeView !== 'compose') {
+      events.push(action({ type: 'pushView', value: 'compose' }))
+    }
+    events.push(action({ type: 'commitCompose', action: { type: 'setEditing', value: true } }))
+    return events
   }
 
-  if (inputValue === 'c' && (state.activeView === 'status' || state.activeView === 'diff')) {
-    return [{ type: 'createManualCommit' }]
+  if (
+    inputValue === 'c' &&
+    (state.activeView === 'status' || state.activeView === 'diff' || state.activeView === 'compose')
+  ) {
+    const events: LogInkInputEvent[] = []
+    if (state.activeView !== 'compose') {
+      events.push(action({ type: 'pushView', value: 'compose' }))
+    }
+    events.push({ type: 'createManualCommit' })
+    return events
   }
 
   const workflowAction = getLogInkWorkflowActionByKey(inputValue)

@@ -1008,6 +1008,10 @@ function renderMainPanel(
     )
   }
 
+  if (state.activeView === 'compose') {
+    return renderComposeSurface(h, components, state, context, contextStatus, bodyRows, theme)
+  }
+
   return renderHistoryPanel(
     h,
     components,
@@ -1117,6 +1121,82 @@ function renderStatusSurface(
     key: `status-surface-${index}`,
     dimColor: index > 0,
   }, truncate(line, 140))))
+}
+
+function renderComposeSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const compose = state.commitCompose
+  const focused = state.focus === 'commits'
+  const worktree = context.worktree
+  const statusLine = isLogInkContextKeyLoading(contextStatus, 'worktree')
+    ? 'Status loading'
+    : worktree
+      ? `${worktree.stagedCount} staged | ${worktree.unstagedCount} unstaged | ${worktree.untrackedCount} untracked`
+      : 'No worktree info yet'
+  const summaryCursor = compose.editing && compose.field === 'summary' ? '_' : ''
+  const bodyCursor = compose.editing && compose.field === 'body' ? '_' : ''
+  const bodyRowsAvailable = Math.max(4, bodyRows - 10)
+  const bodyLines = compose.body
+    ? compose.body.split('\n').slice(0, bodyRowsAvailable)
+    : ['<empty>']
+  const stateLine = compose.loading
+    ? 'Working...'
+    : compose.editing
+      ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
+      : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
+  const stagedFileLines = (worktree?.files || [])
+    .filter((file) => file.indexStatus !== ' ' && file.indexStatus !== '?')
+    .slice(0, 5)
+    .map((file) => `  ${file.indexStatus} ${file.path}`)
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexGrow: 1,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Compose commit', focused)),
+    h(Text, { dimColor: true }, statusLine)
+  ),
+  h(Text, undefined, ''),
+  h(Text, {
+    bold: compose.field === 'summary' && compose.editing,
+  }, truncate(`Summary  ${compose.summary || '<empty>'}${summaryCursor}`, 140)),
+  h(Text, undefined, ''),
+  h(Text, {
+    bold: compose.field === 'body' && compose.editing,
+  }, 'Body'),
+  ...bodyLines.map((line, index) => h(Text, {
+    key: `compose-body-${index}`,
+    dimColor: line === '<empty>',
+  }, truncate(`  ${line}${bodyCursor && index === bodyLines.length - 1 ? bodyCursor : ''}`, 140))),
+  h(Text, undefined, ''),
+  h(Text, { dimColor: true }, stateLine),
+  ...(compose.message ? [h(Text, { key: 'compose-msg' }, truncate(compose.message, 140))] : []),
+  ...(compose.details || []).map((line, index) => h(Text, {
+    key: `compose-detail-${index}`,
+    dimColor: true,
+  }, truncate(`  ${line}`, 140))),
+  ...(stagedFileLines.length > 0
+    ? [
+      h(Text, { key: 'compose-staged-spacer' }, ''),
+      h(Text, { key: 'compose-staged-title', bold: true }, 'Staged'),
+      ...stagedFileLines.map((line, index) => h(Text, {
+        key: `compose-staged-${index}`,
+        dimColor: true,
+      }, truncate(line, 140))),
+    ]
+    : []))
 }
 
 function renderDiffSurface(

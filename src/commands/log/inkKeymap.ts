@@ -12,6 +12,7 @@ export type LogInkCommandId =
   | 'moveToBottom'
   | 'moveToTop'
   | 'navigateBack'
+  | 'navigateCompose'
   | 'navigateDiff'
   | 'navigateHome'
   | 'navigateStatus'
@@ -178,6 +179,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'navigateCompose',
+    keys: ['gc'],
+    label: 'compose',
+    description: 'Push the commit-compose view (draft + staged-files summary).',
+    contexts: ['normal'],
+  },
+  {
     id: 'navigateBack',
     keys: ['<', 'esc'],
     label: 'back',
@@ -284,6 +292,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateHome',
   'navigateStatus',
   'navigateDiff',
+  'navigateCompose',
   'navigateBack',
 ]
 
@@ -362,6 +371,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'diff') {
     return {
       contextual: ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'compose') {
+    return {
+      contextual: ['e edit', 'tab field', 'c commit', 'I AI draft', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
