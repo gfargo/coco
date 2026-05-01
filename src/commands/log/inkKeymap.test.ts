@@ -1,9 +1,11 @@
 import {
   LOG_INK_KEY_BINDINGS,
+  filterLogInkPaletteCommands,
   formatLogInkBreadcrumb,
   getLogInkCommandPaletteItems,
   getLogInkFooterHints,
   getLogInkHelpSections,
+  getLogInkPaletteCommands,
 } from './inkKeymap'
 
 describe('log Ink keymap', () => {
@@ -205,6 +207,58 @@ describe('log Ink keymap', () => {
     expect(branches?.keys).toEqual(['gb'])
     expect(tags?.keys).toEqual(['gt'])
     expect(stash?.keys).toEqual(['gz'])
+  })
+
+  describe('palette commands', () => {
+    it('returns both keybinding-derived and workflow commands', () => {
+      const commands = getLogInkPaletteCommands()
+      const ids = commands.map((command) => command.id)
+      const kinds = new Set(commands.map((command) => command.kind))
+
+      expect(ids).toContain('navigateHome')
+      expect(ids).toContain('toggleGraph')
+      expect(ids).toContain('delete-branch')
+      expect(ids).toContain('ai-commit-summary')
+      expect(kinds).toEqual(new Set(['binding', 'workflow']))
+    })
+
+    it('passes through every command when filter is empty and no recent', () => {
+      const commands = getLogInkPaletteCommands()
+      const result = filterLogInkPaletteCommands(commands, '', [])
+      expect(result.length).toBe(commands.length)
+    })
+
+    it('floats recent commands to the top when the filter is empty', () => {
+      const commands = getLogInkPaletteCommands()
+      const result = filterLogInkPaletteCommands(commands, '', ['toggleGraph', 'navigateStash'])
+
+      expect(result[0].id).toBe('toggleGraph')
+      expect(result[1].id).toBe('navigateStash')
+      expect(result.length).toBe(commands.length)
+    })
+
+    it('fuzzy-matches the filter against label, description, keys, and id', () => {
+      const commands = getLogInkPaletteCommands()
+
+      expect(filterLogInkPaletteCommands(commands, 'home', [])[0].id).toBe('navigateHome')
+
+      const diffResults = filterLogInkPaletteCommands(commands, 'gd', [])
+      expect(diffResults.map((command) => command.id)).toContain('navigateDiff')
+
+      expect(filterLogInkPaletteCommands(commands, 'compose', [])[0].id).toBe('navigateCompose')
+    })
+
+    it('drops commands that do not match the filter at all', () => {
+      const commands = getLogInkPaletteCommands()
+      const result = filterLogInkPaletteCommands(commands, 'zzzzznosuchcommand', [])
+      expect(result).toHaveLength(0)
+    })
+
+    it('ignores recent ordering when a filter is set (relevance wins)', () => {
+      const commands = getLogInkPaletteCommands()
+      const result = filterLogInkPaletteCommands(commands, 'compose', ['navigateStash'])
+      expect(result[0].id).toBe('navigateCompose')
+    })
   })
 
   it('derives command palette entries from the shared keymap', () => {

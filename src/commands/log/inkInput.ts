@@ -1,3 +1,8 @@
+import {
+  LogInkPaletteCommand,
+  filterLogInkPaletteCommands,
+  getLogInkPaletteCommands,
+} from './inkKeymap'
 import { LogInkAction, LogInkSidebarTab, LogInkState } from './inkViewModel'
 import {
   getLogInkWorkflowActionById,
@@ -45,6 +50,134 @@ function action(actionValue: LogInkAction): LogInkInputEvent {
   return {
     type: 'action',
     action: actionValue,
+  }
+}
+
+/**
+ * Translate a palette command into the same events its keystroke would have
+ * produced. Phase 6 makes `:` a real launcher: this is the single mapping
+ * from palette IDs to dispatchable behavior.
+ */
+export function getLogInkPaletteExecuteEvents(
+  command: LogInkPaletteCommand,
+  state: LogInkState
+): LogInkInputEvent[] {
+  if (command.kind === 'workflow') {
+    if (command.requiresConfirmation) {
+      return [action({ type: 'setPendingConfirmation', value: command.id })]
+    }
+    return [
+      action({ type: 'setWorkflowAction', value: command.id }),
+      action({ type: 'setStatus', value: `${command.label} selected` }),
+    ]
+  }
+
+  // Binding-derived commands. Map each LogInkCommandId to the same events
+  // the keystroke would emit. Order matches the keymap registry.
+  switch (command.id) {
+    case 'moveUp':
+      return [action({ type: 'move', delta: -1 })]
+    case 'moveDown':
+      return [action({ type: 'move', delta: 1 })]
+    case 'pageUp':
+      return [action({ type: 'page', delta: -10 })]
+    case 'pageDown':
+      return [action({ type: 'page', delta: 10 })]
+    case 'moveToTop':
+      return [
+        action({ type: 'moveToTop' }),
+        action({ type: 'setStatus', value: 'jumped to first commit' }),
+      ]
+    case 'moveToBottom':
+      return [
+        action({ type: 'moveToBottom' }),
+        action({ type: 'setStatus', value: 'jumped to last commit' }),
+      ]
+    case 'nextMatch':
+      return [action({ type: 'move', delta: 1 })]
+    case 'previousMatch':
+      return [action({ type: 'move', delta: -1 })]
+    case 'previousSidebarTab':
+      return [action({ type: 'previousSidebarTab' })]
+    case 'nextSidebarTab':
+      return [action({ type: 'nextSidebarTab' })]
+    case 'focusNext':
+      return [action({ type: 'focusNext' })]
+    case 'focusPrevious':
+      return [action({ type: 'focusPrevious' })]
+    case 'search':
+      return [action({ type: 'toggleFilterMode' })]
+    case 'toggleGraph':
+      return [action({ type: 'toggleGraph' })]
+    case 'navigateHome':
+      return [action({ type: 'navigateHome' })]
+    case 'navigateStatus':
+      return [action({ type: 'pushView', value: 'status' })]
+    case 'navigateDiff':
+      return [action({ type: 'pushView', value: 'diff' })]
+    case 'navigateCompose':
+      return [action({ type: 'pushView', value: 'compose' })]
+    case 'navigateBranches':
+      return [action({ type: 'pushView', value: 'branches' })]
+    case 'navigateTags':
+      return [action({ type: 'pushView', value: 'tags' })]
+    case 'navigateStash':
+      return [action({ type: 'pushView', value: 'stash' })]
+    case 'navigateBack':
+      return [action({ type: 'popView' })]
+    case 'openSelected': {
+      // From history → diff for selected commit; from status → diff for
+      // selected file. Mirrors the enter-key behavior.
+      if (state.activeView === 'history' && state.filteredCommits.length > 0) {
+        const selected = state.filteredCommits[state.selectedIndex]
+        if (selected) {
+          return [action({
+            type: 'navigateOpenDiffForCommit',
+            sha: selected.hash,
+            commitIndex: state.selectedIndex,
+          })]
+        }
+      }
+      if (state.activeView === 'status') {
+        return [action({
+          type: 'navigateOpenDiffForWorktreeFile',
+          fileIndex: state.selectedWorktreeFileIndex,
+        })]
+      }
+      return []
+    }
+    case 'refresh':
+      return [{ type: 'refreshContext' }]
+    case 'revertSelection':
+      return [action({ type: 'setPendingMutationConfirmation', value: 'revert-file' })]
+    case 'editCommit':
+      return [
+        ...(state.activeView !== 'compose'
+          ? [action({ type: 'pushView', value: 'compose' })]
+          : []),
+        action({ type: 'commitCompose', action: { type: 'setEditing', value: true } }),
+      ]
+    case 'commit':
+      return [
+        ...(state.activeView !== 'compose'
+          ? [action({ type: 'pushView', value: 'compose' })]
+          : []),
+        { type: 'createManualCommit' },
+      ]
+    case 'help':
+      return [action({ type: 'toggleHelp' })]
+    case 'commandPalette':
+      // Re-toggling closes; the dispatcher will close after execute anyway.
+      return []
+    case 'workflowActions':
+      // Aggregate entry; individual workflows are surfaced separately.
+      return []
+    case 'quit':
+      return [{ type: 'exit' }]
+    case 'clearSearch':
+      return [action({ type: 'clearFilter' })]
+    default:
+      return []
   }
 }
 
@@ -173,12 +306,63 @@ export function getLogInkInputEvents(
     return []
   }
 
-  if (key.escape && state.showHelp) {
-    return [action({ type: 'toggleHelp' })]
+  if (state.showCommandPalette) {
+    const filtered = filterLogInkPaletteCommands(
+      getLogInkPaletteCommands(),
+      state.paletteFilter,
+      state.paletteRecent
+    )
+
+    if (key.escape) {
+      return [action({ type: 'toggleCommandPalette' })]
+    }
+
+    if (key.return) {
+      const index = Math.max(0, Math.min(state.paletteSelectedIndex, filtered.length - 1))
+      const selected = filtered[index]
+      if (!selected) {
+        return [action({ type: 'toggleCommandPalette' })]
+      }
+      return [
+        action({ type: 'recordPaletteRecent', value: selected.id }),
+        action({ type: 'toggleCommandPalette' }),
+        ...getLogInkPaletteExecuteEvents(selected, state),
+      ]
+    }
+
+    if (key.upArrow || (key.ctrl && inputValue === 'p')) {
+      return [action({
+        type: 'movePaletteSelection',
+        delta: -1,
+        commandCount: filtered.length,
+      })]
+    }
+
+    if (key.downArrow || (key.ctrl && inputValue === 'n')) {
+      return [action({
+        type: 'movePaletteSelection',
+        delta: 1,
+        commandCount: filtered.length,
+      })]
+    }
+
+    if (key.backspace || key.delete) {
+      return [action({ type: 'backspacePaletteFilter' })]
+    }
+
+    if (key.ctrl && inputValue === 'u') {
+      return [action({ type: 'clearPaletteFilter' })]
+    }
+
+    if (inputValue && !key.ctrl && !key.meta) {
+      return [action({ type: 'appendPaletteFilter', value: inputValue })]
+    }
+
+    return []
   }
 
-  if (key.escape && state.showCommandPalette) {
-    return [action({ type: 'toggleCommandPalette' })]
+  if (key.escape && state.showHelp) {
+    return [action({ type: 'toggleHelp' })]
   }
 
   if (key.escape && state.viewStack.length > 1) {
