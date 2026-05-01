@@ -72,6 +72,10 @@ import {
 } from './inkKeymap'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import {
+  LogInkRefreshWatcher,
+  createRefreshWatcher,
+} from './inkRefreshWatcher'
+import {
   LOG_INK_DEFAULT_COLUMNS,
   LOG_INK_DEFAULT_ROWS,
   LOG_INK_MIN_COLUMNS,
@@ -584,6 +588,51 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }))
     setContextStatus((current) => updateLogInkContextStatus(current, 'worktree', 'ready'))
   }, [git])
+
+  // Live refresh: watch .git metadata + the working tree root and reload
+  // context when something changes outside the TUI (editor save, external
+  // git commands, branch switch in another terminal). Best-effort — the
+  // watcher quietly skips paths that don't exist or platforms where
+  // fs.watch fails. Subdirectory unstaged edits don't fire; users can
+  // press `r` for those.
+  React.useEffect(() => {
+    let cancelled = false
+    let watcher: LogInkRefreshWatcher | null = null
+
+    void (async () => {
+      try {
+        const [repoRoot, gitDir] = await Promise.all([
+          git.revparse(['--show-toplevel']),
+          git.revparse(['--absolute-git-dir']),
+        ])
+        if (cancelled) {
+          return
+        }
+        watcher = createRefreshWatcher({
+          repoRoot: repoRoot.trim(),
+          gitDir: gitDir.trim(),
+          onChange: (kind) => {
+            if (!mountedRef.current) {
+              return
+            }
+            if (kind === 'full') {
+              void refreshContext()
+            } else {
+              void refreshWorktreeContext()
+            }
+          },
+        })
+      } catch {
+        // Not in a git worktree, or revparse failed. Skip — manual `r`
+        // refresh still works.
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      watcher?.close()
+    }
+  }, [git, refreshContext, refreshWorktreeContext])
 
   React.useEffect(() => {
     let active = true
