@@ -18,7 +18,7 @@ An AI-powered git assistant that generates meaningful commit messages, creates c
 - 📋 **Conventional Commits** - Full support with automatic validation and formatting  
 - 🔧 **Commitlint Integration** - Seamless integration with your existing commitlint configuration
 - 🏠 **Local AI Support** - Run completely offline with Ollama (no API costs, full privacy)
-- 🖥️ **Coco UI Git Workstation** - Browse history, inspect status/diffs, stage hunks, and compose commits from `coco ui`
+- 🖥️ **Coco UI Git Workstation** - Seven top-level views (history, status, diff, compose, branches, tags, stash) reachable via `g`-prefixed chords, with an interactive command palette (`:`) and global search (`/`)
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
 - 👥 **Team Ready** - Shared configurations and enterprise deployment
 
@@ -100,6 +100,19 @@ coco log --author "Grace Hopper" --path src
 coco log --commit HEAD
 coco log --format json
 ```
+
+### Navigating the TUI
+
+`coco ui` and `coco log -i` share a chord-driven navigation model. Press `g` and then a second key to jump anywhere; `<` (or `Esc`) pops the navigation stack back.
+
+```text
+g h   history          g c   compose         <    back
+g s   status           g b   branches        Esc  back / close modal
+g d   diff             g t   tags            ?    help overlay
+                       g z   stash           :    command palette
+```
+
+The command palette (`:`) is an interactive launcher with fuzzy filter and recently-used at the top — every keybinding and workflow action is reachable from there. `/` searches the active view (history, branches, tags, or stash). See the [Coco UI](https://github.com/gfargo/coco/wiki/Coco-UI) wiki page for the full keymap.
 
 ## Configuration
 
