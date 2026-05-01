@@ -2,6 +2,7 @@ import { Arguments } from 'yargs'
 import { SimpleGit } from 'simple-git'
 import { handler as commitHandler } from '../commit/handler'
 import { CommitOptions } from '../commit/config'
+import { generateCommitDraft } from '../commit/generateCommitDraft'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { createCommit, PreCommitHookError } from '../../lib/simple-git/createCommit'
 import { getRepo } from '../../lib/simple-git/getRepo'
@@ -153,45 +154,51 @@ export async function runCommitWorkflow({
   }
 }
 
-export async function runCommitDraftWorkflow(): Promise<CommitWorkflowResult> {
+export async function runCommitDraftWorkflow(
+  input: { git?: SimpleGit } = {}
+): Promise<CommitWorkflowResult> {
+  const git = input.git || getRepo()
   const argv = createCommitWorkflowArgv('commit')
   const logger = new Logger({ silent: true })
-  const originalWrite = process.stdout.write.bind(process.stdout)
-  let output = ''
-
-  process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
-    output += typeof chunk === 'string' ? chunk : chunk.toString()
-
-    const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === 'function')
-    callback?.()
-
-    return true
-  }) as typeof process.stdout.write
 
   try {
-    await commitHandler(argv, logger)
-    const draft = output.trim()
+    const result = await generateCommitDraft({ git, argv, logger })
+    const draft = result.draft.trim()
+
+    if (result.ok && draft) {
+      return {
+        ok: true,
+        message: formatCommitWorkflowMessage('commit', draft),
+        details: result.warnings,
+        draft,
+      }
+    }
+
+    const failureLines = [
+      ...(result.validationErrors || []),
+      ...(result.warnings || []),
+    ]
 
     return {
-      ok: Boolean(draft),
-      message: draft ? formatCommitWorkflowMessage('commit', draft) : 'AI draft was empty.',
+      ok: false,
+      message: failureLines[0] ||
+        (draft ? 'AI draft did not pass commitlint.' : 'AI draft was empty.'),
+      details: failureLines.slice(1, 6),
       draft,
     }
   } catch (error) {
     if (isCommandExitError(error)) {
-      const lines = compactOutputLines(output || error.message)
+      const lines = compactOutputLines(error.message)
 
       return {
         ok: error.code === 0,
         message: lines[0] || error.message,
         details: lines.slice(1, 6),
-        draft: output.trim(),
+        draft: '',
       }
     }
 
     return formatCommitFailure(error)
-  } finally {
-    process.stdout.write = originalWrite
   }
 }
 

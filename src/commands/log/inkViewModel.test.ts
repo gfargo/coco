@@ -227,6 +227,74 @@ describe('log Ink view model', () => {
     expect(state.selectedWorktreeHunkIndex).toBe(0)
   })
 
+  it('jumps commit-diff hunks symmetrically and stays put past the last hunk', () => {
+    let state = createLogInkState(rows, { activeView: 'diff' })
+
+    state = applyLogInkAction(state, {
+      type: 'jumpCommitDiffHunk',
+      delta: 1,
+      hunkOffsets: [3, 12, 25],
+    })
+    expect(state.diffPreviewOffset).toBe(3)
+
+    state = applyLogInkAction(state, {
+      type: 'jumpCommitDiffHunk',
+      delta: 1,
+      hunkOffsets: [3, 12, 25],
+    })
+    expect(state.diffPreviewOffset).toBe(12)
+
+    state = applyLogInkAction(state, {
+      type: 'jumpCommitDiffHunk',
+      delta: -1,
+      hunkOffsets: [3, 12, 25],
+    })
+    expect(state.diffPreviewOffset).toBe(3)
+  })
+
+  it('keeps diffPreviewOffset put when jumping past either edge', () => {
+    let state = createLogInkState(rows, { activeView: 'diff' })
+
+    // From offset 0 (before first hunk), pressing k must not jump forward
+    state = applyLogInkAction(state, {
+      type: 'jumpCommitDiffHunk',
+      delta: -1,
+      hunkOffsets: [5, 10],
+    })
+    expect(state.diffPreviewOffset).toBe(0)
+
+    // After advancing to the last hunk, pressing j again must stay put
+    state = applyLogInkAction(state, {
+      type: 'jumpCommitDiffHunk',
+      delta: 1,
+      hunkOffsets: [5, 10],
+    })
+    state = applyLogInkAction(state, {
+      type: 'jumpCommitDiffHunk',
+      delta: 1,
+      hunkOffsets: [5, 10],
+    })
+    expect(state.diffPreviewOffset).toBe(10)
+
+    state = applyLogInkAction(state, {
+      type: 'jumpCommitDiffHunk',
+      delta: 1,
+      hunkOffsets: [5, 10],
+    })
+    expect(state.diffPreviewOffset).toBe(10)
+  })
+
+  it('keeps worktreeDiffOffset put when jumping before the first hunk', () => {
+    let state = createLogInkState(rows, { activeView: 'diff' })
+
+    state = applyLogInkAction(state, {
+      type: 'jumpWorktreeHunk',
+      delta: -1,
+      hunkOffsets: [5, 10],
+    })
+    expect(state.worktreeDiffOffset).toBe(0)
+  })
+
   it('stores commit compose state in the shared view model', () => {
     let state = createLogInkState(rows, { activeView: 'status' })
 

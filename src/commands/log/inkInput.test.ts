@@ -196,6 +196,45 @@ describe('log Ink input interactions', () => {
     expect(state.activeView).toBe('status')
   })
 
+  it('routes j/k in diff view to commit-diff hunks when no worktree file is in scope', () => {
+    let state = createLogInkState(rows, { activeView: 'diff' })
+
+    // Worktree context is empty; commit-diff hunk offsets are present.
+    const context = { commitDiffHunkOffsets: [2, 8, 14], previewLineCount: 30 }
+
+    // Pressing k from offset 0 (before the first hunk) must be a no-op,
+    // not a forward jump. This is the regression from inkViewModel:330.
+    state = applyInput(state, 'k', {}, context)
+    expect(state.diffPreviewOffset).toBe(0)
+
+    state = applyInput(state, 'j', {}, context)
+    expect(state.diffPreviewOffset).toBe(2)
+
+    state = applyInput(state, 'j', {}, context)
+    expect(state.diffPreviewOffset).toBe(8)
+
+    state = applyInput(state, 'k', {}, context)
+    expect(state.diffPreviewOffset).toBe(2)
+
+    // Pressing j from the last hunk must stay put, never wrap backward.
+    state = applyInput(state, 'j', {}, context)
+    state = applyInput(state, 'j', {}, context)
+    expect(state.diffPreviewOffset).toBe(14)
+    state = applyInput(state, 'j', {}, context)
+    expect(state.diffPreviewOffset).toBe(14)
+  })
+
+  it('routes PageUp/PageDown in diff view to detail-preview paging when no worktree file is in scope', () => {
+    let state = createLogInkState(rows, { activeView: 'diff' })
+    const context = { previewLineCount: 30 }
+
+    state = applyInput(state, '', { pageDown: true }, context)
+    expect(state.diffPreviewOffset).toBe(8)
+
+    state = applyInput(state, '', { pageUp: true }, context)
+    expect(state.diffPreviewOffset).toBe(0)
+  })
+
   it('emits worktree file and hunk mutation events from status and diff views', () => {
     expect(getLogInkInputEvents(
       createLogInkState(rows, { activeView: 'status' }),
