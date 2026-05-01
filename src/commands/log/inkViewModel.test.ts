@@ -162,6 +162,45 @@ describe('log Ink view model', () => {
     expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
   })
 
+  it('focusPendingCommit selects the synthetic row; getSelectedInkCommit returns undefined', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'focusPendingCommit' })
+
+    expect(state.pendingCommitFocused).toBe(true)
+    expect(state.selectedIndex).toBe(0)
+    expect(getSelectedInkCommit(state)).toBeUndefined()
+
+    state = applyLogInkAction(state, { type: 'unfocusPendingCommit' })
+    expect(state.pendingCommitFocused).toBe(false)
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
+  })
+
+  it('clears the pending-commit focus when navigating away from history', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'focusPendingCommit' })
+    expect(state.pendingCommitFocused).toBe(true)
+
+    state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+    expect(state.activeView).toBe('status')
+    expect(state.pendingCommitFocused).toBe(false)
+  })
+
+  it('clears the pending-commit focus on moveToTop / moveToBottom / navigateHome', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'focusPendingCommit' })
+    state = applyLogInkAction(state, { type: 'moveToBottom' })
+    expect(state.pendingCommitFocused).toBe(false)
+
+    state = applyLogInkAction(state, { type: 'focusPendingCommit' })
+    state = applyLogInkAction(state, { type: 'moveToTop' })
+    expect(state.pendingCommitFocused).toBe(false)
+
+    state = applyLogInkAction(state, { type: 'focusPendingCommit' })
+    state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+    state = applyLogInkAction(state, { type: 'navigateHome' })
+    expect(state.pendingCommitFocused).toBe(false)
+  })
+
   it('appends older rows while preserving the selected commit', () => {
     let state = createLogInkState(rows)
 
