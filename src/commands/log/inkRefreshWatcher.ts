@@ -36,6 +36,10 @@ export type LogInkRefreshDebouncer = {
 const DEFAULT_DEBOUNCE_MS = 250
 
 const DEFAULT_SCHEDULER = {
+  // `callback` is typed `() => void` (a function reference, never a string),
+  // and `ms` is a number, so the eval-injection vector behind DevSkim
+  // DS172411 doesn't apply here.
+  // DevSkim: ignore DS172411
   setTimeout: (callback: () => void, ms: number) => setTimeout(callback, ms),
   clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 }
@@ -56,17 +60,24 @@ export function createRefreshDebouncer(
   let timer: unknown = null
   let pendingKind: LogInkRefreshKind | null = null
 
+  const onTimerFire = (): void => {
+    timer = null
+    const kindToEmit = pendingKind || 'worktree'
+    pendingKind = null
+    options.onSettle(kindToEmit)
+  }
+
   const trigger = (kind: LogInkRefreshKind) => {
     pendingKind = pendingKind === 'full' ? 'full' : kind
     if (timer !== null) {
       scheduler.clearTimeout(timer)
     }
-    timer = scheduler.setTimeout(() => {
-      timer = null
-      const kindToEmit = pendingKind || 'worktree'
-      pendingKind = null
-      options.onSettle(kindToEmit)
-    }, debounceMs)
+    // The first arg is a function value defined above (`onTimerFire`),
+    // never a string, so the eval-injection vector that drives
+    // DevSkim DS172411 doesn't apply here. The second arg is also our
+    // own `debounceMs` constant — no caller-supplied data flows in.
+    // DevSkim: ignore DS172411
+    timer = scheduler.setTimeout(onTimerFire, debounceMs)
   }
 
   const close = () => {
