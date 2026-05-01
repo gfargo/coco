@@ -939,6 +939,11 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       .filter((index) => index >= 0)
   ), [filePreview])
 
+  const worktreeDirty = Boolean(
+    context.worktree &&
+    (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
+  )
+
   useInput((inputValue: string, key: LogInkInputKey) => {
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
@@ -950,6 +955,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       branchCount: context.branches?.localBranches.length,
       tagCount: context.tags?.tags.length,
       stashCount: context.stashes?.stashes.length,
+      worktreeDirty,
     }).forEach((event) => {
       if (event.type === 'exit') {
         exit()
@@ -1154,6 +1160,7 @@ function renderMainPanel(
     h,
     components,
     state,
+    context,
     bodyRows,
     theme,
     hasMoreCommits,
@@ -1165,6 +1172,7 @@ function renderHistoryPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
   state: LogInkState,
+  context: LogInkContext,
   bodyRows: number,
   theme: LogInkTheme,
   hasMoreCommits: boolean,
@@ -1172,7 +1180,18 @@ function renderHistoryPanel(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'commits'
-  const listRows = Math.max(3, bodyRows - 4)
+  const worktree = context.worktree
+  const worktreeDirty = Boolean(
+    worktree && (worktree.stagedCount + worktree.unstagedCount + worktree.untrackedCount) > 0
+  )
+  // The synthetic "(+) new commit" row only appears when the worktree is
+  // dirty AND the visible window is anchored at the top of the list — i.e.
+  // the first real commit (selectedIndex 0) is in view. Scroll past that
+  // and the row slides off naturally; the user can `gg` to bring it back.
+  const showPendingRow = worktreeDirty &&
+    !state.filter &&
+    state.selectedIndex === 0
+  const listRows = Math.max(3, bodyRows - (showPendingRow ? 5 : 4))
   const visible = getVisibleLogInkHistory(state, listRows)
   const loadState = loadingMoreCommits
     ? 'loading older commits'
@@ -1181,6 +1200,15 @@ function renderHistoryPanel(
       : 'loaded'
   const title = `${state.filteredCommits.length}/${state.commits.length} commits`
   const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
+
+  const pendingRowSelected = showPendingRow && Boolean(state.pendingCommitFocused) && focused
+  // Real-commit selection is suppressed while the cursor is on the pending
+  // row so the visible cursor only renders in one place at a time.
+  const realSelectionSuppressed = state.pendingCommitFocused
+
+  const pendingNode = showPendingRow
+    ? renderPendingCommitRow(h, Text, worktree!, pendingRowSelected, theme)
+    : null
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1193,6 +1221,7 @@ function renderHistoryPanel(
     h(Text, { bold: true }, panelTitle('Commits', focused)),
     h(Text, { dimColor: true }, `${title} | ${graphMode} | ${loadState}`)
   ),
+  ...(pendingNode ? [pendingNode] : []),
   visible.items.length === 0
     ? h(Text, { dimColor: true }, formatLogInkHistoryEmpty({
       filter: state.filter,
@@ -1207,15 +1236,51 @@ function renderHistoryPanel(
       }
 
       const { commit, selected } = item
+      const isVisuallySelected = selected && !realSelectionSuppressed
       const graph = item.graph.padEnd(visible.graphWidth)
       const row = `${graph} ${commit.shortHash} ${commit.date} ${commit.message}${formatInkRefLabels(commit.refs)}`
 
       return h(Text, {
         key: `${commit.hash}-${index}`,
-        backgroundColor: selected && !theme.noColor ? theme.colors.selection : undefined,
-        inverse: selected,
+        backgroundColor: isVisuallySelected && !theme.noColor ? theme.colors.selection : undefined,
+        inverse: isVisuallySelected,
       }, truncate(row, 140))
     }))
+}
+
+/**
+ * Render the synthetic "(+) new commit" affordance shown above the real
+ * commit list when the worktree is dirty. Pressing up at `selectedIndex 0`
+ * focuses this row; pressing Enter pushes the status view so the user can
+ * stage / commit.
+ */
+function renderPendingCommitRow(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  worktree: NonNullable<LogInkContext['worktree']>,
+  selected: boolean,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const parts: string[] = []
+  if (worktree.stagedCount) {
+    parts.push(`${worktree.stagedCount} staged`)
+  }
+  if (worktree.unstagedCount) {
+    parts.push(`${worktree.unstagedCount} unstaged`)
+  }
+  if (worktree.untrackedCount) {
+    parts.push(`${worktree.untrackedCount} untracked`)
+  }
+  const summary = parts.length ? parts.join(' · ') : 'pending changes'
+  const label = `${theme.ascii ? '[+]' : '(+)'} New commit · ${summary}`
+
+  return h(Text, {
+    key: 'pending-commit-row',
+    bold: true,
+    color: theme.noColor ? undefined : theme.colors.accent,
+    inverse: selected,
+    backgroundColor: selected && !theme.noColor ? theme.colors.selection : undefined,
+  }, truncate(label, 140))
 }
 
 function renderStatusSurface(
@@ -1693,6 +1758,13 @@ function renderDetailPanel(
 
   if (state.pendingConfirmationId || state.pendingMutationConfirmation) {
     return renderConfirmationPanel(h, components, state, width, theme, focused)
+  }
+
+  // The synthetic "(+) new commit" row routes the inspector through the
+  // worktree summary so the user sees what's staged / unstaged at a glance
+  // — same surface as the compose view's right panel.
+  if (state.activeView === 'history' && state.pendingCommitFocused) {
+    return renderComposeContextPanel(h, components, state, context, contextStatus, width, theme, focused)
   }
 
   // Status + worktree-sourced diff keep the staging compose panel — it's

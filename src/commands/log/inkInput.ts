@@ -50,6 +50,13 @@ export type LogInkInputContext = {
   branchCount?: number
   tagCount?: number
   stashCount?: number
+  /**
+   * True when the worktree has any staged, unstaged, or untracked changes.
+   * Drives the synthetic "(+) new commit" row at the top of the history
+   * list — pressing up at `selectedIndex === 0` transitions onto it; the
+   * row is hidden entirely when the worktree is clean.
+   */
+  worktreeDirty?: boolean
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -576,6 +583,16 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveStash', delta: -1, count: context.stashCount })]
     }
 
+    if (
+      state.activeView === 'history' &&
+      state.focus === 'commits' &&
+      state.selectedIndex === 0 &&
+      !state.pendingCommitFocused &&
+      context.worktreeDirty
+    ) {
+      return [action({ type: 'focusPendingCommit' })]
+    }
+
     return [
       action(state.focus === 'sidebar'
         ? { type: 'previousSidebarTab' }
@@ -584,6 +601,10 @@ export function getLogInkInputEvents(
   }
 
   if (key.downArrow || inputValue === 'j') {
+    if (state.activeView === 'history' && state.pendingCommitFocused) {
+      return [action({ type: 'unfocusPendingCommit' })]
+    }
+
     if (state.focus === 'detail' && context.detailFileCount) {
       return [action({ type: 'moveDetailFile', delta: 1, fileCount: context.detailFileCount })]
     }
@@ -685,6 +706,20 @@ export function getLogInkInputEvents(
     }
 
     return [action({ type: 'page', delta: 10 })]
+  }
+
+  // Enter on the synthetic "(+) new commit" row pushes the status view so
+  // the user can stage/commit. The pending flag is cleared on view push so
+  // popping back lands on the real commit at index 0.
+  if (
+    key.return &&
+    state.activeView === 'history' &&
+    state.pendingCommitFocused
+  ) {
+    return [
+      action({ type: 'pushView', value: 'status' }),
+      action({ type: 'setStatus', value: 'staging worktree changes' }),
+    ]
   }
 
   if (

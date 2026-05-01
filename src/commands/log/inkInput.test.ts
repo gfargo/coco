@@ -140,6 +140,36 @@ describe('log Ink input interactions', () => {
     expect(state.focus).toBe('sidebar')
   })
 
+  it('focuses the synthetic pending-commit row on k from index 0 when worktree is dirty', () => {
+    let state = createLogInkState(rows)
+    expect(state.selectedIndex).toBe(0)
+    expect(state.pendingCommitFocused).toBeFalsy()
+
+    // Without worktreeDirty in context, k at index 0 must remain a no-op.
+    state = applyInput(state, 'k')
+    expect(state.pendingCommitFocused).toBeFalsy()
+    expect(state.selectedIndex).toBe(0)
+
+    state = applyInput(state, 'k', {}, { worktreeDirty: true })
+    expect(state.pendingCommitFocused).toBe(true)
+    expect(state.selectedIndex).toBe(0)
+
+    state = applyInput(state, 'j', {}, { worktreeDirty: true })
+    expect(state.pendingCommitFocused).toBeFalsy()
+    expect(state.selectedIndex).toBe(0)
+  })
+
+  it('Enter on the pending-commit row pushes the status view', () => {
+    let state = createLogInkState(rows)
+    state = applyInput(state, 'k', {}, { worktreeDirty: true })
+    expect(state.pendingCommitFocused).toBe(true)
+
+    state = applyInput(state, '', { return: true }, { worktreeDirty: true })
+    expect(state.activeView).toBe('status')
+    // Pending flag clears on view push so popping back lands on real commit 0.
+    expect(state.pendingCommitFocused).toBeFalsy()
+  })
+
   it('supports next/previous match and top/bottom navigation conventions', () => {
     let state = createLogInkState(rows)
 

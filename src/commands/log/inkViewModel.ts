@@ -81,6 +81,19 @@ export type LogInkState = {
    * are selectable. Cleared when the diff view is popped or replaced.
    */
   diffSource?: LogInkDiffSource
+  /**
+   * When true, the cursor sits on the synthetic "(+) new commit" row
+   * that the history panel renders above the real commits whenever the
+   * worktree is dirty. `getSelectedInkCommit` returns undefined in this
+   * state, so the inspector and diff panels fall through to the worktree
+   * summary view.
+   *
+   * The reducer transitions in/out via the `move` action: pressing up
+   * (delta -1) at `selectedIndex === 0` flips the flag on; pressing
+   * down (delta +1) while focused unflips it. The history renderer is
+   * responsible for hiding the synthetic row when the worktree is clean.
+   */
+  pendingCommitFocused?: boolean
 }
 
 export type LogInkAction =
@@ -115,6 +128,8 @@ export type LogInkAction =
   | { type: 'navigateOpenComposeForFile'; fileIndex: number }
   | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
   | { type: 'jumpCommitDiffHunk'; delta: number; hunkOffsets: number[] }
+  | { type: 'focusPendingCommit' }
+  | { type: 'unfocusPendingCommit' }
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
@@ -264,6 +279,7 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
+    pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
 }
@@ -282,6 +298,7 @@ function withPoppedView(state: LogInkState): LogInkState {
     worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: next === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: next === 'diff' ? state.diffSource : undefined,
+    pendingCommitFocused: next === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
 }
@@ -299,6 +316,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
+    pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
 }
@@ -411,6 +429,12 @@ export function createLogInkState(
 }
 
 export function getSelectedInkCommit(state: LogInkState): GitLogCommitRow | undefined {
+  if (state.pendingCommitFocused) {
+    // The cursor is on the synthetic "(+) new commit" row, not a real
+    // commit; callers (detail loaders, diff intents) should treat this as
+    // "no commit selected" and route to the worktree summary instead.
+    return undefined
+  }
   return state.filteredCommits[state.selectedIndex]
 }
 
@@ -449,6 +473,24 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedIndex: clampIndex(state.selectedIndex + action.delta, state.filteredCommits.length),
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
+        pendingCommitFocused: false,
+        pendingKey: undefined,
+      }
+    case 'focusPendingCommit':
+      return {
+        ...state,
+        pendingCommitFocused: true,
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
+        pendingKey: undefined,
+      }
+    case 'unfocusPendingCommit':
+      return {
+        ...state,
+        pendingCommitFocused: false,
+        selectedIndex: 0,
         selectedFileIndex: 0,
         diffPreviewOffset: 0,
         pendingKey: undefined,
@@ -496,6 +538,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedIndex: clampIndex(state.filteredCommits.length - 1, state.filteredCommits.length),
         selectedFileIndex: 0,
         diffPreviewOffset: 0,
+        pendingCommitFocused: false,
         pendingKey: undefined,
       }
     case 'moveToTop':
@@ -504,6 +547,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedIndex: 0,
         selectedFileIndex: 0,
         diffPreviewOffset: 0,
+        pendingCommitFocused: false,
         pendingKey: undefined,
       }
     case 'nextSidebarTab':
@@ -586,6 +630,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         viewStack: [HOME_VIEW],
         worktreeDiffOffset: 0,
         selectedWorktreeHunkIndex: 0,
+        pendingCommitFocused: false,
         pendingKey: undefined,
       }
     }
