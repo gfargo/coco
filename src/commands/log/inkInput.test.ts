@@ -402,6 +402,99 @@ describe('log Ink input interactions', () => {
     expect(state.activeView).toBe('status')
   })
 
+  it('jumps to compose with the gc chord', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
+
+    state = applyInput(state, 'c')
+    expect(state.viewStack).toEqual(['history', 'compose'])
+    expect(state.activeView).toBe('compose')
+    expect(state.statusMessage).toBe('jumped to compose')
+  })
+
+  it('routes e from status to compose with editing started', () => {
+    let state = createLogInkState(rows, { activeView: 'status' })
+
+    const events = getLogInkInputEvents(state, 'e', {}, { worktreeFileCount: 1 })
+    expect(events).toEqual([
+      { type: 'action', action: { type: 'pushView', value: 'compose' } },
+      {
+        type: 'action',
+        action: { type: 'commitCompose', action: { type: 'setEditing', value: true } },
+      },
+    ])
+
+    state = events
+      .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+      .reduce((current, event) => applyLogInkAction(current, event.action), state)
+
+    expect(state.viewStack).toEqual(['status', 'compose'])
+    expect(state.activeView).toBe('compose')
+    expect(state.commitCompose.editing).toBe(true)
+  })
+
+  it('routes c from diff to compose then commits', () => {
+    const state = createLogInkState(rows, { activeView: 'diff' })
+
+    expect(getLogInkInputEvents(state, 'c', {}, { worktreeFileCount: 1 })).toEqual([
+      { type: 'action', action: { type: 'pushView', value: 'compose' } },
+      { type: 'createManualCommit' },
+    ])
+  })
+
+  it('e from compose toggles editing without re-pushing the view', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+    expect(getLogInkInputEvents(state, 'e')).toEqual([
+      {
+        type: 'action',
+        action: { type: 'commitCompose', action: { type: 'setEditing', value: true } },
+      },
+    ])
+  })
+
+  it('c from compose commits without re-pushing the view', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+    expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'createManualCommit' }])
+  })
+
+  it('preserves draft state across compose → history → compose round-trips', () => {
+    let state = createLogInkState(rows)
+
+    // gc → push compose
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'c')
+    expect(state.activeView).toBe('compose')
+
+    // e → start editing, then type "hello" into the summary.
+    state = applyInput(state, 'e')
+    expect(state.commitCompose.editing).toBe(true)
+    state = applyInput(state, 'h')
+    state = applyInput(state, 'e')
+    state = applyInput(state, 'l')
+    state = applyInput(state, 'l')
+    state = applyInput(state, 'o')
+    expect(state.commitCompose.summary).toBe('hello')
+
+    // Leave editing, then jump home.
+    state = applyInput(state, '', { escape: true })
+    expect(state.commitCompose.editing).toBe(false)
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'h')
+    expect(state.activeView).toBe('history')
+
+    // Round-trip back to compose. Draft must still be there.
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'c')
+    expect(state.activeView).toBe('compose')
+    expect(state.commitCompose.summary).toBe('hello')
+  })
+
   it('toggles graph with the relocated \\\\ key (g is now a pure prefix)', () => {
     let state = createLogInkState(rows)
     expect(state.fullGraph).toBe(false)

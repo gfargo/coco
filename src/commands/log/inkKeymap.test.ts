@@ -39,6 +39,16 @@ describe('log Ink keymap', () => {
     })
 
     expect(getLogInkFooterHints({
+      activeView: 'compose',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    })).toEqual({
+      contextual: ['e edit', 'tab field', 'c commit', 'I AI draft', 'esc back'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
+    })
+
+    expect(getLogInkFooterHints({
       filterMode: false,
       focus: 'sidebar',
       showHelp: false,
@@ -141,6 +151,17 @@ describe('log Ink keymap', () => {
     expect(formatLogInkBreadcrumb(['status'])).toBe('status')
     expect(formatLogInkBreadcrumb(['history', 'diff'])).toBe('history › diff')
     expect(formatLogInkBreadcrumb(['history', 'status', 'diff'])).toBe('history › status › diff')
+    expect(formatLogInkBreadcrumb(['history', 'compose'])).toBe('history › compose')
+  })
+
+  it('exposes the gc compose chord as a global navigation binding', () => {
+    const sections = getLogInkHelpSections({ activeView: 'history', focus: 'commits' })
+    const globalIds = sections[0].bindings.map((binding) => binding.id)
+
+    expect(globalIds).toContain('navigateCompose')
+
+    const composeBinding = sections[0].bindings.find((binding) => binding.id === 'navigateCompose')
+    expect(composeBinding?.keys).toEqual(['gc'])
   })
 
   it('derives command palette entries from the shared keymap', () => {

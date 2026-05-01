@@ -9,7 +9,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk'
 
 export type CreateLogInkStateOptions = {
