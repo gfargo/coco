@@ -255,6 +255,27 @@ describe('log Ink input interactions', () => {
     expect(state.diffPreviewOffset).toBe(0)
   })
 
+  it('opens the commit-diff view from detail focus, preserving the selected file', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setFocus', value: 'detail' })
+    state = applyLogInkAction(state, {
+      type: 'moveDetailFile',
+      delta: 2,
+      fileCount: 5,
+    })
+
+    const events = getLogInkInputEvents(state, '', { return: true }, { detailFileCount: 5 })
+    const navigateEvent = events.find((event) =>
+      event.type === 'action' && event.action.type === 'navigateOpenDiffForCommit'
+    )
+    expect(navigateEvent).toBeDefined()
+    if (navigateEvent && navigateEvent.type === 'action' &&
+        navigateEvent.action.type === 'navigateOpenDiffForCommit') {
+      expect(navigateEvent.action.fileIndex).toBe(2)
+      expect(navigateEvent.action.sha).toBe(state.filteredCommits[state.selectedIndex].hash)
+    }
+  })
+
   it('falls back to sidebar tab navigation when ]/[ is pressed outside diff view', () => {
     const stateHistory = createLogInkState(rows)
 

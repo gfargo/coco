@@ -195,21 +195,6 @@ function compactHash(hash: string | undefined): string {
   return hash ? hash.slice(0, 7) : '<none>'
 }
 
-function formatChangedFile(file: GitCommitDetail['files'][number]): string {
-  const stats = file.binary
-    ? 'bin'
-    : file.additions !== undefined || file.deletions !== undefined
-      ? `+${file.additions || 0}/-${file.deletions || 0}`
-      : ''
-  const suffix = stats ? ` ${stats}` : ''
-
-  if (file.oldPath) {
-    return `${file.status} ${file.oldPath} -> ${file.path}${suffix}`
-  }
-
-  return `${file.status} ${file.path}${suffix}`
-}
-
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
   try {
     return await promise
@@ -341,6 +326,46 @@ function diffLineProps(
   }
 
   return {}
+}
+
+/**
+ * Pick a theme color for a single name-status code (`A`, `M`, `D`,
+ * `R100`, etc.) so the inspector and commit-diff file list render with
+ * familiar git colors at a glance. Letters stay in the line so the
+ * meaning survives `NO_COLOR`.
+ */
+function statusCodeColor(status: string, theme: LogInkTheme): string | undefined {
+  if (theme.noColor) {
+    return undefined
+  }
+
+  const head = status.charAt(0)
+  switch (head) {
+    case 'A':
+      return theme.colors.gitAdded
+    case 'D':
+      return theme.colors.gitDeleted
+    case 'U':
+      return theme.colors.danger
+    case 'M':
+    case 'T':
+      return theme.colors.gitModified
+    case 'R':
+    case 'C':
+      return theme.colors.accent
+    default:
+      return undefined
+  }
+}
+
+function formatChangedFileStats(file: GitCommitDetail['files'][number]): string {
+  if (file.binary) {
+    return 'bin'
+  }
+  if (file.additions === undefined && file.deletions === undefined) {
+    return ''
+  }
+  return `+${file.additions || 0}/-${file.deletions || 0}`
 }
 
 function sidebarTabLabel(tab: LogInkSidebarTab): string {
@@ -1535,11 +1560,13 @@ function renderDiffSurface(
   const worktreeFile = worktree?.files[state.selectedWorktreeFileIndex]
   const visibleRows = Math.max(4, bodyRows - 4)
 
-  // When the user opens diff via history → Enter (no worktree file in scope),
-  // render the selected commit's file preview hunks instead of the worktree
-  // surface. j/k/PageUp/PageDown are wired through commitDiffHunkOffsets and
-  // the existing pageDetailPreview action so navigation stays symmetric.
-  const useCommitDiff = !worktreeFile && Boolean(selectedDetailFile)
+  // diffSource disambiguates: 'commit' was set when the user opened the
+  // diff via history → Enter (read-only commit-diff explore), 'worktree'
+  // was set when they came from status → Enter (stage / hunk / revert).
+  // Falls back to the previous heuristic when no source is recorded so
+  // older entry paths still render something sensible.
+  const useCommitDiff = state.diffSource === 'commit' ||
+    (state.diffSource === undefined && !worktreeFile && Boolean(selectedDetailFile))
 
   if (useCommitDiff) {
     const previewHunks = filePreview?.hunks || []
@@ -1654,7 +1681,6 @@ function renderDetailPanel(
   width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
-  const { Box, Text } = components
   const focused = state.focus === 'detail'
 
   if (state.showHelp) {
@@ -1669,16 +1695,50 @@ function renderDetailPanel(
     return renderConfirmationPanel(h, components, state, width, theme, focused)
   }
 
-  if (state.activeView === 'status' || state.activeView === 'diff') {
+  // Status + worktree-sourced diff keep the staging compose panel — it's
+  // the action surface for stage / hunk / commit. Commit-sourced diff (from
+  // history → Enter) gets a dedicated explore panel: subject, body, and a
+  // navigable file list whose selection swaps the center diff.
+  if (state.activeView === 'status') {
     return renderCommitPanel(h, components, state, context, contextStatus, width, theme, focused)
   }
 
+  if (state.activeView === 'diff') {
+    if (state.diffSource === 'commit') {
+      return renderCommitDiffDetail(h, components, state, detail, loading, width, theme, focused)
+    }
+    return renderCommitPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+
+  // Compose view: the right panel had been falling through to the inspector
+  // and showing the last selected commit's data, which is wrong context for
+  // an in-progress commit. Show the worktree summary instead.
+  if (state.activeView === 'compose') {
+    return renderComposeContextPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+
+  return renderHistoryInspector(
+    h, components, state, context, contextStatus, detail, loading,
+    filePreview, filePreviewLoading, width, theme, focused
+  )
+}
+
+function renderHistoryInspector(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  detail: GitCommitDetail | undefined,
+  loading: boolean,
+  _filePreview: GitCommitFilePreview | undefined,
+  _filePreviewLoading: boolean,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
   const selected = getSelectedInkCommit(state)
-  const selectedFile = detail?.files[state.selectedFileIndex]
-  const previewWindow = filePreview?.hunks.slice(state.diffPreviewOffset, state.diffPreviewOffset + 8)
-  const statLine = detail
-    ? `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
-    : ''
   const workflowSections = getLogInkWorkflowSections({
     ...context,
     contextLoading: isLogInkContextLoading(contextStatus),
@@ -1705,6 +1765,7 @@ function renderDetailPanel(
     }, truncate(line, width - 4))))
   }
 
+  const statLine = `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
   const headerLines = [
     detail.message,
     '',
@@ -1717,29 +1778,20 @@ function renderDetailPanel(
     ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']),
     '',
     'Changed files:',
-    ...(detail.files.length
-      ? detail.files.slice(0, 8).map((file, index) =>
-        `${index === state.selectedFileIndex ? '>' : ' '} ${formatChangedFile(file)}`
-      )
-      : ['No changed files found.']),
-    '',
-    selectedFile
-      ? `Preview: ${formatChangedFile(selectedFile)}`
-      : 'Preview: no file selected',
-    filePreviewLoading
-      ? 'Loading diff preview...'
-      : previewWindow?.length
-        ? `Lines ${state.diffPreviewOffset + 1}-${state.diffPreviewOffset + previewWindow.length}/${filePreview?.hunks.length || 0}`
-        : 'No hunk preview available.',
   ]
-  const previewLines = previewWindow || []
+
+  const fileListMaxRows = Math.max(4, Math.min(detail.files.length, 10))
+  const fileListNodes = renderCommitFileList(
+    h, Text, detail.files, state.selectedFileIndex, focused, fileListMaxRows, width, theme
+  )
+
   const trailerLines = [
     '',
     'Workflows:',
     ...workflowSections.flatMap((section) => [
       section.title,
       ...section.lines.slice(0, 3).map((line) => `  ${line}`),
-    ]).slice(0, 14),
+    ]).slice(0, 12),
   ]
 
   return h(Box, {
@@ -1754,14 +1806,200 @@ function renderDetailPanel(
     key: `detail-header-${index}`,
     dimColor: index > 1 && line !== 'Changed files:',
   }, truncate(line, width - 4))),
-  ...previewLines.map((line, index) => h(Text, {
-    key: `detail-preview-${state.diffPreviewOffset + index}`,
-    ...diffLineProps(line, theme),
-  }, truncate(`  ${line}`, width - 4))),
+  ...fileListNodes,
   ...trailerLines.map((line, index) => h(Text, {
     key: `detail-trailer-${index}`,
     dimColor: index > 0,
   }, truncate(line, width - 4))))
+}
+
+function renderCommitDiffDetail(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  detail: GitCommitDetail | undefined,
+  loading: boolean,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const selected = getSelectedInkCommit(state)
+
+  if (!detail) {
+    const fallbackLines = [
+      selected?.message || 'No commit selected.',
+      '',
+      loading ? 'Loading commit details...' : 'Commit details unavailable.',
+    ]
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      width,
+      paddingX: 1,
+    },
+    h(Text, { bold: true }, panelTitle('Commit', focused)),
+    ...fallbackLines.map((line, index) => h(Text, {
+      key: `commit-diff-${index}`,
+      dimColor: index > 1,
+    }, truncate(line, width - 4))))
+  }
+
+  const statLine = `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
+  const headerLines = [
+    detail.message,
+    '',
+    `${compactHash(detail.hash)}  ${detail.date}  ${detail.author}`,
+    detail.refs.length ? `Refs: ${detail.refs.join(', ')}` : 'Refs: none',
+    statLine,
+    '',
+  ]
+  const bodyLines = detail.body ? detail.body.split('\n').slice(0, 5) : []
+  const filesHeader = ['Files:']
+  const fileListMaxRows = Math.max(4, Math.min(detail.files.length, 12))
+  const fileListNodes = renderCommitFileList(
+    h, Text, detail.files, state.selectedFileIndex, focused, fileListMaxRows, width, theme
+  )
+  const hint = focused
+    ? 'j/k pick file · enter swaps the center diff'
+    : 'tab focuses the file list'
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle('Commit', focused)),
+  ...headerLines.map((line, index) => h(Text, {
+    key: `commit-diff-header-${index}`,
+    bold: index === 0,
+    dimColor: index > 0 && index < headerLines.length - 1,
+  }, truncate(line, width - 4))),
+  ...bodyLines.map((line, index) => h(Text, {
+    key: `commit-diff-body-${index}`,
+    dimColor: true,
+  }, truncate(line, width - 4))),
+  ...(bodyLines.length ? [h(Text, { key: 'commit-diff-body-spacer' }, '')] : []),
+  ...filesHeader.map((line, index) => h(Text, {
+    key: `commit-diff-files-${index}`,
+    bold: true,
+  }, truncate(line, width - 4))),
+  ...fileListNodes,
+  h(Text, undefined, ''),
+  h(Text, { dimColor: true }, truncate(hint, width - 4)))
+}
+
+function renderComposeContextPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const worktree = context.worktree
+  const compose = state.commitCompose
+  const loadingWorktree = isLogInkContextKeyLoading(contextStatus, 'worktree')
+  const summary = loadingWorktree
+    ? 'Worktree status loading'
+    : worktree
+      ? `${worktree.stagedCount} staged · ${worktree.unstagedCount} unstaged · ${worktree.untrackedCount} untracked`
+      : 'No worktree information yet'
+  const stagedFiles = (worktree?.files || [])
+    .filter((file) => file.indexStatus !== ' ' && file.indexStatus !== '?')
+    .slice(0, 12)
+  const unstagedFiles = (worktree?.files || [])
+    .filter((file) => file.worktreeStatus !== ' ' && file.indexStatus !== '?')
+    .slice(0, 6)
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle('Worktree', focused)),
+  h(Text, { dimColor: true }, truncate(summary, width - 4)),
+  h(Text, undefined, ''),
+  ...(compose.loading
+    ? [h(Text, {
+      key: 'compose-context-loading',
+      bold: true,
+      color: theme.noColor ? undefined : theme.colors.accent,
+    }, truncate(theme.ascii ? '[...] AI draft in progress' : '⏳ AI draft in progress', width - 4))]
+    : []),
+  ...(stagedFiles.length
+    ? [
+      h(Text, { key: 'compose-context-staged-title', bold: true }, 'Staged'),
+      ...stagedFiles.map((file, index) => h(Text, {
+        key: `compose-context-staged-${index}`,
+        color: theme.noColor ? undefined : theme.colors.gitAdded,
+      }, truncate(`  ${file.indexStatus} ${file.path}`, width - 4))),
+      h(Text, { key: 'compose-context-staged-spacer' }, ''),
+    ]
+    : []),
+  ...(unstagedFiles.length
+    ? [
+      h(Text, { key: 'compose-context-unstaged-title', bold: true }, 'Unstaged'),
+      ...unstagedFiles.map((file, index) => h(Text, {
+        key: `compose-context-unstaged-${index}`,
+        color: theme.noColor ? undefined : theme.colors.gitModified,
+      }, truncate(`  ${file.worktreeStatus} ${file.path}`, width - 4))),
+    ]
+    : !stagedFiles.length && !loadingWorktree
+      ? [h(Text, { dimColor: true }, 'No worktree changes detected.')]
+      : []))
+}
+
+/**
+ * Render a list of changed files with status-code colors and stats. Used
+ * by both the history inspector and the commit-diff detail panel so the
+ * two surfaces stay visually consistent.
+ *
+ * `focused` only controls whether the cursor row is inverse-highlighted —
+ * keys j/k and Enter dispatch via the input handler regardless.
+ */
+function renderCommitFileList(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  files: GitCommitDetail['files'],
+  selectedIndex: number,
+  focused: boolean,
+  maxRows: number,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement[] {
+  if (!files.length) {
+    return [h(Text, { key: 'commit-file-list-empty', dimColor: true }, 'No changed files found.')]
+  }
+
+  const clamped = Math.max(0, Math.min(selectedIndex, files.length - 1))
+  const startIndex = Math.max(0, clamped - Math.floor(maxRows / 2))
+  const visible = files.slice(startIndex, startIndex + maxRows)
+
+  return visible.map((file, offset) => {
+    const index = startIndex + offset
+    const isSelected = index === clamped
+    const cursor = isSelected ? '>' : ' '
+    const stats = formatChangedFileStats(file)
+    const renamed = file.oldPath ? ` (was ${file.oldPath})` : ''
+    const statusCode = file.status.padEnd(3)
+    const label = `${cursor} ${statusCode} ${file.path}${renamed}${stats ? `  ${stats}` : ''}`
+
+    return h(Text, {
+      key: `commit-file-${index}`,
+      color: statusCodeColor(file.status, theme),
+      inverse: isSelected && focused && !theme.noColor,
+      bold: isSelected,
+    }, truncate(label, width - 4))
+  })
 }
 
 function renderCommitPanel(
