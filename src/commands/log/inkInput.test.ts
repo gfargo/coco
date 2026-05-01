@@ -185,7 +185,16 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, '', { pageDown: true }, { worktreeDiffLineCount: 30 })
     expect(state.worktreeDiffOffset).toBe(8)
 
+    // j now scrolls the diff one line at a time (line-level scroll), so
+    // after pageDown(+8) a single j advances to offset 9. Hunk navigation
+    // moved to ]/[.
     state = applyInput(state, 'j', {}, {
+      worktreeDiffLineCount: 30,
+      worktreeHunkOffsets: [2, 12, 20],
+    })
+    expect(state.worktreeDiffOffset).toBe(9)
+
+    state = applyInput(state, ']', {}, {
       worktreeDiffLineCount: 30,
       worktreeHunkOffsets: [2, 12, 20],
     })
@@ -196,31 +205,42 @@ describe('log Ink input interactions', () => {
     expect(state.activeView).toBe('status')
   })
 
-  it('routes j/k in diff view to commit-diff hunks when no worktree file is in scope', () => {
+  it('scrolls the commit-diff preview line-by-line on j/k in diff view', () => {
     let state = createLogInkState(rows, { activeView: 'diff' })
-
-    // Worktree context is empty; commit-diff hunk offsets are present.
     const context = { commitDiffHunkOffsets: [2, 8, 14], previewLineCount: 30 }
 
-    // Pressing k from offset 0 (before the first hunk) must be a no-op,
-    // not a forward jump. This is the regression from inkViewModel:330.
+    // k from offset 0 is a no-op (not a forward jump).
     state = applyInput(state, 'k', {}, context)
     expect(state.diffPreviewOffset).toBe(0)
 
     state = applyInput(state, 'j', {}, context)
-    expect(state.diffPreviewOffset).toBe(2)
+    expect(state.diffPreviewOffset).toBe(1)
 
     state = applyInput(state, 'j', {}, context)
-    expect(state.diffPreviewOffset).toBe(8)
+    expect(state.diffPreviewOffset).toBe(2)
 
     state = applyInput(state, 'k', {}, context)
+    expect(state.diffPreviewOffset).toBe(1)
+  })
+
+  it('jumps commit-diff hunks bidirectionally on ]/[ in diff view', () => {
+    let state = createLogInkState(rows, { activeView: 'diff' })
+    const context = { commitDiffHunkOffsets: [2, 8, 14], previewLineCount: 30 }
+
+    state = applyInput(state, ']', {}, context)
     expect(state.diffPreviewOffset).toBe(2)
 
-    // Pressing j from the last hunk must stay put, never wrap backward.
-    state = applyInput(state, 'j', {}, context)
-    state = applyInput(state, 'j', {}, context)
+    state = applyInput(state, ']', {}, context)
+    expect(state.diffPreviewOffset).toBe(8)
+
+    state = applyInput(state, '[', {}, context)
+    expect(state.diffPreviewOffset).toBe(2)
+
+    // Past the last hunk, ] stays put; before the first hunk, [ stays put.
+    state = applyInput(state, ']', {}, context)
+    state = applyInput(state, ']', {}, context)
     expect(state.diffPreviewOffset).toBe(14)
-    state = applyInput(state, 'j', {}, context)
+    state = applyInput(state, ']', {}, context)
     expect(state.diffPreviewOffset).toBe(14)
   })
 
@@ -233,6 +253,17 @@ describe('log Ink input interactions', () => {
 
     state = applyInput(state, '', { pageUp: true }, context)
     expect(state.diffPreviewOffset).toBe(0)
+  })
+
+  it('falls back to sidebar tab navigation when ]/[ is pressed outside diff view', () => {
+    const stateHistory = createLogInkState(rows)
+
+    expect(getLogInkInputEvents(stateHistory, ']', {})).toEqual([
+      { type: 'action', action: { type: 'nextSidebarTab' } },
+    ])
+    expect(getLogInkInputEvents(stateHistory, '[', {})).toEqual([
+      { type: 'action', action: { type: 'previousSidebarTab' } },
+    ])
   })
 
   it('emits worktree file and hunk mutation events from status and diff views', () => {
