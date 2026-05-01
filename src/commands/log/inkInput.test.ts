@@ -95,8 +95,18 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, '', { tab: true, shift: true })
     expect(state.focus).toBe('commits')
 
-    state = applyInput(state, 'g')
+    state = applyInput(state, '\\')
     expect(state.fullGraph).toBe(true)
+
+    state = applyInput(state, '\\')
+    expect(state.fullGraph).toBe(false)
+
+    // gg jump to top: first 'g' is a pure prefix, second 'g' fires moveToTop.
+    state = applyLogInkAction(state, { type: 'move', delta: 2 })
+    expect(state.selectedIndex).toBeGreaterThan(0)
+
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
 
     state = applyInput(state, 'g')
     expect(state.selectedIndex).toBe(0)
@@ -298,6 +308,112 @@ describe('log Ink input interactions', () => {
     expect(getLogInkInputEvents(createLogInkState(rows), 'r')).toEqual([
       { type: 'refreshContext' },
     ])
+  })
+
+  it('jumps to history with the gh chord and clears the navigation stack', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+    state = applyLogInkAction(state, { type: 'pushView', value: 'diff' })
+
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
+
+    state = applyInput(state, 'h')
+    expect(state.viewStack).toEqual(['history'])
+    expect(state.activeView).toBe('history')
+    expect(state.statusMessage).toBe('jumped to history')
+  })
+
+  it('pushes the status view with the gs chord', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 's')
+
+    expect(state.viewStack).toEqual(['history', 'status'])
+    expect(state.activeView).toBe('status')
+    expect(state.statusMessage).toBe('jumped to status')
+  })
+
+  it('pushes the diff view with the gd chord', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'd')
+
+    expect(state.viewStack).toEqual(['history', 'diff'])
+    expect(state.activeView).toBe('diff')
+    expect(state.statusMessage).toBe('jumped to diff')
+  })
+
+  it('pops the navigation stack with < (back)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+    state = applyLogInkAction(state, { type: 'pushView', value: 'diff' })
+
+    state = applyInput(state, '<')
+    expect(state.viewStack).toEqual(['history', 'status'])
+    expect(state.activeView).toBe('status')
+
+    state = applyInput(state, '<')
+    expect(state.viewStack).toEqual(['history'])
+    expect(state.activeView).toBe('history')
+
+    // No-op when the stack is at the root.
+    state = applyInput(state, '<')
+    expect(state.viewStack).toEqual(['history'])
+  })
+
+  it('uses escape as back when the navigation stack has been pushed onto', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'diff' })
+
+    state = applyInput(state, '', { escape: true })
+    expect(state.viewStack).toEqual(['history'])
+    expect(state.activeView).toBe('history')
+  })
+
+  it('opens diff for the selected commit with enter from history view', () => {
+    let state = createLogInkState(rows)
+    state = applyInput(state, 'j') // move to def5678
+    expect(state.selectedIndex).toBe(1)
+
+    state = applyInput(state, '', { return: true })
+
+    expect(state.viewStack).toEqual(['history', 'diff'])
+    expect(state.activeView).toBe('diff')
+    expect(state.statusMessage).toBe('viewing diff for def5678')
+  })
+
+  it('opens diff for the selected file with enter from status view, preserving stack depth', () => {
+    let state = createLogInkState(rows, { activeView: 'status' })
+
+    state = applyInput(state, 'j', {}, { worktreeFileCount: 3 })
+    expect(state.selectedWorktreeFileIndex).toBe(1)
+
+    state = applyInput(state, '', { return: true }, { worktreeFileCount: 3 })
+
+    expect(state.viewStack).toEqual(['status', 'diff'])
+    expect(state.activeView).toBe('diff')
+    expect(state.selectedWorktreeFileIndex).toBe(1)
+
+    // Escape pops back to status (where we came from).
+    state = applyInput(state, '', { escape: true })
+    expect(state.activeView).toBe('status')
+  })
+
+  it('toggles graph with the relocated \\\\ key (g is now a pure prefix)', () => {
+    let state = createLogInkState(rows)
+    expect(state.fullGraph).toBe(false)
+
+    // Single g press only sets a pending chord — no graph flicker.
+    state = applyInput(state, 'g')
+    expect(state.fullGraph).toBe(false)
+    expect(state.pendingKey).toBe('g')
+
+    // \\ is the new toggle.
+    state = applyInput(state, '\\')
+    expect(state.fullGraph).toBe(true)
   })
 
   it('gates destructive and AI workflow actions behind confirmation', () => {
