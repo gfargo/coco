@@ -2,6 +2,7 @@ import {
   LOG_INK_KEY_BINDINGS,
   filterLogInkPaletteCommands,
   formatLogInkBreadcrumb,
+  getLogInkChordContinuations,
   getLogInkCommandPaletteItems,
   getLogInkFooterHints,
   getLogInkHelpSections,
@@ -271,6 +272,45 @@ describe('log Ink keymap', () => {
     })
     expect(palette.find((item) => item.id === 'workflowActions')).toMatchObject({
       label: 'workflows',
+    })
+  })
+
+  describe('chord continuations', () => {
+    it('returns the registered second-key continuations for the g chord prefix', () => {
+      const continuations = getLogInkChordContinuations('g')
+      const keys = continuations.map((entry) => entry.key)
+      expect(keys).toEqual(expect.arrayContaining(['h', 's', 'd', 'c', 'b', 't', 'z', 'g']))
+      // Sorted alphabetically for stable rendering.
+      expect(keys).toEqual([...keys].sort((a, b) => a.localeCompare(b)))
+    })
+
+    it('returns an empty list for unknown prefixes', () => {
+      expect(getLogInkChordContinuations('z')).toEqual([])
+    })
+  })
+
+  describe('footer chord hints', () => {
+    it('replaces the contextual slot with chord continuations when pendingKey is set', () => {
+      const hints = getLogInkFooterHints({
+        activeView: 'history',
+        filterMode: false,
+        focus: 'commits',
+        showHelp: false,
+        pendingKey: 'g',
+      })
+      expect(hints.contextual[0]).toBe('g …')
+      expect(hints.contextual.some((entry) => entry.startsWith('h '))).toBe(true)
+      expect(hints.global).toContain('esc cancel')
+    })
+
+    it('falls through to normal hints when pendingKey is unset', () => {
+      const hints = getLogInkFooterHints({
+        activeView: 'history',
+        filterMode: false,
+        focus: 'commits',
+        showHelp: false,
+      })
+      expect(hints.contextual[0]).not.toBe('g …')
     })
   })
 })

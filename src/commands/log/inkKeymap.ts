@@ -308,6 +308,40 @@ export type GetLogInkFooterHintsOptions = {
   focus: LogInkFocus
   showHelp: boolean
   showCommandPalette?: boolean
+  /** Set when the user has pressed a chord prefix (e.g. `g`) and the
+   * dispatcher is waiting for the second key. The footer surfaces the
+   * available continuations inline as a fallback for the popup overlay. */
+  pendingKey?: string
+}
+
+export type LogInkChordContinuation = {
+  /** Single character — the second key in the chord (e.g. `h` for `gh`). */
+  key: string
+  label: string
+  description: string
+}
+
+/**
+ * Surface the second-key continuations for a chord prefix (e.g. `g`)
+ * as a flat list, sourced from the canonical keymap so the help, footer
+ * hint, and which-key overlay all stay in sync. Continuations are sorted
+ * by key for stable, scannable output.
+ */
+export function getLogInkChordContinuations(prefix: string): LogInkChordContinuation[] {
+  const continuations: LogInkChordContinuation[] = []
+  for (const binding of LOG_INK_KEY_BINDINGS) {
+    for (const keys of binding.keys) {
+      if (keys.length === 2 && keys.startsWith(prefix)) {
+        continuations.push({
+          key: keys.charAt(1),
+          label: binding.label,
+          description: binding.description,
+        })
+        break
+      }
+    }
+  }
+  return continuations.sort((a, b) => a.key.localeCompare(b.key))
 }
 
 /**
@@ -374,6 +408,19 @@ export function formatLogInkBreadcrumb(viewStack: LogInkView[]): string {
 }
 
 export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
+  if (options.pendingKey) {
+    const continuations = getLogInkChordContinuations(options.pendingKey)
+    if (continuations.length > 0) {
+      return {
+        contextual: [
+          `${options.pendingKey} …`,
+          ...continuations.map((entry) => `${entry.key} ${entry.label}`),
+        ],
+        global: ['esc cancel'],
+      }
+    }
+  }
+
   if (options.filterMode) {
     return {
       contextual: ['enter apply', 'esc cancel', 'ctrl+u clear'],

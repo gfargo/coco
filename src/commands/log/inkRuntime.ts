@@ -67,16 +67,19 @@ import {
   formatBindingKeys,
   formatLogInkBreadcrumb,
   filterLogInkPaletteCommands,
+  getLogInkChordContinuations,
   getLogInkPaletteCommands,
   getLogInkFooterHints,
   getLogInkHelpSections,
 } from './inkKeymap'
 import { substituteGraphChars } from './inkGraphChars'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
+import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
 import {
   LogInkRefreshWatcher,
   createRefreshWatcher,
 } from './inkRefreshWatcher'
+import { installTerminalLifecycle } from './inkTerminalLifecycle'
 import {
   LOG_INK_DEFAULT_COLUMNS,
   LOG_INK_DEFAULT_ROWS,
@@ -171,6 +174,7 @@ type LogInkRuntime = {
       }
     ) => {
       waitUntilExit: () => Promise<void>
+      unmount: () => void
     }
     useApp: () => {
       exit: () => void
@@ -193,6 +197,12 @@ type LogInkComponentDeps = LogInkRuntime & {
   logArgv?: LogArgv
   rows: GitLogRow[]
   theme: LogInkTheme
+  /**
+   * Mutable ref the runtime fills with a force-render callback. The
+   * terminal-lifecycle module invokes it on `SIGCONT` so users land on a
+   * painted screen after `fg` instead of an empty alt buffer.
+   */
+  resumeRef?: { current: (() => void) | null }
 }
 
 const truncate = truncateCells
@@ -514,6 +524,11 @@ export async function startInkInteractiveLog(
 
   const runtime = await loadInkRuntime()
   const { ink, React } = runtime
+
+  // Forward declared so the lifecycle handler can call back into the React
+  // tree on SIGCONT to force a repaint after the user `fg`s.
+  const resumeRef: { current: (() => void) | null } = { current: null }
+
   const app = React.createElement(LogInkApp, {
     appLabel: options.appLabel || 'coco log',
     git,
@@ -523,14 +538,26 @@ export async function startInkInteractiveLog(
     React,
     rows,
     theme: createLogInkTheme(options.theme),
+    resumeRef,
   })
   const instance = ink.render(app, getLogInkRenderOptions({ input, output, error }))
 
-  await instance.waitUntilExit()
+  const lifecycle = installTerminalLifecycle({
+    input,
+    output,
+    instance,
+    onResume: () => resumeRef.current?.(),
+  })
+
+  try {
+    await instance.waitUntilExit()
+  } finally {
+    lifecycle.dispose()
+  }
 }
 
 function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, git, ink, initialView, logArgv, React, rows, theme } = deps
+  const { appLabel, git, ink, initialView, logArgv, React, resumeRef, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -539,6 +566,22 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
     rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
   })
+  // Bumping this on SIGCONT forces the existing tree to repaint so users
+  // land on a drawn screen after `fg` instead of an empty alt buffer.
+  const [, setResumeTick] = React.useState(0)
+  React.useEffect(() => {
+    if (!resumeRef) {
+      return
+    }
+    resumeRef.current = () => setResumeTick((tick) => tick + 1)
+    return () => {
+      resumeRef.current = null
+    }
+  }, [resumeRef])
+  // First-launch onboarding (P1.3). Persisted via a marker file in the
+  // user's cache dir so the tip never reappears once dismissed. Lazy
+  // initializer so the fs check only runs on mount, not every render.
+  const [showOnboarding, setShowOnboarding] = React.useState<boolean>(() => !hasSeenOnboarding())
   const [state, setState] = React.useState<LogInkState>(() =>
     createLogInkState(rows, { activeView: initialView })
   )
@@ -996,6 +1039,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   )
 
   useInput((inputValue: string, key: LogInkInputKey) => {
+    // First-launch onboarding (P1.3): any keystroke dismisses the overlay
+    // and writes the seen-marker. Swallow the keystroke so the same key
+    // doesn't also trigger normal input dispatch.
+    if (showOnboarding) {
+      setShowOnboarding(false)
+      markOnboardingSeen()
+      return
+    }
+
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
       previewLineCount: filePreview?.hunks.length,
@@ -1041,6 +1093,12 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     h(Text, undefined, `Terminal too small: ${layout.columns}x${layout.rows}`),
     h(Text, { dimColor: true }, `Minimum size is ${LOG_INK_MIN_COLUMNS}x${LOG_INK_MIN_ROWS}.`),
     h(Text, { dimColor: true }, 'Resize the terminal or run plain coco log.'))
+  }
+
+  // First-launch onboarding overlay (P1.3) replaces the entire UI for
+  // one render — any keystroke dismisses it and persists the seen-marker.
+  if (showOnboarding) {
+    return renderOnboardingOverlay(h, { Box, Text }, layout.rows, layout.columns, theme, appLabel)
   }
 
   return h(Box, { flexDirection: 'column', height: layout.rows },
@@ -1857,6 +1915,13 @@ function renderDetailPanel(
     return renderConfirmationPanel(h, components, state, width, theme, focused)
   }
 
+  // which-key style overlay — shows the available chord continuations
+  // when the user has pressed the prefix and we're waiting for the
+  // second key. Mirrors helix / which-key.nvim / doom-emacs.
+  if (state.pendingKey) {
+    return renderChordOverlay(h, components, state, width, theme, focused)
+  }
+
   // The synthetic "(+) new commit" row routes the inspector through the
   // worktree summary so the user sees what's staged / unstaged at a glance
   // — same surface as the compose view's right panel.
@@ -2269,6 +2334,109 @@ function renderConfirmationPanel(
   h(Text, undefined, 'Press y to confirm or n/Esc to cancel.'))
 }
 
+/**
+ * First-launch onboarding overlay (P1.3). Shown once per machine, gated
+ * by an XDG-style cache marker so subsequent launches go straight to the
+ * normal UI. Auto-dismisses on the next keystroke.
+ *
+ * Replaces the whole layout for the first render rather than overlaying
+ * a transient banner — Ink doesn't support floating elements, and a full
+ * takeover keeps the message readable on small terminals while still
+ * being instantly dismissible.
+ */
+function renderOnboardingOverlay(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  rows: number,
+  columns: number,
+  theme: LogInkTheme,
+  appLabel: string
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const accent = theme.noColor ? undefined : theme.colors.accent
+  const tips = [
+    { keys: '?', text: 'open the help panel' },
+    { keys: ':', text: 'open the command palette' },
+    { keys: 'g h', text: 'jump to history (g s status, g d diff, g c compose, g b branches, g t tags, g z stash)' },
+    { keys: '<  esc', text: 'pop the navigation stack / go back' },
+    { keys: '/', text: 'filter the active list' },
+    { keys: 'q  ctrl+c', text: 'quit' },
+  ]
+  const maxKeys = tips.reduce((max, tip) => Math.max(max, tip.keys.length), 0)
+  const lineWidth = Math.max(40, columns - 4)
+
+  return h(Box, {
+    flexDirection: 'column',
+    height: rows,
+    paddingX: 2,
+    paddingY: 1,
+  },
+  h(Text, { bold: true, color: accent }, `Welcome to ${appLabel}`),
+  h(Text, { dimColor: true }, 'A quick keyboard tour — press any key to dismiss.'),
+  h(Text, undefined, ''),
+  ...tips.map((tip, index) => h(Text, { key: `onboarding-tip-${index}` },
+    h(Text, { color: accent, bold: true }, `  ${tip.keys.padEnd(maxKeys)}  `),
+    h(Text, undefined, truncate(tip.text, lineWidth - maxKeys - 4)))),
+  h(Text, undefined, ''),
+  h(Text, { dimColor: true }, 'This tip is shown once per machine. Press any key to continue.'))
+}
+
+/**
+ * Which-key style chord overlay (P1.1). When the user presses a chord
+ * prefix (currently just `g`), the dispatcher sets `state.pendingKey`
+ * and waits for the second key. This panel surfaces the available
+ * continuations so newcomers don't have to memorize the chord set.
+ *
+ * Renders in the detail panel slot; auto-dismisses when the chord
+ * completes or `pendingKey` is otherwise cleared.
+ */
+function renderChordOverlay(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const prefix = state.pendingKey || ''
+  const continuations = getLogInkChordContinuations(prefix)
+  const accent = theme.noColor ? undefined : theme.colors.accent
+
+  const lines: ReactTypes.ReactNode[] = [
+    h(Text, { key: 'chord-title', bold: true }, panelTitle(`${prefix} … jump`, focused)),
+    h(Text, { key: 'chord-spacer' }, ''),
+  ]
+
+  if (continuations.length === 0) {
+    lines.push(h(Text, {
+      key: 'chord-empty',
+      dimColor: true,
+    }, truncate(`No bindings registered for the ${prefix} prefix.`, width - 4)))
+  } else {
+    for (const entry of continuations) {
+      lines.push(h(Text, { key: `chord-${entry.key}` },
+        h(Text, { color: accent, bold: true }, `  ${entry.key}  `),
+        h(Text, undefined, truncate(`${entry.label.padEnd(10)} ${entry.description}`, width - 9))
+      ))
+    }
+  }
+
+  lines.push(h(Text, { key: 'chord-foot-spacer' }, ''))
+  lines.push(h(Text, {
+    key: 'chord-hint',
+    dimColor: true,
+  }, truncate('press the second key to jump · esc cancels', width - 4)))
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  }, ...lines)
+}
+
 function renderHelpPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -2389,6 +2557,7 @@ function renderFooter(
     activeView: state.activeView,
     filterMode: state.filterMode,
     focus: state.focus,
+    pendingKey: state.pendingKey,
     showCommandPalette: state.showCommandPalette,
     showHelp: state.showHelp,
   })
