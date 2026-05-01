@@ -527,7 +527,7 @@ export async function startInkInteractiveLog(
 
   // Forward declared so the lifecycle handler can call back into the React
   // tree on SIGCONT to force a repaint after the user `fg`s.
-  let resumeRef: { current: (() => void) | null } = { current: null }
+  const resumeRef: { current: (() => void) | null } = { current: null }
 
   const app = React.createElement(LogInkApp, {
     appLabel: options.appLabel || 'coco log',
