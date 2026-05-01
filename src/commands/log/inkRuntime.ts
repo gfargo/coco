@@ -43,6 +43,7 @@ import { runCommitDraftWorkflow } from './commitWorkflowActions'
 import {
   GitCommitDetail,
   GitCommitFilePreview,
+  GitLogCommitRow,
   GitLogRow,
   LOG_INTERACTIVE_DEFAULT_LIMIT,
   getCommitDetail,
@@ -70,6 +71,7 @@ import {
   getLogInkFooterHints,
   getLogInkHelpSections,
 } from './inkKeymap'
+import { substituteGraphChars } from './inkGraphChars'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import {
   LogInkRefreshWatcher,
@@ -92,7 +94,7 @@ import {
   formatLogInkStatusEmpty,
   formatLogInkTagsEmpty,
 } from './inkSurfaceStates'
-import { truncateCells } from './inkText'
+import { cellWidth, truncateCells } from './inkText'
 import {
   LogInkSidebarTab,
   LogInkState,
@@ -1280,21 +1282,67 @@ function renderHistoryPanel(
       if (item.type === 'graph') {
         return h(Text, {
           key: `graph-${index}-${item.graph}`,
-          dimColor: true,
-        }, truncate(item.graph.padEnd(visible.graphWidth), 140))
+          color: theme.noColor ? undefined : theme.colors.muted,
+          dimColor: theme.noColor,
+        }, truncate(substituteGraphChars(
+          item.graph.padEnd(visible.graphWidth),
+          { ascii: theme.ascii }
+        ), 140))
       }
 
-      const { commit, selected } = item
-      const isVisuallySelected = selected && !realSelectionSuppressed
-      const graph = item.graph.padEnd(visible.graphWidth)
-      const row = `${graph} ${commit.shortHash} ${commit.date} ${commit.message}${formatInkRefLabels(commit.refs)}`
-
-      return h(Text, {
-        key: `${commit.hash}-${index}`,
-        backgroundColor: isVisuallySelected && !theme.noColor ? theme.colors.selection : undefined,
-        inverse: isVisuallySelected,
-      }, truncate(row, 140))
+      return renderCommitHistoryRow(
+        h, Text, item.commit, item.graph, visible.graphWidth,
+        Boolean(item.selected) && !realSelectionSuppressed, theme, index
+      )
     }))
+}
+
+/**
+ * Render a single commit row with each segment in its own colored span.
+ * Graph chars render in `theme.colors.muted` so the topology visually
+ * recedes; shortHash takes the accent so the eye lands on the commit
+ * identifier first; date is dimmed; message is normal; ref labels
+ * (`[HEAD -> main]`) trail in accent. Selection styling is applied at
+ * the outer span via `backgroundColor` / `inverse` so the highlight
+ * fills the whole row regardless of inner-span coloring.
+ *
+ * Truncation is per-segment so the variable-length message field gets
+ * the leftover budget after fixed segments are accounted for.
+ */
+function renderCommitHistoryRow(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  commit: GitLogCommitRow,
+  graph: string,
+  graphWidth: number,
+  selected: boolean,
+  theme: LogInkTheme,
+  index: number
+): ReactTypes.ReactElement {
+  const renderedGraph = substituteGraphChars(graph.padEnd(graphWidth), { ascii: theme.ascii })
+  const refs = formatInkRefLabels(commit.refs)
+  const totalWidth = 140
+  const fixedWidth = graphWidth + 1 + commit.shortHash.length + 1 + commit.date.length + 1
+  const messageRoom = Math.max(8, totalWidth - fixedWidth - cellWidth(refs))
+  const message = truncate(commit.message, messageRoom)
+
+  const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
+  const accent = theme.noColor ? undefined : theme.colors.accent
+  const muted = theme.noColor ? undefined : theme.colors.muted
+
+  return h(Text, {
+    key: `${commit.hash}-${index}`,
+    backgroundColor: selectedBg,
+    inverse: selected,
+  },
+  h(Text, { color: muted, dimColor: theme.noColor }, renderedGraph),
+  ' ',
+  h(Text, { color: accent, bold: selected }, commit.shortHash),
+  ' ',
+  h(Text, { dimColor: true }, commit.date),
+  ' ',
+  h(Text, undefined, message),
+  refs ? h(Text, { color: accent }, refs) : null)
 }
 
 /**
