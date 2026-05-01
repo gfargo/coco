@@ -1,3 +1,40 @@
+/**
+ * Ink runtime for `coco log -i` and `coco ui`.
+ *
+ * # Accessibility & terminal compatibility
+ *
+ * The TUI is keyboard-only by design — every action is reachable from the
+ * keymap (see inkKeymap.ts) and the command palette (`:`). No mouse input
+ * is consumed.
+ *
+ * Color and decorations:
+ *   - `NO_COLOR` is honored end-to-end via `LogInkTheme.noColor` (see
+ *     inkTheme.ts). When set, `focusBorderColor` returns undefined so
+ *     borders fall back to the terminal default and color emphasis is
+ *     dropped without changing layout.
+ *   - The chrome and surfaces use a small set of unicode glyphs (›, ↑/↓,
+ *     ·) that render in any modern UTF-8 terminal. Layout is ASCII-only,
+ *     so a missing glyph never affects column widths.
+ *
+ * Empty / loading / error states:
+ *   - Empty-state copy lives in inkSurfaceStates.ts so every surface
+ *     speaks with the same voice and points users at the next sensible
+ *     action.
+ *   - Loading state uses `formatLogInkLoading` for a uniform leading
+ *     glyph + text.
+ *   - Error state for git command failures is surfaced through the
+ *     existing `compose.message` / `compose.details` pipeline (commit /
+ *     revert hooks) and the footer status message (transient
+ *     operations). Context-load failures fall through to empty-state
+ *     copy via `safe()` — surfacing them as a richer "this view failed
+ *     to load" panel is a future polish.
+ *
+ * Themes:
+ *   - Four presets (`default`, `monochrome`, `catppuccin`, `gruvbox`).
+ *   - `monochrome` is the canary: the layout must read correctly when
+ *     every text decoration is dropped.
+ */
+
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { BranchOverview, getBranchOverview } from './branchData'
@@ -42,6 +79,15 @@ import {
   getLogInkLayout,
 } from './inkLayout'
 import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from './inkTheme'
+import {
+  formatLogInkBranchesEmpty,
+  formatLogInkComposeEmpty,
+  formatLogInkHistoryEmpty,
+  formatLogInkLoading,
+  formatLogInkStashEmpty,
+  formatLogInkStatusEmpty,
+  formatLogInkTagsEmpty,
+} from './inkSurfaceStates'
 import { truncateCells } from './inkText'
 import {
   LogInkSidebarTab,
@@ -1071,7 +1117,10 @@ function renderHistoryPanel(
     h(Text, { dimColor: true }, `${title} | ${graphMode} | ${loadState}`)
   ),
   visible.items.length === 0
-    ? h(Text, { dimColor: true }, 'No commits match the current filter.')
+    ? h(Text, { dimColor: true }, formatLogInkHistoryEmpty({
+      filter: state.filter,
+      totalCommits: state.commits.length,
+    }))
     : visible.items.map((item, index) => {
       if (item.type === 'graph') {
         return h(Text, {
@@ -1106,8 +1155,9 @@ function renderStatusSurface(
   const worktree = context.worktree
   const listRows = Math.max(4, bodyRows - 5)
   const selectedIndex = state.selectedWorktreeFileIndex
+  const cleanHint = formatLogInkStatusEmpty({ hasChanges: Boolean(worktree?.files.length) })
   const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
-    ? ['Loading worktree status...']
+    ? [formatLogInkLoading({ resource: 'worktree status' })]
     : worktree?.files.length
       ? worktree.files
         .slice(Math.max(0, selectedIndex - Math.floor(listRows / 2)))
@@ -1117,7 +1167,9 @@ function renderStatusSurface(
 
           return `${index === selectedIndex ? '>' : ' '} ${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
         })
-      : ['Worktree clean']
+      : cleanHint
+        ? [cleanHint]
+        : ['Worktree clean']
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1171,6 +1223,9 @@ function renderComposeSurface(
     .filter((file) => file.indexStatus !== ' ' && file.indexStatus !== '?')
     .slice(0, 5)
     .map((file) => `  ${file.indexStatus} ${file.path}`)
+  const noStagedHint = !isLogInkContextKeyLoading(contextStatus, 'worktree')
+    ? formatLogInkComposeEmpty({ hasStaged: stagedFileLines.length > 0 })
+    : undefined
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1211,7 +1266,12 @@ function renderComposeSurface(
         dimColor: true,
       }, truncate(line, 140))),
     ]
-    : []))
+    : noStagedHint
+      ? [
+        h(Text, { key: 'compose-no-staged-spacer' }, ''),
+        h(Text, { key: 'compose-no-staged', dimColor: true }, truncate(noStagedHint, 140)),
+      ]
+      : []))
 }
 
 function matchesPromotedFilter(haystacks: string[], filter: string): boolean {
@@ -1249,11 +1309,10 @@ function renderBranchesSurface(
   const headerRight = loading
     ? 'loading branches'
     : `${localBranches.length}/${allLocalBranches.length} local | current: ${branches?.currentBranch || '<detached>'}${filterLabel}`
-  const emptyLabel = state.filter
-    ? `No branches match filter '${state.filter}'`
-    : 'No local branches'
+  const emptyLabel = formatLogInkBranchesEmpty({ filter: state.filter })
+  const loadingLabel = formatLogInkLoading({ resource: 'branches' })
   const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'branches-loading', dimColor: true }, 'Loading branches...')]
+    ? [h(Text, { key: 'branches-loading', dimColor: true }, loadingLabel)]
     : localBranches.length === 0
       ? [h(Text, { key: 'branches-empty', dimColor: true }, emptyLabel)]
       : visible.map((branch, offset) => {
@@ -1307,9 +1366,10 @@ function renderTagsSurface(
   const headerRight = loading
     ? 'loading tags'
     : `${tags.length}/${allTags.length} tags${filterLabel}`
-  const emptyLabel = state.filter ? `No tags match filter '${state.filter}'` : 'No tags found'
+  const emptyLabel = formatLogInkTagsEmpty({ filter: state.filter })
+  const loadingLabel = formatLogInkLoading({ resource: 'tags' })
   const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'tags-loading', dimColor: true }, 'Loading tags...')]
+    ? [h(Text, { key: 'tags-loading', dimColor: true }, loadingLabel)]
     : tags.length === 0
       ? [h(Text, { key: 'tags-empty', dimColor: true }, emptyLabel)]
       : visible.map((tag, offset) => {
@@ -1363,11 +1423,10 @@ function renderStashSurface(
   const headerRight = loading
     ? 'loading stashes'
     : `${stashes.length}/${allStashes.length} stashes${filterLabel}`
-  const emptyLabel = state.filter
-    ? `No stashes match filter '${state.filter}'`
-    : 'No stashes'
+  const emptyLabel = formatLogInkStashEmpty({ filter: state.filter })
+  const loadingLabel = formatLogInkLoading({ resource: 'stashes' })
   const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'stash-loading', dimColor: true }, 'Loading stashes...')]
+    ? [h(Text, { key: 'stash-loading', dimColor: true }, loadingLabel)]
     : stashes.length === 0
       ? [h(Text, { key: 'stash-empty', dimColor: true }, emptyLabel)]
       : visible.map((stash, offset) => {
