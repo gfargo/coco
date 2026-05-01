@@ -67,6 +67,7 @@ import {
   formatBindingKeys,
   formatLogInkBreadcrumb,
   filterLogInkPaletteCommands,
+  getLogInkChordContinuations,
   getLogInkPaletteCommands,
   getLogInkFooterHints,
   getLogInkHelpSections,
@@ -1894,6 +1895,13 @@ function renderDetailPanel(
     return renderConfirmationPanel(h, components, state, width, theme, focused)
   }
 
+  // which-key style overlay — shows the available chord continuations
+  // when the user has pressed the prefix and we're waiting for the
+  // second key. Mirrors helix / which-key.nvim / doom-emacs.
+  if (state.pendingKey) {
+    return renderChordOverlay(h, components, state, width, theme, focused)
+  }
+
   // The synthetic "(+) new commit" row routes the inspector through the
   // worktree summary so the user sees what's staged / unstaged at a glance
   // — same surface as the compose view's right panel.
@@ -2306,6 +2314,62 @@ function renderConfirmationPanel(
   h(Text, undefined, 'Press y to confirm or n/Esc to cancel.'))
 }
 
+/**
+ * Which-key style chord overlay (P1.1). When the user presses a chord
+ * prefix (currently just `g`), the dispatcher sets `state.pendingKey`
+ * and waits for the second key. This panel surfaces the available
+ * continuations so newcomers don't have to memorize the chord set.
+ *
+ * Renders in the detail panel slot; auto-dismisses when the chord
+ * completes or `pendingKey` is otherwise cleared.
+ */
+function renderChordOverlay(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const prefix = state.pendingKey || ''
+  const continuations = getLogInkChordContinuations(prefix)
+  const accent = theme.noColor ? undefined : theme.colors.accent
+
+  const lines: ReactTypes.ReactNode[] = [
+    h(Text, { key: 'chord-title', bold: true }, panelTitle(`${prefix} … jump`, focused)),
+    h(Text, { key: 'chord-spacer' }, ''),
+  ]
+
+  if (continuations.length === 0) {
+    lines.push(h(Text, {
+      key: 'chord-empty',
+      dimColor: true,
+    }, truncate(`No bindings registered for the ${prefix} prefix.`, width - 4)))
+  } else {
+    for (const entry of continuations) {
+      lines.push(h(Text, { key: `chord-${entry.key}` },
+        h(Text, { color: accent, bold: true }, `  ${entry.key}  `),
+        h(Text, undefined, truncate(`${entry.label.padEnd(10)} ${entry.description}`, width - 9))
+      ))
+    }
+  }
+
+  lines.push(h(Text, { key: 'chord-foot-spacer' }, ''))
+  lines.push(h(Text, {
+    key: 'chord-hint',
+    dimColor: true,
+  }, truncate('press the second key to jump · esc cancels', width - 4)))
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  }, ...lines)
+}
+
 function renderHelpPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -2426,6 +2490,7 @@ function renderFooter(
     activeView: state.activeView,
     filterMode: state.filterMode,
     focus: state.focus,
+    pendingKey: state.pendingKey,
     showCommandPalette: state.showCommandPalette,
     showHelp: state.showHelp,
   })
