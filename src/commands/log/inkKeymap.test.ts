@@ -49,6 +49,36 @@ describe('log Ink keymap', () => {
     })
 
     expect(getLogInkFooterHints({
+      activeView: 'branches',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    })).toEqual({
+      contextual: ['↑/↓ branches', 'D delete', 'X checkout', 'enter diff', 'esc back'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
+    })
+
+    expect(getLogInkFooterHints({
+      activeView: 'tags',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    })).toEqual({
+      contextual: ['↑/↓ tags', 'T create', 'X push', 'esc back'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
+    })
+
+    expect(getLogInkFooterHints({
+      activeView: 'stash',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    })).toEqual({
+      contextual: ['↑/↓ stashes', 'A apply', 'D drop', 'esc back'],
+      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
+    })
+
+    expect(getLogInkFooterHints({
       filterMode: false,
       focus: 'sidebar',
       showHelp: false,
@@ -162,6 +192,19 @@ describe('log Ink keymap', () => {
 
     const composeBinding = sections[0].bindings.find((binding) => binding.id === 'navigateCompose')
     expect(composeBinding?.keys).toEqual(['gc'])
+  })
+
+  it('exposes the gb/gt/gz chords as global navigation bindings', () => {
+    const sections = getLogInkHelpSections({ activeView: 'history', focus: 'commits' })
+    const globals = sections[0].bindings
+
+    const branches = globals.find((binding) => binding.id === 'navigateBranches')
+    const tags = globals.find((binding) => binding.id === 'navigateTags')
+    const stash = globals.find((binding) => binding.id === 'navigateStash')
+
+    expect(branches?.keys).toEqual(['gb'])
+    expect(tags?.keys).toEqual(['gt'])
+    expect(stash?.keys).toEqual(['gz'])
   })
 
   it('derives command palette entries from the shared keymap', () => {

@@ -36,6 +36,9 @@ export type LogInkInputContext = {
   previewLineCount?: number
   worktreeDiffLineCount?: number
   worktreeFileCount?: number
+  branchCount?: number
+  tagCount?: number
+  stashCount?: number
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -222,6 +225,27 @@ export function getLogInkInputEvents(
     ]
   }
 
+  if (state.pendingKey === 'g' && inputValue === 'b') {
+    return [
+      action({ type: 'pushView', value: 'branches' }),
+      action({ type: 'setStatus', value: 'jumped to branches' }),
+    ]
+  }
+
+  if (state.pendingKey === 'g' && inputValue === 't') {
+    return [
+      action({ type: 'pushView', value: 'tags' }),
+      action({ type: 'setStatus', value: 'jumped to tags' }),
+    ]
+  }
+
+  if (state.pendingKey === 'g' && inputValue === 'z') {
+    return [
+      action({ type: 'pushView', value: 'stash' }),
+      action({ type: 'setStatus', value: 'jumped to stash' }),
+    ]
+  }
+
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
       return [
@@ -301,6 +325,18 @@ export function getLogInkInputEvents(
       })]
     }
 
+    if (state.activeView === 'branches' && context.branchCount) {
+      return [action({ type: 'moveBranch', delta: -1, count: context.branchCount })]
+    }
+
+    if (state.activeView === 'tags' && context.tagCount) {
+      return [action({ type: 'moveTag', delta: -1, count: context.tagCount })]
+    }
+
+    if (state.activeView === 'stash' && context.stashCount) {
+      return [action({ type: 'moveStash', delta: -1, count: context.stashCount })]
+    }
+
     return [
       action(state.focus === 'sidebar'
         ? { type: 'previousSidebarTab' }
@@ -327,6 +363,18 @@ export function getLogInkInputEvents(
         delta: 1,
         hunkOffsets: context.worktreeHunkOffsets || [],
       })]
+    }
+
+    if (state.activeView === 'branches' && context.branchCount) {
+      return [action({ type: 'moveBranch', delta: 1, count: context.branchCount })]
+    }
+
+    if (state.activeView === 'tags' && context.tagCount) {
+      return [action({ type: 'moveTag', delta: 1, count: context.tagCount })]
+    }
+
+    if (state.activeView === 'stash' && context.stashCount) {
+      return [action({ type: 'moveStash', delta: 1, count: context.stashCount })]
     }
 
     return [

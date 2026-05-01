@@ -12,10 +12,13 @@ export type LogInkCommandId =
   | 'moveToBottom'
   | 'moveToTop'
   | 'navigateBack'
+  | 'navigateBranches'
   | 'navigateCompose'
   | 'navigateDiff'
   | 'navigateHome'
+  | 'navigateStash'
   | 'navigateStatus'
+  | 'navigateTags'
   | 'nextMatch'
   | 'nextSidebarTab'
   | 'moveUp'
@@ -186,6 +189,27 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'navigateBranches',
+    keys: ['gb'],
+    label: 'branches',
+    description: 'Push the branches view (local branches with divergence info).',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigateTags',
+    keys: ['gt'],
+    label: 'tags',
+    description: 'Push the tags view.',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigateStash',
+    keys: ['gz'],
+    label: 'stash',
+    description: 'Push the stash view (gz; gs is reserved for status).',
+    contexts: ['normal'],
+  },
+  {
     id: 'navigateBack',
     keys: ['<', 'esc'],
     label: 'back',
@@ -293,6 +317,9 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateStatus',
   'navigateDiff',
   'navigateCompose',
+  'navigateBranches',
+  'navigateTags',
+  'navigateStash',
   'navigateBack',
 ]
 
@@ -378,6 +405,27 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'compose') {
     return {
       contextual: ['e edit', 'tab field', 'c commit', 'I AI draft', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'branches') {
+    return {
+      contextual: ['↑/↓ branches', 'D delete', 'X checkout', 'enter diff', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'tags') {
+    return {
+      contextual: ['↑/↓ tags', 'T create', 'X push', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'stash') {
+    return {
+      contextual: ['↑/↓ stashes', 'A apply', 'D drop', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

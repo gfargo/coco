@@ -836,6 +836,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       worktreeDiffLineCount: worktreeDiff?.lines.length,
       worktreeFileCount: context.worktree?.files.length,
       worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
+      branchCount: context.branches?.localBranches.length,
+      tagCount: context.tags?.tags.length,
+      stashCount: context.stashes?.stashes.length,
     }).forEach((event) => {
       if (event.type === 'exit') {
         exit()
@@ -1010,6 +1013,18 @@ function renderMainPanel(
 
   if (state.activeView === 'compose') {
     return renderComposeSurface(h, components, state, context, contextStatus, bodyRows, theme)
+  }
+
+  if (state.activeView === 'branches') {
+    return renderBranchesSurface(h, components, state, context, contextStatus, bodyRows, theme)
+  }
+
+  if (state.activeView === 'tags') {
+    return renderTagsSurface(h, components, state, context, contextStatus, bodyRows, theme)
+  }
+
+  if (state.activeView === 'stash') {
+    return renderStashSurface(h, components, state, context, contextStatus, bodyRows, theme)
   }
 
   return renderHistoryPanel(
@@ -1197,6 +1212,152 @@ function renderComposeSurface(
       }, truncate(line, 140))),
     ]
     : []))
+}
+
+function renderBranchesSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const branches = context.branches
+  const loading = isLogInkContextKeyLoading(contextStatus, 'branches')
+  const localBranches = branches?.localBranches || []
+  const selected = state.selectedBranchIndex
+  const listRows = Math.max(4, bodyRows - 4)
+  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const visible = localBranches.slice(startIndex, startIndex + listRows)
+  const headerRight = loading
+    ? 'loading branches'
+    : `${localBranches.length} local | current: ${branches?.currentBranch || '<detached>'}`
+  const lines: ReactTypes.ReactNode[] = loading
+    ? [h(Text, { key: 'branches-loading', dimColor: true }, 'Loading branches...')]
+    : localBranches.length === 0
+      ? [h(Text, { key: 'branches-empty', dimColor: true }, 'No local branches')]
+      : visible.map((branch, offset) => {
+        const index = startIndex + offset
+        const isSelected = index === selected
+        const cursor = isSelected ? '>' : ' '
+        const marker = branch.current ? '*' : ' '
+        const divergence = formatDivergence(branch)
+        return h(Text, {
+          key: `branch-${index}`,
+          bold: isSelected,
+          dimColor: !isSelected && !branch.current,
+        }, truncate(`${cursor} ${marker} ${branch.shortName.padEnd(28)} ${divergence}`, 140))
+      })
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexGrow: 1,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Branches', focused)),
+    h(Text, { dimColor: true }, headerRight)
+  ),
+  ...lines)
+}
+
+function renderTagsSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const loading = isLogInkContextKeyLoading(contextStatus, 'tags')
+  const tags = context.tags?.tags || []
+  const selected = state.selectedTagIndex
+  const listRows = Math.max(4, bodyRows - 4)
+  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const visible = tags.slice(startIndex, startIndex + listRows)
+  const headerRight = loading ? 'loading tags' : `${tags.length} tags`
+  const lines: ReactTypes.ReactNode[] = loading
+    ? [h(Text, { key: 'tags-loading', dimColor: true }, 'Loading tags...')]
+    : tags.length === 0
+      ? [h(Text, { key: 'tags-empty', dimColor: true }, 'No tags found')]
+      : visible.map((tag, offset) => {
+        const index = startIndex + offset
+        const isSelected = index === selected
+        const cursor = isSelected ? '>' : ' '
+        return h(Text, {
+          key: `tag-${index}`,
+          bold: isSelected,
+          dimColor: !isSelected,
+        }, truncate(`${cursor} ${tag.name.padEnd(20)} ${tag.subject}`, 140))
+      })
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexGrow: 1,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Tags', focused)),
+    h(Text, { dimColor: true }, headerRight)
+  ),
+  ...lines)
+}
+
+function renderStashSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const loading = isLogInkContextKeyLoading(contextStatus, 'stashes')
+  const stashes = context.stashes?.stashes || []
+  const selected = state.selectedStashIndex
+  const listRows = Math.max(4, bodyRows - 4)
+  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const visible = stashes.slice(startIndex, startIndex + listRows)
+  const headerRight = loading ? 'loading stashes' : `${stashes.length} stashes`
+  const lines: ReactTypes.ReactNode[] = loading
+    ? [h(Text, { key: 'stash-loading', dimColor: true }, 'Loading stashes...')]
+    : stashes.length === 0
+      ? [h(Text, { key: 'stash-empty', dimColor: true }, 'No stashes')]
+      : visible.map((stash, offset) => {
+        const index = startIndex + offset
+        const isSelected = index === selected
+        const cursor = isSelected ? '>' : ' '
+        return h(Text, {
+          key: `stash-${index}`,
+          bold: isSelected,
+          dimColor: !isSelected,
+        }, truncate(`${cursor} ${stash.ref.padEnd(12)} ${stash.message}`, 140))
+      })
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexGrow: 1,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Stash', focused)),
+    h(Text, { dimColor: true }, headerRight)
+  ),
+  ...lines)
 }
 
 function renderDiffSurface(

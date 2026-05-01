@@ -346,6 +346,99 @@ describe('log Ink input interactions', () => {
     expect(state.statusMessage).toBe('jumped to diff')
   })
 
+  it('pushes branches with the gb chord', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'b')
+
+    expect(state.viewStack).toEqual(['history', 'branches'])
+    expect(state.activeView).toBe('branches')
+    expect(state.statusMessage).toBe('jumped to branches')
+  })
+
+  it('pushes tags with the gt chord', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 't')
+
+    expect(state.viewStack).toEqual(['history', 'tags'])
+    expect(state.activeView).toBe('tags')
+    expect(state.statusMessage).toBe('jumped to tags')
+  })
+
+  it('pushes stash with the gz chord (gs is reserved for status)', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'z')
+
+    expect(state.viewStack).toEqual(['history', 'stash'])
+    expect(state.activeView).toBe('stash')
+    expect(state.statusMessage).toBe('jumped to stash')
+  })
+
+  it('moves the selected branch with arrow keys when in branches view', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+
+    state = applyInput(state, 'j', {}, { branchCount: 5 })
+    expect(state.selectedBranchIndex).toBe(1)
+
+    state = applyInput(state, '', { downArrow: true }, { branchCount: 5 })
+    expect(state.selectedBranchIndex).toBe(2)
+
+    state = applyInput(state, 'k', {}, { branchCount: 5 })
+    expect(state.selectedBranchIndex).toBe(1)
+  })
+
+  it('moves the selected tag with arrow keys when in tags view', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'tags' })
+
+    state = applyInput(state, 'j', {}, { tagCount: 4 })
+    state = applyInput(state, 'j', {}, { tagCount: 4 })
+    expect(state.selectedTagIndex).toBe(2)
+  })
+
+  it('moves the selected stash with arrow keys when in stash view', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'stash' })
+
+    state = applyInput(state, 'j', {}, { stashCount: 3 })
+    state = applyInput(state, 'j', {}, { stashCount: 3 })
+    expect(state.selectedStashIndex).toBe(2)
+
+    // Clamped at the count boundary.
+    state = applyInput(state, 'j', {}, { stashCount: 3 })
+    expect(state.selectedStashIndex).toBe(2)
+  })
+
+  it('preserves per-view selection across navigation', () => {
+    let state = createLogInkState(rows)
+
+    // Move within branches.
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+    state = applyInput(state, 'j', {}, { branchCount: 5 })
+    state = applyInput(state, 'j', {}, { branchCount: 5 })
+    expect(state.selectedBranchIndex).toBe(2)
+
+    // Pop to history, push tags, move there.
+    state = applyInput(state, '<')
+    state = applyLogInkAction(state, { type: 'pushView', value: 'tags' })
+    state = applyInput(state, 'j', {}, { tagCount: 4 })
+    expect(state.selectedTagIndex).toBe(1)
+
+    // Selection state for branches should be preserved.
+    expect(state.selectedBranchIndex).toBe(2)
+
+    // Round-trip back to branches and confirm.
+    state = applyInput(state, '<')
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+    expect(state.selectedBranchIndex).toBe(2)
+  })
+
   it('pops the navigation stack with < (back)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'status' })

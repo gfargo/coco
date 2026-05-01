@@ -9,7 +9,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk'
 
 export type CreateLogInkStateOptions = {
@@ -34,6 +34,14 @@ export type LogInkState = {
   selectedFileIndex: number
   selectedWorktreeFileIndex: number
   selectedWorktreeHunkIndex: number
+  /**
+   * Cursor positions for the promoted top-level views (branches/tags/stash).
+   * Persisted on the root state so navigating away and back keeps the user's
+   * place in each list.
+   */
+  selectedBranchIndex: number
+  selectedTagIndex: number
+  selectedStashIndex: number
   commitCompose: CommitComposeState
   diffPreviewOffset: number
   worktreeDiffOffset: number
@@ -62,6 +70,9 @@ export type LogInkAction =
   | { type: 'move'; delta: number }
   | { type: 'moveDetailFile'; delta: number; fileCount: number }
   | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
+  | { type: 'moveBranch'; delta: number; count: number }
+  | { type: 'moveTag'; delta: number; count: number }
+  | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveToBottom' }
   | { type: 'moveToTop' }
   | { type: 'nextSidebarTab' }
@@ -343,6 +354,9 @@ export function createLogInkState(
     selectedFileIndex: 0,
     selectedWorktreeFileIndex: 0,
     selectedWorktreeHunkIndex: 0,
+    selectedBranchIndex: 0,
+    selectedTagIndex: 0,
+    selectedStashIndex: 0,
     commitCompose: createCommitComposeState(),
     diffPreviewOffset: 0,
     worktreeDiffOffset: 0,
@@ -422,6 +436,24 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         worktreeDiffOffset: 0,
       }
     }
+    case 'moveBranch':
+      return {
+        ...state,
+        selectedBranchIndex: clampIndex(state.selectedBranchIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'moveTag':
+      return {
+        ...state,
+        selectedTagIndex: clampIndex(state.selectedTagIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'moveStash':
+      return {
+        ...state,
+        selectedStashIndex: clampIndex(state.selectedStashIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
     case 'moveToBottom':
       return {
         ...state,
