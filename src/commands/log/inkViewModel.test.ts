@@ -504,6 +504,35 @@ describe('log Ink view model', () => {
       expect(state.viewStack).toEqual(['history', 'diff'])
       expect(state.activeView).toBe('diff')
       expect(getSelectedInkCommit(state)?.hash).toBe('fed999900000')
+      expect(state.diffSource).toBe('commit')
+    })
+
+    it('navigateOpenDiffForCommit preserves the selected file when fileIndex is provided', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'navigateOpenDiffForCommit',
+        sha: 'def567890123',
+        commitIndex: 1,
+        fileIndex: 3,
+      })
+
+      expect(state.activeView).toBe('diff')
+      expect(state.selectedFileIndex).toBe(3)
+      expect(state.diffSource).toBe('commit')
+    })
+
+    it('clears diffSource when the diff view is popped', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'navigateOpenDiffForCommit',
+        sha: 'def567890123',
+        commitIndex: 1,
+      })
+      expect(state.diffSource).toBe('commit')
+
+      state = applyLogInkAction(state, { type: 'popView' })
+      expect(state.activeView).toBe('history')
+      expect(state.diffSource).toBeUndefined()
     })
 
     it('intentOpenDiffForWorktreeFile resolves a known path to a fileIndex', () => {
@@ -533,6 +562,7 @@ describe('log Ink view model', () => {
       expect(state.viewStack).toEqual(['history', 'diff'])
       expect(state.activeView).toBe('diff')
       expect(state.selectedWorktreeFileIndex).toBe(1)
+      expect(state.diffSource).toBe('worktree')
     })
 
     it('intentOpenComposeForFile is a no-op when the working tree is clean', () => {

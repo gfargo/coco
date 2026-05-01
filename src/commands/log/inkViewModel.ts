@@ -11,6 +11,15 @@ export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
 export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk'
+/**
+ * Tracks which kind of diff the user pushed into. `commit` means they
+ * came from history → Enter on a commit (read-only commit-diff explore
+ * mode). `worktree` means they came from status → Enter on a file
+ * (stage / hunk / revert mode). The renderer routes the inspector and
+ * input handlers off this field so a dirty worktree can't bleed staging
+ * UI into a commit-diff view.
+ */
+export type LogInkDiffSource = 'commit' | 'worktree'
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
@@ -66,6 +75,12 @@ export type LogInkState = {
   focus: LogInkFocus
   sidebarTab: LogInkSidebarTab
   statusMessage?: string
+  /**
+   * Set by `navigateOpenDiffForCommit` / `navigateOpenDiffForWorktreeFile`
+   * to disambiguate the diff view when both a worktree file and a commit
+   * are selectable. Cleared when the diff view is popped or replaced.
+   */
+  diffSource?: LogInkDiffSource
 }
 
 export type LogInkAction =
@@ -95,7 +110,7 @@ export type LogInkAction =
   | { type: 'popView' }
   | { type: 'replaceView'; value: LogInkView }
   | { type: 'navigateHome' }
-  | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number }
+  | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
   | { type: 'navigateOpenComposeForFile'; fileIndex: number }
   | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
@@ -248,6 +263,7 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     viewStack,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
+    diffSource: value === 'diff' ? state.diffSource : undefined,
     pendingKey: undefined,
   }
 }
@@ -265,6 +281,7 @@ function withPoppedView(state: LogInkState): LogInkState {
     viewStack,
     worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: next === 'diff' ? state.selectedWorktreeHunkIndex : 0,
+    diffSource: next === 'diff' ? state.diffSource : undefined,
     pendingKey: undefined,
   }
 }
@@ -281,6 +298,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     viewStack,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
+    diffSource: value === 'diff' ? state.diffSource : undefined,
     pendingKey: undefined,
   }
 }
@@ -579,8 +597,9 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...next,
         selectedIndex: clampIndex(selectedIndex, filteredCommits.length),
-        selectedFileIndex: 0,
+        selectedFileIndex: Math.max(0, action.fileIndex ?? 0),
         diffPreviewOffset: 0,
+        diffSource: 'commit',
       }
     }
     case 'navigateOpenDiffForWorktreeFile': {
@@ -590,6 +609,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedWorktreeFileIndex: Math.max(0, action.fileIndex),
         selectedWorktreeHunkIndex: 0,
         worktreeDiffOffset: 0,
+        diffSource: 'worktree',
       }
     }
     case 'navigateOpenComposeForFile': {

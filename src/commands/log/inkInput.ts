@@ -706,6 +706,28 @@ export function getLogInkInputEvents(
     }
   }
 
+  // From the inspector / commit-diff detail panel, Enter opens (or refocuses)
+  // the diff view scoped to the currently-selected commit and file. Lets the
+  // user drive the explore flow entirely from the right panel: j/k picks a
+  // file, Enter opens the diff for it.
+  if (
+    key.return &&
+    state.focus === 'detail' &&
+    (state.activeView === 'history' || state.activeView === 'diff') &&
+    context.detailFileCount &&
+    state.filteredCommits.length > 0
+  ) {
+    const selected = state.filteredCommits[state.selectedIndex]
+    if (selected) {
+      return [action({
+        type: 'navigateOpenDiffForCommit',
+        sha: selected.hash,
+        commitIndex: state.selectedIndex,
+        fileIndex: state.selectedFileIndex,
+      })]
+    }
+  }
+
   if (key.return && state.activeView === 'status' && context.worktreeFileCount) {
     return [action({
       type: 'navigateOpenDiffForWorktreeFile',
