@@ -74,6 +74,7 @@ import {
 } from './inkKeymap'
 import { substituteGraphChars } from './inkGraphChars'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
+import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
 import {
   LogInkRefreshWatcher,
   createRefreshWatcher,
@@ -577,6 +578,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       resumeRef.current = null
     }
   }, [resumeRef])
+  // First-launch onboarding (P1.3). Persisted via a marker file in the
+  // user's cache dir so the tip never reappears once dismissed. Lazy
+  // initializer so the fs check only runs on mount, not every render.
+  const [showOnboarding, setShowOnboarding] = React.useState<boolean>(() => !hasSeenOnboarding())
   const [state, setState] = React.useState<LogInkState>(() =>
     createLogInkState(rows, { activeView: initialView })
   )
@@ -1034,6 +1039,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   )
 
   useInput((inputValue: string, key: LogInkInputKey) => {
+    // First-launch onboarding (P1.3): any keystroke dismisses the overlay
+    // and writes the seen-marker. Swallow the keystroke so the same key
+    // doesn't also trigger normal input dispatch.
+    if (showOnboarding) {
+      setShowOnboarding(false)
+      markOnboardingSeen()
+      return
+    }
+
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
       previewLineCount: filePreview?.hunks.length,
@@ -1079,6 +1093,12 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     h(Text, undefined, `Terminal too small: ${layout.columns}x${layout.rows}`),
     h(Text, { dimColor: true }, `Minimum size is ${LOG_INK_MIN_COLUMNS}x${LOG_INK_MIN_ROWS}.`),
     h(Text, { dimColor: true }, 'Resize the terminal or run plain coco log.'))
+  }
+
+  // First-launch onboarding overlay (P1.3) replaces the entire UI for
+  // one render — any keystroke dismisses it and persists the seen-marker.
+  if (showOnboarding) {
+    return renderOnboardingOverlay(h, { Box, Text }, layout.rows, layout.columns, theme, appLabel)
   }
 
   return h(Box, { flexDirection: 'column', height: layout.rows },
@@ -2312,6 +2332,53 @@ function renderConfirmationPanel(
   h(Text, { dimColor: true }, truncate(warning, width - 4)),
   h(Text, undefined, ''),
   h(Text, undefined, 'Press y to confirm or n/Esc to cancel.'))
+}
+
+/**
+ * First-launch onboarding overlay (P1.3). Shown once per machine, gated
+ * by an XDG-style cache marker so subsequent launches go straight to the
+ * normal UI. Auto-dismisses on the next keystroke.
+ *
+ * Replaces the whole layout for the first render rather than overlaying
+ * a transient banner — Ink doesn't support floating elements, and a full
+ * takeover keeps the message readable on small terminals while still
+ * being instantly dismissible.
+ */
+function renderOnboardingOverlay(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  rows: number,
+  columns: number,
+  theme: LogInkTheme,
+  appLabel: string
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const accent = theme.noColor ? undefined : theme.colors.accent
+  const tips = [
+    { keys: '?', text: 'open the help panel' },
+    { keys: ':', text: 'open the command palette' },
+    { keys: 'g h', text: 'jump to history (g s status, g d diff, g c compose, g b branches, g t tags, g z stash)' },
+    { keys: '<  esc', text: 'pop the navigation stack / go back' },
+    { keys: '/', text: 'filter the active list' },
+    { keys: 'q  ctrl+c', text: 'quit' },
+  ]
+  const maxKeys = tips.reduce((max, tip) => Math.max(max, tip.keys.length), 0)
+  const lineWidth = Math.max(40, columns - 4)
+
+  return h(Box, {
+    flexDirection: 'column',
+    height: rows,
+    paddingX: 2,
+    paddingY: 1,
+  },
+  h(Text, { bold: true, color: accent }, `Welcome to ${appLabel}`),
+  h(Text, { dimColor: true }, 'A quick keyboard tour — press any key to dismiss.'),
+  h(Text, undefined, ''),
+  ...tips.map((tip, index) => h(Text, { key: `onboarding-tip-${index}` },
+    h(Text, { color: accent, bold: true }, `  ${tip.keys.padEnd(maxKeys)}  `),
+    h(Text, undefined, truncate(tip.text, lineWidth - maxKeys - 4)))),
+  h(Text, undefined, ''),
+  h(Text, { dimColor: true }, 'This tip is shown once per machine. Press any key to continue.'))
 }
 
 /**
