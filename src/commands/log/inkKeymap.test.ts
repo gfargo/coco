@@ -178,13 +178,14 @@ describe('log Ink keymap', () => {
     expect(helpText).toContain('tab Move focus to the next panel.')
   })
 
-  it('formats the navigation breadcrumb based on the view stack', () => {
+  it('formats the navigation breadcrumb with a back-hint cue when nested', () => {
     expect(formatLogInkBreadcrumb([])).toBe('')
     expect(formatLogInkBreadcrumb(['history'])).toBe('')
-    expect(formatLogInkBreadcrumb(['status'])).toBe('status')
-    expect(formatLogInkBreadcrumb(['history', 'diff'])).toBe('history › diff')
-    expect(formatLogInkBreadcrumb(['history', 'status', 'diff'])).toBe('history › status › diff')
-    expect(formatLogInkBreadcrumb(['history', 'compose'])).toBe('history › compose')
+    expect(formatLogInkBreadcrumb(['status'])).toBe('status   ← <')
+    expect(formatLogInkBreadcrumb(['history', 'diff'])).toBe('history › diff   ← <')
+    expect(formatLogInkBreadcrumb(['history', 'status', 'diff']))
+      .toBe('history › status › diff   ← <')
+    expect(formatLogInkBreadcrumb(['history', 'compose'])).toBe('history › compose   ← <')
   })
 
   it('exposes the gc compose chord as a global navigation binding', () => {

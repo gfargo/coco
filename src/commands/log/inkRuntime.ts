@@ -1048,6 +1048,26 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
+    // P4.5: navigation in branches/tags/stash uses the FILTERED list
+    // length when a filter is active so j/k stay live instead of getting
+    // stuck against a full-list count that no longer matches what's on
+    // screen.
+    const branchVisibleCount = state.filter
+      ? (context.branches?.localBranches || [])
+        .filter((branch) => matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter))
+        .length
+      : context.branches?.localBranches.length
+    const tagVisibleCount = state.filter
+      ? (context.tags?.tags || [])
+        .filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
+        .length
+      : context.tags?.tags.length
+    const stashVisibleCount = state.filter
+      ? (context.stashes?.stashes || [])
+        .filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
+        .length
+      : context.stashes?.stashes.length
+
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
       previewLineCount: filePreview?.hunks.length,
@@ -1055,9 +1075,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       worktreeFileCount: context.worktree?.files.length,
       worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
       commitDiffHunkOffsets,
-      branchCount: context.branches?.localBranches.length,
-      tagCount: context.tags?.tags.length,
-      stashCount: context.stashes?.stashes.length,
+      branchCount: branchVisibleCount,
+      tagCount: tagVisibleCount,
+      stashCount: stashVisibleCount,
       worktreeDirty,
     }).forEach((event) => {
       if (event.type === 'exit') {
@@ -1167,7 +1187,19 @@ function renderHeader(
   const loading = isLogInkContextLoading(contextStatus) ? '  loading context' : ''
   const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
   const view = breadcrumb ? `  ${breadcrumb}` : ''
-  const title = truncate(`${appLabel}  ${repo}  ${branch}  ${dirty}  ${pr}${view}${loading}`, columns - 2)
+  // Mode indicator (P2.2) — surfaces the current input mode so users
+  // never wonder why `q` doesn't quit while they're editing or filtering.
+  const mode = state.commitCompose.editing
+    ? '[EDIT]'
+    : state.filterMode
+      ? '[FILTER]'
+      : '[NORMAL]'
+  const title = truncate(`${appLabel}  ${repo}  ${branch}  ${dirty}  ${pr}${view}${loading}`, columns - mode.length - 4)
+  const modeColor = theme.noColor
+    ? undefined
+    : state.filterMode || state.commitCompose.editing
+      ? theme.colors.warning
+      : theme.colors.accent
 
   return h(Box, {
     borderColor: theme.colors.border,
@@ -1176,6 +1208,7 @@ function renderHeader(
     paddingX: 1,
   },
   h(Text, { bold: true, color: theme.colors.accent }, title),
+  h(Text, { bold: true, color: modeColor }, `  ${mode}`),
   search ? h(Text, { dimColor: true }, `  ${truncate(search, 36)}`) : undefined)
 }
 
@@ -1642,6 +1675,7 @@ function renderBranchesSurface(
     h(Text, { bold: true }, panelTitle('Branches', focused)),
     h(Text, { dimColor: true }, headerRight)
   ),
+  ...renderPromotedFilterAffordance(h, Text, state, theme),
   ...lines)
 }
 
@@ -1697,6 +1731,7 @@ function renderTagsSurface(
     h(Text, { bold: true }, panelTitle('Tags', focused)),
     h(Text, { dimColor: true }, headerRight)
   ),
+  ...renderPromotedFilterAffordance(h, Text, state, theme),
   ...lines)
 }
 
@@ -1754,7 +1789,32 @@ function renderStashSurface(
     h(Text, { bold: true }, panelTitle('Stash', focused)),
     h(Text, { dimColor: true }, headerRight)
   ),
+  ...renderPromotedFilterAffordance(h, Text, state, theme),
   ...lines)
+}
+
+/**
+ * Filter input cursor for the promoted views (branches/tags/stash).
+ * History already shows the same `filter: foo_` affordance in its header
+ * — this mirrors that into the other surfaces so the user can see what
+ * they're typing instead of watching the list silently shrink (P2.1).
+ *
+ * Returns an empty array when the surface isn't in filter mode so call
+ * sites can spread it unconditionally.
+ */
+function renderPromotedFilterAffordance(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  state: LogInkState,
+  theme: LogInkTheme
+): ReactTypes.ReactElement[] {
+  if (!state.filterMode) {
+    return []
+  }
+  const accent = theme.noColor ? undefined : theme.colors.accent
+  return [
+    h(Text, { key: 'promoted-filter-input', color: accent }, `filter: ${state.filter}_`),
+  ]
 }
 
 function renderDiffSurface(
@@ -2312,9 +2372,13 @@ function renderConfirmationPanel(
     ? 'Revert selected hunk'
     : state.pendingMutationConfirmation === 'revert-file'
       ? 'Revert selected file'
-      : undefined
+      : state.pendingMutationConfirmation === 'discard-draft'
+        ? 'Quit and discard the in-progress commit draft'
+        : undefined
   const label = action?.label || mutationLabel || 'Workflow action'
-  const warning = state.pendingMutationConfirmation
+  const warning = state.pendingMutationConfirmation === 'discard-draft'
+    ? 'You have an unsaved commit draft. Press y to discard it and quit.'
+    : state.pendingMutationConfirmation
     ? 'This discards local changes and cannot be undone by Coco.'
     : action?.kind === 'ai'
     ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`

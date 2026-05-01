@@ -195,6 +195,9 @@ export function getLogInkPaletteExecuteEvents(
       // Aggregate entry; individual workflows are surfaced separately.
       return []
     case 'quit':
+      if (hasUnsavedComposeDraft(state)) {
+        return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
+      }
       return [{ type: 'exit' }]
     case 'clearSearch':
       return [action({ type: 'clearFilter' })]
@@ -211,6 +214,20 @@ const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '5': 'worktrees',
 }
 
+/**
+ * Returns true when the compose surface holds an unsaved commit message
+ * (any text in summary or body and no in-flight AI draft). Used by the
+ * quit confirmation flow (P2.3) so users can't lose drafts via a stray
+ * `q` / Ctrl+C.
+ */
+function hasUnsavedComposeDraft(state: LogInkState): boolean {
+  const compose = state.commitCompose
+  if (compose.loading) {
+    return false
+  }
+  return Boolean(compose.summary.trim() || compose.body.trim())
+}
+
 export function getLogInkInputEvents(
   state: LogInkState,
   inputValue: string,
@@ -218,6 +235,9 @@ export function getLogInkInputEvents(
   context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
   if (key.ctrl && inputValue === 'c') {
+    if (hasUnsavedComposeDraft(state) && !state.pendingMutationConfirmation) {
+      return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
+    }
     return [{ type: 'exit' }]
   }
 
@@ -257,7 +277,18 @@ export function getLogInkInputEvents(
   }
 
   if (state.filterMode) {
-    if (key.return || key.escape) {
+    if (key.return) {
+      return [action({ type: 'toggleFilterMode' })]
+    }
+
+    // Two-stage Esc (P2.4 / P4.4): first Esc with a non-empty filter
+    // clears the input but keeps filterMode active so the user can keep
+    // typing; second Esc exits filterMode entirely. Matches vim and
+    // most modal TUIs.
+    if (key.escape) {
+      if (state.filter.length > 0) {
+        return [action({ type: 'clearFilterText' })]
+      }
       return [action({ type: 'toggleFilterMode' })]
     }
 
@@ -310,6 +341,12 @@ export function getLogInkInputEvents(
 
   if (state.pendingMutationConfirmation) {
     if (inputValue === 'y') {
+      if (state.pendingMutationConfirmation === 'discard-draft') {
+        return [
+          action({ type: 'setPendingMutationConfirmation', value: undefined }),
+          { type: 'exit' },
+        ]
+      }
       return [
         state.pendingMutationConfirmation === 'revert-hunk'
           ? { type: 'revertSelectedHunk' }
@@ -319,9 +356,12 @@ export function getLogInkInputEvents(
     }
 
     if (inputValue === 'n' || key.escape) {
+      const cancelMessage = state.pendingMutationConfirmation === 'discard-draft'
+        ? 'kept draft — press q again to quit without saving'
+        : 'revert cancelled'
       return [
         action({ type: 'setPendingMutationConfirmation', value: undefined }),
-        action({ type: 'setStatus', value: 'revert cancelled' }),
+        action({ type: 'setStatus', value: cancelMessage }),
       ]
     }
 
@@ -336,6 +376,11 @@ export function getLogInkInputEvents(
     )
 
     if (key.escape) {
+      // Two-stage Esc inside the palette: first Esc with non-empty
+      // input clears the filter; second Esc closes the palette. P2.4.
+      if (state.paletteFilter.length > 0) {
+        return [action({ type: 'clearPaletteFilter' })]
+      }
       return [action({ type: 'toggleCommandPalette' })]
     }
 
@@ -392,6 +437,9 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === 'q') {
+    if (hasUnsavedComposeDraft(state)) {
+      return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
+    }
     return [{ type: 'exit' }]
   }
 

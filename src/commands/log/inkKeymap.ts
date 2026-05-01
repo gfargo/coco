@@ -404,7 +404,9 @@ export function formatLogInkBreadcrumb(viewStack: LogInkView[]): string {
     return ''
   }
 
-  return viewStack.join(' › ')
+  // Trailing back-hint (P2.5) reminds the user how to walk back when
+  // they're nested deeper than the root view.
+  return `${viewStack.join(' › ')}   ← <`
 }
 
 export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {

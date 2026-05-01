@@ -10,7 +10,7 @@ export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
 export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash'
-export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk'
+export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
  * came from history → Enter on a commit (read-only commit-diff explore
@@ -101,6 +101,7 @@ export type LogInkAction =
   | { type: 'appendFilter'; value: string }
   | { type: 'backspaceFilter' }
   | { type: 'clearFilter' }
+  | { type: 'clearFilterText' }
   | { type: 'commitCompose'; action: CommitComposeAction }
   | { type: 'focusNext' }
   | { type: 'focusPrevious' }
@@ -323,6 +324,12 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
 
 function withFilter(state: LogInkState, filter: string): LogInkState {
   const filteredCommits = filterCommits(state.commits, filter)
+  // P4.5: snap promoted-view selections to the top of the filtered list
+  // when the filter changes. Pre-filter cursor positions reference indexes
+  // that may not exist in the filtered view, so resetting to 0 keeps
+  // navigation predictable. The runtime passes filtered counts into
+  // `moveBranch` / `moveTag` / `moveStash` so j/k stay live.
+  const filterChanged = state.filter !== filter
 
   return {
     ...state,
@@ -330,6 +337,9 @@ function withFilter(state: LogInkState, filter: string): LogInkState {
     filteredCommits,
     selectedIndex: clampIndex(state.selectedIndex, filteredCommits.length),
     selectedFileIndex: 0,
+    selectedBranchIndex: filterChanged ? 0 : state.selectedBranchIndex,
+    selectedTagIndex: filterChanged ? 0 : state.selectedTagIndex,
+    selectedStashIndex: filterChanged ? 0 : state.selectedStashIndex,
     diffPreviewOffset: 0,
     pendingKey: undefined,
   }
@@ -451,6 +461,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         filterMode: false,
       }, '')
+    case 'clearFilterText':
+      // Clears the filter input but stays in filterMode so the user can
+      // keep typing. P2.4 / P4.4: pairs with the two-stage Esc semantics.
+      return withFilter(state, '')
     case 'commitCompose':
       return {
         ...state,
