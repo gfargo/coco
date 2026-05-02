@@ -876,7 +876,26 @@ export function getLogInkInputEvents(
     }
   }
 
-  if (key.return && state.activeView === 'status' && context.worktreeFileCount) {
+  // Enter on a sidebar tab drills into the corresponding promoted view
+  // (status / branches / tags / stash). Sits above the per-view Enter
+  // handlers so a sidebar-focused Enter never fires checkout-branch /
+  // navigateOpenDiffForCommit / etc. against the (hidden) selection in
+  // the active tab.
+  if (key.return && state.focus === 'sidebar') {
+    const tabToView: Partial<Record<LogInkSidebarTab, 'status' | 'branches' | 'tags' | 'stash'>> = {
+      status: 'status',
+      branches: 'branches',
+      tags: 'tags',
+      stashes: 'stash',
+    }
+    const target = tabToView[state.sidebarTab]
+    if (target) {
+      return [action({ type: 'pushView', value: target })]
+    }
+    return [action({ type: 'setStatus', value: 'no detail view for this tab' })]
+  }
+
+  if (key.return && state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
     return [action({
       type: 'navigateOpenDiffForWorktreeFile',
       fileIndex: state.selectedWorktreeFileIndex,
@@ -885,7 +904,7 @@ export function getLogInkInputEvents(
 
   // Enter on a branch row checks the branch out. Non-destructive workflow
   // action — no confirmation prompt.
-  if (key.return && state.activeView === 'branches' && context.branchCount) {
+  if (key.return && state.activeView === 'branches' && state.focus === 'commits' && context.branchCount) {
     return [{ type: 'runWorkflowAction', id: 'checkout-branch' }]
   }
 
@@ -927,7 +946,7 @@ export function getLogInkInputEvents(
   // The runtime loads `git stash show -p <ref>` once the view is
   // active. The stash ref is passed via the action so we don't need a
   // context lookup here.
-  if (key.return && state.activeView === 'stash' && context.stashCount && context.stashSelectedRef) {
+  if (key.return && state.activeView === 'stash' && state.focus === 'commits' && context.stashCount && context.stashSelectedRef) {
     return [action({
       type: 'navigateOpenDiffForStash',
       ref: context.stashSelectedRef,
