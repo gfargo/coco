@@ -74,6 +74,7 @@ import {
   getLogInkHelpSections,
 } from './inkKeymap'
 import { substituteGraphChars } from './inkGraphChars'
+import { LaneSegment, getLaneColor } from './inkGraphLanes'
 import { formatHyperlink } from './inkHyperlinks'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
@@ -2336,6 +2337,12 @@ function renderHistoryPanel(
     }))
     : visible.items.map((item, index) => {
       if (item.type === 'graph') {
+        if (item.laneSegments && !theme.ascii) {
+          return h(Text, { key: `graph-${index}-${item.graph}` },
+            ...renderLaneSegmentSpans(
+              h, Text, item.laneSegments, theme, visible.graphWidth, `g${index}`
+            ))
+        }
         return h(Text, {
           key: `graph-${index}-${item.graph}`,
           color: theme.noColor ? undefined : theme.colors.muted,
@@ -2348,9 +2355,49 @@ function renderHistoryPanel(
 
       return renderCommitHistoryRow(
         h, Text, item.commit, item.graph, visible.graphWidth,
-        Boolean(item.selected) && !realSelectionSuppressed, theme, index
+        Boolean(item.selected) && !realSelectionSuppressed, theme, index,
+        item.laneSegments
       )
     }))
+}
+
+/**
+ * Render `LaneSegment[]` as a flat list of Text spans, one per lane
+ * (#791 stage 2). Each segment paints in its lane's palette color so
+ * the eye can follow a branch column-by-column; segments without a
+ * lane id (spaces, padding, decorations) fall back to the muted graph
+ * color so they visually recede.
+ *
+ * Final padding is appended as its own span so callers do not need to
+ * pre-pad the graph string before computing lane segments.
+ */
+function renderLaneSegmentSpans(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  segments: LaneSegment[],
+  theme: LogInkTheme,
+  padTo: number,
+  keyPrefix: string
+): ReactTypes.ReactElement[] {
+  const muted = theme.noColor ? undefined : theme.colors.muted
+  const elements: ReactTypes.ReactElement[] = []
+  let totalLen = 0
+
+  segments.forEach((seg, idx) => {
+    const laneColor = getLaneColor(seg.laneId, theme)
+    elements.push(h(Text, {
+      key: `${keyPrefix}-${idx}`,
+      color: laneColor ?? muted,
+      dimColor: theme.noColor && seg.laneId === undefined,
+    }, seg.text))
+    totalLen += seg.text.length
+  })
+
+  if (padTo > totalLen) {
+    elements.push(h(Text, { key: `${keyPrefix}-pad` }, ' '.repeat(padTo - totalLen)))
+  }
+
+  return elements
 }
 
 /**
@@ -2373,9 +2420,9 @@ function renderCommitHistoryRow(
   graphWidth: number,
   selected: boolean,
   theme: LogInkTheme,
-  index: number
+  index: number,
+  laneSegments?: LaneSegment[]
 ): ReactTypes.ReactElement {
-  const renderedGraph = substituteGraphChars(graph.padEnd(graphWidth), { ascii: theme.ascii })
   const refs = formatInkRefLabels(commit.refs)
   const totalWidth = 140
   const fixedWidth = graphWidth + 1 + commit.shortHash.length + 1 + commit.date.length + 1
@@ -2386,12 +2433,20 @@ function renderCommitHistoryRow(
   const accent = theme.noColor ? undefined : theme.colors.accent
   const muted = theme.noColor ? undefined : theme.colors.muted
 
+  // Lane-colored graph spans when full graph mode + non-ASCII rendering
+  // is in play; otherwise fall back to the legacy single-muted span so
+  // compact mode and legacy terminals stay visually unchanged.
+  const graphChildren = laneSegments && !theme.ascii
+    ? renderLaneSegmentSpans(h, Text, laneSegments, theme, graphWidth, `c${index}`)
+    : [h(Text, { color: muted, dimColor: theme.noColor },
+        substituteGraphChars(graph.padEnd(graphWidth), { ascii: theme.ascii }))]
+
   return h(Text, {
     key: `${commit.hash}-${index}`,
     backgroundColor: selectedBg,
     inverse: selected,
   },
-  h(Text, { color: muted, dimColor: theme.noColor }, renderedGraph),
+  ...graphChildren,
   ' ',
   h(Text, { color: accent, bold: selected }, commit.shortHash),
   ' ',

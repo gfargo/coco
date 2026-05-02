@@ -18,7 +18,7 @@
  *   - parens / brackets   (HEAD decoration markers, not part of the graph)
  *   - hyphens / colons    (likewise)
  */
-const ASCII_TO_UNICODE: Record<string, string> = {
+export const ASCII_TO_UNICODE_MAP: Readonly<Record<string, string>> = {
   '*': '●',
   '|': '│',
   '/': '╱',
@@ -97,7 +97,7 @@ export function substituteGraphChars(
     if (a === '*') {
       output += commitGlyph
     } else {
-      output += ASCII_TO_UNICODE[a] ?? a
+      output += ASCII_TO_UNICODE_MAP[a] ?? a
     }
     i += 1
   }

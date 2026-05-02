@@ -1,16 +1,29 @@
 import { GitLogCommitRow, GitLogGraphRow, GitLogRow } from './data'
+import {
+  LaneSegment,
+  advanceTrackerThrough,
+  createLaneTrackerState,
+  renderGraphRowSegments,
+} from './inkGraphLanes'
 import { LogInkState } from './inkViewModel'
 
 export type LogInkHistoryCommitItem = {
   type: 'commit'
   commit: GitLogCommitRow
   graph: string
+  /**
+   * Lane-colored segments for the rendered graph prefix. Only attached
+   * in full graph mode; compact mode renders a single `*` per commit so
+   * lane tracking is not meaningful and segments stay undefined.
+   */
+  laneSegments?: LaneSegment[]
   selected: boolean
 }
 
 export type LogInkHistoryGraphItem = {
   type: 'graph'
   graph: string
+  laneSegments?: LaneSegment[]
 }
 
 export type LogInkHistoryItem = LogInkHistoryCommitItem | LogInkHistoryGraphItem
@@ -56,18 +69,29 @@ function toFullGraphItems(state: LogInkState, visibleCount: number): LogInkHisto
     visibleCount
   )
 
+  // Lane tracking is order-dependent — fast-forward the tracker through
+  // every row above the visible window so lane ids stay stable as the
+  // user scrolls. Without this, scrolling would re-color lanes from a
+  // fresh tracker each time.
+  const tracker = createLaneTrackerState()
+  const allGraphs = state.rows.map((row) => (row.type === 'commit' ? row.graph || '*' : row.graph))
+  advanceTrackerThrough(allGraphs, tracker, start)
+
   return state.rows.slice(start, start + visibleCount).map((row) => {
     if (row.type === 'graph') {
       return {
         type: 'graph',
         graph: row.graph,
+        laneSegments: renderGraphRowSegments(row.graph, tracker, { ascii: false }),
       }
     }
 
+    const graph = row.graph || '*'
     return {
       type: 'commit',
       commit: row,
-      graph: row.graph || '*',
+      graph,
+      laneSegments: renderGraphRowSegments(graph, tracker, { ascii: false }),
       selected: isSelectedCommit(row, selected),
     }
   })
