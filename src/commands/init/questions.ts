@@ -1,11 +1,11 @@
 import { ANTHROPIC_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
 import {
-  confirmPrompt,
-  editorPrompt,
-  inputPrompt,
-  passwordPrompt,
-  selectPrompt,
+    confirmPrompt,
+    editorPrompt,
+    inputPrompt,
+    passwordPrompt,
+    selectPrompt,
 } from '../../lib/ui/inquirerPrompts'
 import { commandExit } from '../../lib/utils/commandExit'
 import { execPromise } from '../../lib/utils/execPromise'
@@ -248,7 +248,11 @@ export const questions = {
       message: 'where would you like to store the project config?',
       choices: [
         {
-          name: '.coco.config.json',
+          name: '.coco.json (recommended)',
+          value: '.coco.json',
+        },
+        {
+          name: '.coco.config.json (legacy)',
           value: '.coco.config.json',
         },
         {
