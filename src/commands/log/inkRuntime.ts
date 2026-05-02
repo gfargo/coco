@@ -778,16 +778,29 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setState((current) => applyLogInkAction(current, action))
   }, [])
 
-  const refreshContext = React.useCallback(async () => {
-    dispatch({ type: 'setStatus', value: 'refreshing repository context' })
-    setContextStatus(createLogInkContextStatus('loading'))
-    setContext(await loadLogInkContext(git))
+  const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
+    // Loud refresh (manual `r`): flip everything to 'loading' so the user
+    // sees the surfaces clear, then settle to 'ready' on completion.
+    // Silent refresh (fs.watch trigger): keep the existing data on screen
+    // (stale-while-revalidate) and quietly swap it in once the new fetch
+    // resolves — avoids the every-second flicker the watcher would
+    // otherwise produce on busy repos.
+    if (!options.silent) {
+      dispatch({ type: 'setStatus', value: 'refreshing repository context' })
+      setContextStatus(createLogInkContextStatus('loading'))
+    }
+    const next = await loadLogInkContext(git)
+    setContext(next)
     setContextStatus(createLogInkContextStatus('ready'))
-    dispatch({ type: 'setStatus', value: 'repository context refreshed' })
+    if (!options.silent) {
+      dispatch({ type: 'setStatus', value: 'repository context refreshed' })
+    }
   }, [dispatch, git])
 
-  const refreshWorktreeContext = React.useCallback(async () => {
-    setContextStatus((current) => updateLogInkContextStatus(current, 'worktree', 'loading'))
+  const refreshWorktreeContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) {
+      setContextStatus((current) => updateLogInkContextStatus(current, 'worktree', 'loading'))
+    }
     const worktree = await safe(getWorktreeOverview(git))
 
     setContext((current) => ({
@@ -819,14 +832,20 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         watcher = createRefreshWatcher({
           repoRoot: repoRoot.trim(),
           gitDir: gitDir.trim(),
+          // Editor saves and git background processes can produce a steady
+          // drip of fs events on busy repos. The default 250ms debounce
+          // was tight enough that the watcher fired ~once per second; 750
+          // batches the steady-state better without delaying the user's
+          // perception of an actual change.
+          debounceMs: 750,
           onChange: (kind) => {
             if (!mountedRef.current) {
               return
             }
             if (kind === 'full') {
-              void refreshContext()
+              void refreshContext({ silent: true })
             } else {
-              void refreshWorktreeContext()
+              void refreshWorktreeContext({ silent: true })
             }
           },
         })
@@ -1310,6 +1329,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         commitDiffHunkOffsets,
         selectedDetailFile,
         layout.bodyRows,
+        layout.mainPanelWidth,
         theme,
         hasMoreCommits,
         loadingMoreCommits
@@ -1447,12 +1467,13 @@ function renderMainPanel(
   commitDiffHunkOffsets: number[] | undefined,
   selectedDetailFile: GitCommitDetail['files'][number] | undefined,
   bodyRows: number,
+  width: number,
   theme: LogInkTheme,
   hasMoreCommits: boolean,
   loadingMoreCommits: boolean
 ): ReactTypes.ReactElement {
   if (state.activeView === 'status') {
-    return renderStatusSurface(h, components, state, context, contextStatus, bodyRows, theme)
+    return renderStatusSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   if (state.activeView === 'diff') {
@@ -1471,24 +1492,25 @@ function renderMainPanel(
       commitDiffHunkOffsets,
       selectedDetailFile,
       bodyRows,
+      width,
       theme
     )
   }
 
   if (state.activeView === 'compose') {
-    return renderComposeSurface(h, components, state, context, contextStatus, bodyRows, theme)
+    return renderComposeSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   if (state.activeView === 'branches') {
-    return renderBranchesSurface(h, components, state, context, contextStatus, bodyRows, theme)
+    return renderBranchesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   if (state.activeView === 'tags') {
-    return renderTagsSurface(h, components, state, context, contextStatus, bodyRows, theme)
+    return renderTagsSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   if (state.activeView === 'stash') {
-    return renderStashSurface(h, components, state, context, contextStatus, bodyRows, theme)
+    return renderStashSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   return renderHistoryPanel(
@@ -1497,6 +1519,7 @@ function renderMainPanel(
     state,
     context,
     bodyRows,
+    width,
     theme,
     hasMoreCommits,
     loadingMoreCommits
@@ -1509,6 +1532,7 @@ function renderHistoryPanel(
   state: LogInkState,
   context: LogInkContext,
   bodyRows: number,
+  width: number,
   theme: LogInkTheme,
   hasMoreCommits: boolean,
   loadingMoreCommits: boolean
@@ -1549,8 +1573,9 @@ function renderHistoryPanel(
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
     flexDirection: 'column',
-    flexGrow: 1,
+    flexShrink: 0,
     paddingX: 1,
+    width,
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Commits', focused)),
@@ -1671,6 +1696,7 @@ function renderStatusSurface(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   bodyRows: number,
+  width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
@@ -1713,8 +1739,9 @@ function renderStatusSurface(
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
     flexDirection: 'column',
-    flexGrow: 1,
+    flexShrink: 0,
     paddingX: 1,
+    width,
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Worktree', focused)),
@@ -1736,6 +1763,7 @@ function renderComposeSurface(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   bodyRows: number,
+  width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
@@ -1768,8 +1796,9 @@ function renderComposeSurface(
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
     flexDirection: 'column',
-    flexGrow: 1,
+    flexShrink: 0,
     paddingX: 1,
+    width,
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Compose commit', focused)),
@@ -1834,6 +1863,7 @@ function renderBranchesSurface(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   bodyRows: number,
+  width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
@@ -1878,8 +1908,9 @@ function renderBranchesSurface(
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
     flexDirection: 'column',
-    flexGrow: 1,
+    flexShrink: 0,
     paddingX: 1,
+    width,
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Branches', focused)),
@@ -1896,6 +1927,7 @@ function renderTagsSurface(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   bodyRows: number,
+  width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
@@ -1952,8 +1984,9 @@ function renderTagsSurface(
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
     flexDirection: 'column',
-    flexGrow: 1,
+    flexShrink: 0,
     paddingX: 1,
+    width,
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Tags', focused)),
@@ -1970,6 +2003,7 @@ function renderStashSurface(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   bodyRows: number,
+  width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
@@ -2010,8 +2044,9 @@ function renderStashSurface(
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
     flexDirection: 'column',
-    flexGrow: 1,
+    flexShrink: 0,
     paddingX: 1,
+    width,
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Stash', focused)),
@@ -2060,6 +2095,7 @@ function renderDiffSurface(
   commitDiffHunkOffsets: number[] | undefined,
   selectedDetailFile: GitCommitDetail['files'][number] | undefined,
   bodyRows: number,
+  width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
@@ -2107,8 +2143,9 @@ function renderDiffSurface(
       borderColor: focusBorderColor(theme, focused),
       borderStyle: theme.borderStyle,
       flexDirection: 'column',
-      flexGrow: 1,
+      flexShrink: 0,
       paddingX: 1,
+      width,
     },
     h(Box, { justifyContent: 'space-between' },
       h(Text, { bold: true }, panelTitle('Diff', focused)),
@@ -2157,8 +2194,9 @@ function renderDiffSurface(
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
     flexDirection: 'column',
-    flexGrow: 1,
+    flexShrink: 0,
     paddingX: 1,
+    width,
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Diff', focused)),
