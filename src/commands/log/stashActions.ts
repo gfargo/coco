@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
+import { checkoutOrDeleteFromRef } from './historyActions'
 import { StashEntry } from './stashData'
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
@@ -58,8 +59,9 @@ export function dropStash(git: SimpleGit, stash: StashEntry): Promise<BranchActi
 /**
  * Materialize a single file's contents from a stash into the working
  * tree, leaving the rest of the stash untouched. Equivalent to
- * `git checkout <stashRef> -- <path>`. Used by the stash diff explorer
- * for file-level cherry-pick.
+ * `git checkout <stashRef> -- <path>` for additions/modifications. When
+ * the path doesn't exist at <stashRef> — i.e. the stash recorded a
+ * deletion — mirror that deletion in the worktree.
  *
  * Important: this overwrites the file in the working tree. The caller
  * is responsible for confirming with the user when the working tree
@@ -70,8 +72,5 @@ export function checkoutFileFromStash(
   stashRef: string,
   path: string
 ): Promise<BranchActionResult> {
-  return runAction(
-    () => git.raw(['checkout', stashRef, '--', path]),
-    `Checked out ${path} from ${stashRef}`
-  )
+  return checkoutOrDeleteFromRef(git, stashRef, path, stashRef)
 }

@@ -107,17 +107,46 @@ export type StashDiffFile = {
  *
  * Renames / moves return the destination path (the `b/` side); the
  * action surface treats that as the path to materialize from the stash.
+ *
+ * Path quoting: git wraps paths containing spaces or special characters
+ * in double-quotes (`diff --git "a/path with spaces" "b/path with spaces"`).
+ * The parser handles both the unquoted and quoted forms; without that,
+ * stash-file navigation and cherry-pick silently broke for any file
+ * whose path contained a space.
  */
 export function parseStashDiffFiles(lines: string[]): StashDiffFile[] {
   const files: StashDiffFile[] = []
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]
-    const match = line.match(/^diff --git a\/(.+) b\/(.+)$/)
-    if (match) {
-      files.push({ path: match[2] || match[1], startLine: i })
+    const parsed = parseDiffGitHeader(line)
+    if (parsed) {
+      files.push({ path: parsed.bPath || parsed.aPath, startLine: i })
     }
   }
   return files
+}
+
+const DIFF_GIT_HEADER = /^diff --git (?:"a\/((?:\\.|[^"\\])+)"|a\/(\S+)) (?:"b\/((?:\\.|[^"\\])+)"|b\/(\S+))$/
+
+function parseDiffGitHeader(line: string): { aPath: string; bPath: string } | undefined {
+  const match = line.match(DIFF_GIT_HEADER)
+  if (!match) return undefined
+  const aPath = unescapeGitQuoted(match[1]) || match[2]
+  const bPath = unescapeGitQuoted(match[3]) || match[4]
+  if (!aPath || !bPath) return undefined
+  return { aPath, bPath }
+}
+
+function unescapeGitQuoted(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  // Git's diff header quoting escapes `"`, `\`, and the usual
+  // C-style sequences. Reverse the most common ones so callers get the
+  // raw on-disk path.
+  return value
+    .replace(/\\\\/g, '\\')
+    .replace(/\\"/g, '"')
+    .replace(/\\t/g, '\t')
+    .replace(/\\n/g, '\n')
 }
 
 export const stashDataTestInternals = {

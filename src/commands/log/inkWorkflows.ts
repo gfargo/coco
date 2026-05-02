@@ -149,6 +149,30 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // Per-view-only: scoped to the commit-diff explore in inkInput.
+      // Routed through the y-confirm path because `git checkout <sha> --
+      // <path>` overwrites the worktree file unconditionally and we
+      // want the user to acknowledge that before discarding any local
+      // edits to the path.
+      id: 'checkout-file-from-commit',
+      key: '',
+      label: 'Cherry-pick file from commit',
+      description: 'Materialize the selected file from this commit into the working tree (after confirmation).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // Per-view-only: scoped to the stash-diff explorer in inkInput.
+      // Same overwrite rationale as `checkout-file-from-commit` — the
+      // y-confirm path is the dirty-tree warning.
+      id: 'checkout-file-from-stash',
+      key: '',
+      label: 'Cherry-pick file from stash',
+      description: 'Materialize the selected file from this stash into the working tree (after confirmation).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'open-pr',
       key: 'O',
       label: 'Open PR / repo',

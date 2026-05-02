@@ -110,10 +110,12 @@ export function getLogInkPaletteExecuteEvents(
     if (command.requiresConfirmation) {
       return [action({ type: 'setPendingConfirmation', value: command.id })]
     }
-    return [
-      action({ type: 'setWorkflowAction', value: command.id }),
-      action({ type: 'setStatus', value: `${command.label} selected` }),
-    ]
+    // Non-confirm workflows are dispatched directly through the runtime
+    // workflow runner — same path the keyboard takes. Previously this
+    // emitted `setWorkflowAction` only, which set state but never fired
+    // the action because nothing in the runtime consumes
+    // `workflowActionId`.
+    return [{ type: 'runWorkflowAction', id: command.id }]
   }
 
   // Binding-derived commands. Map each LogInkCommandId to the same events
@@ -402,7 +404,7 @@ export function getLogInkInputEvents(
       // selected item and run the right action function.
       if (workflowAction) {
         return [
-          { type: 'runWorkflowAction', id: workflowAction.id },
+          { type: 'runWorkflowAction', id: workflowAction.id, payload: state.pendingConfirmationPayload },
           action({ type: 'setPendingConfirmation', value: undefined }),
         ]
       }
@@ -940,6 +942,10 @@ export function getLogInkInputEvents(
   // handlers so a sidebar-focused Enter never fires checkout-branch /
   // navigateOpenDiffForCommit / etc. against the (hidden) selection in
   // the active tab.
+  //
+  // The Enter also moves focus out of the sidebar into the newly opened
+  // list — otherwise ↑/↓ keep cycling sidebar tabs instead of navigating
+  // inside the just-opened view, which made the drill-in feel half-done.
   if (key.return && state.focus === 'sidebar') {
     const tabToView: Partial<Record<LogInkSidebarTab, 'status' | 'branches' | 'tags' | 'stash' | 'worktrees'>> = {
       status: 'status',
@@ -950,7 +956,10 @@ export function getLogInkInputEvents(
     }
     const target = tabToView[state.sidebarTab]
     if (target) {
-      return [action({ type: 'pushView', value: target })]
+      return [
+        action({ type: 'pushView', value: target }),
+        action({ type: 'setFocus', value: 'commits' }),
+      ]
     }
     return [action({ type: 'setStatus', value: 'no detail view for this tab' })]
   }
@@ -1066,8 +1075,10 @@ export function getLogInkInputEvents(
 
   // `c` on a stash diff cherry-picks the file under the cursor —
   // materializes that single path from the stash into the working tree
-  // (`git checkout <stashRef> -- <path>`). Scoped to the stash diff
-  // surface so the letter is free elsewhere.
+  // (`git checkout <stashRef> -- <path>`). Routed through the y-confirm
+  // path because the checkout overwrites the worktree file
+  // unconditionally; the prompt is the user's chance to abort if they
+  // have unsaved edits at that path.
   if (
     inputValue === 'c' &&
     state.activeView === 'diff' &&
@@ -1075,17 +1086,18 @@ export function getLogInkInputEvents(
     context.stashDiffSelectedPath &&
     state.stashDiffRef
   ) {
-    return [{
-      type: 'runWorkflowAction',
-      id: 'checkout-file-from-stash',
+    return [action({
+      type: 'setPendingConfirmation',
+      value: 'checkout-file-from-stash',
       payload: context.stashDiffSelectedPath,
-    }]
+    })]
   }
 
   // `c` on a commit-diff explore cherry-picks the cursored file from
-  // that historical commit — `git checkout <sha> -- <path>`. The
-  // commit's hash + the selected file's path are captured at dispatch
-  // time so the runtime handler doesn't have to re-resolve them.
+  // that historical commit — `git checkout <sha> -- <path>`. Same
+  // confirmation rationale as the stash variant. The payload encodes
+  // both the sha and the path so the runtime handler doesn't have to
+  // re-resolve either.
   if (
     inputValue === 'c' &&
     state.activeView === 'diff' &&
@@ -1093,11 +1105,11 @@ export function getLogInkInputEvents(
     context.commitDiffSelectedPath &&
     context.commitDiffSelectedSha
   ) {
-    return [{
-      type: 'runWorkflowAction',
-      id: 'checkout-file-from-commit',
+    return [action({
+      type: 'setPendingConfirmation',
+      value: 'checkout-file-from-commit',
       payload: `${context.commitDiffSelectedSha} ${context.commitDiffSelectedPath}`,
-    }]
+    })]
   }
 
   // `c` on the history view cherry-picks the full selected commit on

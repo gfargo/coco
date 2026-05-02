@@ -810,8 +810,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     if (state.inputPrompt || state.pendingConfirmationId || state.pendingMutationConfirmation || state.showCommandPalette) {
       return
     }
-    // DevSkim: ignore DS172411 — callback is a function literal, delay
-    // is a hard-coded constant.
+    // The `setTimeout` callback is a literal arrow function (not a
+    // string), and the delay is a hard-coded constant, so the
+    // eval-injection vector behind DevSkim DS172411 doesn't apply here.
+    // DevSkim: ignore DS172411
     const handle = setTimeout(() => {
       if (mountedRef.current) {
         dispatch({ type: 'setStatus', value: undefined })
@@ -911,10 +913,16 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }, [git, refreshContext, refreshWorktreeContext])
 
   // Per-repo sidebar tab persistence (#21). Resolve the repo root, look
-  // up the cached tab, and dispatch `setSidebarTab` once on mount so the
-  // user lands on whichever tab they were last on for this project.
-  // Subsequent setSidebarTab actions (1-5 / [/]) write back to the cache.
-  // Best-effort — read/write failures fall through to the default tab.
+  // up the cached tab, and dispatch `restoreSidebarTab` once on mount so
+  // the user lands on whichever tab they were last on for this project.
+  // `restoreSidebarTab` (vs `setSidebarTab`) intentionally does not pull
+  // focus into the sidebar — the user lands on commits, the saved tab
+  // is just visible in the gutter.
+  //
+  // The save effect listens to `userSidebarTab` (the user's explicit
+  // choice mirror), not `sidebarTab`. That way the auto-switch to
+  // Branches when entering compose / status doesn't overwrite the saved
+  // preference.
   const repoRootRef = React.useRef<string | undefined>(undefined)
   React.useEffect(() => {
     let cancelled = false
@@ -924,8 +932,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (cancelled || !repoRoot) return
         repoRootRef.current = repoRoot
         const saved = getSavedSidebarTab(repoRoot)
-        if (saved && saved !== state.sidebarTab) {
-          dispatch({ type: 'setSidebarTab', value: saved })
+        if (saved && saved !== state.userSidebarTab) {
+          dispatch({ type: 'restoreSidebarTab', value: saved })
         }
       } catch {
         // Not in a worktree, or revparse failed; nothing to restore.
@@ -937,8 +945,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   React.useEffect(() => {
     const repoRoot = repoRootRef.current
     if (!repoRoot) return
-    saveSidebarTab(repoRoot, state.sidebarTab)
-  }, [state.sidebarTab])
+    saveSidebarTab(repoRoot, state.userSidebarTab)
+  }, [state.userSidebarTab])
 
   // P-stash-explorer: load `git stash show -p <ref>` once the diff view
   // becomes active with diffSource='stash'. Best-effort — empty stashes
@@ -1218,7 +1226,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // wondering.
   const openInEditor = React.useCallback((path: string) => {
     if (!path) return
-    const editor = process.env.VISUAL || process.env.EDITOR || 'vi'
+    const editorEnv = process.env.VISUAL || process.env.EDITOR || 'vi'
+    // $VISUAL / $EDITOR commonly include flags (`code -w`, `vim -f`,
+    // `emacs -nw`). Tokenize on whitespace so the leading word is the
+    // executable and the rest are passed as arguments — passing the
+    // full string to spawnSync as the executable would fail with
+    // ENOENT for any of those configurations.
+    const editorArgs = editorEnv.trim().split(/\s+/).filter(Boolean)
+    const editor = editorArgs[0] || 'vi'
+    const editorPrefixArgs = editorArgs.slice(1)
     const out = process.stdout
     const stdin = process.stdin
     const ENTER_ALT = '\x1b[?1049h'
@@ -1230,9 +1246,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // doesn't inherit our raw-mode keystrokes.
       stdin.setRawMode?.(false)
       out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
-      const result = spawnSync(editor, [path], { stdio: 'inherit' })
+      const result = spawnSync(editor, [...editorPrefixArgs, path], { stdio: 'inherit' })
       if (result.error) {
         dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}` })
+      } else if (result.signal) {
+        // Editor was killed by a signal (e.g. ^C, SIGTERM). status is
+        // null in this case, so the old `status !== 0` check would
+        // mistakenly fall through to the success branch.
+        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}` })
       } else if (typeof result.status === 'number' && result.status !== 0) {
         dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}` })
       } else {
@@ -1362,15 +1383,25 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       },
       'remove-worktree': async () => {
         const all = context.worktreeList?.worktrees || []
-        // Prefer the cursor on the worktrees promoted view; fall back to
-        // the first non-current worktree (e.g. when the action is fired
-        // from the command palette without ever visiting `g w`).
-        const cursorTarget = all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
-        const target = cursorTarget && !cursorTarget.current
-          ? cursorTarget
-          : all.find((w) => !w.current)
-        if (!target) return { ok: false, message: 'No removable worktree' }
-        return removeWorktree(git, target)
+        // Resolve the target from the visible (filtered) list so a
+        // hidden filtered-out worktree can never be the action target.
+        // Falls back to the cursor against the unfiltered list when the
+        // action is invoked from the palette without ever visiting the
+        // worktrees view.
+        const visible = state.filter
+          ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
+          : all
+        const cursorTarget = visible.length
+          ? visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
+          : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
+        if (!cursorTarget) return { ok: false, message: 'No worktree selected' }
+        if (cursorTarget.current) {
+          return {
+            ok: false,
+            message: 'Cannot remove the current worktree — switch to another worktree first.',
+          }
+        }
+        return removeWorktree(git, cursorTarget)
       },
       'abort-operation': async () => {
         const operation = context.operation?.operation
@@ -1586,6 +1617,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const stashVisibleCount = visibleStashes.length
     const stashSelectedRef = visibleStashes[Math.min(state.selectedStashIndex, Math.max(0, visibleStashes.length - 1))]?.ref
 
+    // The worktrees promoted view is filterable; mirror the branches /
+    // tags / stash pattern and feed the filtered count into the input
+    // dispatcher so ↑/↓ stay synchronized with the visible rows.
+    const worktreeVisibleCount = state.filter
+      ? (context.worktreeList?.worktrees || [])
+        .filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
+        .length
+      : context.worktreeList?.worktrees.length
+
     // When the diff view is showing a stash patch, swap the previewLineCount
     // to the stash diff length so the existing pageDetailPreview path
     // (j/k, PgUp/PgDn) scrolls through it without a parallel pipeline.
@@ -1629,7 +1669,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashSelectedRef,
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,
-      worktreeListCount: context.worktreeList?.worktrees.length,
+      worktreeListCount: worktreeVisibleCount,
       worktreeSelectedPath: context.worktree?.files[state.selectedWorktreeFileIndex]?.path,
       commitDiffSelectedPath: state.diffSource === 'commit'
         ? selectedDetailFile?.path

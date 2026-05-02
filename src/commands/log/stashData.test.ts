@@ -105,5 +105,30 @@ describe('log stash data', () => {
     it('returns an empty array for an empty patch', () => {
       expect(parseStashDiffFiles([])).toEqual([])
     })
+
+    it('handles git\'s quoted-path form for filenames with spaces', () => {
+      const lines = [
+        'diff --git "a/src/file with spaces.ts" "b/src/file with spaces.ts"',
+        'index aaa..bbb 100644',
+        '--- "a/src/file with spaces.ts"',
+        '+++ "b/src/file with spaces.ts"',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'src/file with spaces.ts', startLine: 0 },
+      ])
+    })
+
+    it('decodes git\'s C-style escapes inside quoted paths', () => {
+      const lines = [
+        'diff --git "a/src/quote\\".ts" "b/src/quote\\".ts"',
+        'index aaa..bbb 100644',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'src/quote".ts', startLine: 0 },
+      ])
+    })
   })
 })

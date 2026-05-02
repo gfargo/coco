@@ -34,6 +34,12 @@ function resolveCacheDir(): string {
 }
 
 function repoKey(repoPath: string): string {
+  // sha1 is used here as a non-security cache-key derivation — we just
+  // need a deterministic short identifier for the marker filename so
+  // re-creating a repo at the same path keeps the same preference.
+  // No PII or auth context is hashed; no collision-resistance against
+  // an adversary is required. DevSkim DS126858 doesn't apply.
+  // DevSkim: ignore DS126858
   return crypto.createHash('sha1').update(repoPath).digest('hex').slice(0, 16)
 }
 
