@@ -1848,9 +1848,18 @@ function renderComposeSurface(
   const summaryCursor = compose.editing && compose.field === 'summary' ? '_' : ''
   const bodyCursor = compose.editing && compose.field === 'body' ? '_' : ''
   const bodyRowsAvailable = Math.max(4, bodyRows - 10)
-  const bodyLines = compose.body
-    ? compose.body.split('\n').slice(0, bodyRowsAvailable)
+  // Wrap each source line of the body to the panel width so long messages
+  // line-wrap inside the compose surface instead of getting trimmed by an
+  // outer truncate(line, 140). The 2-space indent eats 2 cells; chrome
+  // (border + paddingX) eats 4 — same budget as renderCommitPanel.
+  const bodyTextWidth = Math.max(8, width - 6)
+  const bodyVisualLines = compose.body
+    ? compose.body.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth)).slice(0, bodyRowsAvailable)
     : ['<empty>']
+  const summaryVisualLines = wrapCells(
+    `${compose.summary || '<empty>'}${summaryCursor}`,
+    Math.max(8, width - 11) // "Summary  " (9) + 2 chrome = 11
+  )
   const stateLine = compose.editing
     ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
     : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
@@ -1877,15 +1886,22 @@ function renderComposeSurface(
   h(Text, undefined, ''),
   h(Text, {
     bold: compose.field === 'summary' && compose.editing,
-  }, truncate(`Summary  ${compose.summary || '<empty>'}${summaryCursor}`, 140)),
+  }, `Summary  ${summaryVisualLines[0] || ''}`),
+  ...summaryVisualLines.slice(1).map((line, index) => h(Text, {
+    key: `compose-summary-${index}`,
+    bold: compose.field === 'summary' && compose.editing,
+  }, `         ${line}`)),
   h(Text, undefined, ''),
   h(Text, {
     bold: compose.field === 'body' && compose.editing,
   }, 'Body'),
-  ...bodyLines.map((line, index) => h(Text, {
-    key: `compose-body-${index}`,
-    dimColor: line === '<empty>',
-  }, truncate(`  ${line}${bodyCursor && index === bodyLines.length - 1 ? bodyCursor : ''}`, 140))),
+  ...bodyVisualLines.map((line, index) => {
+    const isLast = index === bodyVisualLines.length - 1
+    return h(Text, {
+      key: `compose-body-${index}`,
+      dimColor: line === '<empty>',
+    }, `  ${line}${bodyCursor && isLast ? bodyCursor : ''}`)
+  }),
   h(Text, undefined, ''),
   ...(compose.loading
     ? [h(Text, {
