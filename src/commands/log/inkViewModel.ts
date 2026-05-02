@@ -129,6 +129,9 @@ export type LogInkState = {
 export type LogInkInputPromptKind =
   | 'create-branch'
   | 'create-tag'
+  | 'rename-branch'
+  | 'set-upstream'
+  | 'create-stash'
 
 export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind

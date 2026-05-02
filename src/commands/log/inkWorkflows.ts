@@ -138,6 +138,42 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      id: 'fetch-remotes',
+      key: 'F',
+      label: 'Fetch all remotes',
+      description: 'Run `git fetch --all --prune` and silently refresh context.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'pull-current-branch',
+      key: 'U',
+      label: 'Pull current branch',
+      description: 'Run `git pull --ff-only` against the current branch.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'push-current-branch',
+      key: 'P',
+      label: 'Push current branch',
+      description: 'Run `git push` for the current branch.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      // Per-view-only — the inkInput handler scopes this to the tags
+      // surface so we don't expose `R` as a remote-delete from elsewhere.
+      // The empty `key` keeps the workflow palette-discoverable but does
+      // not register a global hotkey.
+      id: 'delete-remote-tag',
+      key: '',
+      label: 'Delete remote tag',
+      description: 'Push :tag to origin to delete the selected tag remotely after confirmation.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'stage-file',
       key: 'space',
       label: 'Stage or unstage file',

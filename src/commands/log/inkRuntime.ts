@@ -135,9 +135,18 @@ import {
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
-import { checkoutBranch, createBranch, deleteBranch } from './branchActions'
-import { createLightweightTag, deleteLocalTag, pushTag } from './tagActions'
-import { applyStash, checkoutFileFromStash, dropStash, popStash } from './stashActions'
+import {
+  checkoutBranch,
+  createBranch,
+  deleteBranch,
+  fetchRemotes,
+  pullCurrentBranch,
+  pushCurrentBranch,
+  renameBranch,
+  setUpstream,
+} from './branchActions'
+import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from './tagActions'
+import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
@@ -1245,6 +1254,45 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return { ok: false, message: 'No git operation in progress' }
         }
         return abortOperation(git, operation)
+      },
+      'fetch-remotes': async () => fetchRemotes(git),
+      'pull-current-branch': async () => pullCurrentBranch(git),
+      'push-current-branch': async () => pushCurrentBranch(git),
+      'rename-branch': async () => {
+        const newName = payload?.trim()
+        if (!newName) return { ok: false, message: 'New branch name required' }
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return renameBranch(git, branch.shortName, newName)
+      },
+      'set-upstream': async () => {
+        const upstream = payload?.trim()
+        if (!upstream) return { ok: false, message: 'Upstream ref required' }
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return setUpstream(git, branch.shortName, upstream)
+      },
+      'delete-remote-tag': async () => {
+        const all = sortTags(context.tags?.tags || [], state.tagSort)
+        const visible = state.filter
+          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+          : all
+        const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+        if (!tag) return { ok: false, message: 'No tag selected' }
+        return deleteRemoteTag(git, tag.name)
+      },
+      'create-stash': async () => {
+        const message = payload?.trim()
+        if (!message) return { ok: false, message: 'Stash message required' }
+        return createStash(git, message)
       },
     }
     const handler = handlers[id]

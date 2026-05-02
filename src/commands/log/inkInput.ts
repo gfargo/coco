@@ -991,9 +991,46 @@ export function getLogInkInputEvents(
   }
   // Per-view tag action: `P` pushes the selected tag to origin. Letter
   // is scoped to the tags surface so it doesn't collide with `p` for
-  // pop-stash.
+  // pop-stash. Note: this also takes precedence over the global
+  // push-current-branch workflow's `P` key.
   if (inputValue === 'P' && state.activeView === 'tags' && context.tagCount) {
     return [{ type: 'runWorkflowAction', id: 'push-tag' }]
+  }
+
+  // Per-view branches actions: `R` renames the selected branch, `u`
+  // sets its upstream. Both open the input prompt so the user can type
+  // the new value. Pre-fills are handled by the prompt's `initial`.
+  if (inputValue === 'R' && state.activeView === 'branches' && context.branchCount) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'rename-branch',
+      label: 'Rename branch to',
+    })]
+  }
+  if (inputValue === 'u' && state.activeView === 'branches' && context.branchCount) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'set-upstream',
+      label: 'Upstream ref (e.g. origin/main)',
+    })]
+  }
+
+  // Per-view tag action: `R` deletes the tag from the remote (after
+  // confirmation). Scoped per-view so this letter is free elsewhere
+  // (especially the `R` rename binding on the branches view).
+  if (inputValue === 'R' && state.activeView === 'tags' && context.tagCount) {
+    return [action({ type: 'setPendingConfirmation', value: 'delete-remote-tag' })]
+  }
+
+  // Global stash hotkey: `S` opens a stash-message prompt and
+  // `createStash` runs once submitted. Available everywhere there's
+  // not a more modal handler in front of it.
+  if (inputValue === 'S') {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-stash',
+      label: 'Stash message',
+    })]
   }
 
   // `c` on a stash diff cherry-picks the file under the cursor —
