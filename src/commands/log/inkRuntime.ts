@@ -164,6 +164,7 @@ import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { StashOverview, getStashDiff, getStashOverview, parseStashDiffFiles } from './stashData'
+import { formatStashHeaderIdentity } from './inkStashHeader'
 import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeOverview, applyStatusFilterMask, getWorktreeOverview } from './statusData'
 import {
@@ -3105,11 +3106,19 @@ function renderDiffSurface(
     const currentFileIndex = currentFile
       ? Math.max(0, stashFiles.findIndex((file) => file.startLine === currentFile.startLine))
       : -1
+    // Look up the active stash entry so the panel header can show a
+    // human-identifier instead of the raw `stash@{<iso-date>}` ref.
+    // The git ref is the timestamp form (we fetch with --date=iso for
+    // stable parsing) which reads as noise in the title bar; the
+    // message + branch + index combination is what the user wrote down
+    // when they ran `git stash`. Body still shows the full ref so it
+    // stays unambiguous.
+    const stashIdentity = formatStashHeaderIdentity(state.stashDiffRef, context.stashes?.stashes)
     const headerLines: string[] = stashDiffLoading
-      ? [`Loading diff for ${state.stashDiffRef || 'stash'}...`]
+      ? [`Loading diff for ${stashIdentity.subtitle}...`]
       : lines.length
         ? [
-          `Stash: ${state.stashDiffRef || ''}`,
+          stashIdentity.bodyLine,
           fileCount > 0 && currentFile
             ? `File ${currentFileIndex + 1}/${fileCount}: ${currentFile.path}`
             : 'No files in this stash.',
@@ -3128,7 +3137,7 @@ function renderDiffSurface(
     },
     h(Box, { justifyContent: 'space-between' },
       h(Text, { bold: true }, panelTitle('Stash diff', focused)),
-      h(Text, { dimColor: true }, state.stashDiffRef || 'no stash')
+      h(Text, { dimColor: true }, stashIdentity.subtitle)
     ),
     ...headerLines.map((line, index) => h(Text, {
       key: `stash-diff-header-${index}`,
