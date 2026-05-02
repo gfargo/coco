@@ -23,6 +23,7 @@ export type LogInkCommandId =
   | 'navigateDiff'
   | 'navigateHome'
   | 'navigateStash'
+  | 'navigateWorktrees'
   | 'navigateStatus'
   | 'navigateTags'
   | 'nextHunk'
@@ -232,6 +233,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'navigateWorktrees',
+    keys: ['gw'],
+    label: 'worktrees',
+    description: 'Push the linked worktrees view.',
+    contexts: ['normal'],
+  },
+  {
     id: 'navigateBack',
     keys: ['<', 'esc'],
     label: 'back',
@@ -386,6 +394,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateBranches',
   'navigateTags',
   'navigateStash',
+  'navigateWorktrees',
   'navigateBack',
 ]
 
@@ -513,6 +522,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'stash') {
     return {
       contextual: ['↑/↓ stashes', 'enter diff', 'a apply', 'p pop', 'X drop'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'worktrees') {
+    return {
+      contextual: ['↑/↓ worktrees', 'W remove', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

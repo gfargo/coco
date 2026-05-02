@@ -1229,9 +1229,13 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       },
       'remove-worktree': async () => {
         const all = context.worktreeList?.worktrees || []
-        // No dedicated cursor for the worktrees tab yet — operate on the
-        // first non-current worktree as a safe default.
-        const target = all.find((w) => !w.current)
+        // Prefer the cursor on the worktrees promoted view; fall back to
+        // the first non-current worktree (e.g. when the action is fired
+        // from the command palette without ever visiting `g w`).
+        const cursorTarget = all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
+        const target = cursorTarget && !cursorTarget.current
+          ? cursorTarget
+          : all.find((w) => !w.current)
         if (!target) return { ok: false, message: 'No removable worktree' }
         return removeWorktree(git, target)
       },
@@ -1254,7 +1258,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // flickering the surfaces through a 'loading' phase.
     await refreshContext({ silent: true })
   }, [context, dispatch, git, refreshContext, state.branchSort, state.filter, state.selectedBranchIndex,
-    state.selectedStashIndex, state.selectedTagIndex, state.stashDiffRef, state.tagSort])
+    state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
+    state.tagSort])
 
   React.useEffect(() => {
     let active = true
@@ -1439,6 +1444,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashSelectedRef,
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,
+      worktreeListCount: context.worktreeList?.worktrees.length,
       worktreeDirty,
     }).forEach((event) => {
       if (event.type === 'exit') {
@@ -1790,6 +1796,10 @@ function renderMainPanel(
 
   if (state.activeView === 'stash') {
     return renderStashSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
+  if (state.activeView === 'worktrees') {
+    return renderWorktreesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   return renderHistoryPanel(
@@ -2348,6 +2358,70 @@ function renderStashSurface(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Stash', focused)),
+    h(Text, { dimColor: true }, headerRight)
+  ),
+  ...renderPromotedFilterAffordance(h, Text, state, theme),
+  ...lines)
+}
+
+function renderWorktreesSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const loading = isLogInkContextKeyLoading(contextStatus, 'worktreeList')
+  const allWorktrees = context.worktreeList?.worktrees || []
+  const worktrees = state.filter
+    ? allWorktrees.filter((entry) =>
+      matchesPromotedFilter([entry.path, entry.branch || '', entry.head || ''], state.filter)
+    )
+    : allWorktrees
+  const selected = Math.max(0, Math.min(state.selectedWorktreeListIndex, Math.max(0, worktrees.length - 1)))
+  const listRows = Math.max(4, bodyRows - 4)
+  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const visible = worktrees.slice(startIndex, startIndex + listRows)
+  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
+  const headerRight = loading
+    ? 'loading worktrees'
+    : `${worktrees.length}/${allWorktrees.length} worktrees${filterLabel}`
+  const lines: ReactTypes.ReactNode[] = loading
+    ? [h(Text, { key: 'worktrees-loading', dimColor: true }, formatLogInkLoading({ resource: 'worktrees' }))]
+    : worktrees.length === 0
+      ? [h(Text, { key: 'worktrees-empty', dimColor: true }, 'No linked worktrees.')]
+      : visible.map((entry, offset) => {
+        const index = startIndex + offset
+        const isSelected = index === selected
+        const cursor = isSelected ? '>' : ' '
+        const marker = entry.current ? '*' : ' '
+        const branchLabel = entry.branch ? entry.branch : entry.head || '<detached>'
+        const stateLabel = entry.dirty ? 'dirty' : 'clean'
+        return h(Text, {
+          key: `worktree-${index}`,
+          bold: isSelected,
+          dimColor: !isSelected && !entry.current,
+        }, truncate(
+          `${cursor} ${marker} ${branchLabel.padEnd(28)} ${stateLabel.padEnd(6)} ${entry.path}`,
+          width - 4
+        ))
+      })
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexShrink: 0,
+    paddingX: 1,
+    width,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Worktrees', focused)),
     h(Text, { dimColor: true }, headerRight)
   ),
   ...renderPromotedFilterAffordance(h, Text, state, theme),

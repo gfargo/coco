@@ -51,6 +51,7 @@ export type LogInkInputContext = {
   branchCount?: number
   tagCount?: number
   stashCount?: number
+  worktreeListCount?: number
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
   /**
@@ -159,6 +160,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'tags' })]
     case 'navigateStash':
       return [action({ type: 'pushView', value: 'stash' })]
+    case 'navigateWorktrees':
+      return [action({ type: 'pushView', value: 'worktrees' })]
     case 'navigateBack':
       return [action({ type: 'popView' })]
     case 'openSelected': {
@@ -565,6 +568,13 @@ export function getLogInkInputEvents(
     ]
   }
 
+  if (state.pendingKey === 'g' && inputValue === 'w') {
+    return [
+      action({ type: 'pushView', value: 'worktrees' }),
+      action({ type: 'setStatus', value: 'jumped to worktrees' }),
+    ]
+  }
+
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
       return [
@@ -721,6 +731,10 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveStash', delta: -1, count: context.stashCount })]
     }
 
+    if (state.activeView === 'worktrees' && context.worktreeListCount) {
+      return [action({ type: 'moveWorktreeListEntry', delta: -1, count: context.worktreeListCount })]
+    }
+
     if (
       state.activeView === 'history' &&
       state.focus === 'commits' &&
@@ -781,6 +795,10 @@ export function getLogInkInputEvents(
 
     if (state.activeView === 'stash' && context.stashCount) {
       return [action({ type: 'moveStash', delta: 1, count: context.stashCount })]
+    }
+
+    if (state.activeView === 'worktrees' && context.worktreeListCount) {
+      return [action({ type: 'moveWorktreeListEntry', delta: 1, count: context.worktreeListCount })]
     }
 
     return [
@@ -907,11 +925,12 @@ export function getLogInkInputEvents(
   // navigateOpenDiffForCommit / etc. against the (hidden) selection in
   // the active tab.
   if (key.return && state.focus === 'sidebar') {
-    const tabToView: Partial<Record<LogInkSidebarTab, 'status' | 'branches' | 'tags' | 'stash'>> = {
+    const tabToView: Partial<Record<LogInkSidebarTab, 'status' | 'branches' | 'tags' | 'stash' | 'worktrees'>> = {
       status: 'status',
       branches: 'branches',
       tags: 'tags',
       stashes: 'stash',
+      worktrees: 'worktrees',
     }
     const target = tabToView[state.sidebarTab]
     if (target) {
@@ -933,17 +952,26 @@ export function getLogInkInputEvents(
     return [{ type: 'runWorkflowAction', id: 'checkout-branch' }]
   }
 
-  // `+` on the branches / tags views opens a text-input prompt for the
-  // new branch / tag name. Empty submit is rejected by the prompt
-  // handler so the user has to either type a name or press Esc.
-  if (inputValue === '+' && state.activeView === 'branches') {
+  // `+` opens a create-branch / create-tag prompt depending on context.
+  // Works from either the matching promoted view (active branches /
+  // tags surface) or from the sidebar when the corresponding tab is
+  // active — saves a drill-in for "I just want to make a new branch".
+  const wantsCreateBranch = inputValue === '+' && (
+    state.activeView === 'branches' ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'branches')
+  )
+  const wantsCreateTag = inputValue === '+' && (
+    state.activeView === 'tags' ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'tags')
+  )
+  if (wantsCreateBranch) {
     return [action({
       type: 'openInputPrompt',
       kind: 'create-branch',
       label: 'New branch name',
     })]
   }
-  if (inputValue === '+' && state.activeView === 'tags') {
+  if (wantsCreateTag) {
     return [action({
       type: 'openInputPrompt',
       kind: 'create-tag',
