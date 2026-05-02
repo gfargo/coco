@@ -489,14 +489,14 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'branches') {
     return {
-      contextual: ['↑/↓ branches', 's sort', 'D delete', 'X checkout', 'enter diff'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'tags') {
     return {
-      contextual: ['↑/↓ tags', 's sort', 'T create', 'X push', 'esc back'],
+      contextual: ['↑/↓ tags', '+ new', 'T delete', 's sort'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

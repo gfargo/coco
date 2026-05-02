@@ -57,7 +57,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ branches', 's sort', 'D delete', 'X checkout', 'enter diff'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -67,7 +67,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ tags', 's sort', 'T create', 'X push', 'esc back'],
+      contextual: ['↑/↓ tags', '+ new', 'T delete', 's sort'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
