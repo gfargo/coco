@@ -20,7 +20,8 @@ export type BranchDivergenceInput = {
 /**
  * Format a branch's relationship to its upstream.
  * - no upstream  → "no upstream"
- * - even         → "even with <upstream>"
+ * - even         → "" (the boring default — keep the row tight; the row
+ *   marker already encodes "synced")
  * - divergent    → "↑<ahead> ↓<behind> <upstream>" (only the non-zero side
  *   is rendered so the line stays tight). ASCII mode falls back to the
  *   legacy `+N/-N` form.
@@ -34,7 +35,7 @@ export function formatBranchDivergence(
   }
 
   if (branch.ahead === 0 && branch.behind === 0) {
-    return `even with ${branch.upstream}`
+    return ''
   }
 
   if (options.ascii) {
@@ -51,11 +52,21 @@ export function formatBranchDivergence(
 export type BranchRowMarkerInput = {
   current: boolean
   upstream?: string
+  ahead?: number
+  behind?: number
 }
 
 /**
  * Single-cell marker shown to the left of a branch name in lists.
- * `*` = current, `◌` = no upstream (detached from a remote), space otherwise.
+ *
+ * - `*` — current branch (regardless of remote state)
+ * - `◌` — no upstream
+ * - `≡` — has upstream + synced (ahead === 0 && behind === 0)
+ * - `↕` — has upstream + diverged (any non-zero ahead/behind)
+ * - ` ` — fallback / no info
+ *
+ * ASCII fallbacks (legible without box-drawing/arrow glyphs):
+ * - `?` for "no upstream", `=` for synced, `~` for diverged.
  */
 export function branchRowMarker(
   branch: BranchRowMarkerInput,
@@ -63,7 +74,62 @@ export function branchRowMarker(
 ): string {
   if (branch.current) return '*'
   if (!branch.upstream) return options.ascii ? '?' : '◌'
-  return ' '
+
+  const ahead = branch.ahead ?? 0
+  const behind = branch.behind ?? 0
+  if (ahead === 0 && behind === 0) {
+    return options.ascii ? '=' : '≡'
+  }
+  return options.ascii ? '~' : '↕'
+}
+
+/**
+ * Compact, human-friendly relative timestamp for the branch row.
+ * Inputs:
+ * - `iso` — committer-date in `YYYY-MM-DD` form (as produced by
+ *   `for-each-ref` with `committerdate:short`).
+ * - `now` — reference instant; pass it explicitly so callers can pin it
+ *   for deterministic tests.
+ *
+ * Outputs (rounded toward the nearest unit):
+ * - `today`, `1d ago`, `2d ago` … up to 13d
+ * - `2w ago` … up to 8w
+ * - `2mo ago` … up to 12mo
+ * - `2y ago` for older
+ * - `''` for malformed inputs (caller renders nothing).
+ *
+ * "in the future" inputs (clock skew, bad data) collapse to `today`.
+ */
+export function formatBranchLastTouched(iso: string | undefined, now: Date): string {
+  if (!iso) return ''
+  // Tolerate either `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS…` ISO strings.
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!match) return ''
+
+  const year = Number.parseInt(match[1], 10)
+  const month = Number.parseInt(match[2], 10)
+  const day = Number.parseInt(match[3], 10)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return ''
+
+  // Compare at day granularity in UTC so a branch touched "yesterday"
+  // never reads "today" depending on the operator's timezone.
+  const branchUtc = Date.UTC(year, month - 1, day)
+  const nowUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const diffMs = nowUtc - branchUtc
+  const oneDay = 24 * 60 * 60 * 1000
+  const days = Math.floor(diffMs / oneDay)
+
+  if (days <= 0) return 'today'
+  if (days < 14) return `${days}d ago`
+
+  const weeks = Math.floor(days / 7)
+  if (weeks < 9) return `${weeks}w ago`
+
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+
+  const years = Math.floor(days / 365)
+  return `${years}y ago`
 }
 
 /* ------------------------------ P3.2 — PR ------------------------------- */
