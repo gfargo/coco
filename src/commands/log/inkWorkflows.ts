@@ -173,6 +173,34 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // Per-view-only: scoped to commit-diff and stash-diff explores in
+      // inkInput (key: H). The action is non-destructive in the sense
+      // that `git apply` won't lose any data — `git apply -R` undoes
+      // it cleanly — so it bypasses the y-confirm path. The patch text
+      // travels via the action's `payload` field. Empty key keeps the
+      // workflow palette-discoverable without registering a global
+      // hotkey (the palette path can't synthesize the patch text and
+      // surfaces a hint instead — actual dispatch is from H in diff
+      // view).
+      id: 'apply-hunk-worktree',
+      key: '',
+      label: 'Apply hunk to worktree',
+      description: 'Extract the hunk under the cursor and apply it to the working tree via `git apply`.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      // Sibling of `apply-hunk-worktree` — same extraction path, but
+      // `git apply --cached` so the patch lands in the index without
+      // touching the worktree. Bound to the `gH` chord in inkInput.
+      id: 'apply-hunk-index',
+      key: '',
+      label: 'Apply hunk to index',
+      description: 'Extract the hunk under the cursor and apply it to the index via `git apply --cached`.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       id: 'open-pr',
       key: 'O',
       label: 'Open PR / repo',

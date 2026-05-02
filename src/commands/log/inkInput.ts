@@ -1,3 +1,4 @@
+import { extractDiffHunk } from './inkHunkExtraction'
 import {
   LogInkPaletteCommand,
   filterLogInkPaletteCommands,
@@ -97,6 +98,16 @@ export type LogInkInputContext = {
    * row is hidden entirely when the worktree is clean.
    */
   worktreeDirty?: boolean
+  /**
+   * Lines of the active diff (stash or commit) when the user is on a
+   * diff explore. Used by the H / gH hunk-apply handler to slice the
+   * cursored hunk out of the patch text and ship it to `git apply`.
+   * Stash uses the full `git stash show -p` output; commit-diff uses
+   * the per-file `filePreview.hunks` array (hunks-only). The handler
+   * doesn't care which — `extractDiffHunk` walks `@@` headers either
+   * way.
+   */
+  diffLinesForHunkApply?: string[]
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -104,6 +115,44 @@ function action(actionValue: LogInkAction): LogInkInputEvent {
     type: 'action',
     action: actionValue,
   }
+}
+
+/**
+ * Build the events needed to apply the hunk under the diff cursor. The
+ * runtime workflow handler expects payload format `<target>\n<patch>`
+ * — splitting on the first newline keeps the patch body intact for
+ * targets like `worktree` and `index` (no newlines in the prefix).
+ *
+ * Returns [] when the user isn't on a commit-diff / stash-diff explore,
+ * or when no hunk can be extracted at the current cursor offset
+ * (e.g. cursor sits on a `diff --git` header before the first `@@`).
+ * Callers fall back to a contextual status message when this returns [].
+ */
+function buildApplyHunkEvents(
+  state: LogInkState,
+  context: LogInkInputContext,
+  target: 'worktree' | 'index'
+): LogInkInputEvent[] {
+  if (state.activeView !== 'diff') return []
+  if (state.diffSource !== 'commit' && state.diffSource !== 'stash') return []
+  const lines = context.diffLinesForHunkApply
+  if (!lines || lines.length === 0) return []
+  const path = state.diffSource === 'stash'
+    ? context.stashDiffSelectedPath
+    : context.commitDiffSelectedPath
+  if (!path) return []
+  const extracted = extractDiffHunk({
+    lines,
+    cursorOffset: state.diffPreviewOffset,
+    path,
+  })
+  if (!extracted) return []
+  const id = target === 'index' ? 'apply-hunk-index' : 'apply-hunk-worktree'
+  return [{
+    type: 'runWorkflowAction',
+    id,
+    payload: `${target}\n${extracted.patchText}`,
+  }]
 }
 
 /**
@@ -746,6 +795,22 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // `gH` chord: apply the cursored hunk to the index (`git apply
+  // --cached`). Sibling of bare `H` which targets the worktree.
+  // Discoverable via the footer hint on diff views and the help
+  // overlay; the explicit chord keeps `H` (single keystroke) for
+  // the more common worktree case.
+  if (state.pendingKey === 'g' && inputValue === 'H') {
+    const events = buildApplyHunkEvents(state, context, 'index')
+    if (events.length) {
+      return [action({ type: 'setPendingKey', value: undefined }), ...events]
+    }
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      action({ type: 'setStatus', value: 'gH applies a hunk in commit-diff or stash-diff view' }),
+    ]
+  }
+
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
       return [
@@ -1356,6 +1421,22 @@ export function getLogInkInputEvents(
       value: 'checkout-file-from-commit',
       payload: `${context.commitDiffSelectedSha} ${context.commitDiffSelectedPath}`,
     })]
+  }
+
+  // `H` on a commit-diff or stash-diff explore extracts the hunk under
+  // the cursor and applies it to the working tree (`git apply`). The
+  // sibling `gH` chord targets the index (`git apply --cached`). Both
+  // bypass the y-confirm path because `git apply` is non-destructive
+  // (it'll fail loudly on conflict and `git apply -R` undoes a clean
+  // apply).
+  if (inputValue === 'H') {
+    const events = buildApplyHunkEvents(state, context, 'worktree')
+    if (events.length) {
+      return events
+    }
+    if (state.activeView === 'diff' && (state.diffSource === 'commit' || state.diffSource === 'stash')) {
+      return [action({ type: 'setStatus', value: 'no hunk under cursor — j/k to a + or - line first' })]
+    }
   }
 
   // `c` on the history view cherry-picks the full selected commit on
