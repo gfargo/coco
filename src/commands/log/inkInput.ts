@@ -51,6 +51,8 @@ export type LogInkInputContext = {
   branchCount?: number
   tagCount?: number
   stashCount?: number
+  /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
+  stashSelectedRef?: string
   /**
    * True when the worktree has any staged, unstaged, or untracked changes.
    * Drives the synthetic "(+) new commit" row at the top of the history
@@ -914,6 +916,17 @@ export function getLogInkInputEvents(
   }
   if (inputValue === 'p' && state.activeView === 'stash' && context.stashCount) {
     return [{ type: 'runWorkflowAction', id: 'pop-stash' }]
+  }
+  // Enter on a stash row pushes the diff view scoped to that stash.
+  // The runtime loads `git stash show -p <ref>` once the view is
+  // active. The stash ref is passed via the action so we don't need a
+  // context lookup here.
+  if (key.return && state.activeView === 'stash' && context.stashCount && context.stashSelectedRef) {
+    return [action({
+      type: 'navigateOpenDiffForStash',
+      ref: context.stashSelectedRef,
+      stashIndex: state.selectedStashIndex,
+    })]
   }
 
   if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {

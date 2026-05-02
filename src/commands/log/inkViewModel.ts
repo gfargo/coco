@@ -28,7 +28,7 @@ export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discar
  * input handlers off this field so a dirty worktree can't bleed staging
  * UI into a commit-diff view.
  */
-export type LogInkDiffSource = 'commit' | 'worktree'
+export type LogInkDiffSource = 'commit' | 'worktree' | 'stash'
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
@@ -98,6 +98,12 @@ export type LogInkState = {
    */
   diffSource?: LogInkDiffSource
   /**
+   * Stash ref (e.g. `stash@{0}`) currently being inspected in the diff
+   * view. Set by `navigateOpenDiffForStash`; cleared when the diff view
+   * is popped or replaced.
+   */
+  stashDiffRef?: string
+  /**
    * When true, the cursor sits on the synthetic "(+) new commit" row
    * that the history panel renders above the real commits whenever the
    * worktree is dirty. `getSelectedInkCommit` returns undefined in this
@@ -159,6 +165,7 @@ export type LogInkAction =
   | { type: 'navigateHome' }
   | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
+  | { type: 'navigateOpenDiffForStash'; ref: string; stashIndex?: number }
   | { type: 'navigateOpenComposeForFile'; fileIndex: number }
   | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
   | { type: 'jumpCommitDiffHunk'; delta: number; hunkOffsets: number[] }
@@ -325,6 +332,7 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
+    stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
@@ -344,6 +352,7 @@ function withPoppedView(state: LogInkState): LogInkState {
     worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: next === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: next === 'diff' ? state.diffSource : undefined,
+    stashDiffRef: next === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: next === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
@@ -362,6 +371,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
+    stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
@@ -769,6 +779,16 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         diffSource: 'worktree',
       }
     }
+    case 'navigateOpenDiffForStash': {
+      const next = withPushedView(state, 'diff')
+      return {
+        ...next,
+        diffSource: 'stash',
+        stashDiffRef: action.ref,
+        selectedStashIndex: Math.max(0, action.stashIndex ?? state.selectedStashIndex),
+        worktreeDiffOffset: 0,
+      }
+    }
     case 'navigateOpenComposeForFile': {
       const next = withPushedView(state, 'status')
       return {
@@ -945,6 +965,16 @@ export function intentOpenDiffForWorktreeFile(
   }
 
   return { type: 'navigateOpenDiffForWorktreeFile', fileIndex: idx }
+}
+
+export function intentOpenDiffForStash(
+  ref: string,
+  stashIndex?: number
+): LogInkAction | null {
+  if (!ref) {
+    return null
+  }
+  return { type: 'navigateOpenDiffForStash', ref, stashIndex }
 }
 
 export function intentOpenComposeForFile(

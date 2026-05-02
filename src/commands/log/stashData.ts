@@ -75,6 +75,20 @@ export async function getStashDiffSummary(git: SimpleGit, stashRef: string): Pro
     .filter(Boolean)
 }
 
+/**
+ * Full unified-patch diff for a stash. Used by the diff surface when
+ * `state.diffSource === 'stash'` to render the stash's changes inline.
+ *
+ * Empty stashes (e.g. created by `git stash --keep-index` against an
+ * already-clean tree) return [] rather than throwing — surfaces fall
+ * back to a "no diff to display" message.
+ */
+export async function getStashDiff(git: SimpleGit, stashRef: string): Promise<string[]> {
+  return (await git.raw(['stash', 'show', '-p', stashRef]))
+    .split('\n')
+    .map((line) => line.replace(/\r$/, ''))
+}
+
 export const stashDataTestInternals = {
   parseStashSubject,
 }

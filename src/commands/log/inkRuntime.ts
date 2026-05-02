@@ -142,7 +142,7 @@ import { applyStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
-import { StashOverview, getStashOverview } from './stashData'
+import { StashOverview, getStashDiff, getStashOverview } from './stashData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeOverview, getWorktreeOverview } from './statusData'
 import {
@@ -732,6 +732,13 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     undefined
   )
   const [worktreeHunksLoading, setWorktreeHunksLoading] = React.useState(false)
+  // Stash diff explorer (Enter on a stash row): the runtime fetches
+  // `git stash show -p <ref>` lazily once the diff view becomes active
+  // with diffSource='stash'. Lines are stored as a flat string[] —
+  // renderDiffSurface paints each line through diffLineProps so +/-
+  // colors match the commit-diff path.
+  const [stashDiffLines, setStashDiffLines] = React.useState<string[] | undefined>(undefined)
+  const [stashDiffLoading, setStashDiffLoading] = React.useState(false)
   const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
     Boolean(logArgv?.interactive && !logArgv.limit) &&
     getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
@@ -862,6 +869,25 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       watcher?.close()
     }
   }, [git, refreshContext, refreshWorktreeContext])
+
+  // P-stash-explorer: load `git stash show -p <ref>` once the diff view
+  // becomes active with diffSource='stash'. Best-effort — empty stashes
+  // or read errors fall through to a "no diff" hint at the render site.
+  React.useEffect(() => {
+    if (state.activeView !== 'diff' || state.diffSource !== 'stash' || !state.stashDiffRef) {
+      return
+    }
+    let active = true
+    setStashDiffLoading(true)
+    void (async () => {
+      const lines = await safe(getStashDiff(git, state.stashDiffRef!))
+      if (active) {
+        setStashDiffLines(lines || [])
+        setStashDiffLoading(false)
+      }
+    })()
+    return () => { active = false }
+  }, [git, state.activeView, state.diffSource, state.stashDiffRef])
 
   React.useEffect(() => {
     let active = true
@@ -1348,15 +1374,23 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         .filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
         .length
       : context.tags?.tags.length
-    const stashVisibleCount = state.filter
+    const visibleStashes = state.filter
       ? (context.stashes?.stashes || [])
         .filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
-        .length
-      : context.stashes?.stashes.length
+      : (context.stashes?.stashes || [])
+    const stashVisibleCount = visibleStashes.length
+    const stashSelectedRef = visibleStashes[Math.min(state.selectedStashIndex, Math.max(0, visibleStashes.length - 1))]?.ref
+
+    // When the diff view is showing a stash patch, swap the previewLineCount
+    // to the stash diff length so the existing pageDetailPreview path
+    // (j/k, PgUp/PgDn) scrolls through it without a parallel pipeline.
+    const diffPreviewLineCount = state.diffSource === 'stash'
+      ? stashDiffLines?.length
+      : filePreview?.hunks.length
 
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
-      previewLineCount: filePreview?.hunks.length,
+      previewLineCount: diffPreviewLineCount,
       worktreeDiffLineCount: worktreeDiff?.lines.length,
       worktreeFileCount: context.worktree?.files.length,
       worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
@@ -1364,6 +1398,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       branchCount: branchVisibleCount,
       tagCount: tagVisibleCount,
       stashCount: stashVisibleCount,
+      stashSelectedRef,
       worktreeDirty,
     }).forEach((event) => {
       if (event.type === 'exit') {
@@ -1442,6 +1477,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         filePreviewLoading,
         commitDiffHunkOffsets,
         selectedDetailFile,
+        stashDiffLines,
+        stashDiffLoading,
         layout.bodyRows,
         layout.mainPanelWidth,
         theme,
@@ -1664,6 +1701,8 @@ function renderMainPanel(
   filePreviewLoading: boolean,
   commitDiffHunkOffsets: number[] | undefined,
   selectedDetailFile: GitCommitDetail['files'][number] | undefined,
+  stashDiffLines: string[] | undefined,
+  stashDiffLoading: boolean,
   bodyRows: number,
   width: number,
   theme: LogInkTheme,
@@ -1689,6 +1728,8 @@ function renderMainPanel(
       filePreviewLoading,
       commitDiffHunkOffsets,
       selectedDetailFile,
+      stashDiffLines,
+      stashDiffLoading,
       bodyRows,
       width,
       theme
@@ -2311,6 +2352,8 @@ function renderDiffSurface(
   filePreviewLoading: boolean,
   commitDiffHunkOffsets: number[] | undefined,
   selectedDetailFile: GitCommitDetail['files'][number] | undefined,
+  stashDiffLines: string[] | undefined,
+  stashDiffLoading: boolean,
   bodyRows: number,
   width: number,
   theme: LogInkTheme
@@ -2320,6 +2363,49 @@ function renderDiffSurface(
   const worktree = context.worktree
   const worktreeFile = worktree?.files[state.selectedWorktreeFileIndex]
   const visibleRows = Math.max(4, bodyRows - 4)
+
+  // Stash diff branch: when the user opened the diff via Enter on a stash
+  // row, render the stash patch text directly (no per-file selection yet —
+  // the lines arrive as one flat patch).
+  if (state.diffSource === 'stash') {
+    const lines = stashDiffLines || []
+    const visibleLines = lines.slice(
+      state.diffPreviewOffset,
+      state.diffPreviewOffset + visibleRows
+    )
+    const headerLines: string[] = stashDiffLoading
+      ? [`Loading diff for ${state.stashDiffRef || 'stash'}...`]
+      : lines.length
+        ? [
+          `Stash: ${state.stashDiffRef || ''}`,
+          `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
+          '',
+        ]
+        : ['No diff to display for this stash.']
+
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexShrink: 0,
+      paddingX: 1,
+      width,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle('Stash diff', focused)),
+      h(Text, { dimColor: true }, state.stashDiffRef || 'no stash')
+    ),
+    ...headerLines.map((line, index) => h(Text, {
+      key: `stash-diff-header-${index}`,
+      dimColor: index > 0,
+    }, truncate(line, width - 4))),
+    ...(stashDiffLoading || !lines.length
+      ? []
+      : visibleLines.map((line, index) => h(Text, {
+        key: `stash-diff-line-${state.diffPreviewOffset + index}`,
+        ...diffLineProps(line, theme),
+      }, truncate(line, width - 4)))))
+  }
 
   // diffSource disambiguates: 'commit' was set when the user opened the
   // diff via history → Enter (read-only commit-diff explore), 'worktree'
