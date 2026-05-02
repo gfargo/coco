@@ -149,7 +149,12 @@ import {
   setUpstream,
 } from './branchActions'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from './tagActions'
-import { checkoutFileFromCommit, cherryPickCommit } from './historyActions'
+import {
+  ClipboardRunner,
+  checkoutFileFromCommit,
+  cherryPickCommit,
+  defaultClipboardRunner,
+} from './historyActions'
 import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
@@ -255,6 +260,12 @@ type LogInkComponentDeps = LogInkRuntime & {
    * painted screen after `fg` instead of an empty alt buffer.
    */
   resumeRef?: { current: (() => void) | null }
+  /**
+   * Test seam — when set, the yank-to-clipboard handler uses this runner
+   * instead of `defaultClipboardRunner`. Lets unit tests assert that the
+   * right value reached the clipboard without spawning pbcopy/wl-copy.
+   */
+  clipboardRunner?: ClipboardRunner
 }
 
 const truncate = truncateCells
@@ -706,7 +717,7 @@ function enrichFilterActionWithRectification(
 }
 
 function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, git, idleTipsEnabled, ink, initialView, logArgv, React, resumeRef, rows, theme } = deps
+  const { appLabel, clipboardRunner, git, idleTipsEnabled, ink, initialView, logArgv, React, resumeRef, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -1477,6 +1488,134 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
     state.tagSort])
 
+  // Resolve the active view's "yank target" (commit hash / branch /
+  // tag / stash ref / file path) against the live filtered+sorted list,
+  // copy it to the system clipboard, and surface the result on the
+  // status line. `short=true` opts into the short hash on history /
+  // commit-diff views (Y vs y); ignored for ref-only views.
+  const yankFromActiveView = React.useCallback(async (short?: boolean) => {
+    const clipboard: ClipboardRunner = clipboardRunner || defaultClipboardRunner
+    let value: string | undefined
+    let label: string | undefined
+
+    const view = state.activeView
+    if (view === 'history') {
+      const commit = state.filteredCommits[state.selectedIndex]
+      if (commit) {
+        value = short ? commit.shortHash : commit.hash
+        label = short ? `short hash ${commit.shortHash}` : `commit ${commit.shortHash}`
+      }
+    } else if (view === 'branches') {
+      const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+      const visible = state.filter
+        ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+        : all
+      const branch = visible[Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1))]
+      if (branch) {
+        value = branch.shortName
+        label = `branch ${branch.shortName}`
+      }
+    } else if (view === 'tags') {
+      const all = sortTags(context.tags?.tags || [], state.tagSort)
+      const visible = state.filter
+        ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+        : all
+      const tag = visible[Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1))]
+      if (tag) {
+        value = tag.name
+        label = `tag ${tag.name}`
+      }
+    } else if (view === 'stash') {
+      const all = context.stashes?.stashes || []
+      const visible = state.filter
+        ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+        : all
+      const stash = visible[Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1))]
+      if (stash) {
+        value = stash.ref
+        label = `stash ${stash.ref}`
+      }
+    } else if (view === 'status') {
+      const path = context.worktree?.files[state.selectedWorktreeFileIndex]?.path
+      if (path) {
+        value = path
+        label = `path ${path}`
+      }
+    } else if (view === 'diff') {
+      if (state.diffSource === 'worktree') {
+        const path = context.worktree?.files[state.selectedWorktreeFileIndex]?.path
+        if (path) {
+          value = path
+          label = `path ${path}`
+        }
+      } else if (state.diffSource === 'stash' && stashDiffLines) {
+        // Walk back to the most recent file header at or before the
+        // current preview offset — same logic the input-context block
+        // uses to expose stashDiffSelectedPath.
+        const files = parseStashDiffFiles(stashDiffLines)
+        if (files.length > 0) {
+          let current = files[0]
+          for (const file of files) {
+            if (file.startLine <= state.diffPreviewOffset) {
+              current = file
+            } else {
+              break
+            }
+          }
+          value = current.path
+          label = `path ${current.path}`
+        }
+      } else if (state.diffSource === 'commit') {
+        // Y on a commit-diff yanks the sha (handy when the user has
+        // drilled into the file list); y yanks the cursored file path.
+        if (short && selected) {
+          value = selected.hash
+          label = `commit ${selected.shortHash}`
+        } else if (selectedDetailFile?.path) {
+          value = selectedDetailFile.path
+          label = `path ${selectedDetailFile.path}`
+        } else if (selected) {
+          value = selected.hash
+          label = `commit ${selected.shortHash}`
+        }
+      }
+    }
+
+    if (!value || !label) {
+      dispatch({ type: 'setStatus', value: 'Nothing to yank in this view' })
+      return
+    }
+
+    try {
+      await clipboard(value)
+      dispatch({ type: 'setStatus', value: `Copied ${label}` })
+    } catch (error) {
+      dispatch({ type: 'setStatus', value: `Copy failed: ${(error as Error).message}` })
+    }
+  }, [
+    clipboardRunner,
+    context.branches,
+    context.stashes,
+    context.tags,
+    context.worktree,
+    dispatch,
+    selected,
+    selectedDetailFile,
+    stashDiffLines,
+    state.activeView,
+    state.branchSort,
+    state.diffPreviewOffset,
+    state.diffSource,
+    state.filter,
+    state.filteredCommits,
+    state.selectedBranchIndex,
+    state.selectedIndex,
+    state.selectedStashIndex,
+    state.selectedTagIndex,
+    state.selectedWorktreeFileIndex,
+    state.tagSort,
+  ])
+
   React.useEffect(() => {
     let active = true
 
@@ -1699,6 +1838,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void runWorkflowAction(event.id, event.payload)
       } else if (event.type === 'openFileInEditor') {
         openInEditor(event.path)
+      } else if (event.type === 'yankFromActiveView') {
+        void yankFromActiveView(event.short)
       } else {
         // P4.5: enrich filter-mutating actions with a precomputed
         // selection snapshot so the reducer can preserve the cursor on

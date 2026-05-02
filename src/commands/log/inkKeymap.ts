@@ -42,6 +42,7 @@ export type LogInkCommandId =
   | 'search'
   | 'toggleGraph'
   | 'workflowActions'
+  | 'yankClipboard'
 
 export type LogInkKeyBinding = {
   id: LogInkCommandId
@@ -289,6 +290,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['commits'],
   },
   {
+    id: 'yankClipboard',
+    keys: ['y', 'Y'],
+    label: 'yank',
+    description: 'Copy the cursored identifier (commit hash, branch shortName, stash ref, file path, or tag name) to the clipboard. Y yanks the short hash on history and commit-diff views.',
+    contexts: ['commits'],
+  },
+  {
     id: 'help',
     keys: ['?'],
     label: 'help',
@@ -480,7 +488,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'status') {
     return {
-      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose'],
+      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -488,7 +496,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'diff') {
     if (options.diffSource === 'stash') {
       return {
-        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'o edit', 'esc back'],
+        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'o edit', 'y yank', 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
@@ -496,12 +504,12 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
       // Commit-diff explore: read-only diff, but `c` cherry-picks the
       // cursored file from the commit into the worktree.
       return {
-        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', 'esc back'],
+        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', 'y/Y yank', 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
     return {
-      contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'esc files'],
+      contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -515,21 +523,21 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'branches') {
     return {
-      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'tags') {
     return {
-      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort'],
+      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'stash') {
     return {
-      contextual: ['↑/↓ stashes', 'enter diff', 'a apply', 'p pop', 'X drop'],
+      contextual: ['↑/↓ stashes', 'enter diff', 'a apply', 'p pop', 'X drop', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -542,7 +550,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   }
 
   return {
-    contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', '/ search', 'gg/G top/bottom'],
+    contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', 'y/Y yank', '/ search', 'gg/G top/bottom'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }

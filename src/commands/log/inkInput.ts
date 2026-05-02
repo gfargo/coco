@@ -36,6 +36,7 @@ export type LogInkInputEvent =
   | { type: 'runAiCommitDraft' }
   | { type: 'runWorkflowAction'; id: string; payload?: string }
   | { type: 'openFileInEditor'; path: string }
+  | { type: 'yankFromActiveView'; short?: boolean }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -247,6 +248,12 @@ export function getLogInkPaletteExecuteEvents(
         type: 'setStatus',
         value: 'Sort cycle is available in the branches and tags views',
       })]
+    case 'yankClipboard':
+      // The runtime resolves the value/label against the live filtered
+      // list — palette execute simply fires the same event the keystroke
+      // would. Empty active views (no commits / no branches / etc.) are
+      // surfaced by the runtime as a "Nothing to yank" status.
+      return [{ type: 'yankFromActiveView' }]
     default:
       return []
   }
@@ -1123,6 +1130,45 @@ export function getLogInkInputEvents(
     !state.pendingCommitFocused
   ) {
     return [action({ type: 'setPendingConfirmation', value: 'cherry-pick-commit' })]
+  }
+
+  // `y` / `Y` yank the contextually relevant identifier from the active
+  // view to the system clipboard:
+  //   history    → cursored commit hash (Y for short hash)
+  //   branches   → cursored branch shortName
+  //   tags       → cursored tag name
+  //   stash      → cursored stash ref
+  //   status     → cursored worktree file path
+  //   diff       → cursored file path (Y on a commit-diff yanks the sha instead)
+  // The runtime resolves the actual value/label against live filtered
+  // lists; the dispatcher only decides whether the keystroke applies.
+  if (inputValue === 'y' || inputValue === 'Y') {
+    const short = inputValue === 'Y'
+    if (state.activeView === 'history' && state.filteredCommits.length > 0) {
+      return [{ type: 'yankFromActiveView', short }]
+    }
+    if (state.activeView === 'branches' && context.branchCount) {
+      return [{ type: 'yankFromActiveView' }]
+    }
+    if (state.activeView === 'tags' && context.tagCount) {
+      return [{ type: 'yankFromActiveView' }]
+    }
+    if (state.activeView === 'stash' && context.stashCount && context.stashSelectedRef) {
+      return [{ type: 'yankFromActiveView' }]
+    }
+    if (state.activeView === 'status' && context.worktreeSelectedPath) {
+      return [{ type: 'yankFromActiveView' }]
+    }
+    if (state.activeView === 'diff') {
+      if (
+        context.worktreeSelectedPath ||
+        context.stashDiffSelectedPath ||
+        context.commitDiffSelectedPath ||
+        context.commitDiffSelectedSha
+      ) {
+        return [{ type: 'yankFromActiveView', short }]
+      }
+    }
   }
 
   // Enter on a stash row pushes the diff view scoped to that stash.

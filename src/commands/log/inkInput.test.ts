@@ -1,5 +1,5 @@
 import { GitLogRow } from './data'
-import { getLogInkInputEvents } from './inkInput'
+import { getLogInkInputEvents, getLogInkPaletteExecuteEvents } from './inkInput'
 import { applyLogInkAction, createLogInkState } from './inkViewModel'
 
 const rows: GitLogRow[] = [
@@ -952,6 +952,104 @@ describe('log Ink input interactions', () => {
       state = applyInput(state, 's')
       expect(state.branchSort).toBe('name')
       expect(state.tagSort).toBe('recent')
+    })
+  })
+
+  describe('y / Y yank to clipboard (#778)', () => {
+    it('emits yankFromActiveView from history view (y full hash, Y short hash)', () => {
+      const state = createLogInkState(rows)
+
+      expect(getLogInkInputEvents(state, 'y')).toEqual([
+        { type: 'yankFromActiveView', short: false },
+      ])
+      expect(getLogInkInputEvents(state, 'Y')).toEqual([
+        { type: 'yankFromActiveView', short: true },
+      ])
+    })
+
+    it('does not emit a short flag for views where it is meaningless', () => {
+      // Branches/tags/stash/status only have one identifier per row — short
+      // is reserved for hash-bearing views (history + commit-diff).
+      let state = createLogInkState(rows)
+
+      state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+      expect(getLogInkInputEvents(state, 'y', {}, { branchCount: 1 })).toEqual([
+        { type: 'yankFromActiveView' },
+      ])
+
+      state = applyLogInkAction(state, { type: 'popView' })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      expect(
+        getLogInkInputEvents(state, 'y', {}, { worktreeFileCount: 1, worktreeSelectedPath: 'a.ts' })
+      ).toEqual([{ type: 'yankFromActiveView' }])
+    })
+
+    it('emits yankFromActiveView from branches when there is a selectable branch', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+
+      expect(getLogInkInputEvents(state, 'y', {}, { branchCount: 3 })).toEqual([
+        { type: 'yankFromActiveView' },
+      ])
+      // Empty branches list — no event, falls through to existing handlers.
+      expect(getLogInkInputEvents(state, 'y', {}, { branchCount: 0 })).toEqual([])
+    })
+
+    it('emits yankFromActiveView from tags and stash when those views have a selection', () => {
+      let state = createLogInkState(rows)
+
+      state = applyLogInkAction(state, { type: 'pushView', value: 'tags' })
+      expect(getLogInkInputEvents(state, 'y', {}, { tagCount: 2 })).toEqual([
+        { type: 'yankFromActiveView' },
+      ])
+
+      state = applyLogInkAction(state, { type: 'popView' })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'stash' })
+      expect(
+        getLogInkInputEvents(state, 'y', {}, { stashCount: 1, stashSelectedRef: 'stash@{0}' })
+      ).toEqual([{ type: 'yankFromActiveView' }])
+      // No stashSelectedRef → can't yank.
+      expect(getLogInkInputEvents(state, 'y', {}, { stashCount: 1 })).toEqual([])
+    })
+
+    it('emits yankFromActiveView from status only when a worktree path is selected', () => {
+      const state = createLogInkState(rows, { activeView: 'status' })
+
+      expect(getLogInkInputEvents(state, 'y', {}, { worktreeFileCount: 1, worktreeSelectedPath: 'src/foo.ts' })).toEqual([
+        { type: 'yankFromActiveView' },
+      ])
+      // Empty worktree → fall through.
+      expect(getLogInkInputEvents(state, 'y', {}, { worktreeFileCount: 0 })).toEqual([])
+    })
+
+    it('emits yankFromActiveView from diff view across worktree/stash/commit sources', () => {
+      const state = createLogInkState(rows, { activeView: 'diff' })
+
+      expect(getLogInkInputEvents(state, 'y', {}, { worktreeSelectedPath: 'src/foo.ts' })).toEqual([
+        { type: 'yankFromActiveView', short: false },
+      ])
+      expect(getLogInkInputEvents(state, 'y', {}, { stashDiffSelectedPath: 'src/bar.ts' })).toEqual([
+        { type: 'yankFromActiveView', short: false },
+      ])
+      expect(
+        getLogInkInputEvents(state, 'Y', {}, { commitDiffSelectedSha: 'abc123', commitDiffSelectedPath: 'src/baz.ts' })
+      ).toEqual([{ type: 'yankFromActiveView', short: true }])
+      // No diff context → fall through.
+      expect(getLogInkInputEvents(state, 'y', {}, {})).toEqual([])
+    })
+
+    it('palette execute for yankClipboard fires yankFromActiveView', () => {
+      const events = getLogInkPaletteExecuteEvents(
+        {
+          id: 'yankClipboard',
+          kind: 'binding',
+          keys: 'y/Y',
+          label: 'yank',
+          description: 'Copy the cursored identifier to the clipboard.',
+        },
+        createLogInkState(rows)
+      )
+      expect(events).toEqual([{ type: 'yankFromActiveView' }])
     })
   })
 })
