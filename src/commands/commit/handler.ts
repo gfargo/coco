@@ -86,9 +86,15 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       llm,
     })
 
+    const splitMode = INTERACTIVE ? 'interactive' : (config.mode || 'stdout')
+
     await handleResult({
       result: splitResult,
-      mode: config.mode || 'stdout',
+      mode: splitMode as 'interactive' | 'stdout',
+      interactiveModeCallback: async (result) => {
+        logger.log(result)
+        logSuccess()
+      },
     })
     logLlmTelemetrySummary(logger, 'commit')
     return

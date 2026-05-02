@@ -57,6 +57,13 @@ y.command<InitOptions>(
   init.handler
 )
 
+y.command<DoctorOptions>(
+  doctor.command,
+  doctor.desc,
+  doctor.builder,
+  doctor.handler
+)
+
 y.command<LogOptions>(
   log.command,
   log.desc,
@@ -73,4 +80,4 @@ y.command<UiOptions>(
 
 y.help().parse(process.argv.slice(2))
 
-export { changelog, commit, Config, init, log, recap, types, ui }
+export { changelog, commit, Config, doctor, init, log, recap, types, ui }
