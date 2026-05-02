@@ -144,6 +144,60 @@ export type LogInkState = {
    * or Esc (cancel) is pressed.
    */
   inputPrompt?: LogInkInputPromptState
+  /**
+   * Visibility mask for the status surface (#776). Each flag controls
+   * whether files of that staging category are rendered. Default: all
+   * three on. Pressing `1`/`2`/`3` while the status view is active
+   * toggles the matching bit; if a toggle would zero the mask, it snaps
+   * back to all-on so the user always has something to look at.
+   */
+  statusFilterMask: LogInkStatusFilterMask
+  /**
+   * Server-side history filter, set when the user submits a filter that
+   * begins with `path:` or `author:` (#776). The runtime re-runs
+   * `getLogRows` with the matching `--author=` / `-- <path>` args; the
+   * panel header surfaces what's active. Cleared when the filter is
+   * cleared.
+   */
+  historyFetchArgs?: LogInkHistoryFetchArgs
+}
+
+export type LogInkStatusFilterMask = {
+  staged: boolean
+  unstaged: boolean
+  untracked: boolean
+}
+
+export type LogInkHistoryFetchArgs = {
+  author?: string
+  path?: string
+}
+
+export const DEFAULT_LOG_INK_STATUS_FILTER_MASK: LogInkStatusFilterMask = {
+  staged: true,
+  unstaged: true,
+  untracked: true,
+}
+
+/**
+ * Detect a history server-side filter prefix (#776). Returns the parsed
+ * `LogInkHistoryFetchArgs` for `path:<value>` and `author:<value>`
+ * prefixes, or `undefined` for a plain (client-side) filter. The whole
+ * remainder of the string (post-prefix) becomes the value — paths and
+ * author names commonly contain spaces, and we don't try to parse
+ * shell-like syntax.
+ */
+export function parseLogInkHistoryFetchPrefix(filter: string): LogInkHistoryFetchArgs | undefined {
+  const trimmed = filter.trim()
+  if (trimmed.startsWith('path:')) {
+    const value = trimmed.slice('path:'.length).trim()
+    return value ? { path: value } : undefined
+  }
+  if (trimmed.startsWith('author:')) {
+    const value = trimmed.slice('author:'.length).trim()
+    return value ? { author: value } : undefined
+  }
+  return undefined
 }
 
 export type LogInkInputPromptKind =
@@ -161,6 +215,7 @@ export type LogInkInputPromptState = {
 
 export type LogInkAction =
   | { type: 'appendRows'; rows: GitLogRow[] }
+  | { type: 'replaceRows'; rows: GitLogRow[] }
   | { type: 'appendFilter'; value: string; promotedSelections?: PromotedSelectionsSnapshot }
   | { type: 'backspaceFilter'; promotedSelections?: PromotedSelectionsSnapshot }
   | { type: 'clearFilter'; promotedSelections?: PromotedSelectionsSnapshot }
@@ -220,6 +275,8 @@ export type LogInkAction =
   | { type: 'backspaceInputPrompt' }
   | { type: 'clearInputPromptText' }
   | { type: 'closeInputPrompt' }
+  | { type: 'toggleStatusFilterMask'; kind: keyof LogInkStatusFilterMask }
+  | { type: 'setHistoryFetchArgs'; value?: LogInkHistoryFetchArgs }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -445,6 +502,25 @@ function withFilter(
   }
 }
 
+function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
+  // Wholesale row replacement after a server-side re-fetch (#776).
+  // Resets the cursor to the top because the new commit set may not
+  // share any hashes with the old one (e.g. switching from `--all` to
+  // `-- some/path` typically dumps the previous selection).
+  const commits = getCommitRows(rows)
+  const filteredCommits = filterCommits(commits, state.filter)
+  return {
+    ...state,
+    rows,
+    commits,
+    filteredCommits,
+    selectedIndex: 0,
+    selectedFileIndex: 0,
+    pendingCommitFocused: false,
+    pendingKey: undefined,
+  }
+}
+
 function appendRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
   const selected = getSelectedInkCommit(state)
   const nextRows = [...state.rows, ...rows]
@@ -540,6 +616,7 @@ export function createLogInkState(
     focus: 'commits',
     sidebarTab: 'status',
     userSidebarTab: 'status',
+    statusFilterMask: { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK },
   }
 }
 
@@ -557,6 +634,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
   switch (action.type) {
     case 'appendRows':
       return appendRows(state, action.rows)
+    case 'replaceRows':
+      return replaceRows(state, action.rows)
     case 'appendFilter':
       return withFilter(state, `${state.filter}${action.value}`, action.promotedSelections)
     case 'backspaceFilter':
@@ -697,6 +776,21 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         : state
     case 'closeInputPrompt':
       return { ...state, inputPrompt: undefined, pendingKey: undefined }
+    case 'toggleStatusFilterMask': {
+      const next = { ...state.statusFilterMask, [action.kind]: !state.statusFilterMask[action.kind] }
+      // If the user just zeroed the mask, snap back to all-on rather
+      // than rendering an empty pane. Keeps the affordance reversible
+      // without requiring a "reset" key.
+      const allOff = !next.staged && !next.unstaged && !next.untracked
+      return {
+        ...state,
+        statusFilterMask: allOff ? { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK } : next,
+        selectedWorktreeFileIndex: 0,
+        pendingKey: undefined,
+      }
+    }
+    case 'setHistoryFetchArgs':
+      return { ...state, historyFetchArgs: action.value, pendingKey: undefined }
     case 'moveToBottom':
       return {
         ...state,

@@ -1052,4 +1052,97 @@ describe('log Ink input interactions', () => {
       expect(events).toEqual([{ type: 'yankFromActiveView' }])
     })
   })
+
+  describe('status filter mask 1/2/3 (#776)', () => {
+    it('toggles the mask bits when the active view is status', () => {
+      let state = createLogInkState(rows, { activeView: 'status' })
+      expect(state.statusFilterMask).toEqual({ staged: true, unstaged: true, untracked: true })
+
+      state = applyInput(state, '1')
+      expect(state.statusFilterMask).toEqual({ staged: false, unstaged: true, untracked: true })
+
+      state = applyInput(state, '2')
+      expect(state.statusFilterMask).toEqual({ staged: false, unstaged: false, untracked: true })
+
+      state = applyInput(state, '3')
+      // Snap-back to all-on rather than a fully empty mask.
+      expect(state.statusFilterMask).toEqual({ staged: true, unstaged: true, untracked: true })
+    })
+
+    it('still drives sidebar tab numeric jumps from outside the status view', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, '5')
+      expect(state.sidebarTab).toBe('worktrees')
+      expect(state.statusFilterMask).toEqual({ staged: true, unstaged: true, untracked: true })
+    })
+  })
+
+  describe('history server-side filter prefix (#776)', () => {
+    it('Enter on path:<value> dispatches setHistoryFetchArgs and clears the textual filter', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, '/')
+      state = applyInput(state, 'p')
+      state = applyInput(state, 'a')
+      state = applyInput(state, 't')
+      state = applyInput(state, 'h')
+      state = applyInput(state, ':')
+      state = applyInput(state, 'f')
+      state = applyInput(state, 'o')
+      state = applyInput(state, 'o')
+      expect(state.filter).toBe('path:foo')
+      expect(state.filterMode).toBe(true)
+
+      state = applyInput(state, '', { return: true })
+      expect(state.historyFetchArgs).toEqual({ path: 'foo' })
+      expect(state.filter).toBe('')
+      expect(state.filterMode).toBe(false)
+    })
+
+    it('Enter on author:<value> sets the matching arg', () => {
+      let state = createLogInkState(rows, { activeView: 'history' })
+      state = applyInput(state, '/')
+      'author:alice'.split('').forEach((c) => {
+        state = applyInput(state, c)
+      })
+      state = applyInput(state, '', { return: true })
+      expect(state.historyFetchArgs).toEqual({ author: 'alice' })
+    })
+
+    it('Enter on a non-prefix filter still just exits filter mode (no fetch args)', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, '/')
+      state = applyInput(state, 'f')
+      state = applyInput(state, 'i')
+      state = applyInput(state, 'x')
+
+      state = applyInput(state, '', { return: true })
+      expect(state.historyFetchArgs).toBeUndefined()
+      expect(state.filter).toBe('fix')
+      expect(state.filterMode).toBe(false)
+    })
+
+    it('Ctrl+U inside filter mode clears both the textual filter and active fetch args', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setHistoryFetchArgs', value: { author: 'alice' } })
+      state = applyInput(state, '/')
+      state = applyInput(state, 'a')
+      state = applyInput(state, 'b')
+      expect(state.filter).toBe('ab')
+
+      state = applyInput(state, 'u', { ctrl: true })
+      expect(state.filter).toBe('')
+      expect(state.filterMode).toBe(false)
+      expect(state.historyFetchArgs).toBeUndefined()
+    })
+
+    it('Enter on a path: prefix from a non-history view does not dispatch fetch args', () => {
+      let state = createLogInkState(rows, { activeView: 'branches' })
+      state = applyInput(state, '/')
+      'path:foo'.split('').forEach((c) => {
+        state = applyInput(state, c)
+      })
+      state = applyInput(state, '', { return: true })
+      expect(state.historyFetchArgs).toBeUndefined()
+    })
+  })
 })

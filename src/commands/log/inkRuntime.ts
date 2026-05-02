@@ -126,8 +126,10 @@ import {
 } from './inkSurfaceStates'
 import { cellWidth, truncateCells, wrapCells } from './inkText'
 import {
+  LogInkHistoryFetchArgs,
   LogInkSidebarTab,
   LogInkState,
+  LogInkStatusFilterMask,
   LogInkView,
   applyLogInkAction,
   createLogInkState,
@@ -161,7 +163,7 @@ import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { StashOverview, getStashDiff, getStashOverview, parseStashDiffFiles } from './stashData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
-import { WorktreeOverview, getWorktreeOverview } from './statusData'
+import { WorktreeOverview, applyStatusFilterMask, getWorktreeOverview } from './statusData'
 import {
   WorktreeHunkOverview,
   getWorktreeHunks,
@@ -804,7 +806,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   const selected = getSelectedInkCommit(state)
   const selectedDetailFile = detail?.files[state.selectedFileIndex]
-  const selectedWorktreeFile = context.worktree?.files[state.selectedWorktreeFileIndex]
+  // Status surface visibility mask (#776). `visibleWorktreeFiles` is the
+  // single source of truth for staged/unstaged/untracked filtering: file
+  // count, selected-file resolution, and the rendered list all key off
+  // it so toggles never desync the cursor from the rendered rows.
+  const visibleWorktreeFiles = React.useMemo(
+    () => applyStatusFilterMask(context.worktree?.files || [], state.statusFilterMask),
+    [context.worktree?.files, state.statusFilterMask]
+  )
+  const selectedWorktreeFile = visibleWorktreeFiles[state.selectedWorktreeFileIndex]
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
@@ -1536,14 +1546,17 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         label = `stash ${stash.ref}`
       }
     } else if (view === 'status') {
-      const path = context.worktree?.files[state.selectedWorktreeFileIndex]?.path
+      // Read from the mask-filtered list (#776) so the cursor and the
+      // yanked path always match what's on screen — yanking a hidden
+      // row is always a desync bug.
+      const path = visibleWorktreeFiles[state.selectedWorktreeFileIndex]?.path
       if (path) {
         value = path
         label = `path ${path}`
       }
     } else if (view === 'diff') {
       if (state.diffSource === 'worktree') {
-        const path = context.worktree?.files[state.selectedWorktreeFileIndex]?.path
+        const path = visibleWorktreeFiles[state.selectedWorktreeFileIndex]?.path
         if (path) {
           value = path
           label = `path ${path}`
@@ -1597,7 +1610,6 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context.branches,
     context.stashes,
     context.tags,
-    context.worktree,
     dispatch,
     selected,
     selectedDetailFile,
@@ -1614,6 +1626,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedTagIndex,
     state.selectedWorktreeFileIndex,
     state.tagSort,
+    visibleWorktreeFiles,
   ])
 
   React.useEffect(() => {
@@ -1668,8 +1681,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       loadMoreRequestRef.current = requestId
       setLoadingMoreCommits(true)
       dispatch({ type: 'setStatus', value: 'loading older commits' })
+      const fetchArgs = state.historyFetchArgs
+      const mergedArgv: LogArgv = {
+        ...logArgv,
+        ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
+        ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
+      }
       const nextRows = await safe(
-        getLogRows(git, logArgv, {
+        getLogRows(git, mergedArgv, {
           limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
           skip: state.commits.length,
         })
@@ -1711,8 +1730,66 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     logArgv,
     state.commits.length,
     state.filteredCommits.length,
+    state.historyFetchArgs,
     state.selectedIndex,
   ])
+
+  // Server-side history filter (#776). When the user submits `path:foo`
+  // or `author:foo`, the filter parser dispatches setHistoryFetchArgs;
+  // this effect picks up the change, re-runs `getLogRows` with merged
+  // args, and replaces the rows. Clearing the fetch args (Ctrl+U inside
+  // filter mode) re-fetches with the original logArgv so the user gets
+  // the live full log back, not a stale snapshot of the initial rows.
+  const historyFetchEffectInitialized = React.useRef(false)
+  const historyFetchRequestRef = React.useRef(0)
+  React.useEffect(() => {
+    if (!logArgv) return
+    // Skip the first run — initial rows came in via deps.rows; we only
+    // want to fetch in response to *changes* to historyFetchArgs.
+    if (!historyFetchEffectInitialized.current) {
+      historyFetchEffectInitialized.current = true
+      return
+    }
+
+    const requestId = historyFetchRequestRef.current + 1
+    historyFetchRequestRef.current = requestId
+    const fetchArgs = state.historyFetchArgs
+    const merged: LogArgv = {
+      ...logArgv,
+      ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
+      ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
+    }
+    const description = fetchArgs?.author
+      ? `author:${fetchArgs.author}`
+      : fetchArgs?.path
+        ? `path:${fetchArgs.path}`
+        : undefined
+
+    dispatch({
+      type: 'setStatus',
+      value: description ? `Refetching with ${description}` : 'Restoring full log',
+    })
+
+    void (async () => {
+      const nextRows = await safe(getLogRows(git, merged, { limit: LOG_INTERACTIVE_DEFAULT_LIMIT }))
+      if (!mountedRef.current || historyFetchRequestRef.current !== requestId) {
+        return
+      }
+      if (!nextRows) {
+        dispatch({ type: 'setStatus', value: 'Failed to refetch with active filter' })
+        return
+      }
+      dispatch({ type: 'replaceRows', rows: nextRows })
+      const matched = getCommitRows(nextRows).length
+      setHasMoreCommits(matched >= LOG_INTERACTIVE_DEFAULT_LIMIT)
+      dispatch({
+        type: 'setStatus',
+        value: description
+          ? `Showing ${matched} commits matching ${description}`
+          : 'Showing full log',
+      })
+    })()
+  }, [dispatch, git, logArgv, state.historyFetchArgs])
 
   const commitDiffHunkOffsets = React.useMemo(() => (
     filePreview?.hunks
@@ -1799,7 +1876,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       detailFileCount: detail?.files.length,
       previewLineCount: diffPreviewLineCount,
       worktreeDiffLineCount: worktreeDiff?.lines.length,
-      worktreeFileCount: context.worktree?.files.length,
+      worktreeFileCount: visibleWorktreeFiles.length,
       worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
       commitDiffHunkOffsets,
       branchCount: branchVisibleCount,
@@ -1809,7 +1886,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,
       worktreeListCount: worktreeVisibleCount,
-      worktreeSelectedPath: context.worktree?.files[state.selectedWorktreeFileIndex]?.path,
+      worktreeSelectedPath: visibleWorktreeFiles[state.selectedWorktreeFileIndex]?.path,
       commitDiffSelectedPath: state.diffSource === 'commit'
         ? selectedDetailFile?.path
         : undefined,
@@ -2245,6 +2322,12 @@ function renderHistoryPanel(
     h(Text, { bold: true }, panelTitle('Commits', focused)),
     h(Text, { dimColor: true }, `${title} | ${graphMode} | ${loadState}`)
   ),
+  // Server-side filter indicator (#776). Only rendered when the user
+  // has an active path:/author: prefix; clears when they Ctrl+U.
+  ...(state.historyFetchArgs
+    ? [h(Text, { key: 'history-fetch-indicator', dimColor: true },
+        `filter: ${formatHistoryFetchArgs(state.historyFetchArgs)}  (ctrl+u in / to clear)`)]
+    : []),
   ...(pendingNode ? [pendingNode] : []),
   visible.items.length === 0
     ? h(Text, { dimColor: true }, formatLogInkHistoryEmpty({
@@ -2366,14 +2449,19 @@ function renderStatusSurface(
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree
+  // Apply the status visibility mask (#776) at render time so the
+  // rendered rows match the filtered count the input context already
+  // uses for j/k navigation. `visibleFiles` may be a strict subset of
+  // worktree.files when the user has narrowed via 1/2/3.
+  const visibleFiles = applyStatusFilterMask(worktree?.files || [], state.statusFilterMask)
   const listRows = Math.max(4, bodyRows - 5)
   const selectedIndex = state.selectedWorktreeFileIndex
   const cleanHint = formatLogInkStatusEmpty({ hasChanges: Boolean(worktree?.files.length) })
   const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
   const isLoading = isLogInkContextKeyLoading(contextStatus, 'worktree')
-  const fileRows: ReactTypes.ReactNode[] = isLoading || !worktree?.files.length
+  const fileRows: ReactTypes.ReactNode[] = isLoading || !visibleFiles.length
     ? []
-    : worktree.files.slice(startIndex).slice(0, listRows).map((file, offset) => {
+    : visibleFiles.slice(startIndex).slice(0, listRows).map((file, offset) => {
       const index = startIndex + offset
       const isSelected = index === selectedIndex
       const cursorPart = `${isSelected ? '>' : ' '} `
@@ -2391,13 +2479,20 @@ function renderStatusSurface(
       ...(useDot ? [h(Text, { color: dotColor }, STAGE_STATUS_DOT), ' '] : []),
       tailTrunc)
     })
+  // When the mask narrows the list to nothing but the underlying repo
+  // is non-clean, surface why the panel looks empty so the user can
+  // un-narrow rather than wonder if the repo is actually clean.
+  const maskHidesAll =
+    Boolean(worktree?.files.length) && visibleFiles.length === 0
   const fallbackLines = isLoading
     ? [formatLogInkLoading({ resource: 'worktree status' })]
-    : worktree?.files.length
+    : visibleFiles.length
       ? []
-      : cleanHint
-        ? [cleanHint]
-        : ['Worktree clean']
+      : maskHidesAll
+        ? [`No files match the active filter (${formatStatusFilterMask(state.statusFilterMask)}). Press 1/2/3 to widen.`]
+        : cleanHint
+          ? [cleanHint]
+          : ['Worktree clean']
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -2413,11 +2508,37 @@ function renderStatusSurface(
       ? `${worktree.stagedCount} staged | ${worktree.unstagedCount} unstaged | ${worktree.untrackedCount} untracked`
       : 'status loading')
   ),
+  // Mask indicator (#776). Only rendered when the mask is narrower
+  // than the all-on default — keeps the chrome clean for users who
+  // never touch the filter.
+  ...(isStatusFilterMaskActive(state.statusFilterMask)
+    ? [h(Text, { key: 'status-mask-indicator', dimColor: true },
+        `filter: ${formatStatusFilterMask(state.statusFilterMask)}  (1/2/3 to toggle)`)]
+    : []),
   ...fileRows,
   ...fallbackLines.map((line, index) => h(Text, {
     key: `status-surface-fallback-${index}`,
     dimColor: index > 0,
   }, truncate(line, 140))))
+}
+
+function isStatusFilterMaskActive(mask: LogInkStatusFilterMask): boolean {
+  return !mask.staged || !mask.unstaged || !mask.untracked
+}
+
+function formatStatusFilterMask(mask: LogInkStatusFilterMask): string {
+  const active: string[] = []
+  if (mask.staged) active.push('staged')
+  if (mask.unstaged) active.push('unstaged')
+  if (mask.untracked) active.push('untracked')
+  return active.join(' + ') || 'none'
+}
+
+function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
+  const parts: string[] = []
+  if (args.author) parts.push(`--author=${args.author}`)
+  if (args.path) parts.push(`-- ${args.path}`)
+  return parts.join(' ') || 'none'
 }
 
 function renderComposeSurface(
