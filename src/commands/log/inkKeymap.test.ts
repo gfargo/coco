@@ -86,7 +86,10 @@ describe('log Ink keymap', () => {
       focus: 'sidebar',
       showHelp: false,
     })).toEqual({
-      contextual: ['[/] tab', '1-5 jump', 'tab focus'],
+      // Sidebar focused with no per-tab context (no items / status tab):
+      // generic "drill into the dedicated view" hint. ←/→ now switches
+      // tabs (in-sidebar selection PR — vertical axis is items).
+      contextual: ['←/→ tab', '1-5 jump', 'enter open', 'tab focus'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -98,6 +101,76 @@ describe('log Ink keymap', () => {
       contextual: ['↑/↓ files', 'pgup/pgdn diff', 'tab focus'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
+  })
+
+  // #791 follow-up — in-sidebar selection. When sidebar is focused on a
+  // content tab WITH items, the footer surfaces the per-entity ops
+  // (checkout / apply / pop / drop / etc.) so the user discovers that
+  // they can act on the cursored item without drilling into the
+  // dedicated view. Empty content tabs and the status tab fall back to
+  // the generic "enter open" hint.
+  it('surfaces per-tab in-sidebar ops when the focused tab has items', () => {
+    expect(getLogInkFooterHints({
+      filterMode: false,
+      focus: 'sidebar',
+      showHelp: false,
+      sidebarTab: 'branches',
+      sidebarItemCount: 5,
+    }).contextual).toEqual([
+      '↑/↓ branches', '←/→ tab', 'enter checkout', 'D delete', 'R rename', 'u upstream',
+    ])
+
+    expect(getLogInkFooterHints({
+      filterMode: false,
+      focus: 'sidebar',
+      showHelp: false,
+      sidebarTab: 'stashes',
+      sidebarItemCount: 3,
+    }).contextual).toEqual([
+      '↑/↓ stashes', '←/→ tab', 'enter diff', 'a apply', 'p pop', 'X drop',
+    ])
+
+    expect(getLogInkFooterHints({
+      filterMode: false,
+      focus: 'sidebar',
+      showHelp: false,
+      sidebarTab: 'tags',
+      sidebarItemCount: 2,
+    }).contextual).toEqual([
+      '↑/↓ tags', '←/→ tab', '+ new', 'P push', 'T delete',
+    ])
+
+    expect(getLogInkFooterHints({
+      filterMode: false,
+      focus: 'sidebar',
+      showHelp: false,
+      sidebarTab: 'worktrees',
+      sidebarItemCount: 1,
+    }).contextual).toEqual([
+      '↑/↓ worktrees', '←/→ tab', 'W remove',
+    ])
+  })
+
+  it('falls back to the generic open hint when the sidebar tab has no items', () => {
+    // Empty content tab (no branches, etc.) — surface the drill-in
+    // affordance instead of per-item ops the user can't reach.
+    expect(getLogInkFooterHints({
+      filterMode: false,
+      focus: 'sidebar',
+      showHelp: false,
+      sidebarTab: 'branches',
+      sidebarItemCount: 0,
+    }).contextual).toEqual(['←/→ tab', '1-5 jump', 'enter open', 'tab focus'])
+
+    // Status tab is excluded from the in-sidebar selection model — its
+    // preview is worktree files which the dedicated status view owns.
+    expect(getLogInkFooterHints({
+      filterMode: false,
+      focus: 'sidebar',
+      showHelp: false,
+      sidebarTab: 'status',
+      sidebarItemCount: 12,
+    }).contextual).toEqual(['←/→ tab', '1-5 jump', 'enter open', 'tab focus'])
   })
 
   it('reduces global hints in special modes (filter, help, palette)', () => {

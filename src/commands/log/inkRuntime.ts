@@ -80,6 +80,7 @@ import { formatHyperlink } from './inkHyperlinks'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
 import { getSavedSidebarTab, saveSidebarTab } from './inkSidebarPersistence'
+import { getSidebarVisibleWindow } from './inkSidebarSelection'
 import {
   PromotedSelectionsSnapshot,
   rectifyPromotedSelectionIndex,
@@ -468,102 +469,6 @@ function sidebarTabLabel(tab: LogInkSidebarTab): string {
     default:
       return tab
   }
-}
-
-function sidebarLines(
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  tab: LogInkSidebarTab,
-  width: number,
-  state: LogInkState,
-  theme: LogInkTheme
-): string[] {
-  if (tab === 'status') {
-    const worktree = context.worktree
-
-    if (isLogInkContextKeyLoading(contextStatus, 'worktree')) {
-      return ['Loading status...']
-    }
-
-    if (!worktree) {
-      return ['Status unavailable']
-    }
-
-    return [
-      `${worktree.stagedCount} staged`,
-      `${worktree.unstagedCount} unstaged`,
-      `${worktree.untrackedCount} untracked`,
-      '',
-      ...worktree.files.slice(0, 12).map((file) =>
-        `${file.indexStatus}${file.worktreeStatus} ${truncate(file.path, width - 3)}`
-      ),
-    ]
-  }
-
-  if (tab === 'branches') {
-    const branches = context.branches
-
-    if (isLogInkContextKeyLoading(contextStatus, 'branches')) {
-      return ['Loading branches...']
-    }
-
-    if (!branches) {
-      return ['Branches unavailable']
-    }
-
-    const sortedBranches = sortBranches(branches.localBranches, state.branchSort)
-    return [
-      `Current: ${branches.currentBranch || '<detached>'}`,
-      branches.dirty ? 'Worktree: dirty' : 'Worktree: clean',
-      '',
-      ...sortedBranches.slice(0, 8).map((branch) =>
-        `${branchRowMarker(branch, { ascii: theme.ascii })} ${truncate(branch.shortName, width - 4)}`
-      ),
-      ...sortedBranches
-        .slice(0, 4)
-        .map((branch) => formatBranchDivergence(branch, { ascii: theme.ascii }))
-        .filter((line) => line.length > 0)
-        .map((line) => `  ${truncate(line, width - 2)}`),
-    ]
-  }
-
-  if (tab === 'tags') {
-    if (isLogInkContextKeyLoading(contextStatus, 'tags')) {
-      return ['Loading tags...']
-    }
-
-    const sortedTags = sortTags(context.tags?.tags || [], state.tagSort)
-    return sortedTags.length
-      ? sortedTags.slice(0, 12).map((tag) =>
-        `${truncate(tag.name, 16)} ${truncate(tag.subject, Math.max(8, width - 18))}`
-      )
-      : ['No tags found']
-  }
-
-  if (tab === 'stashes') {
-    if (isLogInkContextKeyLoading(contextStatus, 'stashes')) {
-      return ['Loading stashes...']
-    }
-
-    return context.stashes?.stashes.length
-      ? context.stashes.stashes.slice(0, 12).map((stash) =>
-        `${stash.ref} ${truncate(stash.message, Math.max(8, width - stash.ref.length - 1))}`
-      )
-      : ['No stashes found']
-  }
-
-  if (isLogInkContextKeyLoading(contextStatus, 'worktreeList')) {
-    return ['Loading worktrees...']
-  }
-
-  return context.worktreeList?.worktrees.length
-    ? context.worktreeList.worktrees.slice(0, 12).map((worktree) => {
-      const marker = worktree.current ? '*' : ' '
-      const state = worktree.dirty ? 'dirty' : 'clean'
-
-      return `${marker} ${truncate(worktree.branch || worktree.path, Math.max(8, width - 8))} ${state}`
-    })
-    : ['No linked worktrees']
 }
 
 export async function startInkInteractiveLog(
@@ -2051,7 +1956,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         theme
       )
     ),
-    renderFooter(h, { Box, Text }, state, theme, idleTip)
+    renderFooter(h, { Box, Text }, state, context, theme, idleTip)
   )
 }
 
@@ -2192,11 +2097,138 @@ function renderActiveSidebarContent(
   if (tab === 'status') {
     return renderActiveStatusTabContent(h, Text, context, contextStatus, width, theme)
   }
-  const lines = sidebarLines(context, contextStatus, tab, width - 6, state, theme)
-  return lines.map((line, index) => h(Text, {
-    key: `tab-content-${tab}-${index}`,
-    dimColor: !line.trim(),
-  }, truncate(`  ${line}`, width - 4)))
+
+  // Branches / tags / stashes / worktrees: render selectable rows so
+  // ↑/↓ navigates within the sidebar list and Enter / per-entity keys
+  // act on the cursored item without needing to drill into the
+  // dedicated view (#791 follow-up — in-sidebar selection).
+  const focused = state.focus === 'sidebar' && state.sidebarTab === tab
+
+  if (tab === 'branches') {
+    if (isLogInkContextKeyLoading(contextStatus, 'branches')) {
+      return [h(Text, { key: 'tab-branches-loading', dimColor: true }, '  Loading branches…')]
+    }
+    const branches = context.branches
+    if (!branches) {
+      return [h(Text, { key: 'tab-branches-empty', dimColor: true }, '  Branches unavailable')]
+    }
+    const sortedBranches = sortBranches(branches.localBranches, state.branchSort)
+    const headerRows: ReactTypes.ReactElement[] = [
+      h(Text, { key: 'tab-branches-current', dimColor: true },
+        truncate(`  Current: ${branches.currentBranch || '<detached>'}`, width - 4)),
+      h(Text, { key: 'tab-branches-state', dimColor: true },
+        `  Worktree: ${branches.dirty ? 'dirty' : 'clean'}`),
+      h(Text, { key: 'tab-branches-spacer' }, ''),
+    ]
+    return [
+      ...headerRows,
+      ...renderSelectableSidebarRows(
+        h, Text, sortedBranches, state.selectedBranchIndex, focused, width, theme,
+        (branch) => `${branchRowMarker(branch, { ascii: theme.ascii })} ${branch.shortName}`,
+        'tab-branches'
+      ),
+    ]
+  }
+
+  if (tab === 'tags') {
+    if (isLogInkContextKeyLoading(contextStatus, 'tags')) {
+      return [h(Text, { key: 'tab-tags-loading', dimColor: true }, '  Loading tags…')]
+    }
+    const tags = sortTags(context.tags?.tags || [], state.tagSort)
+    if (tags.length === 0) {
+      return [h(Text, { key: 'tab-tags-empty', dimColor: true }, '  No tags found')]
+    }
+    return renderSelectableSidebarRows(
+      h, Text, tags, state.selectedTagIndex, focused, width, theme,
+      (tag) => `${truncate(tag.name, 16)} ${tag.subject}`,
+      'tab-tags'
+    )
+  }
+
+  if (tab === 'stashes') {
+    if (isLogInkContextKeyLoading(contextStatus, 'stashes')) {
+      return [h(Text, { key: 'tab-stashes-loading', dimColor: true }, '  Loading stashes…')]
+    }
+    const stashes = context.stashes?.stashes || []
+    if (stashes.length === 0) {
+      return [h(Text, { key: 'tab-stashes-empty', dimColor: true }, '  No stashes found')]
+    }
+    return renderSelectableSidebarRows(
+      h, Text, stashes, state.selectedStashIndex, focused, width, theme,
+      (stash, index) => `@{${index}} ${stash.message || '(no message)'}`,
+      'tab-stashes'
+    )
+  }
+
+  // worktrees
+  if (isLogInkContextKeyLoading(contextStatus, 'worktreeList')) {
+    return [h(Text, { key: 'tab-worktrees-loading', dimColor: true }, '  Loading worktrees…')]
+  }
+  const worktrees = context.worktreeList?.worktrees || []
+  if (worktrees.length === 0) {
+    return [h(Text, { key: 'tab-worktrees-empty', dimColor: true }, '  No linked worktrees')]
+  }
+  return renderSelectableSidebarRows(
+    h, Text, worktrees, state.selectedWorktreeListIndex, focused, width, theme,
+    (worktree) => {
+      const marker = worktree.current ? '*' : ' '
+      const wstate = worktree.dirty ? 'dirty' : 'clean'
+      return `${marker} ${worktree.branch || worktree.path} ${wstate}`
+    },
+    'tab-worktrees'
+  )
+}
+
+/**
+ * Render a sliding-window list of selectable sidebar rows. The cursor
+ * highlights the row at `selectedIndex` only when `focused` is true so
+ * an unfocused sidebar doesn't compete visually with the active panel.
+ * Sliding window keeps the cursor in view as the user navigates a long
+ * list; truncation hints surface the count of hidden rows.
+ */
+function renderSelectableSidebarRows<T>(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  items: T[],
+  selectedIndex: number,
+  focused: boolean,
+  width: number,
+  theme: LogInkTheme,
+  toRowText: (item: T, index: number) => string,
+  keyPrefix: string
+): ReactTypes.ReactElement[] {
+  if (items.length === 0) return []
+
+  const window = getSidebarVisibleWindow(items.length, selectedIndex)
+  const elements: ReactTypes.ReactElement[] = []
+
+  if (window.truncatedAbove > 0) {
+    elements.push(h(Text, {
+      key: `${keyPrefix}-trunc-above`,
+      dimColor: true,
+    }, truncate(`  … ${window.truncatedAbove} more above`, width - 4)))
+  }
+
+  for (let offset = 0; offset < window.size; offset += 1) {
+    const index = window.start + offset
+    if (index >= items.length) break
+    const isSelected = focused && index === selectedIndex
+    const text = toRowText(items[index], index)
+    elements.push(h(Text, {
+      key: `${keyPrefix}-row-${index}`,
+      backgroundColor: isSelected && !theme.noColor ? theme.colors.selection : undefined,
+      inverse: isSelected,
+    }, truncate(`  ${text}`, width - 4)))
+  }
+
+  if (window.truncatedBelow > 0) {
+    elements.push(h(Text, {
+      key: `${keyPrefix}-trunc-below`,
+      dimColor: true,
+    }, truncate(`  … ${window.truncatedBelow} more below`, width - 4)))
+  }
+
+  return elements
 }
 
 function renderActiveStatusTabContent(
@@ -4200,10 +4232,23 @@ function renderFooter(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
   state: LogInkState,
+  context: LogInkContext,
   theme: LogInkTheme,
   idleTip?: string
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
+  // Sidebar item count drives the per-tab footer hints — when items are
+  // present the footer surfaces in-sidebar ops (checkout / apply / pop /
+  // drop), otherwise it falls back to the generic "enter open" hint.
+  const sidebarItemCount = (() => {
+    switch (state.sidebarTab) {
+      case 'branches': return context.branches?.localBranches.length
+      case 'tags': return context.tags?.tags.length
+      case 'stashes': return context.stashes?.stashes.length
+      case 'worktrees': return context.worktreeList?.worktrees.length
+      default: return undefined
+    }
+  })()
   const hints = getLogInkFooterHints({
     activeView: state.activeView,
     diffSource: state.diffSource,
@@ -4212,6 +4257,8 @@ function renderFooter(
     pendingKey: state.pendingKey,
     showCommandPalette: state.showCommandPalette,
     showHelp: state.showHelp,
+    sidebarTab: state.sidebarTab,
+    sidebarItemCount,
   })
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.
