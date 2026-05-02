@@ -2,6 +2,7 @@
 dist/**/*
 
 # ignore commit-copilot project config
+.coco.json
 .coco.config.json
 
 # build reports
@@ -51,3 +52,6 @@ AGENTS.md
 
 package-lock.json
 commitlint.config.js
+
+# Internal specs, audits, and design docs
+specs/
