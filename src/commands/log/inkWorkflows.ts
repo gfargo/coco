@@ -288,6 +288,15 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
 export function getLogInkWorkflowActionByKey(
   inputValue: string
 ): LogInkWorkflowAction | undefined {
+  // Workflow actions with an empty `key` are palette-only — they
+  // exist so the command palette can surface them but should never
+  // match a raw keystroke. Without this guard, any unbound key
+  // (left/right arrow, function keys) that arrives with an empty
+  // inputValue would `find()` the first empty-key entry —
+  // `cherry-pick-commit` — and pop its confirmation dialog.
+  if (!inputValue) {
+    return undefined
+  }
   return getLogInkWorkflowActions().find((action) => action.key === inputValue)
 }
 

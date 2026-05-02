@@ -57,6 +57,22 @@ describe('log Ink workflows', () => {
     expect(getLogInkWorkflowActionById('ai-commit-summary')?.key).toBe('I')
   })
 
+  // Regression: arrow keys (left/right) and other unbound keystrokes
+  // arrive at the workflow lookup with `inputValue === ''`. Without
+  // the empty-string guard, `find()` would match the first action
+  // declared with `key: ''` (cherry-pick-commit) and pop a
+  // confirmation prompt on every arrow press. Palette-only entries
+  // (key: '') must stay reachable via the palette but ignore key
+  // dispatch entirely.
+  it('returns undefined for empty inputValue so palette-only actions never match a keystroke', () => {
+    expect(getLogInkWorkflowActionByKey('')).toBeUndefined()
+  })
+
+  it('still finds palette-only actions by id (cherry-pick-commit, etc.)', () => {
+    expect(getLogInkWorkflowActionById('cherry-pick-commit')?.key).toBe('')
+    expect(getLogInkWorkflowActionById('checkout-file-from-commit')?.key).toBe('')
+  })
+
   it('reports loading states while optional repository context hydrates', () => {
     const sections = getLogInkWorkflowSections({
       contextLoading: true,
