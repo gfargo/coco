@@ -1,3 +1,5 @@
+import { ColorEnv, getColorLevel, presetUsesTrueColor } from './inkColorSupport'
+
 export type LogInkBorderStyle = 'round' | 'single' | 'classic'
 export type LogInkThemePreset = 'default' | 'monochrome' | 'catppuccin' | 'gruvbox'
 
@@ -33,6 +35,12 @@ export type LogInkTheme = {
 export type CreateLogInkThemeOptions = LogInkThemeConfig & {
   noColor?: boolean
   term?: string
+  /**
+   * Snapshot of the env used for color-level detection (P5.2). Defaults to
+   * `process.env`. Tests pass a synthetic env to keep results deterministic
+   * across CI runners and developer machines.
+   */
+  env?: ColorEnv
 }
 
 const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'>, LogInkThemeColors> = {
@@ -92,7 +100,15 @@ export function createLogInkTheme(options: CreateLogInkThemeOptions = {}): LogIn
   const noColor = (options.noColor ?? Boolean(process.env.NO_COLOR)) ||
     options.preset === 'monochrome'
   const ascii = options.ascii ?? shouldUseAscii(options.term ?? process.env.TERM)
-  const preset = options.preset && options.preset !== 'monochrome' ? options.preset : 'default'
+  const requestedPreset = options.preset && options.preset !== 'monochrome' ? options.preset : 'default'
+  // P5.2 — gracefully downgrade hex presets (catppuccin / gruvbox) when
+  // the host terminal can't render truecolor. Chalk approximates hex in
+  // those modes anyway, but the default preset's ANSI-named palette
+  // renders far more faithfully on 16-color terminals.
+  const colorLevel = getColorLevel(options.env ?? process.env)
+  const preset = !noColor && presetUsesTrueColor(requestedPreset) && colorLevel !== 'truecolor'
+    ? 'default'
+    : requestedPreset
   const colors = noColor
     ? {}
     : {

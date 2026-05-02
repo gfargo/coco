@@ -73,6 +73,7 @@ import {
   getLogInkHelpSections,
 } from './inkKeymap'
 import { substituteGraphChars } from './inkGraphChars'
+import { formatHyperlink } from './inkHyperlinks'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
 import {
@@ -109,7 +110,7 @@ import {
 } from './inkViewModel'
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
-import { ProviderOverview, getProviderOverview } from './providerData'
+import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { StashOverview, getStashOverview } from './stashData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
@@ -1713,11 +1714,28 @@ function renderTagsSurface(
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
+        // P5.1 — link the tag name to its GitHub tree page when we know
+        // the remote. Truncation runs on the visible (pre-OSC) text;
+        // formatHyperlink wraps just the tag name, leaving width math
+        // intact.
+        const url = buildRefUrl(context.provider?.repository, tag.name)
+        const namePadded = tag.name.padEnd(20)
+        const lineText = truncate(`${cursor} ${namePadded} ${tag.subject}`, 140)
+        if (!url || lineText.indexOf(namePadded) < 0) {
+          return h(Text, {
+            key: `tag-${index}`,
+            bold: isSelected,
+            dimColor: !isSelected,
+          }, lineText)
+        }
+        const linkStart = lineText.indexOf(namePadded)
+        const before = lineText.slice(0, linkStart)
+        const after = lineText.slice(linkStart + namePadded.length)
         return h(Text, {
           key: `tag-${index}`,
           bold: isSelected,
           dimColor: !isSelected,
-        }, truncate(`${cursor} ${tag.name.padEnd(20)} ${tag.subject}`, 140))
+        }, before, formatHyperlink(namePadded, url), after)
       })
 
   return h(Box, {
@@ -2060,18 +2078,37 @@ function renderHistoryInspector(
   }
 
   const statLine = `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
-  const headerLines = [
-    detail.message,
-    '',
-    `Commit: ${compactHash(detail.hash)}`,
-    `Author: ${detail.author}`,
-    `Date: ${detail.date}`,
-    detail.refs.length ? `Refs: ${detail.refs.join(', ')}` : 'Refs: none',
-    statLine,
-    '',
-    ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']),
-    '',
-    'Changed files:',
+  // P5.1 — link the commit hash and each ref out to GitHub when we know
+  // the remote. OSC 8 escapes embed inline; supportsHyperlinks() decides
+  // whether to wrap or fall through to plain text.
+  const repository = context.provider?.repository
+  const commitLink = formatHyperlink(
+    compactHash(detail.hash),
+    buildCommitUrl(repository, detail.hash)
+  )
+  const refNodes = detail.refs.length
+    ? renderInspectorRefs(h, Text, detail.refs, repository)
+    : null
+
+  const headerNodes: ReactTypes.ReactElement[] = [
+    h(Text, { key: 'detail-msg' }, truncate(detail.message, width - 4)),
+    h(Text, { key: 'detail-spacer-1' }, ''),
+    h(Text, { key: 'detail-commit', dimColor: true }, 'Commit: ', commitLink),
+    h(Text, { key: 'detail-author', dimColor: true }, truncate(`Author: ${detail.author}`, width - 4)),
+    h(Text, { key: 'detail-date', dimColor: true }, truncate(`Date: ${detail.date}`, width - 4)),
+    refNodes
+      ? h(Text, { key: 'detail-refs', dimColor: true }, 'Refs: ', ...refNodes)
+      : h(Text, { key: 'detail-refs', dimColor: true }, 'Refs: none'),
+    h(Text, { key: 'detail-stat', dimColor: true }, truncate(statLine, width - 4)),
+    h(Text, { key: 'detail-spacer-2' }, ''),
+    ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']).map((line, index) =>
+      h(Text, {
+        key: `detail-body-${index}`,
+        dimColor: true,
+      }, truncate(line, width - 4))
+    ),
+    h(Text, { key: 'detail-spacer-3' }, ''),
+    h(Text, { key: 'detail-files-title' }, 'Changed files:'),
   ]
 
   const fileListMaxRows = Math.max(4, Math.min(detail.files.length, 10))
@@ -2096,15 +2133,60 @@ function renderHistoryInspector(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Inspector', focused)),
-  ...headerLines.map((line, index) => h(Text, {
-    key: `detail-header-${index}`,
-    dimColor: index > 1 && line !== 'Changed files:',
-  }, truncate(line, width - 4))),
+  ...headerNodes,
   ...fileListNodes,
   ...trailerLines.map((line, index) => h(Text, {
     key: `detail-trailer-${index}`,
     dimColor: index > 0,
   }, truncate(line, width - 4))))
+}
+
+/**
+ * Build a commit URL for the repo when GitHub provider info is available.
+ * Returns undefined for unsupported remotes — formatHyperlink falls through
+ * to plain text in that case.
+ */
+function buildCommitUrl(
+  repository: ProviderRepository | undefined,
+  hash: string
+): string | undefined {
+  if (!repository) return undefined
+  return buildProviderUrl(repository, { type: 'commit', commit: hash })
+}
+
+/**
+ * Build a branch URL for a ref name. Strips the `HEAD -> ` and `tag: `
+ * prefixes git decoration uses. For everything else we treat the ref as a
+ * branch — GitHub's `/tree/<ref>` resolves both branches and tags.
+ */
+function buildRefUrl(
+  repository: ProviderRepository | undefined,
+  ref: string
+): string | undefined {
+  if (!repository) return undefined
+  const stripped = ref.replace(/^HEAD -> /, '').replace(/^tag: /, '').trim()
+  if (!stripped) return undefined
+  return buildProviderUrl(repository, { type: 'branch', branch: stripped })
+}
+
+/**
+ * Render `refs` as a comma-separated sequence of <Text> fragments, each
+ * wrapped in OSC 8 (no-op when the terminal can't render hyperlinks).
+ */
+function renderInspectorRefs(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  refs: string[],
+  repository: ProviderRepository | undefined
+): ReactTypes.ReactElement[] {
+  const out: ReactTypes.ReactElement[] = []
+  refs.forEach((ref, index) => {
+    if (index > 0) {
+      out.push(h(Text, { key: `ref-sep-${index}` }, ', '))
+    }
+    out.push(h(Text, { key: `ref-${index}` }, formatHyperlink(ref, buildRefUrl(repository, ref))))
+  })
+  return out
 }
 
 function renderCommitDiffDetail(
