@@ -1863,12 +1863,14 @@ function renderComposeSurface(
   const stateLine = compose.editing
     ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
     : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
-  const stagedFileLines = (worktree?.files || [])
-    .filter((file) => file.indexStatus !== ' ' && file.indexStatus !== '?')
-    .slice(0, 5)
-    .map((file) => `  ${file.indexStatus} ${file.path}`)
+  const hasStagedFiles = (worktree?.files || [])
+    .some((file) => file.indexStatus !== ' ' && file.indexStatus !== '?')
+  // Staged file list is rendered in the right Worktree panel
+  // (renderComposeContextPanel); duplicating it here was confusing.
+  // Keep only the actionable "stage something first" hint when nothing is
+  // staged yet.
   const noStagedHint = !isLogInkContextKeyLoading(contextStatus, 'worktree')
-    ? formatLogInkComposeEmpty({ hasStaged: stagedFileLines.length > 0 })
+    ? formatLogInkComposeEmpty({ hasStaged: hasStagedFiles })
     : undefined
 
   return h(Box, {
@@ -1917,21 +1919,12 @@ function renderComposeSurface(
     key: `compose-detail-${index}`,
     dimColor: true,
   }, truncate(`  ${line}`, 140))),
-  ...(stagedFileLines.length > 0
+  ...(!hasStagedFiles && noStagedHint
     ? [
-      h(Text, { key: 'compose-staged-spacer' }, ''),
-      h(Text, { key: 'compose-staged-title', bold: true }, 'Staged'),
-      ...stagedFileLines.map((line, index) => h(Text, {
-        key: `compose-staged-${index}`,
-        dimColor: true,
-      }, truncate(line, 140))),
+      h(Text, { key: 'compose-no-staged-spacer' }, ''),
+      h(Text, { key: 'compose-no-staged', dimColor: true }, truncate(noStagedHint, 140)),
     ]
-    : noStagedHint
-      ? [
-        h(Text, { key: 'compose-no-staged-spacer' }, ''),
-        h(Text, { key: 'compose-no-staged', dimColor: true }, truncate(noStagedHint, 140)),
-      ]
-      : []))
+    : []))
 }
 
 function matchesPromotedFilter(haystacks: string[], filter: string): boolean {
