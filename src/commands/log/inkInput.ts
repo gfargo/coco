@@ -35,6 +35,7 @@ export type LogInkInputEvent =
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
   | { type: 'runWorkflowAction'; id: string; payload?: string }
+  | { type: 'openFileInEditor'; path: string }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -65,6 +66,11 @@ export type LogInkInputContext = {
    * patch. Used by `c` (cherry-pick) to know which path to materialize.
    */
   stashDiffSelectedPath?: string
+  /**
+   * Path of the cursored file in the worktree (status / worktree diff
+   * views). Used by `o` (open in $EDITOR).
+   */
+  worktreeSelectedPath?: string
   /**
    * True when the worktree has any staged, unstaged, or untracked changes.
    * Drives the synthetic "(+) new commit" row at the top of the history
@@ -1031,6 +1037,21 @@ export function getLogInkInputEvents(
       kind: 'create-stash',
       label: 'Stash message',
     })]
+  }
+
+  // `o` opens the file under the cursor in $EDITOR. Available on the
+  // status surface (worktree files), the worktree diff (the file being
+  // diffed), and the stash diff (the file the cursor sits in inside
+  // the patch). The runtime suspends Ink, spawns the editor sync, then
+  // re-renders.
+  if (inputValue === 'o' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
+    return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
+  }
+  if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'worktree' && context.worktreeSelectedPath) {
+    return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
+  }
+  if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffSelectedPath) {
+    return [{ type: 'openFileInEditor', path: context.stashDiffSelectedPath }]
   }
 
   // `c` on a stash diff cherry-picks the file under the cursor —

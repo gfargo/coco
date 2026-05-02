@@ -35,6 +35,7 @@
  *     every text decoration is dropped.
  */
 
+import { spawnSync } from 'node:child_process'
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { BranchOverview, getBranchOverview } from './branchData'
@@ -1147,6 +1148,47 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch({ type: 'setStatus', value: result.message })
   }, [dispatch])
 
+  // Open a file in $EDITOR (or $VISUAL) by suspending Ink's hold on the
+  // terminal, spawning the editor synchronously inheriting stdio, then
+  // restoring the alt screen + raw mode and forcing a re-render. The
+  // dance mirrors the SIGTSTP / SIGCONT path in inkTerminalLifecycle.
+  // Falls back to vi when neither env var is set; surfaces a status
+  // message on missing-binary / non-zero exit so the user isn't left
+  // wondering.
+  const openInEditor = React.useCallback((path: string) => {
+    if (!path) return
+    const editor = process.env.VISUAL || process.env.EDITOR || 'vi'
+    const out = process.stdout
+    const stdin = process.stdin
+    const ENTER_ALT = '\x1b[?1049h'
+    const EXIT_ALT = '\x1b[?1049l'
+    const SHOW_CURSOR = '\x1b[?25h'
+    const HIDE_CURSOR = '\x1b[?25l'
+    try {
+      // Drop into the primary buffer + cooked mode so the editor
+      // doesn't inherit our raw-mode keystrokes.
+      stdin.setRawMode?.(false)
+      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
+      const result = spawnSync(editor, [path], { stdio: 'inherit' })
+      if (result.error) {
+        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}` })
+      } else if (typeof result.status === 'number' && result.status !== 0) {
+        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}` })
+      } else {
+        dispatch({ type: 'setStatus', value: `Edited ${path}` })
+      }
+    } finally {
+      // Re-enter the alt screen + raw mode + hidden cursor; nudge React
+      // so the freshly-restored screen actually paints.
+      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
+      stdin.setRawMode?.(true)
+      resumeRef?.current?.()
+    }
+    // Worktree status may have changed (e.g. user saved an edit) — silent
+    // refresh so the file row reflects the new staged/unstaged state.
+    void refreshWorktreeContext({ silent: true })
+  }, [dispatch, refreshWorktreeContext, resumeRef])
+
   // Resolve the destructive-action target from the live filtered+sorted
   // list the user is looking at, run the action against it, surface the
   // result on the status line, and silently refresh so the deleted item
@@ -1493,6 +1535,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,
       worktreeListCount: context.worktreeList?.worktrees.length,
+      worktreeSelectedPath: context.worktree?.files[state.selectedWorktreeFileIndex]?.path,
       worktreeDirty,
     }).forEach((event) => {
       if (event.type === 'exit') {
@@ -1513,6 +1556,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void runAiCommitDraft()
       } else if (event.type === 'runWorkflowAction') {
         void runWorkflowAction(event.id, event.payload)
+      } else if (event.type === 'openFileInEditor') {
+        openInEditor(event.path)
       } else {
         // P4.5: enrich filter-mutating actions with a precomputed
         // selection snapshot so the reducer can preserve the cursor on
