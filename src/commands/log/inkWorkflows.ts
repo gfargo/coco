@@ -138,6 +138,14 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      id: 'open-pr',
+      key: 'O',
+      label: 'Open PR / repo',
+      description: 'Open the current branch\'s pull request in the browser, or the repo page if there\'s no PR.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       id: 'fetch-remotes',
       key: 'F',
       label: 'Fetch all remotes',

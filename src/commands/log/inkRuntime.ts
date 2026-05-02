@@ -135,6 +135,7 @@ import {
 } from './inkViewModel'
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
+import { openProviderUrl } from './providerActions'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
 import {
   checkoutBranch,
@@ -1296,6 +1297,19 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return { ok: false, message: 'No git operation in progress' }
         }
         return abortOperation(git, operation)
+      },
+      'open-pr': async () => {
+        const repo = context.provider?.repository
+        if (!repo || repo.provider !== 'github' || !repo.owner || !repo.name) {
+          return { ok: false, message: 'No GitHub remote detected for this repo' }
+        }
+        const pr = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
+        if (pr) {
+          return openProviderUrl(repo, { type: 'pull-request', number: pr.number })
+        }
+        // No PR — fall back to opening the repo page so the user can
+        // create one or browse from there.
+        return openProviderUrl(repo, { type: 'repo' })
       },
       'fetch-remotes': async () => fetchRemotes(git),
       'pull-current-branch': async () => pullCurrentBranch(git),
