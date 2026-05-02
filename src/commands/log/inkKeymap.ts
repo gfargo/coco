@@ -339,6 +339,13 @@ export type GetLogInkFooterHintsOptions = {
    * dispatcher is waiting for the second key. The footer surfaces the
    * available continuations inline as a fallback for the popup overlay. */
   pendingKey?: string
+  /** Active sidebar tab — used to surface the per-tab in-sidebar ops
+   *  (checkout / apply / pop / drop / etc.) when sidebar is focused. */
+  sidebarTab?: 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
+  /** Item count for the active sidebar tab — empty content tabs fall
+   *  back to the generic "enter open" hint instead of showing per-item
+   *  ops the user cannot reach. */
+  sidebarItemCount?: number
 }
 
 export type LogInkChordContinuation = {
@@ -473,8 +480,37 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   }
 
   if (options.focus === 'sidebar') {
+    // Per-tab hints when the active tab has selectable items — the user
+    // can act on the cursored entity without leaving the workstation
+    // view. Status tab + empty content tabs fall back to the generic
+    // "enter open" hint that drills into the dedicated view.
+    const itemsPresent = (options.sidebarItemCount ?? 0) > 0
+    if (itemsPresent && options.sidebarTab === 'branches') {
+      return {
+        contextual: ['↑/↓ branches', '←/→ tab', 'enter checkout', 'D delete', 'R rename', 'u upstream'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
+    if (itemsPresent && options.sidebarTab === 'stashes') {
+      return {
+        contextual: ['↑/↓ stashes', '←/→ tab', 'enter diff', 'a apply', 'p pop', 'X drop'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
+    if (itemsPresent && options.sidebarTab === 'tags') {
+      return {
+        contextual: ['↑/↓ tags', '←/→ tab', '+ new', 'P push', 'T delete'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
+    if (itemsPresent && options.sidebarTab === 'worktrees') {
+      return {
+        contextual: ['↑/↓ worktrees', '←/→ tab', 'W remove'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
     return {
-      contextual: ['[/] tab', '1-5 jump', 'tab focus'],
+      contextual: ['←/→ tab', '1-5 jump', 'enter open', 'tab focus'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

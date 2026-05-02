@@ -13,6 +13,7 @@ import {
   getLogInkWorkflowActionById,
   getLogInkWorkflowActionByKey,
 } from './inkWorkflows'
+import { sidebarTabHasSelectableItems } from './inkSidebarSelection'
 
 export type LogInkInputKey = {
   backspace?: boolean
@@ -20,10 +21,12 @@ export type LogInkInputKey = {
   delete?: boolean
   downArrow?: boolean
   escape?: boolean
+  leftArrow?: boolean
   meta?: boolean
   pageDown?: boolean
   pageUp?: boolean
   return?: boolean
+  rightArrow?: boolean
   shift?: boolean
   tab?: boolean
   upArrow?: boolean
@@ -100,6 +103,54 @@ function action(actionValue: LogInkAction): LogInkInputEvent {
   return {
     type: 'action',
     action: actionValue,
+  }
+}
+
+/**
+ * Per-entity action-target predicates. The promoted views (`branches`,
+ * `tags`, `stash`, `worktrees`) each scope a set of ops to their
+ * dedicated surface. The same ops also fire when the user has the
+ * sidebar focused on the matching tab — that's how in-sidebar
+ * selection (#791 follow-up) lets the user checkout / apply / drop
+ * without leaving the workstation view.
+ */
+function isBranchActionTarget(state: LogInkState): boolean {
+  return (state.activeView === 'branches' && state.focus === 'commits') ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'branches')
+}
+
+function isTagActionTarget(state: LogInkState): boolean {
+  return (state.activeView === 'tags' && state.focus === 'commits') ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'tags')
+}
+
+function isStashActionTarget(state: LogInkState): boolean {
+  return (state.activeView === 'stash' && state.focus === 'commits') ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
+}
+
+function isWorktreeActionTarget(state: LogInkState): boolean {
+  return (state.activeView === 'worktrees' && state.focus === 'commits') ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'worktrees')
+}
+
+/**
+ * Item count for the active sidebar tab — used by the generic
+ * sidebar-Enter handler to decide whether to defer to the per-entity
+ * Enter (when items are present and the user is cursoring through
+ * them) or to drill into the dedicated view (when the tab is empty
+ * or has no per-entity Enter handler defined).
+ */
+function getSidebarItemCount(
+  sidebarTab: LogInkSidebarTab,
+  context: LogInkInputContext
+): number | undefined {
+  switch (sidebarTab) {
+    case 'branches': return context.branchCount
+    case 'tags': return context.tagCount
+    case 'stashes': return context.stashCount
+    case 'worktrees': return context.worktreeListCount
+    default: return undefined
   }
 }
 
@@ -243,10 +294,10 @@ export function getLogInkPaletteExecuteEvents(
     case 'clearSearch':
       return [action({ type: 'clearFilter' })]
     case 'cycleSort':
-      if (state.activeView === 'branches') {
+      if (isBranchActionTarget(state)) {
         return [action({ type: 'cycleBranchSort' })]
       }
-      if (state.activeView === 'tags') {
+      if (isTagActionTarget(state)) {
         return [action({ type: 'cycleTagSort' })]
       }
       return [action({
@@ -669,10 +720,10 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === 's') {
-    if (state.activeView === 'branches') {
+    if (isBranchActionTarget(state)) {
       return [action({ type: 'cycleBranchSort' })]
     }
-    if (state.activeView === 'tags') {
+    if (isTagActionTarget(state)) {
       return [action({ type: 'cycleTagSort' })]
     }
     // Falls through so other views (history/status/diff/compose/stash) still
@@ -751,6 +802,18 @@ export function getLogInkInputEvents(
     return [action({ type: key.shift ? 'focusPrevious' : 'focusNext' })]
   }
 
+  // ←/→ on the sidebar switch tabs (Status ↔ Branches ↔ Tags ↔
+  // Stashes ↔ Worktrees) — the horizontal axis is "between tabs", the
+  // vertical axis (↑/↓ below) is "within the active tab's items".
+  // [/] still works as a keyboard alternative for users who prefer
+  // non-arrow keys.
+  if (key.leftArrow && state.focus === 'sidebar') {
+    return [action({ type: 'previousSidebarTab' })]
+  }
+  if (key.rightArrow && state.focus === 'sidebar') {
+    return [action({ type: 'nextSidebarTab' })]
+  }
+
   if (key.upArrow || inputValue === 'k') {
     if (state.focus === 'detail' && context.detailFileCount) {
       return [action({ type: 'moveDetailFile', delta: -1, fileCount: context.detailFileCount })]
@@ -784,19 +847,19 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'branches' && context.branchCount) {
+    if (isBranchActionTarget(state) && context.branchCount) {
       return [action({ type: 'moveBranch', delta: -1, count: context.branchCount })]
     }
 
-    if (state.activeView === 'tags' && context.tagCount) {
+    if (isTagActionTarget(state) && context.tagCount) {
       return [action({ type: 'moveTag', delta: -1, count: context.tagCount })]
     }
 
-    if (state.activeView === 'stash' && context.stashCount) {
+    if (isStashActionTarget(state) && context.stashCount) {
       return [action({ type: 'moveStash', delta: -1, count: context.stashCount })]
     }
 
-    if (state.activeView === 'worktrees' && context.worktreeListCount) {
+    if (isWorktreeActionTarget(state) && context.worktreeListCount) {
       return [action({ type: 'moveWorktreeListEntry', delta: -1, count: context.worktreeListCount })]
     }
 
@@ -810,6 +873,11 @@ export function getLogInkInputEvents(
       return [action({ type: 'focusPendingCommit' })]
     }
 
+    // Sidebar fallback: when no entity claim above succeeds (status
+    // tab or empty content tab), ↑ falls through to cycling sidebar
+    // tabs so the user always has a way to navigate. With ←/→ above
+    // already handling tab switching, this is mostly a vim-style
+    // safety net for `k`.
     return [
       action(state.focus === 'sidebar'
         ? { type: 'previousSidebarTab' }
@@ -850,19 +918,19 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'branches' && context.branchCount) {
+    if (isBranchActionTarget(state) && context.branchCount) {
       return [action({ type: 'moveBranch', delta: 1, count: context.branchCount })]
     }
 
-    if (state.activeView === 'tags' && context.tagCount) {
+    if (isTagActionTarget(state) && context.tagCount) {
       return [action({ type: 'moveTag', delta: 1, count: context.tagCount })]
     }
 
-    if (state.activeView === 'stash' && context.stashCount) {
+    if (isStashActionTarget(state) && context.stashCount) {
       return [action({ type: 'moveStash', delta: 1, count: context.stashCount })]
     }
 
-    if (state.activeView === 'worktrees' && context.worktreeListCount) {
+    if (isWorktreeActionTarget(state) && context.worktreeListCount) {
       return [action({ type: 'moveWorktreeListEntry', delta: 1, count: context.worktreeListCount })]
     }
 
@@ -985,30 +1053,44 @@ export function getLogInkInputEvents(
   }
 
   // Enter on a sidebar tab drills into the corresponding promoted view
-  // (status / branches / tags / stash). Sits above the per-view Enter
-  // handlers so a sidebar-focused Enter never fires checkout-branch /
-  // navigateOpenDiffForCommit / etc. against the (hidden) selection in
-  // the active tab.
+  // (status / branches / tags / stash) — but only when the sidebar tab
+  // either has no per-entity Enter handler defined (status, tags,
+  // worktrees) or has zero items (so the dedicated view's empty-state
+  // tells the user what to do next).
   //
-  // The Enter also moves focus out of the sidebar into the newly opened
-  // list — otherwise ↑/↓ keep cycling sidebar tabs instead of navigating
-  // inside the just-opened view, which made the drill-in feel half-done.
+  // When the sidebar IS focused on a content tab WITH items, this
+  // handler defers to the per-entity Enter below (checkout-branch for
+  // branches, navigateOpenDiffForStash for stashes) so the user can
+  // act on the cursored item without leaving the workstation view —
+  // the in-sidebar selection win from #791 follow-up.
+  //
+  // The drill-in moves focus out of the sidebar into the newly opened
+  // list — otherwise ↑/↓ keep navigating the sidebar instead of the
+  // just-opened view, which made the drill-in feel half-done.
   if (key.return && state.focus === 'sidebar') {
-    const tabToView: Partial<Record<LogInkSidebarTab, 'status' | 'branches' | 'tags' | 'stash' | 'worktrees'>> = {
-      status: 'status',
-      branches: 'branches',
-      tags: 'tags',
-      stashes: 'stash',
-      worktrees: 'worktrees',
+    const sidebarItemCount = getSidebarItemCount(state.sidebarTab, context)
+    const hasInSidebarPrimaryAction =
+      (state.sidebarTab === 'branches' || state.sidebarTab === 'stashes') &&
+      sidebarTabHasSelectableItems(state.sidebarTab, sidebarItemCount)
+
+    if (!hasInSidebarPrimaryAction) {
+      const tabToView: Partial<Record<LogInkSidebarTab, 'status' | 'branches' | 'tags' | 'stash' | 'worktrees'>> = {
+        status: 'status',
+        branches: 'branches',
+        tags: 'tags',
+        stashes: 'stash',
+        worktrees: 'worktrees',
+      }
+      const target = tabToView[state.sidebarTab]
+      if (target) {
+        return [
+          action({ type: 'pushView', value: target }),
+          action({ type: 'setFocus', value: 'commits' }),
+        ]
+      }
+      return [action({ type: 'setStatus', value: 'no detail view for this tab' })]
     }
-    const target = tabToView[state.sidebarTab]
-    if (target) {
-      return [
-        action({ type: 'pushView', value: target }),
-        action({ type: 'setFocus', value: 'commits' }),
-      ]
-    }
-    return [action({ type: 'setStatus', value: 'no detail view for this tab' })]
+    // Fall through — per-entity Enter handler below claims the keystroke.
   }
 
   if (key.return && state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
@@ -1019,8 +1101,10 @@ export function getLogInkInputEvents(
   }
 
   // Enter on a branch row checks the branch out. Non-destructive workflow
-  // action — no confirmation prompt.
-  if (key.return && state.activeView === 'branches' && state.focus === 'commits' && context.branchCount) {
+  // action — no confirmation prompt. Fires from either the dedicated
+  // branches view or from the sidebar when the branches tab is focused
+  // with items.
+  if (key.return && isBranchActionTarget(state) && context.branchCount) {
     return [{ type: 'runWorkflowAction', id: 'checkout-branch' }]
   }
 
@@ -1053,33 +1137,34 @@ export function getLogInkInputEvents(
 
   // Per-view stash actions: `a` apply (keep the stash), `p` pop (apply
   // then drop). Drop is the existing destructive `X` workflow which
-  // routes through the y-confirm path. Scoped to the stash view so the
-  // letters stay free elsewhere.
-  if (inputValue === 'a' && state.activeView === 'stash' && context.stashCount) {
+  // routes through the y-confirm path. Scoped to the stash target so
+  // the letters stay free elsewhere — the target predicate also fires
+  // when the sidebar's stashes tab is focused with items.
+  if (inputValue === 'a' && isStashActionTarget(state) && context.stashCount) {
     return [{ type: 'runWorkflowAction', id: 'apply-stash' }]
   }
-  if (inputValue === 'p' && state.activeView === 'stash' && context.stashCount) {
+  if (inputValue === 'p' && isStashActionTarget(state) && context.stashCount) {
     return [{ type: 'runWorkflowAction', id: 'pop-stash' }]
   }
   // Per-view tag action: `P` pushes the selected tag to origin. Letter
-  // is scoped to the tags surface so it doesn't collide with `p` for
+  // is scoped to the tags target so it doesn't collide with `p` for
   // pop-stash. Note: this also takes precedence over the global
   // push-current-branch workflow's `P` key.
-  if (inputValue === 'P' && state.activeView === 'tags' && context.tagCount) {
+  if (inputValue === 'P' && isTagActionTarget(state) && context.tagCount) {
     return [{ type: 'runWorkflowAction', id: 'push-tag' }]
   }
 
   // Per-view branches actions: `R` renames the selected branch, `u`
   // sets its upstream. Both open the input prompt so the user can type
   // the new value. Pre-fills are handled by the prompt's `initial`.
-  if (inputValue === 'R' && state.activeView === 'branches' && context.branchCount) {
+  if (inputValue === 'R' && isBranchActionTarget(state) && context.branchCount) {
     return [action({
       type: 'openInputPrompt',
       kind: 'rename-branch',
       label: 'Rename branch to',
     })]
   }
-  if (inputValue === 'u' && state.activeView === 'branches' && context.branchCount) {
+  if (inputValue === 'u' && isBranchActionTarget(state) && context.branchCount) {
     return [action({
       type: 'openInputPrompt',
       kind: 'set-upstream',
@@ -1088,9 +1173,9 @@ export function getLogInkInputEvents(
   }
 
   // Per-view tag action: `R` deletes the tag from the remote (after
-  // confirmation). Scoped per-view so this letter is free elsewhere
-  // (especially the `R` rename binding on the branches view).
-  if (inputValue === 'R' && state.activeView === 'tags' && context.tagCount) {
+  // confirmation). Scoped per-target so this letter is free elsewhere
+  // (especially the `R` rename binding on the branches target).
+  if (inputValue === 'R' && isTagActionTarget(state) && context.tagCount) {
     return [action({ type: 'setPendingConfirmation', value: 'delete-remote-tag' })]
   }
 
@@ -1187,13 +1272,13 @@ export function getLogInkInputEvents(
     if (state.activeView === 'history' && state.filteredCommits.length > 0) {
       return [{ type: 'yankFromActiveView', short }]
     }
-    if (state.activeView === 'branches' && context.branchCount) {
+    if (isBranchActionTarget(state) && context.branchCount) {
       return [{ type: 'yankFromActiveView' }]
     }
-    if (state.activeView === 'tags' && context.tagCount) {
+    if (isTagActionTarget(state) && context.tagCount) {
       return [{ type: 'yankFromActiveView' }]
     }
-    if (state.activeView === 'stash' && context.stashCount && context.stashSelectedRef) {
+    if (isStashActionTarget(state) && context.stashCount && context.stashSelectedRef) {
       return [{ type: 'yankFromActiveView' }]
     }
     if (state.activeView === 'status' && context.worktreeSelectedPath) {
@@ -1214,8 +1299,9 @@ export function getLogInkInputEvents(
   // Enter on a stash row pushes the diff view scoped to that stash.
   // The runtime loads `git stash show -p <ref>` once the view is
   // active. The stash ref is passed via the action so we don't need a
-  // context lookup here.
-  if (key.return && state.activeView === 'stash' && state.focus === 'commits' && context.stashCount && context.stashSelectedRef) {
+  // context lookup here. Fires from either the dedicated stash view or
+  // from the sidebar when the stashes tab is focused with items.
+  if (key.return && isStashActionTarget(state) && context.stashCount && context.stashSelectedRef) {
     return [action({
       type: 'navigateOpenDiffForStash',
       ref: context.stashSelectedRef,

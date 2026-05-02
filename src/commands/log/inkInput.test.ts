@@ -1148,4 +1148,133 @@ describe('log Ink input interactions', () => {
       expect(state.historyFetchArgs).toBeUndefined()
     })
   })
+
+  // #791 follow-up — in-sidebar selection. When the sidebar is focused
+  // on a content tab, ↑/↓ navigates the items, ←/→ switches between
+  // tabs, and per-entity keys (Enter checkout for branches, Enter diff
+  // / a / p / X for stashes) act on the cursored item without leaving
+  // the workstation view. Empty content tabs and the status tab keep
+  // the legacy "Enter drills in" behavior.
+  describe('in-sidebar selection (sidebar focus + content tab)', () => {
+    function sidebarBranchesState() {
+      const state = createLogInkState(rows)
+      return { ...state, focus: 'sidebar' as const, sidebarTab: 'branches' as const }
+    }
+
+    function sidebarStashesState() {
+      const state = createLogInkState(rows)
+      return { ...state, focus: 'sidebar' as const, sidebarTab: 'stashes' as const }
+    }
+
+    it('←/→ on the sidebar switches between tabs', () => {
+      const events = getLogInkInputEvents(sidebarBranchesState(), '', { rightArrow: true })
+      expect(events).toEqual([{ type: 'action', action: { type: 'nextSidebarTab' } }])
+
+      const left = getLogInkInputEvents(sidebarBranchesState(), '', { leftArrow: true })
+      expect(left).toEqual([{ type: 'action', action: { type: 'previousSidebarTab' } }])
+    })
+
+    it('↑/↓ on a sidebar branches tab with items moves the branch cursor', () => {
+      // The action is `moveBranch` (not previousSidebarTab) because the
+      // branches tab has items the user is cursoring through. Without
+      // items, the dispatch falls through to tab cycling — see next test.
+      const events = getLogInkInputEvents(
+        sidebarBranchesState(),
+        '',
+        { downArrow: true },
+        { branchCount: 5 }
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: 1, count: 5 } },
+      ])
+    })
+
+    it('↑/↓ on an empty sidebar content tab falls back to cycling tabs', () => {
+      // No branches → no entity-list claim → fall back to the previous
+      // tab-cycle behavior so the user always has navigation. Matches
+      // status tab too.
+      const events = getLogInkInputEvents(
+        sidebarBranchesState(),
+        '',
+        { downArrow: true },
+        { branchCount: 0 }
+      )
+      expect(events).toEqual([{ type: 'action', action: { type: 'nextSidebarTab' } }])
+    })
+
+    it('Enter on sidebar branches with items checks out the cursored branch', () => {
+      const events = getLogInkInputEvents(
+        sidebarBranchesState(),
+        '',
+        { return: true },
+        { branchCount: 3 }
+      )
+      // Per-entity Enter handler claims this — pushView stays out of
+      // the way because the user is cursoring through items.
+      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'checkout-branch' })
+      expect(events.find((e) =>
+        e.type === 'action' && e.action.type === 'pushView'
+      )).toBeUndefined()
+    })
+
+    it('Enter on an empty sidebar branches tab still drills into the dedicated view', () => {
+      const events = getLogInkInputEvents(
+        sidebarBranchesState(),
+        '',
+        { return: true },
+        { branchCount: 0 }
+      )
+      // Empty list → drill in so the user sees the dedicated view's
+      // empty-state message and can act on it (e.g., create a branch).
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'pushView', value: 'branches' } },
+        { type: 'action', action: { type: 'setFocus', value: 'commits' } },
+      ])
+    })
+
+    it('Enter on sidebar stashes opens the diff for the cursored stash', () => {
+      const events = getLogInkInputEvents(
+        sidebarStashesState(),
+        '',
+        { return: true },
+        { stashCount: 2, stashSelectedRef: 'stash@{0}' }
+      )
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'navigateOpenDiffForStash', ref: 'stash@{0}', stashIndex: 0 },
+      })
+    })
+
+    it('a / p / X work on sidebar stashes (apply / pop / drop)', () => {
+      const apply = getLogInkInputEvents(sidebarStashesState(), 'a', {}, { stashCount: 2 })
+      expect(apply).toEqual([{ type: 'runWorkflowAction', id: 'apply-stash' }])
+
+      const pop = getLogInkInputEvents(sidebarStashesState(), 'p', {}, { stashCount: 2 })
+      expect(pop).toEqual([{ type: 'runWorkflowAction', id: 'pop-stash' }])
+    })
+
+    it('R / u work on sidebar branches (rename / set-upstream)', () => {
+      const rename = getLogInkInputEvents(sidebarBranchesState(), 'R', {}, { branchCount: 3 })
+      expect(rename[0]).toMatchObject({
+        type: 'action',
+        action: { type: 'openInputPrompt', kind: 'rename-branch' },
+      })
+
+      const upstream = getLogInkInputEvents(sidebarBranchesState(), 'u', {}, { branchCount: 3 })
+      expect(upstream[0]).toMatchObject({
+        type: 'action',
+        action: { type: 'openInputPrompt', kind: 'set-upstream' },
+      })
+    })
+
+    it('Enter on the status sidebar tab still drills in (no in-sidebar primary action)', () => {
+      const state = createLogInkState(rows)
+      const sidebar = { ...state, focus: 'sidebar' as const, sidebarTab: 'status' as const }
+      const events = getLogInkInputEvents(sidebar, '', { return: true })
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'pushView', value: 'status' } },
+        { type: 'action', action: { type: 'setFocus', value: 'commits' } },
+      ])
+    })
+  })
 })
