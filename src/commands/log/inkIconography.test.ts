@@ -2,6 +2,7 @@ import {
   STAGE_STATUS_DOT,
   branchRowMarker,
   formatBranchDivergence,
+  formatBranchLastTouched,
   getPullRequestStateGlyph,
   getStageStatusDotColor,
   sidebarTabCount,
@@ -18,9 +19,11 @@ describe('log Ink iconography', () => {
       expect(formatBranchDivergence({ ahead: 0, behind: 0 })).toBe('no upstream')
     })
 
-    it('reports parity when ahead and behind are zero', () => {
+    it('returns an empty string when even with upstream (the boring default)', () => {
+      // The row marker conveys "synced" — repeating "even with X" on every
+      // row is noise that dominates the line.
       expect(formatBranchDivergence({ upstream: 'origin/main', ahead: 0, behind: 0 }))
-        .toBe('even with origin/main')
+        .toBe('')
     })
 
     it('uses ↑↓ arrows for divergent branches', () => {
@@ -44,9 +47,10 @@ describe('log Ink iconography', () => {
   })
 
   describe('branchRowMarker (P3.1)', () => {
-    it('marks the current branch with *', () => {
+    it('marks the current branch with * regardless of upstream state', () => {
       expect(branchRowMarker({ current: true, upstream: 'origin/main' })).toBe('*')
       expect(branchRowMarker({ current: true })).toBe('*')
+      expect(branchRowMarker({ current: true, upstream: 'origin/main', ahead: 3 })).toBe('*')
     })
 
     it('uses ◌ for non-current branches without upstream', () => {
@@ -57,8 +61,73 @@ describe('log Ink iconography', () => {
       expect(branchRowMarker({ current: false }, { ascii: true })).toBe('?')
     })
 
-    it('renders a space for non-current branches with upstream', () => {
-      expect(branchRowMarker({ current: false, upstream: 'origin/feat' })).toBe(' ')
+    it('uses ≡ for non-current branches synced with their upstream', () => {
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 0, behind: 0 })).toBe('≡')
+      // Default ahead/behind to 0 when not provided.
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat' })).toBe('≡')
+    })
+
+    it('uses = as ASCII fallback for synced branches', () => {
+      expect(branchRowMarker(
+        { current: false, upstream: 'origin/feat', ahead: 0, behind: 0 },
+        { ascii: true }
+      )).toBe('=')
+    })
+
+    it('uses ↕ for non-current branches that have diverged from their upstream', () => {
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 2, behind: 0 })).toBe('↕')
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 0, behind: 1 })).toBe('↕')
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 3, behind: 4 })).toBe('↕')
+    })
+
+    it('uses ~ as ASCII fallback for diverged branches', () => {
+      expect(branchRowMarker(
+        { current: false, upstream: 'origin/feat', ahead: 1, behind: 1 },
+        { ascii: true }
+      )).toBe('~')
+    })
+  })
+
+  describe('formatBranchLastTouched', () => {
+    const now = new Date(Date.UTC(2026, 4, 2)) // 2026-05-02
+
+    it('returns "today" for same-day commits', () => {
+      expect(formatBranchLastTouched('2026-05-02', now)).toBe('today')
+    })
+
+    it('returns "Nd ago" for the past two weeks', () => {
+      expect(formatBranchLastTouched('2026-05-01', now)).toBe('1d ago')
+      expect(formatBranchLastTouched('2026-04-30', now)).toBe('2d ago')
+      expect(formatBranchLastTouched('2026-04-19', now)).toBe('13d ago')
+    })
+
+    it('switches to weeks once we cross 14 days', () => {
+      expect(formatBranchLastTouched('2026-04-18', now)).toBe('2w ago')
+      expect(formatBranchLastTouched('2026-03-15', now)).toBe('6w ago')
+    })
+
+    it('switches to months once we cross ~9 weeks', () => {
+      expect(formatBranchLastTouched('2026-02-15', now)).toBe('2mo ago')
+      expect(formatBranchLastTouched('2025-08-15', now)).toBe('8mo ago')
+    })
+
+    it('switches to years for >= 12 months old', () => {
+      expect(formatBranchLastTouched('2024-05-02', now)).toBe('2y ago')
+      expect(formatBranchLastTouched('2023-01-01', now)).toBe('3y ago')
+    })
+
+    it('collapses future-dated inputs (clock skew) to "today"', () => {
+      expect(formatBranchLastTouched('2026-05-10', now)).toBe('today')
+    })
+
+    it('returns "" for missing or malformed input', () => {
+      expect(formatBranchLastTouched(undefined, now)).toBe('')
+      expect(formatBranchLastTouched('', now)).toBe('')
+      expect(formatBranchLastTouched('not-a-date', now)).toBe('')
+    })
+
+    it('tolerates full ISO timestamps (uses the date prefix only)', () => {
+      expect(formatBranchLastTouched('2026-04-30T18:33:42Z', now)).toBe('2d ago')
     })
   })
 

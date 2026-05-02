@@ -101,6 +101,7 @@ import {
   STAGE_STATUS_DOT,
   branchRowMarker,
   formatBranchDivergence,
+  formatBranchLastTouched,
   getPullRequestStateGlyph,
   getStageStatusDotColor,
   sidebarTabCount,
@@ -517,9 +518,11 @@ function sidebarLines(
       ...sortedBranches.slice(0, 8).map((branch) =>
         `${branchRowMarker(branch, { ascii: theme.ascii })} ${truncate(branch.shortName, width - 4)}`
       ),
-      ...sortedBranches.slice(0, 4).map((branch) =>
-        `  ${truncate(formatBranchDivergence(branch, { ascii: theme.ascii }), width - 2)}`
-      ),
+      ...sortedBranches
+        .slice(0, 4)
+        .map((branch) => formatBranchDivergence(branch, { ascii: theme.ascii }))
+        .filter((line) => line.length > 0)
+        .map((line) => `  ${truncate(line, width - 2)}`),
     ]
   }
 
@@ -2805,11 +2808,39 @@ function renderBranchesSurface(
         const cursor = isSelected ? '>' : ' '
         const marker = branchRowMarker(branch, { ascii: theme.ascii })
         const divergence = formatBranchDivergence(branch, { ascii: theme.ascii })
+        const lastTouched = formatBranchLastTouched(branch.date, new Date())
+        // Split the row into spans so the timestamp stays dim even on the
+        // currently-selected (bold) row. The leading marker + name keep
+        // their original column widths; the timestamp is right-padded so
+        // the divergence column stays aligned across rows.
+        const namePadded = branch.shortName.padEnd(28)
+        const timestampPadded = lastTouched.padEnd(8)
+        const lineDim = !isSelected && !branch.current
+        const head = `${cursor} ${marker} ${namePadded} `
+        const trailingDivergence = divergence ? ` ${divergence}` : ''
+        // Truncate the assembled line cooperatively so we never overflow
+        // the panel; the timestamp is short and the divergence is the
+        // most expendable, but the existing 140 cap is ample.
+        const fullText = `${head}${timestampPadded}${trailingDivergence}`
+        const truncated = truncate(fullText, 140)
+        // If truncation chopped into the timestamp/divergence portion,
+        // fall back to a single Text to keep the visible width honest.
+        if (truncated !== fullText) {
+          return h(Text, {
+            key: `branch-${index}`,
+            bold: isSelected,
+            dimColor: lineDim,
+          }, truncated)
+        }
         return h(Text, {
           key: `branch-${index}`,
           bold: isSelected,
-          dimColor: !isSelected && !branch.current,
-        }, truncate(`${cursor} ${marker} ${branch.shortName.padEnd(28)} ${divergence}`, 140))
+          dimColor: lineDim,
+        },
+        head,
+        h(Text, { dimColor: true }, timestampPadded),
+        trailingDivergence
+        )
       })
 
   return h(Box, {
