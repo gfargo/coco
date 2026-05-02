@@ -34,6 +34,7 @@ export type LogInkInputEvent =
   | { type: 'revertSelectedHunk' }
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
+  | { type: 'runWorkflowAction'; id: string }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -329,14 +330,20 @@ export function getLogInkInputEvents(
         ]
       }
 
+      // Destructive + provider workflow actions (delete-branch, delete-tag,
+      // drop-stash, remove-worktree, abort-operation, create-pr, …) defer
+      // to the runtime — it has the live context needed to identify the
+      // selected item and run the right action function.
+      if (workflowAction) {
+        return [
+          { type: 'runWorkflowAction', id: workflowAction.id },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+
       return [
         action({ type: 'setPendingConfirmation', value: undefined }),
-        action({
-          type: 'setStatus',
-          value: workflowAction
-            ? `${workflowAction.label} queued for workflow execution`
-            : 'workflow action queued',
-        }),
+        action({ type: 'setStatus', value: 'workflow action queued' }),
       ]
     }
 
