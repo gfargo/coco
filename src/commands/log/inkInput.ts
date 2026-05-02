@@ -72,6 +72,16 @@ export type LogInkInputContext = {
    */
   worktreeSelectedPath?: string
   /**
+   * Path of the cursored file in a commit-diff explore. Used by `c`
+   * (cherry-pick file from commit).
+   */
+  commitDiffSelectedPath?: string
+  /**
+   * Hash of the commit being explored — pairs with commitDiffSelectedPath
+   * so the cherry-pick handler knows which sha to checkout from.
+   */
+  commitDiffSelectedSha?: string
+  /**
    * True when the worktree has any staged, unstaged, or untracked changes.
    * Drives the synthetic "(+) new commit" row at the top of the history
    * list — pressing up at `selectedIndex === 0` transitions onto it; the
@@ -1069,6 +1079,24 @@ export function getLogInkInputEvents(
       type: 'runWorkflowAction',
       id: 'checkout-file-from-stash',
       payload: context.stashDiffSelectedPath,
+    }]
+  }
+
+  // `c` on a commit-diff explore cherry-picks the cursored file from
+  // that historical commit — `git checkout <sha> -- <path>`. The
+  // commit's hash + the selected file's path are captured at dispatch
+  // time so the runtime handler doesn't have to re-resolve them.
+  if (
+    inputValue === 'c' &&
+    state.activeView === 'diff' &&
+    state.diffSource === 'commit' &&
+    context.commitDiffSelectedPath &&
+    context.commitDiffSelectedSha
+  ) {
+    return [{
+      type: 'runWorkflowAction',
+      id: 'checkout-file-from-commit',
+      payload: `${context.commitDiffSelectedSha} ${context.commitDiffSelectedPath}`,
     }]
   }
   // Enter on a stash row pushes the diff view scoped to that stash.

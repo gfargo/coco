@@ -493,10 +493,10 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
       }
     }
     if (options.diffSource === 'commit') {
-      // Read-only commit-diff explore: no staging applies. Surface only
-      // the keys that actually do something.
+      // Commit-diff explore: read-only diff, but `c` cherry-picks the
+      // cursored file from the commit into the worktree.
       return {
-        contextual: ['j/k hunks', '[/] file', 'esc back'],
+        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }

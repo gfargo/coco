@@ -148,6 +148,7 @@ import {
   setUpstream,
 } from './branchActions'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from './tagActions'
+import { checkoutFileFromCommit } from './historyActions'
 import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
@@ -1279,6 +1280,18 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!ref) return { ok: false, message: 'No stash ref active' }
         return checkoutFileFromStash(git, ref, path)
       },
+      'checkout-file-from-commit': async () => {
+        // payload is "<sha> <path>" so we pass both through a single
+        // string field on the action.
+        const trimmed = payload?.trim()
+        if (!trimmed) return { ok: false, message: 'No commit file under cursor' }
+        const spaceIndex = trimmed.indexOf(' ')
+        if (spaceIndex < 0) return { ok: false, message: 'Malformed commit file payload' }
+        const sha = trimmed.slice(0, spaceIndex)
+        const path = trimmed.slice(spaceIndex + 1)
+        if (!sha || !path) return { ok: false, message: 'No commit file under cursor' }
+        return checkoutFileFromCommit(git, sha, path)
+      },
       'remove-worktree': async () => {
         const all = context.worktreeList?.worktrees || []
         // Prefer the cursor on the worktrees promoted view; fall back to
@@ -1550,6 +1563,12 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashDiffSelectedPath,
       worktreeListCount: context.worktreeList?.worktrees.length,
       worktreeSelectedPath: context.worktree?.files[state.selectedWorktreeFileIndex]?.path,
+      commitDiffSelectedPath: state.diffSource === 'commit'
+        ? selectedDetailFile?.path
+        : undefined,
+      commitDiffSelectedSha: state.diffSource === 'commit'
+        ? selected?.hash
+        : undefined,
       worktreeDirty,
     }).forEach((event) => {
       if (event.type === 'exit') {

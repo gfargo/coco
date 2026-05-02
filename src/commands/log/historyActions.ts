@@ -345,6 +345,27 @@ export function cherryPickCommit(
   ))
 }
 
+/**
+ * Materialize a single file's contents from a historical commit into the
+ * working tree, leaving every other path untouched. Equivalent to
+ * `git checkout <sha> -- <path>`. Used by the commit-diff explore surface
+ * for file-level cherry-pick.
+ *
+ * Important: this overwrites the file in the working tree. The caller
+ * is responsible for confirming with the user when the working tree
+ * already has uncommitted changes to that path.
+ */
+export function checkoutFileFromCommit(
+  git: SimpleGit,
+  sha: string,
+  path: string
+): Promise<BranchActionResult> {
+  return runAction(
+    () => git.raw(['checkout', sha, '--', path]),
+    `Checked out ${path} from ${sha.slice(0, 7)}`
+  )
+}
+
 export function revertCommit(
   git: SimpleGit,
   commit: HistoryCommitRef | undefined
