@@ -298,6 +298,25 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
   return args
 }
 
+/**
+ * Build merged `LogArgv` for the interactive TUI's `g` graph toggle.
+ *
+ * The TUI tracks a transient `fullGraph` boolean; toggling it must produce
+ * a fresh fetch with the right `view` so the renderer actually has graph
+ * topology to draw. When switching to full mode we override `view` to
+ * `'full'` (which `buildLogArgs` already maps to `--all`, dropping
+ * `--first-parent`/`--no-merges`). When switching back we honor the user's
+ * original `view` from argv, defaulting to `'compact'`.
+ *
+ * Pure helper so the effect that calls it stays trivially testable.
+ */
+export function buildToggleGraphArgs(argv: LogArgv, fullGraph: boolean): LogArgv {
+  if (fullGraph) {
+    return { ...argv, view: 'full' }
+  }
+  return { ...argv, view: argv.view ?? 'compact' }
+}
+
 export async function getLogRows(
   git: SimpleGit,
   argv: LogArgv,

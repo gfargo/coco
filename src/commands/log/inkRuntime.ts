@@ -47,6 +47,7 @@ import {
   GitLogCommitRow,
   GitLogRow,
   LOG_INTERACTIVE_DEFAULT_LIMIT,
+  buildToggleGraphArgs,
   getCommitDetail,
   getCommitFilePreview,
   getCommitRows,
@@ -1791,6 +1792,54 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       })
     })()
   }, [dispatch, git, logArgv, state.historyFetchArgs])
+
+  // Graph mode toggle (`g` key, #791 follow-up). The header label flips
+  // between "compact graph" and "full graph", but unless we re-fetch with
+  // the right `view`, the underlying rows still come from the user's
+  // initial argv (default `--first-parent --no-merges`) and the renderer
+  // has no topology to draw — defeating the per-lane / junction work.
+  // Mirrors the historyFetchArgs effect: skip first run, request-id ref
+  // for stale-completion guard, swap rows in place via replaceRows.
+  const toggleGraphEffectInitialized = React.useRef(false)
+  const toggleGraphRequestRef = React.useRef(0)
+  React.useEffect(() => {
+    if (!logArgv) return
+    if (!toggleGraphEffectInitialized.current) {
+      toggleGraphEffectInitialized.current = true
+      return
+    }
+
+    const requestId = toggleGraphRequestRef.current + 1
+    toggleGraphRequestRef.current = requestId
+    const merged = buildToggleGraphArgs(logArgv, state.fullGraph)
+
+    dispatch({
+      type: 'setStatus',
+      value: state.fullGraph
+        ? 'Loading full topology…'
+        : 'Loading compact history…',
+    })
+
+    void (async () => {
+      const nextRows = await safe(getLogRows(git, merged, { limit: LOG_INTERACTIVE_DEFAULT_LIMIT }))
+      if (!mountedRef.current || toggleGraphRequestRef.current !== requestId) {
+        return
+      }
+      if (!nextRows) {
+        dispatch({ type: 'setStatus', value: 'Failed to refetch graph rows' })
+        return
+      }
+      dispatch({ type: 'replaceRows', rows: nextRows })
+      const matched = getCommitRows(nextRows).length
+      setHasMoreCommits(matched >= LOG_INTERACTIVE_DEFAULT_LIMIT)
+      dispatch({
+        type: 'setStatus',
+        value: state.fullGraph
+          ? `Showing ${matched} commits across all branches`
+          : `Showing ${matched} commits (compact)`,
+      })
+    })()
+  }, [dispatch, git, logArgv, state.fullGraph])
 
   const commitDiffHunkOffsets = React.useMemo(() => (
     filePreview?.hunks
