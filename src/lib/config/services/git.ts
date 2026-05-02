@@ -14,16 +14,32 @@ import { Config } from '../types'
  * Load git profile config (from ~/.gitconfig)
  *
  * @param {Config} config
+ * @param {object} opts
  * @returns {Config} Updated config
  **/
-export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
+export function loadGitConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts: { returnSource: true }
+): { config: ConfigType; path?: string }
+export function loadGitConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts?: { returnSource?: false }
+): ConfigType
+export function loadGitConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts?: { returnSource?: boolean }
+): ConfigType | { config: ConfigType; path?: string } {
   const gitConfigPath = path.join(os.homedir(), '.gitconfig')
+  let foundPath: string | undefined
+
   if (fs.existsSync(gitConfigPath)) {
     const gitConfigRaw = fs.readFileSync(gitConfigPath, 'utf-8')
     const gitConfigParsed = ini.parse(gitConfigRaw)
 
     let service: LLMService | undefined = config.service
     if (gitConfigParsed.coco) {
+      foundPath = gitConfigPath
+
       service = {
         provider: gitConfigParsed.coco?.serviceProvider,
         model: gitConfigParsed.coco?.serviceModel,
@@ -78,7 +94,12 @@ export function loadGitConfig<ConfigType = Config>(config: Partial<Config>) {
       includeBranchName: gitConfigParsed.coco?.includeBranchName || config.includeBranchName,
     }
   }
-  return removeUndefined(config) as ConfigType
+
+  const cleaned = removeUndefined(config) as ConfigType
+  if (opts?.returnSource) {
+    return { config: cleaned, path: foundPath }
+  }
+  return cleaned
 }
 
 /**

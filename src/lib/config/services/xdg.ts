@@ -8,12 +8,27 @@ import { Config } from '../types'
  * Load XDG config
  *
  * @param {Config} config
+ * @param {object} opts
  * @returns {Config} Updated config
  */
-export function loadXDGConfig<ConfigType = Config>(config: Partial<Config>) {
+export function loadXDGConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts: { returnSource: true }
+): { config: ConfigType; path?: string }
+export function loadXDGConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts?: { returnSource?: false }
+): ConfigType
+export function loadXDGConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts?: { returnSource?: boolean }
+): ConfigType | { config: ConfigType; path?: string } {
   const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
   const xdgConfigPath = path.join(xdgConfigHome, 'coco', 'config.json')
+  let foundPath: string | undefined
+
   if (fs.existsSync(xdgConfigPath)) {
+    foundPath = xdgConfigPath
     const xdgConfig = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8'))
 
     const service = parseServiceConfig(xdgConfig.service || config.service)
@@ -23,6 +38,10 @@ export function loadXDGConfig<ConfigType = Config>(config: Partial<Config>) {
       ...xdgConfig, 
       service: service 
     }
+  }
+
+  if (opts?.returnSource) {
+    return { config: config as ConfigType, path: foundPath }
   }
   return config as ConfigType
 }

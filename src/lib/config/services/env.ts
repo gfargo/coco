@@ -11,10 +11,23 @@ type ValuesTypes = Config[keyof Config]
  * Load environment variables
  *
  * @param {Config} config
+ * @param {object} opts
  * @returns {Config} Updated config
  **/
-export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
+export function loadEnvConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts: { returnSource: true }
+): { config: ConfigType; active: boolean }
+export function loadEnvConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts?: { returnSource?: false }
+): ConfigType
+export function loadEnvConfig<ConfigType = Config>(
+  config: Partial<Config>,
+  opts?: { returnSource?: boolean }
+): ConfigType | { config: ConfigType; active: boolean } {
   const envConfig: Partial<Record<keyof Config, ValuesTypes>> = {}
+  let foundAny = false
 
   const envKeys = [
     ...CONFIG_KEYS,
@@ -55,16 +68,22 @@ export function loadEnvConfig<ConfigType = Config>(config: Partial<Config>) {
       // @ts-ignore
       envConfig.service = envConfig.service || {}
       handleServiceEnvVar(envConfig.service as LLMService, key, envValue)
+      foundAny = true
     } else {
       if (key === 'service' || !envValue) {
         return
       }
 
       envConfig[key as keyof typeof envConfig] = envValue as ValuesTypes
+      foundAny = true
     }
   })
 
-  return { ...config, ...removeUndefined(envConfig) } as ConfigType
+  const merged = { ...config, ...removeUndefined(envConfig) } as ConfigType
+  if (opts?.returnSource) {
+    return { config: merged, active: foundAny }
+  }
+  return merged
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
