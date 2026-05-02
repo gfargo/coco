@@ -70,10 +70,13 @@ describe('log data layer', () => {
   })
 
   it('preserves graph continuation rows while parsing commits', () => {
+    // First commit is a merge (two parent hashes); second is a regular
+    // commit (single parent). Stage 3 of #791 uses the parent count to
+    // pick a distinct merge glyph so the renderer can flag it visually.
     const output = [
-      `*${FIELD_SEPARATOR}abc1234${FIELD_SEPARATOR}abc1234${FIELD_SEPARATOR}2026-04-27${FIELD_SEPARATOR}Coco Test${FIELD_SEPARATOR}(HEAD -> main, tag: 1.0.0)${FIELD_SEPARATOR}feat: first`,
+      `*${FIELD_SEPARATOR}abc1234${FIELD_SEPARATOR}abc1234${FIELD_SEPARATOR}aaa1111 bbb2222${FIELD_SEPARATOR}2026-04-27${FIELD_SEPARATOR}Coco Test${FIELD_SEPARATOR}(HEAD -> main, tag: 1.0.0)${FIELD_SEPARATOR}feat: first`,
       '|\\',
-      `| *${FIELD_SEPARATOR}def5678${FIELD_SEPARATOR}def5678${FIELD_SEPARATOR}2026-04-26${FIELD_SEPARATOR}Coco Test${FIELD_SEPARATOR}${FIELD_SEPARATOR}fix: second`,
+      `| *${FIELD_SEPARATOR}def5678${FIELD_SEPARATOR}def5678${FIELD_SEPARATOR}ccc3333${FIELD_SEPARATOR}2026-04-26${FIELD_SEPARATOR}Coco Test${FIELD_SEPARATOR}${FIELD_SEPARATOR}fix: second`,
       '|/',
     ].join('\n')
 
@@ -84,6 +87,7 @@ describe('log data layer', () => {
         type: 'commit',
         graph: '*',
         shortHash: 'abc1234',
+        parents: ['aaa1111', 'bbb2222'],
         refs: ['HEAD -> main', 'tag: 1.0.0'],
       }),
       {
@@ -94,6 +98,7 @@ describe('log data layer', () => {
         type: 'commit',
         graph: '| *',
         shortHash: 'def5678',
+        parents: ['ccc3333'],
       }),
       {
         type: 'graph',
@@ -103,11 +108,30 @@ describe('log data layer', () => {
     expect(getCommitRows(rows)).toHaveLength(2)
   })
 
+  it('parses an empty parents field as an empty list (root commit)', () => {
+    // A root commit has no parents. `%P` returns an empty string in
+    // that case; the parser must not produce `['']`.
+    const output = `*${FIELD_SEPARATOR}aaa0000${FIELD_SEPARATOR}aaa000000000${FIELD_SEPARATOR}${FIELD_SEPARATOR}2026-04-25${FIELD_SEPARATOR}Coco Test${FIELD_SEPARATOR}${FIELD_SEPARATOR}initial commit`
+    const [row] = parseLogOutput(output)
+
+    expect(row.type).toBe('commit')
+    if (row.type === 'commit') {
+      expect(row.parents).toEqual([])
+    }
+  })
+
+  it('threads %P into the log format so parents come back populated', () => {
+    expect(buildLogArgs(argv())).toEqual(
+      expect.arrayContaining([expect.stringContaining('%P')])
+    )
+  })
+
   it('parses commit detail metadata and changed files', () => {
     const detail = parseCommitDetail(
       [
         'abc1234',
         'abc1234',
+        'parent1 parent2',
         '2026-04-27',
         'Coco Test',
         '(tag: 1.0.0)',
@@ -119,6 +143,7 @@ describe('log data layer', () => {
     )
 
     expect(detail).toEqual(expect.objectContaining({
+      parents: ['parent1', 'parent2'],
       refs: ['tag: 1.0.0'],
       message: 'feat: add details',
       body: 'Detailed body',

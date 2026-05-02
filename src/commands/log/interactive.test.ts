@@ -17,6 +17,7 @@ const rows: GitLogRow[] = [
     graph: '*',
     shortHash: 'abc1234',
     hash: 'abc1234',
+    parents: [],
     date: '2026-04-27',
     author: 'Coco Test',
     refs: ['HEAD -> main'],
@@ -27,6 +28,7 @@ const rows: GitLogRow[] = [
 const detail: GitCommitDetail = {
   shortHash: 'abc1234',
   hash: 'abc1234',
+  parents: [],
   date: '2026-04-27',
   author: 'Coco Test',
   refs: ['HEAD -> main'],

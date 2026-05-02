@@ -2,8 +2,11 @@ import { SimpleGit } from 'simple-git'
 import { LogArgv, LogView } from './config'
 
 export const FIELD_SEPARATOR = '\x1f'
-const LOG_FORMAT = `%x1f%h%x1f%H%x1f%ad%x1f%an%x1f%d%x1f%s`
-const DETAIL_FORMAT = `%H%x1f%h%x1f%ad%x1f%an%x1f%d%x1f%s%x1f%b`
+// `%P` (parent hashes, space-separated) lets the TUI distinguish
+// merge commits (parents.length > 1) from regular commits without a
+// second round-trip to git. See #791 stage 3 — merge glyph + HEAD ring.
+const LOG_FORMAT = `%x1f%h%x1f%H%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s`
+const DETAIL_FORMAT = `%H%x1f%h%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s%x1f%b`
 export const LOG_DEFAULT_LIMIT = 30
 export const LOG_INTERACTIVE_DEFAULT_LIMIT = 300
 
@@ -17,6 +20,12 @@ export type GitLogCommitRow = {
   graph: string
   shortHash: string
   hash: string
+  /**
+   * Full parent commit hashes, in order. `parents.length > 1` flags a
+   * merge commit; the renderer paints these with `◆` instead of `●`
+   * so they stand out from the run of regular commits.
+   */
+  parents: string[]
   date: string
   author: string
   refs: string[]
@@ -126,13 +135,15 @@ export function parseLogOutput(output: string): GitLogRow[] {
         }
       }
 
-      const [graph, shortHash, hash, date, author, refs, message] = line.split(FIELD_SEPARATOR)
+      const [graph, shortHash, hash, parentsStr, date, author, refs, message] =
+        line.split(FIELD_SEPARATOR)
 
       return {
         type: 'commit',
         graph: graph.trimEnd(),
         shortHash,
         hash,
+        parents: parentsStr ? parentsStr.trim().split(' ').filter(Boolean) : [],
         date,
         author,
         refs: cleanRefs(refs),
@@ -216,7 +227,7 @@ function parseNameStatus(output: string, numstat: ParsedNumstat[] = []): GitComm
 }
 
 export function parseCommitDetail(metadata: string, files: string, numstatOutput = ''): GitCommitDetail {
-  const [hash, shortHash, date, author, refs, message, body = ''] = metadata
+  const [hash, shortHash, parentsStr, date, author, refs, message, body = ''] = metadata
     .trimEnd()
     .split(FIELD_SEPARATOR)
   const numstat = parseNumstat(numstatOutput)
@@ -224,6 +235,7 @@ export function parseCommitDetail(metadata: string, files: string, numstatOutput
   return {
     shortHash,
     hash,
+    parents: parentsStr ? parentsStr.trim().split(' ').filter(Boolean) : [],
     date,
     author,
     refs: cleanRefs(refs),
