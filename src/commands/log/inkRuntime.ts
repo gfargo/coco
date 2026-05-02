@@ -94,12 +94,6 @@ import {
 } from './inkLayout'
 import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from './inkTheme'
 import {
-  PreviewLine,
-  formatBranchPreview,
-  formatStashPreview,
-  formatTagPreview,
-} from './inkPreviewPane'
-import {
   STAGE_STATUS_DOT,
   branchRowMarker,
   formatBranchDivergence,
@@ -107,6 +101,18 @@ import {
   getStageStatusDotColor,
   sidebarTabCount,
 } from './inkIconography'
+import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from './inkIdleTips'
+import {
+  PreviewLine,
+  formatBranchPreview,
+  formatStashPreview,
+  formatTagPreview,
+} from './inkPreviewPane'
+import {
+  formatSortIndicator,
+  sortBranches,
+  sortTags,
+} from './inkSorting'
 import {
   formatLogInkBranchesEmpty,
   formatLogInkComposeEmpty,
@@ -161,6 +167,13 @@ type LogInkStreams = {
 
 type LogInkOptions = {
   appLabel?: string
+  /**
+   * P4.3 — opt-in idle tip rotation. Forwarded from `logTui.idleTips` in the
+   * user's config. The runtime starts a tip cycle when `state.statusMessage`
+   * is empty for >10s; the tip lives in the footer's status slot until the
+   * next user action sets a real message.
+   */
+  idleTips?: boolean
   initialView?: LogInkView
   logArgv?: LogArgv
   theme?: LogInkThemeConfig
@@ -212,6 +225,8 @@ type LogInkComponents = Pick<LogInkRuntime['ink'], 'Box' | 'Text'>
 type LogInkComponentDeps = LogInkRuntime & {
   appLabel: string
   git: SimpleGit
+  /** Drives P4.3 idle status-line tip rotation when truthy. */
+  idleTipsEnabled?: boolean
   initialView: LogInkView
   logArgv?: LogArgv
   rows: GitLogRow[]
@@ -425,6 +440,7 @@ function sidebarLines(
   contextStatus: LogInkContextStatus,
   tab: LogInkSidebarTab,
   width: number,
+  state: LogInkState,
   theme: LogInkTheme
 ): string[] {
   if (tab === 'status') {
@@ -460,14 +476,15 @@ function sidebarLines(
       return ['Branches unavailable']
     }
 
+    const sortedBranches = sortBranches(branches.localBranches, state.branchSort)
     return [
       `Current: ${branches.currentBranch || '<detached>'}`,
       branches.dirty ? 'Worktree: dirty' : 'Worktree: clean',
       '',
-      ...branches.localBranches.slice(0, 8).map((branch) =>
+      ...sortedBranches.slice(0, 8).map((branch) =>
         `${branchRowMarker(branch, { ascii: theme.ascii })} ${truncate(branch.shortName, width - 4)}`
       ),
-      ...branches.localBranches.slice(0, 4).map((branch) =>
+      ...sortedBranches.slice(0, 4).map((branch) =>
         `  ${truncate(formatBranchDivergence(branch, { ascii: theme.ascii }), width - 2)}`
       ),
     ]
@@ -478,8 +495,9 @@ function sidebarLines(
       return ['Loading tags...']
     }
 
-    return context.tags?.tags.length
-      ? context.tags.tags.slice(0, 12).map((tag) =>
+    const sortedTags = sortTags(context.tags?.tags || [], state.tagSort)
+    return sortedTags.length
+      ? sortedTags.slice(0, 12).map((tag) =>
         `${truncate(tag.name, 16)} ${truncate(tag.subject, Math.max(8, width - 18))}`
       )
       : ['No tags found']
@@ -540,6 +558,7 @@ export async function startInkInteractiveLog(
   const app = React.createElement(LogInkApp, {
     appLabel: options.appLabel || 'coco log',
     git,
+    idleTipsEnabled: Boolean(options.idleTips),
     ink,
     initialView: options.initialView || 'history',
     logArgv: options.logArgv,
@@ -669,7 +688,7 @@ function enrichFilterActionWithRectification(
 }
 
 function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, git, ink, initialView, logArgv, React, resumeRef, rows, theme } = deps
+  const { appLabel, git, idleTipsEnabled, ink, initialView, logArgv, React, resumeRef, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -719,6 +738,38 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const loadingMoreCommitsRef = React.useRef(false)
   const loadMoreRequestRef = React.useRef(0)
   const mountedRef = React.useRef(true)
+
+  // P4.3 — idle tip rotation. tickIndex 0 ⇒ no tip; the hook bumps it after
+  // a grace window of empty statusMessage and then on a steady cadence, so
+  // the footer surfaces a different hint every interval until the user does
+  // anything that sets statusMessage.
+  const [idleTipIndex, setIdleTipIndex] = React.useState(0)
+  React.useEffect(() => {
+    if (!idleTipsEnabled) return
+    if (state.statusMessage) {
+      // Any explicit message resets the cycle; next idle stretch starts
+      // from the grace window again.
+      setIdleTipIndex(0)
+      return
+    }
+    let interval: NodeJS.Timeout | undefined
+    // Both timer callbacks are function literals (never strings) and the
+    // delays are our own `IDLE_TIPS_*_MS` constants — no caller-supplied
+    // data flows in, so the eval-injection vector that drives
+    // DevSkim DS172411 doesn't apply here.
+    // DevSkim: ignore DS172411
+    const grace = setTimeout(() => {
+      setIdleTipIndex(1)
+      // DevSkim: ignore DS172411
+      interval = setInterval(() => setIdleTipIndex((tick) => tick + 1), IDLE_TIPS_INTERVAL_MS)
+    }, IDLE_TIPS_GRACE_MS)
+    return () => {
+      clearTimeout(grace)
+      if (interval) clearInterval(interval)
+    }
+  }, [idleTipsEnabled, state.statusMessage])
+  const idleTip = idleTipsEnabled && !state.statusMessage ? pickIdleTip(idleTipIndex) : undefined
+
   const selected = getSelectedInkCommit(state)
   const selectedDetailFile = detail?.files[state.selectedFileIndex]
   const selectedWorktreeFile = context.worktree?.files[state.selectedWorktreeFileIndex]
@@ -1277,7 +1328,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         theme
       )
     ),
-    renderFooter(h, { Box, Text }, state, theme)
+    renderFooter(h, { Box, Text }, state, theme, idleTip)
   )
 }
 
@@ -1359,7 +1410,7 @@ function renderSidebar(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
-  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4, theme)
+  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4, state, theme)
   const tabs = getLogInkSidebarTabs()
 
   return h(Box, {
@@ -1789,20 +1840,21 @@ function renderBranchesSurface(
   const focused = state.focus === 'commits'
   const branches = context.branches
   const loading = isLogInkContextKeyLoading(contextStatus, 'branches')
-  const allLocalBranches = branches?.localBranches || []
+  const sortedAll = sortBranches(branches?.localBranches || [], state.branchSort)
   const localBranches = state.filter
-    ? allLocalBranches.filter((branch) =>
+    ? sortedAll.filter((branch) =>
       matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter)
     )
-    : allLocalBranches
+    : sortedAll
   const selected = Math.max(0, Math.min(state.selectedBranchIndex, Math.max(0, localBranches.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
   const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
   const visible = localBranches.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
+  const sortLabel = ` | ${formatSortIndicator(state.branchSort, { ascii: theme.ascii })}`
   const headerRight = loading
     ? 'loading branches'
-    : `${localBranches.length}/${allLocalBranches.length} local | current: ${branches?.currentBranch || '<detached>'}${filterLabel}`
+    : `${localBranches.length}/${sortedAll.length} local | current: ${branches?.currentBranch || '<detached>'}${filterLabel}${sortLabel}`
   const emptyLabel = formatLogInkBranchesEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'branches' })
   const lines: ReactTypes.ReactNode[] = loading
@@ -1849,18 +1901,19 @@ function renderTagsSurface(
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const loading = isLogInkContextKeyLoading(contextStatus, 'tags')
-  const allTags = context.tags?.tags || []
+  const sortedAll = sortTags(context.tags?.tags || [], state.tagSort)
   const tags = state.filter
-    ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
-    : allTags
+    ? sortedAll.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
+    : sortedAll
   const selected = Math.max(0, Math.min(state.selectedTagIndex, Math.max(0, tags.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
   const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
   const visible = tags.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
+  const sortLabel = ` | ${formatSortIndicator(state.tagSort, { ascii: theme.ascii })}`
   const headerRight = loading
     ? 'loading tags'
-    : `${tags.length}/${allTags.length} tags${filterLabel}`
+    : `${tags.length}/${sortedAll.length} tags${filterLabel}${sortLabel}`
   const emptyLabel = formatLogInkTagsEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'tags' })
   const lines: ReactTypes.ReactNode[] = loading
@@ -2973,7 +3026,8 @@ function renderFooter(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
   state: LogInkState,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  idleTip?: string
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const hints = getLogInkFooterHints({
@@ -2984,7 +3038,10 @@ function renderFooter(
     showCommandPalette: state.showCommandPalette,
     showHelp: state.showHelp,
   })
-  const status = state.statusMessage ? `  ${state.statusMessage}` : ''
+  // Real status messages always win; idle tips only fill the slot when it
+  // would otherwise be empty.
+  const trailing = state.statusMessage || idleTip || ''
+  const status = trailing ? `  ${trailing}` : ''
   const contextualText = `${hints.contextual.join('   ')}${status}`
   const globalText = hints.global.join(' · ')
 

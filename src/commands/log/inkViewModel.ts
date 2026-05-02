@@ -6,6 +6,14 @@ import {
   createCommitComposeState,
 } from './commitCompose'
 import { PromotedSelectionsSnapshot } from './inkSelectionRectify'
+import {
+  BranchSortMode,
+  DEFAULT_BRANCH_SORT_MODE,
+  DEFAULT_TAG_SORT_MODE,
+  TagSortMode,
+  cycleBranchSort,
+  cycleTagSort,
+} from './inkSorting'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
@@ -52,6 +60,13 @@ export type LogInkState = {
   selectedBranchIndex: number
   selectedTagIndex: number
   selectedStashIndex: number
+  /**
+   * Sort modes for the promoted views (P4.2). `s` cycles through the
+   * available modes; the surface header shows a `▼ <mode>` indicator.
+   * Defaults match the existing display order so opting out is a no-op.
+   */
+  branchSort: BranchSortMode
+  tagSort: TagSortMode
   commitCompose: CommitComposeState
   diffPreviewOffset: number
   worktreeDiffOffset: number
@@ -148,6 +163,8 @@ export type LogInkAction =
   | { type: 'toggleGraph' }
   | { type: 'toggleHelp' }
   | { type: 'toggleCommandPalette' }
+  | { type: 'cycleBranchSort' }
+  | { type: 'cycleTagSort' }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -430,6 +447,8 @@ export function createLogInkState(
     selectedBranchIndex: 0,
     selectedTagIndex: 0,
     selectedStashIndex: 0,
+    branchSort: DEFAULT_BRANCH_SORT_MODE,
+    tagSort: DEFAULT_TAG_SORT_MODE,
     paletteFilter: '',
     paletteSelectedIndex: 0,
     paletteRecent: [],
@@ -556,6 +575,22 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedStashIndex: clampIndex(state.selectedStashIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'cycleBranchSort':
+      return {
+        ...state,
+        branchSort: cycleBranchSort(state.branchSort),
+        // Snap to the top of the (newly ordered) list so the user always
+        // sees what's now most relevant under the new mode.
+        selectedBranchIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'cycleTagSort':
+      return {
+        ...state,
+        tagSort: cycleTagSort(state.tagSort),
+        selectedTagIndex: 0,
         pendingKey: undefined,
       }
     case 'moveToBottom':

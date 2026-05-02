@@ -120,6 +120,10 @@ export const schema = {
             "theme": {
               "$ref": "#/definitions/LogInkThemeConfig",
               "description": "Theme settings for `coco log -i`."
+            },
+            "idleTips": {
+              "type": "boolean",
+              "description": "Rotate short usage tips through the status line when the TUI has been idle for >10s. Off by default so power users aren't distracted."
             }
           },
           "additionalProperties": false,

@@ -53,6 +53,7 @@ export async function startCocoUiFromLogArgv(
 
   await startInkInteractiveLog(git, rows, {}, {
     appLabel: 'coco ui',
+    idleTips: config.logTui?.idleTips,
     initialView: 'history',
     logArgv,
     theme: config.logTui?.theme,
@@ -67,6 +68,7 @@ export async function startCocoUi(argv: UiArgv): Promise<void> {
 
   await startInkInteractiveLog(git, rows, {}, {
     appLabel: 'coco ui',
+    idleTips: config.logTui?.idleTips,
     initialView: argv.view || 'history',
     logArgv,
     theme: createUiTheme(config, argv),
