@@ -58,3 +58,25 @@ export async function getWorktreeOverview(git: SimpleGit): Promise<WorktreeOverv
     untrackedCount: files.filter((file) => file.state === 'untracked').length,
   }
 }
+
+/**
+ * Visibility mask for the status surface (#776). Each flag controls
+ * whether files of that staging category are rendered. The all-on
+ * default is the no-op identity — `applyStatusFilterMask` returns the
+ * input array unchanged.
+ */
+export type WorktreeFileVisibilityMask = {
+  staged: boolean
+  unstaged: boolean
+  untracked: boolean
+}
+
+export function applyStatusFilterMask(
+  files: WorktreeFile[],
+  mask: WorktreeFileVisibilityMask
+): WorktreeFile[] {
+  if (mask.staged && mask.unstaged && mask.untracked) {
+    return files
+  }
+  return files.filter((file) => mask[file.state])
+}

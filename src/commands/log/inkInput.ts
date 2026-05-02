@@ -3,7 +3,12 @@ import {
   filterLogInkPaletteCommands,
   getLogInkPaletteCommands,
 } from './inkKeymap'
-import { LogInkAction, LogInkSidebarTab, LogInkState } from './inkViewModel'
+import {
+  LogInkAction,
+  LogInkSidebarTab,
+  LogInkState,
+  parseLogInkHistoryFetchPrefix,
+} from './inkViewModel'
 import {
   getLogInkWorkflowActionById,
   getLogInkWorkflowActionByKey,
@@ -365,6 +370,21 @@ export function getLogInkInputEvents(
 
   if (state.filterMode) {
     if (key.return) {
+      // History server-side filter prefixes (#776): on Enter, if the
+      // active view is history and the filter matches `path:<value>`
+      // or `author:<value>`, hand the parsed args to the runtime
+      // (which re-runs `getLogRows`) and clear the textual filter.
+      // For any other view or any non-prefix filter, Enter just exits
+      // filter mode like before.
+      if (state.activeView === 'history') {
+        const fetchArgs = parseLogInkHistoryFetchPrefix(state.filter)
+        if (fetchArgs) {
+          return [
+            action({ type: 'setHistoryFetchArgs', value: fetchArgs }),
+            action({ type: 'clearFilter' }),
+          ]
+        }
+      }
       return [action({ type: 'toggleFilterMode' })]
     }
 
@@ -384,7 +404,17 @@ export function getLogInkInputEvents(
     }
 
     if (key.ctrl && inputValue === 'u') {
-      return [action({ type: 'clearFilter' })]
+      // Ctrl+U is the canonical "blow away the filter" key. When the
+      // history view also has server-side fetch args active (#776),
+      // drop those too — otherwise the user has no obvious way to
+      // unwind a `path:` / `author:` fetch and the visible filter
+      // appears stuck.
+      return state.historyFetchArgs
+        ? [
+          action({ type: 'clearFilter' }),
+          action({ type: 'setHistoryFetchArgs', value: undefined }),
+        ]
+        : [action({ type: 'clearFilter' })]
     }
 
     if (inputValue && !key.ctrl && !key.meta) {
@@ -701,6 +731,16 @@ export function getLogInkInputEvents(
       })]
     }
     return [action({ type: 'nextSidebarTab' })]
+  }
+
+  // Status surface intercepts 1/2/3 before the sidebar-tab numeric
+  // jump (#776): each key toggles a staging-category bit on the
+  // visibility mask. The reducer snaps back to all-on if all three
+  // bits go off so the user always has rendered files.
+  if (state.activeView === 'status' && (inputValue === '1' || inputValue === '2' || inputValue === '3')) {
+    const kind: 'staged' | 'unstaged' | 'untracked' =
+      inputValue === '1' ? 'staged' : inputValue === '2' ? 'unstaged' : 'untracked'
+    return [action({ type: 'toggleStatusFilterMask', kind })]
   }
 
   if (SIDEBAR_TAB_BY_NUMBER[inputValue]) {

@@ -1,5 +1,6 @@
 import { GitLogRow } from './data'
 import {
+  DEFAULT_LOG_INK_STATUS_FILTER_MASK,
   applyLogInkAction,
   createLogInkState,
   getLogInkSidebarTabs,
@@ -8,6 +9,7 @@ import {
   intentOpenComposeForFile,
   intentOpenDiffForCommit,
   intentOpenDiffForWorktreeFile,
+  parseLogInkHistoryFetchPrefix,
   scoreLogInkCommitFilter,
 } from './inkViewModel'
 
@@ -734,6 +736,112 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, { type: 'setFilter', value: 'foo' })
 
       expect(state.selectedBranchIndex).toBe(3)
+    })
+  })
+
+  describe('status filter mask (#776)', () => {
+    it('initializes the mask to all-on so existing flows are unaffected', () => {
+      const state = createLogInkState(rows)
+      expect(state.statusFilterMask).toEqual(DEFAULT_LOG_INK_STATUS_FILTER_MASK)
+    })
+
+    it('toggles a single bit on each press', () => {
+      let state = createLogInkState(rows)
+
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'staged' })
+      expect(state.statusFilterMask).toEqual({ staged: false, unstaged: true, untracked: true })
+
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'staged' })
+      expect(state.statusFilterMask).toEqual({ staged: true, unstaged: true, untracked: true })
+
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'untracked' })
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'unstaged' })
+      expect(state.statusFilterMask).toEqual({ staged: true, unstaged: false, untracked: false })
+    })
+
+    it('snaps back to all-on when the user would have zeroed the mask', () => {
+      let state = createLogInkState(rows)
+      // Zero each bit one at a time. The third toggle is the one that
+      // would land on all-off; the reducer must restore the default.
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'staged' })
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'unstaged' })
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'untracked' })
+
+      expect(state.statusFilterMask).toEqual(DEFAULT_LOG_INK_STATUS_FILTER_MASK)
+    })
+
+    it('resets selectedWorktreeFileIndex on toggle so the cursor lands on a visible row', () => {
+      let state = createLogInkState(rows)
+      state = { ...state, selectedWorktreeFileIndex: 5 }
+
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'staged' })
+      expect(state.selectedWorktreeFileIndex).toBe(0)
+    })
+  })
+
+  describe('history server-side filter (#776)', () => {
+    describe('parseLogInkHistoryFetchPrefix', () => {
+      it('parses path:<value> into a path fetch arg', () => {
+        expect(parseLogInkHistoryFetchPrefix('path:src/commands/log')).toEqual({
+          path: 'src/commands/log',
+        })
+      })
+
+      it('parses author:<value> into an author fetch arg', () => {
+        expect(parseLogInkHistoryFetchPrefix('author:alice')).toEqual({ author: 'alice' })
+      })
+
+      it('keeps the rest of the string verbatim — paths and author names can contain spaces', () => {
+        expect(parseLogInkHistoryFetchPrefix('path:src/with spaces/foo.ts')).toEqual({
+          path: 'src/with spaces/foo.ts',
+        })
+        expect(parseLogInkHistoryFetchPrefix('author:Griffen Fargo')).toEqual({
+          author: 'Griffen Fargo',
+        })
+      })
+
+      it('returns undefined when the prefix has no value', () => {
+        expect(parseLogInkHistoryFetchPrefix('path:')).toBeUndefined()
+        expect(parseLogInkHistoryFetchPrefix('author:   ')).toBeUndefined()
+      })
+
+      it('returns undefined for plain (client-side) filter strings', () => {
+        expect(parseLogInkHistoryFetchPrefix('feat')).toBeUndefined()
+        expect(parseLogInkHistoryFetchPrefix('fixpathfoo')).toBeUndefined()
+      })
+    })
+
+    it('setHistoryFetchArgs / replaceRows / clear flow keeps state internally consistent', () => {
+      let state = createLogInkState(rows)
+
+      state = applyLogInkAction(state, {
+        type: 'setHistoryFetchArgs',
+        value: { author: 'alice' },
+      })
+      expect(state.historyFetchArgs).toEqual({ author: 'alice' })
+
+      // Server replaces rows with a smaller matched set.
+      const matched: GitLogRow[] = [
+        {
+          type: 'commit',
+          graph: '*',
+          shortHash: 'fff0001',
+          hash: 'fff000111111',
+          date: '2026-05-01',
+          author: 'alice',
+          refs: [],
+          message: 'matched commit',
+        },
+      ]
+      state = applyLogInkAction(state, { type: 'replaceRows', rows: matched })
+      expect(state.commits).toHaveLength(1)
+      expect(state.selectedIndex).toBe(0)
+      expect(state.historyFetchArgs).toEqual({ author: 'alice' })
+
+      // Clearing the fetch args is a separate action — replaceRows did
+      // not touch them, so the runtime can decide when to drop them.
+      state = applyLogInkAction(state, { type: 'setHistoryFetchArgs', value: undefined })
+      expect(state.historyFetchArgs).toBeUndefined()
     })
   })
 })
