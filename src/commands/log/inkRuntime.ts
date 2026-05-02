@@ -73,8 +73,13 @@ import {
   getLogInkHelpSections,
 } from './inkKeymap'
 import { substituteGraphChars } from './inkGraphChars'
+import { formatHyperlink } from './inkHyperlinks'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
+import {
+  PromotedSelectionsSnapshot,
+  rectifyPromotedSelectionIndex,
+} from './inkSelectionRectify'
 import {
   LogInkRefreshWatcher,
   createRefreshWatcher,
@@ -89,11 +94,25 @@ import {
 } from './inkLayout'
 import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from './inkTheme'
 import {
+  STAGE_STATUS_DOT,
+  branchRowMarker,
+  formatBranchDivergence,
+  getPullRequestStateGlyph,
+  getStageStatusDotColor,
+  sidebarTabCount,
+} from './inkIconography'
+import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from './inkIdleTips'
+import {
+  PreviewLine,
+  formatBranchPreview,
+  formatStashPreview,
+  formatTagPreview,
+} from './inkPreviewPane'
+import {
   formatSortIndicator,
   sortBranches,
   sortTags,
 } from './inkSorting'
-import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from './inkIdleTips'
 import {
   formatLogInkBranchesEmpty,
   formatLogInkComposeEmpty,
@@ -115,7 +134,7 @@ import {
 } from './inkViewModel'
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
-import { ProviderOverview, getProviderOverview } from './providerData'
+import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { StashOverview, getStashOverview } from './stashData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
@@ -416,24 +435,13 @@ function sidebarTabLabel(tab: LogInkSidebarTab): string {
   }
 }
 
-function formatDivergence(branch: BranchOverview['localBranches'][number]): string {
-  if (!branch.upstream) {
-    return 'no upstream'
-  }
-
-  if (branch.ahead === 0 && branch.behind === 0) {
-    return `even with ${branch.upstream}`
-  }
-
-  return `+${branch.ahead}/-${branch.behind} ${branch.upstream}`
-}
-
 function sidebarLines(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   tab: LogInkSidebarTab,
   width: number,
-  state: LogInkState
+  state: LogInkState,
+  theme: LogInkTheme
 ): string[] {
   if (tab === 'status') {
     const worktree = context.worktree
@@ -474,10 +482,10 @@ function sidebarLines(
       branches.dirty ? 'Worktree: dirty' : 'Worktree: clean',
       '',
       ...sortedBranches.slice(0, 8).map((branch) =>
-        `${branch.current ? '*' : ' '} ${truncate(branch.shortName, width - 4)}`
+        `${branchRowMarker(branch, { ascii: theme.ascii })} ${truncate(branch.shortName, width - 4)}`
       ),
       ...sortedBranches.slice(0, 4).map((branch) =>
-        `  ${truncate(formatDivergence(branch), width - 2)}`
+        `  ${truncate(formatBranchDivergence(branch, { ascii: theme.ascii }), width - 2)}`
       ),
     ]
   }
@@ -572,6 +580,110 @@ export async function startInkInteractiveLog(
     await instance.waitUntilExit()
   } finally {
     lifecycle.dispose()
+  }
+}
+
+/**
+ * Predict the filter value that a filter-mutating action would land on, so
+ * the runtime can compute the post-filter selection snapshot before the
+ * reducer ever runs (P4.5). Returns undefined when the action isn't a
+ * filter action.
+ */
+function predictNextFilter(
+  action: Parameters<typeof applyLogInkAction>[1],
+  currentFilter: string
+): string | undefined {
+  switch (action.type) {
+    case 'appendFilter':
+      return `${currentFilter}${action.value}`
+    case 'backspaceFilter':
+      return currentFilter.slice(0, -1)
+    case 'clearFilter':
+    case 'clearFilterText':
+      return ''
+    case 'setFilter':
+      return action.value
+    default:
+      return undefined
+  }
+}
+
+/**
+ * Build the post-filter selection snapshot for branches / tags / stash so
+ * the reducer can preserve the cursor when the previously-selected item is
+ * still in the filtered result. Identifies items by a single key per view
+ * (branch shortName, tag name, stash ref) — the same matchesPromotedFilter
+ * the surfaces use covers the multi-field haystacks.
+ */
+function computePromotedSelectionsSnapshot(
+  state: LogInkState,
+  context: LogInkContext,
+  nextFilter: string
+): PromotedSelectionsSnapshot {
+  const allBranches = context.branches?.localBranches || []
+  const filteredBranches = nextFilter
+    ? allBranches.filter((branch) =>
+      matchesPromotedFilter([branch.shortName, branch.upstream || ''], nextFilter))
+    : allBranches
+  const currentBranches = state.filter
+    ? allBranches.filter((branch) =>
+      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter))
+    : allBranches
+  const previousBranchKey = currentBranches[state.selectedBranchIndex]?.shortName
+  const branchIndex = rectifyPromotedSelectionIndex(
+    filteredBranches.map((branch) => branch.shortName),
+    previousBranchKey
+  )
+
+  const allTags = context.tags?.tags || []
+  const filteredTags = nextFilter
+    ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], nextFilter))
+    : allTags
+  const currentTags = state.filter
+    ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
+    : allTags
+  const previousTagKey = currentTags[state.selectedTagIndex]?.name
+  const tagIndex = rectifyPromotedSelectionIndex(
+    filteredTags.map((tag) => tag.name),
+    previousTagKey
+  )
+
+  const allStashes = context.stashes?.stashes || []
+  const filteredStashes = nextFilter
+    ? allStashes.filter((stash) => matchesPromotedFilter([stash.ref, stash.message], nextFilter))
+    : allStashes
+  const currentStashes = state.filter
+    ? allStashes.filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
+    : allStashes
+  const previousStashKey = currentStashes[state.selectedStashIndex]?.ref
+  const stashIndex = rectifyPromotedSelectionIndex(
+    filteredStashes.map((stash) => stash.ref),
+    previousStashKey
+  )
+
+  return { branchIndex, tagIndex, stashIndex }
+}
+
+function enrichFilterActionWithRectification(
+  action: Parameters<typeof applyLogInkAction>[1],
+  state: LogInkState,
+  context: LogInkContext
+): Parameters<typeof applyLogInkAction>[1] {
+  const nextFilter = predictNextFilter(action, state.filter)
+  if (nextFilter === undefined) {
+    return action
+  }
+  const promotedSelections = computePromotedSelectionsSnapshot(state, context, nextFilter)
+  switch (action.type) {
+    case 'appendFilter':
+    case 'setFilter':
+      return { ...action, promotedSelections }
+    case 'backspaceFilter':
+    case 'clearFilter':
+    case 'clearFilterText':
+      return { ...action, promotedSelections }
+    default:
+      return action
   }
 }
 
@@ -1142,7 +1254,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       } else if (event.type === 'runAiCommitDraft') {
         void runAiCommitDraft()
       } else {
-        dispatch(event.action)
+        // P4.5: enrich filter-mutating actions with a precomputed
+        // selection snapshot so the reducer can preserve the cursor on
+        // the same item when it's still in the filtered result, only
+        // snapping to result[0] when the previously selected item drops
+        // out. The snapshot lives in the action so the reducer never
+        // needs context items.
+        const enriched = enrichFilterActionWithRectification(event.action, state, context)
+        dispatch(enriched)
       }
     })
   })
@@ -1223,11 +1342,11 @@ function renderHeader(
   const repo = context.provider?.repository.owner && context.provider.repository.name
     ? `${context.provider.repository.owner}/${context.provider.repository.name}`
     : 'local repository'
-  const pr = context.provider?.currentPullRequest
-    ? `PR #${context.provider.currentPullRequest.number} ${context.provider.currentPullRequest.state}`
-    : context.pullRequest?.currentPullRequest
-      ? `PR #${context.pullRequest.currentPullRequest.number} ${context.pullRequest.currentPullRequest.state}`
-      : 'no PR'
+  const prInfo = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
+  const prGlyph = prInfo ? getPullRequestStateGlyph(prInfo, theme) : null
+  const prLabel = prInfo
+    ? `PR #${prInfo.number} ${prInfo.isDraft ? 'DRAFT' : prInfo.state}`
+    : 'no PR'
   const search = state.filterMode ? `search: ${state.filter}_` : state.filter ? `filter: ${state.filter}` : ''
   const loading = isLogInkContextLoading(contextStatus) ? '  loading context' : ''
   const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
@@ -1239,7 +1358,16 @@ function renderHeader(
     : state.filterMode
       ? '[FILTER]'
       : '[NORMAL]'
-  const title = truncate(`${appLabel}  ${repo}  ${branch}  ${dirty}  ${pr}${view}${loading}`, columns - mode.length - 4)
+  const titlePrefix = `${appLabel}  ${repo}  ${branch}  ${dirty}  `
+  const glyphPart = prGlyph?.glyph ? `${prGlyph.glyph} ` : ''
+  const titleSuffix = `${view}${loading}`
+  const fullTitle = `${titlePrefix}${glyphPart}${prLabel}${titleSuffix}`
+  const titleBudget = columns - mode.length - 4
+  const truncatedTitle = truncate(fullTitle, titleBudget)
+  // Only split into colored fragments when the prefix + glyph + label all
+  // fit unmodified — otherwise the truncate ellipsis can land mid-fragment
+  // and we'd render half a glyph in the wrong color.
+  const splitFragments = truncatedTitle === fullTitle && glyphPart.length > 0
   const modeColor = theme.noColor
     ? undefined
     : state.filterMode || state.commitCompose.editing
@@ -1252,7 +1380,15 @@ function renderHeader(
     height: 3,
     paddingX: 1,
   },
-  h(Text, { bold: true, color: theme.colors.accent }, title),
+  splitFragments
+    ? h(Text, { bold: true, color: theme.colors.accent }, titlePrefix)
+    : h(Text, { bold: true, color: theme.colors.accent }, truncatedTitle),
+  splitFragments
+    ? h(Text, { bold: true, color: prGlyph?.color, dimColor: prGlyph?.dim }, glyphPart)
+    : undefined,
+  splitFragments
+    ? h(Text, { bold: true, color: theme.colors.accent }, `${prLabel}${titleSuffix}`)
+    : undefined,
   h(Text, { bold: true, color: modeColor }, `  ${mode}`),
   search ? h(Text, { dimColor: true }, `  ${truncate(search, 36)}`) : undefined)
 }
@@ -1268,7 +1404,7 @@ function renderSidebar(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
-  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4, state)
+  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4, state, theme)
   const tabs = getLogInkSidebarTabs()
 
   return h(Box, {
@@ -1279,7 +1415,13 @@ function renderSidebar(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Repository', focused)),
-  h(Text, { dimColor: true }, tabs.map((tab) => tab === state.sidebarTab ? `[${sidebarTabLabel(tab)}]` : sidebarTabLabel(tab)).join(' ')),
+  h(Text, { dimColor: true }, tabs.map((tab) => {
+    const count = sidebarTabCount(tab, context)
+    const labelWithCount = count !== undefined
+      ? `${sidebarTabLabel(tab)} (${count})`
+      : sidebarTabLabel(tab)
+    return tab === state.sidebarTab ? `[${labelWithCount}]` : labelWithCount
+  }).join(' ')),
   h(Text, undefined, ''),
   ...lines.map((line, index) => h(Text, { key: `sidebar-${index}` }, truncate(line, width - 4))))
 }
@@ -1531,17 +1673,32 @@ function renderStatusSurface(
   const listRows = Math.max(4, bodyRows - 5)
   const selectedIndex = state.selectedWorktreeFileIndex
   const cleanHint = formatLogInkStatusEmpty({ hasChanges: Boolean(worktree?.files.length) })
-  const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
+  const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
+  const isLoading = isLogInkContextKeyLoading(contextStatus, 'worktree')
+  const fileRows: ReactTypes.ReactNode[] = isLoading || !worktree?.files.length
+    ? []
+    : worktree.files.slice(startIndex).slice(0, listRows).map((file, offset) => {
+      const index = startIndex + offset
+      const isSelected = index === selectedIndex
+      const cursorPart = `${isSelected ? '>' : ' '} `
+      const dotColor = getStageStatusDotColor(file.state, theme)
+      const useDot = dotColor !== undefined
+      const dotCells = useDot ? cellWidth(STAGE_STATUS_DOT) + 1 : 0
+      const tail = `${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
+      const tailTrunc = truncate(tail, Math.max(0, 140 - cellWidth(cursorPart) - dotCells))
+
+      return h(Text, {
+        key: `status-row-${index}`,
+        dimColor: offset > 0,
+      },
+      cursorPart,
+      ...(useDot ? [h(Text, { color: dotColor }, STAGE_STATUS_DOT), ' '] : []),
+      tailTrunc)
+    })
+  const fallbackLines = isLoading
     ? [formatLogInkLoading({ resource: 'worktree status' })]
     : worktree?.files.length
-      ? worktree.files
-        .slice(Math.max(0, selectedIndex - Math.floor(listRows / 2)))
-        .slice(0, listRows)
-        .map((file, offset) => {
-          const index = Math.max(0, selectedIndex - Math.floor(listRows / 2)) + offset
-
-          return `${index === selectedIndex ? '>' : ' '} ${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
-        })
+      ? []
       : cleanHint
         ? [cleanHint]
         : ['Worktree clean']
@@ -1559,8 +1716,9 @@ function renderStatusSurface(
       ? `${worktree.stagedCount} staged | ${worktree.unstagedCount} unstaged | ${worktree.untrackedCount} untracked`
       : 'status loading')
   ),
-  ...lines.map((line, index) => h(Text, {
-    key: `status-surface-${index}`,
+  ...fileRows,
+  ...fallbackLines.map((line, index) => h(Text, {
+    key: `status-surface-fallback-${index}`,
     dimColor: index > 0,
   }, truncate(line, 140))))
 }
@@ -1701,8 +1859,8 @@ function renderBranchesSurface(
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
-        const marker = branch.current ? '*' : ' '
-        const divergence = formatDivergence(branch)
+        const marker = branchRowMarker(branch, { ascii: theme.ascii })
+        const divergence = formatBranchDivergence(branch, { ascii: theme.ascii })
         return h(Text, {
           key: `branch-${index}`,
           bold: isSelected,
@@ -1760,11 +1918,28 @@ function renderTagsSurface(
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
+        // P5.1 — link the tag name to its GitHub tree page when we know
+        // the remote. Truncation runs on the visible (pre-OSC) text;
+        // formatHyperlink wraps just the tag name, leaving width math
+        // intact.
+        const url = buildRefUrl(context.provider?.repository, tag.name)
+        const namePadded = tag.name.padEnd(20)
+        const lineText = truncate(`${cursor} ${namePadded} ${tag.subject}`, 140)
+        if (!url || lineText.indexOf(namePadded) < 0) {
+          return h(Text, {
+            key: `tag-${index}`,
+            bold: isSelected,
+            dimColor: !isSelected,
+          }, lineText)
+        }
+        const linkStart = lineText.indexOf(namePadded)
+        const before = lineText.slice(0, linkStart)
+        const after = lineText.slice(linkStart + namePadded.length)
         return h(Text, {
           key: `tag-${index}`,
           bold: isSelected,
           dimColor: !isSelected,
-        }, truncate(`${cursor} ${tag.name.padEnd(20)} ${tag.subject}`, 140))
+        }, before, formatHyperlink(namePadded, url), after)
       })
 
   return h(Box, {
@@ -2058,6 +2233,19 @@ function renderDetailPanel(
     return renderComposeContextPanel(h, components, state, context, contextStatus, width, theme, focused)
   }
 
+  // Preview pane (P4.1) — fzf / yazi / lazygit style: branches, tags, and
+  // stash views each get a tailored summary of the selected entry instead
+  // of falling through to the (stale) history inspector.
+  if (state.activeView === 'branches') {
+    return renderBranchPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+  if (state.activeView === 'tags') {
+    return renderTagPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+  if (state.activeView === 'stash') {
+    return renderStashPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+
   return renderHistoryInspector(
     h, components, state, context, contextStatus, detail, loading,
     filePreview, filePreviewLoading, width, theme, focused
@@ -2107,18 +2295,37 @@ function renderHistoryInspector(
   }
 
   const statLine = `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
-  const headerLines = [
-    detail.message,
-    '',
-    `Commit: ${compactHash(detail.hash)}`,
-    `Author: ${detail.author}`,
-    `Date: ${detail.date}`,
-    detail.refs.length ? `Refs: ${detail.refs.join(', ')}` : 'Refs: none',
-    statLine,
-    '',
-    ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']),
-    '',
-    'Changed files:',
+  // P5.1 — link the commit hash and each ref out to GitHub when we know
+  // the remote. OSC 8 escapes embed inline; supportsHyperlinks() decides
+  // whether to wrap or fall through to plain text.
+  const repository = context.provider?.repository
+  const commitLink = formatHyperlink(
+    compactHash(detail.hash),
+    buildCommitUrl(repository, detail.hash)
+  )
+  const refNodes = detail.refs.length
+    ? renderInspectorRefs(h, Text, detail.refs, repository)
+    : null
+
+  const headerNodes: ReactTypes.ReactElement[] = [
+    h(Text, { key: 'detail-msg' }, truncate(detail.message, width - 4)),
+    h(Text, { key: 'detail-spacer-1' }, ''),
+    h(Text, { key: 'detail-commit', dimColor: true }, 'Commit: ', commitLink),
+    h(Text, { key: 'detail-author', dimColor: true }, truncate(`Author: ${detail.author}`, width - 4)),
+    h(Text, { key: 'detail-date', dimColor: true }, truncate(`Date: ${detail.date}`, width - 4)),
+    refNodes
+      ? h(Text, { key: 'detail-refs', dimColor: true }, 'Refs: ', ...refNodes)
+      : h(Text, { key: 'detail-refs', dimColor: true }, 'Refs: none'),
+    h(Text, { key: 'detail-stat', dimColor: true }, truncate(statLine, width - 4)),
+    h(Text, { key: 'detail-spacer-2' }, ''),
+    ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']).map((line, index) =>
+      h(Text, {
+        key: `detail-body-${index}`,
+        dimColor: true,
+      }, truncate(line, width - 4))
+    ),
+    h(Text, { key: 'detail-spacer-3' }, ''),
+    h(Text, { key: 'detail-files-title' }, 'Changed files:'),
   ]
 
   const fileListMaxRows = Math.max(4, Math.min(detail.files.length, 10))
@@ -2143,15 +2350,60 @@ function renderHistoryInspector(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Inspector', focused)),
-  ...headerLines.map((line, index) => h(Text, {
-    key: `detail-header-${index}`,
-    dimColor: index > 1 && line !== 'Changed files:',
-  }, truncate(line, width - 4))),
+  ...headerNodes,
   ...fileListNodes,
   ...trailerLines.map((line, index) => h(Text, {
     key: `detail-trailer-${index}`,
     dimColor: index > 0,
   }, truncate(line, width - 4))))
+}
+
+/**
+ * Build a commit URL for the repo when GitHub provider info is available.
+ * Returns undefined for unsupported remotes — formatHyperlink falls through
+ * to plain text in that case.
+ */
+function buildCommitUrl(
+  repository: ProviderRepository | undefined,
+  hash: string
+): string | undefined {
+  if (!repository) return undefined
+  return buildProviderUrl(repository, { type: 'commit', commit: hash })
+}
+
+/**
+ * Build a branch URL for a ref name. Strips the `HEAD -> ` and `tag: `
+ * prefixes git decoration uses. For everything else we treat the ref as a
+ * branch — GitHub's `/tree/<ref>` resolves both branches and tags.
+ */
+function buildRefUrl(
+  repository: ProviderRepository | undefined,
+  ref: string
+): string | undefined {
+  if (!repository) return undefined
+  const stripped = ref.replace(/^HEAD -> /, '').replace(/^tag: /, '').trim()
+  if (!stripped) return undefined
+  return buildProviderUrl(repository, { type: 'branch', branch: stripped })
+}
+
+/**
+ * Render `refs` as a comma-separated sequence of <Text> fragments, each
+ * wrapped in OSC 8 (no-op when the terminal can't render hyperlinks).
+ */
+function renderInspectorRefs(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  refs: string[],
+  repository: ProviderRepository | undefined
+): ReactTypes.ReactElement[] {
+  const out: ReactTypes.ReactElement[] = []
+  refs.forEach((ref, index) => {
+    if (index > 0) {
+      out.push(h(Text, { key: `ref-sep-${index}` }, ', '))
+    }
+    out.push(h(Text, { key: `ref-${index}` }, formatHyperlink(ref, buildRefUrl(repository, ref))))
+  })
+  return out
 }
 
 function renderCommitDiffDetail(
@@ -2341,6 +2593,113 @@ function renderCommitFileList(
       bold: isSelected,
     }, truncate(label, width - 4))
   })
+}
+
+function renderPreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  title: string,
+  lines: PreviewLine[],
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle(title, focused)),
+  ...lines.map((line, index) => {
+    const isHeading = line.emphasis === 'heading' && index > 0
+    return h(Text, {
+      key: `preview-${index}`,
+      bold: isHeading,
+      dimColor: line.emphasis === 'dim',
+    }, truncate(line.text, width - 4))
+  }))
+}
+
+function renderBranchPreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'branches')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Branch preview',
+      [{ text: formatLogInkLoading({ resource: 'branches' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.branches?.localBranches || []
+  const visible = state.filter
+    ? all.filter((branch) =>
+      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter))
+    : all
+  const index = Math.max(0, Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1)))
+  const branch = visible[index]
+  return renderPreviewPanel(h, { Box, Text }, 'Branch preview',
+    formatBranchPreview(branch), width, theme, focused)
+}
+
+function renderTagPreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'tags')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Tag preview',
+      [{ text: formatLogInkLoading({ resource: 'tags' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.tags?.tags || []
+  const visible = state.filter
+    ? all.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
+    : all
+  const index = Math.max(0, Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1)))
+  const tag = visible[index]
+  return renderPreviewPanel(h, { Box, Text }, 'Tag preview',
+    formatTagPreview(tag), width, theme, focused)
+}
+
+function renderStashPreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'stashes')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Stash preview',
+      [{ text: formatLogInkLoading({ resource: 'stashes' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.stashes?.stashes || []
+  const visible = state.filter
+    ? all.filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
+    : all
+  const index = Math.max(0, Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1)))
+  const stash = visible[index]
+  return renderPreviewPanel(h, { Box, Text }, 'Stash preview',
+    formatStashPreview(stash), width, theme, focused)
 }
 
 function renderCommitPanel(
