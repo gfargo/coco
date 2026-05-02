@@ -345,6 +345,57 @@ export function cherryPickCommit(
   ))
 }
 
+/**
+ * Materialize a single file's contents from a historical commit into the
+ * working tree, leaving every other path untouched. Equivalent to
+ * `git checkout <sha> -- <path>` for additions/modifications. When the
+ * path no longer exists at <sha> (i.e. the commit deleted that file),
+ * mirror the deletion in the worktree via `git rm --force`.
+ *
+ * Important: this overwrites the file in the working tree. The caller
+ * is responsible for confirming with the user when the working tree
+ * already has uncommitted changes to that path.
+ */
+export async function checkoutFileFromCommit(
+  git: SimpleGit,
+  sha: string,
+  path: string
+): Promise<BranchActionResult> {
+  return checkoutOrDeleteFromRef(git, sha, path, sha.slice(0, 7))
+}
+
+export async function checkoutOrDeleteFromRef(
+  git: SimpleGit,
+  ref: string,
+  path: string,
+  label: string
+): Promise<BranchActionResult> {
+  const exists = await pathExistsAtRef(git, ref, path)
+  if (exists) {
+    return runAction(
+      () => git.raw(['checkout', ref, '--', path]),
+      `Checked out ${path} from ${label}`
+    )
+  }
+  return runAction(
+    () => git.raw(['rm', '--force', '--quiet', '--', path]),
+    `Removed ${path} (mirrors deletion from ${label})`
+  )
+}
+
+async function pathExistsAtRef(
+  git: SimpleGit,
+  ref: string,
+  path: string
+): Promise<boolean> {
+  try {
+    await git.raw(['cat-file', '-e', `${ref}:${path}`])
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function revertCommit(
   git: SimpleGit,
   commit: HistoryCommitRef | undefined

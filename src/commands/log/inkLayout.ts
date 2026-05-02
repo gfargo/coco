@@ -1,6 +1,13 @@
 export type LogInkLayoutInput = {
   columns: number
   rows: number
+  /**
+   * When true the sidebar grows so long branch / file names stop
+   * truncating. Set this when the sidebar pane has focus — at rest the
+   * sidebar stays compact so the diff / history panels get most of the
+   * width.
+   */
+  sidebarFocused?: boolean
 }
 
 export type LogInkLayout = {
@@ -28,7 +35,12 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const columns = input.columns || LOG_INK_DEFAULT_COLUMNS
   const rows = input.rows || LOG_INK_DEFAULT_ROWS
   const detailWidth = Math.max(30, Math.min(56, Math.floor(columns * 0.34)))
-  const sidebarWidth = Math.max(22, Math.min(34, Math.floor(columns * 0.24)))
+  // Sidebar at rest: 22-34 cells (~24% of width). Focused: 32-50 cells
+  // (~36% of width). The transition is instant per render — focus tab to
+  // expand, focus away to collapse.
+  const sidebarWidth = input.sidebarFocused
+    ? Math.max(32, Math.min(50, Math.floor(columns * 0.36)))
+    : Math.max(22, Math.min(34, Math.floor(columns * 0.24)))
 
   return {
     bodyRows: Math.max(8, rows - 5),

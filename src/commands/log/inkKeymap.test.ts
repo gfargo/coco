@@ -17,7 +17,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next'],
+      contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', '/ search', 'gg/G top/bottom'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -37,7 +37,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files'],
+      contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'esc files'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -47,7 +47,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['e edit', 'tab field', 'c commit', 'I AI draft', 'esc back'],
+      contextual: ['e edit', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -57,7 +57,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ branches', 's sort', 'D delete', 'X checkout', 'enter diff'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -67,7 +67,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ tags', 's sort', 'T create', 'X push', 'esc back'],
+      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -77,7 +77,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ stashes', 'A apply', 'D drop', 'esc back'],
+      contextual: ['↑/↓ stashes', 'enter diff', 'a apply', 'p pop', 'X drop'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 

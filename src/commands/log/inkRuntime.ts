@@ -35,6 +35,7 @@
  *     every text decoration is dropped.
  */
 
+import { spawnSync } from 'node:child_process'
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { BranchOverview, getBranchOverview } from './branchData'
@@ -76,6 +77,7 @@ import { substituteGraphChars } from './inkGraphChars'
 import { formatHyperlink } from './inkHyperlinks'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
+import { getSavedSidebarTab, saveSidebarTab } from './inkSidebarPersistence'
 import {
   PromotedSelectionsSnapshot,
   rectifyPromotedSelectionIndex,
@@ -134,14 +136,25 @@ import {
 } from './inkViewModel'
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
+import { openProviderUrl } from './providerActions'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
-import { deleteBranch } from './branchActions'
-import { deleteLocalTag } from './tagActions'
-import { dropStash } from './stashActions'
+import {
+  checkoutBranch,
+  createBranch,
+  deleteBranch,
+  fetchRemotes,
+  pullCurrentBranch,
+  pushCurrentBranch,
+  renameBranch,
+  setUpstream,
+} from './branchActions'
+import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from './tagActions'
+import { checkoutFileFromCommit, cherryPickCommit } from './historyActions'
+import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
-import { StashOverview, getStashOverview } from './stashData'
+import { StashOverview, getStashDiff, getStashOverview, parseStashDiffFiles } from './stashData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeOverview, getWorktreeOverview } from './statusData'
 import {
@@ -698,10 +711,6 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const h = React.createElement
   const { exit } = useApp()
   const windowSize = useWindowSize()
-  const layout = getLogInkLayout({
-    columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
-    rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
-  })
   // Bumping this on SIGCONT forces the existing tree to repaint so users
   // land on a drawn screen after `fg` instead of an empty alt buffer.
   const [, setResumeTick] = React.useState(0)
@@ -735,6 +744,13 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     undefined
   )
   const [worktreeHunksLoading, setWorktreeHunksLoading] = React.useState(false)
+  // Stash diff explorer (Enter on a stash row): the runtime fetches
+  // `git stash show -p <ref>` lazily once the diff view becomes active
+  // with diffSource='stash'. Lines are stored as a flat string[] —
+  // renderDiffSurface paints each line through diffLineProps so +/-
+  // colors match the commit-diff path.
+  const [stashDiffLines, setStashDiffLines] = React.useState<string[] | undefined>(undefined)
+  const [stashDiffLoading, setStashDiffLoading] = React.useState(false)
   const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
     Boolean(logArgv?.interactive && !logArgv.limit) &&
     getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
@@ -782,6 +798,36 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
   }, [])
+
+  // Auto-dismiss status messages after a short window so transient
+  // confirmations ("Pulled current branch", "Edited foo.ts") don't
+  // linger forever. Each new message resets the timer; clearing the
+  // message via setStatus(undefined) cancels it. Doesn't fire while a
+  // modal (input prompt, confirmation, palette) is open — those flows
+  // use the status line as live feedback for the open task.
+  React.useEffect(() => {
+    if (!state.statusMessage) return
+    if (state.inputPrompt || state.pendingConfirmationId || state.pendingMutationConfirmation || state.showCommandPalette) {
+      return
+    }
+    // The `setTimeout` callback is a literal arrow function (not a
+    // string), and the delay is a hard-coded constant, so the
+    // eval-injection vector behind DevSkim DS172411 doesn't apply here.
+    // DevSkim: ignore DS172411
+    const handle = setTimeout(() => {
+      if (mountedRef.current) {
+        dispatch({ type: 'setStatus', value: undefined })
+      }
+    }, 4000)
+    return () => clearTimeout(handle)
+  }, [
+    dispatch,
+    state.inputPrompt,
+    state.pendingConfirmationId,
+    state.pendingMutationConfirmation,
+    state.showCommandPalette,
+    state.statusMessage,
+  ])
 
   const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
     // Loud refresh (manual `r`): flip everything to 'loading' so the user
@@ -865,6 +911,61 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       watcher?.close()
     }
   }, [git, refreshContext, refreshWorktreeContext])
+
+  // Per-repo sidebar tab persistence (#21). Resolve the repo root, look
+  // up the cached tab, and dispatch `restoreSidebarTab` once on mount so
+  // the user lands on whichever tab they were last on for this project.
+  // `restoreSidebarTab` (vs `setSidebarTab`) intentionally does not pull
+  // focus into the sidebar — the user lands on commits, the saved tab
+  // is just visible in the gutter.
+  //
+  // The save effect listens to `userSidebarTab` (the user's explicit
+  // choice mirror), not `sidebarTab`. That way the auto-switch to
+  // Branches when entering compose / status doesn't overwrite the saved
+  // preference.
+  const repoRootRef = React.useRef<string | undefined>(undefined)
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const repoRoot = (await git.revparse(['--show-toplevel'])).trim()
+        if (cancelled || !repoRoot) return
+        repoRootRef.current = repoRoot
+        const saved = getSavedSidebarTab(repoRoot)
+        if (saved && saved !== state.userSidebarTab) {
+          dispatch({ type: 'restoreSidebarTab', value: saved })
+        }
+      } catch {
+        // Not in a worktree, or revparse failed; nothing to restore.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [git, dispatch])
+
+  React.useEffect(() => {
+    const repoRoot = repoRootRef.current
+    if (!repoRoot) return
+    saveSidebarTab(repoRoot, state.userSidebarTab)
+  }, [state.userSidebarTab])
+
+  // P-stash-explorer: load `git stash show -p <ref>` once the diff view
+  // becomes active with diffSource='stash'. Best-effort — empty stashes
+  // or read errors fall through to a "no diff" hint at the render site.
+  React.useEffect(() => {
+    if (state.activeView !== 'diff' || state.diffSource !== 'stash' || !state.stashDiffRef) {
+      return
+    }
+    let active = true
+    setStashDiffLoading(true)
+    void (async () => {
+      const lines = await safe(getStashDiff(git, state.stashDiffRef!))
+      if (active) {
+        setStashDiffLines(lines || [])
+        setStashDiffLoading(false)
+      }
+    })()
+    return () => { active = false }
+  }, [git, state.activeView, state.diffSource, state.stashDiffRef])
 
   React.useEffect(() => {
     let active = true
@@ -1116,13 +1217,88 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch({ type: 'setStatus', value: result.message })
   }, [dispatch])
 
+  // Open a file in $EDITOR (or $VISUAL) by suspending Ink's hold on the
+  // terminal, spawning the editor synchronously inheriting stdio, then
+  // restoring the alt screen + raw mode and forcing a re-render. The
+  // dance mirrors the SIGTSTP / SIGCONT path in inkTerminalLifecycle.
+  // Falls back to vi when neither env var is set; surfaces a status
+  // message on missing-binary / non-zero exit so the user isn't left
+  // wondering.
+  const openInEditor = React.useCallback((path: string) => {
+    if (!path) return
+    const editorEnv = process.env.VISUAL || process.env.EDITOR || 'vi'
+    // $VISUAL / $EDITOR commonly include flags (`code -w`, `vim -f`,
+    // `emacs -nw`). Tokenize on whitespace so the leading word is the
+    // executable and the rest are passed as arguments — passing the
+    // full string to spawnSync as the executable would fail with
+    // ENOENT for any of those configurations.
+    const editorArgs = editorEnv.trim().split(/\s+/).filter(Boolean)
+    const editor = editorArgs[0] || 'vi'
+    const editorPrefixArgs = editorArgs.slice(1)
+    const out = process.stdout
+    const stdin = process.stdin
+    const ENTER_ALT = '\x1b[?1049h'
+    const EXIT_ALT = '\x1b[?1049l'
+    const SHOW_CURSOR = '\x1b[?25h'
+    const HIDE_CURSOR = '\x1b[?25l'
+    try {
+      // Drop into the primary buffer + cooked mode so the editor
+      // doesn't inherit our raw-mode keystrokes.
+      stdin.setRawMode?.(false)
+      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
+      const result = spawnSync(editor, [...editorPrefixArgs, path], { stdio: 'inherit' })
+      if (result.error) {
+        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}` })
+      } else if (result.signal) {
+        // Editor was killed by a signal (e.g. ^C, SIGTERM). status is
+        // null in this case, so the old `status !== 0` check would
+        // mistakenly fall through to the success branch.
+        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}` })
+      } else if (typeof result.status === 'number' && result.status !== 0) {
+        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}` })
+      } else {
+        dispatch({ type: 'setStatus', value: `Edited ${path}` })
+      }
+    } finally {
+      // Re-enter the alt screen + raw mode + hidden cursor; nudge React
+      // so the freshly-restored screen actually paints.
+      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
+      stdin.setRawMode?.(true)
+      resumeRef?.current?.()
+    }
+    // Worktree status may have changed (e.g. user saved an edit) — silent
+    // refresh so the file row reflects the new staged/unstaged state.
+    void refreshWorktreeContext({ silent: true })
+  }, [dispatch, refreshWorktreeContext, resumeRef])
+
   // Resolve the destructive-action target from the live filtered+sorted
   // list the user is looking at, run the action against it, surface the
   // result on the status line, and silently refresh so the deleted item
   // disappears. Called from the y-confirm path for delete-branch / delete-
   // tag / drop-stash / remove-worktree / abort-operation.
-  const runWorkflowAction = React.useCallback(async (id: string) => {
+  const runWorkflowAction = React.useCallback(async (id: string, payload?: string) => {
     const handlers: Record<string, () => Promise<{ ok: boolean; message: string } | undefined>> = {
+      'create-branch': async () => {
+        const name = payload?.trim()
+        if (!name) return { ok: false, message: 'Branch name required' }
+        const startPoint = context.branches?.currentBranch || 'HEAD'
+        return createBranch(git, name, startPoint)
+      },
+      'create-tag': async () => {
+        const name = payload?.trim()
+        if (!name) return { ok: false, message: 'Tag name required' }
+        return createLightweightTag(git, name, 'HEAD')
+      },
+      'checkout-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        if (branch.current) return { ok: true, message: `Already on ${branch.shortName}` }
+        return checkoutBranch(git, branch)
+      },
       'delete-branch': async () => {
         const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
         const visible = state.filter
@@ -1141,6 +1317,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!tag) return { ok: false, message: 'No tag selected' }
         return deleteLocalTag(git, tag.name)
       },
+      'push-tag': async () => {
+        const all = sortTags(context.tags?.tags || [], state.tagSort)
+        const visible = state.filter
+          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+          : all
+        const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+        if (!tag) return { ok: false, message: 'No tag selected' }
+        return pushTag(git, tag.name)
+      },
       'drop-stash': async () => {
         const all = context.stashes?.stashes || []
         const visible = state.filter
@@ -1150,13 +1335,73 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!stash) return { ok: false, message: 'No stash selected' }
         return dropStash(git, stash)
       },
+      'apply-stash': async () => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        if (!stash) return { ok: false, message: 'No stash selected' }
+        return applyStash(git, stash)
+      },
+      'pop-stash': async () => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        if (!stash) return { ok: false, message: 'No stash selected' }
+        return popStash(git, stash)
+      },
+      'checkout-file-from-stash': async () => {
+        const path = payload?.trim()
+        const ref = state.stashDiffRef
+        if (!path) return { ok: false, message: 'No stash file under cursor' }
+        if (!ref) return { ok: false, message: 'No stash ref active' }
+        return checkoutFileFromStash(git, ref, path)
+      },
+      'cherry-pick-commit': async () => {
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        return cherryPickCommit(git, {
+          hash: commit.hash,
+          shortHash: commit.shortHash,
+          message: commit.message,
+        })
+      },
+      'checkout-file-from-commit': async () => {
+        // payload is "<sha> <path>" so we pass both through a single
+        // string field on the action.
+        const trimmed = payload?.trim()
+        if (!trimmed) return { ok: false, message: 'No commit file under cursor' }
+        const spaceIndex = trimmed.indexOf(' ')
+        if (spaceIndex < 0) return { ok: false, message: 'Malformed commit file payload' }
+        const sha = trimmed.slice(0, spaceIndex)
+        const path = trimmed.slice(spaceIndex + 1)
+        if (!sha || !path) return { ok: false, message: 'No commit file under cursor' }
+        return checkoutFileFromCommit(git, sha, path)
+      },
       'remove-worktree': async () => {
         const all = context.worktreeList?.worktrees || []
-        // No dedicated cursor for the worktrees tab yet — operate on the
-        // first non-current worktree as a safe default.
-        const target = all.find((w) => !w.current)
-        if (!target) return { ok: false, message: 'No removable worktree' }
-        return removeWorktree(git, target)
+        // Resolve the target from the visible (filtered) list so a
+        // hidden filtered-out worktree can never be the action target.
+        // Falls back to the cursor against the unfiltered list when the
+        // action is invoked from the palette without ever visiting the
+        // worktrees view.
+        const visible = state.filter
+          ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
+          : all
+        const cursorTarget = visible.length
+          ? visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
+          : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
+        if (!cursorTarget) return { ok: false, message: 'No worktree selected' }
+        if (cursorTarget.current) {
+          return {
+            ok: false,
+            message: 'Cannot remove the current worktree — switch to another worktree first.',
+          }
+        }
+        return removeWorktree(git, cursorTarget)
       },
       'abort-operation': async () => {
         const operation = context.operation?.operation
@@ -1164,6 +1409,58 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return { ok: false, message: 'No git operation in progress' }
         }
         return abortOperation(git, operation)
+      },
+      'open-pr': async () => {
+        const repo = context.provider?.repository
+        if (!repo || repo.provider !== 'github' || !repo.owner || !repo.name) {
+          return { ok: false, message: 'No GitHub remote detected for this repo' }
+        }
+        const pr = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
+        if (pr) {
+          return openProviderUrl(repo, { type: 'pull-request', number: pr.number })
+        }
+        // No PR — fall back to opening the repo page so the user can
+        // create one or browse from there.
+        return openProviderUrl(repo, { type: 'repo' })
+      },
+      'fetch-remotes': async () => fetchRemotes(git),
+      'pull-current-branch': async () => pullCurrentBranch(git),
+      'push-current-branch': async () => pushCurrentBranch(git),
+      'rename-branch': async () => {
+        const newName = payload?.trim()
+        if (!newName) return { ok: false, message: 'New branch name required' }
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return renameBranch(git, branch.shortName, newName)
+      },
+      'set-upstream': async () => {
+        const upstream = payload?.trim()
+        if (!upstream) return { ok: false, message: 'Upstream ref required' }
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return setUpstream(git, branch.shortName, upstream)
+      },
+      'delete-remote-tag': async () => {
+        const all = sortTags(context.tags?.tags || [], state.tagSort)
+        const visible = state.filter
+          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+          : all
+        const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+        if (!tag) return { ok: false, message: 'No tag selected' }
+        return deleteRemoteTag(git, tag.name)
+      },
+      'create-stash': async () => {
+        const message = payload?.trim()
+        if (!message) return { ok: false, message: 'Stash message required' }
+        return createStash(git, message)
       },
     }
     const handler = handlers[id]
@@ -1177,7 +1474,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // flickering the surfaces through a 'loading' phase.
     await refreshContext({ silent: true })
   }, [context, dispatch, git, refreshContext, state.branchSort, state.filter, state.selectedBranchIndex,
-    state.selectedStashIndex, state.selectedTagIndex, state.tagSort])
+    state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
+    state.tagSort])
 
   React.useEffect(() => {
     let active = true
@@ -1312,15 +1610,55 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         .filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
         .length
       : context.tags?.tags.length
-    const stashVisibleCount = state.filter
+    const visibleStashes = state.filter
       ? (context.stashes?.stashes || [])
         .filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
+      : (context.stashes?.stashes || [])
+    const stashVisibleCount = visibleStashes.length
+    const stashSelectedRef = visibleStashes[Math.min(state.selectedStashIndex, Math.max(0, visibleStashes.length - 1))]?.ref
+
+    // The worktrees promoted view is filterable; mirror the branches /
+    // tags / stash pattern and feed the filtered count into the input
+    // dispatcher so ↑/↓ stay synchronized with the visible rows.
+    const worktreeVisibleCount = state.filter
+      ? (context.worktreeList?.worktrees || [])
+        .filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
         .length
-      : context.stashes?.stashes.length
+      : context.worktreeList?.worktrees.length
+
+    // When the diff view is showing a stash patch, swap the previewLineCount
+    // to the stash diff length so the existing pageDetailPreview path
+    // (j/k, PgUp/PgDn) scrolls through it without a parallel pipeline.
+    const diffPreviewLineCount = state.diffSource === 'stash'
+      ? stashDiffLines?.length
+      : filePreview?.hunks.length
+
+    // Parse the active stash diff into per-file sections so `]`/`[` can
+    // jump between files and `c` knows which path the cursor is on for
+    // a file-level cherry-pick.
+    const stashDiffFiles = state.diffSource === 'stash' && stashDiffLines
+      ? parseStashDiffFiles(stashDiffLines)
+      : []
+    const stashDiffFileOffsets = stashDiffFiles.map((file) => file.startLine)
+    const stashDiffSelectedPath = (() => {
+      if (state.diffSource !== 'stash' || stashDiffFiles.length === 0) return undefined
+      const offset = state.diffPreviewOffset
+      // Walk backwards to the most recent file header at or before the
+      // current cursor offset.
+      let current = stashDiffFiles[0]
+      for (const file of stashDiffFiles) {
+        if (file.startLine <= offset) {
+          current = file
+        } else {
+          break
+        }
+      }
+      return current.path
+    })()
 
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
-      previewLineCount: filePreview?.hunks.length,
+      previewLineCount: diffPreviewLineCount,
       worktreeDiffLineCount: worktreeDiff?.lines.length,
       worktreeFileCount: context.worktree?.files.length,
       worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
@@ -1328,6 +1666,17 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       branchCount: branchVisibleCount,
       tagCount: tagVisibleCount,
       stashCount: stashVisibleCount,
+      stashSelectedRef,
+      stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
+      stashDiffSelectedPath,
+      worktreeListCount: worktreeVisibleCount,
+      worktreeSelectedPath: context.worktree?.files[state.selectedWorktreeFileIndex]?.path,
+      commitDiffSelectedPath: state.diffSource === 'commit'
+        ? selectedDetailFile?.path
+        : undefined,
+      commitDiffSelectedSha: state.diffSource === 'commit'
+        ? selected?.hash
+        : undefined,
       worktreeDirty,
     }).forEach((event) => {
       if (event.type === 'exit') {
@@ -1347,7 +1696,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       } else if (event.type === 'runAiCommitDraft') {
         void runAiCommitDraft()
       } else if (event.type === 'runWorkflowAction') {
-        void runWorkflowAction(event.id)
+        void runWorkflowAction(event.id, event.payload)
+      } else if (event.type === 'openFileInEditor') {
+        openInEditor(event.path)
       } else {
         // P4.5: enrich filter-mutating actions with a precomputed
         // selection snapshot so the reducer can preserve the cursor on
@@ -1359,6 +1710,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         dispatch(enriched)
       }
     })
+  })
+
+  // Layout depends on focus (sidebar grows when focused), so it's
+  // computed here — after state is in scope but before the render path.
+  const layout = getLogInkLayout({
+    columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
+    rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
+    sidebarFocused: state.focus === 'sidebar',
   })
 
   if (layout.tooSmall) {
@@ -1398,6 +1757,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         filePreviewLoading,
         commitDiffHunkOffsets,
         selectedDetailFile,
+        stashDiffLines,
+        stashDiffLoading,
         layout.bodyRows,
         layout.mainPanelWidth,
         theme,
@@ -1500,8 +1861,32 @@ function renderSidebar(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
-  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4, state, theme)
   const tabs = getLogInkSidebarTabs()
+
+  // Accordion layout — every tab's title is visible on its own line, but
+  // only the active tab expands its content underneath. Switching tabs
+  // (1-5 / [/]) collapses the previous and expands the next.
+  const tabBlocks = tabs.flatMap((tab, tabIndex) => {
+    const isActive = tab === state.sidebarTab
+    const count = sidebarTabCount(tab, context)
+    const labelWithCount = count !== undefined
+      ? `${sidebarTabLabel(tab)} (${count})`
+      : sidebarTabLabel(tab)
+    const headerText = isActive ? `[${labelWithCount}]` : labelWithCount
+    const blocks: ReactTypes.ReactElement[] = []
+    if (tabIndex > 0) {
+      blocks.push(h(Text, { key: `tab-spacer-${tab}` }, ''))
+    }
+    blocks.push(h(Text, {
+      key: `tab-header-${tab}`,
+      bold: isActive,
+      dimColor: !isActive,
+    }, headerText))
+    if (isActive) {
+      blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, theme))
+    }
+    return blocks
+  })
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1511,15 +1896,75 @@ function renderSidebar(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Repository', focused)),
-  h(Text, { dimColor: true }, tabs.map((tab) => {
-    const count = sidebarTabCount(tab, context)
-    const labelWithCount = count !== undefined
-      ? `${sidebarTabLabel(tab)} (${count})`
-      : sidebarTabLabel(tab)
-    return tab === state.sidebarTab ? `[${labelWithCount}]` : labelWithCount
-  }).join(' ')),
   h(Text, undefined, ''),
-  ...lines.map((line, index) => h(Text, { key: `sidebar-${index}` }, truncate(line, width - 4))))
+  ...tabBlocks)
+}
+
+/**
+ * Render the indented body of the active sidebar tab. The status tab
+ * colours its summary counts (warning / danger / muted) and per-file
+ * rows so they read as the same severity scale used in the main status
+ * surface; every other tab falls through to `sidebarLines` for its
+ * string-based summary.
+ */
+function renderActiveSidebarContent(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  tab: LogInkSidebarTab,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement[] {
+  if (tab === 'status') {
+    return renderActiveStatusTabContent(h, Text, context, contextStatus, width, theme)
+  }
+  const lines = sidebarLines(context, contextStatus, tab, width - 6, state, theme)
+  return lines.map((line, index) => h(Text, {
+    key: `tab-content-${tab}-${index}`,
+    dimColor: !line.trim(),
+  }, truncate(`  ${line}`, width - 4)))
+}
+
+function renderActiveStatusTabContent(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement[] {
+  if (isLogInkContextKeyLoading(contextStatus, 'worktree')) {
+    return [h(Text, { key: 'tab-status-loading', dimColor: true }, '  Loading status…')]
+  }
+  const worktree = context.worktree
+  if (!worktree) {
+    return [h(Text, { key: 'tab-status-empty', dimColor: true }, '  Status unavailable')]
+  }
+  const colorOf = (state: 'staged' | 'unstaged' | 'untracked'): string | undefined => {
+    if (theme.noColor) return undefined
+    if (state === 'staged') return theme.colors.warning
+    if (state === 'unstaged') return theme.colors.danger
+    return theme.colors.muted
+  }
+  const summaryRow = (count: number, label: string, key: string, kind: 'staged' | 'unstaged' | 'untracked') =>
+    h(Text, { key }, '  ', h(Text, { color: colorOf(kind), bold: count > 0 }, `${count} ${label}`))
+  const fileRows = worktree.files.slice(0, 12).map((file, index) => {
+    const codes = `${file.indexStatus}${file.worktreeStatus}`
+    return h(Text, {
+      key: `tab-status-file-${index}`,
+      color: colorOf(file.state),
+    }, truncate(`  ${codes} ${file.path}`, width - 4))
+  })
+  return [
+    summaryRow(worktree.stagedCount, 'staged', 'tab-status-staged', 'staged'),
+    summaryRow(worktree.unstagedCount, 'unstaged', 'tab-status-unstaged', 'unstaged'),
+    summaryRow(worktree.untrackedCount, 'untracked', 'tab-status-untracked', 'untracked'),
+    ...(fileRows.length
+      ? [h(Text, { key: 'tab-status-spacer' }, ''), ...fileRows]
+      : []),
+  ]
 }
 
 function renderMainPanel(
@@ -1536,6 +1981,8 @@ function renderMainPanel(
   filePreviewLoading: boolean,
   commitDiffHunkOffsets: number[] | undefined,
   selectedDetailFile: GitCommitDetail['files'][number] | undefined,
+  stashDiffLines: string[] | undefined,
+  stashDiffLoading: boolean,
   bodyRows: number,
   width: number,
   theme: LogInkTheme,
@@ -1561,6 +2008,8 @@ function renderMainPanel(
       filePreviewLoading,
       commitDiffHunkOffsets,
       selectedDetailFile,
+      stashDiffLines,
+      stashDiffLoading,
       bodyRows,
       width,
       theme
@@ -1581,6 +2030,10 @@ function renderMainPanel(
 
   if (state.activeView === 'stash') {
     return renderStashSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
+  if (state.activeView === 'worktrees') {
+    return renderWorktreesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   return renderHistoryPanel(
@@ -1904,17 +2357,25 @@ function renderComposeSurface(
       dimColor: line === '<empty>',
     }, `  ${line}${bodyCursor && isLast ? bodyCursor : ''}`)
   }),
-  h(Text, undefined, ''),
+  // Loading indicator + post-action message belong inline with the draft
+  // (they describe what just happened to the fields above). The state-
+  // line ("Editing — Enter switches summary↔body…" / "Press e to edit
+  // …") is footer-style guidance and now sits at the very bottom of the
+  // pane so it doesn't visually separate the body from any
+  // result/details.
   ...(compose.loading
-    ? [h(Text, {
-      key: 'compose-loading',
-      bold: true,
-      color: theme.noColor ? undefined : theme.colors.accent,
-    }, theme.ascii
-      ? '[...] Generating AI commit draft (this can take a moment)'
-      : '⏳ Generating AI commit draft… (this can take a moment)')]
-    : [h(Text, { dimColor: true }, stateLine)]),
-  ...(compose.message ? [h(Text, { key: 'compose-msg' }, truncate(compose.message, 140))] : []),
+    ? [
+      h(Text, undefined, ''),
+      h(Text, {
+        key: 'compose-loading',
+        bold: true,
+        color: theme.noColor ? undefined : theme.colors.accent,
+      }, theme.ascii
+        ? '[...] Generating AI commit draft (this can take a moment)'
+        : '⏳ Generating AI commit draft… (this can take a moment)'),
+    ]
+    : []),
+  ...(compose.message ? [h(Text, undefined, ''), h(Text, { key: 'compose-msg' }, truncate(compose.message, 140))] : []),
   ...(compose.details || []).map((line, index) => h(Text, {
     key: `compose-detail-${index}`,
     dimColor: true,
@@ -1924,7 +2385,9 @@ function renderComposeSurface(
       h(Text, { key: 'compose-no-staged-spacer' }, ''),
       h(Text, { key: 'compose-no-staged', dimColor: true }, truncate(noStagedHint, 140)),
     ]
-    : []))
+    : []),
+  h(Box, { flexGrow: 1 }),
+  h(Text, { key: 'compose-stateline', dimColor: true }, truncate(stateLine, width - 4)))
 }
 
 function matchesPromotedFilter(haystacks: string[], filter: string): boolean {
@@ -2135,6 +2598,70 @@ function renderStashSurface(
   ...lines)
 }
 
+function renderWorktreesSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const loading = isLogInkContextKeyLoading(contextStatus, 'worktreeList')
+  const allWorktrees = context.worktreeList?.worktrees || []
+  const worktrees = state.filter
+    ? allWorktrees.filter((entry) =>
+      matchesPromotedFilter([entry.path, entry.branch || '', entry.head || ''], state.filter)
+    )
+    : allWorktrees
+  const selected = Math.max(0, Math.min(state.selectedWorktreeListIndex, Math.max(0, worktrees.length - 1)))
+  const listRows = Math.max(4, bodyRows - 4)
+  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const visible = worktrees.slice(startIndex, startIndex + listRows)
+  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
+  const headerRight = loading
+    ? 'loading worktrees'
+    : `${worktrees.length}/${allWorktrees.length} worktrees${filterLabel}`
+  const lines: ReactTypes.ReactNode[] = loading
+    ? [h(Text, { key: 'worktrees-loading', dimColor: true }, formatLogInkLoading({ resource: 'worktrees' }))]
+    : worktrees.length === 0
+      ? [h(Text, { key: 'worktrees-empty', dimColor: true }, 'No linked worktrees.')]
+      : visible.map((entry, offset) => {
+        const index = startIndex + offset
+        const isSelected = index === selected
+        const cursor = isSelected ? '>' : ' '
+        const marker = entry.current ? '*' : ' '
+        const branchLabel = entry.branch ? entry.branch : entry.head || '<detached>'
+        const stateLabel = entry.dirty ? 'dirty' : 'clean'
+        return h(Text, {
+          key: `worktree-${index}`,
+          bold: isSelected,
+          dimColor: !isSelected && !entry.current,
+        }, truncate(
+          `${cursor} ${marker} ${branchLabel.padEnd(28)} ${stateLabel.padEnd(6)} ${entry.path}`,
+          width - 4
+        ))
+      })
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexShrink: 0,
+    paddingX: 1,
+    width,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Worktrees', focused)),
+    h(Text, { dimColor: true }, headerRight)
+  ),
+  ...renderPromotedFilterAffordance(h, Text, state, theme),
+  ...lines)
+}
+
 /**
  * Filter input cursor for the promoted views (branches/tags/stash).
  * History already shows the same `filter: foo_` affordance in its header
@@ -2173,6 +2700,8 @@ function renderDiffSurface(
   filePreviewLoading: boolean,
   commitDiffHunkOffsets: number[] | undefined,
   selectedDetailFile: GitCommitDetail['files'][number] | undefined,
+  stashDiffLines: string[] | undefined,
+  stashDiffLoading: boolean,
   bodyRows: number,
   width: number,
   theme: LogInkTheme
@@ -2182,6 +2711,70 @@ function renderDiffSurface(
   const worktree = context.worktree
   const worktreeFile = worktree?.files[state.selectedWorktreeFileIndex]
   const visibleRows = Math.max(4, bodyRows - 4)
+
+  // Stash diff branch: when the user opened the diff via Enter on a stash
+  // row, render the stash patch text directly. The patch is parsed into
+  // per-file sections so `]` / `[` jumps between files and `c`
+  // cherry-picks the file at the cursor.
+  if (state.diffSource === 'stash') {
+    const lines = stashDiffLines || []
+    const visibleLines = lines.slice(
+      state.diffPreviewOffset,
+      state.diffPreviewOffset + visibleRows
+    )
+    const stashFiles = parseStashDiffFiles(lines)
+    const fileCount = stashFiles.length
+    const currentFile = (() => {
+      if (fileCount === 0) return undefined
+      let current = stashFiles[0]
+      for (const file of stashFiles) {
+        if (file.startLine <= state.diffPreviewOffset) {
+          current = file
+        } else {
+          break
+        }
+      }
+      return current
+    })()
+    const currentFileIndex = currentFile
+      ? Math.max(0, stashFiles.findIndex((file) => file.startLine === currentFile.startLine))
+      : -1
+    const headerLines: string[] = stashDiffLoading
+      ? [`Loading diff for ${state.stashDiffRef || 'stash'}...`]
+      : lines.length
+        ? [
+          `Stash: ${state.stashDiffRef || ''}`,
+          fileCount > 0 && currentFile
+            ? `File ${currentFileIndex + 1}/${fileCount}: ${currentFile.path}`
+            : 'No files in this stash.',
+          `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
+          '',
+        ]
+        : ['No diff to display for this stash.']
+
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexShrink: 0,
+      paddingX: 1,
+      width,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle('Stash diff', focused)),
+      h(Text, { dimColor: true }, state.stashDiffRef || 'no stash')
+    ),
+    ...headerLines.map((line, index) => h(Text, {
+      key: `stash-diff-header-${index}`,
+      dimColor: index > 0,
+    }, truncate(line, width - 4))),
+    ...(stashDiffLoading || !lines.length
+      ? []
+      : visibleLines.map((line, index) => h(Text, {
+        key: `stash-diff-line-${state.diffPreviewOffset + index}`,
+        ...diffLineProps(line, theme),
+      }, truncate(line, width - 4)))))
+  }
 
   // diffSource disambiguates: 'commit' was set when the user opened the
   // diff via history → Enter (read-only commit-diff explore), 'worktree'
@@ -2314,6 +2907,10 @@ function renderDetailPanel(
 
   if (state.showCommandPalette) {
     return renderCommandPalette(h, components, state, width, theme, focused)
+  }
+
+  if (state.inputPrompt) {
+    return renderInputPromptPanel(h, components, state, width, theme, focused)
   }
 
   if (state.pendingConfirmationId || state.pendingMutationConfirmation) {
@@ -2889,17 +3486,56 @@ function renderCommitPanel(
     key: `commit-header-${index}`,
     dimColor: index < 2 || line.startsWith('  ') || line === '<empty>',
   }, truncate(line, width - 4))),
-  loading
-    ? h(Text, {
+  // Loading indicator + commit result/details stay inline with the body
+  // (they describe what just happened to the fields above). The action
+  // hint ("e edit | c commit | I AI draft") moves to the bottom of the
+  // pane to read as footer guidance, matching the compose surface.
+  ...(loading
+    ? [h(Text, {
       key: 'commit-loading',
       bold: true,
       color: theme.noColor ? undefined : theme.colors.accent,
-    }, truncate(theme.ascii ? '[...] Generating AI draft' : '⏳ Generating AI draft…', width - 4))
-    : h(Text, { key: 'commit-state', dimColor: true }, truncate(stateLine, width - 4)),
+    }, truncate(theme.ascii ? '[...] Generating AI draft' : '⏳ Generating AI draft…', width - 4))]
+    : []),
   ...trailerLines.map((line, index) => h(Text, {
     key: `commit-trailer-${index}`,
     dimColor: line.startsWith('  '),
-  }, truncate(line, width - 4))))
+  }, truncate(line, width - 4))),
+  h(Box, { flexGrow: 1 }),
+  loading
+    ? null
+    : h(Text, { key: 'commit-state', dimColor: true }, truncate(stateLine, width - 4)))
+}
+
+function renderInputPromptPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const prompt = state.inputPrompt
+  if (!prompt) {
+    return h(Box, { width })
+  }
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle('Prompt', focused)),
+  h(Text, { dimColor: true }, truncate(prompt.label, width - 4)),
+  h(Text, undefined, ''),
+  h(Text, {
+    bold: true,
+    color: theme.noColor ? undefined : theme.colors.accent,
+  }, truncate(`${prompt.value}_`, width - 4)),
+  h(Text, undefined, ''),
+  h(Text, { dimColor: true }, 'Enter to submit · Esc to cancel · Ctrl+u to clear'))
 }
 
 function renderConfirmationPanel(
@@ -3164,6 +3800,7 @@ function renderFooter(
   const { Box, Text } = components
   const hints = getLogInkFooterHints({
     activeView: state.activeView,
+    diffSource: state.diffSource,
     filterMode: state.filterMode,
     focus: state.focus,
     pendingKey: state.pendingKey,

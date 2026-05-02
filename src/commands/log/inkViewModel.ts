@@ -18,7 +18,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
@@ -28,7 +28,7 @@ export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discar
  * input handlers off this field so a dirty worktree can't bleed staging
  * UI into a commit-diff view.
  */
-export type LogInkDiffSource = 'commit' | 'worktree'
+export type LogInkDiffSource = 'commit' | 'worktree' | 'stash'
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
@@ -60,6 +60,7 @@ export type LogInkState = {
   selectedBranchIndex: number
   selectedTagIndex: number
   selectedStashIndex: number
+  selectedWorktreeListIndex: number
   /**
    * Sort modes for the promoted views (P4.2). `s` cycles through the
    * available modes; the surface header shows a `▼ <mode>` indicator.
@@ -86,10 +87,30 @@ export type LogInkState = {
   paletteRecent: string[]
   workflowActionId?: string
   pendingConfirmationId?: string
+  /**
+   * Optional payload carried into the y-confirm path. When the user
+   * answers `y`, the confirmation handler forwards this value to the
+   * runtime workflow runner so workflows that need a captured target
+   * (selected file path, sha+path, etc.) can resolve it without re-
+   * walking state.
+   */
+  pendingConfirmationPayload?: string
   pendingMutationConfirmation?: LogInkMutationConfirmation
   pendingKey?: string
   focus: LogInkFocus
   sidebarTab: LogInkSidebarTab
+  /**
+   * The user's last *explicit* sidebar tab choice. Only changes when
+   * the user picks a tab themselves (number-key, [/], or palette). The
+   * auto-switch in `withPushedView` (compose / status views) updates
+   * `sidebarTab` for display only — `userSidebarTab` stays put so:
+   *
+   *  - Per-repo persistence (#21) only writes when the user actually
+   *    changes the tab, never on incidental view pushes.
+   *  - Popping back from compose / status restores the tab the user
+   *    had open before they opened those surfaces.
+   */
+  userSidebarTab: LogInkSidebarTab
   statusMessage?: string
   /**
    * Set by `navigateOpenDiffForCommit` / `navigateOpenDiffForWorktreeFile`
@@ -97,6 +118,12 @@ export type LogInkState = {
    * are selectable. Cleared when the diff view is popped or replaced.
    */
   diffSource?: LogInkDiffSource
+  /**
+   * Stash ref (e.g. `stash@{0}`) currently being inspected in the diff
+   * view. Set by `navigateOpenDiffForStash`; cleared when the diff view
+   * is popped or replaced.
+   */
+  stashDiffRef?: string
   /**
    * When true, the cursor sits on the synthetic "(+) new commit" row
    * that the history panel renders above the real commits whenever the
@@ -110,6 +137,26 @@ export type LogInkState = {
    * responsible for hiding the synthetic row when the worktree is clean.
    */
   pendingCommitFocused?: boolean
+  /**
+   * Active text-input prompt overlay. Drives create-branch / create-tag /
+   * etc. flows where we need a free-text value before running an action.
+   * When set, all keystrokes route into the prompt until Enter (submit)
+   * or Esc (cancel) is pressed.
+   */
+  inputPrompt?: LogInkInputPromptState
+}
+
+export type LogInkInputPromptKind =
+  | 'create-branch'
+  | 'create-tag'
+  | 'rename-branch'
+  | 'set-upstream'
+  | 'create-stash'
+
+export type LogInkInputPromptState = {
+  kind: LogInkInputPromptKind
+  label: string
+  value: string
 }
 
 export type LogInkAction =
@@ -127,6 +174,7 @@ export type LogInkAction =
   | { type: 'moveBranch'; delta: number; count: number }
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
+  | { type: 'moveWorktreeListEntry'; delta: number; count: number }
   | { type: 'moveToBottom' }
   | { type: 'moveToTop' }
   | { type: 'nextSidebarTab' }
@@ -142,6 +190,7 @@ export type LogInkAction =
   | { type: 'navigateHome' }
   | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
+  | { type: 'navigateOpenDiffForStash'; ref: string; stashIndex?: number }
   | { type: 'navigateOpenComposeForFile'; fileIndex: number }
   | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
   | { type: 'jumpCommitDiffHunk'; delta: number; hunkOffsets: number[] }
@@ -150,9 +199,10 @@ export type LogInkAction =
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
+  | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
   | { type: 'setStatus'; value?: string }
   | { type: 'setWorkflowAction'; value?: string }
-  | { type: 'setPendingConfirmation'; value?: string }
+  | { type: 'setPendingConfirmation'; value?: string; payload?: string }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
   | { type: 'appendPaletteFilter'; value: string }
   | { type: 'backspacePaletteFilter' }
@@ -165,6 +215,11 @@ export type LogInkAction =
   | { type: 'toggleCommandPalette' }
   | { type: 'cycleBranchSort' }
   | { type: 'cycleTagSort' }
+  | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string }
+  | { type: 'appendInputPrompt'; value: string }
+  | { type: 'backspaceInputPrompt' }
+  | { type: 'clearInputPromptText' }
+  | { type: 'closeInputPrompt' }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -295,9 +350,19 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     ...state,
     activeView: value,
     viewStack,
+    // The compose + status views' right detail panels already show
+    // worktree info, so keeping the left sidebar on the Status tab
+    // duplicates that information. Auto-switch to Branches when entering
+    // either view; the user can swap back with [/] if they want.
+    //
+    // We update only the rendered `sidebarTab` here, never
+    // `userSidebarTab`, so this auto-switch is invisible to per-repo
+    // persistence and pop-view restores the previous tab.
+    sidebarTab: value === 'compose' || value === 'status' ? 'branches' : state.sidebarTab,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
+    stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
@@ -314,9 +379,14 @@ function withPoppedView(state: LogInkState): LogInkState {
     ...state,
     activeView: next,
     viewStack,
+    // Restore the user's last explicit tab choice so popping out of
+    // compose / status (which auto-switch the sidebar to Branches)
+    // returns the user to whatever they actually had open before.
+    sidebarTab: state.userSidebarTab,
     worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: next === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: next === 'diff' ? state.diffSource : undefined,
+    stashDiffRef: next === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: next === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
@@ -335,6 +405,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
+    stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     pendingKey: undefined,
   }
@@ -447,6 +518,7 @@ export function createLogInkState(
     selectedBranchIndex: 0,
     selectedTagIndex: 0,
     selectedStashIndex: 0,
+    selectedWorktreeListIndex: 0,
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
     paletteFilter: '',
@@ -462,10 +534,12 @@ export function createLogInkState(
     showCommandPalette: false,
     workflowActionId: undefined,
     pendingConfirmationId: undefined,
+    pendingConfirmationPayload: undefined,
     pendingMutationConfirmation: undefined,
     pendingKey: undefined,
     focus: 'commits',
     sidebarTab: 'status',
+    userSidebarTab: 'status',
   }
 }
 
@@ -577,6 +651,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedStashIndex: clampIndex(state.selectedStashIndex + action.delta, action.count),
         pendingKey: undefined,
       }
+    case 'moveWorktreeListEntry':
+      return {
+        ...state,
+        selectedWorktreeListIndex: clampIndex(state.selectedWorktreeListIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
     case 'cycleBranchSort':
       return {
         ...state,
@@ -593,6 +673,30 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedTagIndex: 0,
         pendingKey: undefined,
       }
+    case 'openInputPrompt':
+      return {
+        ...state,
+        inputPrompt: {
+          kind: action.kind,
+          label: action.label,
+          value: action.initial || '',
+        },
+        pendingKey: undefined,
+      }
+    case 'appendInputPrompt':
+      return state.inputPrompt
+        ? { ...state, inputPrompt: { ...state.inputPrompt, value: `${state.inputPrompt.value}${action.value}` } }
+        : state
+    case 'backspaceInputPrompt':
+      return state.inputPrompt
+        ? { ...state, inputPrompt: { ...state.inputPrompt, value: state.inputPrompt.value.slice(0, -1) } }
+        : state
+    case 'clearInputPromptText':
+      return state.inputPrompt
+        ? { ...state, inputPrompt: { ...state.inputPrompt, value: '' } }
+        : state
+    case 'closeInputPrompt':
+      return { ...state, inputPrompt: undefined, pendingKey: undefined }
     case 'moveToBottom':
       return {
         ...state,
@@ -611,12 +715,15 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingCommitFocused: false,
         pendingKey: undefined,
       }
-    case 'nextSidebarTab':
+    case 'nextSidebarTab': {
+      const next = cycleValue(SIDEBAR_TABS, state.sidebarTab, 1)
       return {
         ...state,
-        sidebarTab: cycleValue(SIDEBAR_TABS, state.sidebarTab, 1),
+        sidebarTab: next,
+        userSidebarTab: next,
         pendingKey: undefined,
       }
+    }
     case 'page':
       return {
         ...state,
@@ -665,12 +772,15 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ),
         pendingKey: undefined,
       }
-    case 'previousSidebarTab':
+    case 'previousSidebarTab': {
+      const previous = cycleValue(SIDEBAR_TABS, state.sidebarTab, -1)
       return {
         ...state,
-        sidebarTab: cycleValue(SIDEBAR_TABS, state.sidebarTab, -1),
+        sidebarTab: previous,
+        userSidebarTab: previous,
         pendingKey: undefined,
       }
+    }
     case 'setFilter':
       return withFilter(state, action.value, action.promotedSelections)
     case 'setActiveView':
@@ -718,6 +828,21 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         diffSource: 'worktree',
       }
     }
+    case 'navigateOpenDiffForStash': {
+      const next = withPushedView(state, 'diff')
+      return {
+        ...next,
+        diffSource: 'stash',
+        stashDiffRef: action.ref,
+        selectedStashIndex: Math.max(0, action.stashIndex ?? state.selectedStashIndex),
+        // Reset the diff scroll offset so the stash patch always opens
+        // at the top, mirroring `navigateOpenDiffForCommit`. Without
+        // this, opening a stash inherits whatever offset the previous
+        // diff had, landing the user mid-patch.
+        diffPreviewOffset: 0,
+        worktreeDiffOffset: 0,
+      }
+    }
     case 'navigateOpenComposeForFile': {
       const next = withPushedView(state, 'status')
       return {
@@ -742,7 +867,20 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         sidebarTab: action.value,
+        userSidebarTab: action.value,
         focus: 'sidebar',
+        pendingKey: undefined,
+      }
+    case 'restoreSidebarTab':
+      // Mount-time restore from per-repo persistence (#21). Updates the
+      // tab + the user-choice mirror without forcing focus into the
+      // sidebar — that's the focus-steal regression flagged in the PR
+      // review. Users land on commits as usual; their saved tab is
+      // visible in the sidebar but doesn't grab the cursor.
+      return {
+        ...state,
+        sidebarTab: action.value,
+        userSidebarTab: action.value,
         pendingKey: undefined,
       }
     case 'setStatus':
@@ -756,6 +894,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         workflowActionId: action.value,
         pendingConfirmationId: undefined,
+        pendingConfirmationPayload: undefined,
         pendingMutationConfirmation: undefined,
         pendingKey: undefined,
       }
@@ -763,6 +902,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         pendingConfirmationId: action.value,
+        pendingConfirmationPayload: action.value ? action.payload : undefined,
         workflowActionId: action.value ? undefined : state.workflowActionId,
         pendingMutationConfirmation: action.value ? undefined : state.pendingMutationConfirmation,
         pendingKey: undefined,
@@ -772,6 +912,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         pendingMutationConfirmation: action.value,
         pendingConfirmationId: action.value ? undefined : state.pendingConfirmationId,
+        pendingConfirmationPayload: action.value ? undefined : state.pendingConfirmationPayload,
         workflowActionId: action.value ? undefined : state.workflowActionId,
         pendingKey: undefined,
       }
@@ -894,6 +1035,16 @@ export function intentOpenDiffForWorktreeFile(
   }
 
   return { type: 'navigateOpenDiffForWorktreeFile', fileIndex: idx }
+}
+
+export function intentOpenDiffForStash(
+  ref: string,
+  stashIndex?: number
+): LogInkAction | null {
+  if (!ref) {
+    return null
+  }
+  return { type: 'navigateOpenDiffForStash', ref, stashIndex }
 }
 
 export function intentOpenComposeForFile(

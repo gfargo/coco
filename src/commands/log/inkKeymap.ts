@@ -23,6 +23,7 @@ export type LogInkCommandId =
   | 'navigateDiff'
   | 'navigateHome'
   | 'navigateStash'
+  | 'navigateWorktrees'
   | 'navigateStatus'
   | 'navigateTags'
   | 'nextHunk'
@@ -232,6 +233,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'navigateWorktrees',
+    keys: ['gw'],
+    label: 'worktrees',
+    description: 'Push the linked worktrees view.',
+    contexts: ['normal'],
+  },
+  {
     id: 'navigateBack',
     keys: ['<', 'esc'],
     label: 'back',
@@ -312,6 +320,9 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
 
 export type GetLogInkFooterHintsOptions = {
   activeView?: LogInkView
+  /** Used to differentiate the diff-view hints between commit / worktree
+   *  / stash sources without reaching into runtime state. */
+  diffSource?: 'commit' | 'worktree' | 'stash'
   filterMode: boolean
   focus: LogInkFocus
   showHelp: boolean
@@ -383,6 +394,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateBranches',
   'navigateTags',
   'navigateStash',
+  'navigateWorktrees',
   'navigateBack',
 ]
 
@@ -474,42 +486,63 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   }
 
   if (options.activeView === 'diff') {
+    if (options.diffSource === 'stash') {
+      return {
+        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'o edit', 'esc back'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
+    if (options.diffSource === 'commit') {
+      // Commit-diff explore: read-only diff, but `c` cherry-picks the
+      // cursored file from the commit into the worktree.
+      return {
+        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', 'esc back'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
     return {
-      contextual: ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files'],
+      contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'esc files'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'compose') {
     return {
-      contextual: ['e edit', 'tab field', 'c commit', 'I AI draft', 'esc back'],
+      contextual: ['e edit', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'branches') {
     return {
-      contextual: ['↑/↓ branches', 's sort', 'D delete', 'X checkout', 'enter diff'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'tags') {
     return {
-      contextual: ['↑/↓ tags', 's sort', 'T create', 'X push', 'esc back'],
+      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'stash') {
     return {
-      contextual: ['↑/↓ stashes', 'A apply', 'D drop', 'esc back'],
+      contextual: ['↑/↓ stashes', 'enter diff', 'a apply', 'p pop', 'X drop'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'worktrees') {
+    return {
+      contextual: ['↑/↓ worktrees', 'W remove', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   return {
-    contextual: ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next'],
+    contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', '/ search', 'gg/G top/bottom'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }

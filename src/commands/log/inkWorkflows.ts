@@ -138,6 +138,85 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // Per-view-only: scoped to the history view in inkInput so `c`
+      // doesn't fire elsewhere. Empty key keeps it palette-discoverable
+      // without registering a global hotkey.
+      id: 'cherry-pick-commit',
+      key: '',
+      label: 'Cherry-pick commit',
+      description: 'Apply the selected commit on top of the current branch (after confirmation).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // Per-view-only: scoped to the commit-diff explore in inkInput.
+      // Routed through the y-confirm path because `git checkout <sha> --
+      // <path>` overwrites the worktree file unconditionally and we
+      // want the user to acknowledge that before discarding any local
+      // edits to the path.
+      id: 'checkout-file-from-commit',
+      key: '',
+      label: 'Cherry-pick file from commit',
+      description: 'Materialize the selected file from this commit into the working tree (after confirmation).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // Per-view-only: scoped to the stash-diff explorer in inkInput.
+      // Same overwrite rationale as `checkout-file-from-commit` — the
+      // y-confirm path is the dirty-tree warning.
+      id: 'checkout-file-from-stash',
+      key: '',
+      label: 'Cherry-pick file from stash',
+      description: 'Materialize the selected file from this stash into the working tree (after confirmation).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'open-pr',
+      key: 'O',
+      label: 'Open PR / repo',
+      description: 'Open the current branch\'s pull request in the browser, or the repo page if there\'s no PR.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'fetch-remotes',
+      key: 'F',
+      label: 'Fetch all remotes',
+      description: 'Run `git fetch --all --prune` and silently refresh context.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'pull-current-branch',
+      key: 'U',
+      label: 'Pull current branch',
+      description: 'Run `git pull --ff-only` against the current branch.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'push-current-branch',
+      key: 'P',
+      label: 'Push current branch',
+      description: 'Run `git push` for the current branch.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      // Per-view-only — the inkInput handler scopes this to the tags
+      // surface so we don't expose `R` as a remote-delete from elsewhere.
+      // The empty `key` keeps the workflow palette-discoverable but does
+      // not register a global hotkey.
+      id: 'delete-remote-tag',
+      key: '',
+      label: 'Delete remote tag',
+      description: 'Push :tag to origin to delete the selected tag remotely after confirmation.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'stage-file',
       key: 'space',
       label: 'Stage or unstage file',

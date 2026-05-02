@@ -39,4 +39,24 @@ describe('log Ink layout', () => {
     expect(getLogInkLayout({ columns: 79, rows: 24 }).tooSmall).toBe(true)
     expect(getLogInkLayout({ columns: 80, rows: 23 }).tooSmall).toBe(true)
   })
+
+  it('grows the sidebar when sidebarFocused is set', () => {
+    const collapsed = getLogInkLayout({ columns: 120, rows: 40 })
+    const expanded = getLogInkLayout({ columns: 120, rows: 40, sidebarFocused: true })
+
+    expect(expanded.sidebarWidth).toBeGreaterThan(collapsed.sidebarWidth)
+    expect(expanded.sidebarWidth).toBe(43)
+    expect(expanded.detailWidth).toBe(collapsed.detailWidth)
+    // Main panel shrinks to absorb the sidebar growth so the three
+    // panels still tile flush across the terminal.
+    expect(expanded.mainPanelWidth).toBe(120 - expanded.sidebarWidth - expanded.detailWidth)
+  })
+
+  it('clamps the focused sidebar to its 32–50 cell range', () => {
+    const narrow = getLogInkLayout({ columns: 80, rows: 24, sidebarFocused: true })
+    const wide = getLogInkLayout({ columns: 200, rows: 60, sidebarFocused: true })
+
+    expect(narrow.sidebarWidth).toBe(32)
+    expect(wide.sidebarWidth).toBe(50)
+  })
 })

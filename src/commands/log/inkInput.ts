@@ -34,7 +34,8 @@ export type LogInkInputEvent =
   | { type: 'revertSelectedHunk' }
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
-  | { type: 'runWorkflowAction'; id: string }
+  | { type: 'runWorkflowAction'; id: string; payload?: string }
+  | { type: 'openFileInEditor'; path: string }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -51,6 +52,35 @@ export type LogInkInputContext = {
   branchCount?: number
   tagCount?: number
   stashCount?: number
+  worktreeListCount?: number
+  /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
+  stashSelectedRef?: string
+  /**
+   * Per-file `diff --git` line offsets inside the active stash diff.
+   * Used by `]` / `[` to jump to next / previous file within a stash
+   * patch.
+   */
+  stashDiffFileOffsets?: number[]
+  /**
+   * Path of the file currently under the diff-view cursor in a stash
+   * patch. Used by `c` (cherry-pick) to know which path to materialize.
+   */
+  stashDiffSelectedPath?: string
+  /**
+   * Path of the cursored file in the worktree (status / worktree diff
+   * views). Used by `o` (open in $EDITOR).
+   */
+  worktreeSelectedPath?: string
+  /**
+   * Path of the cursored file in a commit-diff explore. Used by `c`
+   * (cherry-pick file from commit).
+   */
+  commitDiffSelectedPath?: string
+  /**
+   * Hash of the commit being explored — pairs with commitDiffSelectedPath
+   * so the cherry-pick handler knows which sha to checkout from.
+   */
+  commitDiffSelectedSha?: string
   /**
    * True when the worktree has any staged, unstaged, or untracked changes.
    * Drives the synthetic "(+) new commit" row at the top of the history
@@ -80,10 +110,12 @@ export function getLogInkPaletteExecuteEvents(
     if (command.requiresConfirmation) {
       return [action({ type: 'setPendingConfirmation', value: command.id })]
     }
-    return [
-      action({ type: 'setWorkflowAction', value: command.id }),
-      action({ type: 'setStatus', value: `${command.label} selected` }),
-    ]
+    // Non-confirm workflows are dispatched directly through the runtime
+    // workflow runner — same path the keyboard takes. Previously this
+    // emitted `setWorkflowAction` only, which set state but never fired
+    // the action because nothing in the runtime consumes
+    // `workflowActionId`.
+    return [{ type: 'runWorkflowAction', id: command.id }]
   }
 
   // Binding-derived commands. Map each LogInkCommandId to the same events
@@ -146,6 +178,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'tags' })]
     case 'navigateStash':
       return [action({ type: 'pushView', value: 'stash' })]
+    case 'navigateWorktrees':
+      return [action({ type: 'pushView', value: 'worktrees' })]
     case 'navigateBack':
       return [action({ type: 'popView' })]
     case 'openSelected': {
@@ -253,6 +287,40 @@ export function getLogInkInputEvents(
     return [{ type: 'exit' }]
   }
 
+  // Input prompt is the most modal — when active, every keystroke routes
+  // into the prompt until Enter (submit) or Esc (cancel). Sits above the
+  // filter/confirmation/compose handlers so a prompt opened from inside
+  // any of those still captures focus cleanly.
+  if (state.inputPrompt) {
+    if (key.escape) {
+      return [
+        action({ type: 'closeInputPrompt' }),
+        action({ type: 'setStatus', value: 'cancelled' }),
+      ]
+    }
+    if (key.return) {
+      const value = state.inputPrompt.value.trim()
+      if (!value) {
+        return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel' })]
+      }
+      const id = state.inputPrompt.kind
+      return [
+        { type: 'runWorkflowAction', id, payload: value },
+        action({ type: 'closeInputPrompt' }),
+      ]
+    }
+    if (key.backspace || key.delete) {
+      return [action({ type: 'backspaceInputPrompt' })]
+    }
+    if (key.ctrl && inputValue === 'u') {
+      return [action({ type: 'clearInputPromptText' })]
+    }
+    if (inputValue && !key.ctrl && !key.meta) {
+      return [action({ type: 'appendInputPrompt', value: inputValue })]
+    }
+    return []
+  }
+
   if (state.commitCompose.editing) {
     if (key.escape) {
       return [action({ type: 'commitCompose', action: { type: 'setEditing', value: false } })]
@@ -336,7 +404,7 @@ export function getLogInkInputEvents(
       // selected item and run the right action function.
       if (workflowAction) {
         return [
-          { type: 'runWorkflowAction', id: workflowAction.id },
+          { type: 'runWorkflowAction', id: workflowAction.id, payload: state.pendingConfirmationPayload },
           action({ type: 'setPendingConfirmation', value: undefined }),
         ]
       }
@@ -518,6 +586,13 @@ export function getLogInkInputEvents(
     ]
   }
 
+  if (state.pendingKey === 'g' && inputValue === 'w') {
+    return [
+      action({ type: 'pushView', value: 'worktrees' }),
+      action({ type: 'setStatus', value: 'jumped to worktrees' }),
+    ]
+  }
+
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
       return [
@@ -579,6 +654,13 @@ export function getLogInkInputEvents(
         hunkOffsets: context.worktreeHunkOffsets,
       })]
     }
+    if (state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffFileOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: -1,
+        hunkOffsets: context.stashDiffFileOffsets,
+      })]
+    }
     if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
       return [action({
         type: 'jumpCommitDiffHunk',
@@ -595,6 +677,13 @@ export function getLogInkInputEvents(
         type: 'jumpWorktreeHunk',
         delta: 1,
         hunkOffsets: context.worktreeHunkOffsets,
+      })]
+    }
+    if (state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffFileOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: 1,
+        hunkOffsets: context.stashDiffFileOffsets,
       })]
     }
     if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
@@ -660,6 +749,10 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveStash', delta: -1, count: context.stashCount })]
     }
 
+    if (state.activeView === 'worktrees' && context.worktreeListCount) {
+      return [action({ type: 'moveWorktreeListEntry', delta: -1, count: context.worktreeListCount })]
+    }
+
     if (
       state.activeView === 'history' &&
       state.focus === 'commits' &&
@@ -720,6 +813,10 @@ export function getLogInkInputEvents(
 
     if (state.activeView === 'stash' && context.stashCount) {
       return [action({ type: 'moveStash', delta: 1, count: context.stashCount })]
+    }
+
+    if (state.activeView === 'worktrees' && context.worktreeListCount) {
+      return [action({ type: 'moveWorktreeListEntry', delta: 1, count: context.worktreeListCount })]
     }
 
     return [
@@ -840,10 +937,203 @@ export function getLogInkInputEvents(
     }
   }
 
-  if (key.return && state.activeView === 'status' && context.worktreeFileCount) {
+  // Enter on a sidebar tab drills into the corresponding promoted view
+  // (status / branches / tags / stash). Sits above the per-view Enter
+  // handlers so a sidebar-focused Enter never fires checkout-branch /
+  // navigateOpenDiffForCommit / etc. against the (hidden) selection in
+  // the active tab.
+  //
+  // The Enter also moves focus out of the sidebar into the newly opened
+  // list — otherwise ↑/↓ keep cycling sidebar tabs instead of navigating
+  // inside the just-opened view, which made the drill-in feel half-done.
+  if (key.return && state.focus === 'sidebar') {
+    const tabToView: Partial<Record<LogInkSidebarTab, 'status' | 'branches' | 'tags' | 'stash' | 'worktrees'>> = {
+      status: 'status',
+      branches: 'branches',
+      tags: 'tags',
+      stashes: 'stash',
+      worktrees: 'worktrees',
+    }
+    const target = tabToView[state.sidebarTab]
+    if (target) {
+      return [
+        action({ type: 'pushView', value: target }),
+        action({ type: 'setFocus', value: 'commits' }),
+      ]
+    }
+    return [action({ type: 'setStatus', value: 'no detail view for this tab' })]
+  }
+
+  if (key.return && state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
     return [action({
       type: 'navigateOpenDiffForWorktreeFile',
       fileIndex: state.selectedWorktreeFileIndex,
+    })]
+  }
+
+  // Enter on a branch row checks the branch out. Non-destructive workflow
+  // action — no confirmation prompt.
+  if (key.return && state.activeView === 'branches' && state.focus === 'commits' && context.branchCount) {
+    return [{ type: 'runWorkflowAction', id: 'checkout-branch' }]
+  }
+
+  // `+` opens a create-branch / create-tag prompt depending on context.
+  // Works from either the matching promoted view (active branches /
+  // tags surface) or from the sidebar when the corresponding tab is
+  // active — saves a drill-in for "I just want to make a new branch".
+  const wantsCreateBranch = inputValue === '+' && (
+    state.activeView === 'branches' ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'branches')
+  )
+  const wantsCreateTag = inputValue === '+' && (
+    state.activeView === 'tags' ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'tags')
+  )
+  if (wantsCreateBranch) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-branch',
+      label: 'New branch name',
+    })]
+  }
+  if (wantsCreateTag) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-tag',
+      label: 'New tag name',
+    })]
+  }
+
+  // Per-view stash actions: `a` apply (keep the stash), `p` pop (apply
+  // then drop). Drop is the existing destructive `X` workflow which
+  // routes through the y-confirm path. Scoped to the stash view so the
+  // letters stay free elsewhere.
+  if (inputValue === 'a' && state.activeView === 'stash' && context.stashCount) {
+    return [{ type: 'runWorkflowAction', id: 'apply-stash' }]
+  }
+  if (inputValue === 'p' && state.activeView === 'stash' && context.stashCount) {
+    return [{ type: 'runWorkflowAction', id: 'pop-stash' }]
+  }
+  // Per-view tag action: `P` pushes the selected tag to origin. Letter
+  // is scoped to the tags surface so it doesn't collide with `p` for
+  // pop-stash. Note: this also takes precedence over the global
+  // push-current-branch workflow's `P` key.
+  if (inputValue === 'P' && state.activeView === 'tags' && context.tagCount) {
+    return [{ type: 'runWorkflowAction', id: 'push-tag' }]
+  }
+
+  // Per-view branches actions: `R` renames the selected branch, `u`
+  // sets its upstream. Both open the input prompt so the user can type
+  // the new value. Pre-fills are handled by the prompt's `initial`.
+  if (inputValue === 'R' && state.activeView === 'branches' && context.branchCount) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'rename-branch',
+      label: 'Rename branch to',
+    })]
+  }
+  if (inputValue === 'u' && state.activeView === 'branches' && context.branchCount) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'set-upstream',
+      label: 'Upstream ref (e.g. origin/main)',
+    })]
+  }
+
+  // Per-view tag action: `R` deletes the tag from the remote (after
+  // confirmation). Scoped per-view so this letter is free elsewhere
+  // (especially the `R` rename binding on the branches view).
+  if (inputValue === 'R' && state.activeView === 'tags' && context.tagCount) {
+    return [action({ type: 'setPendingConfirmation', value: 'delete-remote-tag' })]
+  }
+
+  // Global stash hotkey: `S` opens a stash-message prompt and
+  // `createStash` runs once submitted. Available everywhere there's
+  // not a more modal handler in front of it.
+  if (inputValue === 'S') {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-stash',
+      label: 'Stash message',
+    })]
+  }
+
+  // `o` opens the file under the cursor in $EDITOR. Available on the
+  // status surface (worktree files), the worktree diff (the file being
+  // diffed), and the stash diff (the file the cursor sits in inside
+  // the patch). The runtime suspends Ink, spawns the editor sync, then
+  // re-renders.
+  if (inputValue === 'o' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
+    return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
+  }
+  if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'worktree' && context.worktreeSelectedPath) {
+    return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
+  }
+  if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffSelectedPath) {
+    return [{ type: 'openFileInEditor', path: context.stashDiffSelectedPath }]
+  }
+
+  // `c` on a stash diff cherry-picks the file under the cursor —
+  // materializes that single path from the stash into the working tree
+  // (`git checkout <stashRef> -- <path>`). Routed through the y-confirm
+  // path because the checkout overwrites the worktree file
+  // unconditionally; the prompt is the user's chance to abort if they
+  // have unsaved edits at that path.
+  if (
+    inputValue === 'c' &&
+    state.activeView === 'diff' &&
+    state.diffSource === 'stash' &&
+    context.stashDiffSelectedPath &&
+    state.stashDiffRef
+  ) {
+    return [action({
+      type: 'setPendingConfirmation',
+      value: 'checkout-file-from-stash',
+      payload: context.stashDiffSelectedPath,
+    })]
+  }
+
+  // `c` on a commit-diff explore cherry-picks the cursored file from
+  // that historical commit — `git checkout <sha> -- <path>`. Same
+  // confirmation rationale as the stash variant. The payload encodes
+  // both the sha and the path so the runtime handler doesn't have to
+  // re-resolve either.
+  if (
+    inputValue === 'c' &&
+    state.activeView === 'diff' &&
+    state.diffSource === 'commit' &&
+    context.commitDiffSelectedPath &&
+    context.commitDiffSelectedSha
+  ) {
+    return [action({
+      type: 'setPendingConfirmation',
+      value: 'checkout-file-from-commit',
+      payload: `${context.commitDiffSelectedSha} ${context.commitDiffSelectedPath}`,
+    })]
+  }
+
+  // `c` on the history view cherry-picks the full selected commit on
+  // top of the current branch. Routed through the y-confirm flow since
+  // it can produce conflicts and is a real working-tree mutation.
+  if (
+    inputValue === 'c' &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    return [action({ type: 'setPendingConfirmation', value: 'cherry-pick-commit' })]
+  }
+
+  // Enter on a stash row pushes the diff view scoped to that stash.
+  // The runtime loads `git stash show -p <ref>` once the view is
+  // active. The stash ref is passed via the action so we don't need a
+  // context lookup here.
+  if (key.return && state.activeView === 'stash' && state.focus === 'commits' && context.stashCount && context.stashSelectedRef) {
+    return [action({
+      type: 'navigateOpenDiffForStash',
+      ref: context.stashSelectedRef,
+      stashIndex: state.selectedStashIndex,
     })]
   }
 
@@ -894,10 +1184,10 @@ export function getLogInkInputEvents(
   }
 
   if (workflowAction) {
-    return [
-      action({ type: 'setWorkflowAction', value: workflowAction.id }),
-      action({ type: 'setStatus', value: `${workflowAction.label} selected` }),
-    ]
+    // Non-destructive workflow — fire it directly via the runtime
+    // handler. The handler surfaces success/failure on the status line
+    // and silently refreshes context so the list updates.
+    return [{ type: 'runWorkflowAction', id: workflowAction.id }]
   }
 
   return []
