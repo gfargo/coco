@@ -753,8 +753,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
     let interval: NodeJS.Timeout | undefined
+    // Both timer callbacks are function literals (never strings) and the
+    // delays are our own `IDLE_TIPS_*_MS` constants — no caller-supplied
+    // data flows in, so the eval-injection vector that drives
+    // DevSkim DS172411 doesn't apply here.
+    // DevSkim: ignore DS172411
     const grace = setTimeout(() => {
       setIdleTipIndex(1)
+      // DevSkim: ignore DS172411
       interval = setInterval(() => setIdleTipIndex((tick) => tick + 1), IDLE_TIPS_INTERVAL_MS)
     }, IDLE_TIPS_GRACE_MS)
     return () => {
