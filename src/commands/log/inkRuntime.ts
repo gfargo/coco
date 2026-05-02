@@ -89,6 +89,12 @@ import {
 } from './inkLayout'
 import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from './inkTheme'
 import {
+  PreviewLine,
+  formatBranchPreview,
+  formatStashPreview,
+  formatTagPreview,
+} from './inkPreviewPane'
+import {
   formatLogInkBranchesEmpty,
   formatLogInkComposeEmpty,
   formatLogInkHistoryEmpty,
@@ -2011,6 +2017,19 @@ function renderDetailPanel(
     return renderComposeContextPanel(h, components, state, context, contextStatus, width, theme, focused)
   }
 
+  // Preview pane (P4.1) — fzf / yazi / lazygit style: branches, tags, and
+  // stash views each get a tailored summary of the selected entry instead
+  // of falling through to the (stale) history inspector.
+  if (state.activeView === 'branches') {
+    return renderBranchPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+  if (state.activeView === 'tags') {
+    return renderTagPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+  if (state.activeView === 'stash') {
+    return renderStashPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+
   return renderHistoryInspector(
     h, components, state, context, contextStatus, detail, loading,
     filePreview, filePreviewLoading, width, theme, focused
@@ -2294,6 +2313,113 @@ function renderCommitFileList(
       bold: isSelected,
     }, truncate(label, width - 4))
   })
+}
+
+function renderPreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  title: string,
+  lines: PreviewLine[],
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle(title, focused)),
+  ...lines.map((line, index) => {
+    const isHeading = line.emphasis === 'heading' && index > 0
+    return h(Text, {
+      key: `preview-${index}`,
+      bold: isHeading,
+      dimColor: line.emphasis === 'dim',
+    }, truncate(line.text, width - 4))
+  }))
+}
+
+function renderBranchPreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'branches')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Branch preview',
+      [{ text: formatLogInkLoading({ resource: 'branches' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.branches?.localBranches || []
+  const visible = state.filter
+    ? all.filter((branch) =>
+      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter))
+    : all
+  const index = Math.max(0, Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1)))
+  const branch = visible[index]
+  return renderPreviewPanel(h, { Box, Text }, 'Branch preview',
+    formatBranchPreview(branch), width, theme, focused)
+}
+
+function renderTagPreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'tags')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Tag preview',
+      [{ text: formatLogInkLoading({ resource: 'tags' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.tags?.tags || []
+  const visible = state.filter
+    ? all.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
+    : all
+  const index = Math.max(0, Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1)))
+  const tag = visible[index]
+  return renderPreviewPanel(h, { Box, Text }, 'Tag preview',
+    formatTagPreview(tag), width, theme, focused)
+}
+
+function renderStashPreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'stashes')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Stash preview',
+      [{ text: formatLogInkLoading({ resource: 'stashes' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.stashes?.stashes || []
+  const visible = state.filter
+    ? all.filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
+    : all
+  const index = Math.max(0, Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1)))
+  const stash = visible[index]
+  return renderPreviewPanel(h, { Box, Text }, 'Stash preview',
+    formatStashPreview(stash), width, theme, focused)
 }
 
 function renderCommitPanel(
