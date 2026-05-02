@@ -54,6 +54,17 @@ export type LogInkInputContext = {
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
   /**
+   * Per-file `diff --git` line offsets inside the active stash diff.
+   * Used by `]` / `[` to jump to next / previous file within a stash
+   * patch.
+   */
+  stashDiffFileOffsets?: number[]
+  /**
+   * Path of the file currently under the diff-view cursor in a stash
+   * patch. Used by `c` (cherry-pick) to know which path to materialize.
+   */
+  stashDiffSelectedPath?: string
+  /**
    * True when the worktree has any staged, unstaged, or untracked changes.
    * Drives the synthetic "(+) new commit" row at the top of the history
    * list — pressing up at `selectedIndex === 0` transitions onto it; the
@@ -615,6 +626,13 @@ export function getLogInkInputEvents(
         hunkOffsets: context.worktreeHunkOffsets,
       })]
     }
+    if (state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffFileOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: -1,
+        hunkOffsets: context.stashDiffFileOffsets,
+      })]
+    }
     if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
       return [action({
         type: 'jumpCommitDiffHunk',
@@ -631,6 +649,13 @@ export function getLogInkInputEvents(
         type: 'jumpWorktreeHunk',
         delta: 1,
         hunkOffsets: context.worktreeHunkOffsets,
+      })]
+    }
+    if (state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffFileOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: 1,
+        hunkOffsets: context.stashDiffFileOffsets,
       })]
     }
     if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
@@ -941,6 +966,24 @@ export function getLogInkInputEvents(
   // pop-stash.
   if (inputValue === 'P' && state.activeView === 'tags' && context.tagCount) {
     return [{ type: 'runWorkflowAction', id: 'push-tag' }]
+  }
+
+  // `c` on a stash diff cherry-picks the file under the cursor —
+  // materializes that single path from the stash into the working tree
+  // (`git checkout <stashRef> -- <path>`). Scoped to the stash diff
+  // surface so the letter is free elsewhere.
+  if (
+    inputValue === 'c' &&
+    state.activeView === 'diff' &&
+    state.diffSource === 'stash' &&
+    context.stashDiffSelectedPath &&
+    state.stashDiffRef
+  ) {
+    return [{
+      type: 'runWorkflowAction',
+      id: 'checkout-file-from-stash',
+      payload: context.stashDiffSelectedPath,
+    }]
   }
   // Enter on a stash row pushes the diff view scoped to that stash.
   // The runtime loads `git stash show -p <ref>` once the view is

@@ -137,11 +137,11 @@ import { GitOperationOverview, getGitOperationOverview } from './operationData'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
 import { checkoutBranch, createBranch, deleteBranch } from './branchActions'
 import { createLightweightTag, deleteLocalTag, pushTag } from './tagActions'
-import { applyStash, dropStash, popStash } from './stashActions'
+import { applyStash, checkoutFileFromStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
-import { StashOverview, getStashDiff, getStashOverview } from './stashData'
+import { StashOverview, getStashDiff, getStashOverview, parseStashDiffFiles } from './stashData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeOverview, getWorktreeOverview } from './statusData'
 import {
@@ -1220,6 +1220,13 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!stash) return { ok: false, message: 'No stash selected' }
         return popStash(git, stash)
       },
+      'checkout-file-from-stash': async () => {
+        const path = payload?.trim()
+        const ref = state.stashDiffRef
+        if (!path) return { ok: false, message: 'No stash file under cursor' }
+        if (!ref) return { ok: false, message: 'No stash ref active' }
+        return checkoutFileFromStash(git, ref, path)
+      },
       'remove-worktree': async () => {
         const all = context.worktreeList?.worktrees || []
         // No dedicated cursor for the worktrees tab yet — operate on the
@@ -1247,7 +1254,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // flickering the surfaces through a 'loading' phase.
     await refreshContext({ silent: true })
   }, [context, dispatch, git, refreshContext, state.branchSort, state.filter, state.selectedBranchIndex,
-    state.selectedStashIndex, state.selectedTagIndex, state.tagSort])
+    state.selectedStashIndex, state.selectedTagIndex, state.stashDiffRef, state.tagSort])
 
   React.useEffect(() => {
     let active = true
@@ -1396,6 +1403,29 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       ? stashDiffLines?.length
       : filePreview?.hunks.length
 
+    // Parse the active stash diff into per-file sections so `]`/`[` can
+    // jump between files and `c` knows which path the cursor is on for
+    // a file-level cherry-pick.
+    const stashDiffFiles = state.diffSource === 'stash' && stashDiffLines
+      ? parseStashDiffFiles(stashDiffLines)
+      : []
+    const stashDiffFileOffsets = stashDiffFiles.map((file) => file.startLine)
+    const stashDiffSelectedPath = (() => {
+      if (state.diffSource !== 'stash' || stashDiffFiles.length === 0) return undefined
+      const offset = state.diffPreviewOffset
+      // Walk backwards to the most recent file header at or before the
+      // current cursor offset.
+      let current = stashDiffFiles[0]
+      for (const file of stashDiffFiles) {
+        if (file.startLine <= offset) {
+          current = file
+        } else {
+          break
+        }
+      }
+      return current.path
+    })()
+
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
       previewLineCount: diffPreviewLineCount,
@@ -1407,6 +1437,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       tagCount: tagVisibleCount,
       stashCount: stashVisibleCount,
       stashSelectedRef,
+      stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
+      stashDiffSelectedPath,
       worktreeDirty,
     }).forEach((event) => {
       if (event.type === 'exit') {
@@ -2373,19 +2405,40 @@ function renderDiffSurface(
   const visibleRows = Math.max(4, bodyRows - 4)
 
   // Stash diff branch: when the user opened the diff via Enter on a stash
-  // row, render the stash patch text directly (no per-file selection yet —
-  // the lines arrive as one flat patch).
+  // row, render the stash patch text directly. The patch is parsed into
+  // per-file sections so `]` / `[` jumps between files and `c`
+  // cherry-picks the file at the cursor.
   if (state.diffSource === 'stash') {
     const lines = stashDiffLines || []
     const visibleLines = lines.slice(
       state.diffPreviewOffset,
       state.diffPreviewOffset + visibleRows
     )
+    const stashFiles = parseStashDiffFiles(lines)
+    const fileCount = stashFiles.length
+    const currentFile = (() => {
+      if (fileCount === 0) return undefined
+      let current = stashFiles[0]
+      for (const file of stashFiles) {
+        if (file.startLine <= state.diffPreviewOffset) {
+          current = file
+        } else {
+          break
+        }
+      }
+      return current
+    })()
+    const currentFileIndex = currentFile
+      ? Math.max(0, stashFiles.findIndex((file) => file.startLine === currentFile.startLine))
+      : -1
     const headerLines: string[] = stashDiffLoading
       ? [`Loading diff for ${state.stashDiffRef || 'stash'}...`]
       : lines.length
         ? [
           `Stash: ${state.stashDiffRef || ''}`,
+          fileCount > 0 && currentFile
+            ? `File ${currentFileIndex + 1}/${fileCount}: ${currentFile.path}`
+            : 'No files in this stash.',
           `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
           '',
         ]
@@ -3439,6 +3492,7 @@ function renderFooter(
   const { Box, Text } = components
   const hints = getLogInkFooterHints({
     activeView: state.activeView,
+    diffSource: state.diffSource,
     filterMode: state.filterMode,
     focus: state.focus,
     pendingKey: state.pendingKey,

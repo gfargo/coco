@@ -1,4 +1,4 @@
-import { getStashDiffSummary, getStashOverview, parseStashFiles, parseStashList, stashDataTestInternals } from './stashData'
+import { getStashDiffSummary, getStashOverview, parseStashDiffFiles, parseStashFiles, parseStashList, stashDataTestInternals } from './stashData'
 
 describe('log stash data', () => {
   it('parses stash list lines with branch context and messages', () => {
@@ -64,5 +64,46 @@ describe('log stash data', () => {
       ' 1 file changed',
     ])
     expect(git.raw).toHaveBeenCalledWith(['stash', 'show', '--stat', 'stash@{0}'])
+  })
+
+  describe('parseStashDiffFiles', () => {
+    it('extracts each file path + diff-header line offset', () => {
+      const lines = [
+        'diff --git a/src/a.ts b/src/a.ts',
+        'index aaa..bbb 100644',
+        '--- a/src/a.ts',
+        '+++ b/src/a.ts',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+        'diff --git a/src/b.ts b/src/b.ts',
+        'index ccc..ddd 100644',
+        '--- a/src/b.ts',
+        '+++ b/src/b.ts',
+        '@@ -1 +1 @@',
+        '-x',
+        '+y',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'src/a.ts', startLine: 0 },
+        { path: 'src/b.ts', startLine: 7 },
+      ])
+    })
+
+    it('returns the destination path when a file was renamed', () => {
+      const lines = [
+        'diff --git a/old/path.ts b/new/path.ts',
+        'similarity index 95%',
+        'rename from old/path.ts',
+        'rename to new/path.ts',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'new/path.ts', startLine: 0 },
+      ])
+    })
+
+    it('returns an empty array for an empty patch', () => {
+      expect(parseStashDiffFiles([])).toEqual([])
+    })
   })
 })

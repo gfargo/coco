@@ -54,3 +54,24 @@ export function dropStash(git: SimpleGit, stash: StashEntry): Promise<BranchActi
     `Dropped ${stash.ref}`
   )
 }
+
+/**
+ * Materialize a single file's contents from a stash into the working
+ * tree, leaving the rest of the stash untouched. Equivalent to
+ * `git checkout <stashRef> -- <path>`. Used by the stash diff explorer
+ * for file-level cherry-pick.
+ *
+ * Important: this overwrites the file in the working tree. The caller
+ * is responsible for confirming with the user when the working tree
+ * already has uncommitted changes to that path.
+ */
+export function checkoutFileFromStash(
+  git: SimpleGit,
+  stashRef: string,
+  path: string
+): Promise<BranchActionResult> {
+  return runAction(
+    () => git.raw(['checkout', stashRef, '--', path]),
+    `Checked out ${path} from ${stashRef}`
+  )
+}

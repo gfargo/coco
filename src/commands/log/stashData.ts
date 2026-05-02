@@ -89,6 +89,37 @@ export async function getStashDiff(git: SimpleGit, stashRef: string): Promise<st
     .map((line) => line.replace(/\r$/, ''))
 }
 
+export type StashDiffFile = {
+  /** Repo-relative path of the file as parsed from the `b/` side of the
+   *  diff header. Used for the cherry-pick action's `--` argument. */
+  path: string
+  /** Line offset of the `diff --git` header inside the patch text. The
+   *  diff surface jumps to this offset when the user navigates to the
+   *  next/previous file. */
+  startLine: number
+}
+
+/**
+ * Slice a unified-patch into per-file sections. Each entry records the
+ * file path and the offset of its `diff --git` header within `lines`.
+ * Used by the stash explorer to build a per-file cursor + cherry-pick
+ * the file at the cursor.
+ *
+ * Renames / moves return the destination path (the `b/` side); the
+ * action surface treats that as the path to materialize from the stash.
+ */
+export function parseStashDiffFiles(lines: string[]): StashDiffFile[] {
+  const files: StashDiffFile[] = []
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]
+    const match = line.match(/^diff --git a\/(.+) b\/(.+)$/)
+    if (match) {
+      files.push({ path: match[2] || match[1], startLine: i })
+    }
+  }
+  return files
+}
+
 export const stashDataTestInternals = {
   parseStashSubject,
 }

@@ -312,6 +312,9 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
 
 export type GetLogInkFooterHintsOptions = {
   activeView?: LogInkView
+  /** Used to differentiate the diff-view hints between commit / worktree
+   *  / stash sources without reaching into runtime state. */
+  diffSource?: 'commit' | 'worktree' | 'stash'
   filterMode: boolean
   focus: LogInkFocus
   showHelp: boolean
@@ -474,6 +477,12 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   }
 
   if (options.activeView === 'diff') {
+    if (options.diffSource === 'stash') {
+      return {
+        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'esc back'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
     return {
       contextual: ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files'],
       global: NORMAL_GLOBAL_HINTS,
