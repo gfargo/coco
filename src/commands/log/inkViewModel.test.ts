@@ -629,4 +629,72 @@ describe('log Ink view model', () => {
       expect(state.selectedWorktreeFileIndex).toBe(0)
     })
   })
+
+  describe('promoted-view selection rectification on filter (P4.5)', () => {
+    it('uses the supplied snapshot to preserve the cursor on the same item', () => {
+      let state = createLogInkState(rows)
+      state = { ...state, selectedBranchIndex: 1 }
+
+      state = applyLogInkAction(state, {
+        type: 'appendFilter',
+        value: 'feat',
+        promotedSelections: { branchIndex: 0, tagIndex: 0, stashIndex: 0 },
+      })
+
+      expect(state.filter).toBe('feat')
+      expect(state.selectedBranchIndex).toBe(0)
+    })
+
+    it('snaps each promoted selection to result[0] when the snapshot says so', () => {
+      let state = createLogInkState(rows)
+      state = {
+        ...state,
+        selectedBranchIndex: 5,
+        selectedTagIndex: 3,
+        selectedStashIndex: 2,
+      }
+
+      state = applyLogInkAction(state, {
+        type: 'appendFilter',
+        value: 'q',
+        promotedSelections: { branchIndex: 0, tagIndex: 0, stashIndex: 0 },
+      })
+
+      expect(state.selectedBranchIndex).toBe(0)
+      expect(state.selectedTagIndex).toBe(0)
+      expect(state.selectedStashIndex).toBe(0)
+    })
+
+    it('falls back to "always snap to 0" when no snapshot is supplied', () => {
+      let state = createLogInkState(rows)
+      state = { ...state, selectedBranchIndex: 4, selectedTagIndex: 7 }
+
+      state = applyLogInkAction(state, { type: 'appendFilter', value: 'x' })
+
+      expect(state.selectedBranchIndex).toBe(0)
+      expect(state.selectedTagIndex).toBe(0)
+    })
+
+    it('lets the snapshot move the cursor to a non-zero index in the filtered list', () => {
+      let state = createLogInkState(rows)
+      state = { ...state, filter: 'alpha', selectedBranchIndex: 0 }
+
+      state = applyLogInkAction(state, {
+        type: 'backspaceFilter',
+        promotedSelections: { branchIndex: 2 },
+      })
+
+      expect(state.filter).toBe('alph')
+      expect(state.selectedBranchIndex).toBe(2)
+    })
+
+    it('keeps the cursor put when the filter string did not actually change', () => {
+      let state = createLogInkState(rows)
+      state = { ...state, filter: 'foo', selectedBranchIndex: 3 }
+
+      state = applyLogInkAction(state, { type: 'setFilter', value: 'foo' })
+
+      expect(state.selectedBranchIndex).toBe(3)
+    })
+  })
 })

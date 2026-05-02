@@ -5,6 +5,7 @@ import {
   applyCommitComposeAction,
   createCommitComposeState,
 } from './commitCompose'
+import { PromotedSelectionsSnapshot } from './inkSelectionRectify'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
@@ -98,10 +99,10 @@ export type LogInkState = {
 
 export type LogInkAction =
   | { type: 'appendRows'; rows: GitLogRow[] }
-  | { type: 'appendFilter'; value: string }
-  | { type: 'backspaceFilter' }
-  | { type: 'clearFilter' }
-  | { type: 'clearFilterText' }
+  | { type: 'appendFilter'; value: string; promotedSelections?: PromotedSelectionsSnapshot }
+  | { type: 'backspaceFilter'; promotedSelections?: PromotedSelectionsSnapshot }
+  | { type: 'clearFilter'; promotedSelections?: PromotedSelectionsSnapshot }
+  | { type: 'clearFilterText'; promotedSelections?: PromotedSelectionsSnapshot }
   | { type: 'commitCompose'; action: CommitComposeAction }
   | { type: 'focusNext' }
   | { type: 'focusPrevious' }
@@ -118,7 +119,7 @@ export type LogInkAction =
   | { type: 'pageDetailPreview'; delta: number; previewLineCount: number }
   | { type: 'pageWorktreeDiff'; delta: number; lineCount: number }
   | { type: 'previousSidebarTab' }
-  | { type: 'setFilter'; value: string }
+  | { type: 'setFilter'; value: string; promotedSelections?: PromotedSelectionsSnapshot }
   | { type: 'setActiveView'; value: LogInkView }
   | { type: 'pushView'; value: LogInkView }
   | { type: 'popView' }
@@ -322,14 +323,25 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
   }
 }
 
-function withFilter(state: LogInkState, filter: string): LogInkState {
+function withFilter(
+  state: LogInkState,
+  filter: string,
+  promotedSelections?: PromotedSelectionsSnapshot
+): LogInkState {
   const filteredCommits = filterCommits(state.commits, filter)
-  // P4.5: snap promoted-view selections to the top of the filtered list
-  // when the filter changes. Pre-filter cursor positions reference indexes
-  // that may not exist in the filtered view, so resetting to 0 keeps
-  // navigation predictable. The runtime passes filtered counts into
-  // `moveBranch` / `moveTag` / `moveStash` so j/k stay live.
+  // P4.5: rectify promoted-view selections when the filter changes. Prefer
+  // the runtime-supplied snapshot — which preserves the cursor on the same
+  // item when it's still in the filtered list and only snaps to result[0]
+  // when the previously-selected item dropped out. Falls back to the older
+  // "snap to 0" behavior when no snapshot was provided (test paths,
+  // dispatchers without context).
   const filterChanged = state.filter !== filter
+  const branchIndex = promotedSelections?.branchIndex ??
+    (filterChanged ? 0 : state.selectedBranchIndex)
+  const tagIndex = promotedSelections?.tagIndex ??
+    (filterChanged ? 0 : state.selectedTagIndex)
+  const stashIndex = promotedSelections?.stashIndex ??
+    (filterChanged ? 0 : state.selectedStashIndex)
 
   return {
     ...state,
@@ -337,9 +349,9 @@ function withFilter(state: LogInkState, filter: string): LogInkState {
     filteredCommits,
     selectedIndex: clampIndex(state.selectedIndex, filteredCommits.length),
     selectedFileIndex: 0,
-    selectedBranchIndex: filterChanged ? 0 : state.selectedBranchIndex,
-    selectedTagIndex: filterChanged ? 0 : state.selectedTagIndex,
-    selectedStashIndex: filterChanged ? 0 : state.selectedStashIndex,
+    selectedBranchIndex: branchIndex,
+    selectedTagIndex: tagIndex,
+    selectedStashIndex: stashIndex,
     diffPreviewOffset: 0,
     pendingKey: undefined,
   }
@@ -453,18 +465,18 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     case 'appendRows':
       return appendRows(state, action.rows)
     case 'appendFilter':
-      return withFilter(state, `${state.filter}${action.value}`)
+      return withFilter(state, `${state.filter}${action.value}`, action.promotedSelections)
     case 'backspaceFilter':
-      return withFilter(state, state.filter.slice(0, -1))
+      return withFilter(state, state.filter.slice(0, -1), action.promotedSelections)
     case 'clearFilter':
       return withFilter({
         ...state,
         filterMode: false,
-      }, '')
+      }, '', action.promotedSelections)
     case 'clearFilterText':
       // Clears the filter input but stays in filterMode so the user can
       // keep typing. P2.4 / P4.4: pairs with the two-stage Esc semantics.
-      return withFilter(state, '')
+      return withFilter(state, '', action.promotedSelections)
     case 'commitCompose':
       return {
         ...state,
@@ -625,7 +637,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingKey: undefined,
       }
     case 'setFilter':
-      return withFilter(state, action.value)
+      return withFilter(state, action.value, action.promotedSelections)
     case 'setActiveView':
       return withReplacedView(state, action.value)
     case 'pushView':
