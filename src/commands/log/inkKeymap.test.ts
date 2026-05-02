@@ -17,7 +17,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', '/ search', 'gg/G top/bottom'],
+      contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', 'y/Y yank', '/ search', 'gg/G top/bottom'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -27,7 +27,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose'],
+      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose', 'y yank'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -37,7 +37,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'esc files'],
+      contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'y yank'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -57,7 +57,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort', 'y yank'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -67,7 +67,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort'],
+      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort', 'y yank'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -77,7 +77,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ stashes', 'enter diff', 'a apply', 'p pop', 'X drop'],
+      contextual: ['↑/↓ stashes', 'enter diff', 'a apply', 'p pop', 'X drop', 'y yank'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
