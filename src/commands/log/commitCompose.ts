@@ -112,10 +112,11 @@ export function applyCommitComposeAction(
         details: action.details,
       }
     case 'reset':
-      return createCommitComposeState({
-        message: state.message,
-        details: state.details,
-      })
+      // Drop message/details too — the post-commit "Created commit ..."
+      // notification is already on the runtime status line (footer); a
+      // duplicate copy lingering in the Compose panel reads as stale
+      // state once the user starts a fresh draft.
+      return createCommitComposeState()
     default:
       return state
   }
