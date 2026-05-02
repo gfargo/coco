@@ -27,6 +27,15 @@ export const ASCII_TO_UNICODE_MAP: Readonly<Record<string, string>> = {
 }
 
 export const DEFAULT_COMMIT_GLYPH = '●'
+/**
+ * #791 stage 3 — distinct glyphs for merges and HEAD so they stand
+ * out from the run of regular commits. `◆` (filled diamond) flags a
+ * merge commit (`parents.length > 1`); `◉` (fisheye) flags HEAD
+ * regardless of parent count. Both render at the same column width as
+ * `●` so graph alignment stays intact across mixed commit types.
+ */
+export const MERGE_COMMIT_GLYPH = '◆'
+export const HEAD_COMMIT_GLYPH = '◉'
 
 export type SubstituteGraphCharsOptions = {
   ascii: boolean

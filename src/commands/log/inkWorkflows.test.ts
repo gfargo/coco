@@ -25,6 +25,7 @@ describe('log Ink workflows', () => {
         graph: '*',
         shortHash: 'abc1234',
         hash: 'abc123456789',
+        parents: [],
         date: '2026-04-29',
         author: 'Coco Test',
         refs: [],
