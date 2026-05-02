@@ -100,6 +100,12 @@ type BaseConfig = {
      * Theme settings for `coco log -i`.
      */
     theme?: LogInkThemeConfig
+
+    /**
+     * Rotate short usage tips through the status line when the TUI has been
+     * idle for >10s. Off by default so power users aren't distracted.
+     */
+    idleTips?: boolean
   }
 }
 

@@ -9,6 +9,7 @@ export type LogInkCommandId =
   | 'clearSearch'
   | 'commandPalette'
   | 'commit'
+  | 'cycleSort'
   | 'editCommit'
   | 'focusNext'
   | 'focusPrevious'
@@ -273,6 +274,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['commits'],
   },
   {
+    id: 'cycleSort',
+    keys: ['s'],
+    label: 'sort',
+    description: 'Cycle the sort mode in branches (name/recent/ahead) or tags (recent/name).',
+    contexts: ['commits'],
+  },
+  {
     id: 'help',
     keys: ['?'],
     label: 'help',
@@ -481,14 +489,14 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'branches') {
     return {
-      contextual: ['↑/↓ branches', 'D delete', 'X checkout', 'enter diff', 'esc back'],
+      contextual: ['↑/↓ branches', 's sort', 'D delete', 'X checkout', 'enter diff'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'tags') {
     return {
-      contextual: ['↑/↓ tags', 'T create', 'X push', 'esc back'],
+      contextual: ['↑/↓ tags', 's sort', 'T create', 'X push', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

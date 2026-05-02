@@ -629,4 +629,43 @@ describe('log Ink view model', () => {
       expect(state.selectedWorktreeFileIndex).toBe(0)
     })
   })
+
+  describe('sort cycling (P4.2)', () => {
+    it('cycleBranchSort advances the mode and resets the cursor to the top', () => {
+      let state = createLogInkState(rows)
+      state = { ...state, selectedBranchIndex: 5 }
+      expect(state.branchSort).toBe('name')
+
+      state = applyLogInkAction(state, { type: 'cycleBranchSort' })
+      expect(state.branchSort).toBe('recent')
+      expect(state.selectedBranchIndex).toBe(0)
+
+      state = applyLogInkAction(state, { type: 'cycleBranchSort' })
+      expect(state.branchSort).toBe('ahead')
+
+      state = applyLogInkAction(state, { type: 'cycleBranchSort' })
+      expect(state.branchSort).toBe('name')
+    })
+
+    it('cycleTagSort advances the mode and resets the cursor', () => {
+      let state = createLogInkState(rows)
+      state = { ...state, selectedTagIndex: 7 }
+      expect(state.tagSort).toBe('recent')
+
+      state = applyLogInkAction(state, { type: 'cycleTagSort' })
+      expect(state.tagSort).toBe('name')
+      expect(state.selectedTagIndex).toBe(0)
+
+      state = applyLogInkAction(state, { type: 'cycleTagSort' })
+      expect(state.tagSort).toBe('recent')
+    })
+
+    it('cycle actions clear any pending chord prefix', () => {
+      let state = createLogInkState(rows)
+      state = { ...state, pendingKey: 'g' }
+
+      state = applyLogInkAction(state, { type: 'cycleBranchSort' })
+      expect(state.pendingKey).toBeUndefined()
+    })
+  })
 })

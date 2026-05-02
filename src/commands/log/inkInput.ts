@@ -201,6 +201,17 @@ export function getLogInkPaletteExecuteEvents(
       return [{ type: 'exit' }]
     case 'clearSearch':
       return [action({ type: 'clearFilter' })]
+    case 'cycleSort':
+      if (state.activeView === 'branches') {
+        return [action({ type: 'cycleBranchSort' })]
+      }
+      if (state.activeView === 'tags') {
+        return [action({ type: 'cycleTagSort' })]
+      }
+      return [action({
+        type: 'setStatus',
+        value: 'Sort cycle is available in the branches and tags views',
+      })]
     default:
       return []
   }
@@ -536,6 +547,17 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'r') {
     return [{ type: 'refreshContext' }]
+  }
+
+  if (inputValue === 's') {
+    if (state.activeView === 'branches') {
+      return [action({ type: 'cycleBranchSort' })]
+    }
+    if (state.activeView === 'tags') {
+      return [action({ type: 'cycleTagSort' })]
+    }
+    // Falls through so other views (history/status/diff/compose/stash) still
+    // see the literal `s` for whatever per-view bindings they may grow.
   }
 
   if (inputValue === ':') {

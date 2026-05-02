@@ -923,4 +923,35 @@ describe('log Ink input interactions', () => {
       },
     ])
   })
+
+  describe('s cycles sort modes (P4.2)', () => {
+    it('cycles branch sort when active view is branches', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+      expect(state.branchSort).toBe('name')
+
+      state = applyInput(state, 's')
+      expect(state.branchSort).toBe('recent')
+
+      state = applyInput(state, 's')
+      expect(state.branchSort).toBe('ahead')
+    })
+
+    it('cycles tag sort when active view is tags', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'tags' })
+      expect(state.tagSort).toBe('recent')
+
+      state = applyInput(state, 's')
+      expect(state.tagSort).toBe('name')
+    })
+
+    it('does not cycle sort outside branches/tags views', () => {
+      let state = createLogInkState(rows)
+      // history view: `s` is unbound; reducer should not touch sort modes.
+      state = applyInput(state, 's')
+      expect(state.branchSort).toBe('name')
+      expect(state.tagSort).toBe('recent')
+    })
+  })
 })
