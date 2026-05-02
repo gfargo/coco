@@ -496,7 +496,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'tags') {
     return {
-      contextual: ['↑/↓ tags', '+ new', 'T delete', 's sort'],
+      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

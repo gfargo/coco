@@ -917,6 +917,12 @@ export function getLogInkInputEvents(
   if (inputValue === 'p' && state.activeView === 'stash' && context.stashCount) {
     return [{ type: 'runWorkflowAction', id: 'pop-stash' }]
   }
+  // Per-view tag action: `P` pushes the selected tag to origin. Letter
+  // is scoped to the tags surface so it doesn't collide with `p` for
+  // pop-stash.
+  if (inputValue === 'P' && state.activeView === 'tags' && context.tagCount) {
+    return [{ type: 'runWorkflowAction', id: 'push-tag' }]
+  }
   // Enter on a stash row pushes the diff view scoped to that stash.
   // The runtime loads `git stash show -p <ref>` once the view is
   // active. The stash ref is passed via the action so we don't need a

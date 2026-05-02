@@ -136,8 +136,7 @@ import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
 import { checkoutBranch, createBranch, deleteBranch } from './branchActions'
-import { createLightweightTag } from './tagActions'
-import { deleteLocalTag } from './tagActions'
+import { createLightweightTag, deleteLocalTag, pushTag } from './tagActions'
 import { applyStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
@@ -1184,6 +1183,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
         if (!tag) return { ok: false, message: 'No tag selected' }
         return deleteLocalTag(git, tag.name)
+      },
+      'push-tag': async () => {
+        const all = sortTags(context.tags?.tags || [], state.tagSort)
+        const visible = state.filter
+          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+          : all
+        const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+        if (!tag) return { ok: false, message: 'No tag selected' }
+        return pushTag(git, tag.name)
       },
       'drop-stash': async () => {
         const all = context.stashes?.stashes || []
