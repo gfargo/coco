@@ -488,19 +488,27 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'diff') {
     if (options.diffSource === 'stash') {
       return {
-        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'esc back'],
+        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'o edit', 'esc back'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
+    if (options.diffSource === 'commit') {
+      // Read-only commit-diff explore: no staging applies. Surface only
+      // the keys that actually do something.
+      return {
+        contextual: ['j/k hunks', '[/] file', 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
     return {
-      contextual: ['j/k hunks', 'space stage', 'z revert', 'e/c compose', 'esc files'],
+      contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'esc files'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'compose') {
     return {
-      contextual: ['e edit', 'tab field', 'c commit', 'I AI draft', 'esc back'],
+      contextual: ['e edit', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
