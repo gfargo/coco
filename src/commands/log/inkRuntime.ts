@@ -2899,17 +2899,25 @@ function renderCommitPanel(
     key: `commit-header-${index}`,
     dimColor: index < 2 || line.startsWith('  ') || line === '<empty>',
   }, truncate(line, width - 4))),
-  loading
-    ? h(Text, {
+  // Loading indicator + commit result/details stay inline with the body
+  // (they describe what just happened to the fields above). The action
+  // hint ("e edit | c commit | I AI draft") moves to the bottom of the
+  // pane to read as footer guidance, matching the compose surface.
+  ...(loading
+    ? [h(Text, {
       key: 'commit-loading',
       bold: true,
       color: theme.noColor ? undefined : theme.colors.accent,
-    }, truncate(theme.ascii ? '[...] Generating AI draft' : '⏳ Generating AI draft…', width - 4))
-    : h(Text, { key: 'commit-state', dimColor: true }, truncate(stateLine, width - 4)),
+    }, truncate(theme.ascii ? '[...] Generating AI draft' : '⏳ Generating AI draft…', width - 4))]
+    : []),
   ...trailerLines.map((line, index) => h(Text, {
     key: `commit-trailer-${index}`,
     dimColor: line.startsWith('  '),
-  }, truncate(line, width - 4))))
+  }, truncate(line, width - 4))),
+  h(Box, { flexGrow: 1 }),
+  loading
+    ? null
+    : h(Text, { key: 'commit-state', dimColor: true }, truncate(stateLine, width - 4)))
 }
 
 function renderConfirmationPanel(
