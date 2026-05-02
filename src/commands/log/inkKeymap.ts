@@ -503,7 +503,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'stash') {
     return {
-      contextual: ['↑/↓ stashes', 'A apply', 'D drop', 'esc back'],
+      contextual: ['↑/↓ stashes', 'a apply', 'p pop', 'X drop', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

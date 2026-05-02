@@ -138,7 +138,7 @@ import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOver
 import { checkoutBranch, createBranch, deleteBranch } from './branchActions'
 import { createLightweightTag } from './tagActions'
 import { deleteLocalTag } from './tagActions'
-import { dropStash } from './stashActions'
+import { applyStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
@@ -1167,6 +1167,24 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
         if (!stash) return { ok: false, message: 'No stash selected' }
         return dropStash(git, stash)
+      },
+      'apply-stash': async () => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        if (!stash) return { ok: false, message: 'No stash selected' }
+        return applyStash(git, stash)
+      },
+      'pop-stash': async () => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        if (!stash) return { ok: false, message: 'No stash selected' }
+        return popStash(git, stash)
       },
       'remove-worktree': async () => {
         const all = context.worktreeList?.worktrees || []

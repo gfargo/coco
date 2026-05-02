@@ -905,6 +905,17 @@ export function getLogInkInputEvents(
     })]
   }
 
+  // Per-view stash actions: `a` apply (keep the stash), `p` pop (apply
+  // then drop). Drop is the existing destructive `X` workflow which
+  // routes through the y-confirm path. Scoped to the stash view so the
+  // letters stay free elsewhere.
+  if (inputValue === 'a' && state.activeView === 'stash' && context.stashCount) {
+    return [{ type: 'runWorkflowAction', id: 'apply-stash' }]
+  }
+  if (inputValue === 'p' && state.activeView === 'stash' && context.stashCount) {
+    return [{ type: 'runWorkflowAction', id: 'pop-stash' }]
+  }
+
   if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {
     return [{ type: 'toggleSelectedFileStage' }]
   }
@@ -952,10 +963,10 @@ export function getLogInkInputEvents(
   }
 
   if (workflowAction) {
-    return [
-      action({ type: 'setWorkflowAction', value: workflowAction.id }),
-      action({ type: 'setStatus', value: `${workflowAction.label} selected` }),
-    ]
+    // Non-destructive workflow — fire it directly via the runtime
+    // handler. The handler surfaces success/failure on the status line
+    // and silently refreshes context so the list updates.
+    return [{ type: 'runWorkflowAction', id: workflowAction.id }]
   }
 
   return []

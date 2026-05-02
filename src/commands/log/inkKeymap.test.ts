@@ -77,7 +77,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ stashes', 'A apply', 'D drop', 'esc back'],
+      contextual: ['↑/↓ stashes', 'a apply', 'p pop', 'X drop', 'esc back'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
