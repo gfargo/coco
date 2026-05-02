@@ -847,6 +847,12 @@ export function getLogInkInputEvents(
     })]
   }
 
+  // Enter on a branch row checks the branch out. Non-destructive workflow
+  // action — no confirmation prompt.
+  if (key.return && state.activeView === 'branches' && context.branchCount) {
+    return [{ type: 'runWorkflowAction', id: 'checkout-branch' }]
+  }
+
   if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {
     return [{ type: 'toggleSelectedFileStage' }]
   }

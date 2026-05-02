@@ -135,7 +135,7 @@ import {
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
-import { deleteBranch } from './branchActions'
+import { checkoutBranch, deleteBranch } from './branchActions'
 import { deleteLocalTag } from './tagActions'
 import { dropStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
@@ -1119,6 +1119,16 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // tag / drop-stash / remove-worktree / abort-operation.
   const runWorkflowAction = React.useCallback(async (id: string) => {
     const handlers: Record<string, () => Promise<{ ok: boolean; message: string } | undefined>> = {
+      'checkout-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        if (branch.current) return { ok: true, message: `Already on ${branch.shortName}` }
+        return checkoutBranch(git, branch)
+      },
       'delete-branch': async () => {
         const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
         const visible = state.filter
