@@ -1904,17 +1904,25 @@ function renderComposeSurface(
       dimColor: line === '<empty>',
     }, `  ${line}${bodyCursor && isLast ? bodyCursor : ''}`)
   }),
-  h(Text, undefined, ''),
+  // Loading indicator + post-action message belong inline with the draft
+  // (they describe what just happened to the fields above). The state-
+  // line ("Editing — Enter switches summary↔body…" / "Press e to edit
+  // …") is footer-style guidance and now sits at the very bottom of the
+  // pane so it doesn't visually separate the body from any
+  // result/details.
   ...(compose.loading
-    ? [h(Text, {
-      key: 'compose-loading',
-      bold: true,
-      color: theme.noColor ? undefined : theme.colors.accent,
-    }, theme.ascii
-      ? '[...] Generating AI commit draft (this can take a moment)'
-      : '⏳ Generating AI commit draft… (this can take a moment)')]
-    : [h(Text, { dimColor: true }, stateLine)]),
-  ...(compose.message ? [h(Text, { key: 'compose-msg' }, truncate(compose.message, 140))] : []),
+    ? [
+      h(Text, undefined, ''),
+      h(Text, {
+        key: 'compose-loading',
+        bold: true,
+        color: theme.noColor ? undefined : theme.colors.accent,
+      }, theme.ascii
+        ? '[...] Generating AI commit draft (this can take a moment)'
+        : '⏳ Generating AI commit draft… (this can take a moment)'),
+    ]
+    : []),
+  ...(compose.message ? [h(Text, undefined, ''), h(Text, { key: 'compose-msg' }, truncate(compose.message, 140))] : []),
   ...(compose.details || []).map((line, index) => h(Text, {
     key: `compose-detail-${index}`,
     dimColor: true,
@@ -1924,7 +1932,9 @@ function renderComposeSurface(
       h(Text, { key: 'compose-no-staged-spacer' }, ''),
       h(Text, { key: 'compose-no-staged', dimColor: true }, truncate(noStagedHint, 140)),
     ]
-    : []))
+    : []),
+  h(Box, { flexGrow: 1 }),
+  h(Text, { key: 'compose-stateline', dimColor: true }, truncate(stateLine, width - 4)))
 }
 
 function matchesPromotedFilter(haystacks: string[], filter: string): boolean {

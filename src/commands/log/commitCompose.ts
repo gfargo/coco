@@ -95,13 +95,18 @@ export function applyCommitComposeAction(
         loading: action.value,
       }
     case 'setDraft':
+      // No `message` here — the loader → filled fields are the confirmation
+      // that the AI generated something. A lingering "AI draft ready for
+      // editing" line in the panel reads as stale state. The runtime still
+      // posts the same string to the footer status line for transient
+      // feedback.
       return {
         ...state,
         ...splitCommitDraft(action.value),
         field: 'summary',
         editing: true,
         loading: false,
-        message: 'AI draft ready for editing',
+        message: undefined,
         details: undefined,
       }
     case 'setResult':

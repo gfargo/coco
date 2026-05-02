@@ -295,6 +295,11 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     ...state,
     activeView: value,
     viewStack,
+    // The compose view's right detail panel already shows worktree
+    // status, so keeping the left sidebar on the Status tab duplicates
+    // that information. Auto-switch to Branches when entering compose;
+    // the user can swap back with [/] if they want.
+    sidebarTab: value === 'compose' ? 'branches' : state.sidebarTab,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
