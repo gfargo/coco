@@ -95,6 +95,14 @@ import {
   formatTagPreview,
 } from './inkPreviewPane'
 import {
+  STAGE_STATUS_DOT,
+  branchRowMarker,
+  formatBranchDivergence,
+  getPullRequestStateGlyph,
+  getStageStatusDotColor,
+  sidebarTabCount,
+} from './inkIconography'
+import {
   formatLogInkBranchesEmpty,
   formatLogInkComposeEmpty,
   formatLogInkHistoryEmpty,
@@ -407,23 +415,12 @@ function sidebarTabLabel(tab: LogInkSidebarTab): string {
   }
 }
 
-function formatDivergence(branch: BranchOverview['localBranches'][number]): string {
-  if (!branch.upstream) {
-    return 'no upstream'
-  }
-
-  if (branch.ahead === 0 && branch.behind === 0) {
-    return `even with ${branch.upstream}`
-  }
-
-  return `+${branch.ahead}/-${branch.behind} ${branch.upstream}`
-}
-
 function sidebarLines(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   tab: LogInkSidebarTab,
-  width: number
+  width: number,
+  theme: LogInkTheme
 ): string[] {
   if (tab === 'status') {
     const worktree = context.worktree
@@ -463,10 +460,10 @@ function sidebarLines(
       branches.dirty ? 'Worktree: dirty' : 'Worktree: clean',
       '',
       ...branches.localBranches.slice(0, 8).map((branch) =>
-        `${branch.current ? '*' : ' '} ${truncate(branch.shortName, width - 4)}`
+        `${branchRowMarker(branch, { ascii: theme.ascii })} ${truncate(branch.shortName, width - 4)}`
       ),
       ...branches.localBranches.slice(0, 4).map((branch) =>
-        `  ${truncate(formatDivergence(branch), width - 2)}`
+        `  ${truncate(formatBranchDivergence(branch, { ascii: theme.ascii }), width - 2)}`
       ),
     ]
   }
@@ -1184,11 +1181,11 @@ function renderHeader(
   const repo = context.provider?.repository.owner && context.provider.repository.name
     ? `${context.provider.repository.owner}/${context.provider.repository.name}`
     : 'local repository'
-  const pr = context.provider?.currentPullRequest
-    ? `PR #${context.provider.currentPullRequest.number} ${context.provider.currentPullRequest.state}`
-    : context.pullRequest?.currentPullRequest
-      ? `PR #${context.pullRequest.currentPullRequest.number} ${context.pullRequest.currentPullRequest.state}`
-      : 'no PR'
+  const prInfo = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
+  const prGlyph = prInfo ? getPullRequestStateGlyph(prInfo, theme) : null
+  const prLabel = prInfo
+    ? `PR #${prInfo.number} ${prInfo.isDraft ? 'DRAFT' : prInfo.state}`
+    : 'no PR'
   const search = state.filterMode ? `search: ${state.filter}_` : state.filter ? `filter: ${state.filter}` : ''
   const loading = isLogInkContextLoading(contextStatus) ? '  loading context' : ''
   const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
@@ -1200,7 +1197,16 @@ function renderHeader(
     : state.filterMode
       ? '[FILTER]'
       : '[NORMAL]'
-  const title = truncate(`${appLabel}  ${repo}  ${branch}  ${dirty}  ${pr}${view}${loading}`, columns - mode.length - 4)
+  const titlePrefix = `${appLabel}  ${repo}  ${branch}  ${dirty}  `
+  const glyphPart = prGlyph?.glyph ? `${prGlyph.glyph} ` : ''
+  const titleSuffix = `${view}${loading}`
+  const fullTitle = `${titlePrefix}${glyphPart}${prLabel}${titleSuffix}`
+  const titleBudget = columns - mode.length - 4
+  const truncatedTitle = truncate(fullTitle, titleBudget)
+  // Only split into colored fragments when the prefix + glyph + label all
+  // fit unmodified — otherwise the truncate ellipsis can land mid-fragment
+  // and we'd render half a glyph in the wrong color.
+  const splitFragments = truncatedTitle === fullTitle && glyphPart.length > 0
   const modeColor = theme.noColor
     ? undefined
     : state.filterMode || state.commitCompose.editing
@@ -1213,7 +1219,15 @@ function renderHeader(
     height: 3,
     paddingX: 1,
   },
-  h(Text, { bold: true, color: theme.colors.accent }, title),
+  splitFragments
+    ? h(Text, { bold: true, color: theme.colors.accent }, titlePrefix)
+    : h(Text, { bold: true, color: theme.colors.accent }, truncatedTitle),
+  splitFragments
+    ? h(Text, { bold: true, color: prGlyph?.color, dimColor: prGlyph?.dim }, glyphPart)
+    : undefined,
+  splitFragments
+    ? h(Text, { bold: true, color: theme.colors.accent }, `${prLabel}${titleSuffix}`)
+    : undefined,
   h(Text, { bold: true, color: modeColor }, `  ${mode}`),
   search ? h(Text, { dimColor: true }, `  ${truncate(search, 36)}`) : undefined)
 }
@@ -1229,7 +1243,7 @@ function renderSidebar(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
-  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4)
+  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4, theme)
   const tabs = getLogInkSidebarTabs()
 
   return h(Box, {
@@ -1240,7 +1254,13 @@ function renderSidebar(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Repository', focused)),
-  h(Text, { dimColor: true }, tabs.map((tab) => tab === state.sidebarTab ? `[${sidebarTabLabel(tab)}]` : sidebarTabLabel(tab)).join(' ')),
+  h(Text, { dimColor: true }, tabs.map((tab) => {
+    const count = sidebarTabCount(tab, context)
+    const labelWithCount = count !== undefined
+      ? `${sidebarTabLabel(tab)} (${count})`
+      : sidebarTabLabel(tab)
+    return tab === state.sidebarTab ? `[${labelWithCount}]` : labelWithCount
+  }).join(' ')),
   h(Text, undefined, ''),
   ...lines.map((line, index) => h(Text, { key: `sidebar-${index}` }, truncate(line, width - 4))))
 }
@@ -1492,17 +1512,32 @@ function renderStatusSurface(
   const listRows = Math.max(4, bodyRows - 5)
   const selectedIndex = state.selectedWorktreeFileIndex
   const cleanHint = formatLogInkStatusEmpty({ hasChanges: Boolean(worktree?.files.length) })
-  const lines = isLogInkContextKeyLoading(contextStatus, 'worktree')
+  const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
+  const isLoading = isLogInkContextKeyLoading(contextStatus, 'worktree')
+  const fileRows: ReactTypes.ReactNode[] = isLoading || !worktree?.files.length
+    ? []
+    : worktree.files.slice(startIndex).slice(0, listRows).map((file, offset) => {
+      const index = startIndex + offset
+      const isSelected = index === selectedIndex
+      const cursorPart = `${isSelected ? '>' : ' '} `
+      const dotColor = getStageStatusDotColor(file.state, theme)
+      const useDot = dotColor !== undefined
+      const dotCells = useDot ? cellWidth(STAGE_STATUS_DOT) + 1 : 0
+      const tail = `${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
+      const tailTrunc = truncate(tail, Math.max(0, 140 - cellWidth(cursorPart) - dotCells))
+
+      return h(Text, {
+        key: `status-row-${index}`,
+        dimColor: offset > 0,
+      },
+      cursorPart,
+      ...(useDot ? [h(Text, { color: dotColor }, STAGE_STATUS_DOT), ' '] : []),
+      tailTrunc)
+    })
+  const fallbackLines = isLoading
     ? [formatLogInkLoading({ resource: 'worktree status' })]
     : worktree?.files.length
-      ? worktree.files
-        .slice(Math.max(0, selectedIndex - Math.floor(listRows / 2)))
-        .slice(0, listRows)
-        .map((file, offset) => {
-          const index = Math.max(0, selectedIndex - Math.floor(listRows / 2)) + offset
-
-          return `${index === selectedIndex ? '>' : ' '} ${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
-        })
+      ? []
       : cleanHint
         ? [cleanHint]
         : ['Worktree clean']
@@ -1520,8 +1555,9 @@ function renderStatusSurface(
       ? `${worktree.stagedCount} staged | ${worktree.unstagedCount} unstaged | ${worktree.untrackedCount} untracked`
       : 'status loading')
   ),
-  ...lines.map((line, index) => h(Text, {
-    key: `status-surface-${index}`,
+  ...fileRows,
+  ...fallbackLines.map((line, index) => h(Text, {
+    key: `status-surface-fallback-${index}`,
     dimColor: index > 0,
   }, truncate(line, 140))))
 }
@@ -1661,8 +1697,8 @@ function renderBranchesSurface(
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
-        const marker = branch.current ? '*' : ' '
-        const divergence = formatDivergence(branch)
+        const marker = branchRowMarker(branch, { ascii: theme.ascii })
+        const divergence = formatBranchDivergence(branch, { ascii: theme.ascii })
         return h(Text, {
           key: `branch-${index}`,
           bold: isSelected,
