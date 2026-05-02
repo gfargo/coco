@@ -122,7 +122,7 @@ import {
   formatLogInkStatusEmpty,
   formatLogInkTagsEmpty,
 } from './inkSurfaceStates'
-import { cellWidth, truncateCells } from './inkText'
+import { cellWidth, truncateCells, wrapCells } from './inkText'
 import {
   LogInkSidebarTab,
   LogInkState,
@@ -135,6 +135,11 @@ import {
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
+import { deleteBranch } from './branchActions'
+import { deleteLocalTag } from './tagActions'
+import { dropStash } from './stashActions'
+import { removeWorktree } from './worktreeActions'
+import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import { StashOverview, getStashOverview } from './stashData'
 import { revertFile, stageFile, unstageFile } from './statusActions'
@@ -1111,6 +1116,69 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch({ type: 'setStatus', value: result.message })
   }, [dispatch])
 
+  // Resolve the destructive-action target from the live filtered+sorted
+  // list the user is looking at, run the action against it, surface the
+  // result on the status line, and silently refresh so the deleted item
+  // disappears. Called from the y-confirm path for delete-branch / delete-
+  // tag / drop-stash / remove-worktree / abort-operation.
+  const runWorkflowAction = React.useCallback(async (id: string) => {
+    const handlers: Record<string, () => Promise<{ ok: boolean; message: string } | undefined>> = {
+      'delete-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return deleteBranch(git, branch)
+      },
+      'delete-tag': async () => {
+        const all = sortTags(context.tags?.tags || [], state.tagSort)
+        const visible = state.filter
+          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+          : all
+        const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+        if (!tag) return { ok: false, message: 'No tag selected' }
+        return deleteLocalTag(git, tag.name)
+      },
+      'drop-stash': async () => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        if (!stash) return { ok: false, message: 'No stash selected' }
+        return dropStash(git, stash)
+      },
+      'remove-worktree': async () => {
+        const all = context.worktreeList?.worktrees || []
+        // No dedicated cursor for the worktrees tab yet — operate on the
+        // first non-current worktree as a safe default.
+        const target = all.find((w) => !w.current)
+        if (!target) return { ok: false, message: 'No removable worktree' }
+        return removeWorktree(git, target)
+      },
+      'abort-operation': async () => {
+        const operation = context.operation?.operation
+        if (!operation) {
+          return { ok: false, message: 'No git operation in progress' }
+        }
+        return abortOperation(git, operation)
+      },
+    }
+    const handler = handlers[id]
+    if (!handler) {
+      dispatch({ type: 'setStatus', value: `Workflow action ${id} not yet wired` })
+      return
+    }
+    const result = await handler()
+    dispatch({ type: 'setStatus', value: result?.message || 'Workflow action complete' })
+    // Silent refresh so the deleted item disappears from the list without
+    // flickering the surfaces through a 'loading' phase.
+    await refreshContext({ silent: true })
+  }, [context, dispatch, git, refreshContext, state.branchSort, state.filter, state.selectedBranchIndex,
+    state.selectedStashIndex, state.selectedTagIndex, state.tagSort])
+
   React.useEffect(() => {
     let active = true
 
@@ -1278,6 +1346,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void createCommitFromCompose()
       } else if (event.type === 'runAiCommitDraft') {
         void runAiCommitDraft()
+      } else if (event.type === 'runWorkflowAction') {
+        void runWorkflowAction(event.id)
       } else {
         // P4.5: enrich filter-mutating actions with a precomputed
         // selection snapshot so the reducer can preserve the cursor on
@@ -2766,13 +2836,28 @@ function renderCommitPanel(
     : `${stagedCount} staged | ${unstagedCount} unstaged`
   const summaryCursor = compose.editing && compose.field === 'summary' ? '_' : ''
   const bodyCursor = compose.editing && compose.field === 'body' ? '_' : ''
-  const bodyLines = compose.body ? compose.body.split('\n').slice(0, 4) : ['<empty>']
+  const bodyTextWidth = Math.max(8, width - 6) // 4 for chrome + 2 for indent
+  // Wrap each source line of the body so long messages don't get cut off
+  // by the previous truncate(line, width - 4). The 12-line cap is generous
+  // — most commit bodies fit, and the panel's column layout absorbs the
+  // height naturally.
+  const bodyHasContent = Boolean(compose.body)
+  const bodyVisualLines: string[] = bodyHasContent
+    ? compose.body.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth)).slice(0, 12)
+    : ['<empty>']
+  const summaryWrapped = wrapCells(`${compose.summary || '<empty>'}${summaryCursor}`, bodyTextWidth)
+  const summaryFirst = `${compose.field === 'summary' && compose.editing ? '>' : ' '} Summary: ${summaryWrapped[0] || ''}`
+  const summaryRest = summaryWrapped.slice(1).map((line) => `           ${line}`)
   const headerLines = [
     statusLine,
     '',
-    `${compose.field === 'summary' && compose.editing ? '>' : ' '} Summary: ${compose.summary || '<empty>'}${summaryCursor}`,
+    summaryFirst,
+    ...summaryRest,
     `${compose.field === 'body' && compose.editing ? '>' : ' '} Body:`,
-    ...bodyLines.map((line) => `  ${line}${bodyCursor && line === bodyLines[bodyLines.length - 1] ? bodyCursor : ''}`),
+    ...bodyVisualLines.map((line, index) => {
+      const isLast = index === bodyVisualLines.length - 1
+      return `  ${line}${bodyCursor && isLast ? bodyCursor : ''}`
+    }),
     '',
   ]
   const trailerLines = [

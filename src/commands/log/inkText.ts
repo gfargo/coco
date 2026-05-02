@@ -47,6 +47,83 @@ export function cellWidth(value: string): number {
   return Array.from(value).reduce((width, character) => width + characterWidth(character), 0)
 }
 
+/**
+ * Word-wrap `value` into lines that each fit within `width` cells. Breaks
+ * on whitespace where possible; falls back to mid-word splits when a single
+ * word is wider than the budget. Preserves blank input as a single empty
+ * line so `value.split('\n').flatMap(wrapCells)` round-trips cleanly.
+ */
+export function wrapCells(value: string, width: number): string[] {
+  if (width < 1) {
+    return [value]
+  }
+  if (cellWidth(value) <= width) {
+    return [value]
+  }
+
+  const lines: string[] = []
+  let current = ''
+  let currentWidth = 0
+
+  const flush = (): void => {
+    if (current.length > 0) {
+      lines.push(current)
+      current = ''
+      currentWidth = 0
+    }
+  }
+
+  // Tokenize into runs of whitespace + non-whitespace so we can keep word
+  // boundaries when possible.
+  const tokens = value.match(/\s+|\S+/g) || []
+
+  for (const token of tokens) {
+    const tokenWidth = cellWidth(token)
+
+    if (currentWidth + tokenWidth <= width) {
+      current += token
+      currentWidth += tokenWidth
+      continue
+    }
+
+    if (/^\s+$/.test(token)) {
+      // Drop boundary whitespace at line breaks.
+      flush()
+      continue
+    }
+
+    flush()
+
+    if (tokenWidth <= width) {
+      current = token
+      currentWidth = tokenWidth
+      continue
+    }
+
+    // Word longer than budget — hard-split into chunks.
+    let remaining = token
+    while (cellWidth(remaining) > width) {
+      let chunk = ''
+      let chunkWidth = 0
+      for (const character of Array.from(remaining)) {
+        const charW = characterWidth(character)
+        if (chunkWidth + charW > width) break
+        chunk += character
+        chunkWidth += charW
+      }
+      lines.push(chunk)
+      remaining = remaining.slice(chunk.length)
+    }
+    if (remaining.length > 0) {
+      current = remaining
+      currentWidth = cellWidth(remaining)
+    }
+  }
+
+  flush()
+  return lines.length > 0 ? lines : [value]
+}
+
 export function truncateCells(value: string, width: number): string {
   if (width < 1) {
     return ''
