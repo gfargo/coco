@@ -41,6 +41,7 @@ export type LogInkCommandId =
   | 'refresh'
   | 'revertSelection'
   | 'search'
+  | 'toggleDiffViewMode'
   | 'toggleGraph'
   | 'workflowActions'
   | 'yankClipboard'
@@ -184,6 +185,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     label: 'graph',
     description: 'Toggle compact and full graph display.',
     contexts: ['normal', 'commits'],
+  },
+  {
+    id: 'toggleDiffViewMode',
+    keys: ['d'],
+    label: 'split/unified',
+    description: 'Toggle the diff view between unified and side-by-side split rendering. Falls back to unified on narrow terminals.',
+    contexts: ['commits'],
   },
   {
     id: 'navigateHome',
@@ -354,6 +362,12 @@ export type GetLogInkFooterHintsOptions = {
    *  back to the generic "enter open" hint instead of showing per-item
    *  ops the user cannot reach. */
   sidebarItemCount?: number
+  /**
+   * Current diff view rendering mode (#785). When set on the diff view
+   * the footer surfaces `d split` / `d unified` so users see what `d`
+   * will switch to.
+   */
+  diffViewMode?: 'unified' | 'split'
 }
 
 export type LogInkChordContinuation = {
@@ -539,9 +553,14 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   }
 
   if (options.activeView === 'diff') {
+    // Surface what `d` will switch *to* — labels the next mode rather
+    // than the current one so the hint reads as a verb. The split-mode
+    // hint is only shown for the read-only diff sources (commit/stash);
+    // the worktree diff stays unified-only for now.
+    const splitToggleHint = options.diffViewMode === 'split' ? 'd unified' : 'd split'
     if (options.diffSource === 'stash') {
       return {
-        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'o edit', 'y yank', 'esc back'],
+        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'o edit', splitToggleHint, 'y yank', 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
@@ -549,7 +568,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
       // Commit-diff explore: read-only diff, but `c` cherry-picks the
       // cursored file from the commit into the worktree.
       return {
-        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', 'y/Y yank', 'esc back'],
+        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', splitToggleHint, 'y/Y yank', 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }

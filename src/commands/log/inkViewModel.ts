@@ -29,6 +29,15 @@ export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discar
  * UI into a commit-diff view.
  */
 export type LogInkDiffSource = 'commit' | 'worktree' | 'stash'
+/**
+ * Diff rendering mode (#785). `unified` is the historical single-column
+ * patch view; `split` lays the same lines out side-by-side (removals on
+ * the left, additions on the right) for wide terminals. The toggle is
+ * scoped to the diff view (`d` key) and falls back to unified at render
+ * time when the terminal is too narrow — the user's preference is
+ * preserved either way.
+ */
+export type LogInkDiffViewMode = 'unified' | 'split'
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
@@ -160,6 +169,14 @@ export type LogInkState = {
    * cleared.
    */
   historyFetchArgs?: LogInkHistoryFetchArgs
+  /**
+   * Diff view rendering mode (#785). `unified` (default) keeps the
+   * historical single-column patch view; `split` lays removals on the
+   * left and additions on the right. The renderer falls back to
+   * unified at paint time when the terminal is too narrow — this field
+   * stores the user's preference, not the effective render mode.
+   */
+  diffViewMode: LogInkDiffViewMode
 }
 
 export type LogInkStatusFilterMask = {
@@ -281,6 +298,8 @@ export type LogInkAction =
   | { type: 'closeInputPrompt' }
   | { type: 'toggleStatusFilterMask'; kind: keyof LogInkStatusFilterMask }
   | { type: 'setHistoryFetchArgs'; value?: LogInkHistoryFetchArgs }
+  | { type: 'toggleDiffViewMode' }
+  | { type: 'setDiffViewMode'; value: LogInkDiffViewMode }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -621,6 +640,7 @@ export function createLogInkState(
     sidebarTab: 'status',
     userSidebarTab: 'status',
     statusFilterMask: { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK },
+    diffViewMode: 'unified',
   }
 }
 
@@ -795,6 +815,27 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     }
     case 'setHistoryFetchArgs':
       return { ...state, historyFetchArgs: action.value, pendingKey: undefined }
+    case 'toggleDiffViewMode':
+      // Reset the scroll offsets so the new mode opens at the top — long
+      // lines wrap differently in split mode (the renderer truncates per
+      // column instead of per row), so the saved offset can land on a
+      // different visual line. Snap to the top is simpler than mapping
+      // unified offsets to split offsets.
+      return {
+        ...state,
+        diffViewMode: state.diffViewMode === 'unified' ? 'split' : 'unified',
+        diffPreviewOffset: 0,
+        worktreeDiffOffset: 0,
+        pendingKey: undefined,
+      }
+    case 'setDiffViewMode':
+      return {
+        ...state,
+        diffViewMode: action.value,
+        diffPreviewOffset: 0,
+        worktreeDiffOffset: 0,
+        pendingKey: undefined,
+      }
     case 'moveToBottom':
       return {
         ...state,

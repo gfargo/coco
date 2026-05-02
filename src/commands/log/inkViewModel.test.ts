@@ -368,6 +368,40 @@ describe('log Ink view model', () => {
     expect(state.showCommandPalette).toBe(true)
   })
 
+  it('defaults the diff view mode to unified', () => {
+    const state = createLogInkState(rows)
+    expect(state.diffViewMode).toBe('unified')
+  })
+
+  it('toggles diffViewMode between unified and split, resetting scroll offsets', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pageDetailPreview', delta: 5, previewLineCount: 100 })
+    state = applyLogInkAction(state, { type: 'pageWorktreeDiff', delta: 5, lineCount: 100 })
+    expect(state.diffPreviewOffset).toBe(5)
+    expect(state.worktreeDiffOffset).toBe(5)
+
+    state = applyLogInkAction(state, { type: 'toggleDiffViewMode' })
+    expect(state.diffViewMode).toBe('split')
+    expect(state.diffPreviewOffset).toBe(0)
+    expect(state.worktreeDiffOffset).toBe(0)
+
+    state = applyLogInkAction(state, { type: 'toggleDiffViewMode' })
+    expect(state.diffViewMode).toBe('unified')
+  })
+
+  it('honors setDiffViewMode for explicit (e.g. persistence-restored) values', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setDiffViewMode', value: 'split' })
+    expect(state.diffViewMode).toBe('split')
+
+    // Re-applying the same value is a no-op for diffViewMode but still
+    // resets scroll — consistent with toggle semantics.
+    state = applyLogInkAction(state, { type: 'pageDetailPreview', delta: 3, previewLineCount: 50 })
+    state = applyLogInkAction(state, { type: 'setDiffViewMode', value: 'unified' })
+    expect(state.diffViewMode).toBe('unified')
+    expect(state.diffPreviewOffset).toBe(0)
+  })
+
   it('tracks workflow action and confirmation state', () => {
     let state = createLogInkState(rows)
 
