@@ -1500,8 +1500,32 @@ function renderSidebar(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
-  const lines = sidebarLines(context, contextStatus, state.sidebarTab, width - 4, state, theme)
   const tabs = getLogInkSidebarTabs()
+
+  // Accordion layout — every tab's title is visible on its own line, but
+  // only the active tab expands its content underneath. Switching tabs
+  // (1-5 / [/]) collapses the previous and expands the next.
+  const tabBlocks = tabs.flatMap((tab, tabIndex) => {
+    const isActive = tab === state.sidebarTab
+    const count = sidebarTabCount(tab, context)
+    const labelWithCount = count !== undefined
+      ? `${sidebarTabLabel(tab)} (${count})`
+      : sidebarTabLabel(tab)
+    const headerText = isActive ? `[${labelWithCount}]` : labelWithCount
+    const blocks: ReactTypes.ReactElement[] = []
+    if (tabIndex > 0) {
+      blocks.push(h(Text, { key: `tab-spacer-${tab}` }, ''))
+    }
+    blocks.push(h(Text, {
+      key: `tab-header-${tab}`,
+      bold: isActive,
+      dimColor: !isActive,
+    }, headerText))
+    if (isActive) {
+      blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, theme))
+    }
+    return blocks
+  })
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -1511,15 +1535,75 @@ function renderSidebar(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Repository', focused)),
-  h(Text, { dimColor: true }, tabs.map((tab) => {
-    const count = sidebarTabCount(tab, context)
-    const labelWithCount = count !== undefined
-      ? `${sidebarTabLabel(tab)} (${count})`
-      : sidebarTabLabel(tab)
-    return tab === state.sidebarTab ? `[${labelWithCount}]` : labelWithCount
-  }).join(' ')),
   h(Text, undefined, ''),
-  ...lines.map((line, index) => h(Text, { key: `sidebar-${index}` }, truncate(line, width - 4))))
+  ...tabBlocks)
+}
+
+/**
+ * Render the indented body of the active sidebar tab. The status tab
+ * colours its summary counts (warning / danger / muted) and per-file
+ * rows so they read as the same severity scale used in the main status
+ * surface; every other tab falls through to `sidebarLines` for its
+ * string-based summary.
+ */
+function renderActiveSidebarContent(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  tab: LogInkSidebarTab,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement[] {
+  if (tab === 'status') {
+    return renderActiveStatusTabContent(h, Text, context, contextStatus, width, theme)
+  }
+  const lines = sidebarLines(context, contextStatus, tab, width - 6, state, theme)
+  return lines.map((line, index) => h(Text, {
+    key: `tab-content-${tab}-${index}`,
+    dimColor: !line.trim(),
+  }, truncate(`  ${line}`, width - 4)))
+}
+
+function renderActiveStatusTabContent(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement[] {
+  if (isLogInkContextKeyLoading(contextStatus, 'worktree')) {
+    return [h(Text, { key: 'tab-status-loading', dimColor: true }, '  Loading status…')]
+  }
+  const worktree = context.worktree
+  if (!worktree) {
+    return [h(Text, { key: 'tab-status-empty', dimColor: true }, '  Status unavailable')]
+  }
+  const colorOf = (state: 'staged' | 'unstaged' | 'untracked'): string | undefined => {
+    if (theme.noColor) return undefined
+    if (state === 'staged') return theme.colors.warning
+    if (state === 'unstaged') return theme.colors.danger
+    return theme.colors.muted
+  }
+  const summaryRow = (count: number, label: string, key: string, kind: 'staged' | 'unstaged' | 'untracked') =>
+    h(Text, { key }, '  ', h(Text, { color: colorOf(kind), bold: count > 0 }, `${count} ${label}`))
+  const fileRows = worktree.files.slice(0, 12).map((file, index) => {
+    const codes = `${file.indexStatus}${file.worktreeStatus}`
+    return h(Text, {
+      key: `tab-status-file-${index}`,
+      color: colorOf(file.state),
+    }, truncate(`  ${codes} ${file.path}`, width - 4))
+  })
+  return [
+    summaryRow(worktree.stagedCount, 'staged', 'tab-status-staged', 'staged'),
+    summaryRow(worktree.unstagedCount, 'unstaged', 'tab-status-unstaged', 'unstaged'),
+    summaryRow(worktree.untrackedCount, 'untracked', 'tab-status-untracked', 'untracked'),
+    ...(fileRows.length
+      ? [h(Text, { key: 'tab-status-spacer' }, ''), ...fileRows]
+      : []),
+  ]
 }
 
 function renderMainPanel(
