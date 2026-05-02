@@ -1096,9 +1096,23 @@ export function getLogInkInputEvents(
     return [{
       type: 'runWorkflowAction',
       id: 'checkout-file-from-commit',
-      payload: `${context.commitDiffSelectedSha} ${context.commitDiffSelectedPath}`,
+      payload: `${context.commitDiffSelectedSha} ${context.commitDiffSelectedPath}`,
     }]
   }
+
+  // `c` on the history view cherry-picks the full selected commit on
+  // top of the current branch. Routed through the y-confirm flow since
+  // it can produce conflicts and is a real working-tree mutation.
+  if (
+    inputValue === 'c' &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    return [action({ type: 'setPendingConfirmation', value: 'cherry-pick-commit' })]
+  }
+
   // Enter on a stash row pushes the diff view scoped to that stash.
   // The runtime loads `git stash show -p <ref>` once the view is
   // active. The stash ref is passed via the action so we don't need a

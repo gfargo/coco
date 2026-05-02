@@ -17,7 +17,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next'],
+      contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', '/ search', 'gg/G top/bottom'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 

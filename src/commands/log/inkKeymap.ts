@@ -542,7 +542,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   }
 
   return {
-    contextual: ['↑/↓ move', '/ search', 'gg/G top/bottom', 'n/N next'],
+    contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', '/ search', 'gg/G top/bottom'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }

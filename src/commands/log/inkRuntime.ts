@@ -77,6 +77,7 @@ import { substituteGraphChars } from './inkGraphChars'
 import { formatHyperlink } from './inkHyperlinks'
 import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
+import { getSavedSidebarTab, saveSidebarTab } from './inkSidebarPersistence'
 import {
   PromotedSelectionsSnapshot,
   rectifyPromotedSelectionIndex,
@@ -148,7 +149,7 @@ import {
   setUpstream,
 } from './branchActions'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from './tagActions'
-import { checkoutFileFromCommit } from './historyActions'
+import { checkoutFileFromCommit, cherryPickCommit } from './historyActions'
 import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
@@ -798,6 +799,34 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setState((current) => applyLogInkAction(current, action))
   }, [])
 
+  // Auto-dismiss status messages after a short window so transient
+  // confirmations ("Pulled current branch", "Edited foo.ts") don't
+  // linger forever. Each new message resets the timer; clearing the
+  // message via setStatus(undefined) cancels it. Doesn't fire while a
+  // modal (input prompt, confirmation, palette) is open — those flows
+  // use the status line as live feedback for the open task.
+  React.useEffect(() => {
+    if (!state.statusMessage) return
+    if (state.inputPrompt || state.pendingConfirmationId || state.pendingMutationConfirmation || state.showCommandPalette) {
+      return
+    }
+    // DevSkim: ignore DS172411 — callback is a function literal, delay
+    // is a hard-coded constant.
+    const handle = setTimeout(() => {
+      if (mountedRef.current) {
+        dispatch({ type: 'setStatus', value: undefined })
+      }
+    }, 4000)
+    return () => clearTimeout(handle)
+  }, [
+    dispatch,
+    state.inputPrompt,
+    state.pendingConfirmationId,
+    state.pendingMutationConfirmation,
+    state.showCommandPalette,
+    state.statusMessage,
+  ])
+
   const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
     // Loud refresh (manual `r`): flip everything to 'loading' so the user
     // sees the surfaces clear, then settle to 'ready' on completion.
@@ -880,6 +909,36 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       watcher?.close()
     }
   }, [git, refreshContext, refreshWorktreeContext])
+
+  // Per-repo sidebar tab persistence (#21). Resolve the repo root, look
+  // up the cached tab, and dispatch `setSidebarTab` once on mount so the
+  // user lands on whichever tab they were last on for this project.
+  // Subsequent setSidebarTab actions (1-5 / [/]) write back to the cache.
+  // Best-effort — read/write failures fall through to the default tab.
+  const repoRootRef = React.useRef<string | undefined>(undefined)
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const repoRoot = (await git.revparse(['--show-toplevel'])).trim()
+        if (cancelled || !repoRoot) return
+        repoRootRef.current = repoRoot
+        const saved = getSavedSidebarTab(repoRoot)
+        if (saved && saved !== state.sidebarTab) {
+          dispatch({ type: 'setSidebarTab', value: saved })
+        }
+      } catch {
+        // Not in a worktree, or revparse failed; nothing to restore.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [git, dispatch])
+
+  React.useEffect(() => {
+    const repoRoot = repoRootRef.current
+    if (!repoRoot) return
+    saveSidebarTab(repoRoot, state.sidebarTab)
+  }, [state.sidebarTab])
 
   // P-stash-explorer: load `git stash show -p <ref>` once the diff view
   // becomes active with diffSource='stash'. Best-effort — empty stashes
@@ -1279,6 +1338,15 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!path) return { ok: false, message: 'No stash file under cursor' }
         if (!ref) return { ok: false, message: 'No stash ref active' }
         return checkoutFileFromStash(git, ref, path)
+      },
+      'cherry-pick-commit': async () => {
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        return cherryPickCommit(git, {
+          hash: commit.hash,
+          shortHash: commit.shortHash,
+          message: commit.message,
+        })
       },
       'checkout-file-from-commit': async () => {
         // payload is "<sha> <path>" so we pass both through a single

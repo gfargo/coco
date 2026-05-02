@@ -138,6 +138,17 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // Per-view-only: scoped to the history view in inkInput so `c`
+      // doesn't fire elsewhere. Empty key keeps it palette-discoverable
+      // without registering a global hotkey.
+      id: 'cherry-pick-commit',
+      key: '',
+      label: 'Cherry-pick commit',
+      description: 'Apply the selected commit on top of the current branch (after confirmation).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'open-pr',
       key: 'O',
       label: 'Open PR / repo',
