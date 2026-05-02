@@ -369,12 +369,31 @@ export function getLogInkInputEvents(
         return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel' })]
       }
       // Most prompt kinds dispatch a workflow whose id matches the
-      // kind. PR-related prompts forward to a workflow id distinct
-      // from the prompt name so the panel can keep its keys
-      // mnemonic-friendly while the workflow ids stay descriptive.
-      // pr-merge-strategy validates the strategy at the input layer
-      // so a typo doesn't surface as a "workflow not yet wired"
-      // status downstream.
+      // kind (`create-branch`, `rename-branch`, etc.). A few are
+      // exceptions:
+      // - `reset-mode` collects soft/mixed/hard and forwards the mode
+      //   as the payload to `reset-to-commit` (#777).
+      // - `pr-merge-strategy` validates the strategy and routes to
+      //   `merge-pr` via the y-confirm path (#783).
+      // - `pr-comment` dispatches `comment-pr` directly — the body
+      //   itself is the affirmative action.
+      // - `pr-request-changes` routes to `request-changes-pr` via
+      //   y-confirm because the review is publicly visible.
+      // Each exception validates here so a typo doesn't surface as a
+      // "workflow not yet wired" status downstream.
+      if (state.inputPrompt.kind === 'reset-mode') {
+        const mode = value.toLowerCase()
+        if (mode !== 'soft' && mode !== 'mixed' && mode !== 'hard') {
+          return [action({
+            type: 'setStatus',
+            value: `Unknown reset mode: ${value}. Use soft, mixed, or hard.`,
+          })]
+        }
+        return [
+          { type: 'runWorkflowAction', id: 'reset-to-commit', payload: mode },
+          action({ type: 'closeInputPrompt' }),
+        ]
+      }
       if (state.inputPrompt.kind === 'pr-merge-strategy') {
         const strategy = value.toLowerCase()
         if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
@@ -1333,6 +1352,55 @@ export function getLogInkInputEvents(
     !state.pendingCommitFocused
   ) {
     return [action({ type: 'setPendingConfirmation', value: 'cherry-pick-commit' })]
+  }
+
+  // `R` reverts the cursored commit by adding an inverse commit on top
+  // of HEAD. Same y-confirm gate as cherry-pick — non-rewriting but
+  // still a real mutation.
+  if (
+    inputValue === 'R' &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    return [action({ type: 'setPendingConfirmation', value: 'revert-commit' })]
+  }
+
+  // `Z` resets the current branch tip to the cursored commit. Opens a
+  // mode prompt (soft / mixed / hard) instead of jumping straight to
+  // confirmation because the choice changes the destructiveness
+  // dramatically — `--hard` discards working-tree changes. The prompt
+  // submission special-cases `kind === 'reset-mode'` to forward the
+  // mode through `reset-to-commit` (see prompt-submit handler above).
+  // No `initial` value: existing prompts append to initial rather than
+  // replacing it, which would surprise the user typing the mode.
+  if (
+    inputValue === 'Z' &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'reset-mode',
+      label: 'Reset mode (soft / mixed / hard)',
+    })]
+  }
+
+  // `i` (lowercase) starts an interactive rebase from the cursored
+  // commit's parent. Lowercase keeps the existing global `I`
+  // ai-commit-summary workflow reachable on the history view; `i`
+  // also matches the `git rebase -i` flag mnemonic.
+  if (
+    inputValue === 'i' &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    return [action({ type: 'setPendingConfirmation', value: 'interactive-rebase' })]
   }
 
   // `y` / `Y` yank the contextually relevant identifier from the active
