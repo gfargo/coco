@@ -34,7 +34,7 @@ export type LogInkInputEvent =
   | { type: 'revertSelectedHunk' }
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
-  | { type: 'runWorkflowAction'; id: string }
+  | { type: 'runWorkflowAction'; id: string; payload?: string }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -251,6 +251,40 @@ export function getLogInkInputEvents(
       return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
     }
     return [{ type: 'exit' }]
+  }
+
+  // Input prompt is the most modal — when active, every keystroke routes
+  // into the prompt until Enter (submit) or Esc (cancel). Sits above the
+  // filter/confirmation/compose handlers so a prompt opened from inside
+  // any of those still captures focus cleanly.
+  if (state.inputPrompt) {
+    if (key.escape) {
+      return [
+        action({ type: 'closeInputPrompt' }),
+        action({ type: 'setStatus', value: 'cancelled' }),
+      ]
+    }
+    if (key.return) {
+      const value = state.inputPrompt.value.trim()
+      if (!value) {
+        return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel' })]
+      }
+      const id = state.inputPrompt.kind
+      return [
+        { type: 'runWorkflowAction', id, payload: value },
+        action({ type: 'closeInputPrompt' }),
+      ]
+    }
+    if (key.backspace || key.delete) {
+      return [action({ type: 'backspaceInputPrompt' })]
+    }
+    if (key.ctrl && inputValue === 'u') {
+      return [action({ type: 'clearInputPromptText' })]
+    }
+    if (inputValue && !key.ctrl && !key.meta) {
+      return [action({ type: 'appendInputPrompt', value: inputValue })]
+    }
+    return []
   }
 
   if (state.commitCompose.editing) {
@@ -851,6 +885,24 @@ export function getLogInkInputEvents(
   // action — no confirmation prompt.
   if (key.return && state.activeView === 'branches' && context.branchCount) {
     return [{ type: 'runWorkflowAction', id: 'checkout-branch' }]
+  }
+
+  // `+` on the branches / tags views opens a text-input prompt for the
+  // new branch / tag name. Empty submit is rejected by the prompt
+  // handler so the user has to either type a name or press Esc.
+  if (inputValue === '+' && state.activeView === 'branches') {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-branch',
+      label: 'New branch name',
+    })]
+  }
+  if (inputValue === '+' && state.activeView === 'tags') {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-tag',
+      label: 'New tag name',
+    })]
   }
 
   if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {

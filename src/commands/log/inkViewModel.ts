@@ -110,6 +110,23 @@ export type LogInkState = {
    * responsible for hiding the synthetic row when the worktree is clean.
    */
   pendingCommitFocused?: boolean
+  /**
+   * Active text-input prompt overlay. Drives create-branch / create-tag /
+   * etc. flows where we need a free-text value before running an action.
+   * When set, all keystrokes route into the prompt until Enter (submit)
+   * or Esc (cancel) is pressed.
+   */
+  inputPrompt?: LogInkInputPromptState
+}
+
+export type LogInkInputPromptKind =
+  | 'create-branch'
+  | 'create-tag'
+
+export type LogInkInputPromptState = {
+  kind: LogInkInputPromptKind
+  label: string
+  value: string
 }
 
 export type LogInkAction =
@@ -165,6 +182,11 @@ export type LogInkAction =
   | { type: 'toggleCommandPalette' }
   | { type: 'cycleBranchSort' }
   | { type: 'cycleTagSort' }
+  | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string }
+  | { type: 'appendInputPrompt'; value: string }
+  | { type: 'backspaceInputPrompt' }
+  | { type: 'clearInputPromptText' }
+  | { type: 'closeInputPrompt' }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -598,6 +620,30 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedTagIndex: 0,
         pendingKey: undefined,
       }
+    case 'openInputPrompt':
+      return {
+        ...state,
+        inputPrompt: {
+          kind: action.kind,
+          label: action.label,
+          value: action.initial || '',
+        },
+        pendingKey: undefined,
+      }
+    case 'appendInputPrompt':
+      return state.inputPrompt
+        ? { ...state, inputPrompt: { ...state.inputPrompt, value: `${state.inputPrompt.value}${action.value}` } }
+        : state
+    case 'backspaceInputPrompt':
+      return state.inputPrompt
+        ? { ...state, inputPrompt: { ...state.inputPrompt, value: state.inputPrompt.value.slice(0, -1) } }
+        : state
+    case 'clearInputPromptText':
+      return state.inputPrompt
+        ? { ...state, inputPrompt: { ...state.inputPrompt, value: '' } }
+        : state
+    case 'closeInputPrompt':
+      return { ...state, inputPrompt: undefined, pendingKey: undefined }
     case 'moveToBottom':
       return {
         ...state,

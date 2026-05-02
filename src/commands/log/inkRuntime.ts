@@ -135,7 +135,8 @@ import {
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
-import { checkoutBranch, deleteBranch } from './branchActions'
+import { checkoutBranch, createBranch, deleteBranch } from './branchActions'
+import { createLightweightTag } from './tagActions'
 import { deleteLocalTag } from './tagActions'
 import { dropStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
@@ -1117,8 +1118,19 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // result on the status line, and silently refresh so the deleted item
   // disappears. Called from the y-confirm path for delete-branch / delete-
   // tag / drop-stash / remove-worktree / abort-operation.
-  const runWorkflowAction = React.useCallback(async (id: string) => {
+  const runWorkflowAction = React.useCallback(async (id: string, payload?: string) => {
     const handlers: Record<string, () => Promise<{ ok: boolean; message: string } | undefined>> = {
+      'create-branch': async () => {
+        const name = payload?.trim()
+        if (!name) return { ok: false, message: 'Branch name required' }
+        const startPoint = context.branches?.currentBranch || 'HEAD'
+        return createBranch(git, name, startPoint)
+      },
+      'create-tag': async () => {
+        const name = payload?.trim()
+        if (!name) return { ok: false, message: 'Tag name required' }
+        return createLightweightTag(git, name, 'HEAD')
+      },
       'checkout-branch': async () => {
         const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
         const visible = state.filter
@@ -1353,7 +1365,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       } else if (event.type === 'runAiCommitDraft') {
         void runAiCommitDraft()
       } else if (event.type === 'runWorkflowAction') {
-        void runWorkflowAction(event.id)
+        void runWorkflowAction(event.id, event.payload)
       } else {
         // P4.5: enrich filter-mutating actions with a precomputed
         // selection snapshot so the reducer can preserve the cursor on
@@ -2424,6 +2436,10 @@ function renderDetailPanel(
     return renderCommandPalette(h, components, state, width, theme, focused)
   }
 
+  if (state.inputPrompt) {
+    return renderInputPromptPanel(h, components, state, width, theme, focused)
+  }
+
   if (state.pendingConfirmationId || state.pendingMutationConfirmation) {
     return renderConfirmationPanel(h, components, state, width, theme, focused)
   }
@@ -3016,6 +3032,37 @@ function renderCommitPanel(
   loading
     ? null
     : h(Text, { key: 'commit-state', dimColor: true }, truncate(stateLine, width - 4)))
+}
+
+function renderInputPromptPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const prompt = state.inputPrompt
+  if (!prompt) {
+    return h(Box, { width })
+  }
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle('Prompt', focused)),
+  h(Text, { dimColor: true }, truncate(prompt.label, width - 4)),
+  h(Text, undefined, ''),
+  h(Text, {
+    bold: true,
+    color: theme.noColor ? undefined : theme.colors.accent,
+  }, truncate(`${prompt.value}_`, width - 4)),
+  h(Text, undefined, ''),
+  h(Text, { dimColor: true }, 'Enter to submit · Esc to cancel · Ctrl+u to clear'))
 }
 
 function renderConfirmationPanel(
