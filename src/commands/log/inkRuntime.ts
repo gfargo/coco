@@ -698,10 +698,6 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const h = React.createElement
   const { exit } = useApp()
   const windowSize = useWindowSize()
-  const layout = getLogInkLayout({
-    columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
-    rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
-  })
   // Bumping this on SIGCONT forces the existing tree to repaint so users
   // land on a drawn screen after `fg` instead of an empty alt buffer.
   const [, setResumeTick] = React.useState(0)
@@ -1359,6 +1355,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         dispatch(enriched)
       }
     })
+  })
+
+  // Layout depends on focus (sidebar grows when focused), so it's
+  // computed here — after state is in scope but before the render path.
+  const layout = getLogInkLayout({
+    columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
+    rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
+    sidebarFocused: state.focus === 'sidebar',
   })
 
   if (layout.tooSmall) {
