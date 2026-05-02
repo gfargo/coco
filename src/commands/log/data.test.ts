@@ -4,6 +4,7 @@ import {
   LOG_DEFAULT_LIMIT,
   LOG_INTERACTIVE_DEFAULT_LIMIT,
   buildLogArgs,
+  buildToggleGraphArgs,
   getCommitFilePreview,
   getCommitRows,
   getLogView,
@@ -67,6 +68,54 @@ describe('log data layer', () => {
 
     expect(args).toContain('--first-parent')
     expect(args).not.toContain('--no-merges')
+  })
+
+  describe('buildToggleGraphArgs', () => {
+    it('switches to full topology when fullGraph is true', () => {
+      const merged = buildToggleGraphArgs(argv({ view: 'compact' }), true)
+
+      expect(merged.view).toBe('full')
+      // The merged args, fed through buildLogArgs, must produce --all and
+      // drop --first-parent so all branches' topology shows up.
+      const args = buildLogArgs(merged)
+      expect(args).toContain('--all')
+      expect(args).not.toContain('--first-parent')
+    })
+
+    it('restores the original view when fullGraph is false', () => {
+      const merged = buildToggleGraphArgs(argv({ view: 'compact' }), false)
+
+      expect(merged.view).toBe('compact')
+      const args = buildLogArgs(merged)
+      expect(args).toContain('--first-parent')
+      expect(args).not.toContain('--all')
+    })
+
+    it('defaults to compact when argv.view is undefined and fullGraph is false', () => {
+      const merged = buildToggleGraphArgs(argv(), false)
+
+      expect(merged.view).toBe('compact')
+    })
+
+    it('preserves unrelated argv fields (path, author, since, branch)', () => {
+      const merged = buildToggleGraphArgs(
+        argv({ view: 'compact', author: 'alice', path: 'src/', since: '2024-01-01', branch: 'main' }),
+        true
+      )
+
+      expect(merged.author).toBe('alice')
+      expect(merged.path).toBe('src/')
+      expect(merged.since).toBe('2024-01-01')
+      expect(merged.branch).toBe('main')
+      expect(merged.view).toBe('full')
+    })
+
+    it('does not mutate the input argv', () => {
+      const original = argv({ view: 'compact' })
+      buildToggleGraphArgs(original, true)
+
+      expect(original.view).toBe('compact')
+    })
   })
 
   it('preserves graph continuation rows while parsing commits', () => {
