@@ -391,14 +391,19 @@ function loadLogInkContextEntries(git: SimpleGit): Array<{
   key: LogInkContextKey
   load: () => Promise<LogInkContext[LogInkContextKey] | undefined>
 }> {
+  // Boot-time per-key fetches. Each load() runs in parallel from
+  // `LogInkApp`'s mount effect. `pullRequest` is intentionally
+  // omitted (#808) — its `gh pr view --json` call duplicates the
+  // slim PR fetch already happening inside `getProviderOverview`,
+  // and the only consumer that needs the *full* enriched response is
+  // the dedicated PR view (`g p`). Lazy-loaded by a separate effect
+  // when the user actually navigates there. Header / yank / workflow
+  // paths read the slim version off `provider.currentPullRequest` so
+  // the chrome stays populated immediately on boot.
   return [
     {
       key: 'branches',
       load: () => safe(getBranchOverview(git)),
-    },
-    {
-      key: 'pullRequest',
-      load: () => safe(getPullRequestOverview(git)),
     },
     {
       key: 'tags',
@@ -850,9 +855,19 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     })
   )
   const [context, setContext] = React.useState<LogInkContext>({})
-  const [contextStatus, setContextStatus] = React.useState<LogInkContextStatus>(() =>
-    createLogInkContextStatus('loading')
-  )
+  const [contextStatus, setContextStatus] = React.useState<LogInkContextStatus>(() => {
+    // Boot starts every fetched key in 'loading' so the surfaces show
+    // their loading hints immediately. `pullRequest` is the exception
+    // (#808) — it isn't part of the boot fetch entries; it lazy-loads
+    // when the user enters the PR view. Marking it 'idle' avoids a
+    // permanent "loading" flag in the chrome and lets the dedicated
+    // PR view's own load effect drive its loading state.
+    return updateLogInkContextStatus(
+      createLogInkContextStatus('loading'),
+      'pullRequest',
+      'idle'
+    )
+  })
   const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
@@ -1203,6 +1218,32 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       active = false
     }
   }, [git])
+
+  // Lazy-load the full pullRequest overview (#808). Only fires when
+  // the user actually navigates to the PR view, and only when we
+  // don't already have data (so a workflow-triggered refresh that
+  // hydrated `pullRequest` doesn't re-fetch on view entry). The
+  // dedicated PR view shows its own loading state while this is in
+  // flight; everywhere else (header glyph, yank, workflow runner)
+  // already falls through to the slim `provider.currentPullRequest`
+  // so the chrome stays populated immediately on boot.
+  React.useEffect(() => {
+    if (state.activeView !== 'pull-request') return
+    if (context.pullRequest) return
+    let active = true
+    setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequest', 'loading'))
+    void safe(getPullRequestOverview(git)).then((value) => {
+      if (!active) return
+      setContext((current) => ({
+        ...current,
+        pullRequest: value,
+      }))
+      setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequest', 'ready'))
+    })
+    return () => {
+      active = false
+    }
+  }, [git, state.activeView, context.pullRequest])
 
   React.useEffect(() => {
     let active = true
