@@ -145,6 +145,20 @@ export type LogInkState = {
    * focus starts on items.
    */
   sidebarHeaderFocused: boolean
+  /**
+   * Status surface counterpart of `sidebarHeaderFocused`: when true,
+   * the cursor sits on the active group's *header row* (e.g.
+   * "Unstaged (3)") rather than on a file inside the group. Pressing
+   * Enter fires the group-level batch action (stage-all / unstage-all)
+   * instead of opening a per-file diff.
+   *
+   * Triggered by ↑ at the first file of the active group; cleared by
+   * ↓ (cursor re-enters the group's first file) or by ←/→ jumping to
+   * a different group's first file. Resets whenever the status view
+   * loses focus or its file selection moves so we never get stuck
+   * "between" cursor states.
+   */
+  statusGroupHeaderFocused: boolean
   statusMessage?: string
   /**
    * Set by `navigateOpenDiffForCommit` / `navigateOpenDiffForWorktreeFile`
@@ -296,6 +310,8 @@ export type LogInkAction =
   | { type: 'moveBranch'; delta: number; count: number }
   | { type: 'resetBranchSelection' }
   | { type: 'setSidebarHeaderFocused'; value: boolean }
+  | { type: 'setStatusGroupHeaderFocused'; value: boolean }
+  | { type: 'jumpToStatusGroup'; targetIndex: number }
   | { type: 'setInspectorTab'; value: LogInkInspectorTab }
   | { type: 'cycleInspectorTab'; delta: -1 | 1 }
   | { type: 'moveTag'; delta: number; count: number }
@@ -494,6 +510,7 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
+    statusGroupHeaderFocused: value === 'status' ? state.statusGroupHeaderFocused : false,
     pendingKey: undefined,
   }
 }
@@ -518,6 +535,7 @@ function withPoppedView(state: LogInkState): LogInkState {
     diffSource: next === 'diff' ? state.diffSource : undefined,
     stashDiffRef: next === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: next === 'history' ? state.pendingCommitFocused : false,
+    statusGroupHeaderFocused: next === 'status' ? state.statusGroupHeaderFocused : false,
     pendingKey: undefined,
   }
 }
@@ -537,6 +555,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
+    statusGroupHeaderFocused: value === 'status' ? state.statusGroupHeaderFocused : false,
     pendingKey: undefined,
   }
 }
@@ -690,6 +709,7 @@ export function createLogInkState(
     sidebarTab: 'status',
     userSidebarTab: 'status',
     sidebarHeaderFocused: false,
+    statusGroupHeaderFocused: false,
     statusFilterMask: { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK },
     diffViewMode: 'unified',
     inspectorTab: 'inspector',
@@ -738,6 +758,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // Reset header focus when leaving the sidebar so the next
         // re-entry starts on items rather than mid-flag.
         sidebarHeaderFocused: false,
+        // Same idea for the status group header — Tab cycling away
+        // from 'commits' should always land back on a real file when
+        // the user returns.
+        statusGroupHeaderFocused: false,
         pendingKey: undefined,
       }
     case 'focusPrevious':
@@ -745,6 +769,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         focus: cycleValue(FOCUS_ORDER, state.focus, -1),
         sidebarHeaderFocused: false,
+        statusGroupHeaderFocused: false,
         pendingKey: undefined,
       }
     case 'move':
@@ -814,6 +839,9 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ),
         selectedWorktreeHunkIndex: 0,
         worktreeDiffOffset: 0,
+        // Cursor moved to a real file row — drop header focus so the
+        // file Enter handler (open diff) is what fires next.
+        statusGroupHeaderFocused: false,
       }
     }
     case 'moveBranch':
@@ -836,6 +864,26 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         sidebarHeaderFocused: action.value,
+        pendingKey: undefined,
+      }
+    case 'setStatusGroupHeaderFocused':
+      return {
+        ...state,
+        statusGroupHeaderFocused: action.value,
+        pendingKey: undefined,
+      }
+    case 'jumpToStatusGroup':
+      // Used by ←/→ on the status surface to land on the first file of
+      // the previous / next non-empty group. Clears header focus so the
+      // user is on a real file after the jump (matches the
+      // sidebar pattern where ←/→ between tabs lands on items, not on
+      // the next tab's header).
+      return {
+        ...state,
+        selectedWorktreeFileIndex: Math.max(0, action.targetIndex),
+        selectedWorktreeHunkIndex: 0,
+        worktreeDiffOffset: 0,
+        statusGroupHeaderFocused: false,
         pendingKey: undefined,
       }
     case 'setInspectorTab':
@@ -925,6 +973,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         statusFilterMask: allOff ? { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK } : next,
         selectedWorktreeFileIndex: 0,
+        // Group composition changed — header focus would be ambiguous
+        // (cursor lands on file 0 which may belong to a different
+        // group now). Reset to clear the indicator.
+        statusGroupHeaderFocused: false,
         pendingKey: undefined,
       }
     }
@@ -1113,6 +1165,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // Reset sidebar header focus when leaving the sidebar so a
         // re-entry starts on items rather than mid-flag.
         sidebarHeaderFocused: action.value === 'sidebar' ? state.sidebarHeaderFocused : false,
+        // The status group header lives in the 'commits' focus on
+        // the status view — clear when focus moves away so a
+        // re-entry starts on a real file.
+        statusGroupHeaderFocused: action.value === 'commits' ? state.statusGroupHeaderFocused : false,
         pendingKey: undefined,
       }
     case 'setPendingKey':

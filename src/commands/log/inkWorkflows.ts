@@ -252,6 +252,35 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'normal',
       requiresConfirmation: false,
     },
+    // Status surface group-level batch ops (#791 follow-up). Triggered
+    // by Enter when the cursor is on a status group header
+    // (Staged / Unstaged / Untracked). Empty `key` keeps them
+    // palette-discoverable without registering a global hotkey — the
+    // Enter-on-header path in inkInput is the canonical trigger.
+    {
+      id: 'unstage-all-staged',
+      key: '',
+      label: 'Unstage all staged files',
+      description: 'Unstage every file currently in the staged group.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'stage-all-unstaged',
+      key: '',
+      label: 'Stage all unstaged files',
+      description: 'Stage every modified-but-not-staged file.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'stage-all-untracked',
+      key: '',
+      label: 'Stage all untracked files',
+      description: 'Add every untracked file to the index after confirmation.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
     {
       id: 'delete-branch',
       key: 'D',

@@ -82,6 +82,18 @@ export type LogInkInputContext = {
    */
   worktreeSelectedPath?: string
   /**
+   * Sectioned view of the visible (mask-filtered) worktree files for
+   * the status surface, in canonical order (staged → unstaged →
+   * untracked). Drives ←/→ group jumps and the ↑-at-top-of-group →
+   * header-focus transition. Empty / undefined when status isn't the
+   * active view.
+   */
+  statusGroups?: Array<{
+    state: 'staged' | 'unstaged' | 'untracked'
+    count: number
+    startIndex: number
+  }>
+  /**
    * Path of the cursored file in a commit-diff explore. Used by `c`
    * (cherry-pick file from commit).
    */
@@ -1022,12 +1034,58 @@ export function getLogInkInputEvents(
     return [action({ type: 'nextSidebarTab' })]
   }
 
+  // ←/→ on the status surface jump between the staged / unstaged /
+  // untracked groups — the horizontal axis is "between groups", the
+  // vertical axis (↑/↓ below) is "within the active group's files".
+  // Lands on the first file of the target group (clears header
+  // focus) so the user is always on a real file after a jump,
+  // mirroring the sidebar's tab-switch landing behavior.
+  if (
+    (key.leftArrow || key.rightArrow) &&
+    state.activeView === 'status' &&
+    state.focus === 'commits' &&
+    context.statusGroups &&
+    context.statusGroups.length > 1
+  ) {
+    const groups = context.statusGroups
+    const currentIndex = groups.findIndex((group) =>
+      state.selectedWorktreeFileIndex >= group.startIndex &&
+      state.selectedWorktreeFileIndex < group.startIndex + group.count
+    )
+    const fallback = currentIndex >= 0 ? currentIndex : 0
+    const delta = key.leftArrow ? -1 : 1
+    const nextIndex = Math.max(0, Math.min(groups.length - 1, fallback + delta))
+    if (nextIndex !== fallback) {
+      return [action({ type: 'jumpToStatusGroup', targetIndex: groups[nextIndex].startIndex })]
+    }
+    return []
+  }
+
   if (key.upArrow || inputValue === 'k') {
     if (state.focus === 'detail' && context.detailFileCount) {
       return [action({ type: 'moveDetailFile', delta: -1, fileCount: context.detailFileCount })]
     }
 
     if (state.activeView === 'status' && context.worktreeFileCount) {
+      // Already on the group header — ↑ is a no-op (use ←/→ to switch
+      // groups). Mirrors the sidebar's "header is the top of the
+      // hierarchy" behavior.
+      if (state.statusGroupHeaderFocused) {
+        return []
+      }
+      // Cursor at the first file of its group → promote to the group
+      // header rather than crossing the boundary into the previous
+      // group's last file. Keeps the cursor inside its current
+      // container; ←/→ is the explicit way to move between groups.
+      if (context.statusGroups && context.statusGroups.length > 0) {
+        const currentGroup = context.statusGroups.find((group) =>
+          state.selectedWorktreeFileIndex >= group.startIndex &&
+          state.selectedWorktreeFileIndex < group.startIndex + group.count
+        )
+        if (currentGroup && state.selectedWorktreeFileIndex === currentGroup.startIndex) {
+          return [action({ type: 'setStatusGroupHeaderFocused', value: true })]
+        }
+      }
       return [action({
         type: 'moveWorktreeFile',
         delta: -1,
@@ -1128,6 +1186,12 @@ export function getLogInkInputEvents(
     }
 
     if (state.activeView === 'status' && context.worktreeFileCount) {
+      // Header focused → ↓ re-enters the group at the cursored file
+      // (which is already the group's first file by construction).
+      // Just clear the flag.
+      if (state.statusGroupHeaderFocused) {
+        return [action({ type: 'setStatusGroupHeaderFocused', value: false })]
+      }
       return [action({
         type: 'moveWorktreeFile',
         delta: 1,
@@ -1343,6 +1407,26 @@ export function getLogInkInputEvents(
   }
 
   if (key.return && state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
+    // Group header focused → fire the group's batch workflow action.
+    // Routed through the workflow runner so the runtime owns the
+    // git invocation + status messaging consistently with the
+    // single-file `space` toggle. The `payload` carries the group's
+    // state ('staged' / 'unstaged' / 'untracked') so the runtime can
+    // resolve which files to act on without re-deriving group state.
+    if (state.statusGroupHeaderFocused && context.statusGroups) {
+      const currentGroup = context.statusGroups.find((group) =>
+        state.selectedWorktreeFileIndex >= group.startIndex &&
+        state.selectedWorktreeFileIndex < group.startIndex + group.count
+      )
+      if (currentGroup) {
+        const workflowId = currentGroup.state === 'staged'
+          ? 'unstage-all-staged'
+          : currentGroup.state === 'unstaged'
+          ? 'stage-all-unstaged'
+          : 'stage-all-untracked'
+        return [{ type: 'runWorkflowAction', id: workflowId, payload: currentGroup.state }]
+      }
+    }
     return [action({
       type: 'navigateOpenDiffForWorktreeFile',
       fileIndex: state.selectedWorktreeFileIndex,
