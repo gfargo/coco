@@ -1825,4 +1825,108 @@ describe('log Ink input interactions', () => {
       expect(events).toEqual([])
     })
   })
+
+  // Sidebar header focus (#806 follow-up) — the cursor escapes the
+  // top of the items list onto the active tab's header. Enter on the
+  // header drills into the dedicated view; ↓ re-enters the list at
+  // index 0. ←/→ tab switching preserves the header focus so the
+  // user can scan tab → tab → drill.
+  describe('sidebar header focus', () => {
+    function sidebarBranchesState() {
+      const state = createLogInkState(rows)
+      return { ...state, focus: 'sidebar' as const, sidebarTab: 'branches' as const }
+    }
+
+    it('↑ at branches index 0 promotes cursor onto the tab header', () => {
+      const events = getLogInkInputEvents(
+        sidebarBranchesState(),
+        '',
+        { upArrow: true },
+        { branchCount: 5 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setSidebarHeaderFocused', value: true } },
+      ])
+    })
+
+    it('↑ when already on the header is a no-op', () => {
+      const state = { ...sidebarBranchesState(), sidebarHeaderFocused: true }
+      const events = getLogInkInputEvents(state, '', { upArrow: true }, { branchCount: 5 })
+      expect(events).toEqual([])
+    })
+
+    it('↓ from the header re-enters the items list at index 0', () => {
+      const state = { ...sidebarBranchesState(), sidebarHeaderFocused: true }
+      const events = getLogInkInputEvents(state, '', { downArrow: true }, { branchCount: 5 })
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setSidebarHeaderFocused', value: false } },
+      ])
+    })
+
+    it('↑ at items index 0 promotes onto the header for tags / stashes / worktrees too', () => {
+      const tags = { ...createLogInkState(rows), focus: 'sidebar' as const, sidebarTab: 'tags' as const }
+      expect(getLogInkInputEvents(tags, '', { upArrow: true }, { tagCount: 3 })).toEqual([
+        { type: 'action', action: { type: 'setSidebarHeaderFocused', value: true } },
+      ])
+
+      const stashes = { ...createLogInkState(rows), focus: 'sidebar' as const, sidebarTab: 'stashes' as const }
+      expect(getLogInkInputEvents(stashes, '', { upArrow: true }, { stashCount: 2 })).toEqual([
+        { type: 'action', action: { type: 'setSidebarHeaderFocused', value: true } },
+      ])
+
+      const worktrees = { ...createLogInkState(rows), focus: 'sidebar' as const, sidebarTab: 'worktrees' as const }
+      expect(getLogInkInputEvents(worktrees, '', { upArrow: true }, { worktreeListCount: 1 })).toEqual([
+        { type: 'action', action: { type: 'setSidebarHeaderFocused', value: true } },
+      ])
+    })
+
+    it('does not promote onto the header when the cursor is past index 0', () => {
+      // selectedBranchIndex = 2 — ↑ should still dispatch moveBranch
+      // toward index 1, not jump to the header.
+      const state = { ...sidebarBranchesState(), selectedBranchIndex: 2 }
+      const events = getLogInkInputEvents(state, '', { upArrow: true }, { branchCount: 5 })
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: -1, count: 5 } },
+      ])
+    })
+
+    it('Enter on a header-focused sidebar drills into the dedicated view', () => {
+      // Even when the tab has items + a primary action, header focus
+      // overrides — Enter explicitly opens the dedicated view.
+      const state = { ...sidebarBranchesState(), sidebarHeaderFocused: true }
+      const events = getLogInkInputEvents(
+        state,
+        '',
+        { return: true },
+        { branchCount: 5 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'pushView', value: 'branches' } },
+        { type: 'action', action: { type: 'setFocus', value: 'commits' } },
+      ])
+    })
+
+    it('Enter on items (not header-focused) still fires the per-entity action', () => {
+      // Sanity check: the existing per-entity Enter path still wins
+      // when the cursor is on items.
+      const events = getLogInkInputEvents(
+        sidebarBranchesState(),
+        '',
+        { return: true },
+        { branchCount: 5 },
+      )
+      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'checkout-branch' })
+    })
+
+    it('does not promote onto the header on empty content tabs', () => {
+      // No items → ↑ falls through to the existing tab-cycle fallback
+      // (no header to escape to in the items-less case; user can use
+      // ←/→ for tab switching anyway).
+      const empty = { ...sidebarBranchesState(), selectedBranchIndex: 0 }
+      const events = getLogInkInputEvents(empty, '', { upArrow: true }, { branchCount: 0 })
+      expect(events.find((e) =>
+        e.type === 'action' && e.action.type === 'setSidebarHeaderFocused'
+      )).toBeUndefined()
+    })
+  })
 })
