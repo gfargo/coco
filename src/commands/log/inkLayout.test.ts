@@ -14,7 +14,8 @@ describe('log Ink layout', () => {
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(19)
     expect(layout.sidebarWidth).toBe(22)
-    expect(layout.detailWidth).toBe(30)
+    // 80 * 0.28 = 22.4 → floor 22 → clamped up to the 26-cell minimum
+    expect(layout.detailWidth).toBe(26)
   })
 
   it('uses a balanced layout at the default terminal size', () => {
@@ -23,7 +24,8 @@ describe('log Ink layout', () => {
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(35)
     expect(layout.sidebarWidth).toBe(28)
-    expect(layout.detailWidth).toBe(40)
+    // 120 * 0.28 = 33.6 → floor 33
+    expect(layout.detailWidth).toBe(33)
   })
 
   it('caps side panel widths on wide terminals', () => {
@@ -32,7 +34,16 @@ describe('log Ink layout', () => {
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(55)
     expect(layout.sidebarWidth).toBe(34)
-    expect(layout.detailWidth).toBe(56)
+    // 200 * 0.28 = 56 → clamped down to the 44-cell maximum
+    expect(layout.detailWidth).toBe(44)
+  })
+
+  it('clamps the inspector to its 26-44 cell range', () => {
+    const tiny = getLogInkLayout({ columns: 80, rows: 24 })
+    const huge = getLogInkLayout({ columns: 400, rows: 80 })
+
+    expect(tiny.detailWidth).toBe(26)
+    expect(huge.detailWidth).toBe(44)
   })
 
   it('reports terminals below the minimum as too small', () => {

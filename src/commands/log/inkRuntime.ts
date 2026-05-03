@@ -203,8 +203,12 @@ import {
 import { TagOverview, getTagOverview } from './tagData'
 import {
   getLogInkWorkflowActionById,
-  getLogInkWorkflowSections,
 } from './inkWorkflows'
+import {
+  InspectorAction,
+  InspectorActionContext,
+  getInspectorActions,
+} from './inkInspectorActions'
 import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from './worktreeData'
 import { WorktreeFileDiff, getWorktreeFileDiff } from './worktreeDiffData'
 import { canStartLogInkTui, getLogInkRenderOptions } from './inkTerminal'
@@ -3815,7 +3819,7 @@ function renderHistoryInspector(
   components: LogInkComponents,
   state: LogInkState,
   context: LogInkContext,
-  contextStatus: LogInkContextStatus,
+  _contextStatus: LogInkContextStatus,
   detail: GitCommitDetail | undefined,
   loading: boolean,
   _filePreview: GitCommitFilePreview | undefined,
@@ -3826,11 +3830,6 @@ function renderHistoryInspector(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const selected = getSelectedInkCommit(state)
-  const workflowSections = getLogInkWorkflowSections({
-    ...context,
-    contextLoading: isLogInkContextLoading(contextStatus),
-    selectedCommit: selected,
-  })
 
   if (!detail) {
     const fallbackLines = [
@@ -3849,7 +3848,8 @@ function renderHistoryInspector(
     ...fallbackLines.map((line, index) => h(Text, {
       key: `detail-${index}`,
       dimColor: index > 1,
-    }, truncate(line, width - 4))))
+    }, truncate(line, width - 4))),
+    ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme))
   }
 
   const statLine = `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
@@ -3865,18 +3865,26 @@ function renderHistoryInspector(
     ? renderInspectorRefs(h, Text, detail.refs, repository)
     : null
 
+  // Inspector reorder (PR — drop duplicative Workflows trailer):
+  //  1. Commit message (the headline of what you're looking at)
+  //  2. Metadata (hash / author / date / refs / stats)
+  //  3. Body preview (up to 8 lines now that the trailer is gone)
+  //  4. Changed files list (cursored entry highlights)
+  //  5. Actions cheat-sheet (per-entity keystrokes; destructive marked)
+  // The Workflows: trailer that used to repeat the repo / branch /
+  // status from the top header and left sidebar is intentionally gone.
   const headerNodes: ReactTypes.ReactElement[] = [
     h(Text, { key: 'detail-msg' }, truncate(detail.message, width - 4)),
     h(Text, { key: 'detail-spacer-1' }, ''),
     h(Text, { key: 'detail-commit', dimColor: true }, 'Commit: ', commitLink),
     h(Text, { key: 'detail-author', dimColor: true }, truncate(`Author: ${detail.author}`, width - 4)),
-    h(Text, { key: 'detail-date', dimColor: true }, truncate(`Date: ${detail.date}`, width - 4)),
+    h(Text, { key: 'detail-date', dimColor: true }, truncate(`Date:   ${detail.date}`, width - 4)),
     refNodes
-      ? h(Text, { key: 'detail-refs', dimColor: true }, 'Refs: ', ...refNodes)
-      : h(Text, { key: 'detail-refs', dimColor: true }, 'Refs: none'),
-    h(Text, { key: 'detail-stat', dimColor: true }, truncate(statLine, width - 4)),
+      ? h(Text, { key: 'detail-refs', dimColor: true }, 'Refs:   ', ...refNodes)
+      : h(Text, { key: 'detail-refs', dimColor: true }, 'Refs:   none'),
+    h(Text, { key: 'detail-stat', dimColor: true }, truncate(`Stats:  ${statLine}`, width - 4)),
     h(Text, { key: 'detail-spacer-2' }, ''),
-    ...(detail.body ? detail.body.split('\n').slice(0, 6) : ['No commit body.']).map((line, index) =>
+    ...(detail.body ? detail.body.split('\n').slice(0, 8) : ['No commit body.']).map((line, index) =>
       h(Text, {
         key: `detail-body-${index}`,
         dimColor: true,
@@ -3891,15 +3899,6 @@ function renderHistoryInspector(
     h, Text, detail.files, state.selectedFileIndex, focused, fileListMaxRows, width, theme
   )
 
-  const trailerLines = [
-    '',
-    'Workflows:',
-    ...workflowSections.flatMap((section) => [
-      section.title,
-      ...section.lines.slice(0, 3).map((line) => `  ${line}`),
-    ]).slice(0, 12),
-  ]
-
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -3910,10 +3909,67 @@ function renderHistoryInspector(
   h(Text, { bold: true }, panelTitle('Inspector', focused)),
   ...headerNodes,
   ...fileListNodes,
-  ...trailerLines.map((line, index) => h(Text, {
-    key: `detail-trailer-${index}`,
-    dimColor: index > 0,
-  }, truncate(line, width - 4))))
+  ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme))
+}
+
+/**
+ * Render the trailing "Actions:" section that surfaces which keystrokes
+ * apply to whatever the inspector is focused on. Keys are colored with
+ * `theme.colors.accent` so they pop as the actionable element. Destructive
+ * actions get the danger color plus a `[!]` marker so they don't blend
+ * into the cherry-pick / yank rows.
+ *
+ * Truncates labels when the inspector is narrow (down to the 26-cell
+ * minimum from `getLogInkLayout`) so an overflowing label never wraps and
+ * collides with the next row.
+ */
+function renderInspectorActionsSection(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  context: InspectorActionContext,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement[] {
+  const actions = getInspectorActions(context)
+  if (!actions.length) return []
+
+  // Width budget for each row: subtract padding + " " gutter, the key
+  // column (left-padded to 5 cells so labels align), the "  " gap
+  // between key and label, and the optional "  [!]" suffix (5 cells).
+  const KEY_COLUMN = 5
+  const GAP = '  '
+  const DESTRUCTIVE_SUFFIX = '  [!]'
+  const labelBudget = Math.max(
+    4,
+    width - 4 /* border + padX */ - KEY_COLUMN - GAP.length - DESTRUCTIVE_SUFFIX.length
+  )
+
+  const nodes: ReactTypes.ReactElement[] = [
+    h(Text, { key: 'actions-spacer' }, ''),
+    h(Text, { key: 'actions-title' }, 'Actions:'),
+    ...actions.map((action: InspectorAction, index) => {
+      const keyCell = action.key.padEnd(KEY_COLUMN)
+      const label = truncate(action.label, labelBudget)
+      const children: Array<string | ReactTypes.ReactElement> = [
+        h(Text, {
+          key: `actions-${index}-key`,
+          color: action.destructive ? theme.colors.danger : theme.colors.accent,
+        }, keyCell),
+        GAP,
+        label,
+      ]
+      if (action.destructive) {
+        children.push(h(Text, {
+          key: `actions-${index}-mark`,
+          color: theme.colors.danger,
+          dimColor: false,
+        }, DESTRUCTIVE_SUFFIX))
+      }
+      return h(Text, { key: `actions-${index}` }, ...children)
+    }),
+  ]
+
+  return nodes
 }
 
 /**
