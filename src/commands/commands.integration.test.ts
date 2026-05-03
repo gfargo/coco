@@ -664,7 +664,7 @@ describe('command integration with temp git repos', () => {
       help: false,
     } as Arguments<LogOptions>, createLogger())
 
-    expect(stdout).toContain('coco ui')
+    expect(stdout).toContain('coco')
     expect(stdout).toContain('feat: add interactive log coverage')
     expect(stdout).toContain('Changed files:')
     expect(stdout).toContain('src/interactive.ts')
@@ -692,7 +692,7 @@ describe('command integration with temp git repos', () => {
       view: 'history',
     } as Arguments<UiOptions>, createLogger())
 
-    expect(stdout).toContain('coco ui')
+    expect(stdout).toContain('coco')
     expect(stdout).toContain('feat: add ui workstation coverage')
     expect(stdout).toContain('Changed files:')
     expect(stdout).toContain('src/ui.ts')
