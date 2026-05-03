@@ -7,6 +7,7 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { LogArgv, LogOptions } from '../log/config'
 import { GitLogRow, getLogRows } from '../log/data'
 import { startInkInteractiveLog } from '../log/inkRuntime'
+import { readCachedCommits, writeCachedCommits } from '../log/inkOverviewCache'
 import { LogInkThemeConfig } from '../log/inkTheme'
 import { UiArgv } from './config'
 
@@ -43,20 +44,48 @@ type StartCocoUiFromLogArgvOptions = {
   rows?: GitLogRow[]
 }
 
+/**
+ * Wrap a fresh-rows loader with the disk-cache write step. Lets the
+ * runtime stay caching-agnostic — it just receives the rows and
+ * doesn't know whether they came from cache or git, while the caller
+ * (which knows the repo path) handles persistence.
+ */
+function withCacheWrite(
+  repoPath: string,
+  loader: () => Promise<GitLogRow[]>
+): () => Promise<GitLogRow[]> {
+  return async () => {
+    const rows = await loader()
+    writeCachedCommits(repoPath, rows)
+    return rows
+  }
+}
+
 export async function startCocoUiFromLogArgv(
   logArgv: LogArgv,
   options: StartCocoUiFromLogArgvOptions = {}
 ): Promise<void> {
   const config = options.config || loadConfig<Config, LogArgv>(logArgv)
   const git = options.git || getRepo()
-  // Defer the commit log fetch into the runtime when the caller
-  // didn't already have rows (#808). Mounts Ink immediately with a
-  // "Loading commits…" placeholder so the user never stares at a
-  // black terminal during the synchronous git log phase.
-  const rows = options.rows || []
-  const loadRows = options.rows ? undefined : () => getLogRows(git, logArgv)
+  const repoPath = process.cwd()
 
-  await startInkInteractiveLog(git, rows, {}, {
+  // Three-stage boot (#808):
+  //   1. Read the disk cache and pass cached rows as the initial set
+  //      so the user sees the workstation chrome populated with
+  //      commits in the first frame.
+  //   2. Mount Ink immediately with those rows (or [] if no cache).
+  //   3. Run loadRows in the background to refresh — when fresh data
+  //      lands the runtime swaps it in transparently and we persist
+  //      the new rows back to the cache for next boot.
+  // Caller-provided rows skip the lazy path entirely (caller already
+  // has up-to-date data — no point redoing the fetch).
+  const cachedRows = options.rows ? undefined : readCachedCommits(repoPath)
+  const initialRows = options.rows || cachedRows || []
+  const loadRows = options.rows
+    ? undefined
+    : withCacheWrite(repoPath, () => getLogRows(git, logArgv))
+
+  await startInkInteractiveLog(git, initialRows, {}, {
     appLabel: 'coco',
     idleTips: config.logTui?.idleTips,
     initialView: 'history',
@@ -70,12 +99,17 @@ export async function startCocoUi(argv: UiArgv): Promise<void> {
   const config = loadConfig<Config, UiArgv>(argv)
   const git = getRepo()
   const logArgv = createLogArgvFromUiArgv(argv)
+  const repoPath = process.cwd()
 
-  await startInkInteractiveLog(git, [], {}, {
+  // Same three-stage boot as startCocoUiFromLogArgv — mount with
+  // cached rows for an instant-paint shell, refresh in background.
+  const cachedRows = readCachedCommits(repoPath)
+
+  await startInkInteractiveLog(git, cachedRows || [], {}, {
     appLabel: 'coco',
     idleTips: config.logTui?.idleTips,
     initialView: argv.view || 'history',
-    loadRows: () => getLogRows(git, logArgv),
+    loadRows: withCacheWrite(repoPath, () => getLogRows(git, logArgv)),
     logArgv,
     theme: createUiTheme(config, argv),
   })
