@@ -165,8 +165,24 @@ import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } f
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
+import {
+  approvePullRequest,
+  closePullRequest,
+  commentPullRequest,
+  isPullRequestMergeStrategy,
+  mergePullRequest,
+  requestChangesPullRequest,
+} from './pullRequestActions'
 import { StashOverview, getStashDiff, getStashOverview, parseStashDiffFiles } from './stashData'
 import { formatStashHeaderIdentity } from './inkStashHeader'
+import {
+  buildPullRequestCheckRows,
+  formatPullRequestChecksSummary,
+  formatPullRequestReviewsSummary,
+  formatPullRequestStateLine,
+  summarizePullRequestChecks,
+  summarizePullRequestReviews,
+} from './inkPullRequestPanel'
 import { revertFile, stageFile, unstageFile } from './statusActions'
 import { WorktreeOverview, applyStatusFilterMask, getWorktreeOverview } from './statusData'
 import {
@@ -1394,6 +1410,30 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!message) return { ok: false, message: 'Stash message required' }
         return createStash(git, message)
       },
+      // #783 — full PR action panel handlers. Each wraps the matching
+      // pullRequestActions verb. Strategy / body arrives via `payload`
+      // — input prompts validate before they reach here, but the
+      // strategy guard stays as a defensive belt-and-suspenders since
+      // a future palette path could call us with a raw value.
+      'merge-pr': async () => {
+        const strategy = (payload || 'merge').toLowerCase()
+        if (!isPullRequestMergeStrategy(strategy)) {
+          return { ok: false, message: `Unknown merge strategy: ${strategy}. Use merge, squash, or rebase.` }
+        }
+        return mergePullRequest(strategy)
+      },
+      'close-pr': async () => closePullRequest(),
+      'approve-pr': async () => approvePullRequest(),
+      'request-changes-pr': async () => {
+        const body = payload?.trim()
+        if (!body) return { ok: false, message: 'Review body required for change-request' }
+        return requestChangesPullRequest(body)
+      },
+      'comment-pr': async () => {
+        const body = payload?.trim()
+        if (!body) return { ok: false, message: 'Comment body required' }
+        return commentPullRequest(body)
+      },
     }
     const handler = handlers[id]
     if (!handler) {
@@ -2340,6 +2380,10 @@ function renderMainPanel(
     return renderWorktreesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
+  if (state.activeView === 'pull-request') {
+    return renderPullRequestSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
   return renderHistoryPanel(
     h,
     components,
@@ -3090,6 +3134,137 @@ function renderWorktreesSurface(
   ),
   ...renderPromotedFilterAffordance(h, Text, state, theme),
   ...lines)
+}
+
+/**
+ * Pull-request action panel (#783) — renders the current branch's PR
+ * with header, checks table, reviews summary, and a body preview.
+ * Action keys (m / x / a / R / c / O) are wired in inkInput.ts and
+ * surfaced via the footer; this renderer is read-only.
+ *
+ * Three loading / fallback states matter:
+ * - Provider data still loading → "Loading pull request..."
+ * - GitHub remote present but no PR for the current branch → empty
+ *   state hint pointing the user at `C` to create one.
+ * - GitHub CLI missing / unauthenticated → unavailable hint.
+ */
+function renderPullRequestSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const loading = isLogInkContextKeyLoading(contextStatus, 'pullRequest')
+  const pullRequestOverview = context.pullRequest
+  // Use the dedicated `pullRequest` overview only — the `provider`
+  // shape carries a slimmer ProviderPullRequestStatus that lacks
+  // url / headRefName / body / mergeable / reviews. The dedicated
+  // overview hits `gh pr view --json` with the full enriched field
+  // list (PULL_REQUEST_VIEW_JSON_FIELDS) so the panel has everything.
+  const pr = pullRequestOverview?.currentPullRequest
+  const muted = theme.noColor ? undefined : theme.colors.muted
+  const accent = theme.noColor ? undefined : theme.colors.accent
+
+  const containerProps = {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column' as const,
+    flexShrink: 0,
+    paddingX: 1,
+    width,
+  }
+
+  if (loading && !pr) {
+    return h(Box, containerProps,
+      h(Box, { justifyContent: 'space-between' },
+        h(Text, { bold: true }, panelTitle('Pull request', focused)),
+        h(Text, { dimColor: true }, 'loading')
+      ),
+      h(Text, { dimColor: true }, formatLogInkLoading({ resource: 'pull request' })))
+  }
+
+  if (!pr) {
+    const hint = pullRequestOverview?.message
+      || 'No pull request detected for this branch. Press `C` (or `:create-pr`) to create one.'
+    return h(Box, containerProps,
+      h(Box, { justifyContent: 'space-between' },
+        h(Text, { bold: true }, panelTitle('Pull request', focused)),
+        h(Text, { dimColor: true }, 'no PR')
+      ),
+      h(Text, { dimColor: true }, truncate(hint, width - 4)))
+  }
+
+  const checks = summarizePullRequestChecks(pr.statusCheckRollup)
+  const reviews = summarizePullRequestReviews(pr.reviews, pr.reviewDecision)
+  const checkRows = buildPullRequestCheckRows(pr.statusCheckRollup, { ascii: theme.ascii })
+  const checkColor = (s: 'success' | 'failure' | 'pending' | 'neutral' | 'skipped'): string | undefined => {
+    if (theme.noColor) return undefined
+    if (s === 'success') return theme.colors.success
+    if (s === 'failure') return theme.colors.danger
+    if (s === 'pending') return theme.colors.warning
+    return theme.colors.muted
+  }
+
+  // Reserve a few rows for the header/section labels; the rest go to
+  // the checks table. Body preview gets the leftover rows so the
+  // surface stays vertically balanced even on tall terminals.
+  const checkBudget = Math.max(3, Math.min(checkRows.length, Math.floor(bodyRows / 2)))
+  const visibleChecks = checkRows.slice(0, checkBudget)
+  const truncatedChecks = checkRows.length - visibleChecks.length
+  const bodyPreviewBudget = Math.max(2, bodyRows - 8 - visibleChecks.length)
+  const bodyLines = (pr.body || '').split(/\r?\n/).filter((line) => line.trim().length > 0)
+  const visibleBodyLines = bodyLines.slice(0, bodyPreviewBudget)
+  const truncatedBodyLines = bodyLines.length - visibleBodyLines.length
+
+  const headerRight = `#${pr.number} · ${pr.headRefName} → ${pr.baseRefName}`
+  const stateLine = formatPullRequestStateLine(pr)
+  const author = pr.author ? `by @${pr.author}` : ''
+
+  return h(Box, containerProps,
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle('Pull request', focused)),
+      h(Text, { dimColor: true }, headerRight)
+    ),
+    h(Text, undefined, truncate(pr.title, width - 4)),
+    h(Text, { dimColor: true }, truncate(`${stateLine}${author ? ` · ${author}` : ''}`, width - 4)),
+    h(Text, undefined, ''),
+
+    // Checks section
+    h(Text, { bold: true, color: accent }, 'Checks'),
+    h(Text, { dimColor: true }, truncate(`  ${formatPullRequestChecksSummary(checks, { ascii: theme.ascii })}`, width - 4)),
+    ...visibleChecks.map((row, index) => h(Text, {
+      key: `pr-check-${index}`,
+      color: checkColor(row.status),
+    }, truncate(`  ${row.glyph} ${row.name.padEnd(28)} ${row.detail}`, width - 4))),
+    ...(truncatedChecks > 0
+      ? [h(Text, { key: 'pr-checks-trunc', dimColor: true }, truncate(`  … ${truncatedChecks} more`, width - 4))]
+      : []),
+    h(Text, undefined, ''),
+
+    // Reviews section
+    h(Text, { bold: true, color: accent }, 'Reviews'),
+    h(Text, { dimColor: true }, truncate(`  ${formatPullRequestReviewsSummary(reviews)}`, width - 4)),
+    h(Text, undefined, ''),
+
+    // Body preview
+    ...(visibleBodyLines.length > 0
+      ? [
+        h(Text, { key: 'pr-body-label', bold: true, color: accent }, 'Description'),
+        ...visibleBodyLines.map((line, index) => h(Text, {
+          key: `pr-body-${index}`,
+          color: muted,
+        }, truncate(`  ${line}`, width - 4))),
+        ...(truncatedBodyLines > 0
+          ? [h(Text, { key: 'pr-body-trunc', dimColor: true }, truncate(`  … ${truncatedBodyLines} more lines`, width - 4))]
+          : []),
+      ]
+      : []))
 }
 
 /**
