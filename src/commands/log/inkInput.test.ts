@@ -1563,4 +1563,148 @@ describe('log Ink input interactions', () => {
       })
     })
   })
+
+  // Issue #806 — multi-line input prompt for free-form text. Enter
+  // inserts a newline; Ctrl+D submits (Unix EOF convention, more
+  // reliable than Ctrl+Enter across terminals/Ink). Esc and the
+  // existing backspace / Ctrl+U keys still work the same way.
+  describe('multi-line input prompt (#806)', () => {
+    function openMultilinePrompt(state = createLogInkState(rows)) {
+      return applyLogInkAction(state, {
+        type: 'openInputPrompt',
+        kind: 'pr-comment',
+        label: 'Comment body',
+        multiline: true,
+      })
+    }
+
+    it('Enter on a multi-line prompt inserts a newline instead of submitting', () => {
+      let state = openMultilinePrompt()
+      'lgtm'.split('').forEach((c) => { state = applyInput(state, c) })
+      const events = getLogInkInputEvents(state, '', { return: true })
+
+      // Enter dispatches an append-newline, not a submit. The prompt
+      // stays open so the user can keep typing.
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'appendInputPrompt', value: '\n' } },
+      ])
+      const next = applyInput(state, '', { return: true })
+      expect(next.inputPrompt).toBeDefined()
+      expect(next.inputPrompt?.value).toBe('lgtm\n')
+    })
+
+    it('Ctrl+D on a multi-line prompt submits the buffered text including newlines', () => {
+      let state = openMultilinePrompt()
+      'first line'.split('').forEach((c) => { state = applyInput(state, c) })
+      state = applyInput(state, '', { return: true })
+      'second line'.split('').forEach((c) => { state = applyInput(state, c) })
+
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).toEqual([
+        {
+          type: 'runWorkflowAction',
+          id: 'comment-pr',
+          payload: 'first line\nsecond line',
+        },
+        { type: 'action', action: { type: 'closeInputPrompt' } },
+      ])
+    })
+
+    it('Esc on a multi-line prompt cancels the same way as single-line', () => {
+      let state = openMultilinePrompt()
+      'wip'.split('').forEach((c) => { state = applyInput(state, c) })
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toContainEqual({ type: 'action', action: { type: 'closeInputPrompt' } })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setStatus', value: 'cancelled' },
+      })
+    })
+
+    it('Backspace on a multi-line prompt deletes a newline cleanly', () => {
+      let state = openMultilinePrompt()
+      'line1'.split('').forEach((c) => { state = applyInput(state, c) })
+      state = applyInput(state, '', { return: true })
+      expect(state.inputPrompt?.value).toBe('line1\n')
+      state = applyInput(state, '', { backspace: true })
+      // Backspace removes the trailing `\n`; the user is back to
+      // editing line 1.
+      expect(state.inputPrompt?.value).toBe('line1')
+    })
+
+    it('Ctrl+U on a multi-line prompt clears the entire buffer', () => {
+      let state = openMultilinePrompt()
+      'first\nsecond\nthird'.split('').forEach((c) => {
+        state = c === '\n'
+          ? applyInput(state, '', { return: true })
+          : applyInput(state, c)
+      })
+      expect(state.inputPrompt?.value).toBe('first\nsecond\nthird')
+      state = applyInput(state, 'u', { ctrl: true })
+      expect(state.inputPrompt?.value).toBe('')
+    })
+
+    it('Ctrl+D on an empty multi-line prompt surfaces the same hint as Enter on a single-line prompt', () => {
+      const state = openMultilinePrompt()
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setStatus', value: 'enter a value or press esc to cancel' } },
+      ])
+    })
+
+    it('PR comment + PR request-changes open the prompt in multi-line mode', () => {
+      // Comment body — c on the pull-request view.
+      const prState = createLogInkState(rows, { activeView: 'pull-request' })
+      const commentEvents = getLogInkInputEvents(prState, 'c')
+      expect(commentEvents[0]).toMatchObject({
+        type: 'action',
+        action: {
+          type: 'openInputPrompt',
+          kind: 'pr-comment',
+          multiline: true,
+        },
+      })
+
+      // Request-changes review — R on the pull-request view.
+      const requestEvents = getLogInkInputEvents(prState, 'R')
+      expect(requestEvents[0]).toMatchObject({
+        type: 'action',
+        action: {
+          type: 'openInputPrompt',
+          kind: 'pr-request-changes',
+          multiline: true,
+        },
+      })
+    })
+
+    it('keeps single-line prompts (create-branch, reset-mode, etc.) untouched', () => {
+      // Sanity check: opening a non-multiline prompt and pressing
+      // Enter still submits as before — the new dispatch path is
+      // strictly opt-in.
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'openInputPrompt',
+        kind: 'create-branch',
+        label: 'New branch name',
+      })
+      'feature/x'.split('').forEach((c) => { state = applyInput(state, c) })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'create-branch', payload: 'feature/x' },
+        { type: 'action', action: { type: 'closeInputPrompt' } },
+      ])
+    })
+
+    it('Ctrl+D on a single-line prompt does NOT submit (only multi-line uses it)', () => {
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'openInputPrompt',
+        kind: 'create-branch',
+        label: 'New branch name',
+      })
+      'feature/x'.split('').forEach((c) => { state = applyInput(state, c) })
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      // Falls through to the `inputValue && !key.ctrl` guard which
+      // rejects ctrl-modified chars — empty events == nothing claimed.
+      expect(events).toEqual([])
+    })
+  })
 })
