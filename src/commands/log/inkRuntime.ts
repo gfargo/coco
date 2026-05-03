@@ -954,6 +954,54 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   )
   const selectedWorktreeFile = visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]
 
+  // Stash patch per-file segmentation (#808). Hoisted out of the
+  // useInput callback (was running on every keystroke), the yank
+  // handler (was running per `y` press), and renderDiffSurface (was
+  // running per paint) into a single LogInkApp-scoped memo. When the
+  // active stash diff has hundreds of files, the prior fan-out was
+  // re-walking the entire patch text 2-3x per keystroke for no
+  // observable reason — the parsed list is purely a function of the
+  // line array, which only changes when the user opens a different
+  // stash.
+  const stashDiffParsedFiles = React.useMemo(
+    () => stashDiffLines ? parseStashDiffFiles(stashDiffLines) : [],
+    [stashDiffLines]
+  )
+
+  // Filtered promoted-view lists (#808). These were recomputed inline
+  // inside useInput on every keystroke — for a repo with hundreds of
+  // branches / tags and an active filter, that's hundreds of regex
+  // matches per arrow-key press. Memoizing on (raw list, filter)
+  // collapses the work to one pass per filter / data change.
+  const filteredBranchList = React.useMemo(() => {
+    const all = context.branches?.localBranches || []
+    if (!state.filter) return all
+    return all.filter((branch) =>
+      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter)
+    )
+  }, [context.branches?.localBranches, state.filter])
+  const filteredTagList = React.useMemo(() => {
+    const all = context.tags?.tags || []
+    if (!state.filter) return all
+    return all.filter((tag) =>
+      matchesPromotedFilter([tag.name, tag.subject], state.filter)
+    )
+  }, [context.tags?.tags, state.filter])
+  const filteredStashList = React.useMemo(() => {
+    const all = context.stashes?.stashes || []
+    if (!state.filter) return all
+    return all.filter((stash) =>
+      matchesPromotedFilter([stash.ref, stash.message], state.filter)
+    )
+  }, [context.stashes?.stashes, state.filter])
+  const filteredWorktreeList = React.useMemo(() => {
+    const all = context.worktreeList?.worktrees || []
+    if (!state.filter) return all
+    return all.filter((entry) =>
+      matchesPromotedFilter([entry.path, entry.branch || ''], state.filter)
+    )
+  }, [context.worktreeList?.worktrees, state.filter])
+
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
   }, [])
@@ -2002,11 +2050,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       } else if (state.diffSource === 'stash' && stashDiffLines) {
         // Walk back to the most recent file header at or before the
         // current preview offset — same logic the input-context block
-        // uses to expose stashDiffSelectedPath.
-        const current = findStashFileForOffset(
-          parseStashDiffFiles(stashDiffLines),
-          state.diffPreviewOffset
-        )
+        // uses to expose stashDiffSelectedPath. Reads the memoized
+        // parse so the yank handler doesn't re-walk the entire patch.
+        const current = findStashFileForOffset(stashDiffParsedFiles, state.diffPreviewOffset)
         if (current) {
           value = current.path
           label = `path ${current.path}`
@@ -2047,6 +2093,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     selected,
     selectedDetailFile,
     stashDiffLines,
+    stashDiffParsedFiles,
     state.activeView,
     state.branchSort,
     state.diffPreviewOffset,
@@ -2296,32 +2343,16 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // P4.5: navigation in branches/tags/stash uses the FILTERED list
     // length when a filter is active so j/k stay live instead of getting
     // stuck against a full-list count that no longer matches what's on
-    // screen.
-    const branchVisibleCount = state.filter
-      ? (context.branches?.localBranches || [])
-        .filter((branch) => matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter))
-        .length
-      : context.branches?.localBranches.length
-    const tagVisibleCount = state.filter
-      ? (context.tags?.tags || [])
-        .filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
-        .length
-      : context.tags?.tags.length
-    const visibleStashes = state.filter
-      ? (context.stashes?.stashes || [])
-        .filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
-      : (context.stashes?.stashes || [])
-    const stashVisibleCount = visibleStashes.length
-    const stashSelectedRef = visibleStashes[Math.min(state.selectedStashIndex, Math.max(0, visibleStashes.length - 1))]?.ref
-
-    // The worktrees promoted view is filterable; mirror the branches /
-    // tags / stash pattern and feed the filtered count into the input
-    // dispatcher so ↑/↓ stay synchronized with the visible rows.
-    const worktreeVisibleCount = state.filter
-      ? (context.worktreeList?.worktrees || [])
-        .filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
-        .length
-      : context.worktreeList?.worktrees.length
+    // screen. The filtered lists are memoized at LogInkApp scope (#808
+    // perf pass) — reading them here is O(1) instead of O(branches +
+    // tags + stashes + worktrees) per keystroke.
+    const branchVisibleCount = filteredBranchList.length
+    const tagVisibleCount = filteredTagList.length
+    const stashVisibleCount = filteredStashList.length
+    const stashSelectedRef = filteredStashList[
+      Math.min(state.selectedStashIndex, Math.max(0, filteredStashList.length - 1))
+    ]?.ref
+    const worktreeVisibleCount = filteredWorktreeList.length
 
     // When the diff view is showing a stash patch, swap the previewLineCount
     // to the stash diff length so the existing pageDetailPreview path
@@ -2330,12 +2361,11 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       ? stashDiffLines?.length
       : filePreview?.hunks.length
 
-    // Parse the active stash diff into per-file sections so `]`/`[` can
-    // jump between files and `c` knows which path the cursor is on for
-    // a file-level cherry-pick.
-    const stashDiffFiles = state.diffSource === 'stash' && stashDiffLines
-      ? parseStashDiffFiles(stashDiffLines)
-      : []
+    // Per-file segmentation for stash diffs reads the LogInkApp-scoped
+    // memo so navigation keys + the input-context derivation share a
+    // single parse pass per stash patch instead of re-walking the
+    // entire patch text on every keystroke.
+    const stashDiffFiles = state.diffSource === 'stash' ? stashDiffParsedFiles : []
     const stashDiffFileOffsets = stashDiffFiles.map((file) => file.startLine)
     const stashDiffSelectedPath = state.diffSource === 'stash'
       ? findStashFileForOffset(stashDiffFiles, state.diffPreviewOffset)?.path
