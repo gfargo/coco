@@ -363,6 +363,38 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // Per-view-only: scoped to the history view in inkInput (key `B`).
+      // The prompt itself is the affirmative gate — the user has to
+      // type a branch name before anything happens — so this skips the
+      // y-confirm path. Empty key keeps it palette-discoverable; the
+      // palette path can't synthesize a branch name and surfaces a
+      // hint instead.
+      //
+      // Distinct from `create-branch` (palette / `+` on branches view),
+      // which uses `git switch -c` and switches onto the new branch.
+      // This workflow uses `git branch <name> <sha>` and stays put —
+      // GitKraken's "create branch here" semantic.
+      id: 'create-branch-here',
+      key: '',
+      label: 'Create branch from commit',
+      description: 'Create a branch pointed at the cursored commit (does not switch).',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      // Per-view-only: scoped to the history view in inkInput via the
+      // `gT` chord (bare `T` is taken by delete-tag on the tags view).
+      // Same prompt-as-confirmation pattern as create-branch-here.
+      // Lightweight tag — annotated tags remain available through the
+      // existing `+` flow on the tags view.
+      id: 'create-tag-here',
+      key: '',
+      label: 'Create tag at commit',
+      description: 'Create a lightweight tag at the cursored commit.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // Per-view-only: scoped to the history view in inkInput. `i`
       // (lowercase) is used instead of `I` so the existing `I`
       // ai-commit-summary workflow stays reachable on the history

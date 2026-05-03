@@ -27,23 +27,31 @@ export function cycleBranchSort(mode: BranchSortMode): BranchSortMode {
 }
 
 export function sortBranches<T extends BranchRef>(branches: T[], mode: BranchSortMode): T[] {
-  const copy = branches.slice()
+  // Pin the current branch at index 0 regardless of sort mode (#806
+  // follow-up). Lands the user's cursor on the active branch by
+  // default and keeps the most-relevant row glued to the top of the
+  // list as they cycle sorts.
+  const current = branches.find((entry) => entry.current)
+  const rest = branches.filter((entry) => !entry.current)
+  const sortedRest = rest.slice()
   switch (mode) {
     case 'name':
-      return copy.sort((a, b) => a.shortName.localeCompare(b.shortName))
+      sortedRest.sort((a, b) => a.shortName.localeCompare(b.shortName))
+      break
     case 'recent':
       // ISO-shaped dates compare byte-for-byte; descending so the freshest
       // branch sits at the top.
-      return copy.sort((a, b) => (b.date || '').localeCompare(a.date || '') ||
+      sortedRest.sort((a, b) => (b.date || '').localeCompare(a.date || '') ||
         a.shortName.localeCompare(b.shortName))
+      break
     case 'ahead':
       // ahead-first; ties broken by behind, then by name. Keeps "this branch
       // has unmerged work" in the user's first scroll.
-      return copy.sort((a, b) => b.ahead - a.ahead || b.behind - a.behind ||
+      sortedRest.sort((a, b) => b.ahead - a.ahead || b.behind - a.behind ||
         a.shortName.localeCompare(b.shortName))
-    default:
-      return copy
+      break
   }
+  return current ? [current, ...sortedRest] : sortedRest
 }
 
 /* --------------------------------- tags --------------------------------- */
