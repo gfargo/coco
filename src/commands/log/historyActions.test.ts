@@ -7,6 +7,8 @@ import {
   compareCommits,
   copyCommitHash,
   copyCommitMessage,
+  createBranchFromCommit,
+  createTagAtCommit,
   getReflogEntries,
   getRemoteCommitUrl,
   historyActionTestInternals,
@@ -283,5 +285,120 @@ describe('log history actions', () => {
       '--max-count=2',
       '--pretty=format:%gd%x1f%h%x1f%gs',
     ])
+  })
+
+  // GitKraken-style "create branch here" / "create tag here" — the
+  // user picks a historical commit, names the ref, and we mark the
+  // commit without touching HEAD.
+  describe('createBranchFromCommit / createTagAtCommit', () => {
+    it('runs git branch <name> <sha> for a selected commit (does not switch)', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+
+      await expect(createBranchFromCommit(git as never, 'feature/x', commit)).resolves.toEqual({
+        ok: true,
+        message: 'Created branch feature/x at abcdef1',
+      })
+
+      expect(git.raw).toHaveBeenCalledWith(['branch', 'feature/x', commit.hash])
+    })
+
+    it('runs git tag <name> <sha> for a selected commit (lightweight)', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+
+      await expect(createTagAtCommit(git as never, 'v1.0.0', commit)).resolves.toEqual({
+        ok: true,
+        message: 'Created tag v1.0.0 at abcdef1',
+      })
+
+      expect(git.raw).toHaveBeenCalledWith(['tag', 'v1.0.0', commit.hash])
+    })
+
+    it('trims whitespace from the supplied name before invoking git', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+
+      await expect(createBranchFromCommit(git as never, '  feature/x  ', commit)).resolves.toEqual({
+        ok: true,
+        message: 'Created branch feature/x at abcdef1',
+      })
+
+      expect(git.raw).toHaveBeenCalledWith(['branch', 'feature/x', commit.hash])
+    })
+
+    it('rejects missing commits and empty names without invoking git', async () => {
+      const git = {
+        revparse: jest.fn(),
+        raw: jest.fn(),
+      }
+
+      await expect(createBranchFromCommit(git as never, 'feature/x', undefined)).resolves.toEqual({
+        ok: false,
+        message: 'No commit selected.',
+      })
+      await expect(createTagAtCommit(git as never, 'v1.0.0', undefined)).resolves.toEqual({
+        ok: false,
+        message: 'No commit selected.',
+      })
+      await expect(createBranchFromCommit(git as never, '   ', commit)).resolves.toEqual({
+        ok: false,
+        message: 'Branch name required.',
+      })
+      await expect(createTagAtCommit(git as never, '   ', commit)).resolves.toEqual({
+        ok: false,
+        message: 'Tag name required.',
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+
+    it('blocks while another git operation is in progress', async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'coco-history-here-'))
+      const mergeHead = join(tempDir, 'MERGE_HEAD')
+
+      writeFileSync(mergeHead, commit.hash)
+
+      const git = {
+        revparse: jest.fn().mockResolvedValue(mergeHead),
+        raw: jest.fn(),
+      }
+
+      try {
+        await expect(createBranchFromCommit(git as never, 'feature/x', commit)).resolves.toEqual({
+          ok: false,
+          message: 'Finish or abort the in-progress merge before editing history.',
+        })
+        await expect(createTagAtCommit(git as never, 'v1.0.0', commit)).resolves.toEqual({
+          ok: false,
+          message: 'Finish or abort the in-progress merge before editing history.',
+        })
+        expect(git.raw).not.toHaveBeenCalled()
+      } finally {
+        rmSync(tempDir, {
+          force: true,
+          recursive: true,
+        })
+      }
+    })
+
+    it('surfaces git failures (e.g. ref already exists) as structured details', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockRejectedValue(new Error([
+          "fatal: a branch named 'feature/x' already exists",
+        ].join('\n'))),
+      }
+
+      await expect(createBranchFromCommit(git as never, 'feature/x', commit)).resolves.toMatchObject({
+        ok: false,
+        message: "fatal: a branch named 'feature/x' already exists",
+      })
+    })
   })
 })

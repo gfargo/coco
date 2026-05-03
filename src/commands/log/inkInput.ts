@@ -835,6 +835,33 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // `gT` chord: create a lightweight tag at the cursored commit on the
+  // history view. Bare `T` is taken (delete-tag on the tags view) so we
+  // use the chord. Mirrors `gH` exactly — uppercase letter after the
+  // `g` chord prefix, distinct from the lowercase `gt` chord which
+  // jumps to the tags view. The prompt is the affirmative gate.
+  if (state.pendingKey === 'g' && inputValue === 'T') {
+    if (
+      state.activeView === 'history' &&
+      state.focus === 'commits' &&
+      state.filteredCommits.length > 0 &&
+      !state.pendingCommitFocused
+    ) {
+      return [
+        action({ type: 'setPendingKey', value: undefined }),
+        action({
+          type: 'openInputPrompt',
+          kind: 'create-tag-here',
+          label: 'New tag name (at cursored commit)',
+        }),
+      ]
+    }
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      action({ type: 'setStatus', value: 'gT creates a tag at the cursored commit on the history view' }),
+    ]
+  }
+
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
       return [
@@ -1529,6 +1556,25 @@ export function getLogInkInputEvents(
     !state.pendingCommitFocused
   ) {
     return [action({ type: 'setPendingConfirmation', value: 'interactive-rebase' })]
+  }
+
+  // `B` opens a create-branch prompt rooted at the cursored commit
+  // (`git branch <name> <sha>` — does NOT switch to the new branch).
+  // The prompt itself is the affirmative gate, so no separate y-confirm.
+  // Bare uppercase `B` since the lowercase `b` is used by the `gb`
+  // chord prefix and we want a single keystroke for this common op.
+  if (
+    inputValue === 'B' &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-branch-here',
+      label: 'New branch name (at cursored commit)',
+    })]
   }
 
   // `y` / `Y` yank the contextually relevant identifier from the active

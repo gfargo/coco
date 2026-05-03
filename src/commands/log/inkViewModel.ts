@@ -219,7 +219,9 @@ export function parseLogInkHistoryFetchPrefix(filter: string): LogInkHistoryFetc
 
 export type LogInkInputPromptKind =
   | 'create-branch'
+  | 'create-branch-here'
   | 'create-tag'
+  | 'create-tag-here'
   | 'rename-branch'
   | 'set-upstream'
   | 'create-stash'

@@ -1378,6 +1378,124 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  // GitKraken-style "create branch / tag from cursored commit" — the
+  // user types the name into an input prompt; submitting forwards the
+  // typed name as the workflow payload. The prompt itself is the
+  // affirmative gate (no extra y-confirm).
+  describe('create-branch-here (B) / create-tag-here (gT) bindings', () => {
+    it('B on the history view opens the create-branch-here prompt', () => {
+      const events = getLogInkInputEvents(createLogInkState(rows), 'B')
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'openInputPrompt',
+            kind: 'create-branch-here',
+            label: 'New branch name (at cursored commit)',
+          },
+        },
+      ])
+    })
+
+    it('B is scoped to the history view — does not fire elsewhere', () => {
+      const branches = createLogInkState(rows, { activeView: 'branches' })
+      // Branches view doesn't bind `B`; it falls through to the default
+      // workflow lookup which has no entry for `B`.
+      expect(getLogInkInputEvents(branches, 'B', {}, { branchCount: 3 })).toEqual([])
+    })
+
+    it('B no-ops when the history list is empty', () => {
+      const empty = createLogInkState([])
+      expect(getLogInkInputEvents(empty, 'B')).toEqual([])
+    })
+
+    it('gT chord on the history view opens the create-tag-here prompt', () => {
+      let state = createLogInkState(rows)
+      // First press `g` to set the chord prefix.
+      state = applyInput(state, 'g')
+      expect(state.pendingKey).toBe('g')
+
+      const events = getLogInkInputEvents(state, 'T')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingKey', value: undefined } },
+        {
+          type: 'action',
+          action: {
+            type: 'openInputPrompt',
+            kind: 'create-tag-here',
+            label: 'New tag name (at cursored commit)',
+          },
+        },
+      ])
+    })
+
+    it('gT outside the history view surfaces a hint instead of opening the prompt', () => {
+      let state = createLogInkState(rows, { activeView: 'branches' })
+      state = applyInput(state, 'g', {}, { branchCount: 3 })
+      expect(state.pendingKey).toBe('g')
+
+      const events = getLogInkInputEvents(state, 'T', {}, { branchCount: 3 })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingKey', value: undefined },
+      })
+      expect(events.find((e) => e.type === 'action' && (e.action as { type: string }).type === 'openInputPrompt')).toBeUndefined()
+    })
+
+    it('gT does not collide with gt (lowercase jumps to tags view)', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'g')
+      // Lowercase t still routes to the tags view.
+      const events = getLogInkInputEvents(state, 't')
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'pushView', value: 'tags' },
+      })
+    })
+
+    it('submitting create-branch-here forwards the typed name as the workflow payload', () => {
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'openInputPrompt',
+        kind: 'create-branch-here',
+        label: 'New branch name (at cursored commit)',
+      })
+      'feature/release'.split('').forEach((c) => { state = applyInput(state, c) })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'create-branch-here', payload: 'feature/release' },
+        { type: 'action', action: { type: 'closeInputPrompt' } },
+      ])
+    })
+
+    it('submitting create-tag-here forwards the typed name as the workflow payload', () => {
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'openInputPrompt',
+        kind: 'create-tag-here',
+        label: 'New tag name (at cursored commit)',
+      })
+      'v1.2.3'.split('').forEach((c) => { state = applyInput(state, c) })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'create-tag-here', payload: 'v1.2.3' },
+        { type: 'action', action: { type: 'closeInputPrompt' } },
+      ])
+    })
+
+    it('submitting an empty name surfaces a hint instead of running the workflow', () => {
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'openInputPrompt',
+        kind: 'create-branch-here',
+        label: 'New branch name (at cursored commit)',
+      })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events.find((e) => e.type === 'runWorkflowAction')).toBeUndefined()
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setStatus', value: 'enter a value or press esc to cancel' },
+      })
+    })
+  })
+
   describe('d toggles diff view mode (#785)', () => {
     it('emits toggleDiffViewMode + a status hint when pressed in the diff view', () => {
       const state = { ...createLogInkState(rows), activeView: 'diff' as const }

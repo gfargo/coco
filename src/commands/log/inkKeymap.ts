@@ -629,9 +629,12 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     // History view default hints. Mutating ops (`c` cherry-pick, `R`
     // revert, `Z` reset, `i` interactive-rebase) all route through a
     // y-confirm or mode prompt — none fire silently from the keystroke.
-    // Grouped into a compact `c/R/Z/i mutate` chip so the footer stays
-    // scannable; full descriptions live in `?` help and the palette.
-    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'y/Y yank', '/ search', 'gg/G top/bottom'],
+    // `B` create-branch-here and `gT` create-tag-here use a prompt as
+    // the affirmative gate (typing the name is the confirmation).
+    // Grouped into compact `c/R/Z/i mutate` and `B/gT new` chips so
+    // the footer stays scannable; full descriptions live in `?` help
+    // and the palette.
+    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'B/gT new', 'y/Y yank', '/ search', 'gg/G top/bottom'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
