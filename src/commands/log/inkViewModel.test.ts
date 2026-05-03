@@ -920,4 +920,17 @@ describe('log Ink view model', () => {
       expect(state.diffPreviewOffset).toBe(0)
     })
   })
+
+  // #806 follow-up — after a successful checkout, the branches sidebar
+  // cursor snaps back to position 0 so it lands on the just-checked-out
+  // branch (which is now pinned at the top per the #809 sort rule).
+  describe('resetBranchSelection', () => {
+    it('snaps selectedBranchIndex to 0', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 5, count: 10 })
+      expect(state.selectedBranchIndex).toBe(5)
+      state = applyLogInkAction(state, { type: 'resetBranchSelection' })
+      expect(state.selectedBranchIndex).toBe(0)
+    })
+  })
 })
