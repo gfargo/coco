@@ -4221,7 +4221,7 @@ function renderHistoryInspector(
       dimColor: activeTab !== 'actions',
     }, activeTab === 'actions' ? '[Actions]' : ' Actions '),
     ...(focused
-      ? [h(Text, { key: 'inspector-tabs-hint', dimColor: true }, '  · [/] switch')]
+      ? [h(Text, { key: 'inspector-tabs-hint', dimColor: true }, '  · ←/→ switch')]
       : []))
 
   // Tabbed mode (short terminals): render only the active tab's
