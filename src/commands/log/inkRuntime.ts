@@ -3034,13 +3034,13 @@ function renderHistoryPanel(
         }, truncate(substituteGraphChars(
           item.graph.padEnd(visible.graphWidth),
           { ascii: theme.ascii }
-        ), 140))
+        ), Math.max(8, width - 4)))
       }
 
       return renderCommitHistoryRow(
         h, Text, item.commit, item.graph, visible.graphWidth,
         Boolean(item.selected) && !realSelectionSuppressed, theme, index,
-        item.laneSegments
+        width, item.laneSegments
       )
     }))
 }
@@ -3105,12 +3105,24 @@ function renderCommitHistoryRow(
   selected: boolean,
   theme: LogInkTheme,
   index: number,
+  panelWidth: number,
   laneSegments?: LaneSegment[]
 ): ReactTypes.ReactElement {
   const refs = formatInkRefLabels(commit.refs)
-  const totalWidth = 140
+  // Total cells available to the row content. Earlier revisions used a
+  // hardcoded 140 here, which let row content overflow whenever the
+  // panel was narrower than that — Ink would wrap onto a second visual
+  // line and the next commit's graph indicator landed against the wrap
+  // continuation rather than its own commit (#830). Subtracting 4
+  // accounts for the panel's left + right border + 1-cell padding.
+  const totalWidth = Math.max(20, panelWidth - 4)
   const fixedWidth = graphWidth + 1 + commit.shortHash.length + 1 + commit.date.length + 1
-  const messageRoom = Math.max(8, totalWidth - fixedWidth - cellWidth(refs))
+  // Refs trail the message and shrink first when the row is narrow:
+  // the user can always see the full ref list in the inspector, so
+  // the headline subject keeps priority over decoration.
+  const refsRoom = Math.max(0, totalWidth - fixedWidth - 8)
+  const refsTrunc = refs ? truncate(refs, refsRoom) : ''
+  const messageRoom = Math.max(8, totalWidth - fixedWidth - cellWidth(refsTrunc))
   const message = truncate(commit.message, messageRoom)
 
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
@@ -3137,7 +3149,7 @@ function renderCommitHistoryRow(
   h(Text, { dimColor: true }, commit.date),
   ' ',
   h(Text, undefined, message),
-  refs ? h(Text, { color: accent }, refs) : null)
+  refsTrunc ? h(Text, { color: accent }, refsTrunc) : null)
 }
 
 /**
