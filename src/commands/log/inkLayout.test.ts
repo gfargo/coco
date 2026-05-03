@@ -14,8 +14,8 @@ describe('log Ink layout', () => {
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(19)
     expect(layout.sidebarWidth).toBe(22)
-    // 80 * 0.28 = 22.4 → floor 22 → clamped up to the 26-cell minimum
-    expect(layout.detailWidth).toBe(26)
+    // 80 * 0.22 = 17.6 → floor 17 → clamped up to the 20-cell minimum
+    expect(layout.detailWidth).toBe(20)
   })
 
   it('uses a balanced layout at the default terminal size', () => {
@@ -24,8 +24,8 @@ describe('log Ink layout', () => {
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(35)
     expect(layout.sidebarWidth).toBe(28)
-    // 120 * 0.28 = 33.6 → floor 33
-    expect(layout.detailWidth).toBe(33)
+    // 120 * 0.22 = 26.4 → floor 26
+    expect(layout.detailWidth).toBe(26)
   })
 
   it('caps side panel widths on wide terminals', () => {
@@ -34,16 +34,36 @@ describe('log Ink layout', () => {
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(55)
     expect(layout.sidebarWidth).toBe(34)
-    // 200 * 0.28 = 56 → clamped down to the 44-cell maximum
-    expect(layout.detailWidth).toBe(44)
+    // 200 * 0.22 = 44 → clamped down to the 32-cell maximum
+    expect(layout.detailWidth).toBe(32)
   })
 
-  it('clamps the inspector to its 26-44 cell range', () => {
+  it('clamps the inspector at rest to its 20-32 cell range', () => {
     const tiny = getLogInkLayout({ columns: 80, rows: 24 })
     const huge = getLogInkLayout({ columns: 400, rows: 80 })
 
-    expect(tiny.detailWidth).toBe(26)
-    expect(huge.detailWidth).toBe(44)
+    expect(tiny.detailWidth).toBe(20)
+    expect(huge.detailWidth).toBe(32)
+  })
+
+  it('grows the inspector when inspectorFocused is set', () => {
+    const collapsed = getLogInkLayout({ columns: 120, rows: 40 })
+    const expanded = getLogInkLayout({ columns: 120, rows: 40, inspectorFocused: true })
+
+    expect(expanded.detailWidth).toBeGreaterThan(collapsed.detailWidth)
+    // 120 * 0.40 = 48 → clamped down to the 60-cell maximum (no clamp needed at 120)
+    expect(expanded.detailWidth).toBe(48)
+    expect(expanded.sidebarWidth).toBe(collapsed.sidebarWidth)
+    // Main panel shrinks to absorb the inspector growth.
+    expect(expanded.mainPanelWidth).toBe(120 - expanded.sidebarWidth - expanded.detailWidth)
+  })
+
+  it('clamps the focused inspector to its 36-60 cell range', () => {
+    const narrow = getLogInkLayout({ columns: 80, rows: 24, inspectorFocused: true })
+    const wide = getLogInkLayout({ columns: 200, rows: 60, inspectorFocused: true })
+
+    expect(narrow.detailWidth).toBe(36)
+    expect(wide.detailWidth).toBe(60)
   })
 
   it('reports terminals below the minimum as too small', () => {

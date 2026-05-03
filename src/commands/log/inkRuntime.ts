@@ -1727,9 +1727,20 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
     const result = await handler()
     dispatch({ type: 'setStatus', value: result?.message || 'Workflow action complete' })
-    // Silent refresh so the deleted item disappears from the list without
-    // flickering the surfaces through a 'loading' phase.
-    await refreshContext({ silent: true })
+    // Checkout-branch is the one workflow where we want a *visible*
+    // refresh so the user sees the branches sidebar repaint with the
+    // new current branch (per #806 follow-up). Snap the cursor to
+    // position 0 first so when the refresh completes and the new
+    // current branch lands at the top (per #809's pin-current rule),
+    // the cursor is already there waiting.
+    if (id === 'checkout-branch' && result?.ok) {
+      dispatch({ type: 'resetBranchSelection' })
+      await refreshContext()
+    } else {
+      // Silent refresh so the deleted item disappears from the list
+      // without flickering the surfaces through a 'loading' phase.
+      await refreshContext({ silent: true })
+    }
   }, [context, dispatch, git, refreshContext, state.branchSort, state.filter, state.selectedBranchIndex,
     state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
     state.tagSort])
@@ -2231,6 +2242,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
     rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
     sidebarFocused: state.focus === 'sidebar',
+    inspectorFocused: state.focus === 'detail',
   })
 
   if (layout.tooSmall) {
@@ -2255,7 +2267,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   return h(Box, { flexDirection: 'column', height: layout.rows },
     renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme, appLabel),
     h(Box, { flexDirection: 'row', height: layout.bodyRows },
-      renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, theme),
+      renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme),
       renderMainPanel(
         h,
         { Box, Text },
@@ -2370,6 +2382,7 @@ function renderSidebar(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   width: number,
+  bodyRows: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
@@ -2396,7 +2409,7 @@ function renderSidebar(
       dimColor: !isActive,
     }, headerText))
     if (isActive) {
-      blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, theme))
+      blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, bodyRows, theme))
     }
     return blocks
   })
@@ -2428,8 +2441,17 @@ function renderActiveSidebarContent(
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
   width: number,
+  bodyRows: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement[] {
+  // Available rows for the active tab's list. The sidebar chrome
+  // takes ~10 rows (panel title + spacer + 5 tab headers + 4 inter-tab
+  // spacers); the branches tab eats 3 more for its summary header
+  // (Current / Worktree / spacer). Floor of 8 keeps short terminals
+  // usable; tall terminals (40+ rows) get noticeably more items.
+  const sidebarChrome = 10
+  const branchHeaderRows = tab === 'branches' ? 3 : 0
+  const visibleListCount = Math.max(8, bodyRows - sidebarChrome - branchHeaderRows)
   if (tab === 'status') {
     return renderActiveStatusTabContent(h, Text, context, contextStatus, width, theme)
   }
@@ -2461,7 +2483,7 @@ function renderActiveSidebarContent(
       ...renderSelectableSidebarRows(
         h, Text, sortedBranches, state.selectedBranchIndex, focused, width, theme,
         (branch) => `${branchRowMarker(branch, { ascii: theme.ascii })} ${branch.shortName}`,
-        'tab-branches'
+        'tab-branches', visibleListCount,
       ),
     ]
   }
@@ -2477,7 +2499,7 @@ function renderActiveSidebarContent(
     return renderSelectableSidebarRows(
       h, Text, tags, state.selectedTagIndex, focused, width, theme,
       (tag) => `${truncate(tag.name, 16)} ${tag.subject}`,
-      'tab-tags'
+      'tab-tags', visibleListCount,
     )
   }
 
@@ -2492,7 +2514,7 @@ function renderActiveSidebarContent(
     return renderSelectableSidebarRows(
       h, Text, stashes, state.selectedStashIndex, focused, width, theme,
       (stash, index) => `@{${index}} ${stash.message || '(no message)'}`,
-      'tab-stashes'
+      'tab-stashes', visibleListCount,
     )
   }
 
@@ -2511,7 +2533,7 @@ function renderActiveSidebarContent(
       const wstate = worktree.dirty ? 'dirty' : 'clean'
       return `${marker} ${worktree.branch || worktree.path} ${wstate}`
     },
-    'tab-worktrees'
+    'tab-worktrees', visibleListCount,
   )
 }
 
@@ -2531,11 +2553,12 @@ function renderSelectableSidebarRows<T>(
   width: number,
   theme: LogInkTheme,
   toRowText: (item: T, index: number) => string,
-  keyPrefix: string
+  keyPrefix: string,
+  visibleCount?: number,
 ): ReactTypes.ReactElement[] {
   if (items.length === 0) return []
 
-  const window = getSidebarVisibleWindow(items.length, selectedIndex)
+  const window = getSidebarVisibleWindow(items.length, selectedIndex, visibleCount)
   const elements: ReactTypes.ReactElement[] = []
 
   if (window.truncatedAbove > 0) {

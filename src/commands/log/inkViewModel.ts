@@ -263,6 +263,7 @@ export type LogInkAction =
   | { type: 'moveDetailFile'; delta: number; fileCount: number }
   | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
   | { type: 'moveBranch'; delta: number; count: number }
+  | { type: 'resetBranchSelection' }
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
@@ -779,6 +780,16 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedBranchIndex: clampIndex(state.selectedBranchIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'resetBranchSelection':
+      // Snap the branches sidebar / view cursor back to position 0.
+      // Used after a successful checkout (#806 follow-up): combined
+      // with the "current branch pinned at top" rule from #809, this
+      // lands the user's cursor on the just-checked-out branch.
+      return {
+        ...state,
+        selectedBranchIndex: 0,
         pendingKey: undefined,
       }
     case 'moveTag':

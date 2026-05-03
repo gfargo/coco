@@ -8,6 +8,13 @@ export type LogInkLayoutInput = {
    * width.
    */
   sidebarFocused?: boolean
+  /**
+   * When true the inspector grows so the user can read long commit
+   * bodies / file lists / action labels. Mirrors the sidebar pattern:
+   * compact at rest so the commit graph dominates, wide on focus so
+   * the inspection surface gets the room it needs.
+   */
+  inspectorFocused?: boolean
 }
 
 export type LogInkLayout = {
@@ -34,12 +41,14 @@ export const LOG_INK_DEFAULT_ROWS = 40
 export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const columns = input.columns || LOG_INK_DEFAULT_COLUMNS
   const rows = input.rows || LOG_INK_DEFAULT_ROWS
-  // Inspector width — 26-44 cells (~28% of width). Narrowed from the
-  // earlier 30-56 range when the inspector dropped its duplicative
-  // workflows trailer (repo / branch / status — all already visible in
-  // the top header and left sidebar). The reclaimed columns go to the
-  // commit graph in the main panel.
-  const detailWidth = Math.max(26, Math.min(44, Math.floor(columns * 0.28)))
+  // Inspector width — at rest 20-32 cells (~22% of width), focused
+  // 36-60 cells (~40% of width). Narrow rest state keeps the commit
+  // graph dominant; focus expansion gives the inspector room for long
+  // commit bodies / file lists / action labels. Mirrors the sidebar
+  // pattern (sidebarFocused above): instant transition per render.
+  const detailWidth = input.inspectorFocused
+    ? Math.max(36, Math.min(60, Math.floor(columns * 0.40)))
+    : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
   // Sidebar at rest: 22-34 cells (~24% of width). Focused: 32-50 cells
   // (~36% of width). The transition is instant per render — focus tab to
   // expand, focus away to collapse.
