@@ -4187,28 +4187,39 @@ function renderHistoryInspector(
     h(Text, { key: 'detail-files-title' }, 'Changed files:'),
   ]
 
+  // Single-cursor invariant: the file list owns the cursor when the
+  // inspector tab is active; the actions list owns it when the actions
+  // tab is active. Pass `focused` only for the matching tab so users
+  // never see two simultaneous selection highlights inside the panel.
+  const fileListFocused = focused && state.inspectorTab === 'inspector'
   const fileListMaxRows = Math.max(4, Math.min(detail.files.length, 10))
   const fileListNodes = renderCommitFileList(
-    h, Text, detail.files, state.selectedFileIndex, focused, fileListMaxRows, width, theme
+    h, Text, detail.files, state.selectedFileIndex, fileListFocused, fileListMaxRows, width, theme
   )
 
-  // Tabbed mode (#806 follow-up — short terminals): render only the
-  // active inspector tab with a `[Inspector] Actions` header so the
-  // user knows what they're seeing and how to switch (`[/]` while
-  // focus is on the inspector). Tall terminals stack both sections
-  // as before.
+  // Tab indicator. Renders in BOTH tabbed (short-terminal) mode and
+  // tall-stacked mode so the user can always see which tab the cursor
+  // owns and learn the `[/]` toggle. Without this on tall terminals,
+  // the actions list looked like a static cheat-sheet — there was no
+  // visible signal that the cursor could move into it.
+  const activeTab = state.inspectorTab
+  const tabHeader = h(Box, { key: 'inspector-tabs', flexDirection: 'row' },
+    h(Text, {
+      bold: activeTab === 'inspector',
+      dimColor: activeTab !== 'inspector',
+    }, activeTab === 'inspector' ? '[Inspector]' : ' Inspector '),
+    ' ',
+    h(Text, {
+      bold: activeTab === 'actions',
+      dimColor: activeTab !== 'actions',
+    }, activeTab === 'actions' ? '[Actions]' : ' Actions '),
+    ...(focused
+      ? [' ', h(Text, { dimColor: true }, '· [/] switch')]
+      : []))
+
+  // Tabbed mode (short terminals): render only the active tab's
+  // content under the tab header.
   if (tabbed) {
-    const activeTab = state.inspectorTab
-    const tabHeader = h(Box, { key: 'inspector-tabs', flexDirection: 'row' },
-      h(Text, {
-        bold: activeTab === 'inspector',
-        dimColor: activeTab !== 'inspector',
-      }, activeTab === 'inspector' ? '[Inspector]' : ' Inspector '),
-      ' ',
-      h(Text, {
-        bold: activeTab === 'actions',
-        dimColor: activeTab !== 'actions',
-      }, activeTab === 'actions' ? '[Actions]' : ' Actions '))
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
       borderStyle: theme.borderStyle,
@@ -4227,6 +4238,9 @@ function renderHistoryInspector(
         })))
   }
 
+  // Tall mode: stack both sections so the user can read everything at
+  // once, but show the tab header so the active section (and the
+  // `[/]` switch affordance) is visible.
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -4235,6 +4249,8 @@ function renderHistoryInspector(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Inspector', focused)),
+  tabHeader,
+  h(Text, { key: 'inspector-tabs-spacer' }, ''),
   ...headerNodes,
   ...fileListNodes,
   ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
