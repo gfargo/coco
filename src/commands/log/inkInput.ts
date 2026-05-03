@@ -388,6 +388,77 @@ function hasUnsavedComposeDraft(state: LogInkState): boolean {
   return Boolean(compose.summary.trim() || compose.body.trim())
 }
 
+/**
+ * Submit the active input prompt — used by Enter on single-line
+ * prompts and by Ctrl+D on multi-line prompts (#806). Most prompt
+ * kinds dispatch a workflow whose id matches the kind
+ * (`create-branch`, `rename-branch`, etc.). A few are exceptions:
+ *   - `reset-mode` (#777) collects soft/mixed/hard and forwards the
+ *     mode as the payload to `reset-to-commit`.
+ *   - `pr-merge-strategy` (#783) validates the strategy and routes to
+ *     `merge-pr` via the y-confirm path.
+ *   - `pr-comment` dispatches `comment-pr` directly — the body itself
+ *     is the affirmative action.
+ *   - `pr-request-changes` routes to `request-changes-pr` via
+ *     y-confirm because the review is publicly visible.
+ * Each exception validates here so a typo doesn't surface as a
+ * "workflow not yet wired" status downstream.
+ *
+ * Empty values yield a hint instead of a no-op so the user knows what
+ * to do — the same UX whether they pressed Enter (single-line) or
+ * Ctrl+D (multi-line).
+ */
+function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
+  if (!state.inputPrompt) return []
+  const value = state.inputPrompt.value.trim()
+  if (!value) {
+    return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel' })]
+  }
+  if (state.inputPrompt.kind === 'reset-mode') {
+    const mode = value.toLowerCase()
+    if (mode !== 'soft' && mode !== 'mixed' && mode !== 'hard') {
+      return [action({
+        type: 'setStatus',
+        value: `Unknown reset mode: ${value}. Use soft, mixed, or hard.`,
+      })]
+    }
+    return [
+      { type: 'runWorkflowAction', id: 'reset-to-commit', payload: mode },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'pr-merge-strategy') {
+    const strategy = value.toLowerCase()
+    if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
+      return [action({
+        type: 'setStatus',
+        value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
+      })]
+    }
+    return [
+      action({ type: 'setPendingConfirmation', value: 'merge-pr', payload: strategy }),
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'pr-comment') {
+    return [
+      { type: 'runWorkflowAction', id: 'comment-pr', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'pr-request-changes') {
+    return [
+      action({ type: 'setPendingConfirmation', value: 'request-changes-pr', payload: value }),
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  const id = state.inputPrompt.kind
+  return [
+    { type: 'runWorkflowAction', id, payload: value },
+    action({ type: 'closeInputPrompt' }),
+  ]
+}
+
 export function getLogInkInputEvents(
   state: LogInkState,
   inputValue: string,
@@ -406,73 +477,26 @@ export function getLogInkInputEvents(
   // filter/confirmation/compose handlers so a prompt opened from inside
   // any of those still captures focus cleanly.
   if (state.inputPrompt) {
+    const isMultiline = Boolean(state.inputPrompt.multiline)
+
     if (key.escape) {
       return [
         action({ type: 'closeInputPrompt' }),
         action({ type: 'setStatus', value: 'cancelled' }),
       ]
     }
+    // Multi-line prompts (#806): Ctrl+D submits (Unix EOF convention,
+    // mirrors `git commit -m -` and HEREDOC patterns). Plain Enter
+    // inserts a newline so the user can compose review bodies / PR
+    // comments naturally without opening $EDITOR.
+    if (isMultiline && key.ctrl && inputValue === 'd') {
+      return submitInputPrompt(state)
+    }
+    if (isMultiline && key.return) {
+      return [action({ type: 'appendInputPrompt', value: '\n' })]
+    }
     if (key.return) {
-      const value = state.inputPrompt.value.trim()
-      if (!value) {
-        return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel' })]
-      }
-      // Most prompt kinds dispatch a workflow whose id matches the
-      // kind (`create-branch`, `rename-branch`, etc.). A few are
-      // exceptions:
-      // - `reset-mode` collects soft/mixed/hard and forwards the mode
-      //   as the payload to `reset-to-commit` (#777).
-      // - `pr-merge-strategy` validates the strategy and routes to
-      //   `merge-pr` via the y-confirm path (#783).
-      // - `pr-comment` dispatches `comment-pr` directly — the body
-      //   itself is the affirmative action.
-      // - `pr-request-changes` routes to `request-changes-pr` via
-      //   y-confirm because the review is publicly visible.
-      // Each exception validates here so a typo doesn't surface as a
-      // "workflow not yet wired" status downstream.
-      if (state.inputPrompt.kind === 'reset-mode') {
-        const mode = value.toLowerCase()
-        if (mode !== 'soft' && mode !== 'mixed' && mode !== 'hard') {
-          return [action({
-            type: 'setStatus',
-            value: `Unknown reset mode: ${value}. Use soft, mixed, or hard.`,
-          })]
-        }
-        return [
-          { type: 'runWorkflowAction', id: 'reset-to-commit', payload: mode },
-          action({ type: 'closeInputPrompt' }),
-        ]
-      }
-      if (state.inputPrompt.kind === 'pr-merge-strategy') {
-        const strategy = value.toLowerCase()
-        if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
-          return [action({
-            type: 'setStatus',
-            value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
-          })]
-        }
-        return [
-          action({ type: 'setPendingConfirmation', value: 'merge-pr', payload: strategy }),
-          action({ type: 'closeInputPrompt' }),
-        ]
-      }
-      if (state.inputPrompt.kind === 'pr-comment') {
-        return [
-          { type: 'runWorkflowAction', id: 'comment-pr', payload: value },
-          action({ type: 'closeInputPrompt' }),
-        ]
-      }
-      if (state.inputPrompt.kind === 'pr-request-changes') {
-        return [
-          action({ type: 'setPendingConfirmation', value: 'request-changes-pr', payload: value }),
-          action({ type: 'closeInputPrompt' }),
-        ]
-      }
-      const id = state.inputPrompt.kind
-      return [
-        { type: 'runWorkflowAction', id, payload: value },
-        action({ type: 'closeInputPrompt' }),
-      ]
+      return submitInputPrompt(state)
     }
     if (key.backspace || key.delete) {
       return [action({ type: 'backspaceInputPrompt' })]
@@ -1344,17 +1368,23 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingConfirmation', value: 'approve-pr' })]
   }
   if (inputValue === 'R' && state.activeView === 'pull-request') {
+    // Free-form review body — multi-line so the reviewer can structure
+    // their feedback naturally without opening $EDITOR (#806).
     return [action({
       type: 'openInputPrompt',
       kind: 'pr-request-changes',
-      label: 'Request changes — review body',
+      label: 'Request changes — review body (Enter newline · Ctrl+D submit)',
+      multiline: true,
     })]
   }
   if (inputValue === 'c' && state.activeView === 'pull-request') {
+    // Free-form comment body — multi-line for the same reason as
+    // pr-request-changes.
     return [action({
       type: 'openInputPrompt',
       kind: 'pr-comment',
-      label: 'Comment body',
+      label: 'Comment body (Enter newline · Ctrl+D submit)',
+      multiline: true,
     })]
   }
 

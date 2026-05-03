@@ -232,6 +232,18 @@ export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind
   label: string
   value: string
+  /**
+   * Free-form text mode (#806). When true:
+   *   - Enter inserts a literal newline into `value`
+   *   - Ctrl+D submits (Unix EOF convention — more reliable across
+   *     terminals + Ink than Ctrl+Enter, which most terminals
+   *     deliver as plain Enter)
+   *   - Backspace, Ctrl+U, Esc behave the same as single-line mode
+   * Opt-in per prompt — structured prompts (branch / tag / stash
+   * names, merge strategies, reset modes) stay single-line so muscle
+   * memory survives.
+   */
+  multiline?: boolean
 }
 
 export type LogInkAction =
@@ -291,7 +303,7 @@ export type LogInkAction =
   | { type: 'toggleCommandPalette' }
   | { type: 'cycleBranchSort' }
   | { type: 'cycleTagSort' }
-  | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string }
+  | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string; multiline?: boolean }
   | { type: 'appendInputPrompt'; value: string }
   | { type: 'backspaceInputPrompt' }
   | { type: 'clearInputPromptText' }
@@ -783,6 +795,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           kind: action.kind,
           label: action.label,
           value: action.initial || '',
+          multiline: action.multiline,
         },
         pendingKey: undefined,
       }

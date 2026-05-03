@@ -4358,6 +4358,29 @@ function renderInputPromptPanel(
   if (!prompt) {
     return h(Box, { width })
   }
+
+  const accent = theme.noColor ? undefined : theme.colors.accent
+  // Multi-line prompts (#806) split on newline and render one Text
+  // row per buffer line — the cursor sits at the end of the last
+  // line via the trailing `_`. Single-line prompts collapse to the
+  // original one-row layout for muscle-memory continuity.
+  const promptLines = prompt.multiline ? prompt.value.split('\n') : [prompt.value]
+  if (promptLines.length === 0) {
+    promptLines.push('')
+  }
+  const valueRows = promptLines.map((line, index) => {
+    const isLast = index === promptLines.length - 1
+    const display = isLast ? `${line}_` : line
+    return h(Text, {
+      key: `prompt-line-${index}`,
+      bold: true,
+      color: accent,
+    }, truncate(display, width - 4))
+  })
+  const hint = prompt.multiline
+    ? 'Enter newline · Ctrl+d submit · Esc cancel · Ctrl+u clear'
+    : 'Enter submit · Esc cancel · Ctrl+u clear'
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -4368,12 +4391,9 @@ function renderInputPromptPanel(
   h(Text, { bold: true }, panelTitle('Prompt', focused)),
   h(Text, { dimColor: true }, truncate(prompt.label, width - 4)),
   h(Text, undefined, ''),
-  h(Text, {
-    bold: true,
-    color: theme.noColor ? undefined : theme.colors.accent,
-  }, truncate(`${prompt.value}_`, width - 4)),
+  ...valueRows,
   h(Text, undefined, ''),
-  h(Text, { dimColor: true }, 'Enter to submit · Esc to cancel · Ctrl+u to clear'))
+  h(Text, { dimColor: true }, hint))
 }
 
 function renderConfirmationPanel(
