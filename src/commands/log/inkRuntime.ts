@@ -3521,6 +3521,15 @@ function renderBranchesSurface(
     : `${localBranches.length}/${sortedAll.length} local | current: ${branches?.currentBranch || '<detached>'}${filterLabel}${sortLabel}`
   const emptyLabel = formatLogInkBranchesEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'branches' })
+  // Per-column width derived from the visible window (#833) so columns
+  // align across rows regardless of name length. Padded to the longest
+  // name in view so short rows fill out instead of leaving a gutter;
+  // capped at 40 cells so one runaway long branch name doesn't blow
+  // out the timestamp column entirely (longer names get truncated and
+  // the timestamp stays where the user expects it).
+  const nameColWidth = visible.length === 0
+    ? 28
+    : Math.min(40, Math.max(8, ...visible.map((branch) => branch.shortName.length)))
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'branches-loading', dimColor: true }, loadingLabel)]
     : localBranches.length === 0
@@ -3534,18 +3543,18 @@ function renderBranchesSurface(
         const lastTouched = formatBranchLastTouched(branch.date, new Date())
         // Split the row into spans so the timestamp stays dim even on the
         // currently-selected (bold) row. The leading marker + name keep
-        // their original column widths; the timestamp is right-padded so
-        // the divergence column stays aligned across rows.
-        const namePadded = branch.shortName.padEnd(28)
+        // their per-window-derived column widths; the timestamp is
+        // right-padded so the divergence column stays aligned across rows.
+        const namePadded = truncate(branch.shortName, nameColWidth).padEnd(nameColWidth)
         const timestampPadded = lastTouched.padEnd(8)
         const lineDim = !isSelected && !branch.current
         const head = `${cursor} ${marker} ${namePadded} `
         const trailingDivergence = divergence ? ` ${divergence}` : ''
-        // Truncate the assembled line cooperatively so we never overflow
-        // the panel; the timestamp is short and the divergence is the
-        // most expendable, but the existing 140 cap is ample.
+        // Truncate the assembled line to the actual panel width so a
+        // narrow inspector / sidebar focus doesn't push branch rows
+        // onto a second visual line (#830).
         const fullText = `${head}${timestampPadded}${trailingDivergence}`
-        const truncated = truncate(fullText, 140)
+        const truncated = truncate(fullText, Math.max(20, width - 4))
         // If truncation chopped into the timestamp/divergence portion,
         // fall back to a single Text to keep the visible width honest.
         if (truncated !== fullText) {
@@ -3610,6 +3619,13 @@ function renderTagsSurface(
     : `${tags.length}/${sortedAll.length} tags${filterLabel}${sortLabel}`
   const emptyLabel = formatLogInkTagsEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'tags' })
+  // Per-window name column width (#833) so short tags don't leave a
+  // wide gutter and long tags don't push the subject off-screen. Cap
+  // matches the branches surface for visual consistency across the
+  // promoted views.
+  const tagNameColWidth = visible.length === 0
+    ? 20
+    : Math.min(40, Math.max(8, ...visible.map((tag) => tag.name.length)))
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'tags-loading', dimColor: true }, loadingLabel)]
     : tags.length === 0
@@ -3623,8 +3639,11 @@ function renderTagsSurface(
         // formatHyperlink wraps just the tag name, leaving width math
         // intact.
         const url = buildRefUrl(context.provider?.repository, tag.name)
-        const namePadded = tag.name.padEnd(20)
-        const lineText = truncate(`${cursor} ${namePadded} ${tag.subject}`, 140)
+        const namePadded = truncate(tag.name, tagNameColWidth).padEnd(tagNameColWidth)
+        const lineText = truncate(
+          `${cursor} ${namePadded} ${tag.subject}`,
+          Math.max(20, width - 4)
+        )
         if (!url || lineText.indexOf(namePadded) < 0) {
           return h(Text, {
             key: `tag-${index}`,
@@ -3745,6 +3764,17 @@ function renderWorktreesSurface(
   const headerRight = loading
     ? 'loading worktrees'
     : `${worktrees.length}/${allWorktrees.length} worktrees${filterLabel}`
+  // Per-window branch column width (#833). Worktrees often track
+  // branches with names varying widely in length (`main` vs.
+  // `feat/tui-something-long`); fixed-width padding either left a
+  // huge gutter on short rows or pushed the path column off-screen on
+  // long ones. Cap matches the other promoted surfaces.
+  const branchColWidth = visible.length === 0
+    ? 28
+    : Math.min(40, Math.max(8, ...visible.map((entry) => {
+      const label = entry.branch ? entry.branch : entry.head || '<detached>'
+      return label.length
+    })))
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'worktrees-loading', dimColor: true }, formatLogInkLoading({ resource: 'worktrees' }))]
     : worktrees.length === 0
@@ -3756,12 +3786,13 @@ function renderWorktreesSurface(
         const marker = entry.current ? '*' : ' '
         const branchLabel = entry.branch ? entry.branch : entry.head || '<detached>'
         const stateLabel = entry.dirty ? 'dirty' : 'clean'
+        const branchPadded = truncate(branchLabel, branchColWidth).padEnd(branchColWidth)
         return h(Text, {
           key: `worktree-${index}`,
           bold: isSelected,
           dimColor: !isSelected && !entry.current,
         }, truncate(
-          `${cursor} ${marker} ${branchLabel.padEnd(28)} ${stateLabel.padEnd(6)} ${entry.path}`,
+          `${cursor} ${marker} ${branchPadded} ${stateLabel.padEnd(6)} ${entry.path}`,
           width - 4
         ))
       })
