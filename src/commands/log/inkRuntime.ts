@@ -3021,16 +3021,23 @@ function renderHistoryPanel(
         }))
     : visible.items.map((item, index) => {
       if (item.type === 'graph') {
+        // Graph-only rows are git's lane-closure scaffolding (`|/`,
+        // `|\`, etc.) — they're real topology but visually they look
+        // like blank rows that the user might wonder if they
+        // accidentally skipped a commit on (#831). Render dim-on-dim
+        // so they retreat as connectors rather than competing with
+        // commit rows for the eye's attention.
         if (item.laneSegments && !theme.ascii) {
-          return h(Text, { key: `graph-${index}-${item.graph}` },
+          return h(Text, { key: `graph-${index}-${item.graph}`, dimColor: true },
             ...renderLaneSegmentSpans(
-              h, Text, item.laneSegments, theme, visible.graphWidth, `g${index}`
+              h, Text, item.laneSegments, theme, visible.graphWidth, `g${index}`,
+              { forceDim: true }
             ))
         }
         return h(Text, {
           key: `graph-${index}-${item.graph}`,
           color: theme.noColor ? undefined : theme.colors.muted,
-          dimColor: theme.noColor,
+          dimColor: true,
         }, truncate(substituteGraphChars(
           item.graph.padEnd(visible.graphWidth),
           { ascii: theme.ascii }
@@ -3061,7 +3068,8 @@ function renderLaneSegmentSpans(
   segments: LaneSegment[],
   theme: LogInkTheme,
   padTo: number,
-  keyPrefix: string
+  keyPrefix: string,
+  options: { forceDim?: boolean } = {}
 ): ReactTypes.ReactElement[] {
   const muted = theme.noColor ? undefined : theme.colors.muted
   const elements: ReactTypes.ReactElement[] = []
@@ -3072,7 +3080,12 @@ function renderLaneSegmentSpans(
     elements.push(h(Text, {
       key: `${keyPrefix}-${idx}`,
       color: laneColor ?? muted,
-      dimColor: theme.noColor && seg.laneId === undefined,
+      // Ink does not cascade dimColor from a parent Text to children,
+      // so the caller's "this whole row should fade" intent has to
+      // travel here as an explicit flag (#831). Used for graph-only
+      // lane-closure rows, where the lane colors otherwise compete
+      // for attention with the commits they connect.
+      dimColor: options.forceDim || (theme.noColor && seg.laneId === undefined),
     }, seg.text))
     totalLen += seg.text.length
   })
