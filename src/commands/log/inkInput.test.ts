@@ -2259,5 +2259,59 @@ describe('log Ink input interactions', () => {
         { type: 'action', action: { type: 'setStatus', value: 'No commit selected' } },
       ])
     })
+
+    // ←/→ for inspector tab switching mirrors the sidebar pattern. The
+    // bracketed `[/]` notation that previously appeared in the chrome
+    // hint read as "press the / key" — which collides with the global
+    // filter trigger and was confusing users. Arrow keys are
+    // unambiguous + match the sidebar's existing left/right tab axis.
+    it('← on detail focus switches to the Inspector tab', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState(),
+        '',
+        { leftArrow: true },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setInspectorTab', value: 'inspector' } },
+      ])
+    })
+
+    it('→ on detail focus switches to the Actions tab', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorTab: 'inspector' }),
+        '',
+        { rightArrow: true },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setInspectorTab', value: 'actions' } },
+      ])
+    })
+
+    it('←/→ on detail focus does not affect the global filter trigger', () => {
+      // The original `[/] switch` chrome hint suggested pressing `/` —
+      // which fires the global filter, not the inspector tab swap.
+      // ←/→ should fire setInspectorTab and nothing else; the global
+      // filter event (`toggleFilterMode`) must not appear in the
+      // dispatch list.
+      const left = getLogInkInputEvents(actionsFocusState(), '', { leftArrow: true })
+      const right = getLogInkInputEvents(actionsFocusState({ inspectorTab: 'inspector' }), '', { rightArrow: true })
+      for (const events of [left, right]) {
+        expect(events.find((e) =>
+          e.type === 'action' && e.action.type === 'toggleFilterMode'
+        )).toBeUndefined()
+      }
+    })
+
+    it('[/] keep working as alternates', () => {
+      // Existing keyboard alternates stay so muscle memory carries.
+      const lbracket = getLogInkInputEvents(actionsFocusState(), '[', {})
+      const rbracket = getLogInkInputEvents(actionsFocusState({ inspectorTab: 'inspector' }), ']', {})
+      expect(lbracket).toEqual([
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: -1 } },
+      ])
+      expect(rbracket).toEqual([
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: 1 } },
+      ])
+    })
   })
 })

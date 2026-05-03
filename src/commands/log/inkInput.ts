@@ -1133,6 +1133,19 @@ export function getLogInkInputEvents(
     return [action({ type: 'nextSidebarTab' })]
   }
 
+  // ←/→ on the inspector switch between the [Inspector] / [Actions]
+  // tabs, mirroring the sidebar's left/right tab semantics. `[` and
+  // `]` still work as keyboard alternatives, but the visible hint in
+  // the inspector chrome shows ←/→ because the bracketed `[/]`
+  // notation reads as "press the / key" — which is the global filter
+  // trigger and was making users think the binding was busted.
+  if (key.leftArrow && state.focus === 'detail') {
+    return [action({ type: 'setInspectorTab', value: 'inspector' })]
+  }
+  if (key.rightArrow && state.focus === 'detail') {
+    return [action({ type: 'setInspectorTab', value: 'actions' })]
+  }
+
   // ←/→ on the status surface jump between the staged / unstaged /
   // untracked groups — the horizontal axis is "between groups", the
   // vertical axis (↑/↓ below) is "within the active group's files".
