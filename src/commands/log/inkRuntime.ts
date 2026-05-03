@@ -4202,19 +4202,26 @@ function renderHistoryInspector(
   // owns and learn the `[/]` toggle. Without this on tall terminals,
   // the actions list looked like a static cheat-sheet — there was no
   // visible signal that the cursor could move into it.
+  //
+  // Spacing between tab labels comes from the labels' own padding
+  // (the active label is bracketed `[Inspector]` while the inactive
+  // one is space-padded ` Inspector `, so adjacency reads cleanly).
+  // Earlier revisions stuck a raw `' '` between the Text children to
+  // pad them visually — that crashes Ink at first paint with
+  // "Text string ' ' must be rendered inside <Text> component"
+  // because Box only accepts component children, never bare strings.
   const activeTab = state.inspectorTab
   const tabHeader = h(Box, { key: 'inspector-tabs', flexDirection: 'row' },
     h(Text, {
       bold: activeTab === 'inspector',
       dimColor: activeTab !== 'inspector',
     }, activeTab === 'inspector' ? '[Inspector]' : ' Inspector '),
-    ' ',
     h(Text, {
       bold: activeTab === 'actions',
       dimColor: activeTab !== 'actions',
     }, activeTab === 'actions' ? '[Actions]' : ' Actions '),
     ...(focused
-      ? [' ', h(Text, { dimColor: true }, '· [/] switch')]
+      ? [h(Text, { key: 'inspector-tabs-hint', dimColor: true }, '  · [/] switch')]
       : []))
 
   // Tabbed mode (short terminals): render only the active tab's
