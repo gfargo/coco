@@ -53,6 +53,7 @@ export type LogInkInspectorTab = 'inspector' | 'actions'
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
+  bootLoading?: boolean
 }
 
 export type LogInkState = {
@@ -230,6 +231,15 @@ export type LogInkState = {
    * entity context never sits highlighted.
    */
   inspectorActionIndex: number
+  /**
+   * True while the runtime is fetching the initial commit log (#808).
+   * Set when the TUI mounts with a `loadRows` deferred loader and
+   * cleared once the loader returns. Drives the "Loading commits…"
+   * placeholder in the history surface and the loading hint in the
+   * top header chrome — without this flag, an empty `filteredCommits`
+   * looks like "no commits found" rather than "still loading".
+   */
+  bootLoading: boolean
 }
 
 export type LogInkStatusFilterMask = {
@@ -324,6 +334,7 @@ export type LogInkAction =
   | { type: 'cycleInspectorTab'; delta: -1 | 1 }
   | { type: 'moveInspectorAction'; delta: number; actionCount: number }
   | { type: 'resetInspectorActionIndex' }
+  | { type: 'setBootLoading'; value: boolean }
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
@@ -620,6 +631,11 @@ function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
     selectedFileIndex: 0,
     pendingCommitFocused: false,
     pendingKey: undefined,
+    // Rows just landed — clear the boot-loading flag so the history
+    // surface drops the "Loading commits…" placeholder. Safe to clear
+    // unconditionally because `replaceRows` only fires after a real
+    // git log returns.
+    bootLoading: false,
   }
 }
 
@@ -724,6 +740,7 @@ export function createLogInkState(
     diffViewMode: 'unified',
     inspectorTab: 'inspector',
     inspectorActionIndex: 0,
+    bootLoading: options.bootLoading ?? false,
   }
 }
 
@@ -933,6 +950,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         inspectorActionIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'setBootLoading':
+      return {
+        ...state,
+        bootLoading: action.value,
         pendingKey: undefined,
       }
     case 'moveTag':

@@ -22,17 +22,19 @@ export const handler: CommandHandler<LogArgv> = async (argv) => {
     return
   }
 
-  const rows = await getLogRows(git, argv)
-
+  // Interactive path defers the commit log fetch into the runtime
+  // (#808) so the TUI mounts immediately with a "Loading commits…"
+  // placeholder. The non-interactive (stdout) path still needs rows
+  // up-front because the formatter just dumps a static snapshot.
   if (argv.interactive && format === 'table') {
     await startCocoUiFromLogArgv(argv, {
       config,
       git,
-      rows,
     })
     return
   }
 
+  const rows = await getLogRows(git, argv)
   const result = format === 'json' ? formatLogJson(rows) : formatLogTable(rows)
 
   await handleResult({

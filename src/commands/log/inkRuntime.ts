@@ -260,6 +260,16 @@ type LogInkOptions = {
   idleTips?: boolean
   initialView?: LogInkView
   logArgv?: LogArgv
+  /**
+   * Deferred commit-log loader (#808). When set, the runtime mounts
+   * Ink immediately with whatever `rows` was passed (typically `[]`)
+   * and runs `loadRows` in a useEffect. The history surface shows a
+   * "Loading commits…" placeholder while the load is in flight; the
+   * loader's result is dispatched via `replaceRows` which clears the
+   * boot flag. Without this option the runtime keeps the previous
+   * eager behavior (caller awaits the rows before mount).
+   */
+  loadRows?: () => Promise<GitLogRow[]>
   theme?: LogInkThemeConfig
 }
 
@@ -314,6 +324,15 @@ type LogInkComponentDeps = LogInkRuntime & {
   initialView: LogInkView
   logArgv?: LogArgv
   rows: GitLogRow[]
+  /**
+   * Optional deferred commit-log loader (#808). When set, the React
+   * tree mounts with `rows` (typically `[]`) and runs the loader on
+   * mount, dispatching `replaceRows` on completion. Boot UX is the
+   * sole motivator — for a moderately large repo, awaiting `git log`
+   * before mount produces 1-3 seconds of black terminal that reads as
+   * "is this hanging?".
+   */
+  loadRows?: () => Promise<GitLogRow[]>
   theme: LogInkTheme
   /**
    * Mutable ref the runtime fills with a force-render callback. The
@@ -642,8 +661,15 @@ export async function startInkInteractiveLog(
   const output = streams.output || process.stdout
   const error = streams.error || process.stderr
 
+  // Non-TTY fallback (CI logs, piped output) needs the rows up-front
+  // because the renderer just dumps a static snapshot. Run the
+  // deferred loader synchronously here when present so callers get
+  // the same shape regardless of the entry path.
   if (!canStartLogInkTui(input, output)) {
-    await startInteractiveLog(git, rows, {
+    const fallbackRows = options.loadRows && rows.length === 0
+      ? await options.loadRows()
+      : rows
+    await startInteractiveLog(git, fallbackRows, {
       appLabel: options.appLabel,
       input,
       output,
@@ -665,6 +691,7 @@ export async function startInkInteractiveLog(
     ink,
     initialView: options.initialView || 'history',
     logArgv: options.logArgv,
+    loadRows: options.loadRows,
     React,
     rows,
     theme: createLogInkTheme(options.theme),
@@ -791,7 +818,7 @@ function enrichFilterActionWithRectification(
 }
 
 function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, clipboardRunner, git, idleTipsEnabled, ink, initialView, logArgv, React, resumeRef, rows, theme } = deps
+  const { appLabel, clipboardRunner, git, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -813,7 +840,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // initializer so the fs check only runs on mount, not every render.
   const [showOnboarding, setShowOnboarding] = React.useState<boolean>(() => !hasSeenOnboarding())
   const [state, setState] = React.useState<LogInkState>(() =>
-    createLogInkState(rows, { activeView: initialView })
+    createLogInkState(rows, {
+      activeView: initialView,
+      // Boot loader is in flight when caller passed `loadRows` and the
+      // initial rows array is empty. The history surface keys off the
+      // flag to render a "Loading commits…" placeholder instead of an
+      // empty-state hint.
+      bootLoading: Boolean(loadRows && rows.length === 0),
+    })
   )
   const [context, setContext] = React.useState<LogInkContext>({})
   const [contextStatus, setContextStatus] = React.useState<LogInkContextStatus>(() =>
@@ -905,6 +939,34 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
+  }, [])
+
+  // Deferred commit-log loader (#808). Runs once on mount when the
+  // caller opted into the lazy boot path. The Ink tree is already on
+  // screen at this point — without this the user stares at a black
+  // terminal during the synchronous git log pre-mount fetch. The
+  // mounted-ref guard prevents a late-resolving promise from
+  // dispatching after the user `q` quits before rows arrive.
+  React.useEffect(() => {
+    if (!loadRows) return
+    let cancelled = false
+    void loadRows()
+      .then((nextRows) => {
+        if (cancelled || !mountedRef.current) return
+        dispatch({ type: 'replaceRows', rows: nextRows })
+      })
+      .catch((error: unknown) => {
+        if (cancelled || !mountedRef.current) return
+        const message = error instanceof Error ? error.message : String(error)
+        dispatch({ type: 'setStatus', value: `Failed to load commits: ${message}` })
+        dispatch({ type: 'setBootLoading', value: false })
+      })
+    return () => {
+      cancelled = true
+    }
+    // Intentionally one-shot — re-running the boot load on hot
+    // dispatch / loader changes would refetch the entire log on every
+    // re-render. The loader fires once per app mount and that's it.
   }, [])
 
   // Auto-dismiss status messages after a short window so transient
@@ -2406,7 +2468,13 @@ function renderHeader(
     ? `PR #${prInfo.number} ${prInfo.isDraft ? 'DRAFT' : prInfo.state}`
     : 'no PR'
   const search = state.filterMode ? `search: ${state.filter}_` : state.filter ? `filter: ${state.filter}` : ''
-  const loading = isLogInkContextLoading(contextStatus) ? '  loading context' : ''
+  // Boot loading wins over the per-context loading hint because it
+  // tells the user the headline thing they care about (commits aren't
+  // ready yet) — the context fetches finish independently and surface
+  // their own per-section loading copy in the sidebars.
+  const loading = state.bootLoading
+    ? '  loading commits'
+    : isLogInkContextLoading(contextStatus) ? '  loading context' : ''
   const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
   const view = breadcrumb ? `  ${breadcrumb}` : ''
   // Mode indicator (P2.2) — surfaces the current input mode so users
@@ -2871,10 +2939,12 @@ function renderHistoryPanel(
     : []),
   ...(pendingNode ? [pendingNode] : []),
   visible.items.length === 0
-    ? h(Text, { dimColor: true }, formatLogInkHistoryEmpty({
-      filter: state.filter,
-      totalCommits: state.commits.length,
-    }))
+    ? h(Text, { dimColor: true }, state.bootLoading
+        ? formatLogInkLoading({ resource: 'commits' })
+        : formatLogInkHistoryEmpty({
+          filter: state.filter,
+          totalCommits: state.commits.length,
+        }))
     : visible.items.map((item, index) => {
       if (item.type === 'graph') {
         if (item.laneSegments && !theme.ascii) {
