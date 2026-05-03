@@ -100,6 +100,27 @@ describe('log Ink workflows', () => {
     })
   })
 
+  it('registers create-branch-here / create-tag-here as palette-only normal actions', () => {
+    // GitKraken-style "create branch / tag from commit" — bound to `B`
+    // and `gT` on the history view in inkInput. Palette-only `key: ''`
+    // here keeps them discoverable without registering global hotkeys;
+    // the prompt itself is the affirmative gate so requiresConfirmation
+    // stays false (no extra y-confirm).
+    const branchHere = getLogInkWorkflowActionById('create-branch-here')
+    expect(branchHere).toMatchObject({
+      key: '',
+      kind: 'normal',
+      requiresConfirmation: false,
+    })
+
+    const tagHere = getLogInkWorkflowActionById('create-tag-here')
+    expect(tagHere).toMatchObject({
+      key: '',
+      kind: 'normal',
+      requiresConfirmation: false,
+    })
+  })
+
   it('registers hunk-apply workflows as palette-only and non-destructive (#782)', () => {
     const worktree = getLogInkWorkflowActionById('apply-hunk-worktree')
     const index = getLogInkWorkflowActionById('apply-hunk-index')

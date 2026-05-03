@@ -162,6 +162,8 @@ import {
   ResetMode,
   checkoutFileFromCommit,
   cherryPickCommit,
+  createBranchFromCommit,
+  createTagAtCommit,
   defaultClipboardRunner,
   isResetMode,
   resetToCommit,
@@ -1576,6 +1578,26 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           hash: commit.hash,
           shortHash: commit.shortHash,
           message: commit.message,
+        })
+      },
+      'create-branch-here': async () => {
+        const commit = getSelectedInkCommit(state)
+        const name = payload?.trim()
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        if (!name) return { ok: false, message: 'Branch name required' }
+        return createBranchFromCommit(git, name, {
+          hash: commit.hash,
+          shortHash: commit.shortHash,
+        })
+      },
+      'create-tag-here': async () => {
+        const commit = getSelectedInkCommit(state)
+        const name = payload?.trim()
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        if (!name) return { ok: false, message: 'Tag name required' }
+        return createTagAtCommit(git, name, {
+          hash: commit.hash,
+          shortHash: commit.shortHash,
         })
       },
       'checkout-file-from-commit': async () => {
