@@ -954,6 +954,13 @@ export function getLogInkInputEvents(
         hunkOffsets: context.commitDiffHunkOffsets,
       })]
     }
+    // Inspector focused: cycle the inspector tab. The renderer only
+    // honors the tab field on short terminals (where the inspector
+    // collapses into a tabbed layout), but we let the user pre-set
+    // their preference on tall terminals too.
+    if (state.focus === 'detail') {
+      return [action({ type: 'cycleInspectorTab', delta: -1 })]
+    }
     return [action({ type: 'previousSidebarTab' })]
   }
 
@@ -978,6 +985,9 @@ export function getLogInkInputEvents(
         delta: 1,
         hunkOffsets: context.commitDiffHunkOffsets,
       })]
+    }
+    if (state.focus === 'detail') {
+      return [action({ type: 'cycleInspectorTab', delta: 1 })]
     }
     return [action({ type: 'nextSidebarTab' })]
   }

@@ -933,4 +933,30 @@ describe('log Ink view model', () => {
       expect(state.selectedBranchIndex).toBe(0)
     })
   })
+
+  // #806 follow-up — tabbed inspector for short terminals.
+  describe('inspectorTab', () => {
+    it('defaults to inspector', () => {
+      const state = createLogInkState(rows)
+      expect(state.inspectorTab).toBe('inspector')
+    })
+
+    it('setInspectorTab snaps to the requested tab', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setInspectorTab', value: 'actions' })
+      expect(state.inspectorTab).toBe('actions')
+      state = applyLogInkAction(state, { type: 'setInspectorTab', value: 'inspector' })
+      expect(state.inspectorTab).toBe('inspector')
+    })
+
+    it('cycleInspectorTab toggles between inspector and actions', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('actions')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('inspector')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('actions')
+    })
+  })
 })

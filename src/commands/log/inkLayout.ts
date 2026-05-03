@@ -31,12 +31,30 @@ export type LogInkLayout = {
   rows: number
   sidebarWidth: number
   tooSmall: boolean
+  /**
+   * True when the terminal is short enough that the inspector should
+   * collapse its commit-detail and actions sections into a tabbed
+   * layout (only the active tab renders). Mirrors the sidebar
+   * accordion: same data, less scroll. The threshold lives below in
+   * `INSPECTOR_TABBED_BELOW_ROWS` so the runtime and tests share a
+   * single value.
+   */
+  inspectorTabbed: boolean
 }
 
 export const LOG_INK_MIN_COLUMNS = 80
 export const LOG_INK_MIN_ROWS = 24
 export const LOG_INK_DEFAULT_COLUMNS = 120
 export const LOG_INK_DEFAULT_ROWS = 40
+
+/**
+ * Terminal-row threshold below which the inspector switches to a
+ * tabbed layout (commit-detail vs actions). Picked empirically: at
+ * 28 rows the inspector's full stack (~30 rows when fully populated)
+ * starts clipping the actions section; below that, the tabbed mode
+ * gives both views their own air.
+ */
+export const INSPECTOR_TABBED_BELOW_ROWS = 28
 
 export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const columns = input.columns || LOG_INK_DEFAULT_COLUMNS
@@ -64,5 +82,6 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
     rows,
     sidebarWidth,
     tooSmall: columns < LOG_INK_MIN_COLUMNS || rows < LOG_INK_MIN_ROWS,
+    inspectorTabbed: rows < INSPECTOR_TABBED_BELOW_ROWS,
   }
 }

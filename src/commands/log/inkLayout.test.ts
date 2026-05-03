@@ -71,6 +71,18 @@ describe('log Ink layout', () => {
     expect(getLogInkLayout({ columns: 80, rows: 23 }).tooSmall).toBe(true)
   })
 
+  // #806 follow-up — the inspector switches to a tabbed layout on
+  // short terminals so the commit-detail and actions sections each
+  // get their own view rather than clipping. Threshold lives in
+  // INSPECTOR_TABBED_BELOW_ROWS so the runtime + tests share one
+  // value.
+  it('flags inspectorTabbed when the terminal is shorter than the threshold', () => {
+    expect(getLogInkLayout({ columns: 120, rows: 24 }).inspectorTabbed).toBe(true)
+    expect(getLogInkLayout({ columns: 120, rows: 27 }).inspectorTabbed).toBe(true)
+    expect(getLogInkLayout({ columns: 120, rows: 28 }).inspectorTabbed).toBe(false)
+    expect(getLogInkLayout({ columns: 120, rows: 40 }).inspectorTabbed).toBe(false)
+  })
+
   it('grows the sidebar when sidebarFocused is set', () => {
     const collapsed = getLogInkLayout({ columns: 120, rows: 40 })
     const expanded = getLogInkLayout({ columns: 120, rows: 40, sidebarFocused: true })
