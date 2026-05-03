@@ -169,6 +169,7 @@ import {
   startInteractiveRebase,
 } from './historyActions'
 import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
+import { ApplyHunkTarget, applyHunkPatch } from './hunkActions'
 import { removeWorktree } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
@@ -1352,6 +1353,31 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // disappears. Called from the y-confirm path for delete-branch / delete-
   // tag / drop-stash / remove-worktree / abort-operation.
   const runWorkflowAction = React.useCallback(async (id: string, payload?: string) => {
+    // Hunk-apply payload format: `<target>\n<patchText>` — the input
+    // handler synthesizes both pieces (target from the keystroke,
+    // patch text from extractDiffHunk against the live diff lines)
+    // and packs them into the single `payload` field. Splitting on
+    // the first newline keeps the patch body intact.
+    const runApplyHunk = (
+      expectedTarget: ApplyHunkTarget,
+      raw: string | undefined
+    ): Promise<{ ok: boolean; message: string; details?: string[] }> => {
+      if (!raw) {
+        return Promise.resolve({ ok: false, message: 'No hunk under cursor to apply.' })
+      }
+      const newlineIndex = raw.indexOf('\n')
+      if (newlineIndex < 0) {
+        return Promise.resolve({ ok: false, message: 'Malformed hunk-apply payload.' })
+      }
+      const target = raw.slice(0, newlineIndex) === 'index' ? 'index' : 'worktree'
+      const patchText = raw.slice(newlineIndex + 1)
+      // The input handler is the source of truth for target — but if a
+      // palette-injected payload mismatches the workflow id, prefer
+      // the workflow id so the user sees the action they asked for.
+      const effectiveTarget = expectedTarget || target
+      return applyHunkPatch(git, patchText, { target: effectiveTarget })
+    }
+
     const handlers: Record<string, () => Promise<{ ok: boolean; message: string } | undefined>> = {
       'create-branch': async () => {
         const name = payload?.trim()
@@ -1491,6 +1517,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!sha || !path) return { ok: false, message: 'No commit file under cursor' }
         return checkoutFileFromCommit(git, sha, path)
       },
+      'apply-hunk-worktree': async () => runApplyHunk('worktree', payload),
+      'apply-hunk-index': async () => runApplyHunk('index', payload),
       'remove-worktree': async () => {
         const all = context.worktreeList?.worktrees || []
         // Resolve the target from the visible (filtered) list so a
@@ -2055,6 +2083,17 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ? selected?.hash
         : undefined,
       worktreeDirty,
+      // H / gH need the actual diff text (not just hunk offsets) to
+      // slice the cursored hunk into a `git apply` patch. Stash uses
+      // the full `git stash show -p` output; commit-diff uses the
+      // per-file `filePreview.hunks` array. Either way, extractDiffHunk
+      // walks `@@` headers and synthesizes a fresh diff --git / --- /
+      // +++ header set using the path the caller already resolved.
+      diffLinesForHunkApply: state.diffSource === 'stash'
+        ? stashDiffLines
+        : state.diffSource === 'commit'
+          ? filePreview?.hunks
+          : undefined,
     }).forEach((event) => {
       if (event.type === 'exit') {
         exit()

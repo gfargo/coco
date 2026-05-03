@@ -560,15 +560,16 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     const splitToggleHint = options.diffViewMode === 'split' ? 'd unified' : 'd split'
     if (options.diffSource === 'stash') {
       return {
-        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'o edit', splitToggleHint, 'y yank', 'esc back'],
+        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'H apply hunk', 'o edit', splitToggleHint, 'y yank', 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
     if (options.diffSource === 'commit') {
       // Commit-diff explore: read-only diff, but `c` cherry-picks the
-      // cursored file from the commit into the worktree.
+      // cursored file from the commit into the worktree, and `H`
+      // (or `gH` for index) applies just the cursored hunk.
       return {
-        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', splitToggleHint, 'y/Y yank', 'esc back'],
+        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'y/Y yank', 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }

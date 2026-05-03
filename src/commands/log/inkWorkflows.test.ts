@@ -100,6 +100,17 @@ describe('log Ink workflows', () => {
     })
   })
 
+  it('registers hunk-apply workflows as palette-only and non-destructive (#782)', () => {
+    const worktree = getLogInkWorkflowActionById('apply-hunk-worktree')
+    const index = getLogInkWorkflowActionById('apply-hunk-index')
+    expect(worktree?.key).toBe('')
+    expect(worktree?.kind).toBe('normal')
+    expect(worktree?.requiresConfirmation).toBe(false)
+    expect(index?.key).toBe('')
+    expect(index?.kind).toBe('normal')
+    expect(index?.requiresConfirmation).toBe(false)
+  })
+
   it('reports loading states while optional repository context hydrates', () => {
     const sections = getLogInkWorkflowSections({
       contextLoading: true,

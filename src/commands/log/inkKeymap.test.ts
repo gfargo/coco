@@ -44,6 +44,23 @@ describe('log Ink keymap', () => {
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
+    // Hunk-apply (#782): commit-diff and stash-diff hints surface `H`.
+    expect(getLogInkFooterHints({
+      activeView: 'diff',
+      diffSource: 'commit',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    }).contextual).toContain('H apply hunk')
+
+    expect(getLogInkFooterHints({
+      activeView: 'diff',
+      diffSource: 'stash',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    }).contextual).toContain('H apply hunk')
+
     expect(getLogInkFooterHints({
       activeView: 'compose',
       filterMode: false,

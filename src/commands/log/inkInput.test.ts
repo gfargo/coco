@@ -1447,4 +1447,120 @@ describe('log Ink input interactions', () => {
       })
     })
   })
+
+  describe('hunk-level apply (#782)', () => {
+    const COMMIT_DIFF_LINES = [
+      '@@ -1,3 +1,4 @@',
+      ' const a = 1',
+      '+const b = 2',
+      ' const c = 3',
+      ' const d = 4',
+    ]
+
+    const STASH_DIFF_LINES = [
+      'diff --git a/src/foo.ts b/src/foo.ts',
+      '--- a/src/foo.ts',
+      '+++ b/src/foo.ts',
+      '@@ -1,2 +1,3 @@',
+      ' const a = 1',
+      '+const b = 2',
+      ' const c = 3',
+    ]
+
+    function commitDiffState() {
+      const state = createLogInkState(rows, { activeView: 'diff' })
+      return {
+        ...state,
+        diffSource: 'commit' as const,
+        diffPreviewOffset: 1,
+      }
+    }
+
+    function stashDiffState() {
+      const state = createLogInkState(rows, { activeView: 'diff' })
+      return {
+        ...state,
+        diffSource: 'stash' as const,
+        stashDiffRef: 'stash@{0}',
+        diffPreviewOffset: 5,
+      }
+    }
+
+    it('H on commit-diff dispatches apply-hunk-worktree with the synthesized patch', () => {
+      const events = getLogInkInputEvents(commitDiffState(), 'H', {}, {
+        diffLinesForHunkApply: COMMIT_DIFF_LINES,
+        commitDiffSelectedPath: 'src/foo.ts',
+        commitDiffSelectedSha: 'abc1234',
+      })
+      expect(events).toHaveLength(1)
+      const event = events[0]
+      expect(event.type).toBe('runWorkflowAction')
+      if (event.type !== 'runWorkflowAction') throw new Error('expected workflow event')
+      expect(event.id).toBe('apply-hunk-worktree')
+      expect(event.payload?.startsWith('worktree\n')).toBe(true)
+      expect(event.payload).toContain('diff --git a/src/foo.ts b/src/foo.ts')
+      expect(event.payload).toContain('+const b = 2')
+    })
+
+    it('H on stash-diff dispatches apply-hunk-worktree with the synthesized patch', () => {
+      const events = getLogInkInputEvents(stashDiffState(), 'H', {}, {
+        diffLinesForHunkApply: STASH_DIFF_LINES,
+        stashDiffSelectedPath: 'src/foo.ts',
+      })
+      expect(events).toHaveLength(1)
+      const event = events[0]
+      expect(event.type).toBe('runWorkflowAction')
+      if (event.type !== 'runWorkflowAction') throw new Error('expected workflow event')
+      expect(event.id).toBe('apply-hunk-worktree')
+      expect(event.payload?.startsWith('worktree\n')).toBe(true)
+      expect(event.payload).toContain('diff --git a/src/foo.ts b/src/foo.ts')
+    })
+
+    it('gH chord dispatches apply-hunk-index instead of worktree', () => {
+      let state: ReturnType<typeof createLogInkState> = commitDiffState()
+      state = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      const events = getLogInkInputEvents(state, 'H', {}, {
+        diffLinesForHunkApply: COMMIT_DIFF_LINES,
+        commitDiffSelectedPath: 'src/foo.ts',
+        commitDiffSelectedSha: 'abc1234',
+      })
+      // First event clears pendingKey, second event dispatches the workflow.
+      const workflowEvent = events.find((e) => e.type === 'runWorkflowAction')
+      expect(workflowEvent).toBeDefined()
+      if (!workflowEvent || workflowEvent.type !== 'runWorkflowAction') {
+        throw new Error('expected workflow event')
+      }
+      expect(workflowEvent.id).toBe('apply-hunk-index')
+      expect(workflowEvent.payload?.startsWith('index\n')).toBe(true)
+    })
+
+    it('H without a hunk-extractable cursor surfaces a status hint', () => {
+      const events = getLogInkInputEvents(stashDiffState(), 'H', {}, {
+        diffLinesForHunkApply: ['diff --git a/x b/x'], // no @@ header
+        stashDiffSelectedPath: 'x',
+      })
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({
+        type: 'action',
+        action: { type: 'setStatus', value: expect.stringContaining('no hunk under cursor') },
+      })
+    })
+
+    it('H outside of commit-diff / stash-diff is a no-op', () => {
+      // History view: H is unbound and should fall through to subsequent
+      // handlers. Empty events == nothing matched.
+      const events = getLogInkInputEvents(createLogInkState(rows), 'H')
+      expect(events).toEqual([])
+    })
+
+    it('gH chord without diff context shows a discoverability hint', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      const events = getLogInkInputEvents(state, 'H')
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setStatus', value: expect.stringContaining('gH applies a hunk') },
+      })
+    })
+  })
 })
