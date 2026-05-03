@@ -447,6 +447,89 @@ export function resetToCommit(
   }))
 }
 
+/**
+ * Create a new local branch pointed at <commit>, without switching to it.
+ *
+ * This is the "create branch from cursored commit" history action — the
+ * user types the new branch name into an input prompt and we run
+ * `git branch <name> <sha>` (NOT `git switch -c`, which is what
+ * `branchActions.createBranch` does for the create-branch-at-HEAD flow).
+ * The split exists because GitKraken-style "create branch here" is
+ * specifically about marking a historical commit, not about switching
+ * onto a new working branch.
+ *
+ * Note for the inspector follow-up: workflow surfacing is driven by the
+ * registry in `inkWorkflows.ts`, not a hardcoded action list — adding
+ * `create-branch-here` there is enough for the inspector / palette to
+ * pick this up.
+ */
+export function createBranchFromCommit(
+  git: SimpleGit,
+  name: string,
+  commit: Pick<HistoryCommitRef, 'hash' | 'shortHash'> | undefined
+): Promise<BranchActionResult> {
+  const trimmedName = name.trim()
+
+  if (!commit) {
+    return Promise.resolve({
+      ok: false,
+      message: 'No commit selected.',
+    })
+  }
+
+  if (!trimmedName) {
+    return Promise.resolve({
+      ok: false,
+      message: 'Branch name required.',
+    })
+  }
+
+  return guardNoInProgressOperation(git).then((blocked) => (
+    blocked || runAction(
+      () => git.raw(['branch', trimmedName, commit.hash]),
+      `Created branch ${trimmedName} at ${commit.shortHash}`
+    )
+  ))
+}
+
+/**
+ * Create a lightweight tag pointed at <commit>.
+ *
+ * Mirrors `createBranchFromCommit` for the tag side: the user types a
+ * tag name into an input prompt and we run `git tag <name> <sha>`
+ * (lightweight, no `-a`/`-m`). Annotated tags remain available through
+ * the existing `+` flow on the tags view; this is the per-commit
+ * shortcut.
+ */
+export function createTagAtCommit(
+  git: SimpleGit,
+  name: string,
+  commit: Pick<HistoryCommitRef, 'hash' | 'shortHash'> | undefined
+): Promise<BranchActionResult> {
+  const trimmedName = name.trim()
+
+  if (!commit) {
+    return Promise.resolve({
+      ok: false,
+      message: 'No commit selected.',
+    })
+  }
+
+  if (!trimmedName) {
+    return Promise.resolve({
+      ok: false,
+      message: 'Tag name required.',
+    })
+  }
+
+  return guardNoInProgressOperation(git).then((blocked) => (
+    blocked || runAction(
+      () => git.raw(['tag', trimmedName, commit.hash]),
+      `Created tag ${trimmedName} at ${commit.shortHash}`
+    )
+  ))
+}
+
 export function startInteractiveRebase(
   git: SimpleGit,
   commit: HistoryCommitRef | undefined
