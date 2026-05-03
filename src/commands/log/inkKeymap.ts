@@ -22,6 +22,7 @@ export type LogInkCommandId =
   | 'navigateCompose'
   | 'navigateDiff'
   | 'navigateHome'
+  | 'navigatePullRequest'
   | 'navigateStash'
   | 'navigateWorktrees'
   | 'navigateStatus'
@@ -241,6 +242,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'navigatePullRequest',
+    keys: ['gp'],
+    label: 'pull request',
+    description: 'Push the dedicated pull-request action panel for the current branch.',
+    contexts: ['normal'],
+  },
+  {
     id: 'navigateBack',
     keys: ['<', 'esc'],
     label: 'back',
@@ -410,6 +418,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateTags',
   'navigateStash',
   'navigateWorktrees',
+  'navigatePullRequest',
   'navigateBack',
 ]
 
@@ -581,6 +590,17 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'worktrees') {
     return {
       contextual: ['↑/↓ worktrees', 'W remove', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'pull-request') {
+    return {
+      // #783 — full PR action panel. Five mutating ops scoped to this
+      // view: m / x / a / R / c, plus O for open-in-browser (already
+      // a global). Each routes through y-confirm or an input prompt;
+      // none fire silently.
+      contextual: ['m merge', 'x close', 'a approve', 'R changes', 'c comment', 'O open', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

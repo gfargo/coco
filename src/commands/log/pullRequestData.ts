@@ -11,6 +11,30 @@ export type GitHubRepository = {
   name: string
 }
 
+export type PullRequestStatusCheck = {
+  /** Display name from `gh pr view --json statusCheckRollup`. */
+  name: string
+  /**
+   * `IN_PROGRESS` / `COMPLETED` / `QUEUED` / etc. for check runs;
+   * `PENDING` / `SUCCESS` / `FAILURE` / `ERROR` for status contexts.
+   * The renderer normalizes both into a single status glyph.
+   */
+  status?: string
+  /**
+   * `SUCCESS` / `FAILURE` / `NEUTRAL` / `CANCELLED` / `SKIPPED` /
+   * `TIMED_OUT` / `ACTION_REQUIRED` for completed check runs;
+   * `undefined` while still in progress.
+   */
+  conclusion?: string
+}
+
+export type PullRequestReviewInfo = {
+  /** GitHub login of the reviewer. */
+  author: string
+  /** `APPROVED` / `CHANGES_REQUESTED` / `COMMENTED` / `DISMISSED` / `PENDING`. */
+  state: string
+}
+
 export type PullRequestInfo = {
   number: number
   title: string
@@ -19,6 +43,22 @@ export type PullRequestInfo = {
   isDraft: boolean
   headRefName: string
   baseRefName: string
+  /** PR body — rendered as a collapsed preview in the panel header. */
+  body?: string
+  /** GitHub login of the PR author. */
+  author?: string
+  /** Aggregated GraphQL review decision (cheaper than computing it
+   *  from the per-review array). */
+  reviewDecision?: string
+  /** `MERGEABLE` / `CONFLICTING` / `UNKNOWN` from gh. */
+  mergeable?: string
+  /** `CLEAN` / `DIRTY` / `BLOCKED` / `BEHIND` / `UNSTABLE` / etc. —
+   *  drives the merge action's affordance and any pre-merge warnings. */
+  mergeStateStatus?: string
+  /** Flat per-check status; rendered as a small table in the panel. */
+  statusCheckRollup?: PullRequestStatusCheck[]
+  /** Per-reviewer entries; rendered as a summary line. */
+  reviews?: PullRequestReviewInfo[]
 }
 
 export type PullRequestOverview = {
@@ -67,8 +107,67 @@ function parsePullRequestInfo(output: string): PullRequestInfo | undefined {
     return undefined
   }
 
-  return JSON.parse(trimmed) as PullRequestInfo
+  const raw = JSON.parse(trimmed) as Record<string, unknown>
+  const author = raw.author && typeof raw.author === 'object' && 'login' in raw.author
+    ? String((raw.author as { login: unknown }).login)
+    : undefined
+
+  return {
+    number: raw.number as number,
+    title: raw.title as string,
+    url: raw.url as string,
+    state: raw.state as string,
+    isDraft: raw.isDraft as boolean,
+    headRefName: raw.headRefName as string,
+    baseRefName: raw.baseRefName as string,
+    body: typeof raw.body === 'string' ? raw.body : undefined,
+    author,
+    reviewDecision: typeof raw.reviewDecision === 'string' ? raw.reviewDecision : undefined,
+    mergeable: typeof raw.mergeable === 'string' ? raw.mergeable : undefined,
+    mergeStateStatus: typeof raw.mergeStateStatus === 'string' ? raw.mergeStateStatus : undefined,
+    statusCheckRollup: Array.isArray(raw.statusCheckRollup)
+      ? (raw.statusCheckRollup as Array<Record<string, unknown>>).map((entry) => ({
+        name: String(entry.name || entry.context || 'check'),
+        status: typeof entry.status === 'string' ? entry.status : undefined,
+        conclusion: typeof entry.conclusion === 'string' ? entry.conclusion : undefined,
+      }))
+      : undefined,
+    reviews: Array.isArray(raw.reviews)
+      ? (raw.reviews as Array<Record<string, unknown>>).map((entry) => {
+        const author = entry.author && typeof entry.author === 'object' && 'login' in entry.author
+          ? String((entry.author as { login: unknown }).login)
+          : ''
+        return {
+          author,
+          state: typeof entry.state === 'string' ? entry.state : '',
+        }
+      }).filter((review) => review.author)
+      : undefined,
+  }
 }
+
+/**
+ * `gh pr view --json` field list. Centralized so the data fetcher and
+ * any future re-fetch (e.g., refresh after a merge action) request the
+ * same shape — the parser depends on every field being present, even
+ * if optional, so they're safe to deserialize.
+ */
+export const PULL_REQUEST_VIEW_JSON_FIELDS = [
+  'number',
+  'title',
+  'url',
+  'state',
+  'isDraft',
+  'headRefName',
+  'baseRefName',
+  'body',
+  'author',
+  'reviewDecision',
+  'mergeable',
+  'mergeStateStatus',
+  'statusCheckRollup',
+  'reviews',
+].join(',')
 
 export async function getPullRequestOverview(
   git: SimpleGit,
@@ -106,7 +205,7 @@ export async function getPullRequestOverview(
       'pr',
       'view',
       '--json',
-      'number,title,url,state,isDraft,headRefName,baseRefName',
+      PULL_REQUEST_VIEW_JSON_FIELDS,
     ])
 
     return {

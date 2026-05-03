@@ -892,12 +892,14 @@ describe('log Ink input interactions', () => {
     it('does not move the palette selection past the filtered command count', () => {
       let state = openPalette()
 
-      // Filter to a unique label to get exactly one match.
-      state = applyInput(state, 'g')
-      state = applyInput(state, 'r')
-      state = applyInput(state, 'a')
-      state = applyInput(state, 'p')
-      state = applyInput(state, 'h')
+      // Filter to a unique substring that ONLY matches toggleGraph.
+      // Earlier the test typed `graph` letter-by-letter, but the
+      // fuzzy-match scorer also accepts long-distance matches like
+      // `Merge ... current ... branch's ... pull ... squash` which
+      // collide with the new PR-panel workflows added in #783.
+      // `togglegr` is a substring of the toggleGraph id and lives
+      // nowhere else in the command set.
+      'togglegr'.split('').forEach((c) => { state = applyInput(state, c) })
 
       // Only one match (toggleGraph). Down-arrow should clamp at index 0.
       state = applyInput(state, '', { downArrow: true })

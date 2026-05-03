@@ -264,6 +264,53 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
     },
+    // #783 — full PR action panel. All five entries are palette-only
+    // (`key: ''`) — actual dispatch is per-view scoped in inkInput so
+    // the keys stay free outside the pull-request view. Merge / close /
+    // approve / request-changes route through the y-confirm path
+    // because each is irreversible (or near-irreversible) once gh
+    // publishes it; comment is a free-form prompt with no extra
+    // confirmation since the body itself is the affirmative action.
+    {
+      id: 'merge-pr',
+      key: '',
+      label: 'Merge pull request',
+      description: 'Merge the current branch\'s pull request (prompts for merge / squash / rebase, then confirms).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'close-pr',
+      key: '',
+      label: 'Close pull request',
+      description: 'Close the current pull request without merging.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'approve-pr',
+      key: '',
+      label: 'Approve pull request',
+      description: 'Submit an approving review on the current pull request.',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'request-changes-pr',
+      key: '',
+      label: 'Request changes on pull request',
+      description: 'Submit a change-request review (prompts for the review body, then confirms).',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'comment-pr',
+      key: '',
+      label: 'Comment on pull request',
+      description: 'Add a comment to the current pull request (prompts for body).',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
     {
       id: 'ai-commit-summary',
       key: 'I',

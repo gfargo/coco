@@ -237,6 +237,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'stash' })]
     case 'navigateWorktrees':
       return [action({ type: 'pushView', value: 'worktrees' })]
+    case 'navigatePullRequest':
+      return [action({ type: 'pushView', value: 'pull-request' })]
     case 'navigateBack':
       return [action({ type: 'popView' })]
     case 'openSelected': {
@@ -365,6 +367,38 @@ export function getLogInkInputEvents(
       const value = state.inputPrompt.value.trim()
       if (!value) {
         return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel' })]
+      }
+      // Most prompt kinds dispatch a workflow whose id matches the
+      // kind. PR-related prompts forward to a workflow id distinct
+      // from the prompt name so the panel can keep its keys
+      // mnemonic-friendly while the workflow ids stay descriptive.
+      // pr-merge-strategy validates the strategy at the input layer
+      // so a typo doesn't surface as a "workflow not yet wired"
+      // status downstream.
+      if (state.inputPrompt.kind === 'pr-merge-strategy') {
+        const strategy = value.toLowerCase()
+        if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
+          return [action({
+            type: 'setStatus',
+            value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
+          })]
+        }
+        return [
+          action({ type: 'setPendingConfirmation', value: 'merge-pr', payload: strategy }),
+          action({ type: 'closeInputPrompt' }),
+        ]
+      }
+      if (state.inputPrompt.kind === 'pr-comment') {
+        return [
+          { type: 'runWorkflowAction', id: 'comment-pr', payload: value },
+          action({ type: 'closeInputPrompt' }),
+        ]
+      }
+      if (state.inputPrompt.kind === 'pr-request-changes') {
+        return [
+          action({ type: 'setPendingConfirmation', value: 'request-changes-pr', payload: value }),
+          action({ type: 'closeInputPrompt' }),
+        ]
       }
       const id = state.inputPrompt.kind
       return [
@@ -678,6 +712,18 @@ export function getLogInkInputEvents(
     return [
       action({ type: 'pushView', value: 'worktrees' }),
       action({ type: 'setStatus', value: 'jumped to worktrees' }),
+    ]
+  }
+
+  // `gp` jumps to the dedicated pull-request action panel (#783).
+  // Lowercase `p` matches the pattern of other navigation chords
+  // (gh / gs / gd / gc / gb / gt / gz / gw). The panel renders the
+  // current branch's PR via `gh pr view --json` enriched fields and
+  // exposes m / x / a / R / c action keys scoped to the view.
+  if (state.pendingKey === 'g' && inputValue === 'p') {
+    return [
+      action({ type: 'pushView', value: 'pull-request' }),
+      action({ type: 'setStatus', value: 'jumped to pull request' }),
     ]
   }
 
@@ -1177,6 +1223,38 @@ export function getLogInkInputEvents(
   // (especially the `R` rename binding on the branches target).
   if (inputValue === 'R' && isTagActionTarget(state) && context.tagCount) {
     return [action({ type: 'setPendingConfirmation', value: 'delete-remote-tag' })]
+  }
+
+  // #783 — full PR action panel keys, scoped to the pull-request view.
+  // All five wrap a `gh pr <verb>` invocation; merge / request-changes /
+  // comment open prompts first, the rest route through the y-confirm
+  // path because they're irreversible (or near-irreversible).
+  if (inputValue === 'm' && state.activeView === 'pull-request') {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'pr-merge-strategy',
+      label: 'Merge strategy (merge / squash / rebase)',
+    })]
+  }
+  if (inputValue === 'x' && state.activeView === 'pull-request') {
+    return [action({ type: 'setPendingConfirmation', value: 'close-pr' })]
+  }
+  if (inputValue === 'a' && state.activeView === 'pull-request') {
+    return [action({ type: 'setPendingConfirmation', value: 'approve-pr' })]
+  }
+  if (inputValue === 'R' && state.activeView === 'pull-request') {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'pr-request-changes',
+      label: 'Request changes — review body',
+    })]
+  }
+  if (inputValue === 'c' && state.activeView === 'pull-request') {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'pr-comment',
+      label: 'Comment body',
+    })]
   }
 
   // Global stash hotkey: `S` opens a stash-message prompt and
