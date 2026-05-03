@@ -1177,6 +1177,13 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       )
       if (loaded) {
         dispatch({ type: 'selectCommitByHash', hash: targetHash })
+        // Confirmation status message so the user gets feedback even
+        // when the dedicated branches / tags view is occupying the
+        // main panel and the history cursor moves invisibly behind it.
+        dispatch({
+          type: 'setStatus',
+          value: `Synced history to ${targetLabel} tip`,
+        })
       } else {
         dispatch({
           type: 'setStatus',
@@ -1647,6 +1654,17 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         const repo = context.provider?.repository
         if (!repo || repo.provider !== 'github' || !repo.owner || !repo.name) {
           return { ok: false, message: 'No GitHub remote detected for this repo' }
+        }
+        // History view: prefer the cursored commit's URL so `O` from
+        // a commit context lands the user on the commit page rather
+        // than the repo root or the current PR. The user-visible
+        // intent of `O` is "open whatever I'm cursoring on the web";
+        // a commit is what the cursor is on in the history view.
+        if (state.activeView === 'history') {
+          const commit = getSelectedInkCommit(state)
+          if (commit) {
+            return openProviderUrl(repo, { type: 'commit', commit: commit.hash })
+          }
         }
         const pr = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
         if (pr) {
