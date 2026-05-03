@@ -106,6 +106,56 @@ describe('log Ink keymap', () => {
     })
   })
 
+  describe('diff view split/unified hint (#785)', () => {
+    it('surfaces "d split" on a unified commit diff', () => {
+      const hints = getLogInkFooterHints({
+        activeView: 'diff',
+        diffSource: 'commit',
+        diffViewMode: 'unified',
+        filterMode: false,
+        focus: 'commits',
+        showHelp: false,
+      })
+      expect(hints.contextual).toContain('d split')
+    })
+
+    it('surfaces "d unified" once split is active on a commit diff', () => {
+      const hints = getLogInkFooterHints({
+        activeView: 'diff',
+        diffSource: 'commit',
+        diffViewMode: 'split',
+        filterMode: false,
+        focus: 'commits',
+        showHelp: false,
+      })
+      expect(hints.contextual).toContain('d unified')
+    })
+
+    it('surfaces the toggle on the stash diff source as well', () => {
+      const hints = getLogInkFooterHints({
+        activeView: 'diff',
+        diffSource: 'stash',
+        diffViewMode: 'unified',
+        filterMode: false,
+        focus: 'commits',
+        showHelp: false,
+      })
+      expect(hints.contextual).toContain('d split')
+    })
+
+    it('does not surface the toggle on the worktree diff source', () => {
+      // Worktree diff stays unified-only for now — staging is the
+      // primary action there and split mode complicates the hunk picker.
+      const hints = getLogInkFooterHints({
+        activeView: 'diff',
+        filterMode: false,
+        focus: 'commits',
+        showHelp: false,
+      })
+      expect(hints.contextual.some((h) => h.startsWith('d '))).toBe(false)
+    })
+  })
+
   // #791 follow-up — in-sidebar selection. When sidebar is focused on a
   // content tab WITH items, the footer surfaces the per-entity ops
   // (checkout / apply / pop / drop / etc.) so the user discovers that

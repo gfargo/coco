@@ -757,6 +757,23 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingKey', value: 'g' })]
   }
 
+  // `d` on the diff view toggles between unified and side-by-side split
+  // rendering (#785). Scoped to the diff view so the letter stays free
+  // for other surfaces. The chord branch above already claimed `gd`,
+  // so by the time we get here `pendingKey` is not `g`.
+  if (inputValue === 'd' && state.activeView === 'diff') {
+    const next = state.diffViewMode === 'unified' ? 'split' : 'unified'
+    return [
+      action({ type: 'toggleDiffViewMode' }),
+      action({
+        type: 'setStatus',
+        value: next === 'split'
+          ? 'Switched to side-by-side diff'
+          : 'Switched to unified diff',
+      }),
+    ]
+  }
+
   if (inputValue === '\\') {
     return [action({ type: 'toggleGraph' })]
   }

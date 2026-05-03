@@ -893,13 +893,14 @@ describe('log Ink input interactions', () => {
       let state = openPalette()
 
       // Filter to a unique substring that ONLY matches toggleGraph.
-      // Earlier the test typed `graph` letter-by-letter, but the
-      // fuzzy-match scorer also accepts long-distance matches like
-      // `Merge ... current ... branch's ... pull ... squash` which
-      // collide with the new PR-panel workflows added in #783.
-      // `togglegr` is a substring of the toggleGraph id and lives
-      // nowhere else in the command set.
-      'togglegr'.split('').forEach((c) => { state = applyInput(state, c) })
+      // The fuzzy-match scorer accepts long-distance character chains,
+      // so the original `graph` filter started colliding with new
+      // commands as the registry grew (e.g., #783's PR-panel
+      // workflows, #785's toggleDiffViewMode description). The full
+      // id substring `togglegraph` is unique to toggleGraph because
+      // toggleDiffViewMode lacks the `p` after `togglegra` in any of
+      // its searchable fields.
+      'togglegraph'.split('').forEach((c) => { state = applyInput(state, c) })
 
       // Only one match (toggleGraph). Down-arrow should clamp at index 0.
       state = applyInput(state, '', { downArrow: true })
@@ -1374,6 +1375,76 @@ describe('log Ink input interactions', () => {
       expect(getLogInkInputEvents(empty, 'R')).toEqual([])
       expect(getLogInkInputEvents(empty, 'Z')).toEqual([])
       expect(getLogInkInputEvents(empty, 'i')).toEqual([])
+    })
+  })
+
+  describe('d toggles diff view mode (#785)', () => {
+    it('emits toggleDiffViewMode + a status hint when pressed in the diff view', () => {
+      const state = { ...createLogInkState(rows), activeView: 'diff' as const }
+      const events = getLogInkInputEvents(state, 'd')
+
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'toggleDiffViewMode' } },
+        {
+          type: 'action',
+          action: { type: 'setStatus', value: 'Switched to side-by-side diff' },
+        },
+      ])
+    })
+
+    it('labels the status hint with the next mode (split → unified)', () => {
+      const state = {
+        ...createLogInkState(rows),
+        activeView: 'diff' as const,
+        diffViewMode: 'split' as const,
+      }
+      const events = getLogInkInputEvents(state, 'd')
+
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setStatus', value: 'Switched to unified diff' },
+      })
+    })
+
+    it('does not toggle the mode when pressed outside the diff view', () => {
+      const state = createLogInkState(rows)
+      // history view (default)
+      const historyEvents = getLogInkInputEvents(state, 'd')
+      expect(historyEvents).not.toContainEqual({
+        type: 'action',
+        action: { type: 'toggleDiffViewMode' },
+      })
+
+      const statusEvents = getLogInkInputEvents(
+        { ...state, activeView: 'status' as const },
+        'd'
+      )
+      expect(statusEvents).not.toContainEqual({
+        type: 'action',
+        action: { type: 'toggleDiffViewMode' },
+      })
+    })
+
+    it('does not collide with the gd chord — gd still pushes the diff view', () => {
+      const state = createLogInkState(rows)
+      // First press starts the chord
+      const startChord = getLogInkInputEvents(state, 'g')
+      expect(startChord).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingKey', value: 'g' },
+      })
+
+      // Second press completes gd → pushView 'diff', not toggleDiffViewMode
+      const chordState = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      const completeChord = getLogInkInputEvents(chordState, 'd')
+      expect(completeChord).toContainEqual({
+        type: 'action',
+        action: { type: 'pushView', value: 'diff' },
+      })
+      expect(completeChord).not.toContainEqual({
+        type: 'action',
+        action: { type: 'toggleDiffViewMode' },
+      })
     })
   })
 })
