@@ -126,6 +126,37 @@ export function parseStashDiffFiles(lines: string[]): StashDiffFile[] {
   return files
 }
 
+/**
+ * Resolve which stash file *contains* a given line offset — the user's
+ * cursor scrolls through a concatenated multi-file patch, and this is
+ * what powers the "File N/M: <path>" panel header, the inline header
+ * highlighting (#791 follow-up), and the cherry-pick / open-in-editor
+ * dispatchers' "what file is the cursor on" lookup.
+ *
+ * Returns `undefined` when the file list is empty *or* the offset
+ * lands before the very first file's `diff --git` header (e.g. when
+ * `--stat` summary lines lead the patch). Callers fall through to a
+ * "no file selected" state in that case.
+ */
+export function findStashFileForOffset(
+  files: StashDiffFile[],
+  offset: number
+): StashDiffFile | undefined {
+  if (files.length === 0) return undefined
+  let current: StashDiffFile | undefined
+  for (const file of files) {
+    if (file.startLine <= offset) {
+      current = file
+    } else {
+      break
+    }
+  }
+  // First file is the canonical fallback — even if the offset lands
+  // before its header (rare), we want the cursor to be "in" something
+  // so the user's actions have a target.
+  return current ?? files[0]
+}
+
 const DIFF_GIT_HEADER = /^diff --git (?:"a\/((?:\\.|[^"\\])+)"|a\/(\S+)) (?:"b\/((?:\\.|[^"\\])+)"|b\/(\S+))$/
 
 function parseDiffGitHeader(line: string): { aPath: string; bPath: string } | undefined {

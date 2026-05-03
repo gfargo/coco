@@ -1,4 +1,12 @@
-import { getStashDiffSummary, getStashOverview, parseStashDiffFiles, parseStashFiles, parseStashList, stashDataTestInternals } from './stashData'
+import {
+  findStashFileForOffset,
+  getStashDiffSummary,
+  getStashOverview,
+  parseStashDiffFiles,
+  parseStashFiles,
+  parseStashList,
+  stashDataTestInternals,
+} from './stashData'
 
 describe('log stash data', () => {
   it('parses stash list lines with branch context and messages', () => {
@@ -129,6 +137,40 @@ describe('log stash data', () => {
       expect(parseStashDiffFiles(lines)).toEqual([
         { path: 'src/quote".ts', startLine: 0 },
       ])
+    })
+  })
+
+  // #791 follow-up — the diff surface uses this to decide which file
+  // header to highlight as "active" while the user scrolls a multi-file
+  // stash patch.
+  describe('findStashFileForOffset', () => {
+    const files = [
+      { path: 'a.ts', startLine: 0 },
+      { path: 'b.ts', startLine: 12 },
+      { path: 'c.ts', startLine: 30 },
+    ]
+
+    it('returns the file the offset sits inside', () => {
+      expect(findStashFileForOffset(files, 0)?.path).toBe('a.ts')
+      expect(findStashFileForOffset(files, 5)?.path).toBe('a.ts')
+      expect(findStashFileForOffset(files, 12)?.path).toBe('b.ts')
+      expect(findStashFileForOffset(files, 25)?.path).toBe('b.ts')
+      expect(findStashFileForOffset(files, 30)?.path).toBe('c.ts')
+      expect(findStashFileForOffset(files, 100)?.path).toBe('c.ts')
+    })
+
+    it('falls back to the first file when offset lands before its header', () => {
+      // Defensive — git stash patches always lead with `diff --git` so
+      // this path is rare, but the helper should never return undefined
+      // when the file list is non-empty.
+      expect(findStashFileForOffset(
+        [{ path: 'a.ts', startLine: 5 }],
+        0
+      )?.path).toBe('a.ts')
+    })
+
+    it('returns undefined for an empty file list', () => {
+      expect(findStashFileForOffset([], 0)).toBeUndefined()
     })
   })
 })

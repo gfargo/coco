@@ -187,7 +187,13 @@ import {
   mergePullRequest,
   requestChangesPullRequest,
 } from './pullRequestActions'
-import { StashOverview, getStashDiff, getStashOverview, parseStashDiffFiles } from './stashData'
+import {
+  StashOverview,
+  findStashFileForOffset,
+  getStashDiff,
+  getStashOverview,
+  parseStashDiffFiles,
+} from './stashData'
 import { formatStashHeaderIdentity } from './inkStashHeader'
 import {
   buildPullRequestCheckRows,
@@ -1892,16 +1898,11 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         // Walk back to the most recent file header at or before the
         // current preview offset — same logic the input-context block
         // uses to expose stashDiffSelectedPath.
-        const files = parseStashDiffFiles(stashDiffLines)
-        if (files.length > 0) {
-          let current = files[0]
-          for (const file of files) {
-            if (file.startLine <= state.diffPreviewOffset) {
-              current = file
-            } else {
-              break
-            }
-          }
+        const current = findStashFileForOffset(
+          parseStashDiffFiles(stashDiffLines),
+          state.diffPreviewOffset
+        )
+        if (current) {
           value = current.path
           label = `path ${current.path}`
         }
@@ -2231,21 +2232,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       ? parseStashDiffFiles(stashDiffLines)
       : []
     const stashDiffFileOffsets = stashDiffFiles.map((file) => file.startLine)
-    const stashDiffSelectedPath = (() => {
-      if (state.diffSource !== 'stash' || stashDiffFiles.length === 0) return undefined
-      const offset = state.diffPreviewOffset
-      // Walk backwards to the most recent file header at or before the
-      // current cursor offset.
-      let current = stashDiffFiles[0]
-      for (const file of stashDiffFiles) {
-        if (file.startLine <= offset) {
-          current = file
-        } else {
-          break
-        }
-      }
-      return current.path
-    })()
+    const stashDiffSelectedPath = state.diffSource === 'stash'
+      ? findStashFileForOffset(stashDiffFiles, state.diffPreviewOffset)?.path
+      : undefined
 
     getLogInkInputEvents(state, inputValue, key, {
       detailFileCount: detail?.files.length,
@@ -3819,18 +3808,7 @@ function renderDiffSurface(
     )
     const stashFiles = parseStashDiffFiles(lines)
     const fileCount = stashFiles.length
-    const currentFile = (() => {
-      if (fileCount === 0) return undefined
-      let current = stashFiles[0]
-      for (const file of stashFiles) {
-        if (file.startLine <= state.diffPreviewOffset) {
-          current = file
-        } else {
-          break
-        }
-      }
-      return current
-    })()
+    const currentFile = findStashFileForOffset(stashFiles, state.diffPreviewOffset)
     const currentFileIndex = currentFile
       ? Math.max(0, stashFiles.findIndex((file) => file.startLine === currentFile.startLine))
       : -1
@@ -3858,6 +3836,13 @@ function renderDiffSurface(
       ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
       : baseHeaderLines
 
+    // File header anchor map: absolute line index → owning stash file.
+    // Lets the body-render pass restyle each `diff --git` row in O(1)
+    // and decide which one is the *active* file (the one currently
+    // containing `diffPreviewOffset`). The active header gets the
+    // selection background to mark "the file the cursor is inside."
+    const stashFileByStartLine = new Map(stashFiles.map((file) => [file.startLine, file]))
+    const activeStartLine = currentFile?.startLine
     const stashBodyNodes: ReactTypes.ReactNode[] = stashDiffLoading || !lines.length
       ? []
       : splitActive
@@ -3865,10 +3850,30 @@ function renderDiffSurface(
           h, components, visibleLines, state.diffPreviewOffset, width, theme,
           'stash-diff-split'
         )
-        : visibleLines.map((line, index) => h(Text, {
-          key: `stash-diff-line-${state.diffPreviewOffset + index}`,
-          ...diffLineProps(line, theme),
-        }, truncate(line, width - 4)))
+        : visibleLines.map((line, index) => {
+          const absoluteIndex = state.diffPreviewOffset + index
+          const headerFile = stashFileByStartLine.get(absoluteIndex)
+          if (headerFile) {
+            // Replace the verbose `diff --git a/<path> b/<path>` text
+            // with a compact `▾ <path>` marker — the path itself is
+            // the meaningful identifier, not the a/b duplication. The
+            // active file's header gets selection styling so the user
+            // sees at a glance which file the cursor is inside.
+            const isActive = absoluteIndex === activeStartLine
+            const arrow = theme.ascii ? '> ' : '▾ '
+            return h(Text, {
+              key: `stash-diff-line-${absoluteIndex}`,
+              bold: true,
+              color: theme.noColor ? undefined : theme.colors.accent,
+              backgroundColor: isActive && focused && !theme.noColor ? theme.colors.selection : undefined,
+              inverse: isActive && focused,
+            }, truncate(`${arrow}${headerFile.path}`, width - 4))
+          }
+          return h(Text, {
+            key: `stash-diff-line-${absoluteIndex}`,
+            ...diffLineProps(line, theme),
+          }, truncate(line, width - 4))
+        })
 
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
