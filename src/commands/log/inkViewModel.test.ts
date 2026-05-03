@@ -934,6 +934,52 @@ describe('log Ink view model', () => {
     })
   })
 
+  // Sidebar header focus (#806 follow-up) — escapes the items list
+  // upward onto the active tab's header. Reducer-level coverage
+  // here; input dispatch coverage lives in inkInput.test.ts.
+  describe('sidebarHeaderFocused', () => {
+    it('defaults to false', () => {
+      expect(createLogInkState(rows).sidebarHeaderFocused).toBe(false)
+    })
+
+    it('setSidebarHeaderFocused toggles the flag', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setSidebarHeaderFocused', value: true })
+      expect(state.sidebarHeaderFocused).toBe(true)
+      state = applyLogInkAction(state, { type: 'setSidebarHeaderFocused', value: false })
+      expect(state.sidebarHeaderFocused).toBe(false)
+    })
+
+    it('clears when focus moves away from the sidebar', () => {
+      let state = applyLogInkAction(createLogInkState(rows), { type: 'setFocus', value: 'sidebar' })
+      state = applyLogInkAction(state, { type: 'setSidebarHeaderFocused', value: true })
+      expect(state.sidebarHeaderFocused).toBe(true)
+      state = applyLogInkAction(state, { type: 'setFocus', value: 'commits' })
+      expect(state.sidebarHeaderFocused).toBe(false)
+    })
+
+    it('clears on focusNext / focusPrevious', () => {
+      let state = applyLogInkAction(createLogInkState(rows), { type: 'setFocus', value: 'sidebar' })
+      state = applyLogInkAction(state, { type: 'setSidebarHeaderFocused', value: true })
+      state = applyLogInkAction(state, { type: 'focusNext' })
+      expect(state.sidebarHeaderFocused).toBe(false)
+
+      state = applyLogInkAction(state, { type: 'setFocus', value: 'sidebar' })
+      state = applyLogInkAction(state, { type: 'setSidebarHeaderFocused', value: true })
+      state = applyLogInkAction(state, { type: 'focusPrevious' })
+      expect(state.sidebarHeaderFocused).toBe(false)
+    })
+
+    it('preserves the flag when setFocus targets sidebar (no-op self-assignment)', () => {
+      let state = applyLogInkAction(createLogInkState(rows), { type: 'setFocus', value: 'sidebar' })
+      state = applyLogInkAction(state, { type: 'setSidebarHeaderFocused', value: true })
+      // Re-setting focus to sidebar (e.g. via setSidebarTab which
+      // also normalizes focus) should not reset header focus.
+      state = applyLogInkAction(state, { type: 'setFocus', value: 'sidebar' })
+      expect(state.sidebarHeaderFocused).toBe(true)
+    })
+  })
+
   // #806 follow-up — tabbed inspector for short terminals.
   describe('inspectorTab', () => {
     it('defaults to inspector', () => {

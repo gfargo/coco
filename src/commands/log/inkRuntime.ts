@@ -2411,6 +2411,11 @@ function renderSidebar(
   // Accordion layout — every tab's title is visible on its own line, but
   // only the active tab expands its content underneath. Switching tabs
   // (1-5 / [/]) collapses the previous and expands the next.
+  // When sidebar focus has been promoted to the tab header (#806
+  // follow-up), the active tab's title row gets selection styling
+  // and the items below it render without their cursor highlight
+  // (which now lives on the header).
+  const headerFocused = focused && state.sidebarHeaderFocused
   const tabBlocks = tabs.flatMap((tab, tabIndex) => {
     const isActive = tab === state.sidebarTab
     const count = sidebarTabCount(tab, context)
@@ -2418,6 +2423,7 @@ function renderSidebar(
       ? `${sidebarTabLabel(tab)} (${count})`
       : sidebarTabLabel(tab)
     const headerText = isActive ? `[${labelWithCount}]` : labelWithCount
+    const headerSelected = isActive && headerFocused
     const blocks: ReactTypes.ReactElement[] = []
     if (tabIndex > 0) {
       blocks.push(h(Text, { key: `tab-spacer-${tab}` }, ''))
@@ -2426,6 +2432,12 @@ function renderSidebar(
       key: `tab-header-${tab}`,
       bold: isActive,
       dimColor: !isActive,
+      // Selection styling on the header itself when the cursor has
+      // been promoted off the items list. inverse swaps fg/bg so the
+      // highlight reads as "this is the cursor target" identically
+      // to how items render when focused.
+      backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
+      inverse: headerSelected,
     }, headerText))
     if (isActive) {
       blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, bodyRows, theme))
@@ -2479,7 +2491,11 @@ function renderActiveSidebarContent(
   // ↑/↓ navigates within the sidebar list and Enter / per-entity keys
   // act on the cursored item without needing to drill into the
   // dedicated view (#791 follow-up — in-sidebar selection).
-  const focused = state.focus === 'sidebar' && state.sidebarTab === tab
+  // Items render with the cursor highlight only when the sidebar is
+  // focused on this tab AND the cursor is on items (not promoted to
+  // the tab header). The header-focused branch up in `renderSidebar`
+  // owns the highlight in that case.
+  const focused = state.focus === 'sidebar' && state.sidebarTab === tab && !state.sidebarHeaderFocused
 
   if (tab === 'branches') {
     if (isLogInkContextKeyLoading(contextStatus, 'branches')) {

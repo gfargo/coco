@@ -1055,6 +1055,31 @@ export function getLogInkInputEvents(
       })]
     }
 
+    // Sidebar header focus: ↑ at item index 0 promotes the cursor
+    // onto the active tab's header. Pressing ↑ again is a no-op
+    // (use ←/→ to switch between tab headers, Enter to drill in).
+    // Only triggers when the sidebar is focused on a content tab —
+    // dedicated promoted views (`g b` etc.) keep the legacy clamp
+    // behavior because they have no header to escape to.
+    if (state.focus === 'sidebar' && !state.sidebarHeaderFocused) {
+      if (state.sidebarTab === 'branches' && state.selectedBranchIndex === 0 && (context.branchCount ?? 0) > 0) {
+        return [action({ type: 'setSidebarHeaderFocused', value: true })]
+      }
+      if (state.sidebarTab === 'tags' && state.selectedTagIndex === 0 && (context.tagCount ?? 0) > 0) {
+        return [action({ type: 'setSidebarHeaderFocused', value: true })]
+      }
+      if (state.sidebarTab === 'stashes' && state.selectedStashIndex === 0 && (context.stashCount ?? 0) > 0) {
+        return [action({ type: 'setSidebarHeaderFocused', value: true })]
+      }
+      if (state.sidebarTab === 'worktrees' && state.selectedWorktreeListIndex === 0 && (context.worktreeListCount ?? 0) > 0) {
+        return [action({ type: 'setSidebarHeaderFocused', value: true })]
+      }
+    }
+    // Already on the header — ↑ is a no-op (←/→ switches tabs).
+    if (state.focus === 'sidebar' && state.sidebarHeaderFocused) {
+      return []
+    }
+
     if (isBranchActionTarget(state) && context.branchCount) {
       return [action({ type: 'moveBranch', delta: -1, count: context.branchCount })]
     }
@@ -1124,6 +1149,14 @@ export function getLogInkInputEvents(
         delta: 1,
         previewLineCount: context.previewLineCount,
       })]
+    }
+
+    // Sidebar header focused: ↓ re-enters the list at index 0.
+    // Clears the header flag and snaps the per-entity selection to 0
+    // (mirrors the existing default selection behavior on first
+    // sidebar focus).
+    if (state.focus === 'sidebar' && state.sidebarHeaderFocused) {
+      return [action({ type: 'setSidebarHeaderFocused', value: false })]
     }
 
     if (isBranchActionTarget(state) && context.branchCount) {
@@ -1281,7 +1314,15 @@ export function getLogInkInputEvents(
       (state.sidebarTab === 'branches' || state.sidebarTab === 'stashes') &&
       sidebarTabHasSelectableItems(state.sidebarTab, sidebarItemCount)
 
-    if (!hasInSidebarPrimaryAction) {
+    // Three cases drill into the dedicated view:
+    //   1. The cursor is on the tab header (user pressed ↑ at the
+    //      top of the list to escape the items — Enter explicitly
+    //      jumps to the dedicated view).
+    //   2. The tab has no in-sidebar primary action defined (status,
+    //      tags, worktrees — drilling in is the canonical path).
+    //   3. The tab has zero items (the dedicated view's empty state
+    //      tells the user what to do next).
+    if (state.sidebarHeaderFocused || !hasInSidebarPrimaryAction) {
       const tabToView: Partial<Record<LogInkSidebarTab, 'status' | 'branches' | 'tags' | 'stash' | 'worktrees'>> = {
         status: 'status',
         branches: 'branches',

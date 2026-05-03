@@ -132,6 +132,19 @@ export type LogInkState = {
    *    had open before they opened those surfaces.
    */
   userSidebarTab: LogInkSidebarTab
+  /**
+   * When true, the cursor sits on the active sidebar tab's *header*
+   * rather than on an item inside the list. Pressing Enter drills
+   * into the dedicated view (`g b`/`g t`/`g z`/`g w`/`g s`) instead
+   * of firing a per-entity action.
+   *
+   * Triggered by pressing ↑ at item index 0; cleared by pressing ↓
+   * (cursor re-enters the list at index 0). Persists across ←/→ tab
+   * switches so the user can scan headers tab-to-tab and drill in.
+   * Resets whenever focus leaves the sidebar so the next sidebar
+   * focus starts on items.
+   */
+  sidebarHeaderFocused: boolean
   statusMessage?: string
   /**
    * Set by `navigateOpenDiffForCommit` / `navigateOpenDiffForWorktreeFile`
@@ -282,6 +295,7 @@ export type LogInkAction =
   | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
   | { type: 'moveBranch'; delta: number; count: number }
   | { type: 'resetBranchSelection' }
+  | { type: 'setSidebarHeaderFocused'; value: boolean }
   | { type: 'setInspectorTab'; value: LogInkInspectorTab }
   | { type: 'cycleInspectorTab'; delta: -1 | 1 }
   | { type: 'moveTag'; delta: number; count: number }
@@ -675,6 +689,7 @@ export function createLogInkState(
     focus: 'commits',
     sidebarTab: 'status',
     userSidebarTab: 'status',
+    sidebarHeaderFocused: false,
     statusFilterMask: { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK },
     diffViewMode: 'unified',
     inspectorTab: 'inspector',
@@ -720,12 +735,16 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         focus: cycleValue(FOCUS_ORDER, state.focus, 1),
+        // Reset header focus when leaving the sidebar so the next
+        // re-entry starts on items rather than mid-flag.
+        sidebarHeaderFocused: false,
         pendingKey: undefined,
       }
     case 'focusPrevious':
       return {
         ...state,
         focus: cycleValue(FOCUS_ORDER, state.focus, -1),
+        sidebarHeaderFocused: false,
         pendingKey: undefined,
       }
     case 'move':
@@ -811,6 +830,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedBranchIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'setSidebarHeaderFocused':
+      return {
+        ...state,
+        sidebarHeaderFocused: action.value,
         pendingKey: undefined,
       }
     case 'setInspectorTab':
@@ -1085,6 +1110,9 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         focus: action.value,
+        // Reset sidebar header focus when leaving the sidebar so a
+        // re-entry starts on items rather than mid-flag.
+        sidebarHeaderFocused: action.value === 'sidebar' ? state.sidebarHeaderFocused : false,
         pendingKey: undefined,
       }
     case 'setPendingKey':
