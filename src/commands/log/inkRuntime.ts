@@ -847,11 +847,13 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const [state, setState] = React.useState<LogInkState>(() =>
     createLogInkState(rows, {
       activeView: initialView,
-      // Boot loader is in flight when caller passed `loadRows` and the
-      // initial rows array is empty. The history surface keys off the
-      // flag to render a "Loading commits…" placeholder instead of an
-      // empty-state hint.
-      bootLoading: Boolean(loadRows && rows.length === 0),
+      // Boot loader is in flight whenever the caller passed
+      // `loadRows`, regardless of whether `rows` was empty or
+      // pre-populated from the disk cache (#808). The history
+      // surface only shows the "Loading commits…" placeholder when
+      // there are zero visible commits, so cached data renders
+      // immediately while the chrome still flags the refresh.
+      bootLoading: Boolean(loadRows),
     })
   )
   const [context, setContext] = React.useState<LogInkContext>({})
