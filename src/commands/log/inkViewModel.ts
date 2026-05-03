@@ -206,6 +206,7 @@ export type LogInkInputPromptKind =
   | 'rename-branch'
   | 'set-upstream'
   | 'create-stash'
+  | 'reset-mode'
   | 'pr-merge-strategy'
   | 'pr-comment'
   | 'pr-request-changes'

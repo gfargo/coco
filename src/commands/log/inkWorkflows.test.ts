@@ -73,6 +73,33 @@ describe('log Ink workflows', () => {
     expect(getLogInkWorkflowActionById('checkout-file-from-commit')?.key).toBe('')
   })
 
+  // Issue #777 — revert / reset / interactive-rebase wired through the
+  // workflow registry as palette-only entries (key: ''). Real keystroke
+  // dispatch is per-view scoped in inkInput.ts so they only fire on
+  // history view.
+  it('registers history-mutation workflows as destructive + palette-only', () => {
+    const revert = getLogInkWorkflowActionById('revert-commit')
+    expect(revert).toMatchObject({
+      key: '',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    })
+
+    const reset = getLogInkWorkflowActionById('reset-to-commit')
+    expect(reset).toMatchObject({
+      key: '',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    })
+
+    const rebase = getLogInkWorkflowActionById('interactive-rebase')
+    expect(rebase).toMatchObject({
+      key: '',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    })
+  })
+
   it('reports loading states while optional repository context hydrates', () => {
     const sections = getLogInkWorkflowSections({
       contextLoading: true,

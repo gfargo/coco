@@ -157,9 +157,14 @@ import {
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from './tagActions'
 import {
   ClipboardRunner,
+  ResetMode,
   checkoutFileFromCommit,
   cherryPickCommit,
   defaultClipboardRunner,
+  isResetMode,
+  resetToCommit,
+  revertCommit,
+  startInteractiveRebase,
 } from './historyActions'
 import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
 import { removeWorktree } from './worktreeActions'
@@ -1312,6 +1317,41 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         const commit = getSelectedInkCommit(state)
         if (!commit) return { ok: false, message: 'No commit selected' }
         return cherryPickCommit(git, {
+          hash: commit.hash,
+          shortHash: commit.shortHash,
+          message: commit.message,
+        })
+      },
+      'revert-commit': async () => {
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        return revertCommit(git, {
+          hash: commit.hash,
+          shortHash: commit.shortHash,
+          message: commit.message,
+        })
+      },
+      'reset-to-commit': async () => {
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        // Mode arrives via the action's `payload` field — the input
+        // handler runs the reset-mode prompt (kind: 'reset-mode') and
+        // routes the typed value here. Default to `mixed` (git's own
+        // default) when the user submitted an empty value.
+        const raw = payload?.trim().toLowerCase() || 'mixed'
+        if (!isResetMode(raw)) {
+          return { ok: false, message: `Unknown reset mode: ${raw}. Use soft, mixed, or hard.` }
+        }
+        return resetToCommit(git, {
+          hash: commit.hash,
+          shortHash: commit.shortHash,
+          message: commit.message,
+        }, raw as ResetMode)
+      },
+      'interactive-rebase': async () => {
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        return startInteractiveRebase(git, {
           hash: commit.hash,
           shortHash: commit.shortHash,
           message: commit.message,

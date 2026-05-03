@@ -312,6 +312,41 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // Per-view-only: scoped to the history view in inkInput so `R`
+      // doesn't fire elsewhere (it's also `R` for rename in branches
+      // and delete-remote-tag in tags). Empty key keeps it
+      // palette-discoverable without registering a global hotkey.
+      id: 'revert-commit',
+      key: '',
+      label: 'Revert commit',
+      description: 'Revert the cursored commit by adding an inverse commit on top of HEAD.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // Per-view-only: scoped to the history view in inkInput. Triggers
+      // a mode prompt (soft / mixed / hard) before the reset runs so
+      // `Z` alone never silently rewrites history.
+      id: 'reset-to-commit',
+      key: '',
+      label: 'Reset to commit',
+      description: 'Move the current branch tip to the cursored commit (prompts for soft / mixed / hard).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // Per-view-only: scoped to the history view in inkInput. `i`
+      // (lowercase) is used instead of `I` so the existing `I`
+      // ai-commit-summary workflow stays reachable on the history
+      // view — `i` matches the `git rebase -i` flag mnemonic anyway.
+      id: 'interactive-rebase',
+      key: '',
+      label: 'Interactive rebase',
+      description: 'Start an interactive rebase from the cursored commit (opens $GIT_EDITOR for the todo list).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'ai-commit-summary',
       key: 'I',
       label: 'AI commit summary',

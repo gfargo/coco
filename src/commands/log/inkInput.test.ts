@@ -1279,4 +1279,101 @@ describe('log Ink input interactions', () => {
       ])
     })
   })
+
+  // Issue #777 — wire revert / reset / interactive-rebase to history
+  // view keystrokes. R and `i` route through y-confirm via the existing
+  // pendingConfirmation flow; Z opens a mode prompt first because the
+  // soft / mixed / hard choice changes destructiveness.
+  describe('history-view mutation bindings (#777)', () => {
+    it('R on the history view sets pending confirmation for revert-commit', () => {
+      const events = getLogInkInputEvents(createLogInkState(rows), 'R')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'revert-commit' } },
+      ])
+    })
+
+    it('Z on the history view opens the reset-mode prompt', () => {
+      const events = getLogInkInputEvents(createLogInkState(rows), 'Z')
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'openInputPrompt',
+            kind: 'reset-mode',
+            label: 'Reset mode (soft / mixed / hard)',
+          },
+        },
+      ])
+    })
+
+    it('i on the history view sets pending confirmation for interactive-rebase', () => {
+      // Lowercase `i` keeps the existing global `I` ai-commit-summary
+      // workflow reachable on the history view; matches `git rebase -i`.
+      const events = getLogInkInputEvents(createLogInkState(rows), 'i')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'interactive-rebase' } },
+      ])
+    })
+
+    it('R / Z / i are scoped to the history view — branches view sees them differently', () => {
+      // Branches view has its own R (rename-branch). Z and i are unbound
+      // there — they fall through silently.
+      const branches = createLogInkState(rows, { activeView: 'branches' })
+      const r = getLogInkInputEvents(branches, 'R', {}, { branchCount: 3 })
+      expect(r[0]).toMatchObject({
+        type: 'action',
+        action: { type: 'openInputPrompt', kind: 'rename-branch' },
+      })
+    })
+
+    it('reset-mode prompt submission forwards the mode to reset-to-commit', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'Z')
+      expect(state.inputPrompt?.kind).toBe('reset-mode')
+
+      // Simulate typing "soft" then Enter.
+      state = applyInput(state, 's')
+      state = applyInput(state, 'o')
+      state = applyInput(state, 'f')
+      state = applyInput(state, 't')
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'reset-to-commit',
+        payload: 'soft',
+      })
+    })
+
+    it('reset-mode prompt rejects unknown modes with a status message', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'Z')
+      'extreme'.split('').forEach((c) => { state = applyInput(state, c) })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      // Status message + no workflow run.
+      expect(events.find((e) => e.type === 'runWorkflowAction')).toBeUndefined()
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setStatus', value: 'Unknown reset mode: extreme. Use soft, mixed, or hard.' },
+      })
+    })
+
+    it('reset-mode prompt accepts mixed and hard modes case-insensitively', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'Z')
+      'HARD'.split('').forEach((c) => { state = applyInput(state, c) })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'reset-to-commit',
+        payload: 'hard',
+      })
+    })
+
+    it('R / Z / i no-op when the history list is empty', () => {
+      const empty = createLogInkState([])
+      expect(getLogInkInputEvents(empty, 'R')).toEqual([])
+      expect(getLogInkInputEvents(empty, 'Z')).toEqual([])
+      expect(getLogInkInputEvents(empty, 'i')).toEqual([])
+    })
+  })
 })

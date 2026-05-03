@@ -17,7 +17,10 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ move', 'enter diff', 'c cherry-pick', 'y/Y yank', '/ search', 'gg/G top/bottom'],
+      // `c/R/Z/i mutate` is the compact chip for cherry-pick / revert /
+      // reset / interactive-rebase — full descriptions in ? help and
+      // the palette.
+      contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'y/Y yank', '/ search', 'gg/G top/bottom'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
