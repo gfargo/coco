@@ -2319,6 +2319,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         filePreview,
         filePreviewLoading,
         layout.detailWidth,
+        layout.inspectorTabbed,
         theme
       )
     ),
@@ -3871,6 +3872,7 @@ function renderDetailPanel(
   filePreview: GitCommitFilePreview | undefined,
   filePreviewLoading: boolean,
   width: number,
+  tabbed: boolean,
   theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const focused = state.focus === 'detail'
@@ -3942,7 +3944,7 @@ function renderDetailPanel(
 
   return renderHistoryInspector(
     h, components, state, context, contextStatus, detail, loading,
-    filePreview, filePreviewLoading, width, theme, focused
+    filePreview, filePreviewLoading, width, tabbed, theme, focused
   )
 }
 
@@ -3957,6 +3959,7 @@ function renderHistoryInspector(
   _filePreview: GitCommitFilePreview | undefined,
   _filePreviewLoading: boolean,
   width: number,
+  tabbed: boolean,
   theme: LogInkTheme,
   focused: boolean
 ): ReactTypes.ReactElement {
@@ -4030,6 +4033,38 @@ function renderHistoryInspector(
   const fileListNodes = renderCommitFileList(
     h, Text, detail.files, state.selectedFileIndex, focused, fileListMaxRows, width, theme
   )
+
+  // Tabbed mode (#806 follow-up — short terminals): render only the
+  // active inspector tab with a `[Inspector] Actions` header so the
+  // user knows what they're seeing and how to switch (`[/]` while
+  // focus is on the inspector). Tall terminals stack both sections
+  // as before.
+  if (tabbed) {
+    const activeTab = state.inspectorTab
+    const tabHeader = h(Box, { key: 'inspector-tabs', flexDirection: 'row' },
+      h(Text, {
+        bold: activeTab === 'inspector',
+        dimColor: activeTab !== 'inspector',
+      }, activeTab === 'inspector' ? '[Inspector]' : ' Inspector '),
+      ' ',
+      h(Text, {
+        bold: activeTab === 'actions',
+        dimColor: activeTab !== 'actions',
+      }, activeTab === 'actions' ? '[Actions]' : ' Actions '))
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      width,
+      paddingX: 1,
+    },
+    h(Text, { bold: true }, panelTitle('Inspector', focused)),
+    tabHeader,
+    h(Text, { key: 'inspector-tabs-spacer' }, ''),
+    ...(activeTab === 'inspector'
+      ? [...headerNodes, ...fileListNodes]
+      : renderInspectorActionsSection(h, Text, 'history-commit', width, theme)))
+  }
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),

@@ -39,6 +39,18 @@ export type LogInkDiffSource = 'commit' | 'worktree' | 'stash'
  */
 export type LogInkDiffViewMode = 'unified' | 'split'
 
+/**
+ * Inspector tab (#806 follow-up). On tall terminals the inspector
+ * stacks the commit-detail block and the actions block together. On
+ * short terminals (rows below the layout's tabbed threshold) only one
+ * tab renders at a time and the user toggles between them with `[/]`
+ * while the inspector is focused. The field is always present in
+ * state so the user can pre-set their preference; the renderer
+ * decides whether to honor it (short terminal) or stack both
+ * (tall terminal).
+ */
+export type LogInkInspectorTab = 'inspector' | 'actions'
+
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
 }
@@ -177,6 +189,12 @@ export type LogInkState = {
    * stores the user's preference, not the effective render mode.
    */
   diffViewMode: LogInkDiffViewMode
+  /**
+   * Inspector tab — see `LogInkInspectorTab`. Defaults to 'inspector'
+   * so first paint shows the commit metadata; the user toggles via
+   * `[/]` when the inspector is focused on a short terminal.
+   */
+  inspectorTab: LogInkInspectorTab
 }
 
 export type LogInkStatusFilterMask = {
@@ -264,6 +282,8 @@ export type LogInkAction =
   | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
   | { type: 'moveBranch'; delta: number; count: number }
   | { type: 'resetBranchSelection' }
+  | { type: 'setInspectorTab'; value: LogInkInspectorTab }
+  | { type: 'cycleInspectorTab'; delta: -1 | 1 }
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
@@ -657,6 +677,7 @@ export function createLogInkState(
     userSidebarTab: 'status',
     statusFilterMask: { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK },
     diffViewMode: 'unified',
+    inspectorTab: 'inspector',
   }
 }
 
@@ -792,6 +813,24 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedBranchIndex: 0,
         pendingKey: undefined,
       }
+    case 'setInspectorTab':
+      return {
+        ...state,
+        inspectorTab: action.value,
+        pendingKey: undefined,
+      }
+    case 'cycleInspectorTab': {
+      // Two-tab toggle — `delta` is symmetrical so direction does not
+      // matter, but we keep the action shape consistent with the
+      // sidebar's `nextSidebarTab` / `previousSidebarTab` so callers
+      // can mirror the sidebar pattern verbatim.
+      const next: LogInkInspectorTab = state.inspectorTab === 'inspector' ? 'actions' : 'inspector'
+      return {
+        ...state,
+        inspectorTab: next,
+        pendingKey: undefined,
+      }
+    }
     case 'moveTag':
       return {
         ...state,
