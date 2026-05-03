@@ -1,6 +1,6 @@
 import { GitLogRow } from './data'
 import { getLogInkInputEvents, getLogInkPaletteExecuteEvents } from './inkInput'
-import { applyLogInkAction, createLogInkState } from './inkViewModel'
+import { LogInkState, applyLogInkAction, createLogInkState } from './inkViewModel'
 
 const rows: GitLogRow[] = [
   {
@@ -1926,6 +1926,172 @@ describe('log Ink input interactions', () => {
       const events = getLogInkInputEvents(empty, '', { upArrow: true }, { branchCount: 0 })
       expect(events.find((e) =>
         e.type === 'action' && e.action.type === 'setSidebarHeaderFocused'
+      )).toBeUndefined()
+    })
+  })
+
+  // Status surface three-tier nav (#791 follow-up). ←/→ jumps between
+  // staged / unstaged / untracked groups; ↑ at the top of a group
+  // promotes onto the header; Enter on the header fires the group's
+  // batch workflow.
+  describe('status group three-tier navigation', () => {
+    function statusState(overrides: Partial<LogInkState> = {}) {
+      const base = createLogInkState(rows)
+      return {
+        ...base,
+        focus: 'commits' as const,
+        activeView: 'status' as const,
+        viewStack: ['status'] as LogInkState['viewStack'],
+        ...overrides,
+      }
+    }
+
+    const groups = [
+      { state: 'staged' as const, count: 2, startIndex: 0 },
+      { state: 'unstaged' as const, count: 3, startIndex: 2 },
+      { state: 'untracked' as const, count: 1, startIndex: 5 },
+    ]
+
+    it('→ jumps to the next group\'s first file', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 0 }),
+        '',
+        { rightArrow: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'jumpToStatusGroup', targetIndex: 2 } },
+      ])
+    })
+
+    it('← from the unstaged group jumps back to staged', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 3 }),
+        '',
+        { leftArrow: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'jumpToStatusGroup', targetIndex: 0 } },
+      ])
+    })
+
+    it('→ at the last group is a no-op', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 5 }),
+        '',
+        { rightArrow: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([])
+    })
+
+    it('↑ at the first file of the unstaged group promotes onto the header', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 2 }),
+        '',
+        { upArrow: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setStatusGroupHeaderFocused', value: true } },
+      ])
+    })
+
+    it('↑ in the middle of a group falls through to moveWorktreeFile', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 3 }),
+        '',
+        { upArrow: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'moveWorktreeFile', delta: -1, fileCount: 6 } },
+      ])
+    })
+
+    it('↑ when header focused is a no-op', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 2, statusGroupHeaderFocused: true }),
+        '',
+        { upArrow: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([])
+    })
+
+    it('↓ when header focused clears the flag (cursor stays on first file)', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 2, statusGroupHeaderFocused: true }),
+        '',
+        { downArrow: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setStatusGroupHeaderFocused', value: false } },
+      ])
+    })
+
+    it('Enter on staged-group header fires unstage-all-staged', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 0, statusGroupHeaderFocused: true }),
+        '',
+        { return: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'unstage-all-staged', payload: 'staged' },
+      ])
+    })
+
+    it('Enter on unstaged-group header fires stage-all-unstaged', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 3, statusGroupHeaderFocused: true }),
+        '',
+        { return: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'stage-all-unstaged', payload: 'unstaged' },
+      ])
+    })
+
+    it('Enter on untracked-group header fires stage-all-untracked', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 5, statusGroupHeaderFocused: true }),
+        '',
+        { return: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'stage-all-untracked', payload: 'untracked' },
+      ])
+    })
+
+    it('Enter on a file (not header focused) still opens the diff', () => {
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 1 }),
+        '',
+        { return: true },
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'navigateOpenDiffForWorktreeFile', fileIndex: 1 } },
+      ])
+    })
+
+    it('←/→ does nothing when only one group is visible (mask narrowed)', () => {
+      const onlyStaged = [{ state: 'staged' as const, count: 2, startIndex: 0 }]
+      const events = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 0 }),
+        '',
+        { rightArrow: true },
+        { worktreeFileCount: 2, statusGroups: onlyStaged },
+      )
+      // Falls through to the next handler — no jumpToStatusGroup
+      // event in the dispatch list.
+      expect(events.find((e) =>
+        e.type === 'action' && e.action.type === 'jumpToStatusGroup'
       )).toBeUndefined()
     })
   })

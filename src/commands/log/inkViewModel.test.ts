@@ -980,6 +980,83 @@ describe('log Ink view model', () => {
     })
   })
 
+  // Status surface group header focus (#791 follow-up) — same shape
+  // as `sidebarHeaderFocused` but scoped to the worktree status
+  // surface, where the cursor escapes upward onto the active group's
+  // header (Staged / Unstaged / Untracked) instead of the sidebar's
+  // tab header.
+  describe('statusGroupHeaderFocused', () => {
+    it('defaults to false', () => {
+      expect(createLogInkState(rows).statusGroupHeaderFocused).toBe(false)
+    })
+
+    it('setStatusGroupHeaderFocused toggles the flag', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatusGroupHeaderFocused', value: true })
+      expect(state.statusGroupHeaderFocused).toBe(true)
+      state = applyLogInkAction(state, { type: 'setStatusGroupHeaderFocused', value: false })
+      expect(state.statusGroupHeaderFocused).toBe(false)
+    })
+
+    it('clears when focus moves away from commits', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatusGroupHeaderFocused', value: true })
+      expect(state.statusGroupHeaderFocused).toBe(true)
+      state = applyLogInkAction(state, { type: 'setFocus', value: 'sidebar' })
+      expect(state.statusGroupHeaderFocused).toBe(false)
+    })
+
+    it('clears on Tab / Shift+Tab cycling', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatusGroupHeaderFocused', value: true })
+      state = applyLogInkAction(state, { type: 'focusNext' })
+      expect(state.statusGroupHeaderFocused).toBe(false)
+    })
+
+    it('clears when the cursor moves to a real file (moveWorktreeFile)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatusGroupHeaderFocused', value: true })
+      state = applyLogInkAction(state, { type: 'moveWorktreeFile', delta: 1, fileCount: 4 })
+      expect(state.statusGroupHeaderFocused).toBe(false)
+    })
+
+    it('clears when the filter mask changes (groups recompose)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatusGroupHeaderFocused', value: true })
+      state = applyLogInkAction(state, { type: 'toggleStatusFilterMask', kind: 'staged' })
+      expect(state.statusGroupHeaderFocused).toBe(false)
+    })
+
+    it('clears when leaving the status view (popView away from status)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      state = applyLogInkAction(state, { type: 'setStatusGroupHeaderFocused', value: true })
+      expect(state.statusGroupHeaderFocused).toBe(true)
+      state = applyLogInkAction(state, { type: 'popView' })
+      expect(state.statusGroupHeaderFocused).toBe(false)
+    })
+  })
+
+  describe('jumpToStatusGroup', () => {
+    it('snaps the worktree file index to the target and clears header focus', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatusGroupHeaderFocused', value: true })
+      state = applyLogInkAction(state, { type: 'jumpToStatusGroup', targetIndex: 3 })
+      expect(state.selectedWorktreeFileIndex).toBe(3)
+      expect(state.statusGroupHeaderFocused).toBe(false)
+      expect(state.selectedWorktreeHunkIndex).toBe(0)
+      expect(state.worktreeDiffOffset).toBe(0)
+    })
+
+    it('clamps a negative target to 0', () => {
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'jumpToStatusGroup',
+        targetIndex: -5,
+      })
+      expect(state.selectedWorktreeFileIndex).toBe(0)
+    })
+  })
+
   // #806 follow-up — tabbed inspector for short terminals.
   describe('inspectorTab', () => {
     it('defaults to inspector', () => {

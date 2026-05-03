@@ -80,3 +80,50 @@ export function applyStatusFilterMask(
   }
   return files.filter((file) => mask[file.state])
 }
+
+/**
+ * Sectioned view of a (filtered) worktree file list. Groups are emitted
+ * in canonical order (staged → unstaged → untracked) so the renderer
+ * and the cursor model agree on layout regardless of the order
+ * `git status --porcelain` happens to spit them out in. Empty
+ * categories are omitted; `startIndex` is the offset of the group's
+ * first file in the *flattened* sorted list — pair with
+ * `flattenWorktreeGroups` so the canonical `selectedWorktreeFileIndex`
+ * always points to the right file.
+ */
+export type WorktreeFileGroup = {
+  state: WorktreeFileState
+  files: WorktreeFile[]
+  startIndex: number
+}
+
+const WORKTREE_GROUP_ORDER: WorktreeFileState[] = ['staged', 'unstaged', 'untracked']
+
+export function groupWorktreeFiles(files: WorktreeFile[]): WorktreeFileGroup[] {
+  const groups: WorktreeFileGroup[] = []
+  let cursor = 0
+  for (const groupState of WORKTREE_GROUP_ORDER) {
+    const groupFiles = files.filter((file) => file.state === groupState)
+    if (groupFiles.length > 0) {
+      groups.push({ state: groupState, files: groupFiles, startIndex: cursor })
+      cursor += groupFiles.length
+    }
+  }
+  return groups
+}
+
+export function flattenWorktreeGroups(groups: WorktreeFileGroup[]): WorktreeFile[] {
+  return groups.flatMap((group) => group.files)
+}
+
+export function findGroupForIndex(
+  groups: WorktreeFileGroup[],
+  index: number
+): WorktreeFileGroup | undefined {
+  for (const group of groups) {
+    if (index >= group.startIndex && index < group.startIndex + group.files.length) {
+      return group
+    }
+  }
+  return undefined
+}

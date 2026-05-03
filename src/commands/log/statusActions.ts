@@ -49,3 +49,36 @@ export function revertFile(git: SimpleGit, file: WorktreeFile): Promise<StatusAc
     `Reverted ${file.path}`
   )
 }
+
+/**
+ * Group-level batch ops triggered by Enter on a status group header
+ * (staged / unstaged / untracked). Pass the files belonging to that
+ * group; the helpers run a single `git add` / `git restore --staged`
+ * with all paths in one invocation rather than looping per-file —
+ * faster + atomic from the user's point of view.
+ */
+export function stageAllFiles(
+  git: SimpleGit,
+  files: WorktreeFile[]
+): Promise<StatusActionResult> {
+  if (files.length === 0) {
+    return Promise.resolve({ ok: false, message: 'No files to stage' })
+  }
+  return runAction(
+    () => git.raw(['add', '--', ...files.map((file) => file.path)]),
+    `Staged ${files.length} ${files.length === 1 ? 'file' : 'files'}`
+  )
+}
+
+export function unstageAllFiles(
+  git: SimpleGit,
+  files: WorktreeFile[]
+): Promise<StatusActionResult> {
+  if (files.length === 0) {
+    return Promise.resolve({ ok: false, message: 'No files to unstage' })
+  }
+  return runAction(
+    () => git.raw(['restore', '--staged', '--', ...files.map((file) => file.path)]),
+    `Unstaged ${files.length} ${files.length === 1 ? 'file' : 'files'}`
+  )
+}

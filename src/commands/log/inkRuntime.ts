@@ -193,8 +193,22 @@ import {
   summarizePullRequestChecks,
   summarizePullRequestReviews,
 } from './inkPullRequestPanel'
-import { revertFile, stageFile, unstageFile } from './statusActions'
-import { WorktreeOverview, applyStatusFilterMask, getWorktreeOverview } from './statusData'
+import {
+  revertFile,
+  stageAllFiles,
+  stageFile,
+  unstageAllFiles,
+  unstageFile,
+} from './statusActions'
+import {
+  WorktreeFile,
+  WorktreeFileGroup,
+  WorktreeOverview,
+  applyStatusFilterMask,
+  flattenWorktreeGroups,
+  getWorktreeOverview,
+  groupWorktreeFiles,
+} from './statusData'
 import {
   WorktreeHunkOverview,
   getWorktreeHunks,
@@ -862,7 +876,22 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     () => applyStatusFilterMask(context.worktree?.files || [], state.statusFilterMask),
     [context.worktree?.files, state.statusFilterMask]
   )
-  const selectedWorktreeFile = visibleWorktreeFiles[state.selectedWorktreeFileIndex]
+  // Sectioned view of the visible files (#791 follow-up). Drives the
+  // status surface's three-tier cursor model: ←/→ jumps between
+  // groups, ↑ at index 0 promotes to the group header, Enter on the
+  // header fires the group's batch action. The renderer also consumes
+  // this so the visible file list stays in canonical group order
+  // regardless of whatever order `git status --porcelain` happens to
+  // emit.
+  const visibleWorktreeGroups = React.useMemo(
+    () => groupWorktreeFiles(visibleWorktreeFiles),
+    [visibleWorktreeFiles]
+  )
+  const visibleWorktreeFilesGrouped = React.useMemo(
+    () => flattenWorktreeGroups(visibleWorktreeGroups),
+    [visibleWorktreeGroups]
+  )
+  const selectedWorktreeFile = visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
@@ -1737,6 +1766,35 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!body) return { ok: false, message: 'Comment body required' }
         return commentPullRequest(body)
       },
+      // Status surface group-level batch ops (#791 follow-up). The
+      // input handler dispatches these when the user presses Enter on a
+      // group header. We re-derive the file list from the live
+      // `context.worktree?.files` rather than trusting a snapshot —
+      // the worktree may have changed since the keystroke fired (rare,
+      // but the cost of re-filtering is negligible compared to the cost
+      // of a stale add). The mask is honored too so a user who's
+      // hidden a category never has it touched by accident.
+      'stage-all-unstaged': async () => {
+        const files = applyStatusFilterMask(
+          context.worktree?.files || [],
+          state.statusFilterMask
+        ).filter((file) => file.state === 'unstaged')
+        return stageAllFiles(git, files)
+      },
+      'unstage-all-staged': async () => {
+        const files = applyStatusFilterMask(
+          context.worktree?.files || [],
+          state.statusFilterMask
+        ).filter((file) => file.state === 'staged')
+        return unstageAllFiles(git, files)
+      },
+      'stage-all-untracked': async () => {
+        const files = applyStatusFilterMask(
+          context.worktree?.files || [],
+          state.statusFilterMask
+        ).filter((file) => file.state === 'untracked')
+        return stageAllFiles(git, files)
+      },
     }
     const handler = handlers[id]
     if (!handler) {
@@ -1761,7 +1819,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [context, dispatch, git, refreshContext, state.branchSort, state.filter, state.selectedBranchIndex,
     state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
-    state.tagSort])
+    state.statusFilterMask, state.tagSort])
 
   // Resolve the active view's "yank target" (commit hash / branch /
   // tag / stash ref / file path) against the live filtered+sorted list,
@@ -1814,14 +1872,14 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // Read from the mask-filtered list (#776) so the cursor and the
       // yanked path always match what's on screen — yanking a hidden
       // row is always a desync bug.
-      const path = visibleWorktreeFiles[state.selectedWorktreeFileIndex]?.path
+      const path = visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path
       if (path) {
         value = path
         label = `path ${path}`
       }
     } else if (view === 'diff') {
       if (state.diffSource === 'worktree') {
-        const path = visibleWorktreeFiles[state.selectedWorktreeFileIndex]?.path
+        const path = visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path
         if (path) {
           value = path
           label = `path ${path}`
@@ -1891,7 +1949,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedTagIndex,
     state.selectedWorktreeFileIndex,
     state.tagSort,
-    visibleWorktreeFiles,
+    visibleWorktreeFilesGrouped,
   ])
 
   React.useEffect(() => {
@@ -2189,7 +2247,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       detailFileCount: detail?.files.length,
       previewLineCount: diffPreviewLineCount,
       worktreeDiffLineCount: worktreeDiff?.lines.length,
-      worktreeFileCount: visibleWorktreeFiles.length,
+      worktreeFileCount: visibleWorktreeFilesGrouped.length,
       worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
       commitDiffHunkOffsets,
       branchCount: branchVisibleCount,
@@ -2199,7 +2257,12 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,
       worktreeListCount: worktreeVisibleCount,
-      worktreeSelectedPath: visibleWorktreeFiles[state.selectedWorktreeFileIndex]?.path,
+      worktreeSelectedPath: visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path,
+      statusGroups: visibleWorktreeGroups.map((group) => ({
+        state: group.state as 'staged' | 'unstaged' | 'untracked',
+        count: group.files.length,
+        startIndex: group.startIndex,
+      })),
       commitDiffSelectedPath: state.diffSource === 'commit'
         ? selectedDetailFile?.path
         : undefined,
@@ -2974,6 +3037,24 @@ function renderPendingCommitRow(
   }, truncate(label, 140))
 }
 
+// Row descriptor for the status surface's grouped layout. Each
+// rendered row is either a group header (e.g. "▾ Unstaged (3)") or a
+// file under that group; both are first-class cursor targets.
+type StatusSurfaceRow =
+  | { kind: 'header'; group: WorktreeFileGroup }
+  | { kind: 'file'; group: WorktreeFileGroup; file: WorktreeFile; flatIndex: number }
+
+function buildStatusSurfaceRows(groups: WorktreeFileGroup[]): StatusSurfaceRow[] {
+  const rows: StatusSurfaceRow[] = []
+  for (const group of groups) {
+    rows.push({ kind: 'header', group })
+    group.files.forEach((file, offset) => {
+      rows.push({ kind: 'file', group, file, flatIndex: group.startIndex + offset })
+    })
+  }
+  return rows
+}
+
 function renderStatusSurface(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -2992,28 +3073,72 @@ function renderStatusSurface(
   // uses for j/k navigation. `visibleFiles` may be a strict subset of
   // worktree.files when the user has narrowed via 1/2/3.
   const visibleFiles = applyStatusFilterMask(worktree?.files || [], state.statusFilterMask)
+  // Group + canonical-sort. The runtime + input handler agree on this
+  // order so a `selectedWorktreeFileIndex` of N always points to the
+  // same file across all three (renderer / input / workflow handlers).
+  const visibleGroups = groupWorktreeFiles(visibleFiles)
+  const surfaceRows = buildStatusSurfaceRows(visibleGroups)
   const listRows = Math.max(4, bodyRows - 5)
   const selectedIndex = state.selectedWorktreeFileIndex
+  const headerFocused = state.statusGroupHeaderFocused
+  // Resolve the cursor's row index in the flat (header-and-file) row
+  // list. Used to window the visible slice around the cursor.
+  const cursorRowIndex = (() => {
+    if (!surfaceRows.length) return 0
+    const currentGroup = visibleGroups.find((group) =>
+      selectedIndex >= group.startIndex && selectedIndex < group.startIndex + group.files.length
+    )
+    if (!currentGroup) return 0
+    if (headerFocused) {
+      const idx = surfaceRows.findIndex((row) => row.kind === 'header' && row.group === currentGroup)
+      return idx >= 0 ? idx : 0
+    }
+    const idx = surfaceRows.findIndex((row) => row.kind === 'file' && row.flatIndex === selectedIndex)
+    return idx >= 0 ? idx : 0
+  })()
   const cleanHint = formatLogInkStatusEmpty({ hasChanges: Boolean(worktree?.files.length) })
-  const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
+  const windowStart = Math.max(
+    0,
+    Math.min(
+      Math.max(0, surfaceRows.length - listRows),
+      cursorRowIndex - Math.floor(listRows / 2)
+    )
+  )
   const isLoading = isLogInkContextKeyLoading(contextStatus, 'worktree')
-  const fileRows: ReactTypes.ReactNode[] = isLoading || !visibleFiles.length
+  const renderedRows: ReactTypes.ReactNode[] = isLoading || !surfaceRows.length
     ? []
-    : visibleFiles.slice(startIndex).slice(0, listRows).map((file, offset) => {
-      const index = startIndex + offset
-      const isSelected = index === selectedIndex
+    : surfaceRows.slice(windowStart, windowStart + listRows).map((row, offset) => {
+      const rowIndex = windowStart + offset
+      if (row.kind === 'header') {
+        const groupContainsCursor =
+          selectedIndex >= row.group.startIndex &&
+          selectedIndex < row.group.startIndex + row.group.files.length
+        const headerSelected = focused && headerFocused && groupContainsCursor
+        const arrow = theme.ascii ? '>' : '▾'
+        const groupLabel = capitalizeGroupName(row.group.state)
+        const text = `  ${arrow} ${groupLabel} (${row.group.files.length})`
+        return h(Text, {
+          key: `status-group-${row.group.state}-${rowIndex}`,
+          bold: true,
+          dimColor: !headerSelected && rowIndex > cursorRowIndex,
+          backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
+          inverse: headerSelected,
+        }, truncate(text, 140))
+      }
+      const isSelected = !headerFocused && row.flatIndex === selectedIndex
       const cursorPart = `${isSelected ? '>' : ' '} `
-      const dotColor = getStageStatusDotColor(file.state, theme)
+      const dotColor = getStageStatusDotColor(row.file.state, theme)
       const useDot = dotColor !== undefined
       const dotCells = useDot ? cellWidth(STAGE_STATUS_DOT) + 1 : 0
-      const tail = `${file.indexStatus}${file.worktreeStatus} ${file.state.padEnd(9)} ${file.path}`
-      const tailTrunc = truncate(tail, Math.max(0, 140 - cellWidth(cursorPart) - dotCells))
-
+      const tail = `${row.file.indexStatus}${row.file.worktreeStatus} ${row.file.path}`
+      const tailTrunc = truncate(tail, Math.max(0, 140 - cellWidth(cursorPart) - dotCells - 2))
       return h(Text, {
-        key: `status-row-${index}`,
-        dimColor: offset > 0,
+        key: `status-file-${row.flatIndex}-${rowIndex}`,
+        dimColor: !isSelected && rowIndex > cursorRowIndex,
+        backgroundColor: isSelected && focused && !theme.noColor ? theme.colors.selection : undefined,
+        inverse: isSelected && focused,
       },
-      cursorPart,
+      `  ${cursorPart}`,
       ...(useDot ? [h(Text, { color: dotColor }, STAGE_STATUS_DOT), ' '] : []),
       tailTrunc)
     })
@@ -3053,11 +3178,15 @@ function renderStatusSurface(
     ? [h(Text, { key: 'status-mask-indicator', dimColor: true },
         `filter: ${formatStatusFilterMask(state.statusFilterMask)}  (1/2/3 to toggle)`)]
     : []),
-  ...fileRows,
+  ...renderedRows,
   ...fallbackLines.map((line, index) => h(Text, {
     key: `status-surface-fallback-${index}`,
     dimColor: index > 0,
   }, truncate(line, 140))))
+}
+
+function capitalizeGroupName(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function isStatusFilterMaskActive(mask: LogInkStatusFilterMask): boolean {
