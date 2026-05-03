@@ -15,6 +15,14 @@ export type LogInkLayoutInput = {
    * the inspection surface gets the room it needs.
    */
   inspectorFocused?: boolean
+  /**
+   * When true the right-hand panel takes a much larger share of the
+   * width so the help / hotkey overlay can render its descriptions
+   * without truncating to "Move focus...". The overlay is read-mostly
+   * so taking visual real estate from the history panel while it's
+   * open is fine — the user is paused on the help, not navigating.
+   */
+  helpOverlayActive?: boolean
 }
 
 export type LogInkLayout = {
@@ -64,9 +72,16 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   // graph dominant; focus expansion gives the inspector room for long
   // commit bodies / file lists / action labels. Mirrors the sidebar
   // pattern (sidebarFocused above): instant transition per render.
-  const detailWidth = input.inspectorFocused
-    ? Math.max(36, Math.min(60, Math.floor(columns * 0.40)))
-    : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
+  //
+  // Help overlay overrides both — it borrows ~50% of the terminal so
+  // hotkey descriptions render in full instead of truncating to
+  // "Move focus...". Capped at 100 cells so a wide terminal doesn't
+  // waste an absurd amount of horizontal space on the cheat sheet.
+  const detailWidth = input.helpOverlayActive
+    ? Math.max(60, Math.min(100, Math.floor(columns * 0.50)))
+    : input.inspectorFocused
+      ? Math.max(36, Math.min(60, Math.floor(columns * 0.40)))
+      : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
   // Sidebar at rest: 22-34 cells (~24% of width). Focused: 32-50 cells
   // (~36% of width). The transition is instant per render — focus tab to
   // expand, focus away to collapse.

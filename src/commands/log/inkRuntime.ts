@@ -2453,6 +2453,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
     sidebarFocused: state.focus === 'sidebar',
     inspectorFocused: state.focus === 'detail',
+    helpOverlayActive: state.showHelp,
   })
 
   if (layout.tooSmall) {
