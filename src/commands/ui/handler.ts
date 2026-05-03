@@ -49,12 +49,18 @@ export async function startCocoUiFromLogArgv(
 ): Promise<void> {
   const config = options.config || loadConfig<Config, LogArgv>(logArgv)
   const git = options.git || getRepo()
-  const rows = options.rows || (await getLogRows(git, logArgv))
+  // Defer the commit log fetch into the runtime when the caller
+  // didn't already have rows (#808). Mounts Ink immediately with a
+  // "Loading commits…" placeholder so the user never stares at a
+  // black terminal during the synchronous git log phase.
+  const rows = options.rows || []
+  const loadRows = options.rows ? undefined : () => getLogRows(git, logArgv)
 
   await startInkInteractiveLog(git, rows, {}, {
     appLabel: 'coco',
     idleTips: config.logTui?.idleTips,
     initialView: 'history',
+    loadRows,
     logArgv,
     theme: config.logTui?.theme,
   })
@@ -64,12 +70,12 @@ export async function startCocoUi(argv: UiArgv): Promise<void> {
   const config = loadConfig<Config, UiArgv>(argv)
   const git = getRepo()
   const logArgv = createLogArgvFromUiArgv(argv)
-  const rows = await getLogRows(git, logArgv)
 
-  await startInkInteractiveLog(git, rows, {}, {
+  await startInkInteractiveLog(git, [], {}, {
     appLabel: 'coco',
     idleTips: config.logTui?.idleTips,
     initialView: argv.view || 'history',
+    loadRows: () => getLogRows(git, logArgv),
     logArgv,
     theme: createUiTheme(config, argv),
   })

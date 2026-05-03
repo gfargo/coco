@@ -1121,4 +1121,33 @@ describe('log Ink view model', () => {
       expect(state.inspectorActionIndex).toBe(0)
     })
   })
+
+  // Boot loading flag (#808). Drives the "Loading commits…"
+  // placeholder + the "loading commits" header indicator while the
+  // deferred commit-log fetch is in flight on TUI mount.
+  describe('bootLoading', () => {
+    it('defaults to false', () => {
+      expect(createLogInkState(rows).bootLoading).toBe(false)
+    })
+
+    it('createLogInkState honors the bootLoading option', () => {
+      expect(createLogInkState([], { bootLoading: true }).bootLoading).toBe(true)
+    })
+
+    it('setBootLoading toggles the flag', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setBootLoading', value: true })
+      expect(state.bootLoading).toBe(true)
+      state = applyLogInkAction(state, { type: 'setBootLoading', value: false })
+      expect(state.bootLoading).toBe(false)
+    })
+
+    it('replaceRows clears bootLoading once rows arrive', () => {
+      let state = createLogInkState([], { bootLoading: true })
+      expect(state.bootLoading).toBe(true)
+      state = applyLogInkAction(state, { type: 'replaceRows', rows })
+      expect(state.bootLoading).toBe(false)
+      expect(state.commits.length).toBeGreaterThan(0)
+    })
+  })
 })
