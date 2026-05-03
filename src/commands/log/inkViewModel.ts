@@ -219,7 +219,9 @@ export function parseLogInkHistoryFetchPrefix(filter: string): LogInkHistoryFetc
 
 export type LogInkInputPromptKind =
   | 'create-branch'
+  | 'create-branch-here'
   | 'create-tag'
+  | 'create-tag-here'
   | 'rename-branch'
   | 'set-upstream'
   | 'create-stash'
@@ -257,6 +259,7 @@ export type LogInkAction =
   | { type: 'focusNext' }
   | { type: 'focusPrevious' }
   | { type: 'move'; delta: number }
+  | { type: 'selectCommitByHash'; hash: string }
   | { type: 'moveDetailFile'; delta: number; fileCount: number }
   | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
   | { type: 'moveBranch'; delta: number; count: number }
@@ -712,6 +715,30 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingCommitFocused: false,
         pendingKey: undefined,
       }
+    case 'selectCommitByHash': {
+      // Locates a commit by its full or short hash within the active
+      // filtered list and snaps the cursor to it. Used by the
+      // branch/tag auto-jump effect (#806 follow-up): cursoring a
+      // branch in the sidebar tracks the history view to that
+      // branch's tip without the user manually scrolling. No-op when
+      // the hash isn't in the loaded list (the runtime surfaces a
+      // status hint in that case).
+      const target = action.hash
+      const index = state.filteredCommits.findIndex((commit) =>
+        commit.hash === target || commit.shortHash === target
+      )
+      if (index < 0) {
+        return state
+      }
+      return {
+        ...state,
+        selectedIndex: index,
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
+        pendingCommitFocused: false,
+        pendingKey: undefined,
+      }
+    }
     case 'focusPendingCommit':
       return {
         ...state,

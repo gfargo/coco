@@ -883,4 +883,41 @@ describe('log Ink view model', () => {
       expect(state.historyFetchArgs).toBeUndefined()
     })
   })
+
+  // #806 follow-up — branch / tag selection auto-jumps the history
+  // view to the cursored ref's tip commit. The reducer just locates
+  // the hash within the filtered list; the runtime React effect is
+  // what watches the cursor and dispatches.
+  describe('selectCommitByHash', () => {
+    it('snaps selectedIndex to the commit matching the full hash', () => {
+      let state = createLogInkState(rows)
+      // rows[2] has hash 'fed999900000'.
+      state = applyLogInkAction(state, { type: 'selectCommitByHash', hash: 'fed999900000' })
+      expect(state.selectedIndex).toBe(2)
+    })
+
+    it('also accepts the short hash', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'selectCommitByHash', hash: 'fed9999' })
+      expect(state.selectedIndex).toBe(2)
+    })
+
+    it('is a no-op when the hash is not in the loaded list', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'move', delta: 1 })
+      expect(state.selectedIndex).toBe(1)
+      // No matching commit → cursor stays put. The runtime effect
+      // surfaces a status hint; this reducer just declines to move.
+      state = applyLogInkAction(state, { type: 'selectCommitByHash', hash: 'nonexistent' })
+      expect(state.selectedIndex).toBe(1)
+    })
+
+    it('resets the file index and diff offset on jump', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveDetailFile', delta: 3, fileCount: 5 })
+      state = applyLogInkAction(state, { type: 'selectCommitByHash', hash: 'fed999900000' })
+      expect(state.selectedFileIndex).toBe(0)
+      expect(state.diffPreviewOffset).toBe(0)
+    })
+  })
 })

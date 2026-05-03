@@ -1122,6 +1122,75 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [git, selected?.hash])
 
+  // #806 follow-up — auto-jump the history view to whichever branch /
+  // tag the user is currently cursoring in the sidebar (or the
+  // dedicated branches / tags view). Debounced so cursor-scrolling
+  // through a long branch list doesn't dispatch on every keystroke.
+  // No-op when the cursored ref's tip isn't in the loaded commit
+  // window (under compact mode the cursored branch's tip may not be
+  // fetched yet); a status hint surfaces in that case so the user
+  // knows to toggle full graph or load older commits.
+  React.useEffect(() => {
+    const onBranchTab = state.activeView === 'branches' ||
+      (state.focus === 'sidebar' && state.sidebarTab === 'branches')
+    const onTagTab = state.activeView === 'tags' ||
+      (state.focus === 'sidebar' && state.sidebarTab === 'tags')
+    if (!onBranchTab && !onTagTab) return
+
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      let targetHash: string | undefined
+      let targetLabel: string | undefined
+
+      if (onBranchTab) {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1))]
+        if (branch) {
+          targetHash = branch.hash
+          targetLabel = `branch ${branch.shortName}`
+        }
+      } else if (onTagTab) {
+        const all = sortTags(context.tags?.tags || [], state.tagSort)
+        const visible = state.filter
+          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+          : all
+        const tag = visible[Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1))]
+        if (tag) {
+          targetHash = tag.hash
+          targetLabel = `tag ${tag.name}`
+        }
+      }
+
+      if (!targetHash) return
+      const loaded = state.filteredCommits.some((commit) =>
+        commit.hash === targetHash || commit.shortHash === targetHash
+      )
+      if (loaded) {
+        dispatch({ type: 'selectCommitByHash', hash: targetHash })
+      } else {
+        dispatch({
+          type: 'setStatus',
+          value: `${targetLabel} tip not in loaded window — press \\ for full graph or Ctrl+L to load more`,
+        })
+      }
+    }, 150)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [
+    dispatch, context.branches, context.tags,
+    state.activeView, state.focus, state.sidebarTab,
+    state.selectedBranchIndex, state.selectedTagIndex,
+    state.branchSort, state.tagSort, state.filter,
+    state.filteredCommits,
+  ])
+
   React.useEffect(() => {
     let active = true
 
