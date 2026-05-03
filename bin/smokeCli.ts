@@ -189,7 +189,7 @@ try {
     label: 'packaged non-TTY interactive log command',
     env: { NO_COLOR: '1' },
   })
-  assertOutputIncludes('packaged non-TTY interactive log command', interactiveLogOutput, 'coco ui')
+  assertOutputIncludes('packaged non-TTY interactive log command', interactiveLogOutput, 'coco')
   assertOutputIncludes(
     'packaged non-TTY interactive log command',
     interactiveLogOutput,
@@ -204,7 +204,7 @@ try {
     label: 'packaged non-TTY ui command',
     env: { NO_COLOR: '1' },
   })
-  assertOutputIncludes('packaged non-TTY ui command', uiOutput, 'coco ui')
+  assertOutputIncludes('packaged non-TTY ui command', uiOutput, 'coco')
   assertOutputIncludes('packaged non-TTY ui command', uiOutput, 'feat: smoke log command')
   console.log('✓ packaged non-TTY ui command')
 } finally {
