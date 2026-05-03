@@ -59,11 +59,21 @@ function formatAuthenticationError(error: LangChainAuthenticationError, logger: 
 }
 
 /**
- * Formats a generic error
+ * Formats a generic error.
+ *
+ * The error message prints unconditionally (was previously gated behind
+ * `--verbose`, which left users staring at a "Failed to execute command"
+ * line with no actionable detail when something crashed). The full stack
+ * trace stays under `logger.verbose` so plain output stays focused on the
+ * one-line cause; users running into something they can't diagnose can opt
+ * in with `--verbose` for the trace.
  */
 function formatGenericError(error: Error, logger: Logger): void {
   logger.log('\nFailed to execute command', { color: 'yellow' })
-  logger.verbose(`\nError: "${error.message}"`, { color: 'red' })
+  logger.log(`\nError: ${error.message}`, { color: 'red' })
+  if (error.stack) {
+    logger.verbose(`\n${error.stack}`, { color: 'gray' })
+  }
 }
 
 function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: CommandHandler<T>) {
