@@ -102,4 +102,39 @@ describe('log Ink layout', () => {
     expect(narrow.sidebarWidth).toBe(32)
     expect(wide.sidebarWidth).toBe(50)
   })
+
+  // Help overlay (#832) — wrests width from the history panel so the
+  // hotkey descriptions stop truncating. Wins over both the at-rest
+  // and the inspector-focused states.
+  describe('helpOverlayActive', () => {
+    it('expands the detail panel beyond both at-rest and inspector-focused widths', () => {
+      const collapsed = getLogInkLayout({ columns: 160, rows: 40 })
+      const focused = getLogInkLayout({ columns: 160, rows: 40, inspectorFocused: true })
+      const help = getLogInkLayout({ columns: 160, rows: 40, helpOverlayActive: true })
+
+      expect(help.detailWidth).toBeGreaterThan(focused.detailWidth)
+      expect(help.detailWidth).toBeGreaterThan(collapsed.detailWidth)
+      // Main panel absorbs the loss so the three columns still tile
+      // across the terminal width.
+      expect(help.mainPanelWidth).toBe(160 - help.sidebarWidth - help.detailWidth)
+    })
+
+    it('clamps the help-overlay detail width to its 60-100 cell range', () => {
+      const narrow = getLogInkLayout({ columns: 80, rows: 24, helpOverlayActive: true })
+      const wide = getLogInkLayout({ columns: 240, rows: 60, helpOverlayActive: true })
+      expect(narrow.detailWidth).toBe(60)
+      expect(wide.detailWidth).toBe(100)
+    })
+
+    it('overrides inspectorFocused when both are set (help wins)', () => {
+      const both = getLogInkLayout({
+        columns: 160,
+        rows: 40,
+        inspectorFocused: true,
+        helpOverlayActive: true,
+      })
+      const helpOnly = getLogInkLayout({ columns: 160, rows: 40, helpOverlayActive: true })
+      expect(both.detailWidth).toBe(helpOnly.detailWidth)
+    })
+  })
 })
