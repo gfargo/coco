@@ -1,5 +1,10 @@
 import { extractDiffHunk } from './inkHunkExtraction'
 import {
+  InspectorAction,
+  InspectorActionContext,
+  getInspectorActions,
+} from './inkInspectorActions'
+import {
   LogInkPaletteCommand,
   filterLogInkPaletteCommands,
   getLogInkPaletteCommands,
@@ -94,6 +99,13 @@ export type LogInkInputContext = {
     startIndex: number
   }>
   /**
+   * Number of actions in the active Inspector Actions list. Used to
+   * clamp the cursor in the actions tab. Undefined / 0 when no
+   * actions are available for the current state — the tab still
+   * renders but the cursor model is a no-op.
+   */
+  inspectorActionCount?: number
+  /**
    * Path of the cursored file in a commit-diff explore. Used by `c`
    * (cherry-pick file from commit).
    */
@@ -126,6 +138,93 @@ function action(actionValue: LogInkAction): LogInkInputEvent {
   return {
     type: 'action',
     action: actionValue,
+  }
+}
+
+/**
+ * Resolve which inspector action context applies for the current
+ * state. Today only history commits expose actions in the inspector
+ * (the renderer hard-coded `'history-commit'`); future PRs can fan
+ * this out to branch / tag / stash / worktree contexts as the
+ * inspector gains entity-aware sections. Returns `undefined` when no
+ * actions section should be shown (so the cursor model stays a
+ * no-op).
+ */
+export function resolveInspectorActionContext(
+  state: LogInkState
+): InspectorActionContext | undefined {
+  if (state.activeView === 'history' && !state.pendingCommitFocused) {
+    return 'history-commit'
+  }
+  return undefined
+}
+
+export function getInspectorActionsForState(state: LogInkState): InspectorAction[] {
+  const ctx = resolveInspectorActionContext(state)
+  return ctx ? getInspectorActions(ctx) : []
+}
+
+/**
+ * Synthesize the events that fire when the user presses Enter on a
+ * cursored inspector action (#791 follow-up). Mirrors
+ * `getLogInkPaletteExecuteEvents` — each action's `key` field
+ * routes to the same dispatch the corresponding keystroke would
+ * trigger from the history view's commit cursor. Per-key dispatch
+ * (rather than recursively re-running the keystroke through
+ * `getLogInkInputEvents`) avoids the gating problem: most history
+ * keystroke handlers require `state.focus === 'commits'`, but the
+ * inspector executor fires from `state.focus === 'detail'`.
+ */
+export function getInspectorActionExecuteEvents(
+  inspectorAction: InspectorAction,
+  state: LogInkState
+): LogInkInputEvent[] {
+  const commit = state.filteredCommits[state.selectedIndex]
+  const requireCommit = (
+    fn: (sha: string, commitIndex: number) => LogInkInputEvent[]
+  ): LogInkInputEvent[] => {
+    if (!commit) {
+      return [action({ type: 'setStatus', value: 'No commit selected' })]
+    }
+    return fn(commit.hash, state.selectedIndex)
+  }
+
+  switch (inspectorAction.key) {
+    case 'enter':
+      return requireCommit((sha, commitIndex) => [
+        action({ type: 'navigateOpenDiffForCommit', sha, commitIndex }),
+      ])
+    case 'c':
+      return requireCommit(() => [
+        action({ type: 'setPendingConfirmation', value: 'cherry-pick-commit' }),
+      ])
+    case 'R':
+      return requireCommit(() => [
+        action({ type: 'setPendingConfirmation', value: 'revert-commit' }),
+      ])
+    case 'Z':
+      return requireCommit(() => [
+        action({
+          type: 'openInputPrompt',
+          kind: 'reset-mode',
+          label: 'Reset mode (soft / mixed / hard)',
+        }),
+      ])
+    case 'i':
+      return requireCommit(() => [
+        action({ type: 'setPendingConfirmation', value: 'interactive-rebase' }),
+      ])
+    case 'y':
+      return requireCommit(() => [{ type: 'yankFromActiveView' }])
+    case 'Y':
+      return requireCommit(() => [{ type: 'yankFromActiveView', short: true }])
+    case 'O':
+      return [{ type: 'runWorkflowAction', id: 'open-pr' }]
+    default:
+      return [action({
+        type: 'setStatus',
+        value: `Action ${inspectorAction.key} not yet wired`,
+      })]
   }
 }
 
@@ -1062,6 +1161,19 @@ export function getLogInkInputEvents(
   }
 
   if (key.upArrow || inputValue === 'k') {
+    // Inspector Actions tab: ↑/↓ moves the cursor through the
+    // executable action list. Wins over moveDetailFile so a
+    // history-commit explore with both file list AND actions visible
+    // navigates the actions when the user has [/]-toggled to the
+    // actions tab. (#791 follow-up)
+    if (state.focus === 'detail' && state.inspectorTab === 'actions' && context.inspectorActionCount) {
+      return [action({
+        type: 'moveInspectorAction',
+        delta: -1,
+        actionCount: context.inspectorActionCount,
+      })]
+    }
+
     if (state.focus === 'detail' && context.detailFileCount) {
       return [action({ type: 'moveDetailFile', delta: -1, fileCount: context.detailFileCount })]
     }
@@ -1179,6 +1291,14 @@ export function getLogInkInputEvents(
   if (key.downArrow || inputValue === 'j') {
     if (state.activeView === 'history' && state.pendingCommitFocused) {
       return [action({ type: 'unfocusPendingCommit' })]
+    }
+
+    if (state.focus === 'detail' && state.inspectorTab === 'actions' && context.inspectorActionCount) {
+      return [action({
+        type: 'moveInspectorAction',
+        delta: 1,
+        actionCount: context.inspectorActionCount,
+      })]
     }
 
     if (state.focus === 'detail' && context.detailFileCount) {
@@ -1332,6 +1452,24 @@ export function getLogInkInputEvents(
         }),
         action({ type: 'setStatus', value: `viewing diff for ${selected.shortHash}` }),
       ]
+    }
+  }
+
+  // Inspector Actions tab: Enter on the cursored action fires its
+  // associated event (cherry-pick / revert / yank / etc.). Wins over
+  // the file-list Enter below when the user has [/]-toggled to the
+  // actions tab. Routes through `getInspectorActionExecuteEvents` so
+  // the per-action dispatch table stays the single source of truth
+  // for what each action does. (#791 follow-up)
+  if (
+    key.return &&
+    state.focus === 'detail' &&
+    state.inspectorTab === 'actions'
+  ) {
+    const actions = getInspectorActionsForState(state)
+    const cursored = actions[state.inspectorActionIndex]
+    if (cursored) {
+      return getInspectorActionExecuteEvents(cursored, state)
     }
   }
 

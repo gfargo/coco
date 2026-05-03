@@ -2095,4 +2095,169 @@ describe('log Ink input interactions', () => {
       )).toBeUndefined()
     })
   })
+
+  // Inspector Actions cursor (#791 follow-up). When focus=detail and
+  // inspectorTab=actions, ↑/↓ navigates the actions list; Enter on
+  // the cursored action fires its event. Cursor model only kicks in
+  // when actions exist for the current entity context.
+  describe('inspector actions cursor', () => {
+    function actionsFocusState(overrides: Partial<LogInkState> = {}) {
+      const base = createLogInkState(rows)
+      return {
+        ...base,
+        focus: 'detail' as const,
+        inspectorTab: 'actions' as const,
+        ...overrides,
+      }
+    }
+
+    it('↑ moves the cursor up through the actions list', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 3 }),
+        '',
+        { upArrow: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'moveInspectorAction', delta: -1, actionCount: 8 } },
+      ])
+    })
+
+    it('↓ moves the cursor down through the actions list', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 0 }),
+        '',
+        { downArrow: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'moveInspectorAction', delta: 1, actionCount: 8 } },
+      ])
+    })
+
+    it('↑/↓ falls through to moveDetailFile when inspectorTab=inspector', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorTab: 'inspector', inspectorActionIndex: 0 }),
+        '',
+        { upArrow: true },
+        { inspectorActionCount: 8, detailFileCount: 5 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'moveDetailFile', delta: -1, fileCount: 5 } },
+      ])
+    })
+
+    it('Enter on the first action (open diff) navigates to the diff', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 0 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8 },
+      )
+      const firstCommit = rows.find((r) => r.type === 'commit')
+      const sha = firstCommit && firstCommit.type === 'commit' ? firstCommit.hash : ''
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'navigateOpenDiffForCommit', sha, commitIndex: 0 } },
+      ])
+    })
+
+    it('Enter on cherry-pick (index 1) opens the y-confirm', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 1 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'cherry-pick-commit' } },
+      ])
+    })
+
+    it('Enter on revert (index 2) opens the y-confirm for revert-commit', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 2 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'revert-commit' } },
+      ])
+    })
+
+    it('Enter on reset (index 3) opens the reset-mode prompt', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 3 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'openInputPrompt',
+            kind: 'reset-mode',
+            label: 'Reset mode (soft / mixed / hard)',
+          },
+        },
+      ])
+    })
+
+    it('Enter on yank (index 5) fires yankFromActiveView', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 5 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([{ type: 'yankFromActiveView' }])
+    })
+
+    it('Enter on yank short (index 6) fires yankFromActiveView with short=true', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 6 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([{ type: 'yankFromActiveView', short: true }])
+    })
+
+    it('Enter on open in browser (index 7) fires open-pr workflow', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 7 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'open-pr' }])
+    })
+
+    it('Enter on inspector tab (not actions) falls through to existing diff handler', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorTab: 'inspector' }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8, detailFileCount: 3 },
+      )
+      // Diff-for-file path, not an action invoke.
+      const types = events.map((e) =>
+        e.type === 'action' ? e.action.type : e.type
+      )
+      expect(types).toEqual(['navigateOpenDiffForCommit'])
+    })
+
+    it('Enter on actions tab when no commit selected emits a status hint', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 1, selectedIndex: 99 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 8 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setStatus', value: 'No commit selected' } },
+      ])
+    })
+  })
 })

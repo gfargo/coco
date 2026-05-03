@@ -1081,5 +1081,44 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
       expect(state.inspectorTab).toBe('actions')
     })
+
+    it('switching tabs resets inspectorActionIndex to 0', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveInspectorAction', delta: 3, actionCount: 8 })
+      expect(state.inspectorActionIndex).toBe(3)
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorActionIndex).toBe(0)
+      state = applyLogInkAction(state, { type: 'moveInspectorAction', delta: 4, actionCount: 8 })
+      state = applyLogInkAction(state, { type: 'setInspectorTab', value: 'inspector' })
+      expect(state.inspectorActionIndex).toBe(0)
+    })
+  })
+
+  // Inspector Actions cursor (#791 follow-up). Mirrors the
+  // moveDetailFile / moveBranch shape — clamp on count, reset on tab
+  // switch.
+  describe('inspectorActionIndex', () => {
+    it('defaults to 0', () => {
+      expect(createLogInkState(rows).inspectorActionIndex).toBe(0)
+    })
+
+    it('moveInspectorAction clamps to [0, count - 1]', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveInspectorAction', delta: 5, actionCount: 3 })
+      expect(state.inspectorActionIndex).toBe(2)
+      state = applyLogInkAction(state, { type: 'moveInspectorAction', delta: -10, actionCount: 3 })
+      expect(state.inspectorActionIndex).toBe(0)
+    })
+
+    it('resetInspectorActionIndex snaps back to 0', () => {
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'moveInspectorAction',
+        delta: 4,
+        actionCount: 8,
+      })
+      expect(state.inspectorActionIndex).toBe(4)
+      state = applyLogInkAction(state, { type: 'resetInspectorActionIndex' })
+      expect(state.inspectorActionIndex).toBe(0)
+    })
   })
 })

@@ -77,7 +77,11 @@ import {
 import { substituteGraphChars } from './inkGraphChars'
 import { LaneSegment, getLaneColor } from './inkGraphLanes'
 import { formatHyperlink } from './inkHyperlinks'
-import { LogInkInputKey, getLogInkInputEvents } from './inkInput'
+import {
+  LogInkInputKey,
+  getInspectorActionsForState,
+  getLogInkInputEvents,
+} from './inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
 import { getSavedDiffViewMode, saveDiffViewMode } from './inkDiffViewModePersistence'
 import { getSavedSidebarTab, saveSidebarTab } from './inkSidebarPersistence'
@@ -2263,6 +2267,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         count: group.files.length,
         startIndex: group.startIndex,
       })),
+      inspectorActionCount: getInspectorActionsForState(state).length,
       commitDiffSelectedPath: state.diffSource === 'commit'
         ? selectedDetailFile?.path
         : undefined,
@@ -4129,7 +4134,10 @@ function renderHistoryInspector(
       key: `detail-${index}`,
       dimColor: index > 1,
     }, truncate(line, width - 4))),
-    ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme))
+    ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
+      cursorIndex: state.inspectorActionIndex,
+      cursorActive: focused && state.inspectorTab === 'actions',
+    }))
   }
 
   const statLine = `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
@@ -4208,7 +4216,10 @@ function renderHistoryInspector(
     h(Text, { key: 'inspector-tabs-spacer' }, ''),
     ...(activeTab === 'inspector'
       ? [...headerNodes, ...fileListNodes]
-      : renderInspectorActionsSection(h, Text, 'history-commit', width, theme)))
+      : renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
+          cursorIndex: state.inspectorActionIndex,
+          cursorActive: focused,
+        })))
   }
 
   return h(Box, {
@@ -4221,7 +4232,10 @@ function renderHistoryInspector(
   h(Text, { bold: true }, panelTitle('Inspector', focused)),
   ...headerNodes,
   ...fileListNodes,
-  ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme))
+  ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
+    cursorIndex: state.inspectorActionIndex,
+    cursorActive: focused && state.inspectorTab === 'actions',
+  }))
 }
 
 /**
@@ -4240,7 +4254,8 @@ function renderInspectorActionsSection(
   Text: LogInkComponents['Text'],
   context: InspectorActionContext,
   width: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  options: { cursorIndex?: number; cursorActive?: boolean } = {}
 ): ReactTypes.ReactElement[] {
   const actions = getInspectorActions(context)
   if (!actions.length) return []
@@ -4256,10 +4271,14 @@ function renderInspectorActionsSection(
     width - 4 /* border + padX */ - KEY_COLUMN - GAP.length - DESTRUCTIVE_SUFFIX.length
   )
 
+  const cursorIndex = options.cursorIndex ?? 0
+  const cursorActive = options.cursorActive ?? false
+
   const nodes: ReactTypes.ReactElement[] = [
     h(Text, { key: 'actions-spacer' }, ''),
-    h(Text, { key: 'actions-title' }, 'Actions:'),
+    h(Text, { key: 'actions-title' }, cursorActive ? '[Actions]' : 'Actions:'),
     ...actions.map((action: InspectorAction, index) => {
+      const isSelected = cursorActive && index === cursorIndex
       const keyCell = action.key.padEnd(KEY_COLUMN)
       const label = truncate(action.label, labelBudget)
       const children: Array<string | ReactTypes.ReactElement> = [
@@ -4277,7 +4296,11 @@ function renderInspectorActionsSection(
           dimColor: false,
         }, DESTRUCTIVE_SUFFIX))
       }
-      return h(Text, { key: `actions-${index}` }, ...children)
+      return h(Text, {
+        key: `actions-${index}`,
+        backgroundColor: isSelected && !theme.noColor ? theme.colors.selection : undefined,
+        inverse: isSelected,
+      }, ...children)
     }),
   ]
 

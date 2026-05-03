@@ -222,6 +222,14 @@ export type LogInkState = {
    * `[/]` when the inspector is focused on a short terminal.
    */
   inspectorTab: LogInkInspectorTab
+  /**
+   * Cursor index into the inspector's Actions list when the user has
+   * the actions tab focused (#791 follow-up). Auto-clamped against
+   * the current entity's action count by the reducer; reset to 0 on
+   * tab switch / focus change so an action stale from a different
+   * entity context never sits highlighted.
+   */
+  inspectorActionIndex: number
 }
 
 export type LogInkStatusFilterMask = {
@@ -314,6 +322,8 @@ export type LogInkAction =
   | { type: 'jumpToStatusGroup'; targetIndex: number }
   | { type: 'setInspectorTab'; value: LogInkInspectorTab }
   | { type: 'cycleInspectorTab'; delta: -1 | 1 }
+  | { type: 'moveInspectorAction'; delta: number; actionCount: number }
+  | { type: 'resetInspectorActionIndex' }
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
@@ -713,6 +723,7 @@ export function createLogInkState(
     statusFilterMask: { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK },
     diffViewMode: 'unified',
     inspectorTab: 'inspector',
+    inspectorActionIndex: 0,
   }
 }
 
@@ -890,6 +901,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         inspectorTab: action.value,
+        // Reset the action cursor so a fresh tab visit always starts
+        // on the first action, regardless of where the user left off
+        // in a previous entity context.
+        inspectorActionIndex: 0,
         pendingKey: undefined,
       }
     case 'cycleInspectorTab': {
@@ -901,9 +916,25 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         inspectorTab: next,
+        inspectorActionIndex: 0,
         pendingKey: undefined,
       }
     }
+    case 'moveInspectorAction':
+      return {
+        ...state,
+        inspectorActionIndex: clampIndex(
+          state.inspectorActionIndex + action.delta,
+          action.actionCount
+        ),
+        pendingKey: undefined,
+      }
+    case 'resetInspectorActionIndex':
+      return {
+        ...state,
+        inspectorActionIndex: 0,
+        pendingKey: undefined,
+      }
     case 'moveTag':
       return {
         ...state,
