@@ -34,7 +34,12 @@ export const LOG_INK_DEFAULT_ROWS = 40
 export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const columns = input.columns || LOG_INK_DEFAULT_COLUMNS
   const rows = input.rows || LOG_INK_DEFAULT_ROWS
-  const detailWidth = Math.max(30, Math.min(56, Math.floor(columns * 0.34)))
+  // Inspector width — 26-44 cells (~28% of width). Narrowed from the
+  // earlier 30-56 range when the inspector dropped its duplicative
+  // workflows trailer (repo / branch / status — all already visible in
+  // the top header and left sidebar). The reclaimed columns go to the
+  // commit graph in the main panel.
+  const detailWidth = Math.max(26, Math.min(44, Math.floor(columns * 0.28)))
   // Sidebar at rest: 22-34 cells (~24% of width). Focused: 32-50 cells
   // (~36% of width). The transition is instant per render — focus tab to
   // expand, focus away to collapse.
