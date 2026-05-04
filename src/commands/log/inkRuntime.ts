@@ -1322,12 +1322,27 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   // #806 follow-up — auto-jump the history view to whichever branch /
   // tag the user is currently cursoring in the sidebar (or the
-  // dedicated branches / tags view). Debounced so cursor-scrolling
-  // through a long branch list doesn't dispatch on every keystroke.
+  // dedicated branches / tags view).
+  //
+  // Originally this fired on a 150ms trailing-edge debounce. The user
+  // reported the sync feeling inconsistent (#839) — the trailing
+  // pattern means a fast scroll through a long branch list cancels
+  // the timer on every keystroke and only fires once on release; the
+  // user never sees the cursor follow their navigation. Switched to
+  // synchronous fire-on-effect so each cursor move snaps the history
+  // graph immediately. The dispatch is cheap (O(n) findIndex on the
+  // filtered commits + a state spread); React batches the re-renders
+  // so even rapid scroll only paints the final position. Tracks the
+  // last-dispatched hash via a ref so we don't fire setStatus
+  // repeatedly when several adjacent branches all point at the same
+  // commit (very common with squash-merged feature branches that all
+  // converge on `main`'s tip).
+  //
   // No-op when the cursored ref's tip isn't in the loaded commit
   // window (under compact mode the cursored branch's tip may not be
   // fetched yet); a status hint surfaces in that case so the user
   // knows to toggle full graph or load older commits.
+  const lastSyncedHashRef = React.useRef<string | undefined>(undefined)
   React.useEffect(() => {
     const onBranchTab = state.activeView === 'branches' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'branches')
@@ -1335,58 +1350,58 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       (state.focus === 'sidebar' && state.sidebarTab === 'tags')
     if (!onBranchTab && !onTagTab) return
 
-    let cancelled = false
-    const timer = setTimeout(() => {
-      if (cancelled) return
-      let targetHash: string | undefined
-      let targetLabel: string | undefined
+    let targetHash: string | undefined
+    let targetLabel: string | undefined
 
-      if (onBranchTab) {
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1))]
-        if (branch) {
-          targetHash = branch.hash
-          targetLabel = `branch ${branch.shortName}`
-        }
-      } else if (onTagTab) {
-        const all = sortTags(context.tags?.tags || [], state.tagSort)
-        const visible = state.filter
-          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
-          : all
-        const tag = visible[Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1))]
-        if (tag) {
-          targetHash = tag.hash
-          targetLabel = `tag ${tag.name}`
-        }
+    if (onBranchTab) {
+      const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+      const visible = state.filter
+        ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+        : all
+      const branch = visible[Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1))]
+      if (branch) {
+        targetHash = branch.hash
+        targetLabel = `branch ${branch.shortName}`
       }
-
-      if (!targetHash) return
-      const loaded = state.filteredCommits.some((commit) =>
-        commit.hash === targetHash || commit.shortHash === targetHash
-      )
-      if (loaded) {
-        dispatch({ type: 'selectCommitByHash', hash: targetHash })
-        // Confirmation status message so the user gets feedback even
-        // when the dedicated branches / tags view is occupying the
-        // main panel and the history cursor moves invisibly behind it.
-        dispatch({
-          type: 'setStatus',
-          value: `Synced history to ${targetLabel} tip`,
-        })
-      } else {
-        dispatch({
-          type: 'setStatus',
-          value: `${targetLabel} tip not in loaded window — press \\ for full graph or Ctrl+L to load more`,
-        })
+    } else if (onTagTab) {
+      const all = sortTags(context.tags?.tags || [], state.tagSort)
+      const visible = state.filter
+        ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+        : all
+      const tag = visible[Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1))]
+      if (tag) {
+        targetHash = tag.hash
+        targetLabel = `tag ${tag.name}`
       }
-    }, 150)
+    }
 
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
+    if (!targetHash) return
+    // Skip the dispatch + status churn when the cursor hasn't
+    // actually changed which commit it's targeting (the case for
+    // rapid navigation through a cluster of branches that all point
+    // at the same commit). Without this guard the user sees a stream
+    // of "Synced history to <branch> tip" status messages even
+    // though the history cursor never moved.
+    if (targetHash === lastSyncedHashRef.current) return
+
+    const loaded = state.filteredCommits.some((commit) =>
+      commit.hash === targetHash || commit.shortHash === targetHash
+    )
+    if (loaded) {
+      lastSyncedHashRef.current = targetHash
+      dispatch({ type: 'selectCommitByHash', hash: targetHash })
+      // Confirmation status message so the user gets feedback even
+      // when the dedicated branches / tags view is occupying the
+      // main panel and the history cursor moves invisibly behind it.
+      dispatch({
+        type: 'setStatus',
+        value: `Synced history to ${targetLabel} tip`,
+      })
+    } else {
+      dispatch({
+        type: 'setStatus',
+        value: `${targetLabel} tip not in loaded window — press \\ for full graph or Ctrl+L to load more`,
+      })
     }
   }, [
     dispatch, context.branches, context.tags,
@@ -1395,6 +1410,19 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.branchSort, state.tagSort, state.filter,
     state.filteredCommits,
   ])
+
+  // Reset the dedup ref when the user moves focus away from the
+  // sidebar branches / tags tab so re-entering re-fires the sync
+  // even if the cursored branch is the same as before.
+  React.useEffect(() => {
+    const onBranchTab = state.activeView === 'branches' ||
+      (state.focus === 'sidebar' && state.sidebarTab === 'branches')
+    const onTagTab = state.activeView === 'tags' ||
+      (state.focus === 'sidebar' && state.sidebarTab === 'tags')
+    if (!onBranchTab && !onTagTab) {
+      lastSyncedHashRef.current = undefined
+    }
+  }, [state.activeView, state.focus, state.sidebarTab])
 
   React.useEffect(() => {
     let active = true
