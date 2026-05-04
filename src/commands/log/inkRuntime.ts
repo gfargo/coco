@@ -4735,7 +4735,13 @@ function renderComposeContextPanel(
     : []),
   ...(stagedFiles.length
     ? [
-      h(Text, { key: 'compose-context-staged-title', bold: true }, 'Staged'),
+      // Section header carries the total count to match the status
+      // surface's "▾ Staged (n)" treatment (#840). The visible
+      // file list is sliced at 12 rows; using `worktree.stagedCount`
+      // (the total) avoids a misleading "Staged (12)" label when
+      // there are actually more staged files below the slice.
+      h(Text, { key: 'compose-context-staged-title', bold: true },
+        `Staged (${worktree?.stagedCount ?? stagedFiles.length})`),
       ...stagedFiles.map((file, index) => h(Text, {
         key: `compose-context-staged-${index}`,
         color: theme.noColor ? undefined : theme.colors.gitAdded,
@@ -4745,7 +4751,8 @@ function renderComposeContextPanel(
     : []),
   ...(unstagedFiles.length
     ? [
-      h(Text, { key: 'compose-context-unstaged-title', bold: true }, 'Unstaged'),
+      h(Text, { key: 'compose-context-unstaged-title', bold: true },
+        `Unstaged (${worktree?.unstagedCount ?? unstagedFiles.length})`),
       ...unstagedFiles.map((file, index) => h(Text, {
         key: `compose-context-unstaged-${index}`,
         color: theme.noColor ? undefined : theme.colors.gitModified,
