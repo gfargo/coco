@@ -2314,4 +2314,68 @@ describe('log Ink input interactions', () => {
       ])
     })
   })
+
+  // #838 — `D` on the worktrees view fires the chained worktree
+  // removal + branch delete instead of the global delete-branch
+  // workflow. Scoped per-view so `D` from elsewhere keeps doing what
+  // it always did.
+  describe('worktree D-for-delete-with-branch', () => {
+    function worktreesViewState(overrides: Partial<LogInkState> = {}) {
+      const base = createLogInkState(rows)
+      return {
+        ...base,
+        focus: 'commits' as const,
+        activeView: 'worktrees' as const,
+        viewStack: ['worktrees'] as LogInkState['viewStack'],
+        ...overrides,
+      }
+    }
+
+    it('D on the worktrees view fires the remove-worktree-and-branch confirm', () => {
+      const events = getLogInkInputEvents(
+        worktreesViewState(),
+        'D',
+        {},
+        { worktreeListCount: 2 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'remove-worktree-and-branch' } },
+      ])
+    })
+
+    it('D from anywhere else still fires the global delete-branch workflow', () => {
+      // History view: no per-view interception; global workflow-by-key
+      // path takes over and routes to delete-branch.
+      const events = getLogInkInputEvents(createLogInkState(rows), 'D', {})
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'delete-branch' } },
+      ])
+    })
+
+    it('W on the worktrees view still fires plain remove-worktree (existing behavior)', () => {
+      const events = getLogInkInputEvents(
+        worktreesViewState(),
+        'W',
+        {},
+        { worktreeListCount: 2 },
+      )
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'remove-worktree' } },
+      ])
+    })
+
+    it('D on the worktrees view with no worktrees falls through (no interception)', () => {
+      const events = getLogInkInputEvents(
+        worktreesViewState(),
+        'D',
+        {},
+        { worktreeListCount: 0 },
+      )
+      // worktreeListCount=0 means the per-view guard doesn't fire; the
+      // global workflow-by-key path then claims D for delete-branch.
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'delete-branch' } },
+      ])
+    })
+  })
 })
