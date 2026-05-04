@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
-import { BranchActionResult } from './branchActions'
+import { BranchActionResult, deleteBranch } from './branchActions'
+import { BranchRef } from './branchData'
 import { WorktreeEntry } from './worktreeData'
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
@@ -85,5 +86,66 @@ export function worktreePathAction(worktree: WorktreeEntry): BranchActionResult 
   return {
     ok: true,
     message: `Worktree path: ${worktree.path}`,
+  }
+}
+
+/**
+ * Remove a worktree AND delete the branch it was tracking (#838). The
+ * canonical "I'm done with this side branch" wind-down: removes the
+ * worktree directory, then runs `git branch -d` on the previously
+ * checked-out branch.
+ *
+ * Both pre-flight guards inherit from the underlying helpers:
+ *   - removeWorktree refuses the current worktree and dirty worktrees
+ *   - deleteBranch refuses the current branch and uses `-d` (safe
+ *     delete, refuses unmerged commits)
+ *
+ * Aborts cleanly at any failure point and surfaces a message that
+ * names which step broke. When the worktree had no branch (detached
+ * HEAD) the branch step is silently skipped — there's nothing to
+ * delete and the worktree removal alone counts as success.
+ */
+export async function removeWorktreeAndBranch(
+  git: SimpleGit,
+  worktree: WorktreeEntry,
+  branchRefs: BranchRef[]
+): Promise<BranchActionResult> {
+  const removeResult = await removeWorktree(git, worktree)
+  if (!removeResult.ok) {
+    return removeResult
+  }
+
+  const branchName = worktree.branch
+  if (!branchName) {
+    return {
+      ok: true,
+      message: `Removed worktree ${worktree.path} (no branch to delete)`,
+    }
+  }
+
+  // Look up the local BranchRef for the branch this worktree was on.
+  // deleteBranch needs the full ref (not just the name) so its
+  // current-branch and local-only guards apply correctly.
+  const branch = branchRefs.find((entry) =>
+    entry.type === 'local' && entry.shortName === branchName
+  )
+  if (!branch) {
+    return {
+      ok: true,
+      message: `Removed worktree ${worktree.path} (branch ${branchName} not found in local branches)`,
+    }
+  }
+
+  const deleteResult = await deleteBranch(git, branch)
+  if (!deleteResult.ok) {
+    return {
+      ok: false,
+      message: `Removed worktree ${worktree.path}, but branch delete failed: ${deleteResult.message}`,
+    }
+  }
+
+  return {
+    ok: true,
+    message: `Removed worktree ${worktree.path} and deleted branch ${branchName}`,
   }
 }

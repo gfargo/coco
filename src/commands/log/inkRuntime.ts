@@ -176,7 +176,7 @@ import {
 } from './historyActions'
 import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from './hunkActions'
-import { removeWorktree } from './worktreeActions'
+import { removeWorktree, removeWorktreeAndBranch } from './worktreeActions'
 import { abortOperation } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import {
@@ -1862,6 +1862,32 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           }
         }
         return removeWorktree(git, cursorTarget)
+      },
+      'remove-worktree-and-branch': async () => {
+        const all = context.worktreeList?.worktrees || []
+        const visible = state.filter
+          ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
+          : all
+        const cursorTarget = visible.length
+          ? visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
+          : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
+        if (!cursorTarget) return { ok: false, message: 'No worktree selected' }
+        if (cursorTarget.current) {
+          return {
+            ok: false,
+            message: 'Cannot remove the current worktree — switch to another worktree first.',
+          }
+        }
+        // The chained helper handles the worktree removal AND the
+        // safe branch delete in one call. Branch refs come from the
+        // live context so the underlying deleteBranch helper sees
+        // the current/local flags it needs to refuse the destructive
+        // path on the wrong target.
+        return removeWorktreeAndBranch(
+          git,
+          cursorTarget,
+          context.branches?.localBranches || []
+        )
       },
       'abort-operation': async () => {
         const operation = context.operation?.operation

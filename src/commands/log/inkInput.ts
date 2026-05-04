@@ -1663,6 +1663,17 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingConfirmation', value: 'delete-remote-tag' })]
   }
 
+  // Per-view worktree action: `D` removes the worktree AND deletes
+  // the branch it was tracking (#838). Scoped to the worktrees
+  // surface so it intercepts BEFORE the global workflow-by-key
+  // dispatcher would otherwise route `D` to delete-branch (which
+  // would silently target whatever was last cursored on the branches
+  // surface instead of acting on the worktree under the cursor here).
+  // `W` keeps its existing "remove worktree only" semantics.
+  if (inputValue === 'D' && isWorktreeActionTarget(state) && context.worktreeListCount) {
+    return [action({ type: 'setPendingConfirmation', value: 'remove-worktree-and-branch' })]
+  }
+
   // #783 — full PR action panel keys, scoped to the pull-request view.
   // All five wrap a `gh pr <verb>` invocation; merge / request-changes /
   // comment open prompts first, the rest route through the y-confirm

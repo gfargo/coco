@@ -314,6 +314,19 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // Per-view-only — the inkInput handler scopes this to the
+      // worktrees surface so the global `D` keystroke (delete-branch)
+      // keeps working from elsewhere. The empty `key` keeps the
+      // workflow palette-discoverable but does not register a global
+      // hotkey that would collide with delete-branch.
+      id: 'remove-worktree-and-branch',
+      key: '',
+      label: 'Remove worktree + delete branch',
+      description: 'Remove the selected worktree and delete the branch it was tracking after confirmation.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'abort-operation',
       key: 'A',
       label: 'Abort operation',
