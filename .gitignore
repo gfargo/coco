@@ -43,6 +43,9 @@ coverage/
 # Local GitHub wiki checkout
 .wiki/
 
+# WWW NextJS marketing frontend site
+.www/
+
 /src/lib/buildInfo.ts
 
 .kiro
