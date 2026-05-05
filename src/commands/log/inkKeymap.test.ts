@@ -470,7 +470,7 @@ describe('log Ink keymap', () => {
       expect(hints.contextual).toContain('u theirs')
       expect(hints.contextual).toContain('U ours')
       expect(hints.contextual).toContain('o edit')
-      expect(hints.contextual).toContain('C continue')
+      expect(hints.contextual).toContain('C continue*')
       expect(hints.contextual).toContain('enter diff')
       expect(hints.global).toEqual(['g jump', '< back', '? help', ': cmds', 'q quit'])
     })

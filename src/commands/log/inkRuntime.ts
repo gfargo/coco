@@ -1923,8 +1923,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           dispatch({ type: 'navigateOpenDiffForWorktreeFile', fileIndex })
           return { ok: true, message: `Viewing diff for ${path}` }
         }
-        // Fallback: open in editor if not in worktree list
-        return { ok: true, message: `Opening ${path}` }
+        // File not in worktree list (e.g. deleted-by-us) — open in
+        // editor as fallback so the user can still inspect it.
+        return { ok: true, message: `${path} not in worktree diff list` }
       },
       'continue-operation': async () => {
         const operation = context.operation?.operation
@@ -2494,7 +2495,12 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         : undefined,
       worktreeDirty,
       conflictFileCount: context.operation?.conflictedFiles.length,
-      conflictSelectedPath: context.operation?.conflictedFiles[state.selectedConflictFileIndex]?.path,
+      conflictSelectedPath: (() => {
+        const files = context.operation?.conflictedFiles
+        if (!files || files.length === 0) return undefined
+        const clamped = Math.min(state.selectedConflictFileIndex, files.length - 1)
+        return files[clamped]?.path
+      })(),
       // H / gH need the actual diff text (not just hunk offsets) to
       // slice the cursored hunk into a `git apply` patch. Stash uses
       // the full `git stash show -p` output; commit-diff uses the
@@ -3335,8 +3341,8 @@ function renderConflictsSurface(
   const conflictedFiles = operation?.conflictedFiles || []
   const operationType = operation?.operation || 'none'
 
-  // If no operation is in progress or no conflicts, show a fallback message.
-  if (!loading && (operationType === 'none' || conflictedFiles.length === 0)) {
+  // If no operation is in progress, show a fallback message.
+  if (!loading && operationType === 'none') {
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
       borderStyle: theme.borderStyle,
@@ -3350,9 +3356,26 @@ function renderConflictsSurface(
       h(Text, { dimColor: true }, 'no operation in progress')
     ),
     h(Text, { key: 'conflicts-empty', dimColor: true },
-      operationType === 'none'
-        ? 'No merge, rebase, cherry-pick, or revert in progress.'
-        : 'All conflicts resolved. Use the operation panel to continue.'
+      'No merge, rebase, cherry-pick, or revert in progress.'
+    ))
+  }
+
+  // All conflicts resolved — show the "continue" hint.
+  if (!loading && conflictedFiles.length === 0 && operationType !== 'none') {
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexShrink: 0,
+      paddingX: 1,
+      width,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle('Conflicts', focused)),
+      h(Text, { dimColor: true }, `${operationType} — all conflicts resolved`)
+    ),
+    h(Text, { key: 'conflicts-hint', dimColor: true },
+      `All conflicts resolved. Press C to continue the ${operationType}, or < to go back.`
     ))
   }
 
@@ -3396,16 +3419,6 @@ function renderConflictsSurface(
       ))
     })
 
-  // Hint when all conflicts are resolved (user staged them all).
-  const hintLines: ReactTypes.ReactNode[] = []
-  if (!loading && conflictedFiles.length === 0 && operationType !== 'none') {
-    hintLines.push(
-      h(Text, { key: 'conflicts-hint', dimColor: true },
-        `All conflicts resolved. Press C to continue the ${operationType}, or < to go back.`
-      )
-    )
-  }
-
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -3418,8 +3431,7 @@ function renderConflictsSurface(
     h(Text, { bold: true }, panelTitle('Conflicts', focused)),
     h(Text, { dimColor: true }, headerRight)
   ),
-  ...lines,
-  ...hintLines)
+  ...lines)
 }
 
 function renderStatusSurface(

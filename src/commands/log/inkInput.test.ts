@@ -2502,9 +2502,12 @@ describe('log Ink input interactions', () => {
         conflictSelectedPath: 'src/conflict.ts',
       })
 
-      // C should not match the conflicts-view continue handler when
-      // conflicts remain — it falls through to the global workflow
-      // action path or is a no-op.
+      // C is intercepted on the conflicts view to prevent fallthrough
+      // to the global C (Create PR) binding. Shows a status hint instead.
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setStatus', value: 'Resolve all conflicts before continuing' },
+      })
       const hasConflictContinue = events.some(
         (e) => e.type === 'runWorkflowAction' && (e as { id: string }).id === 'continue-operation'
       )

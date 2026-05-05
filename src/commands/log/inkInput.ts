@@ -1792,6 +1792,11 @@ export function getLogInkInputEvents(
   if (inputValue === 'C' && state.activeView === 'conflicts' && context.conflictFileCount === 0) {
     return [{ type: 'runWorkflowAction', id: 'continue-operation' }]
   }
+  // Always intercept `C` on the conflicts view to prevent fallthrough to
+  // the global `C` (Create PR) binding when conflicts remain.
+  if (inputValue === 'C' && state.activeView === 'conflicts') {
+    return [action({ type: 'setStatus', value: 'Resolve all conflicts before continuing' })]
+  }
 
   // `c` on a stash diff cherry-picks the file under the cursor —
   // materializes that single path from the stash into the working tree

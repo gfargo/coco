@@ -636,7 +636,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'conflicts') {
     return {
-      contextual: ['↑/↓ files', 'enter diff', 's stage', 'u theirs', 'U ours', 'o edit', 'C continue', 'esc back'],
+      contextual: ['↑/↓ files', 'enter diff', 's stage', 'u theirs', 'U ours', 'o edit', 'C continue*', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
