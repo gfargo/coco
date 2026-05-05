@@ -2378,4 +2378,152 @@ describe('log Ink input interactions', () => {
       ])
     })
   })
+
+  describe('conflicts view', () => {
+    it('navigates to conflicts view via gx chord', () => {
+      let state = createLogInkState(rows)
+      // First key: g sets pending key
+      state = applyInput(state, 'g')
+      expect(state.pendingKey).toBe('g')
+      // Second key: x pushes conflicts view
+      state = applyInput(state, 'x')
+      expect(state.activeView).toBe('conflicts')
+      expect(state.viewStack).toEqual(['history', 'conflicts'])
+    })
+
+    it('moves cursor up and down in the conflicts view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      state = applyInput(state, '', { downArrow: true }, { conflictFileCount: 3 })
+      expect(state.selectedConflictFileIndex).toBe(1)
+
+      state = applyInput(state, '', { upArrow: true }, { conflictFileCount: 3 })
+      expect(state.selectedConflictFileIndex).toBe(0)
+    })
+
+    it('clamps cursor at bounds in the conflicts view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      state = applyInput(state, '', { upArrow: true }, { conflictFileCount: 3 })
+      expect(state.selectedConflictFileIndex).toBe(0)
+    })
+
+    it('dispatches resolve-conflict-stage on s key', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      const events = getLogInkInputEvents(state, 's', {}, {
+        conflictFileCount: 2,
+        conflictSelectedPath: 'src/conflict.ts',
+      })
+
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'resolve-conflict-stage', payload: 'src/conflict.ts' },
+      ])
+    })
+
+    it('dispatches resolve-conflict-theirs on u key', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      const events = getLogInkInputEvents(state, 'u', {}, {
+        conflictFileCount: 2,
+        conflictSelectedPath: 'src/conflict.ts',
+      })
+
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'resolve-conflict-theirs', payload: 'src/conflict.ts' },
+      ])
+    })
+
+    it('dispatches resolve-conflict-ours on U key', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      const events = getLogInkInputEvents(state, 'U', {}, {
+        conflictFileCount: 2,
+        conflictSelectedPath: 'src/conflict.ts',
+      })
+
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'resolve-conflict-ours', payload: 'src/conflict.ts' },
+      ])
+    })
+
+    it('dispatches open-in-editor on o key', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      const events = getLogInkInputEvents(state, 'o', {}, {
+        conflictFileCount: 2,
+        conflictSelectedPath: 'src/conflict.ts',
+      })
+
+      expect(events).toEqual([
+        { type: 'openFileInEditor', path: 'src/conflict.ts' },
+      ])
+    })
+
+    it('dispatches open-diff on Enter key', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      const events = getLogInkInputEvents(state, '', { return: true }, {
+        conflictFileCount: 2,
+        conflictSelectedPath: 'src/conflict.ts',
+      })
+
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'resolve-conflict-open-diff', payload: 'src/conflict.ts' },
+      ])
+    })
+
+    it('dispatches continue-operation on C key when no conflicts remain', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      const events = getLogInkInputEvents(state, 'C', {}, {
+        conflictFileCount: 0,
+      })
+
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'continue-operation' },
+      ])
+    })
+
+    it('does not dispatch continue-operation when conflicts remain', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+
+      const events = getLogInkInputEvents(state, 'C', {}, {
+        conflictFileCount: 3,
+        conflictSelectedPath: 'src/conflict.ts',
+      })
+
+      // C should not match the conflicts-view continue handler when
+      // conflicts remain — it falls through to the global workflow
+      // action path or is a no-op.
+      const hasConflictContinue = events.some(
+        (e) => e.type === 'runWorkflowAction' && (e as { id: string }).id === 'continue-operation'
+      )
+      expect(hasConflictContinue).toBe(false)
+    })
+
+    it('does not fire conflict keys when not on the conflicts view', () => {
+      const state = createLogInkState(rows)
+
+      const events = getLogInkInputEvents(state, 's', {}, {
+        conflictFileCount: 2,
+        conflictSelectedPath: 'src/conflict.ts',
+      })
+
+      // On history view, 's' should not trigger resolve-conflict-stage
+      const hasConflictStage = events.some(
+        (e) => e.type === 'runWorkflowAction' && (e as { id: string }).id === 'resolve-conflict-stage'
+      )
+      expect(hasConflictStage).toBe(false)
+    })
+  })
 })

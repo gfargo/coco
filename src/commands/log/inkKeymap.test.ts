@@ -1,12 +1,12 @@
 import {
-  LOG_INK_KEY_BINDINGS,
-  filterLogInkPaletteCommands,
-  formatLogInkBreadcrumb,
-  getLogInkChordContinuations,
-  getLogInkCommandPaletteItems,
-  getLogInkFooterHints,
-  getLogInkHelpSections,
-  getLogInkPaletteCommands,
+    LOG_INK_KEY_BINDINGS,
+    filterLogInkPaletteCommands,
+    formatLogInkBreadcrumb,
+    getLogInkChordContinuations,
+    getLogInkCommandPaletteItems,
+    getLogInkFooterHints,
+    getLogInkHelpSections,
+    getLogInkPaletteCommands,
 } from './inkKeymap'
 
 describe('log Ink keymap', () => {
@@ -455,6 +455,37 @@ describe('log Ink keymap', () => {
         showHelp: false,
       })
       expect(hints.contextual[0]).not.toBe('g …')
+    })
+  })
+
+  describe('conflicts view', () => {
+    it('returns conflicts-specific footer hints', () => {
+      const hints = getLogInkFooterHints({
+        activeView: 'conflicts',
+        filterMode: false,
+        focus: 'commits',
+        showHelp: false,
+      })
+      expect(hints.contextual).toContain('s stage')
+      expect(hints.contextual).toContain('u theirs')
+      expect(hints.contextual).toContain('U ours')
+      expect(hints.contextual).toContain('o edit')
+      expect(hints.contextual).toContain('C continue')
+      expect(hints.contextual).toContain('enter diff')
+      expect(hints.global).toEqual(['g jump', '< back', '? help', ': cmds', 'q quit'])
+    })
+
+    it('includes gx in chord continuations for the g prefix', () => {
+      const continuations = getLogInkChordContinuations('g')
+      const conflictsEntry = continuations.find((entry) => entry.key === 'x')
+      expect(conflictsEntry).toBeDefined()
+      expect(conflictsEntry!.label).toBe('conflicts')
+    })
+
+    it('includes navigateConflicts in the key bindings registry', () => {
+      const binding = LOG_INK_KEY_BINDINGS.find((b) => b.id === 'navigateConflicts')
+      expect(binding).toBeDefined()
+      expect(binding!.keys).toContain('gx')
     })
   })
 })

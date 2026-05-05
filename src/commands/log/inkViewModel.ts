@@ -1,24 +1,24 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from './data'
 import {
-  CommitComposeAction,
-  CommitComposeState,
-  applyCommitComposeAction,
-  createCommitComposeState,
+    CommitComposeAction,
+    CommitComposeState,
+    applyCommitComposeAction,
+    createCommitComposeState,
 } from './commitCompose'
 import { PromotedSelectionsSnapshot } from './inkSelectionRectify'
 import {
-  BranchSortMode,
-  DEFAULT_BRANCH_SORT_MODE,
-  DEFAULT_TAG_SORT_MODE,
-  TagSortMode,
-  cycleBranchSort,
-  cycleTagSort,
+    BranchSortMode,
+    DEFAULT_BRANCH_SORT_MODE,
+    DEFAULT_TAG_SORT_MODE,
+    TagSortMode,
+    cycleBranchSort,
+    cycleTagSort,
 } from './inkSorting'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
@@ -83,6 +83,7 @@ export type LogInkState = {
   selectedTagIndex: number
   selectedStashIndex: number
   selectedWorktreeListIndex: number
+  selectedConflictFileIndex: number
   /**
    * Sort modes for the promoted views (P4.2). `s` cycles through the
    * available modes; the surface header shows a `▼ <mode>` indicator.
@@ -338,6 +339,7 @@ export type LogInkAction =
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
+  | { type: 'moveConflictFile'; delta: number; count: number }
   | { type: 'moveToBottom' }
   | { type: 'moveToTop' }
   | { type: 'nextSidebarTab' }
@@ -713,6 +715,7 @@ export function createLogInkState(
     selectedTagIndex: 0,
     selectedStashIndex: 0,
     selectedWorktreeListIndex: 0,
+    selectedConflictFileIndex: 0,
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
     paletteFilter: '',
@@ -974,6 +977,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedWorktreeListIndex: clampIndex(state.selectedWorktreeListIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'moveConflictFile':
+      return {
+        ...state,
+        selectedConflictFileIndex: clampIndex(state.selectedConflictFileIndex + action.delta, action.count),
         pendingKey: undefined,
       }
     case 'cycleBranchSort':

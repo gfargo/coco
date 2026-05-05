@@ -1,23 +1,23 @@
 import { extractDiffHunk } from './inkHunkExtraction'
 import {
-  InspectorAction,
-  InspectorActionContext,
-  getInspectorActions,
+    InspectorAction,
+    InspectorActionContext,
+    getInspectorActions,
 } from './inkInspectorActions'
 import {
-  LogInkPaletteCommand,
-  filterLogInkPaletteCommands,
-  getLogInkPaletteCommands,
+    LogInkPaletteCommand,
+    filterLogInkPaletteCommands,
+    getLogInkPaletteCommands,
 } from './inkKeymap'
 import {
-  LogInkAction,
-  LogInkSidebarTab,
-  LogInkState,
-  parseLogInkHistoryFetchPrefix,
+    LogInkAction,
+    LogInkSidebarTab,
+    LogInkState,
+    parseLogInkHistoryFetchPrefix,
 } from './inkViewModel'
 import {
-  getLogInkWorkflowActionById,
-  getLogInkWorkflowActionByKey,
+    getLogInkWorkflowActionById,
+    getLogInkWorkflowActionByKey,
 } from './inkWorkflows'
 import { sidebarTabHasSelectableItems } from './inkSidebarSelection'
 
@@ -132,6 +132,16 @@ export type LogInkInputContext = {
    * way.
    */
   diffLinesForHunkApply?: string[]
+  /**
+   * Number of conflicted files in the current operation. Drives j/k
+   * navigation on the conflicts view.
+   */
+  conflictFileCount?: number
+  /**
+   * Path of the file currently under the cursor in the conflicts view.
+   * Used by `o` (open in $EDITOR) and `s` (stage/resolve).
+   */
+  conflictSelectedPath?: string
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -399,6 +409,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'worktrees' })]
     case 'navigatePullRequest':
       return [action({ type: 'pushView', value: 'pull-request' })]
+    case 'navigateConflicts':
+      return [action({ type: 'pushView', value: 'conflicts' })]
     case 'navigateBack':
       return [action({ type: 'popView' })]
     case 'openSelected': {
@@ -930,6 +942,13 @@ export function getLogInkInputEvents(
     ]
   }
 
+  if (state.pendingKey === 'g' && inputValue === 'x') {
+    return [
+      action({ type: 'pushView', value: 'conflicts' }),
+      action({ type: 'setStatus', value: 'jumped to conflicts' }),
+    ]
+  }
+
   // `gH` chord: apply the cursored hunk to the index (`git apply
   // --cached`). Sibling of bare `H` which targets the worktree.
   // Discoverable via the footer hint on diff views and the help
@@ -1279,6 +1298,10 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveWorktreeListEntry', delta: -1, count: context.worktreeListCount })]
     }
 
+    if (state.activeView === 'conflicts' && context.conflictFileCount) {
+      return [action({ type: 'moveConflictFile', delta: -1, count: context.conflictFileCount })]
+    }
+
     if (
       state.activeView === 'history' &&
       state.focus === 'commits' &&
@@ -1370,6 +1393,10 @@ export function getLogInkInputEvents(
 
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {
       return [action({ type: 'moveWorktreeListEntry', delta: 1, count: context.worktreeListCount })]
+    }
+
+    if (state.activeView === 'conflicts' && context.conflictFileCount) {
+      return [action({ type: 'moveConflictFile', delta: 1, count: context.conflictFileCount })]
     }
 
     return [
@@ -1584,6 +1611,12 @@ export function getLogInkInputEvents(
     })]
   }
 
+  // Enter on a conflict file opens the worktree diff for that file so
+  // the user can inspect the conflict markers in context.
+  if (key.return && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
+    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-open-diff', payload: context.conflictSelectedPath }]
+  }
+
   // Enter on a branch row checks the branch out. Non-destructive workflow
   // action — no confirmation prompt. Fires from either the dedicated
   // branches view or from the sidebar when the branches tab is focused
@@ -1736,6 +1769,28 @@ export function getLogInkInputEvents(
   }
   if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffSelectedPath) {
     return [{ type: 'openFileInEditor', path: context.stashDiffSelectedPath }]
+  }
+
+  // --- Conflicts view per-row handlers ---
+  // `o` opens the conflicted file in $EDITOR for manual resolution.
+  if (inputValue === 'o' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
+    return [{ type: 'openFileInEditor', path: context.conflictSelectedPath }]
+  }
+  // `s` stages the conflicted file (marks it resolved).
+  if (inputValue === 's' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
+    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-stage', payload: context.conflictSelectedPath }]
+  }
+  // `u` resolves by keeping theirs (incoming changes).
+  if (inputValue === 'u' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
+    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-theirs', payload: context.conflictSelectedPath }]
+  }
+  // `U` resolves by keeping ours (current branch).
+  if (inputValue === 'U' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
+    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-ours', payload: context.conflictSelectedPath }]
+  }
+  // `C` continues the in-progress operation (available when no conflicts remain).
+  if (inputValue === 'C' && state.activeView === 'conflicts' && context.conflictFileCount === 0) {
+    return [{ type: 'runWorkflowAction', id: 'continue-operation' }]
   }
 
   // `c` on a stash diff cherry-picks the file under the cursor —

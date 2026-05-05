@@ -1,8 +1,11 @@
 import {
-  abortOperation,
-  continueOperation,
-  operationActionTestInternals,
-  skipOperation,
+    abortOperation,
+    continueOperation,
+    operationActionTestInternals,
+    resolveConflictOurs,
+    resolveConflictTheirs,
+    skipOperation,
+    stageConflictResolved,
 } from './operationActions'
 
 describe('log operation actions', () => {
@@ -66,6 +69,55 @@ describe('log operation actions', () => {
       ok: false,
       message: 'conflicts remain',
       details: ['fix conflict.ts first'],
+    })
+  })
+
+  describe('conflict resolution actions', () => {
+    it('resolveConflictOurs checks out ours and stages the file', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+
+      const result = await resolveConflictOurs(git as never, 'src/conflict.ts')
+
+      expect(result).toEqual({ ok: true, message: 'Resolved src/conflict.ts (kept ours)' })
+      expect(git.raw).toHaveBeenCalledWith(['checkout', '--ours', '--', 'src/conflict.ts'])
+      expect(git.raw).toHaveBeenCalledWith(['add', '--', 'src/conflict.ts'])
+    })
+
+    it('resolveConflictTheirs checks out theirs and stages the file', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+
+      const result = await resolveConflictTheirs(git as never, 'src/conflict.ts')
+
+      expect(result).toEqual({ ok: true, message: 'Resolved src/conflict.ts (kept theirs)' })
+      expect(git.raw).toHaveBeenCalledWith(['checkout', '--theirs', '--', 'src/conflict.ts'])
+      expect(git.raw).toHaveBeenCalledWith(['add', '--', 'src/conflict.ts'])
+    })
+
+    it('stageConflictResolved stages the file to mark it resolved', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+
+      const result = await stageConflictResolved(git as never, 'src/conflict.ts')
+
+      expect(result).toEqual({ ok: true, message: 'Staged src/conflict.ts (marked resolved)' })
+      expect(git.raw).toHaveBeenCalledWith(['add', '--', 'src/conflict.ts'])
+    })
+
+    it('resolveConflictOurs reports failures from git', async () => {
+      const git = { raw: jest.fn().mockRejectedValue(new Error('error: path not found')) }
+
+      const result = await resolveConflictOurs(git as never, 'missing.ts')
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('error: path not found')
+    })
+
+    it('resolveConflictTheirs reports failures from git', async () => {
+      const git = { raw: jest.fn().mockRejectedValue(new Error('error: path not found')) }
+
+      const result = await resolveConflictTheirs(git as never, 'missing.ts')
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('error: path not found')
     })
   })
 })

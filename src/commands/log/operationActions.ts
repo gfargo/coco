@@ -130,6 +130,42 @@ export function skipOperation(
   )
 }
 
+export function resolveConflictOurs(
+  git: SimpleGit,
+  path: string
+): Promise<BranchActionResult> {
+  return runAction(
+    async () => {
+      await git.raw(['checkout', '--ours', '--', path])
+      await git.raw(['add', '--', path])
+    },
+    `Resolved ${path} (kept ours)`
+  )
+}
+
+export function resolveConflictTheirs(
+  git: SimpleGit,
+  path: string
+): Promise<BranchActionResult> {
+  return runAction(
+    async () => {
+      await git.raw(['checkout', '--theirs', '--', path])
+      await git.raw(['add', '--', path])
+    },
+    `Resolved ${path} (kept theirs)`
+  )
+}
+
+export function stageConflictResolved(
+  git: SimpleGit,
+  path: string
+): Promise<BranchActionResult> {
+  return runAction(
+    () => git.raw(['add', '--', path]),
+    `Staged ${path} (marked resolved)`
+  )
+}
+
 export const operationActionTestInternals = {
   getOperationCommand,
 }
