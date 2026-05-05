@@ -39,6 +39,7 @@
     "test": "npm run test:jest && npm run test:publish",
     "test:publish": "npm run lint && npm run build && npm run test:cli && npm pack --dry-run",
     "test:cli": "tsx bin/smokeCli.ts",
+    "bench": "tsx bin/benchmark.ts",
     "pretest:jest": "npm run build:info",
     "test:jest": "jest",
     "test:jest:watch": "jest --watch",

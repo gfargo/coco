@@ -42,45 +42,45 @@ import { BranchOverview, getBranchOverview } from './branchData'
 import { createManualCommit } from './commitCompose'
 import { runCommitDraftWorkflow } from './commitWorkflowActions'
 import {
-  GitCommitDetail,
-  GitCommitFilePreview,
-  GitLogCommitRow,
-  GitLogRow,
-  LOG_INTERACTIVE_DEFAULT_LIMIT,
-  buildToggleGraphArgs,
-  getCommitDetail,
-  getCommitFilePreview,
-  getCommitRows,
-  getLogRows,
+    GitCommitDetail,
+    GitCommitFilePreview,
+    GitLogCommitRow,
+    GitLogRow,
+    LOG_INTERACTIVE_DEFAULT_LIMIT,
+    buildToggleGraphArgs,
+    getCommitDetail,
+    getCommitFilePreview,
+    getCommitRows,
+    getLogRows,
 } from './data'
 import {
-  LogInkContextKey,
-  LogInkContextStatus,
-  createLogInkContextStatus,
-  isLogInkContextKeyLoading,
-  isLogInkContextLoading,
-  updateLogInkContextStatus,
+    LogInkContextKey,
+    LogInkContextStatus,
+    createLogInkContextStatus,
+    isLogInkContextKeyLoading,
+    isLogInkContextLoading,
+    updateLogInkContextStatus,
 } from './inkContext'
 import {
-  formatInkRefLabels,
-  getVisibleLogInkHistory,
+    formatInkRefLabels,
+    getVisibleLogInkHistory,
 } from './inkHistoryRows'
 import {
-  formatBindingKeys,
-  formatLogInkBreadcrumb,
-  filterLogInkPaletteCommands,
-  getLogInkChordContinuations,
-  getLogInkPaletteCommands,
-  getLogInkFooterHints,
-  getLogInkHelpSections,
+    formatBindingKeys,
+    formatLogInkBreadcrumb,
+    filterLogInkPaletteCommands,
+    getLogInkChordContinuations,
+    getLogInkPaletteCommands,
+    getLogInkFooterHints,
+    getLogInkHelpSections,
 } from './inkKeymap'
 import { substituteGraphChars } from './inkGraphChars'
 import { LaneSegment, getLaneColor } from './inkGraphLanes'
 import { formatHyperlink } from './inkHyperlinks'
 import {
-  LogInkInputKey,
-  getInspectorActionsForState,
-  getLogInkInputEvents,
+    LogInkInputKey,
+    getInspectorActionsForState,
+    getLogInkInputEvents,
 } from './inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
 import { getSavedDiffViewMode, saveDiffViewMode } from './inkDiffViewModePersistence'
@@ -88,152 +88,152 @@ import { getSavedSidebarTab, saveSidebarTab } from './inkSidebarPersistence'
 import { SplitDiffRow, buildSplitDiffRows } from './inkSplitDiff'
 import { getSidebarVisibleWindow } from './inkSidebarSelection'
 import {
-  PromotedSelectionsSnapshot,
-  rectifyPromotedSelectionIndex,
+    PromotedSelectionsSnapshot,
+    rectifyPromotedSelectionIndex,
 } from './inkSelectionRectify'
 import {
-  LogInkRefreshWatcher,
-  createRefreshWatcher,
+    LogInkRefreshWatcher,
+    createRefreshWatcher,
 } from './inkRefreshWatcher'
 import { installTerminalLifecycle } from './inkTerminalLifecycle'
 import {
-  LOG_INK_DEFAULT_COLUMNS,
-  LOG_INK_DEFAULT_ROWS,
-  LOG_INK_MIN_COLUMNS,
-  LOG_INK_MIN_ROWS,
-  getLogInkLayout,
+    LOG_INK_DEFAULT_COLUMNS,
+    LOG_INK_DEFAULT_ROWS,
+    LOG_INK_MIN_COLUMNS,
+    LOG_INK_MIN_ROWS,
+    getLogInkLayout,
 } from './inkLayout'
 import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from './inkTheme'
 import {
-  STAGE_STATUS_DOT,
-  branchRowMarker,
-  formatBranchDivergence,
-  formatBranchLastTouched,
-  getPullRequestStateGlyph,
-  getStageStatusDotColor,
-  sidebarTabCount,
+    STAGE_STATUS_DOT,
+    branchRowMarker,
+    formatBranchDivergence,
+    formatBranchLastTouched,
+    getPullRequestStateGlyph,
+    getStageStatusDotColor,
+    sidebarTabCount,
 } from './inkIconography'
 import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from './inkIdleTips'
 import {
-  PreviewLine,
-  formatBranchPreview,
-  formatStashPreview,
-  formatTagPreview,
+    PreviewLine,
+    formatBranchPreview,
+    formatStashPreview,
+    formatTagPreview,
 } from './inkPreviewPane'
 import {
-  formatSortIndicator,
-  sortBranches,
-  sortTags,
+    formatSortIndicator,
+    sortBranches,
+    sortTags,
 } from './inkSorting'
 import {
-  formatLogInkBranchesEmpty,
-  formatLogInkComposeEmpty,
-  formatLogInkHistoryEmpty,
-  formatLogInkLoading,
-  formatLogInkStashEmpty,
-  formatLogInkStatusEmpty,
-  formatLogInkTagsEmpty,
+    formatLogInkBranchesEmpty,
+    formatLogInkComposeEmpty,
+    formatLogInkHistoryEmpty,
+    formatLogInkLoading,
+    formatLogInkStashEmpty,
+    formatLogInkStatusEmpty,
+    formatLogInkTagsEmpty,
 } from './inkSurfaceStates'
 import { cellWidth, truncateCells, wrapCells } from './inkText'
 import {
-  LogInkHistoryFetchArgs,
-  LogInkSidebarTab,
-  LogInkState,
-  LogInkStatusFilterMask,
-  LogInkView,
-  applyLogInkAction,
-  createLogInkState,
-  getLogInkSidebarTabs,
-  getSelectedInkCommit,
+    LogInkHistoryFetchArgs,
+    LogInkSidebarTab,
+    LogInkState,
+    LogInkStatusFilterMask,
+    LogInkView,
+    applyLogInkAction,
+    createLogInkState,
+    getLogInkSidebarTabs,
+    getSelectedInkCommit,
 } from './inkViewModel'
 import { startInteractiveLog } from './interactive'
 import { GitOperationOverview, getGitOperationOverview } from './operationData'
 import { openProviderUrl } from './providerActions'
 import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
 import {
-  checkoutBranch,
-  createBranch,
-  deleteBranch,
-  fetchRemotes,
-  pullCurrentBranch,
-  pushCurrentBranch,
-  renameBranch,
-  setUpstream,
+    checkoutBranch,
+    createBranch,
+    deleteBranch,
+    fetchRemotes,
+    pullCurrentBranch,
+    pushCurrentBranch,
+    renameBranch,
+    setUpstream,
 } from './branchActions'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from './tagActions'
 import {
-  ClipboardRunner,
-  ResetMode,
-  checkoutFileFromCommit,
-  cherryPickCommit,
-  createBranchFromCommit,
-  createTagAtCommit,
-  defaultClipboardRunner,
-  isResetMode,
-  resetToCommit,
-  revertCommit,
-  startInteractiveRebase,
+    ClipboardRunner,
+    ResetMode,
+    checkoutFileFromCommit,
+    cherryPickCommit,
+    createBranchFromCommit,
+    createTagAtCommit,
+    defaultClipboardRunner,
+    isResetMode,
+    resetToCommit,
+    revertCommit,
+    startInteractiveRebase,
 } from './historyActions'
 import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from './hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from './worktreeActions'
-import { abortOperation } from './operationActions'
+import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from './operationActions'
 import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
 import {
-  approvePullRequest,
-  closePullRequest,
-  commentPullRequest,
-  isPullRequestMergeStrategy,
-  mergePullRequest,
-  requestChangesPullRequest,
+    approvePullRequest,
+    closePullRequest,
+    commentPullRequest,
+    isPullRequestMergeStrategy,
+    mergePullRequest,
+    requestChangesPullRequest,
 } from './pullRequestActions'
 import {
-  StashOverview,
-  findStashFileForOffset,
-  getStashDiff,
-  getStashOverview,
-  parseStashDiffFiles,
+    StashOverview,
+    findStashFileForOffset,
+    getStashDiff,
+    getStashOverview,
+    parseStashDiffFiles,
 } from './stashData'
 import { formatStashHeaderIdentity } from './inkStashHeader'
 import {
-  buildPullRequestCheckRows,
-  formatPullRequestChecksSummary,
-  formatPullRequestReviewsSummary,
-  formatPullRequestStateLine,
-  summarizePullRequestChecks,
-  summarizePullRequestReviews,
+    buildPullRequestCheckRows,
+    formatPullRequestChecksSummary,
+    formatPullRequestReviewsSummary,
+    formatPullRequestStateLine,
+    summarizePullRequestChecks,
+    summarizePullRequestReviews,
 } from './inkPullRequestPanel'
 import {
-  revertFile,
-  stageAllFiles,
-  stageFile,
-  unstageAllFiles,
-  unstageFile,
+    revertFile,
+    stageAllFiles,
+    stageFile,
+    unstageAllFiles,
+    unstageFile,
 } from './statusActions'
 import {
-  WorktreeFile,
-  WorktreeFileGroup,
-  WorktreeOverview,
-  applyStatusFilterMask,
-  flattenWorktreeGroups,
-  getWorktreeOverview,
-  groupWorktreeFiles,
+    WorktreeFile,
+    WorktreeFileGroup,
+    WorktreeOverview,
+    applyStatusFilterMask,
+    flattenWorktreeGroups,
+    getWorktreeOverview,
+    groupWorktreeFiles,
 } from './statusData'
 import {
-  WorktreeHunkOverview,
-  getWorktreeHunks,
-  revertHunk,
-  stageHunk,
-  unstageHunk,
+    WorktreeHunkOverview,
+    getWorktreeHunks,
+    revertHunk,
+    stageHunk,
+    unstageHunk,
 } from './statusHunks'
 import { TagOverview, getTagOverview } from './tagData'
 import {
-  getLogInkWorkflowActionById,
+    getLogInkWorkflowActionById,
 } from './inkWorkflows'
 import {
-  InspectorAction,
-  InspectorActionContext,
-  getInspectorActions,
+    InspectorAction,
+    InspectorActionContext,
+    getInspectorActions,
 } from './inkInspectorActions'
 import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from './worktreeData'
 import { WorktreeFileDiff, getWorktreeFileDiff } from './worktreeDiffData'
@@ -1896,6 +1896,47 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         }
         return abortOperation(git, operation)
       },
+      'resolve-conflict-ours': async () => {
+        const path = payload?.trim()
+        if (!path) return { ok: false, message: 'No conflict file selected' }
+        return resolveConflictOurs(git, path)
+      },
+      'resolve-conflict-theirs': async () => {
+        const path = payload?.trim()
+        if (!path) return { ok: false, message: 'No conflict file selected' }
+        return resolveConflictTheirs(git, path)
+      },
+      'resolve-conflict-stage': async () => {
+        const path = payload?.trim()
+        if (!path) return { ok: false, message: 'No conflict file selected' }
+        return stageConflictResolved(git, path)
+      },
+      'resolve-conflict-open-diff': async () => {
+        // Push the diff view for the conflicted file so the user can
+        // inspect conflict markers in context. We find the file's index
+        // in the worktree file list and navigate to its diff.
+        const path = payload?.trim()
+        if (!path) return { ok: false, message: 'No conflict file selected' }
+        const worktreeFiles = context.worktree?.files || []
+        const fileIndex = worktreeFiles.findIndex((f) => f.path === path)
+        if (fileIndex >= 0) {
+          dispatch({ type: 'navigateOpenDiffForWorktreeFile', fileIndex })
+          return { ok: true, message: `Viewing diff for ${path}` }
+        }
+        // File not in worktree list (e.g. deleted-by-us) — open in
+        // editor as fallback so the user can still inspect it.
+        return { ok: true, message: `${path} not in worktree diff list` }
+      },
+      'continue-operation': async () => {
+        const operation = context.operation?.operation
+        if (!operation || operation === 'none') {
+          return { ok: false, message: 'No git operation in progress' }
+        }
+        if ((context.operation?.conflictedFiles.length ?? 0) > 0) {
+          return { ok: false, message: 'Resolve all conflicts before continuing' }
+        }
+        return continueOperation(git, operation)
+      },
       'open-pr': async () => {
         const repo = context.provider?.repository
         if (!repo || repo.provider !== 'github' || !repo.owner || !repo.name) {
@@ -2453,6 +2494,13 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ? selected?.hash
         : undefined,
       worktreeDirty,
+      conflictFileCount: context.operation?.conflictedFiles.length,
+      conflictSelectedPath: (() => {
+        const files = context.operation?.conflictedFiles
+        if (!files || files.length === 0) return undefined
+        const clamped = Math.min(state.selectedConflictFileIndex, files.length - 1)
+        return files[clamped]?.path
+      })(),
       // H / gH need the actual diff text (not just hunk offsets) to
       // slice the cursored hunk into a `git apply` patch. Stash uses
       // the full `git stash show -p` output; commit-diff uses the
@@ -2991,6 +3039,10 @@ function renderMainPanel(
     return renderPullRequestSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
+  if (state.activeView === 'conflicts') {
+    return renderConflictsSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
   return renderHistoryPanel(
     h,
     components,
@@ -3270,6 +3322,116 @@ function buildStatusSurfaceRows(groups: WorktreeFileGroup[]): StatusSurfaceRow[]
     })
   }
   return rows
+}
+
+function renderConflictsSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const loading = isLogInkContextKeyLoading(contextStatus, 'operation')
+  const operation = context.operation
+  const conflictedFiles = operation?.conflictedFiles || []
+  const operationType = operation?.operation || 'none'
+
+  // If no operation is in progress, show a fallback message.
+  if (!loading && operationType === 'none') {
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexShrink: 0,
+      paddingX: 1,
+      width,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle('Conflicts', focused)),
+      h(Text, { dimColor: true }, 'no operation in progress')
+    ),
+    h(Text, { key: 'conflicts-empty', dimColor: true },
+      'No merge, rebase, cherry-pick, or revert in progress.'
+    ))
+  }
+
+  // All conflicts resolved — show the "continue" hint.
+  if (!loading && conflictedFiles.length === 0 && operationType !== 'none') {
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexShrink: 0,
+      paddingX: 1,
+      width,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle('Conflicts', focused)),
+      h(Text, { dimColor: true }, `${operationType} — all conflicts resolved`)
+    ),
+    h(Text, { key: 'conflicts-hint', dimColor: true },
+      `All conflicts resolved. Press C to continue the ${operationType}, or < to go back.`
+    ))
+  }
+
+  const selected = Math.max(0, Math.min(state.selectedConflictFileIndex, Math.max(0, conflictedFiles.length - 1)))
+  const listRows = Math.max(4, bodyRows - 4)
+  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const visible = conflictedFiles.slice(startIndex, startIndex + listRows)
+  const remaining = conflictedFiles.length
+  const headerRight = loading
+    ? 'loading conflicts'
+    : `${operationType} — ${remaining} ${remaining === 1 ? 'conflict' : 'conflicts'} remaining`
+
+  const statusLabel = (file: { indexStatus: string; worktreeStatus: string }): string => {
+    const code = `${file.indexStatus}${file.worktreeStatus}`
+    switch (code) {
+      case 'UU': return 'both modified'
+      case 'AA': return 'added by both'
+      case 'DD': return 'both deleted'
+      case 'AU': case 'UA': return 'added by one'
+      case 'DU': return 'deleted by us'
+      case 'UD': return 'deleted by them'
+      default: return code
+    }
+  }
+
+  const lines: ReactTypes.ReactNode[] = loading
+    ? [h(Text, { key: 'conflicts-loading', dimColor: true }, formatLogInkLoading({ resource: 'conflicts' }))]
+    : visible.map((file, offset) => {
+      const index = startIndex + offset
+      const isSelected = index === selected
+      const cursor = isSelected ? '>' : ' '
+      const code = `${file.indexStatus}${file.worktreeStatus}`
+      const label = statusLabel(file)
+      return h(Text, {
+        key: `conflict-${index}`,
+        bold: isSelected,
+        dimColor: !isSelected,
+      }, truncate(
+        `${cursor} ${code} ${file.path}  (${label})`,
+        width - 4
+      ))
+    })
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexShrink: 0,
+    paddingX: 1,
+    width,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Conflicts', focused)),
+    h(Text, { dimColor: true }, headerRight)
+  ),
+  ...lines)
 }
 
 function renderStatusSurface(

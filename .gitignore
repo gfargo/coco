@@ -59,3 +59,10 @@ commitlint.config.js
 
 # Internal specs, audits, and design docs
 specs/
+
+# Diff-condensing benchmark output (#845). Per-run files are local
+# noise; the committed baseline lives at .bench/baseline.json so PR
+# perf claims have a reference point. Telemetry sidecar from
+# COCO_BENCH=1 stays local too.
+.bench/run-*.json
+.coco-bench.json

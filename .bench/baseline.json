@@ -1,0 +1,40 @@
+{
+  "capturedAt": "2026-05-05T15:06:12.102Z",
+  "node": "v22.13.0",
+  "platform": "darwin-arm64",
+  "options": {
+    "baseLatencyMs": 1500,
+    "perTokenMs": 2,
+    "maxConcurrent": 6,
+    "maxTokens": 2048
+  },
+  "results": [
+    {
+      "fixture": "tiny",
+      "fileCount": 5,
+      "approxTokens": 790,
+      "durationMs": 2,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0
+    },
+    {
+      "fixture": "medium",
+      "fileCount": 25,
+      "approxTokens": 36150,
+      "durationMs": 30213,
+      "llmCalls": 20,
+      "llmTotalMs": 102723,
+      "llmTotalPromptTokens": 91766
+    },
+    {
+      "fixture": "large",
+      "fileCount": 50,
+      "approxTokens": 83410,
+      "durationMs": 70048,
+      "llmCalls": 41,
+      "llmTotalMs": 236818,
+      "llmTotalPromptTokens": 220199
+    }
+  ]
+}

@@ -1,16 +1,16 @@
 import { GitLogRow } from './data'
 import {
-  DEFAULT_LOG_INK_STATUS_FILTER_MASK,
-  applyLogInkAction,
-  createLogInkState,
-  getLogInkSidebarTabs,
-  getSelectedInkCommit,
-  intentGoHome,
-  intentOpenComposeForFile,
-  intentOpenDiffForCommit,
-  intentOpenDiffForWorktreeFile,
-  parseLogInkHistoryFetchPrefix,
-  scoreLogInkCommitFilter,
+    DEFAULT_LOG_INK_STATUS_FILTER_MASK,
+    applyLogInkAction,
+    createLogInkState,
+    getLogInkSidebarTabs,
+    getSelectedInkCommit,
+    intentGoHome,
+    intentOpenComposeForFile,
+    intentOpenDiffForCommit,
+    intentOpenDiffForWorktreeFile,
+    parseLogInkHistoryFetchPrefix,
+    scoreLogInkCommitFilter,
 } from './inkViewModel'
 
 const rows: GitLogRow[] = [
@@ -1148,6 +1148,44 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, { type: 'replaceRows', rows })
       expect(state.bootLoading).toBe(false)
       expect(state.commits.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('conflicts view', () => {
+    it('initializes selectedConflictFileIndex to 0', () => {
+      const state = createLogInkState(rows)
+      expect(state.selectedConflictFileIndex).toBe(0)
+    })
+
+    it('moves the conflict file cursor within bounds', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveConflictFile', delta: 1, count: 5 })
+      expect(state.selectedConflictFileIndex).toBe(1)
+      state = applyLogInkAction(state, { type: 'moveConflictFile', delta: 1, count: 5 })
+      expect(state.selectedConflictFileIndex).toBe(2)
+    })
+
+    it('clamps the conflict file cursor at list bounds', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveConflictFile', delta: -1, count: 3 })
+      expect(state.selectedConflictFileIndex).toBe(0)
+      state = applyLogInkAction(state, { type: 'moveConflictFile', delta: 10, count: 3 })
+      expect(state.selectedConflictFileIndex).toBe(2)
+    })
+
+    it('pushes the conflicts view onto the navigation stack', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+      expect(state.activeView).toBe('conflicts')
+      expect(state.viewStack).toEqual(['history', 'conflicts'])
+    })
+
+    it('pops back from the conflicts view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+      state = applyLogInkAction(state, { type: 'popView' })
+      expect(state.activeView).toBe('history')
+      expect(state.viewStack).toEqual(['history'])
     })
   })
 })

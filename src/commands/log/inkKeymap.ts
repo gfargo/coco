@@ -1,8 +1,8 @@
 import { LogInkFocus, LogInkView } from './inkViewModel'
 import {
-  LogInkWorkflowAction,
-  LogInkWorkflowActionKind,
-  getLogInkWorkflowActions,
+    LogInkWorkflowAction,
+    LogInkWorkflowActionKind,
+    getLogInkWorkflowActions,
 } from './inkWorkflows'
 
 export type LogInkCommandId =
@@ -20,6 +20,7 @@ export type LogInkCommandId =
   | 'navigateBack'
   | 'navigateBranches'
   | 'navigateCompose'
+  | 'navigateConflicts'
   | 'navigateDiff'
   | 'navigateHome'
   | 'navigatePullRequest'
@@ -257,6 +258,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'navigateConflicts',
+    keys: ['gx'],
+    label: 'conflicts',
+    description: 'Push the conflict resolution helper view (available during merge/rebase/cherry-pick/revert).',
+    contexts: ['normal'],
+  },
+  {
     id: 'navigateBack',
     keys: ['<', 'esc'],
     label: 'back',
@@ -433,6 +441,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateStash',
   'navigateWorktrees',
   'navigatePullRequest',
+  'navigateConflicts',
   'navigateBack',
 ]
 
@@ -621,6 +630,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
       // a global). Each routes through y-confirm or an input prompt;
       // none fire silently.
       contextual: ['m merge', 'x close', 'a approve', 'R changes', 'c comment', 'O open', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'conflicts') {
+    return {
+      contextual: ['↑/↓ files', 'enter diff', 's stage', 'u theirs', 'U ours', 'o edit', 'C continue*', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
