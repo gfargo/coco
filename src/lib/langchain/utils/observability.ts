@@ -1,3 +1,6 @@
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+
 import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
 
@@ -14,6 +17,27 @@ export type LlmCallMetadata = {
   inputDocuments?: number
   inputChunks?: number
 }
+
+/**
+ * Bench-mode call record (#845). Captured for every LLM call when
+ * `COCO_BENCH=1` (or a path) is set, then flushed to disk by
+ * `flushLlmBenchRun` at the end of the command. The structure stays
+ * narrow on purpose — fields the runner actually compares before /
+ * after, nothing more — so different runs with different model /
+ * provider mixes can still diff against the baseline cleanly.
+ */
+type LlmBenchCall = {
+  task: string
+  command?: string
+  provider?: string
+  model?: string
+  promptTokens?: number
+  elapsedMs?: number
+  inputDocuments?: number
+  inputChunks?: number
+}
+
+const benchCalls: LlmBenchCall[] = []
 
 type LlmTelemetrySummary = {
   calls: number
@@ -40,10 +64,29 @@ export function estimatePromptTokens(
   }
 }
 
+function isBenchModeActive(): boolean {
+  return Boolean(process.env.COCO_BENCH && process.env.COCO_BENCH !== '0')
+}
+
+function recordBenchCall(metadata: LlmCallMetadata): void {
+  if (!isBenchModeActive()) return
+  benchCalls.push({
+    task: metadata.task,
+    command: metadata.command,
+    provider: metadata.provider,
+    model: metadata.model,
+    promptTokens: metadata.promptTokens,
+    elapsedMs: metadata.elapsedMs,
+    inputDocuments: metadata.inputDocuments,
+    inputChunks: metadata.inputChunks,
+  })
+}
+
 export function logLlmCall(logger: Logger | undefined, metadata: LlmCallMetadata): void {
   if (!logger) return
 
   recordLlmTelemetry(metadata)
+  recordBenchCall(metadata)
 
   const fields = [
     `task=${metadata.task}`,
@@ -113,4 +156,95 @@ export function logLlmTelemetrySummary(logger: Logger | undefined, command: stri
 
 export function resetLlmTelemetry(): void {
   telemetryByCommand.clear()
+  benchCalls.length = 0
+}
+
+export type LlmBenchRunStage = {
+  name: string
+  elapsedMs: number
+}
+
+export type LlmBenchRunRecord = {
+  command?: string
+  totalElapsedMs?: number
+  stages?: LlmBenchRunStage[]
+  callCount: number
+  totalLlmElapsedMs: number
+  totalPromptTokens: number
+  calls: LlmBenchCall[]
+}
+
+/**
+ * Build the in-memory bench run record from accumulated calls.
+ * Pure (no I/O) so callers can inspect or assert the contents without
+ * touching disk — useful in tests + the in-process benchmark runner.
+ */
+export function buildLlmBenchRun(
+  options: {
+    command?: string
+    totalElapsedMs?: number
+    stages?: LlmBenchRunStage[]
+  } = {}
+): LlmBenchRunRecord {
+  const calls = benchCalls.slice()
+  return {
+    command: options.command,
+    totalElapsedMs: options.totalElapsedMs,
+    stages: options.stages,
+    callCount: calls.length,
+    totalLlmElapsedMs: calls.reduce((sum, call) => sum + (call.elapsedMs || 0), 0),
+    totalPromptTokens: calls.reduce((sum, call) => sum + (call.promptTokens || 0), 0),
+    calls,
+  }
+}
+
+/**
+ * Persist the current bench run to a JSON file. No-op when bench
+ * mode is inactive (so production runs don't pay for disk I/O).
+ *
+ * The file path comes from `COCO_BENCH_FILE` if set, otherwise
+ * defaults to `<cwd>/.coco-bench.json`. Each call appends to the
+ * `runs` array of the file (creates the file if missing) so a single
+ * benchmark session that triggers multiple commands ends up with one
+ * file containing the full sequence.
+ *
+ * Best-effort: write failures are swallowed silently. The bench
+ * runner reports back the failure mode via the return value.
+ */
+export function flushLlmBenchRun(
+  options: {
+    command?: string
+    totalElapsedMs?: number
+    stages?: LlmBenchRunStage[]
+  } = {}
+): { ok: boolean; filePath?: string; error?: string } {
+  if (!isBenchModeActive()) {
+    return { ok: false, error: 'COCO_BENCH not set' }
+  }
+
+  const record = buildLlmBenchRun(options)
+  const filePath = path.resolve(process.env.COCO_BENCH_FILE || path.join(process.cwd(), '.coco-bench.json'))
+
+  try {
+    let existing: { runs: LlmBenchRunRecord[] } = { runs: [] }
+    if (fs.existsSync(filePath)) {
+      try {
+        const raw = fs.readFileSync(filePath, 'utf8')
+        const parsed = JSON.parse(raw)
+        if (parsed && Array.isArray(parsed.runs)) {
+          existing = parsed
+        }
+      } catch {
+        // Corrupt or pre-existing non-bench file: overwrite with a
+        // fresh structure. Bench mode is opt-in; collisions here are
+        // a developer-only concern.
+      }
+    }
+    existing.runs.push(record)
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2))
+    benchCalls.length = 0
+    return { ok: true, filePath }
+  } catch (error) {
+    return { ok: false, error: (error as Error).message }
+  }
 }
