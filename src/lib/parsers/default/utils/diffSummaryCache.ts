@@ -55,12 +55,11 @@ function resolveCacheDir(): string {
 }
 
 function repoKey(repoPath: string): string {
-  // sha1 here is a non-security cache-key derivation — deterministic
+  // sha256 here is a non-security cache-key derivation — deterministic
   // short identifier for the cache filename so two repos at different
-  // paths never collide. No PII or auth context is hashed; no
-  // collision-resistance against an adversary is required.
-  // DevSkim: ignore DS126858
-  return crypto.createHash('sha1').update(repoPath).digest('hex').slice(0, 16)
+  // paths never collide. We truncate to 16 chars; collision-resistance
+  // against an adversary is not required.
+  return crypto.createHash('sha256').update(repoPath).digest('hex').slice(0, 16)
 }
 
 export function getDiffSummaryCachePath(repoPath: string): string {
