@@ -2,6 +2,7 @@ import { FileDiff, DiffNode } from '../../../types'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
 import { TokenCounter } from '../../../utils/tokenizer'
 import { Logger } from '../../../utils/logger'
+import { summarizeTrivialDiff } from './trivialDiff'
 
 export type SummarizeLargeFilesOptions = {
   /**
@@ -22,6 +23,14 @@ export type SummarizeLargeFilesOptions = {
 
 /**
  * Summarize a single file diff that exceeds the token threshold.
+ *
+ * Trivial-shape short-circuit (#845, PR 2): pure additions / deletions
+ * / renames / binary changes have no information content beyond the
+ * diff's shape, so we templated-summarize them instead of paying for
+ * an LLM call. On initial-commit fixtures (lots of pure adds) this
+ * collapses the per-file summary phase entirely; the resulting tiny
+ * synthetic summaries usually drop the directory token totals under
+ * budget so wave consolidation skips too.
  */
 async function summarizeFileDiff(
   fileDiff: FileDiff,
@@ -33,6 +42,19 @@ async function summarizeFileDiff(
     metadata,
   }: Pick<SummarizeLargeFilesOptions, 'chain' | 'textSplitter' | 'tokenizer' | 'logger' | 'metadata'>
 ): Promise<FileDiff> {
+  const trivialSummary = summarizeTrivialDiff(fileDiff)
+  if (trivialSummary !== undefined) {
+    logger.verbose(
+      ` - ${fileDiff.file}: trivial-shape skip (no LLM call)`,
+      { color: 'gray' }
+    )
+    return {
+      ...fileDiff,
+      diff: trivialSummary,
+      tokenCount: tokenizer(trivialSummary),
+    }
+  }
+
   try {
     const fileSummary = await summarize(
       [
