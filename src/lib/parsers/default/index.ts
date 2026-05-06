@@ -49,10 +49,17 @@ export async function fileChangeParser({
   // 1. Pre-process large files to prevent bias
   // 2. Group by directory and assess token count
   // 3. Wave-based parallel summarization until under budget
+  //
+  // The 4096 fallback (#845) matches the default service configs
+  // for openai / anthropic / ollama (`langchain/utils.ts`). It's a
+  // safety net for users with custom service definitions that omit
+  // `tokenLimit` — without it those users hit a degenerate 2048
+  // budget that triggers needless pre-summarization on diffs the
+  // model could absorb whole.
   logger.startTimer()
   const summary = await summarizeDiffs(diffs, {
     tokenizer,
-    maxTokens: maxTokens || 2048,
+    maxTokens: maxTokens || 4096,
     minTokensForSummary,
     maxFileTokens,
     maxConcurrent,

@@ -1,19 +1,19 @@
 {
-  "capturedAt": "2026-05-06T00:45:56.229Z",
+  "capturedAt": "2026-05-06T00:58:34.994Z",
   "node": "v22.13.0",
   "platform": "darwin-arm64",
   "options": {
     "baseLatencyMs": 1500,
     "perTokenMs": 2,
     "maxConcurrent": 6,
-    "maxTokens": 2048
+    "maxTokens": 4096
   },
   "results": [
     {
       "fixture": "tiny",
       "fileCount": 5,
       "approxTokens": 790,
-      "durationMs": 1,
+      "durationMs": 2,
       "llmCalls": 0,
       "llmTotalMs": 0,
       "llmTotalPromptTokens": 0
@@ -22,55 +22,55 @@
       "fixture": "medium",
       "fileCount": 25,
       "approxTokens": 36150,
-      "durationMs": 31137,
-      "llmCalls": 20,
-      "llmTotalMs": 106348,
-      "llmTotalPromptTokens": 34237
+      "durationMs": 29267,
+      "llmCalls": 19,
+      "llmTotalMs": 109679,
+      "llmTotalPromptTokens": 36895
     },
     {
       "fixture": "large",
       "fileCount": 50,
       "approxTokens": 83410,
-      "durationMs": 72093,
-      "llmCalls": 41,
-      "llmTotalMs": 244101,
-      "llmTotalPromptTokens": 74197
+      "durationMs": 59992,
+      "llmCalls": 30,
+      "llmTotalMs": 228089,
+      "llmTotalPromptTokens": 74609
     },
     {
       "fixture": "feature-add",
       "fileCount": 14,
       "approxTokens": 17600,
-      "durationMs": 15967,
+      "durationMs": 19591,
       "llmCalls": 11,
-      "llmTotalMs": 54727,
-      "llmTotalPromptTokens": 18937
+      "llmTotalMs": 59354,
+      "llmTotalPromptTokens": 20707
     },
     {
       "fixture": "refactor",
       "fileCount": 30,
       "approxTokens": 32650,
-      "durationMs": 33999,
-      "llmCalls": 28,
-      "llmTotalMs": 153888,
-      "llmTotalPromptTokens": 52430
+      "durationMs": 41340,
+      "llmCalls": 20,
+      "llmTotalMs": 143983,
+      "llmTotalPromptTokens": 53548
     },
     {
       "fixture": "initial-commit",
       "fileCount": 50,
       "approxTokens": 83410,
-      "durationMs": 72285,
-      "llmCalls": 41,
-      "llmTotalMs": 245148,
-      "llmTotalPromptTokens": 74546
+      "durationMs": 60034,
+      "llmCalls": 30,
+      "llmTotalMs": 229291,
+      "llmTotalPromptTokens": 74948
     },
     {
       "fixture": "docs-update",
       "fileCount": 9,
       "approxTokens": 15050,
-      "durationMs": 18570,
-      "llmCalls": 8,
-      "llmTotalMs": 56293,
-      "llmTotalPromptTokens": 13908
+      "durationMs": 18563,
+      "llmCalls": 7,
+      "llmTotalMs": 52225,
+      "llmTotalPromptTokens": 13139
     },
     {
       "fixture": "dep-bump",

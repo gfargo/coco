@@ -247,7 +247,15 @@ export async function summarizeDiffs(
   {
     tokenizer,
     logger,
-    maxTokens = 2048,
+    // Default raised to 4096 (#845) so the budget matches the
+    // canonical service configs in `langchain/utils.ts`. The
+    // previous 2048 default came from an earlier era when 4k
+    // context was a stretch for fast models; today every shipped
+    // service overrides it to 4096 anyway. Keeping this in sync
+    // with the service defaults means a caller that omits
+    // `maxTokens` doesn't accidentally fall into a tighter budget
+    // than the rest of the system assumes.
+    maxTokens = 4096,
     minTokensForSummary = 400,
     maxFileTokens,
     maxConcurrent = 6,
