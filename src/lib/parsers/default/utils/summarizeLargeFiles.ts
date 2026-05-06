@@ -1,8 +1,23 @@
 import { FileDiff, DiffNode } from '../../../types'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
+import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
 import { TokenCounter } from '../../../utils/tokenizer'
 import { Logger } from '../../../utils/logger'
+import {
+  diffSummaryKey,
+  readDiffSummary,
+  touchDiffSummary,
+  writeDiffSummary,
+} from './diffSummaryCache'
 import { summarizeTrivialDiff } from './trivialDiff'
+
+/**
+ * Cache opt-out: COCO_NO_CACHE=1 disables both reads and writes
+ * for the diff-summary cache (#845, PR 5). Default is enabled.
+ */
+function isCacheEnabled(): boolean {
+  return !process.env.COCO_NO_CACHE || process.env.COCO_NO_CACHE === '0'
+}
 
 export type SummarizeLargeFilesOptions = {
   /**
@@ -55,6 +70,33 @@ async function summarizeFileDiff(
     }
   }
 
+  // Cache lookup (#845, PR 5). Keyed on the file's literal diff
+  // content + the active model + the summarization prompt hash.
+  // A hit returns the prior summary instantly; on iterative
+  // `coco commit` re-runs after small edits, the unchanged files
+  // never go to the LLM.
+  const cacheModel = typeof metadata?.model === 'string' ? metadata.model : undefined
+  const cacheRepo = process.cwd()
+  const cacheKey = isCacheEnabled() && cacheModel
+    ? diffSummaryKey(fileDiff.diff, cacheModel, SUMMARIZE_PROMPT_HASH)
+    : undefined
+
+  if (cacheKey) {
+    const cached = readDiffSummary(cacheRepo, cacheKey)
+    if (cached) {
+      logger.verbose(
+        ` - ${fileDiff.file}: cache hit (skipped LLM, ${cached.tokens} tokens)`,
+        { color: 'cyan' }
+      )
+      touchDiffSummary(cacheRepo, cacheKey)
+      return {
+        ...fileDiff,
+        diff: cached.summary,
+        tokenCount: cached.tokens,
+      }
+    }
+  }
+
   try {
     const fileSummary = await summarize(
       [
@@ -82,6 +124,14 @@ async function summarizeFileDiff(
     )
 
     const newTokenCount = tokenizer(fileSummary)
+
+    if (cacheKey && cacheModel) {
+      writeDiffSummary(cacheRepo, cacheKey, {
+        summary: fileSummary,
+        model: cacheModel,
+        tokens: newTokenCount,
+      })
+    }
 
     return {
       ...fileDiff,

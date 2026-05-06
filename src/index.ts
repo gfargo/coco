@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import yargs from 'yargs'
+import cache from './commands/cache'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
 import doctor from './commands/doctor'
@@ -9,6 +10,7 @@ import recap from './commands/recap'
 import review from './commands/review'
 import ui from './commands/ui'
 
+import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
 import { DoctorOptions } from './commands/doctor/config'
@@ -80,6 +82,13 @@ y.command<UiOptions>(
   ui.handler
 )
 
+y.command<CacheOptions>(
+  cache.command,
+  cache.desc,
+  cache.builder,
+  cache.handler
+)
+
 y.help().parse(process.argv.slice(2))
 
-export { changelog, commit, Config, doctor, init, log, recap, types, ui }
+export { cache, changelog, commit, Config, doctor, init, log, recap, types, ui }
