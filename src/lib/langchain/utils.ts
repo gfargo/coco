@@ -103,7 +103,12 @@ export function getDefaultServiceApiKey(config: Config): string {
 
 export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   provider: 'openai',
-  model: 'gpt-4o-mini',
+  // Bumped from `gpt-4o-mini` to `gpt-4.1-nano` (#854). Diff
+  // condensing is bounded summarization — the cheaper / faster
+  // tier is the right default for it; quality is on par for this
+  // class of task. Users who want the older 4o-mini can still
+  // override via service config.
+  model: 'gpt-4.1-nano',
   tokenLimit: 4096,
   temperature: 0.32,
   maxConcurrent: 12,
@@ -119,7 +124,13 @@ export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
 
 export const DEFAULT_ANTHROPIC_LLM_SERVICE: AnthropicLLMService = {
   provider: 'anthropic',
-  model: 'claude-3-5-sonnet-20240620',
+  // Bumped from `claude-3-5-sonnet-20240620` to
+  // `claude-haiku-4-5-20251001` (#854). The Sonnet 3.5 default
+  // was nearly two model generations stale; Haiku 4.5 is the
+  // current fast tier and the right fit for diff summarization.
+  // Users who want Sonnet for quality-sensitive runs can still
+  // override via service config (recommended: `claude-sonnet-4-6`).
+  model: 'claude-haiku-4-5-20251001',
   temperature: 0.32,
   tokenLimit: 4096,
   maxConcurrent: 12,

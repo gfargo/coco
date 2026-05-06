@@ -518,6 +518,10 @@ export const schema = {
     "AnthropicModel": {
       "type": "string",
       "enum": [
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
+        "claude-haiku-4-5",
+        "claude-opus-4-7",
         "claude-sonnet-4-0",
         "claude-3-7-sonnet-latest",
         "claude-3-5-haiku-latest",
