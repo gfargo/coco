@@ -20,6 +20,64 @@ export type SummarizeContext = {
   metadata?: Partial<LlmCallMetadata>
 }
 
+/**
+ * Adaptive backoff (#845, PR 3). Wraps the chain invocation so a
+ * transient 429 (rate limit) or 5xx no longer kills the whole
+ * pipeline — instead we wait briefly and retry up to N times
+ * before surfacing the failure.
+ *
+ * Cap is intentionally short. Diff condensing fans out to many
+ * concurrent calls; if rate limits hit hard, queueing requests
+ * indefinitely just makes the user wait longer for a result the
+ * pipeline ultimately handles via fewer concurrent passes anyway.
+ * 3 retries with 1s/2s/4s waits trade ~7s of worst-case extra
+ * latency for resilience to brief rate-limit blips.
+ */
+const BACKOFF_RETRIES = 3
+const BACKOFF_BASE_MS = 1000
+const BACKOFF_CAP_MS = 5000
+
+function isRetryableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { status?: number; code?: string | number; message?: string }
+  if (err.status === 429 || err.status === 503 || err.status === 502 || err.status === 504) {
+    return true
+  }
+  if (err.code === 429 || err.code === 'rate_limit_exceeded' || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
+    return true
+  }
+  if (typeof err.message === 'string' && /(rate.?limit|429|too many requests|timeout|temporarily unavailable)/i.test(err.message)) {
+    return true
+  }
+  return false
+}
+
+async function invokeWithBackoff(
+  chain: SummarizeContext['chain'],
+  input: { input_documents: Document[]; returnIntermediateSteps: boolean },
+  logger: Logger | undefined
+): Promise<{ text: string; error?: string }> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= BACKOFF_RETRIES; attempt++) {
+    try {
+      return await chain.invoke(input) as { text: string; error?: string }
+    } catch (error) {
+      lastError = error
+      if (!isRetryableError(error) || attempt === BACKOFF_RETRIES) {
+        throw error
+      }
+      const wait = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * Math.pow(2, attempt))
+      logger?.verbose(
+        `[summarize] retryable error (attempt ${attempt + 1}/${BACKOFF_RETRIES}); backing off ${wait}ms`,
+        { color: 'yellow' }
+      )
+      await new Promise((resolve) => setTimeout(resolve, wait))
+    }
+  }
+  // Unreachable — the loop either returns or rethrows above.
+  throw lastError
+}
+
 export async function summarize(
   documents: DocumentInput[],
   { chain, textSplitter, options, logger, tokenizer, metadata }: SummarizeContext
@@ -32,10 +90,10 @@ export async function summarize(
     : undefined
 
   const startedAt = Date.now()
-  const res = await chain.invoke({
+  const res = await invokeWithBackoff(chain, {
     input_documents: docs,
     returnIntermediateSteps,
-  })
+  }, logger)
   const elapsedMs = Date.now() - startedAt
 
   logLlmCall(logger, {

@@ -70,11 +70,13 @@ const DEFAULT_OPTIONS: BenchOptions = {
   // multi-thousand-token inputs. Adjust if real-world timings drift.
   baseLatencyMs: 1500,
   perTokenMs: 2,
-  maxConcurrent: 6,
+  // Match the canonical service maxConcurrent from
+  // `langchain/utils.ts` (raised 12 → 24 in PR 3 of #845). The
+  // bench mirrors the most-common production setting so per-PR
+  // diffs reflect what real users see.
+  maxConcurrent: 24,
   // Match the canonical service tokenLimit from `langchain/utils.ts`
-  // (raised from 2048 to 4096 in PR 1 of #845). The bench mirrors
-  // the most-common production budget so per-PR diffs reflect what
-  // real users will see.
+  // (raised from 2048 to 4096 in PR 1 of #845).
   maxTokens: 4096,
 }
 
