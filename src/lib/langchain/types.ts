@@ -20,7 +20,14 @@ export type OpenAIModel =
   | 'gpt-4.1-nano'
 
 export type AnthropicModel =
+  // Current generation (recommended for new users)
+  | 'claude-sonnet-4-6'
+  | 'claude-haiku-4-5-20251001'
+  | 'claude-haiku-4-5'
+  | 'claude-opus-4-7'
+  // Earlier 4.x line
   | 'claude-sonnet-4-0'
+  // Pre-4.x (kept for users with existing service config pinned to these)
   | 'claude-3-7-sonnet-latest'
   | 'claude-3-5-haiku-latest'
   | 'claude-3-5-sonnet-latest'
