@@ -1,5 +1,6 @@
 import { BaseArgvOptions, BaseCommandOptions } from '../../../commands/types'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
+import { DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../constants'
 import { loadConfig } from './loadConfig'
 import * as fs from 'fs'
 
@@ -63,5 +64,39 @@ describe('loadConfig', () => {
     // Cleanup
     delete process.env.OPENAI_API_KEY
     delete process.env.COCO_TOKEN_LIMIT
+  })
+
+  it('keeps default ignored files / extensions when project config provides only a subset (#851)', () => {
+    // Repro for #851: a user's `.coco.config.json` that includes
+    // ignoredExtensions but omits the lockfile entries used to wipe
+    // the canonical defaults. The merge step in loadConfig keeps the
+    // defaults regardless of what the user provides.
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath
+        ? ['.coco.config.json'].includes(filepath.toString())
+        : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === '.coco.config.json') {
+        return JSON.stringify({
+          ignoredExtensions: ['.snap'],
+          ignoredFiles: ['mySecret.json'],
+        })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
+
+    // User additions are preserved.
+    expect(config.ignoredExtensions).toContain('.snap')
+    expect(config.ignoredFiles).toContain('mySecret.json')
+    // Defaults are still present — this is the bug fix.
+    for (const ext of DEFAULT_IGNORED_EXTENSIONS) {
+      expect(config.ignoredExtensions).toContain(ext)
+    }
+    for (const fileName of DEFAULT_IGNORED_FILES) {
+      expect(config.ignoredFiles).toContain(fileName)
+    }
   })
 })
