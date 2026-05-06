@@ -90,21 +90,44 @@ type BenchResult = {
   llmTotalPromptTokens: number
 }
 
+/**
+ * Deterministic hash of the chain input. Used to derive per-call
+ * latency variance so the bench mirrors real-world LLM tail
+ * behavior without sacrificing reproducibility (same input ⇒ same
+ * latency every run).
+ */
+function inputHash(documents: Document[]): number {
+  const sample = documents.map((doc) => doc.pageContent).join('')
+  let h = 5381
+  for (let i = 0; i < sample.length; i++) {
+    h = ((h << 5) + h + sample.charCodeAt(i)) >>> 0
+  }
+  return h
+}
+
 function mockChain(options: BenchOptions): unknown {
   // Duck-typed chain that satisfies the .invoke() shape
-  // `summarize()` expects. Latency is deterministic so before/after
-  // runs are directly comparable.
+  // `summarize()` expects.
+  //
+  // Latency model (#845, PR 4): a base + per-token term, plus a
+  // deterministic tail-variance multiplier. ~10% of calls land in
+  // a 3x slow bucket and ~3% in a 6x slow bucket, mirroring the
+  // real-world LLM behavior the user's #845 verbose log exhibited
+  // (one 98 s call dominating an otherwise-fast wave). The
+  // multiplier is keyed on the input hash so the same call shape
+  // always gets the same latency — bench remains reproducible
+  // while surfacing scheduler pathologies the uniform model hid.
   return {
     invoke: async (input: { input_documents: Document[] }) => {
       const totalChars = input.input_documents.reduce(
         (sum, doc) => sum + doc.pageContent.length,
         0
       )
-      // Approximate token count from chars/4 — enough fidelity for
-      // the latency model. The pipeline's real tokenizer counts
-      // separately for telemetry.
       const approxTokens = Math.floor(totalChars / 4)
-      const latencyMs = options.baseLatencyMs + Math.floor(approxTokens * options.perTokenMs)
+      const baseLatency = options.baseLatencyMs + Math.floor(approxTokens * options.perTokenMs)
+      const bucket = inputHash(input.input_documents) % 100
+      const tailMultiplier = bucket < 3 ? 6 : bucket < 13 ? 3 : 1
+      const latencyMs = baseLatency * tailMultiplier
       await new Promise((resolve) => setTimeout(resolve, latencyMs))
       return { text: `[mock summary of ${input.input_documents.length} doc(s), ~${approxTokens} tokens]` }
     },

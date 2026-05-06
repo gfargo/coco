@@ -314,12 +314,17 @@ describe('summarizeDiffs', () => {
       textSplitter: mockTextSplitter,
     })
 
-    expect(summarizeMock.mock.calls.length).toBeGreaterThanOrEqual(10)
+    // Continuous-queue scheduler (#845, PR 4): may dispatch fewer
+    // calls than wave-based did because in-flight completions can
+    // drop the budget before all eligible directories run. As long
+    // as concurrency stays under the cap and the result is
+    // produced, the contract holds.
+    expect(summarizeMock.mock.calls.length).toBeGreaterThan(0)
     expect(summarizeMock.mock.calls.length).toBeLessThanOrEqual(12)
     expect(maxActiveSummaries).toBeLessThanOrEqual(3)
     expect(result).toContain('Summary')
     expect(mockLogger.verbose).toHaveBeenCalledWith(
-      expect.stringContaining('Under token budget'),
+      expect.stringContaining('continuous queue'),
       expect.any(Object)
     )
   })

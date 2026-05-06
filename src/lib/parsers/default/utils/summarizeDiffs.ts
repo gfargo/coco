@@ -128,8 +128,28 @@ export type SummarizeDiffsOptions = {
 } & SummarizeContext
 
 /**
- * Process directory summarization in waves to respect concurrency limits
- * while maintaining predictable behavior.
+ * Continuous-queue scheduler for the directory summarization pass
+ * (#845, PR 4). The previous wave-by-wave Promise.all forced the
+ * scheduler to wait for the slowest call in a wave before starting
+ * the next wave; on a fixture like `refactor` (20 directories, mixed
+ * sizes) one big directory could pin the wave at ~its own latency
+ * even though the other 19 calls finished long before.
+ *
+ * The continuous queue dispatches all eligible directories through
+ * a `createLimit(maxConcurrent)` semaphore — same primitive
+ * `collectDiffs` already uses. As soon as any in-flight summary
+ * resolves, the next eligible directory takes its slot. Each
+ * scheduled call also re-checks the budget at the moment it would
+ * fire; if the budget is already met (because earlier completions
+ * dropped the total under maxTokens), it returns the original
+ * directory without an LLM call. So the work scales with what's
+ * actually needed, not with the worst-case wave count.
+ *
+ * Order discipline is preserved: directories are sorted by token
+ * count descending and dispatched in that order. The biggest
+ * candidates land in the first batch of in-flight calls; as smaller
+ * candidates reach the queue front, the budget is more likely to
+ * already be met and they short-circuit.
  */
 async function summarizeInWaves(
   directories: DirectoryDiff[],
@@ -156,77 +176,84 @@ async function summarizeInWaves(
   let totalTokenCount = initialTotal
   const results = [...directories]
 
-  // Create sorted indices by token count (descending) for prioritized processing
-  const sortedIndices = directories
+  // Pick eligible directories upfront, sorted big-first.
+  const eligibleIndices = directories
     .map((d, i) => ({ index: i, tokens: d.tokenCount }))
+    .filter((entry) => entry.tokens >= minTokensForSummary && !results[entry.index].summary)
     .sort((a, b) => b.tokens - a.tokens)
+    .map((entry) => entry.index)
 
-  let cursor = 0
-
-  while (totalTokenCount > maxTokens && cursor < sortedIndices.length) {
-    // Select wave candidates: directories that exceed minTokensForSummary
-    const wave: number[] = []
-
-    for (let i = cursor; i < sortedIndices.length && wave.length < maxConcurrent; i++) {
-      const { index, tokens } = sortedIndices[i]
-
-      // Skip directories below the minimum threshold
-      if (tokens < minTokensForSummary) {
-        cursor = i + 1
-        continue
-      }
-
-      // Skip directories that have already been summarized
-      if (results[index].summary) {
-        cursor = i + 1
-        continue
-      }
-
-      wave.push(index)
-      cursor = i + 1
-    }
-
-    // No more eligible candidates
-    if (wave.length === 0) {
-      break
-    }
-
-    logger.verbose(`\nProcessing wave of ${wave.length} directories...`, { color: 'blue' })
-
-    // Process wave in parallel
-    const waveResults = await Promise.all(
-      wave.map((idx) =>
-        summarizeDirectoryDiff(results[idx], { chain, textSplitter, tokenizer, logger, metadata })
-      )
-    )
-
-    // Update results and recalculate total
-    waveResults.forEach((result, i) => {
-      const idx = wave[i]
-      const originalTokens = results[idx].tokenCount
-      const newTokens = result.tokenCount
-      const reduction = originalTokens - newTokens
-
-      totalTokenCount -= reduction
-      results[idx] = result
-
-      logger.verbose(` • Summarized "/${result.path}": ${originalTokens} -> ${newTokens} tokens`, {
-        color: 'magenta',
-      })
-    })
-
-    logger.verbose(`Total token count: ${totalTokenCount}`, {
-      color: totalTokenCount > maxTokens ? 'yellow' : 'green',
-    })
-
-    // Check if we're now under budget
-    if (totalTokenCount <= maxTokens) {
-      logger.verbose(`Under token budget, stopping summarization.`, { color: 'green' })
-      break
-    }
+  if (eligibleIndices.length === 0 || totalTokenCount <= maxTokens) {
+    return { directories: results, totalTokenCount }
   }
 
+  const limit = createLimit(maxConcurrent)
+  logger.verbose(
+    `\nProcessing ${eligibleIndices.length} directories with continuous queue (concurrency ${maxConcurrent})...`,
+    { color: 'blue' }
+  )
+
+  await Promise.all(
+    eligibleIndices.map((idx) =>
+      limit(async () => {
+        // Re-check the budget at dispatch time. Earlier completions
+        // may have already dropped the total under the cap; in that
+        // case skip the LLM call entirely.
+        if (totalTokenCount <= maxTokens) {
+          return
+        }
+        const result = await summarizeDirectoryDiff(results[idx], {
+          chain,
+          textSplitter,
+          tokenizer,
+          logger,
+          metadata,
+        })
+        const originalTokens = results[idx].tokenCount
+        const newTokens = result.tokenCount
+        totalTokenCount -= (originalTokens - newTokens)
+        results[idx] = result
+        logger.verbose(` • Summarized "/${result.path}": ${originalTokens} -> ${newTokens} tokens`, {
+          color: 'magenta',
+        })
+      })
+    )
+  )
+
+  logger.verbose(`Total token count after continuous queue: ${totalTokenCount}`, {
+    color: totalTokenCount > maxTokens ? 'yellow' : 'green',
+  })
+
   return { directories: results, totalTokenCount }
+}
+
+/**
+ * Tiny semaphore mirroring `collectDiffs.createLimit` (kept private
+ * here to avoid a cross-module import for one helper). Schedules at
+ * most `maxConcurrent` operations concurrently; the rest queue FIFO.
+ */
+function createLimit(maxConcurrent: number) {
+  const limit = Math.max(1, maxConcurrent)
+  let active = 0
+  const queue: (() => void)[] = []
+
+  const runNext = () => {
+    active--
+    const next = queue.shift()
+    if (next) next()
+  }
+
+  return async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => queue.push(resolve))
+    }
+    active++
+    try {
+      return await operation()
+    } finally {
+      runNext()
+    }
+  }
 }
 
 /**

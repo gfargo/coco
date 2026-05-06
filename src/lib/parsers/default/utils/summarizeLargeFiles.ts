@@ -96,22 +96,46 @@ async function summarizeFileDiff(
 }
 
 /**
- * Process files in waves to respect concurrency limits.
+ * Continuous-queue scheduler (#845, PR 4). Mirrors the directory-
+ * level scheduler in `summarizeDiffs.ts` and replaces the previous
+ * fixed-wave Promise.all loop, which made the slowest call in
+ * each wave block the next wave from starting. With realistic LLM
+ * tail variance, that wave-locking adds dead time at every wave
+ * boundary; continuous queue fills slots as in-flight calls
+ * resolve, so the wall-clock tracks the slowest *call*, not the
+ * sum of slowest-per-wave.
  */
 async function processInWaves<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
   maxConcurrent: number
 ): Promise<R[]> {
-  const results: R[] = []
+  const limit = createLimit(maxConcurrent)
+  return Promise.all(items.map((item) => limit(() => processor(item))))
+}
 
-  for (let i = 0; i < items.length; i += maxConcurrent) {
-    const wave = items.slice(i, i + maxConcurrent)
-    const waveResults = await Promise.all(wave.map(processor))
-    results.push(...waveResults)
+function createLimit(maxConcurrent: number) {
+  const limit = Math.max(1, maxConcurrent)
+  let active = 0
+  const queue: (() => void)[] = []
+
+  const runNext = () => {
+    active--
+    const next = queue.shift()
+    if (next) next()
   }
 
-  return results
+  return async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => queue.push(resolve))
+    }
+    active++
+    try {
+      return await operation()
+    } finally {
+      runNext()
+    }
+  }
 }
 
 /**

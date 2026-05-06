@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-05-06T03:03:50.907Z",
+  "capturedAt": "2026-05-06T04:51:15.941Z",
   "node": "v22.13.0",
   "platform": "darwin-arm64",
   "options": {
@@ -22,54 +22,54 @@
       "fixture": "medium",
       "fileCount": 25,
       "approxTokens": 36150,
-      "durationMs": 6905,
+      "durationMs": 8502,
       "llmCalls": 6,
-      "llmTotalMs": 25222,
+      "llmTotalMs": 36155,
       "llmTotalPromptTokens": 8525
     },
     {
       "fixture": "large",
       "fileCount": 50,
       "approxTokens": 83410,
-      "durationMs": 9754,
+      "durationMs": 14413,
       "llmCalls": 7,
-      "llmTotalMs": 45865,
+      "llmTotalMs": 55470,
       "llmTotalPromptTokens": 17461
     },
     {
       "fixture": "feature-add",
       "fileCount": 14,
       "approxTokens": 17600,
-      "durationMs": 5641,
+      "durationMs": 13062,
       "llmCalls": 4,
-      "llmTotalMs": 18853,
+      "llmTotalMs": 27557,
       "llmTotalPromptTokens": 6117
     },
     {
       "fixture": "refactor",
       "fileCount": 30,
       "approxTokens": 32650,
-      "durationMs": 26718,
+      "durationMs": 51116,
       "llmCalls": 20,
-      "llmTotalMs": 143989,
+      "llmTotalMs": 187612,
       "llmTotalPromptTokens": 53548
     },
     {
       "fixture": "initial-commit",
       "fileCount": 50,
       "approxTokens": 83410,
-      "durationMs": 9816,
+      "durationMs": 16965,
       "llmCalls": 7,
-      "llmTotalMs": 45897,
+      "llmTotalMs": 57202,
       "llmTotalPromptTokens": 17107
     },
     {
       "fixture": "docs-update",
       "fileCount": 9,
       "approxTokens": 15050,
-      "durationMs": 10248,
+      "durationMs": 24384,
       "llmCalls": 7,
-      "llmTotalMs": 52224,
+      "llmTotalMs": 68468,
       "llmTotalPromptTokens": 13139
     },
     {
@@ -80,6 +80,15 @@
       "llmCalls": 0,
       "llmTotalMs": 0,
       "llmTotalPromptTokens": 0
+    },
+    {
+      "fixture": "monorepo",
+      "fileCount": 80,
+      "approxTokens": 159320,
+      "durationMs": 88957,
+      "llmCalls": 80,
+      "llmTotalMs": 921786,
+      "llmTotalPromptTokens": 249565
     }
   ]
 }
