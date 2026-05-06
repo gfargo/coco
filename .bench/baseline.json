@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-05-06T04:51:15.941Z",
+  "capturedAt": "2026-05-06T05:12:57.441Z",
   "node": "v22.13.0",
   "platform": "darwin-arm64",
   "options": {
@@ -16,61 +16,138 @@
       "durationMs": 2,
       "llmCalls": 0,
       "llmTotalMs": 0,
-      "llmTotalPromptTokens": 0
+      "llmTotalPromptTokens": 0,
+      "pass": "cold"
+    },
+    {
+      "fixture": "tiny",
+      "fileCount": 5,
+      "approxTokens": 790,
+      "durationMs": 1,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     },
     {
       "fixture": "medium",
       "fileCount": 25,
       "approxTokens": 36150,
-      "durationMs": 8502,
+      "durationMs": 8505,
       "llmCalls": 6,
-      "llmTotalMs": 36155,
-      "llmTotalPromptTokens": 8525
+      "llmTotalMs": 36162,
+      "llmTotalPromptTokens": 8525,
+      "pass": "cold"
+    },
+    {
+      "fixture": "medium",
+      "fileCount": 25,
+      "approxTokens": 36150,
+      "durationMs": 4,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     },
     {
       "fixture": "large",
       "fileCount": 50,
       "approxTokens": 83410,
-      "durationMs": 14413,
+      "durationMs": 14415,
       "llmCalls": 7,
-      "llmTotalMs": 55470,
-      "llmTotalPromptTokens": 17461
+      "llmTotalMs": 55466,
+      "llmTotalPromptTokens": 17461,
+      "pass": "cold"
+    },
+    {
+      "fixture": "large",
+      "fileCount": 50,
+      "approxTokens": 83410,
+      "durationMs": 6,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     },
     {
       "fixture": "feature-add",
       "fileCount": 14,
       "approxTokens": 17600,
-      "durationMs": 13062,
+      "durationMs": 13074,
       "llmCalls": 4,
-      "llmTotalMs": 27557,
-      "llmTotalPromptTokens": 6117
+      "llmTotalMs": 27556,
+      "llmTotalPromptTokens": 6117,
+      "pass": "cold"
+    },
+    {
+      "fixture": "feature-add",
+      "fileCount": 14,
+      "approxTokens": 17600,
+      "durationMs": 4,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     },
     {
       "fixture": "refactor",
       "fileCount": 30,
       "approxTokens": 32650,
-      "durationMs": 51116,
+      "durationMs": 51115,
       "llmCalls": 20,
-      "llmTotalMs": 187612,
-      "llmTotalPromptTokens": 53548
+      "llmTotalMs": 187600,
+      "llmTotalPromptTokens": 53548,
+      "pass": "cold"
+    },
+    {
+      "fixture": "refactor",
+      "fileCount": 30,
+      "approxTokens": 32650,
+      "durationMs": 5,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     },
     {
       "fixture": "initial-commit",
       "fileCount": 50,
       "approxTokens": 83410,
-      "durationMs": 16965,
+      "durationMs": 16962,
       "llmCalls": 7,
-      "llmTotalMs": 57202,
-      "llmTotalPromptTokens": 17107
+      "llmTotalMs": 57196,
+      "llmTotalPromptTokens": 17107,
+      "pass": "cold"
+    },
+    {
+      "fixture": "initial-commit",
+      "fileCount": 50,
+      "approxTokens": 83410,
+      "durationMs": 5,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     },
     {
       "fixture": "docs-update",
       "fileCount": 9,
       "approxTokens": 15050,
-      "durationMs": 24384,
+      "durationMs": 24385,
       "llmCalls": 7,
-      "llmTotalMs": 68468,
-      "llmTotalPromptTokens": 13139
+      "llmTotalMs": 68473,
+      "llmTotalPromptTokens": 13139,
+      "pass": "cold"
+    },
+    {
+      "fixture": "docs-update",
+      "fileCount": 9,
+      "approxTokens": 15050,
+      "durationMs": 3,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     },
     {
       "fixture": "dep-bump",
@@ -79,16 +156,38 @@
       "durationMs": 0,
       "llmCalls": 0,
       "llmTotalMs": 0,
-      "llmTotalPromptTokens": 0
+      "llmTotalPromptTokens": 0,
+      "pass": "cold"
+    },
+    {
+      "fixture": "dep-bump",
+      "fileCount": 2,
+      "approxTokens": 450,
+      "durationMs": 0,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     },
     {
       "fixture": "monorepo",
       "fileCount": 80,
       "approxTokens": 159320,
-      "durationMs": 88957,
+      "durationMs": 88956,
       "llmCalls": 80,
-      "llmTotalMs": 921786,
-      "llmTotalPromptTokens": 249565
+      "llmTotalMs": 921782,
+      "llmTotalPromptTokens": 249565,
+      "pass": "cold"
+    },
+    {
+      "fixture": "monorepo",
+      "fileCount": 80,
+      "approxTokens": 159320,
+      "durationMs": 29,
+      "llmCalls": 0,
+      "llmTotalMs": 0,
+      "llmTotalPromptTokens": 0,
+      "pass": "warm"
     }
   ]
 }

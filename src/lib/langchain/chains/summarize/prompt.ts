@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { PromptTemplate } from '@langchain/core/prompts'
 
 /**
@@ -24,3 +26,17 @@ export const SUMMARIZE_PROMPT = new PromptTemplate({
   inputVariables,
   template,
 })
+
+/**
+ * Stable fingerprint of the active summarization template (#845, PR 5).
+ *
+ * The diff-summary cache keys include this hash so any prompt edit
+ * invalidates prior cache entries automatically — no manual bumps,
+ * no stale outputs that no longer reflect the current prompt's voice
+ * or rules. Only the template body matters; whitespace differences
+ * still re-key the cache, which is the safe default.
+ */
+export const SUMMARIZE_PROMPT_HASH = createHash('sha256')
+  .update(template)
+  .digest('hex')
+  .slice(0, 16)

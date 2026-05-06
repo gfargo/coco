@@ -2,8 +2,23 @@ import { DirectoryDiff, DiffNode } from '../../../types'
 import { Logger } from '../../../utils/logger'
 import { getPathFromFilePath } from '../../../utils/getPathFromFilePath'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
+import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
 import { TokenCounter } from '../../../utils/tokenizer'
+import {
+  diffSummaryKey,
+  readDiffSummary,
+  touchDiffSummary,
+  writeDiffSummary,
+} from './diffSummaryCache'
 import { preprocessLargeFiles } from './summarizeLargeFiles'
+
+/**
+ * Cache opt-out: COCO_NO_CACHE=1 disables both reads and writes
+ * for the diff-summary cache (#845, PR 5). Default is enabled.
+ */
+function isCacheEnabled(): boolean {
+  return !process.env.COCO_NO_CACHE || process.env.COCO_NO_CACHE === '0'
+}
 
 /**
  * Create groups from a given node info.
@@ -42,6 +57,37 @@ export async function summarizeDirectoryDiff(
   directory: DirectoryDiff,
   { chain, textSplitter, tokenizer, logger, metadata }: SummarizeDirectoryDiffOptions
 ): Promise<DirectoryDiff> {
+  // Cache lookup (#845, PR 5). Joined per-file diffs become the
+  // payload signature; if every file in the directory is unchanged
+  // since the last run (and the model + prompt match), the prior
+  // directory-level summary is reused instead of paying for another
+  // map_reduce pass.
+  const cacheModel = typeof metadata?.model === 'string' ? metadata.model : undefined
+  const cacheRepo = process.cwd()
+  const cachePayload = directory.diffs
+    .map((diff) => `${diff.file}\x1e${diff.diff}`)
+    .join('\x1d')
+  const cacheKey = isCacheEnabled() && cacheModel
+    ? diffSummaryKey(cachePayload, cacheModel, SUMMARIZE_PROMPT_HASH)
+    : undefined
+
+  if (cacheKey) {
+    const cached = readDiffSummary(cacheRepo, cacheKey)
+    if (cached) {
+      logger?.verbose?.(
+        ` • Cache hit for "/${directory.path}" (skipped LLM, ${cached.tokens} tokens)`,
+        { color: 'cyan' }
+      )
+      touchDiffSummary(cacheRepo, cacheKey)
+      return {
+        diffs: directory.diffs,
+        path: directory.path,
+        summary: cached.summary,
+        tokenCount: cached.tokens,
+      }
+    }
+  }
+
   try {
     const directorySummary = await summarize(
       directory.diffs.map((diff) => ({
@@ -67,6 +113,14 @@ export async function summarizeDirectoryDiff(
     )
 
     const newTokenTotal = tokenizer(directorySummary)
+
+    if (cacheKey && cacheModel) {
+      writeDiffSummary(cacheRepo, cacheKey, {
+        summary: directorySummary,
+        model: cacheModel,
+        tokens: newTokenTotal,
+      })
+    }
 
     return {
       diffs: directory.diffs,

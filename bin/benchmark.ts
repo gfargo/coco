@@ -32,6 +32,7 @@ import type { Document } from '@langchain/classic/document'
 
 import { fileChangeParser } from '../src/lib/parsers/default'
 import { summarizeDiffs } from '../src/lib/parsers/default/utils/summarizeDiffs'
+import { clearDiffSummaryCache } from '../src/lib/parsers/default/utils/diffSummaryCache'
 import { allFixtures, DiffFixture } from '../src/lib/parsers/default/__fixtures__'
 import { Logger } from '../src/lib/utils/logger'
 import { getTokenCounter } from '../src/lib/utils/tokenizer'
@@ -88,6 +89,8 @@ type BenchResult = {
   llmCalls: number
   llmTotalMs: number
   llmTotalPromptTokens: number
+  /** When this row is a warm-cache re-run, the cold result it amortized against. */
+  pass?: 'cold' | 'warm'
 }
 
 /**
@@ -190,13 +193,19 @@ function formatRow(label: string, value: string | number): string {
 function printSummary(results: BenchResult[], baseline?: BenchResult[]): void {
   console.log('\n=== diff-condensing benchmark ===\n')
   for (const result of results) {
-    console.log(`Fixture: ${result.fixture}  (${result.fileCount} files, ~${result.approxTokens} tokens)`)
+    const passLabel = result.pass ? ` (${result.pass})` : ''
+    console.log(`Fixture: ${result.fixture}${passLabel}  (${result.fileCount} files, ~${result.approxTokens} tokens)`)
     console.log(formatRow('wall-clock duration', `${result.durationMs}ms`))
     console.log(formatRow('llm calls', result.llmCalls))
     console.log(formatRow('llm total time', `${result.llmTotalMs}ms`))
     console.log(formatRow('llm prompt tokens', result.llmTotalPromptTokens))
     if (baseline) {
-      const prior = baseline.find((entry) => entry.fixture === result.fixture)
+      // For repeat runs, only diff cold pass against baseline so warm
+      // numbers don't muddy the headline regression check.
+      const matchPass = result.pass ?? undefined
+      const prior = baseline.find(
+        (entry) => entry.fixture === result.fixture && (entry.pass ?? undefined) === matchPass
+      )
       if (prior) {
         const deltaPct = (n: number, p: number) =>
           p === 0 ? 'n/a' : `${(((n - p) / p) * 100).toFixed(1)}%`
@@ -246,6 +255,16 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const updateBaseline = args.includes('--update')
   const fixtureArg = args.find((arg) => arg.startsWith('--fixture='))?.split('=')[1]
+  // --repeat runs each fixture twice: a cold pass (cache cleared
+  // beforehand) and a warm pass (cache populated by the cold pass).
+  // Demonstrates the cache hit rate added in #845 PR 5 — same fixture,
+  // unchanged inputs, second run should be essentially free.
+  const repeat = args.includes('--repeat')
+  // --no-cache disables the diff-summary cache for the run. Useful
+  // for reproducing pre-PR-5 numbers against the same harness.
+  if (args.includes('--no-cache')) {
+    process.env.COCO_NO_CACHE = '1'
+  }
 
   const fixtures = fixtureArg
     ? allFixtures.filter((fixture) => fixture.name === fixtureArg)
@@ -258,9 +277,22 @@ async function main(): Promise<void> {
 
   const results: BenchResult[] = []
   for (const fixture of fixtures) {
-    console.log(`Running fixture ${fixture.name}...`)
-    const result = await runFixture(fixture, DEFAULT_OPTIONS)
-    results.push(result)
+    if (repeat) {
+      // Cold pass: clear the cache for this repo first so the run
+      // can't piggyback on a prior bench.
+      clearDiffSummaryCache(process.cwd())
+      console.log(`Running fixture ${fixture.name} (cold)...`)
+      const cold = await runFixture(fixture, DEFAULT_OPTIONS)
+      results.push({ ...cold, pass: 'cold' })
+
+      console.log(`Running fixture ${fixture.name} (warm)...`)
+      const warm = await runFixture(fixture, DEFAULT_OPTIONS)
+      results.push({ ...warm, pass: 'warm' })
+    } else {
+      console.log(`Running fixture ${fixture.name}...`)
+      const result = await runFixture(fixture, DEFAULT_OPTIONS)
+      results.push(result)
+    }
   }
 
   const baseline = updateBaseline ? undefined : readBaseline()
