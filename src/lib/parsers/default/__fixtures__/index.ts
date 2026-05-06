@@ -304,6 +304,30 @@ const DEP_BUMP_FILES: FileSpec[] = [
   { path: 'CHANGELOG.md', tokens: 200, shape: 'modification' },
 ]
 
+/**
+ * Monorepo-scale stress fixture (#845, PR 4 motivation). 80 files
+ * across 35 directories, all modifications, sized to land above
+ * `maxFileTokens` so they enter both pre-process AND wave
+ * consolidation. The point: produce more LLM calls than the
+ * default `maxConcurrent` (24) so wave-locking under variance
+ * actually shows in the bench wall-clock numbers. Without this
+ * scenario, every smaller fixture finishes in a single wave
+ * regardless of scheduler choice.
+ */
+const MONOREPO_FILES: FileSpec[] = Array.from({ length: 80 }, (_, i): FileSpec => {
+  const subsystem = ['auth', 'billing', 'inventory', 'orders', 'shipping', 'analytics', 'notifications'][i % 7]
+  const layer = ['api', 'service', 'repo', 'handlers'][Math.floor(i / 7) % 4]
+  const fileType = i % 3 === 0 ? 'tests' : i % 3 === 1 ? 'src' : 'src'
+  return {
+    path: `packages/${subsystem}/${fileType}/${layer}/${layer}-${i}.ts`,
+    // Mostly mid-sized (1.2k-2.8k tokens) — large enough to trigger
+    // pre-process pre-summarization but not so large that any one
+    // file dominates the budget.
+    tokens: 1200 + (i * 137) % 1600,
+    shape: 'modification',
+  }
+})
+
 // ---------------------------------------------------------------------------
 // Public surface
 // ---------------------------------------------------------------------------
@@ -333,6 +357,7 @@ export const refactorFixture: DiffFixture = asFixture('refactor', REFACTOR_FILES
 export const initialCommitFixture: DiffFixture = asFixture('initial-commit', INITIAL_COMMIT_FILES)
 export const docsUpdateFixture: DiffFixture = asFixture('docs-update', DOCS_UPDATE_FILES)
 export const depBumpFixture: DiffFixture = asFixture('dep-bump', DEP_BUMP_FILES)
+export const monorepoFixture: DiffFixture = asFixture('monorepo', MONOREPO_FILES)
 
 export const allFixtures: DiffFixture[] = [
   tinyFixture,
@@ -343,4 +368,5 @@ export const allFixtures: DiffFixture[] = [
   initialCommitFixture,
   docsUpdateFixture,
   depBumpFixture,
+  monorepoFixture,
 ]

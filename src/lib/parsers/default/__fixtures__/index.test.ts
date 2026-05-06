@@ -24,6 +24,7 @@ describe('bench fixtures (#845)', () => {
       'initial-commit',
       'docs-update',
       'dep-bump',
+      'monorepo',
     ])
   })
 
