@@ -111,7 +111,13 @@ export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   model: 'gpt-4.1-nano',
   tokenLimit: 4096,
   temperature: 0.32,
-  maxConcurrent: 12,
+  // Bumped 12 → 24 (#845, PR 3). The OpenAI fast tier comfortably
+  // handles ~30 concurrent on the per-key default rate limit; 24
+  // leaves headroom for retries while still doubling throughput.
+  // The summarize chain has a 429-aware backoff (`summarize`
+  // helper) so a temporary rate-limit hit no longer kills the
+  // whole pipeline.
+  maxConcurrent: 24,
   minTokensForSummary: 800,
   maxFileTokens: 2000,
   authentication: {
@@ -133,7 +139,11 @@ export const DEFAULT_ANTHROPIC_LLM_SERVICE: AnthropicLLMService = {
   model: 'claude-haiku-4-5-20251001',
   temperature: 0.32,
   tokenLimit: 4096,
-  maxConcurrent: 12,
+  // Bumped 12 → 24 (#845, PR 3). Matches the OpenAI default;
+  // Anthropic's per-key concurrency on Haiku is generous enough
+  // that 24 stays under the rate ceiling for typical fast-model
+  // request shapes. Backoff in `summarize` handles spikes.
+  maxConcurrent: 24,
   minTokensForSummary: 800,
   maxFileTokens: 2000,
   authentication: {
