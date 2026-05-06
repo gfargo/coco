@@ -71,7 +71,11 @@ const DEFAULT_OPTIONS: BenchOptions = {
   baseLatencyMs: 1500,
   perTokenMs: 2,
   maxConcurrent: 6,
-  maxTokens: 2048,
+  // Match the canonical service tokenLimit from `langchain/utils.ts`
+  // (raised from 2048 to 4096 in PR 1 of #845). The bench mirrors
+  // the most-common production budget so per-PR diffs reflect what
+  // real users will see.
+  maxTokens: 4096,
 }
 
 type BenchResult = {
