@@ -290,13 +290,17 @@ const DOCS_UPDATE_FILES: FileSpec[] = [
 ]
 
 /**
- * Dep bump: the dependabot-style commit. Tiny content change in
- * package.json, large lockfile delta. Pipeline should mostly
- * skip-trivial these.
+ * Dep bump: the dependabot-style commit. Just the human-readable
+ * surface — package.json + an optional CHANGELOG entry. Lockfiles
+ * (yarn.lock, package-lock.json, pnpm-lock.yaml, *.lock) are in
+ * `DEFAULT_IGNORED_FILES` / `DEFAULT_IGNORED_EXTENSIONS`
+ * (`src/lib/config/constants.ts`), so the pipeline never sees them
+ * on a real `coco commit`. An earlier draft of this fixture
+ * included `yarn.lock` and reported 27 s of LLM work for it; that
+ * was a bench-fixture artifact, not a real-world cost.
  */
 const DEP_BUMP_FILES: FileSpec[] = [
   { path: 'package.json', tokens: 250, shape: 'modification' },
-  { path: 'yarn.lock', tokens: 8000, shape: 'modification' },
   { path: 'CHANGELOG.md', tokens: 200, shape: 'modification' },
 ]
 

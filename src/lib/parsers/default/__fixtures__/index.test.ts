@@ -1,3 +1,5 @@
+import { DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../../../config/constants'
+import { DiffNode } from '../../../types'
 import {
   allFixtures,
   depBumpFixture,
@@ -49,6 +51,31 @@ describe('bench fixtures (#845)', () => {
     expect(firstSnapshot).toBe(secondSnapshot)
   })
 
+  // Guard against the class of mistake that shipped in the prior
+  // dep-bump fixture: any file matching the default ignore list
+  // (lockfiles, node_modules, .map / .lock extensions) would be
+  // stripped before the pipeline ever sees it on a real commit, so
+  // including such a file in a fixture produces bench numbers that
+  // can't translate to user-facing wins. Fail loudly if any fixture
+  // accidentally drifts back into that shape.
+  it('no fixture file matches DEFAULT_IGNORED_FILES or DEFAULT_IGNORED_EXTENSIONS', () => {
+    const offending: string[] = []
+    const collect = (node: DiffNode, fixtureName: string) => {
+      node.diffs.forEach((diff) => {
+        const basename = diff.file.split('/').pop() || diff.file
+        if (DEFAULT_IGNORED_FILES.includes(basename)) {
+          offending.push(`${fixtureName}: ${diff.file} (matches DEFAULT_IGNORED_FILES)`)
+        }
+        if (DEFAULT_IGNORED_EXTENSIONS.some((ext) => diff.file.toLowerCase().endsWith(ext))) {
+          offending.push(`${fixtureName}: ${diff.file} (matches DEFAULT_IGNORED_EXTENSIONS)`)
+        }
+      })
+      node.children.forEach((child) => collect(child, fixtureName))
+    }
+    allFixtures.forEach((fixture) => collect(fixture.rootNode, fixture.name))
+    expect(offending).toEqual([])
+  })
+
   it('refactor scenario includes a rename diff', () => {
     const collectedDiffs: string[] = []
     const walk = (node: typeof refactorFixture.rootNode) => {
@@ -59,10 +86,20 @@ describe('bench fixtures (#845)', () => {
     expect(collectedDiffs.some((diff) => diff.includes('rename from'))).toBe(true)
   })
 
-  it('dep-bump scenario is dominated by a lockfile-shaped modification', () => {
-    const lockfileDiff = depBumpFixture.rootNode.diffs.find((diff) => diff.file.endsWith('.lock'))
-    expect(lockfileDiff).toBeDefined()
-    expect(lockfileDiff?.diff).toContain('diff --git')
-    expect(lockfileDiff?.tokenCount).toBeGreaterThan(1000)
+  it('dep-bump scenario reflects post-filter content (no lockfiles)', () => {
+    // Lockfiles live in DEFAULT_IGNORED_FILES + DEFAULT_IGNORED_EXTENSIONS,
+    // so they're stripped before the pipeline ever sees the diff. The
+    // fixture should mirror what the pipeline would actually receive
+    // for a dependabot-style commit: package.json + CHANGELOG, both
+    // small.
+    const allDiffs: typeof depBumpFixture.rootNode.diffs = []
+    const walk = (node: typeof depBumpFixture.rootNode) => {
+      allDiffs.push(...node.diffs)
+      node.children.forEach(walk)
+    }
+    walk(depBumpFixture.rootNode)
+    expect(allDiffs.find((diff) => diff.file.endsWith('.lock'))).toBeUndefined()
+    expect(allDiffs.find((diff) => diff.file.endsWith('-lock.json'))).toBeUndefined()
+    expect(allDiffs.find((diff) => diff.file === 'package.json')).toBeDefined()
   })
 })
