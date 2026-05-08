@@ -10,16 +10,16 @@
     "declaration": true,
     "declarationDir": "dist/dts",
     "sourceMap": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
     "strictNullChecks": true,
     "skipLibCheck": true,
-    "downlevelIteration": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "types": ["jest", "node"]
   },
   "include": ["src/**/*.ts", "bin/validateSchema.test.ts"],
   "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts", "dist", "rollup.config.mjs"]
