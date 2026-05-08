@@ -507,6 +507,125 @@ describe('command integration with temp git repos', () => {
     expect(variables.hunk_inventory).toContain('src/feature.ts::hunk-2')
   })
 
+  it('retries the split plan when the LLM produces an invalid grouping', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    // First attempt drops src/feature.ts entirely; retry covers both files.
+    mockExecuteChainWithSchema
+      .mockResolvedValueOnce({
+        groups: [
+          {
+            title: 'docs: update readme',
+            body: 'Document the temp repo.',
+            files: ['README.md'],
+            hunks: [],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        groups: [
+          {
+            title: 'docs: update readme',
+            body: 'Document the temp repo.',
+            files: ['README.md'],
+            hunks: [],
+          },
+          {
+            title: 'test: add feature fixture',
+            body: 'Add a feature fixture file.',
+            files: ['src/feature.ts'],
+            hunks: [],
+          },
+        ],
+      })
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.git.add(['README.md', 'src/feature.ts'])
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit', 'split'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      split: true,
+      plan: true,
+      apply: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(2)
+
+    const firstCallVars = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+    const secondCallVars = mockExecuteChainWithSchema.mock.calls[1][3] as Record<string, string>
+
+    expect(firstCallVars.previous_attempt_feedback).toContain('first attempt')
+    expect(secondCallVars.previous_attempt_feedback).toContain('Staged files missing')
+    expect(secondCallVars.previous_attempt_feedback).toContain('src/feature.ts')
+    expect(stdout).toContain('docs: update readme')
+    expect(stdout).toContain('test: add feature fixture')
+  })
+
+  it('surfaces a clear error after retries are exhausted', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    mockExecuteChainWithSchema.mockResolvedValue({
+      groups: [
+        {
+          title: 'docs: update readme',
+          body: 'Document the temp repo.',
+          files: ['README.md'],
+          hunks: [],
+        },
+      ],
+    })
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.git.add(['README.md', 'src/feature.ts'])
+
+    await expect(
+      commitHandler({
+        $0: 'coco',
+        _: ['commit', 'split'],
+        interactive: false,
+        openInEditor: false,
+        ignoredFiles: [],
+        ignoredExtensions: [],
+        withPreviousCommits: 0,
+        conventional: false,
+        includeBranchName: false,
+        noDiff: false,
+        noVerify: true,
+        split: true,
+        plan: true,
+        apply: false,
+        verbose: false,
+        version: false,
+        help: false,
+      } as Arguments<CommitOptions>, createLogger())
+    ).rejects.toThrow(/after 3 attempts.*missing files: src\/feature\.ts/i)
+
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(3)
+  })
+
   it('generates a changelog from real branch commit history', async () => {
     mockLoadConfig.mockImplementation((argv) => createConfig({
       ...(argv as Record<string, unknown>),
