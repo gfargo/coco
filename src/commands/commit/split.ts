@@ -1,10 +1,8 @@
 import { PromptTemplate } from '@langchain/core/prompts'
 import { spawn } from 'child_process'
 import { formatPatch, parsePatch, StructuredPatch, StructuredPatchHunk } from 'diff'
-import { z } from 'zod'
 import { Arguments } from 'yargs'
 import { Config } from '../../lib/config/types'
-import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
@@ -14,26 +12,23 @@ import { FileChange } from '../../lib/types'
 import { Logger } from '../../lib/utils/logger'
 import { TokenCounter } from '../../lib/utils/tokenizer'
 import { CommitOptions } from './config'
+import {
+  DEFAULT_MAX_PLAN_ATTEMPTS,
+  generateValidatedCommitSplitPlan,
+} from './splitPlanGenerator'
+import {
+  CommitSplitGroup,
+  CommitSplitPlan,
+  CommitSplitPlanSchema,
+} from './splitPlanTypes'
+import {
+  formatPlanValidationIssuesError,
+  getPlanValidationIssues,
+  hasPlanValidationIssues,
+} from './splitPlanValidation'
 
-export const CommitSplitPlanSchema = z.object({
-  groups: z
-    .array(
-      z.object({
-        title: z.string().min(1),
-        body: z.string().optional(),
-        rationale: z.string().optional(),
-        files: z.array(z.string()),
-        hunks: z.array(z.string()),
-      })
-      .refine((group) => group.files.length > 0 || group.hunks.length > 0, {
-        message: 'Each group must include at least one file or hunk',
-      })
-    )
-    .min(1),
-})
-
-export type CommitSplitPlan = z.infer<typeof CommitSplitPlanSchema>
-export type CommitSplitGroup = CommitSplitPlan['groups'][number]
+export { CommitSplitPlanSchema }
+export type { CommitSplitPlan, CommitSplitGroup }
 
 const COMMIT_SPLIT_PROMPT = PromptTemplate.fromTemplate(`You are helping split staged git changes into a small sequence of coherent commits.
 
@@ -51,14 +46,13 @@ Return ONLY valid JSON matching this schema:
 }}
 
 Rules:
-- Use each staged file exactly once.
-- If a file has hunk IDs and contains unrelated changes, assign every hunk ID exactly once instead of assigning the whole file.
-- Do not list the same file in "files" when assigning that file through "hunks".
-- Only use file paths listed in the staged file inventory.
-- Only use hunk IDs listed in the staged hunk inventory.
+- Every staged file MUST be assigned exactly once across all groups, either via "files" OR via every one of its hunk IDs (never both).
+- If you assign any hunk for a file, you MUST assign EVERY hunk for that file across the groups — partial coverage is invalid.
+- Do not list the same file in "files" of more than one group, and do not assign the same hunk ID to more than one group.
+- Only use file paths listed in the staged file inventory. Do not invent files.
+- Only use hunk IDs listed in the staged hunk inventory. Do not invent hunk IDs.
 - Prefer 2-5 commits unless the changes are truly all one topic.
 - Keep commit titles concise and understandable.
-- Do not invent files.
 
 Staged file inventory:
 {file_inventory}
@@ -70,7 +64,10 @@ Condensed staged diff:
 {summary}
 
 Additional context:
-{additional_context}`)
+{additional_context}
+
+Feedback on previous attempt (fix every item before responding):
+{previous_attempt_feedback}`)
 
 export function isCommitSplitCommand(argv: Arguments<CommitOptions>): boolean {
   return Boolean(argv.split || argv.plan || argv.apply || argv._.includes('split'))
@@ -106,10 +103,6 @@ type HunkInventory = {
   hunks: StagedHunk[]
   byId: Map<string, StagedHunk>
   byFile: Map<string, StagedHunk[]>
-}
-
-function getStagedFileSet(changes: FileChange[]): Set<string> {
-  return new Set(changes.map((change) => change.filePath))
 }
 
 function getGroupFiles(group: CommitSplitGroup): string[] {
@@ -188,79 +181,9 @@ function validatePlanForStagedFiles(
   staged: FileChange[],
   hunkInventory?: HunkInventory
 ): void {
-  const stagedFiles = getStagedFileSet(staged)
-  const seen = new Set<string>()
-  const seenHunks = new Set<string>()
-  const unknown: string[] = []
-  const duplicate: string[] = []
-  const unknownHunks: string[] = []
-  const duplicateHunks: string[] = []
-
-  plan.groups.forEach((group) => {
-    getGroupFiles(group).forEach((file) => {
-      if (!stagedFiles.has(file)) {
-        unknown.push(file)
-        return
-      }
-
-      if (seen.has(file)) {
-        duplicate.push(file)
-        return
-      }
-
-      seen.add(file)
-    })
-
-    getGroupHunks(group).forEach((hunkId) => {
-      const hunk = hunkInventory?.byId.get(hunkId)
-      if (!hunk) {
-        unknownHunks.push(hunkId)
-        return
-      }
-
-      if (seenHunks.has(hunkId)) {
-        duplicateHunks.push(hunkId)
-        return
-      }
-
-      seenHunks.add(hunkId)
-    })
-  })
-
-  const hunkCoveredFiles = new Set([...seenHunks].map((hunkId) => hunkInventory?.byId.get(hunkId)?.filePath))
-  const mixedFiles = [...seen].filter((file) => hunkCoveredFiles.has(file))
-  const partiallyCoveredFiles = [...hunkCoveredFiles]
-    .filter((file): file is string => Boolean(file))
-    .filter((file) => {
-      const fileHunks = hunkInventory?.byFile.get(file) || []
-      return fileHunks.some((hunk) => !seenHunks.has(hunk.id))
-    })
-  const missing = [...stagedFiles].filter((file) => !seen.has(file) && !hunkCoveredFiles.has(file))
-
-  if (
-    unknown.length ||
-    duplicate.length ||
-    unknownHunks.length ||
-    duplicateHunks.length ||
-    mixedFiles.length ||
-    partiallyCoveredFiles.length ||
-    missing.length
-  ) {
-    throw new Error(
-      [
-        unknown.length ? `unknown files: ${unknown.join(', ')}` : undefined,
-        duplicate.length ? `duplicate files: ${duplicate.join(', ')}` : undefined,
-        unknownHunks.length ? `unknown hunks: ${unknownHunks.join(', ')}` : undefined,
-        duplicateHunks.length ? `duplicate hunks: ${duplicateHunks.join(', ')}` : undefined,
-        mixedFiles.length ? `files assigned both as whole files and hunks: ${mixedFiles.join(', ')}` : undefined,
-        partiallyCoveredFiles.length
-          ? `files with only some hunks assigned: ${partiallyCoveredFiles.join(', ')}`
-          : undefined,
-        missing.length ? `missing files: ${missing.join(', ')}` : undefined,
-      ]
-        .filter(Boolean)
-        .join('; ')
-    )
+  const issues = getPlanValidationIssues(plan, staged, hunkInventory)
+  if (hasPlanValidationIssues(issues)) {
+    throw new Error(formatPlanValidationIssuesError(issues))
   }
 }
 
@@ -430,29 +353,26 @@ export async function handleCommitSplit({
     .join('\n')
   const hunkInventoryText = formatHunkInventory(hunkInventory)
 
-  const plan = await executeChainWithSchema<CommitSplitPlan>(
-    CommitSplitPlanSchema,
+  const { plan } = await generateValidatedCommitSplitPlan({
     llm,
-    COMMIT_SPLIT_PROMPT,
-    {
+    prompt: COMMIT_SPLIT_PROMPT,
+    variables: {
       file_inventory: fileInventory,
       hunk_inventory: hunkInventoryText,
       summary,
       additional_context: argv.additional || '',
     },
-    {
-      logger,
-      tokenizer,
-      metadata: {
-        task: 'commit-split-plan',
-        command: 'commit',
-        provider: config.service.provider,
-        model: String(config.service.model),
-      },
-    }
-  )
-
-  validatePlanForStagedFiles(plan, changes.staged, hunkInventory)
+    staged: changes.staged,
+    hunkInventory,
+    logger,
+    tokenizer,
+    metadata: {
+      command: 'commit',
+      provider: config.service.provider,
+      model: String(config.service.model),
+    },
+    maxAttempts: DEFAULT_MAX_PLAN_ATTEMPTS,
+  })
 
   if (argv.apply) {
     return await applyCommitSplitPlan({

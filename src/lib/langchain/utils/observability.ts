@@ -10,6 +10,7 @@ export type LlmCallMetadata = {
   provider?: string
   model?: string
   retryAttempt?: number
+  planAttempt?: number
   parserType?: string
   variableKeys?: string[]
   promptTokens?: number
