@@ -32,6 +32,14 @@ export type SummarizeLargeFilesOptions = {
    * Maximum number of concurrent summarization requests.
    */
   maxConcurrent: number
+  /**
+   * Total token budget across all diffs. When provided, Phase 2 dispatches
+   * eligible files biggest-first and re-checks the running total per
+   * dispatch — once earlier completions drop the total under `maxTokens`,
+   * the remaining files keep their raw diffs (#861, PR 1). When undefined,
+   * every eligible file is summarized regardless of budget.
+   */
+  maxTokens?: number
   tokenizer: TokenCounter
   logger: Logger
 } & SummarizeContext
@@ -201,8 +209,17 @@ export async function summarizeLargeFiles(
   diffs: FileDiff[],
   options: SummarizeLargeFilesOptions
 ): Promise<FileDiff[]> {
-  const { maxFileTokens, minTokensForSummary, maxConcurrent, tokenizer, logger, chain, textSplitter, metadata } =
-    options
+  const {
+    maxFileTokens,
+    minTokensForSummary,
+    maxConcurrent,
+    maxTokens,
+    tokenizer,
+    logger,
+    chain,
+    textSplitter,
+    metadata,
+  } = options
 
   // Identify files that need summarization
   const filesToSummarize: { index: number; diff: FileDiff }[] = []
@@ -218,28 +235,76 @@ export async function summarizeLargeFiles(
     return results
   }
 
-  logger.verbose(`Pre-summarizing ${filesToSummarize.length} large file(s)...`, { color: 'blue' })
+  // Incremental termination (#861, PR 1). When the caller supplies a
+  // budget, dispatch biggest-first and re-check the running total per
+  // dispatch — once earlier completions drop the total under maxTokens,
+  // the remaining queued files skip the LLM and keep their raw diffs.
+  // Mirrors the Phase 3 pattern in `summarizeDiffs.ts`. Without a
+  // budget (undefined), behavior matches the prior path: every
+  // eligible file is summarized regardless.
+  filesToSummarize.sort((a, b) => b.diff.tokenCount - a.diff.tokenCount)
 
-  // Process large files in waves
-  const summarizedFiles = await processInWaves(
+  const incrementalTermination = maxTokens !== undefined
+  let runningTotal = diffs.reduce((sum, diff) => sum + diff.tokenCount, 0)
+  let summarizedCount = 0
+  let skippedCount = 0
+
+  logger.verbose(
+    `Pre-summarizing up to ${filesToSummarize.length} large file(s)...`,
+    { color: 'blue' }
+  )
+
+  const processed = await processInWaves(
     filesToSummarize,
-    async ({ diff }) => summarizeFileDiff(diff, { chain, textSplitter, tokenizer, logger, metadata }),
+    async ({ diff }) => {
+      // Re-check the budget at dispatch time when the caller supplied
+      // one. Earlier completions may have already dropped the total
+      // under the cap; in that case skip the LLM call entirely and
+      // keep the raw diff. Without a budget, every eligible file is
+      // summarized (preserves the prior behavior).
+      if (incrementalTermination && runningTotal <= (maxTokens as number)) {
+        return { diff, summarized: false as const }
+      }
+      const summarized = await summarizeFileDiff(diff, {
+        chain,
+        textSplitter,
+        tokenizer,
+        logger,
+        metadata,
+      })
+      const delta = diff.tokenCount - summarized.tokenCount
+      if (delta > 0) {
+        runningTotal -= delta
+      }
+      return { diff: summarized, summarized: true as const }
+    },
     maxConcurrent
   )
 
-  // Update results with summarized files
-  summarizedFiles.forEach((summarizedDiff, i) => {
+  processed.forEach((entry, i) => {
     const originalIndex = filesToSummarize[i].index
+    if (!entry.summarized) {
+      skippedCount++
+      return
+    }
+    summarizedCount++
     const originalTokens = results[originalIndex].tokenCount
-    const newTokens = summarizedDiff.tokenCount
+    const newTokens = entry.diff.tokenCount
 
     logger.verbose(
-      ` - ${summarizedDiff.file}: ${originalTokens} -> ${newTokens} tokens`,
+      ` - ${entry.diff.file}: ${originalTokens} -> ${newTokens} tokens`,
       { color: 'magenta' }
     )
 
-    results[originalIndex] = summarizedDiff
+    results[originalIndex] = entry.diff
   })
+
+  if (skippedCount > 0) {
+    logger.verbose(
+      `Skipped ${skippedCount} pre-summary call(s) — token budget already met after ${summarizedCount} earlier file(s)`,
+      { color: 'cyan' }
+    )
+  }
 
   return results
 }
