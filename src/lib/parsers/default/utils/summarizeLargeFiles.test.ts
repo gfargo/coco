@@ -221,6 +221,84 @@ describe('summarizeLargeFiles', () => {
     expect(firstCallDocs[0]?.metadata?.file).toBe('big-b.ts')
   })
 
+  it('routes markdown modification diffs to the LLM by default (fastPath off)', async () => {
+    const markdownDiff = [
+      'diff --git a/docs/intro.md b/docs/intro.md',
+      'index aaa..bbb 100644',
+      '--- a/docs/intro.md',
+      '+++ b/docs/intro.md',
+      '@@ -1,5 +1,8 @@',
+      ' some context',
+      '-the old wording for the intro',
+      '-another old sentence that was here',
+      '+## New section',
+      '+plenty of new prose lines making this large',
+      '+more new prose',
+    ].join('\n')
+
+    const diffs: FileDiff[] = [
+      {
+        file: 'docs/intro.md',
+        diff: markdownDiff,
+        summary: 'docs/intro.md',
+        tokenCount: 600,
+      },
+    ]
+
+    await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      // no fastPath -> markdown still goes to LLM
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockSummarize).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes markdown modification diffs to the templated extract when fastPath.markdown is enabled', async () => {
+    const markdownDiff = [
+      'diff --git a/docs/intro.md b/docs/intro.md',
+      'index aaa..bbb 100644',
+      '--- a/docs/intro.md',
+      '+++ b/docs/intro.md',
+      '@@ -1,5 +1,8 @@',
+      ' some context',
+      '-the old wording for the intro',
+      '-another old sentence that was here',
+      '+## New section',
+      '+plenty of new prose lines making this large',
+      '+more new prose',
+    ].join('\n')
+
+    const diffs: FileDiff[] = [
+      {
+        file: 'docs/intro.md',
+        diff: markdownDiff,
+        summary: 'docs/intro.md',
+        tokenCount: 600,
+      },
+    ]
+
+    const result = await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      fastPath: { markdown: true },
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockSummarize).not.toHaveBeenCalled()
+    expect(result[0].diff).toContain('Updated markdown')
+    expect(result[0].diff).toContain('New section')
+  })
+
   it('should respect maxConcurrent limit', async () => {
     const diffs: FileDiff[] = Array.from({ length: 10 }, (_, i) => ({
       file: `file${i}.ts`,

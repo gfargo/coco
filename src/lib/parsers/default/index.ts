@@ -19,6 +19,7 @@ export async function fileChangeParser({
     minTokensForSummary,
     maxFileTokens,
     maxConcurrent,
+    fastPath,
     metadata,
   },
 }: FileChangeParserInput): Promise<string> {
@@ -63,6 +64,7 @@ export async function fileChangeParser({
     minTokensForSummary,
     maxFileTokens,
     maxConcurrent,
+    fastPath,
     textSplitter,
     chain: summarizationChain,
     logger,

@@ -9,6 +9,7 @@ import {
   touchDiffSummary,
   writeDiffSummary,
 } from './diffSummaryCache'
+import { summarizeMarkdownDiff } from './markdownDiff'
 import { summarizeTrivialDiff } from './trivialDiff'
 
 /**
@@ -40,6 +41,14 @@ export type SummarizeLargeFilesOptions = {
    * every eligible file is summarized regardless of budget.
    */
   maxTokens?: number
+  /**
+   * Opt-in fast paths that trade summary detail for speed. Off by
+   * default; the markdown skip only fires when `fastPath.markdown` is
+   * true (#861, angle 5).
+   */
+  fastPath?: {
+    markdown?: boolean
+  }
   tokenizer: TokenCounter
   logger: Logger
 } & SummarizeContext
@@ -63,7 +72,11 @@ async function summarizeFileDiff(
     tokenizer,
     logger,
     metadata,
-  }: Pick<SummarizeLargeFilesOptions, 'chain' | 'textSplitter' | 'tokenizer' | 'logger' | 'metadata'>
+    fastPath,
+  }: Pick<
+    SummarizeLargeFilesOptions,
+    'chain' | 'textSplitter' | 'tokenizer' | 'logger' | 'metadata' | 'fastPath'
+  >
 ): Promise<FileDiff> {
   const trivialSummary = summarizeTrivialDiff(fileDiff)
   if (trivialSummary !== undefined) {
@@ -75,6 +88,29 @@ async function summarizeFileDiff(
       ...fileDiff,
       diff: trivialSummary,
       tokenCount: tokenizer(trivialSummary),
+    }
+  }
+
+  // Markdown fast path (#861, angle 5). Opt-in via `fastPath.markdown`
+  // because it's a lossy optimization: the templated summary names
+  // structural changes only and drops body-text detail that an LLM
+  // summary would carry. Off by default; users who prefer summary
+  // fidelity over speed (which is the safer default for commit-message
+  // generation downstream) keep the LLM path. When the flag IS on, the
+  // fast path still falls through to the LLM for paragraph-only edits
+  // where a templated summary would lose useful context.
+  if (fastPath?.markdown) {
+    const markdownSummary = summarizeMarkdownDiff(fileDiff)
+    if (markdownSummary !== undefined) {
+      logger.verbose(
+        ` - ${fileDiff.file}: markdown fast-path skip (no LLM call)`,
+        { color: 'gray' }
+      )
+      return {
+        ...fileDiff,
+        diff: markdownSummary,
+        tokenCount: tokenizer(markdownSummary),
+      }
     }
   }
 
@@ -214,6 +250,7 @@ export async function summarizeLargeFiles(
     minTokensForSummary,
     maxConcurrent,
     maxTokens,
+    fastPath,
     tokenizer,
     logger,
     chain,
@@ -271,6 +308,7 @@ export async function summarizeLargeFiles(
         tokenizer,
         logger,
         metadata,
+        fastPath,
       })
       const delta = diff.tokenCount - summarized.tokenCount
       if (delta > 0) {

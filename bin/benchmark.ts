@@ -63,6 +63,14 @@ type BenchOptions = {
   perTokenMs: number
   maxConcurrent: number
   maxTokens: number
+  /**
+   * Opt-in fast paths to enable for this run. Off by default so the
+   * bench reflects production defaults; flip on via `--fast-path=markdown`
+   * to measure the lossy markdown skip (#861, angle 5).
+   */
+  fastPath?: {
+    markdown?: boolean
+  }
 }
 
 const DEFAULT_OPTIONS: BenchOptions = {
@@ -167,6 +175,7 @@ async function runFixture(
     minTokensForSummary: 400,
     maxFileTokens: Math.floor(options.maxTokens * 0.25),
     maxConcurrent: options.maxConcurrent,
+    fastPath: options.fastPath,
     textSplitter,
     chain,
     metadata: { command: 'benchmark', model: 'mock' },
@@ -265,6 +274,15 @@ async function main(): Promise<void> {
   if (args.includes('--no-cache')) {
     process.env.COCO_NO_CACHE = '1'
   }
+  // --fast-path=<name>[,<name>] enables opt-in fast paths for the
+  // run (#861, angle 5). Default is off so bench numbers track
+  // production defaults; pass `--fast-path=markdown` to measure the
+  // markdown skip's impact on docs-update-shaped fixtures.
+  const fastPathArg = args.find((arg) => arg.startsWith('--fast-path='))?.split('=')[1]
+  const fastPath = fastPathArg
+    ? Object.fromEntries(fastPathArg.split(',').map((name) => [name.trim(), true]))
+    : undefined
+  const runOptions: BenchOptions = { ...DEFAULT_OPTIONS, fastPath }
 
   const fixtures = fixtureArg
     ? allFixtures.filter((fixture) => fixture.name === fixtureArg)
@@ -282,15 +300,15 @@ async function main(): Promise<void> {
       // can't piggyback on a prior bench.
       clearDiffSummaryCache(process.cwd())
       console.log(`Running fixture ${fixture.name} (cold)...`)
-      const cold = await runFixture(fixture, DEFAULT_OPTIONS)
+      const cold = await runFixture(fixture, runOptions)
       results.push({ ...cold, pass: 'cold' })
 
       console.log(`Running fixture ${fixture.name} (warm)...`)
-      const warm = await runFixture(fixture, DEFAULT_OPTIONS)
+      const warm = await runFixture(fixture, runOptions)
       results.push({ ...warm, pass: 'warm' })
     } else {
       console.log(`Running fixture ${fixture.name}...`)
-      const result = await runFixture(fixture, DEFAULT_OPTIONS)
+      const result = await runFixture(fixture, runOptions)
       results.push(result)
     }
   }

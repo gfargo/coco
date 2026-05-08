@@ -68,6 +68,19 @@ export interface BaseParserOptions {
    * @default 6
    */
   maxConcurrent?: number
+  /**
+   * Opt-in fast paths that trade summary detail for speed. Mirrors the
+   * `service.fastPath` shape. Off by default; lossless optimizations
+   * are not configured here.
+   */
+  fastPath?: {
+    /**
+     * Replace the LLM summary with a templated heading extract for
+     * markdown modification diffs with structural signals.
+     * @default false
+     */
+    markdown?: boolean
+  }
   metadata?: Partial<LlmCallMetadata>
 }
 
