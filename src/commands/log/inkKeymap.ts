@@ -24,6 +24,7 @@ export type LogInkCommandId =
   | 'navigateDiff'
   | 'navigateHome'
   | 'navigatePullRequest'
+  | 'navigateReflog'
   | 'navigateStash'
   | 'navigateWorktrees'
   | 'navigateStatus'
@@ -265,6 +266,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'navigateReflog',
+    keys: ['gr'],
+    label: 'reflog',
+    description: 'Push the reflog browser view — chronological recovery log.',
+    contexts: ['normal'],
+  },
+  {
     id: 'navigateBack',
     keys: ['<', 'esc'],
     label: 'back',
@@ -442,6 +450,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateWorktrees',
   'navigatePullRequest',
   'navigateConflicts',
+  'navigateReflog',
   'navigateBack',
 ]
 
@@ -637,6 +646,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'conflicts') {
     return {
       contextual: ['↑/↓ files', 'enter diff', 's stage', 'u theirs', 'U ours', 'o edit', 'C continue*', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'reflog') {
+    return {
+      contextual: ['↑/↓ entries', 'enter inspect', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

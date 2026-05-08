@@ -611,6 +611,66 @@ describe('log Ink input interactions', () => {
     expect(state.selectedStashIndex).toBe(2)
   })
 
+  it('pushes reflog with the gr chord (#781)', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'r')
+
+    expect(state.viewStack).toEqual(['history', 'reflog'])
+    expect(state.activeView).toBe('reflog')
+    expect(state.statusMessage).toBe('jumped to reflog')
+  })
+
+  it('moves the selected reflog entry with arrow keys when in reflog view (#781)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'reflog' })
+
+    state = applyInput(state, 'j', {}, { reflogCount: 4 })
+    state = applyInput(state, 'j', {}, { reflogCount: 4 })
+    expect(state.selectedReflogIndex).toBe(2)
+
+    state = applyInput(state, 'k', {}, { reflogCount: 4 })
+    expect(state.selectedReflogIndex).toBe(1)
+
+    // Clamped at the count boundary going up.
+    state = applyInput(state, 'k', {}, { reflogCount: 4 })
+    state = applyInput(state, 'k', {}, { reflogCount: 4 })
+    expect(state.selectedReflogIndex).toBe(0)
+  })
+
+  it('Enter on a reflog row drills into the diff for that hash (#781)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'reflog' })
+
+    const events = getLogInkInputEvents(state, '', { return: true }, {
+      reflogCount: 5,
+      reflogSelectedHash: 'abc1234',
+    })
+
+    const navigate = events.find((event) =>
+      event.type === 'action' && event.action.type === 'navigateOpenDiffForCommit'
+    )
+    expect(navigate).toBeDefined()
+    if (navigate && navigate.type === 'action' && navigate.action.type === 'navigateOpenDiffForCommit') {
+      expect(navigate.action.sha).toBe('abc1234')
+    }
+  })
+
+  it('Enter on a reflog row is a no-op when no entry is cursored (#781)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'reflog' })
+
+    const events = getLogInkInputEvents(state, '', { return: true }, {
+      reflogCount: 0,
+      reflogSelectedHash: undefined,
+    })
+
+    expect(events.find((event) =>
+      event.type === 'action' && event.action.type === 'navigateOpenDiffForCommit'
+    )).toBeUndefined()
+  })
+
   it('preserves per-view selection across navigation', () => {
     let state = createLogInkState(rows)
 

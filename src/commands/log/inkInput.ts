@@ -67,6 +67,9 @@ export type LogInkInputContext = {
   branchCount?: number
   tagCount?: number
   stashCount?: number
+  reflogCount?: number
+  /** Hash of the cursored reflog entry (#781). Used by Enter to drill into the diff. */
+  reflogSelectedHash?: string
   worktreeListCount?: number
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
@@ -299,6 +302,15 @@ function isStashActionTarget(state: LogInkState): boolean {
     (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
 }
 
+/**
+ * Reflog has no sidebar tab — only the dedicated promoted view (#781).
+ * The condition stays as a single helper anyway so navigation handlers
+ * can read it the same way they do for the other promoted views.
+ */
+function isReflogActionTarget(state: LogInkState): boolean {
+  return state.activeView === 'reflog' && state.focus === 'commits'
+}
+
 function isWorktreeActionTarget(state: LogInkState): boolean {
   return (state.activeView === 'worktrees' && state.focus === 'commits') ||
     (state.focus === 'sidebar' && state.sidebarTab === 'worktrees')
@@ -411,6 +423,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'pull-request' })]
     case 'navigateConflicts':
       return [action({ type: 'pushView', value: 'conflicts' })]
+    case 'navigateReflog':
+      return [action({ type: 'pushView', value: 'reflog' })]
     case 'navigateBack':
       return [action({ type: 'popView' })]
     case 'openSelected': {
@@ -949,6 +963,16 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // `gr` chord: jump to the reflog browser (#781). Recovery view —
+  // chronological list of reflog entries with Enter to drill into the
+  // commit-diff for the entry's hash. Loaded lazily by the runtime.
+  if (state.pendingKey === 'g' && inputValue === 'r') {
+    return [
+      action({ type: 'pushView', value: 'reflog' }),
+      action({ type: 'setStatus', value: 'jumped to reflog' }),
+    ]
+  }
+
   // `gH` chord: apply the cursored hunk to the index (`git apply
   // --cached`). Sibling of bare `H` which targets the worktree.
   // Discoverable via the footer hint on diff views and the help
@@ -1294,6 +1318,10 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveStash', delta: -1, count: context.stashCount })]
     }
 
+    if (isReflogActionTarget(state) && context.reflogCount) {
+      return [action({ type: 'moveReflog', delta: -1, count: context.reflogCount })]
+    }
+
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {
       return [action({ type: 'moveWorktreeListEntry', delta: -1, count: context.worktreeListCount })]
     }
@@ -1389,6 +1417,10 @@ export function getLogInkInputEvents(
 
     if (isStashActionTarget(state) && context.stashCount) {
       return [action({ type: 'moveStash', delta: 1, count: context.stashCount })]
+    }
+
+    if (isReflogActionTarget(state) && context.reflogCount) {
+      return [action({ type: 'moveReflog', delta: 1, count: context.reflogCount })]
     }
 
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {
@@ -1493,6 +1525,31 @@ export function getLogInkInputEvents(
         action({ type: 'setStatus', value: `viewing diff for ${selected.shortHash}` }),
       ]
     }
+  }
+
+  // Enter on a reflog row drills into the diff for that entry's hash
+  // (#781). Reuses `navigateOpenDiffForCommit`, which finds the commit
+  // by hash in `state.filteredCommits` first and falls back to
+  // `commitIndex` only when the hash isn't present. Reflog hashes that
+  // exist in the loaded history (the common case) drill in cleanly;
+  // dangling-commit hashes fall back to the index. The `commitIndex`
+  // we pass is best-effort — index in `state.commits` if found, else
+  // `state.selectedIndex` so the cursor stays sane on the diff view.
+  if (
+    key.return &&
+    isReflogActionTarget(state) &&
+    context.reflogSelectedHash
+  ) {
+    const sha = context.reflogSelectedHash
+    const fallbackIndex = state.commits.findIndex((commit) => commit.hash === sha)
+    return [
+      action({
+        type: 'navigateOpenDiffForCommit',
+        sha,
+        commitIndex: fallbackIndex >= 0 ? fallbackIndex : state.selectedIndex,
+      }),
+      action({ type: 'setStatus', value: `viewing diff for ${sha.slice(0, 7)}` }),
+    ]
   }
 
   // Inspector Actions tab: Enter on the cursored action fires its

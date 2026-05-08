@@ -80,6 +80,17 @@ export function formatLogInkStatusEmpty({ hasChanges }: LogInkStatusEmptyArgs): 
   return 'Worktree clean. Press gh for history, gb for branches, gz for stash.'
 }
 
+export type LogInkReflogEmptyArgs = {
+  filter: string
+}
+
+export function formatLogInkReflogEmpty({ filter }: LogInkReflogEmptyArgs): string {
+  if (filter.trim()) {
+    return `No reflog entries match filter '${filter}'. Press ctrl+u to clear.`
+  }
+  return 'No reflog entries. Activity in this repo will appear here over time.'
+}
+
 export type LogInkComposeEmptyArgs = {
   /** Whether the worktree has any staged changes ready to commit. */
   hasStaged: boolean
