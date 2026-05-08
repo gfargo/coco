@@ -377,6 +377,9 @@ export async function summarizeDiffs(
     maxFileTokens: effectiveMaxFileTokens,
     minTokensForSummary,
     maxConcurrent,
+    // #861, PR 1: pass the overall budget so Phase 2 can short-circuit
+    // once earlier completions drop the running total under the cap.
+    maxTokens,
     tokenizer,
     logger,
     chain,

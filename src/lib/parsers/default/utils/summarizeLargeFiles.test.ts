@@ -1,4 +1,5 @@
 import { FileDiff, DiffNode } from '../../../types'
+import { summarize } from '../../../langchain/chains/summarize'
 import { summarizeLargeFiles, preprocessLargeFiles } from './summarizeLargeFiles'
 
 // Mock the summarize function
@@ -12,6 +13,8 @@ jest.mock('../../../langchain/chains/summarize', () => ({
     return `Summary of ${docs.length} document(s) with ${totalLength} chars`
   }),
 }))
+
+const mockSummarize = summarize as jest.MockedFunction<typeof summarize>
 
 describe('summarizeLargeFiles', () => {
   const mockTokenizer = (text: string) => Math.ceil(text.length / 4) // ~4 chars per token
@@ -108,6 +111,114 @@ describe('summarizeLargeFiles', () => {
 
     // File should remain unchanged
     expect(result).toEqual(diffs)
+  })
+
+  it('skips later large files once the running total drops under maxTokens', async () => {
+    // Three large files, sum 10500 tokens. With maxTokens=8000 and a
+    // mock summarizer that collapses each call to ~1 token (very small
+    // synthetic summary), summarizing the first file alone is enough
+    // to drop the total under budget — the remaining two should skip.
+    const diffs: FileDiff[] = [
+      { file: 'a.ts', diff: 'a'.repeat(20000), summary: 'a.ts', tokenCount: 5000 },
+      { file: 'b.ts', diff: 'b'.repeat(12000), summary: 'b.ts', tokenCount: 3000 },
+      { file: 'c.ts', diff: 'c'.repeat(10000), summary: 'c.ts', tokenCount: 2500 },
+    ]
+
+    const result = await summarizeLargeFiles(diffs, {
+      maxFileTokens: 1000,
+      minTokensForSummary: 400,
+      maxConcurrent: 1, // serialize so the budget check is deterministic
+      maxTokens: 8000,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    // Only the largest file should have been sent to the LLM.
+    expect(mockSummarize).toHaveBeenCalledTimes(1)
+
+    // First file (largest, dispatched first) is summarized.
+    expect(result[0].diff).toContain('Summary')
+
+    // Remaining two files keep their raw diffs — never sent to the LLM.
+    expect(result[1]).toEqual(diffs[1])
+    expect(result[2]).toEqual(diffs[2])
+
+    expect(mockLogger.verbose).toHaveBeenCalledWith(
+      expect.stringContaining('Skipped 2 pre-summary call(s)'),
+      expect.any(Object)
+    )
+  })
+
+  it('summarizes every eligible file when maxTokens is omitted (backward compat)', async () => {
+    const diffs: FileDiff[] = [
+      { file: 'a.ts', diff: 'a'.repeat(20000), summary: 'a.ts', tokenCount: 5000 },
+      { file: 'b.ts', diff: 'b'.repeat(12000), summary: 'b.ts', tokenCount: 3000 },
+      { file: 'c.ts', diff: 'c'.repeat(10000), summary: 'c.ts', tokenCount: 2500 },
+    ]
+
+    await summarizeLargeFiles(diffs, {
+      maxFileTokens: 1000,
+      minTokensForSummary: 400,
+      maxConcurrent: 1,
+      // no maxTokens — old behavior: every eligible file is summarized
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockSummarize).toHaveBeenCalledTimes(3)
+  })
+
+  it('still summarizes every file when the budget cannot be met by the eligible set', async () => {
+    // Three large files. maxTokens=100 is unreachable even after every
+    // file is summarized to ~1 token, so no skip should fire.
+    const diffs: FileDiff[] = [
+      { file: 'a.ts', diff: 'a'.repeat(20000), summary: 'a.ts', tokenCount: 5000 },
+      { file: 'b.ts', diff: 'b'.repeat(12000), summary: 'b.ts', tokenCount: 3000 },
+      { file: 'c.ts', diff: 'c'.repeat(10000), summary: 'c.ts', tokenCount: 2500 },
+    ]
+
+    await summarizeLargeFiles(diffs, {
+      maxFileTokens: 1000,
+      minTokensForSummary: 400,
+      maxConcurrent: 1,
+      maxTokens: 100,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockSummarize).toHaveBeenCalledTimes(3)
+  })
+
+  it('dispatches biggest-first so a single big file can short-circuit the rest', async () => {
+    // Files defined in non-sorted order. The largest one (b.ts) should
+    // be summarized first, regardless of array position.
+    const diffs: FileDiff[] = [
+      { file: 'small-a.ts', diff: 'a'.repeat(8000), summary: 'small-a.ts', tokenCount: 2000 },
+      { file: 'big-b.ts', diff: 'b'.repeat(40000), summary: 'big-b.ts', tokenCount: 10000 },
+      { file: 'small-c.ts', diff: 'c'.repeat(8000), summary: 'small-c.ts', tokenCount: 2000 },
+    ]
+
+    await summarizeLargeFiles(diffs, {
+      maxFileTokens: 1000,
+      minTokensForSummary: 400,
+      maxConcurrent: 1,
+      maxTokens: 5000, // total is 14000; summarizing big-b alone collapses it under budget
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockSummarize).toHaveBeenCalledTimes(1)
+    // The single call should have processed big-b.ts (the largest).
+    const firstCallDocs = mockSummarize.mock.calls[0][0] as { metadata?: { file?: string } }[]
+    expect(firstCallDocs[0]?.metadata?.file).toBe('big-b.ts')
   })
 
   it('should respect maxConcurrent limit', async () => {
