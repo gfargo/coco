@@ -9,6 +9,7 @@ import {
   touchDiffSummary,
   writeDiffSummary,
 } from './diffSummaryCache'
+import { summarizeMarkdownDiff } from './markdownDiff'
 import { summarizeTrivialDiff } from './trivialDiff'
 
 /**
@@ -75,6 +76,24 @@ async function summarizeFileDiff(
       ...fileDiff,
       diff: trivialSummary,
       tokenCount: tokenizer(trivialSummary),
+    }
+  }
+
+  // Markdown fast path (#861, angle 5). Modification diffs to .md /
+  // .mdx / .markdown files with clear heading-level structural
+  // changes resolve via a templated summary instead of an LLM call.
+  // Diffs without structural signals (paragraph-only edits) fall
+  // through to the LLM so the summary keeps its detail.
+  const markdownSummary = summarizeMarkdownDiff(fileDiff)
+  if (markdownSummary !== undefined) {
+    logger.verbose(
+      ` - ${fileDiff.file}: markdown fast-path skip (no LLM call)`,
+      { color: 'gray' }
+    )
+    return {
+      ...fileDiff,
+      diff: markdownSummary,
+      tokenCount: tokenizer(markdownSummary),
     }
   }
 
