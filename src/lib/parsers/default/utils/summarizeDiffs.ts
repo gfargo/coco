@@ -178,6 +178,13 @@ export type SummarizeDiffsOptions = {
    * @default 6
    */
   maxConcurrent?: number
+  /**
+   * Opt-in fast paths that trade summary detail for speed. Forwarded
+   * to `preprocessLargeFiles`; off by default.
+   */
+  fastPath?: {
+    markdown?: boolean
+  }
   handleOutput?: typeof defaultOutputCallback
 } & SummarizeContext
 
@@ -340,6 +347,7 @@ export async function summarizeDiffs(
     minTokensForSummary = 400,
     maxFileTokens,
     maxConcurrent = 6,
+    fastPath,
     textSplitter,
     chain,
     metadata,
@@ -380,6 +388,10 @@ export async function summarizeDiffs(
     // #861, PR 1: pass the overall budget so Phase 2 can short-circuit
     // once earlier completions drop the running total under the cap.
     maxTokens,
+    // #861, angle 5: opt-in markdown fast path. Off by default; when
+    // enabled, markdown modification diffs with structural signals
+    // resolve via a templated extract instead of an LLM call.
+    fastPath,
     tokenizer,
     logger,
     chain,

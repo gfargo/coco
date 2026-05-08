@@ -10,6 +10,9 @@ export type FileChangeParserServiceBudget = {
   minTokensForSummary?: number
   maxFileTokens?: number
   maxConcurrent?: number
+  fastPath?: {
+    markdown?: boolean
+  }
 }
 
 export type CreateFileChangeParserOptionsInput = {
@@ -42,6 +45,7 @@ export function createFileChangeParserOptions({
     minTokensForSummary: service?.minTokensForSummary,
     maxFileTokens: service?.maxFileTokens,
     maxConcurrent: service?.maxConcurrent,
+    fastPath: service?.fastPath,
     metadata: {
       command,
       provider,

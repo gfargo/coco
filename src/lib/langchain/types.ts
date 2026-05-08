@@ -164,6 +164,35 @@ export type BaseLLMService = {
    * @default 'balanced'
    */
   dynamicModelPreference?: DynamicModelPreference
+  /**
+   * Opt-in fast paths that trade summary detail for speed. Each flag
+   * here replaces an LLM summary call with a deterministic templated
+   * extract for a specific file shape. Off by default — when enabled,
+   * you accept that final commit messages on those file shapes may be
+   * blander than LLM-generated summaries (the templated extract names
+   * structural changes only).
+   *
+   * Lossless optimizations (cache, trivial-shape skip on pure
+   * additions / deletions / renames / binary, sort discipline) ship
+   * default-on and are not configured here.
+   */
+  fastPath?: {
+    /**
+     * Replace the LLM summary with a templated heading extract for
+     * `.md` / `.mdx` / `.markdown` modification diffs that have clear
+     * heading-level structural changes. Diffs without structural
+     * signals (paragraph-only edits) still go to the LLM regardless
+     * of this flag.
+     *
+     * Bench impact (synthetic): collapses docs-update-shaped commits
+     * from ~24s cold to ~3ms (no LLM calls fire for the markdown
+     * files). Real-world wall-clock savings depend on per-call LLM
+     * latency.
+     *
+     * @default false
+     */
+    markdown?: boolean
+  }
 }
 
 type Authentication =
