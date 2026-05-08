@@ -18,7 +18,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
@@ -84,6 +84,12 @@ export type LogInkState = {
   selectedStashIndex: number
   selectedWorktreeListIndex: number
   selectedConflictFileIndex: number
+  /**
+   * Cursor for the promoted reflog view (#781). Lives on the root state
+   * for the same reason as the other selected* indices: navigating away
+   * and back should keep the user's place in the list.
+   */
+  selectedReflogIndex: number
   /**
    * Sort modes for the promoted views (P4.2). `s` cycles through the
    * available modes; the surface header shows a `▼ <mode>` indicator.
@@ -338,6 +344,7 @@ export type LogInkAction =
   | { type: 'setBootLoading'; value: boolean }
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
+  | { type: 'moveReflog'; delta: number; count: number }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
   | { type: 'moveConflictFile'; delta: number; count: number }
   | { type: 'moveToBottom' }
@@ -602,6 +609,11 @@ function withFilter(
     (filterChanged ? 0 : state.selectedTagIndex)
   const stashIndex = promotedSelections?.stashIndex ??
     (filterChanged ? 0 : state.selectedStashIndex)
+  // Reflog (#781) snaps to 0 on filter change rather than rectifying.
+  // The list is chronological and the user is unlikely to be tracking
+  // a specific entry through filter changes — the simpler reset
+  // matches the "find recovery target by typing" interaction.
+  const reflogIndex = filterChanged ? 0 : state.selectedReflogIndex
 
   return {
     ...state,
@@ -612,6 +624,7 @@ function withFilter(
     selectedBranchIndex: branchIndex,
     selectedTagIndex: tagIndex,
     selectedStashIndex: stashIndex,
+    selectedReflogIndex: reflogIndex,
     diffPreviewOffset: 0,
     pendingKey: undefined,
   }
@@ -716,6 +729,7 @@ export function createLogInkState(
     selectedStashIndex: 0,
     selectedWorktreeListIndex: 0,
     selectedConflictFileIndex: 0,
+    selectedReflogIndex: 0,
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
     paletteFilter: '',
@@ -971,6 +985,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedStashIndex: clampIndex(state.selectedStashIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'moveReflog':
+      return {
+        ...state,
+        selectedReflogIndex: clampIndex(state.selectedReflogIndex + action.delta, action.count),
         pendingKey: undefined,
       }
     case 'moveWorktreeListEntry':
