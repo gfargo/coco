@@ -671,6 +671,152 @@ describe('log Ink input interactions', () => {
     )).toBeUndefined()
   })
 
+  it('marks the cursored branch as compare base on m (#779)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+
+    state = applyInput(state, 'm', {}, {
+      branchCount: 3,
+      branchSelectedShortName: 'main',
+    })
+
+    expect(state.compareBase).toEqual({ kind: 'branch', ref: 'main', label: 'main' })
+    expect(state.statusMessage).toContain('Compare base: main')
+  })
+
+  it('toggles the compare base off when m is pressed on the same ref (#779)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+
+    state = applyInput(state, 'm', {}, {
+      branchCount: 3,
+      branchSelectedShortName: 'main',
+    })
+    expect(state.compareBase?.ref).toBe('main')
+
+    state = applyInput(state, 'm', {}, {
+      branchCount: 3,
+      branchSelectedShortName: 'main',
+    })
+    expect(state.compareBase).toBeUndefined()
+    expect(state.statusMessage).toContain('Cleared compare base')
+  })
+
+  it('replaces the compare base when m is pressed on a different ref (#779)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'tags' })
+
+    state = applyInput(state, 'm', {}, {
+      tagCount: 3,
+      tagSelectedName: 'v1.0',
+    })
+    expect(state.compareBase).toEqual({ kind: 'tag', ref: 'v1.0', label: 'v1.0' })
+
+    state = applyInput(state, 'm', {}, {
+      tagCount: 3,
+      tagSelectedName: 'v2.0',
+    })
+    expect(state.compareBase).toEqual({ kind: 'tag', ref: 'v2.0', label: 'v2.0' })
+  })
+
+  it('Enter on a second ref dispatches navigateOpenDiffForCompare with base + head (#779)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+
+    // Mark base from branches.
+    state = applyInput(state, 'm', {}, {
+      branchCount: 3,
+      branchSelectedShortName: 'main',
+    })
+    expect(state.compareBase?.ref).toBe('main')
+
+    // Switch to tags and press Enter on a tag — Enter override fires.
+    state = applyLogInkAction(state, { type: 'pushView', value: 'tags' })
+    const events = getLogInkInputEvents(state, '', { return: true }, {
+      tagCount: 3,
+      tagSelectedName: 'v1.0',
+    })
+
+    const compare = events.find((event) =>
+      event.type === 'action' && event.action.type === 'navigateOpenDiffForCompare'
+    )
+    expect(compare).toBeDefined()
+    if (compare && compare.type === 'action' && compare.action.type === 'navigateOpenDiffForCompare') {
+      expect(compare.action.base).toEqual({ kind: 'branch', ref: 'main', label: 'main' })
+      expect(compare.action.head).toEqual({ kind: 'tag', ref: 'v1.0', label: 'v1.0' })
+    }
+  })
+
+  it('Enter on the same ref as the compare base shows a hint (#779)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+
+    state = applyInput(state, 'm', {}, {
+      branchCount: 3,
+      branchSelectedShortName: 'main',
+    })
+
+    const events = getLogInkInputEvents(state, '', { return: true }, {
+      branchCount: 3,
+      branchSelectedShortName: 'main',
+    })
+
+    expect(events.find((event) =>
+      event.type === 'action' && event.action.type === 'navigateOpenDiffForCompare'
+    )).toBeUndefined()
+    const status = events.find((event) =>
+      event.type === 'action' && event.action.type === 'setStatus'
+    )
+    expect(status).toBeDefined()
+  })
+
+  it('clears the compare base when the diff view is popped (#779)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+
+    // Mark base + open compare diff.
+    state = applyInput(state, 'm', {}, {
+      branchCount: 3,
+      branchSelectedShortName: 'main',
+    })
+    state = applyLogInkAction(state, {
+      type: 'navigateOpenDiffForCompare',
+      base: { kind: 'branch', ref: 'main', label: 'main' },
+      head: { kind: 'tag', ref: 'v1.0', label: 'v1.0' },
+    })
+    expect(state.activeView).toBe('diff')
+    expect(state.compareBase?.ref).toBe('main')
+    expect(state.compareHead?.ref).toBe('v1.0')
+
+    // Pop the diff — compareBase + compareHead both clear.
+    state = applyLogInkAction(state, { type: 'popView' })
+    expect(state.activeView).toBe('branches')
+    expect(state.compareBase).toBeUndefined()
+    expect(state.compareHead).toBeUndefined()
+  })
+
+  it('Enter on a history commit row uses its hash as the compare head (#779)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, {
+      type: 'setCompareBase',
+      value: { kind: 'branch', ref: 'main', label: 'main' },
+    })
+
+    // History view, default cursor on commit at index 0.
+    const events = getLogInkInputEvents(state, '', { return: true }, {})
+
+    const compare = events.find((event) =>
+      event.type === 'action' && event.action.type === 'navigateOpenDiffForCompare'
+    )
+    expect(compare).toBeDefined()
+    if (compare && compare.type === 'action' && compare.action.type === 'navigateOpenDiffForCompare') {
+      expect(compare.action.base.ref).toBe('main')
+      expect(compare.action.head.kind).toBe('commit')
+      // Hash matches the cursored commit (rows[0] is a commit row in this fixture).
+      expect(compare.action.head.ref).toBeTruthy()
+    }
+  })
+
   it('preserves per-view selection across navigation', () => {
     let state = createLogInkState(rows)
 

@@ -11,6 +11,7 @@ import {
 } from './inkKeymap'
 import {
     LogInkAction,
+    LogInkCompareRef,
     LogInkSidebarTab,
     LogInkState,
     parseLogInkHistoryFetchPrefix,
@@ -65,7 +66,18 @@ export type LogInkInputContext = {
    */
   commitDiffHunkOffsets?: number[]
   branchCount?: number
+  /**
+   * Short name of the cursored branch (#779). Used by `m` to capture
+   * the compare-base ref and by Enter (when compareBase is set) to
+   * resolve the head ref from the branches view.
+   */
+  branchSelectedShortName?: string
   tagCount?: number
+  /**
+   * Name of the cursored tag (#779). Same role as
+   * `branchSelectedShortName` but scoped to the tags view.
+   */
+  tagSelectedName?: string
   stashCount?: number
   reflogCount?: number
   /** Hash of the cursored reflog entry (#781). Used by Enter to drill into the diff. */
@@ -317,6 +329,58 @@ function isWorktreeActionTarget(state: LogInkState): boolean {
 }
 
 /**
+ * Compare-flow target views (#779). The `m` mark + Enter-as-compare
+ * overrides only fire on rows that represent a single ref the user
+ * could pass to `git diff <ref>..<ref>` — branches, tags, and history
+ * commits. The reflog view is intentionally excluded because reflog
+ * entries are *moves* of HEAD, not refs a user typically diffs against.
+ */
+function isCompareFlowTarget(state: LogInkState): boolean {
+  if (state.focus !== 'commits') return false
+  return state.activeView === 'branches' ||
+    state.activeView === 'tags' ||
+    state.activeView === 'history'
+}
+
+/**
+ * Resolve the cursored ref for the compare flow (#779). Pulls the
+ * concrete ref + label off context for branches / tags, and reads the
+ * commit row from state for history. Returns undefined when no usable
+ * ref is under the cursor (e.g., the views are empty, or the focus is
+ * on the synthetic "(+) new commit" row).
+ */
+function getCursoredCompareRef(
+  state: LogInkState,
+  context: LogInkInputContext
+): LogInkCompareRef | undefined {
+  if (state.activeView === 'branches' && context.branchSelectedShortName) {
+    return {
+      kind: 'branch',
+      ref: context.branchSelectedShortName,
+      label: context.branchSelectedShortName,
+    }
+  }
+  if (state.activeView === 'tags' && context.tagSelectedName) {
+    return {
+      kind: 'tag',
+      ref: context.tagSelectedName,
+      label: context.tagSelectedName,
+    }
+  }
+  if (state.activeView === 'history' && !state.pendingCommitFocused) {
+    const commit = state.filteredCommits[state.selectedIndex]
+    if (commit) {
+      return {
+        kind: 'commit',
+        ref: commit.hash,
+        label: `${commit.shortHash} ${commit.message}`.trim(),
+      }
+    }
+  }
+  return undefined
+}
+
+/**
  * Item count for the active sidebar tab — used by the generic
  * sidebar-Enter handler to decide whether to defer to the per-entity
  * Enter (when items are present and the user is cursoring through
@@ -425,6 +489,16 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'conflicts' })]
     case 'navigateReflog':
       return [action({ type: 'pushView', value: 'reflog' })]
+    case 'markForCompare':
+      // Palette context can't reach the cursored ref (filtered branch /
+      // tag lists live in runtime state, not the reducer). Surface a
+      // hint and let the user press `m` directly on the row. The
+      // inline keypress handler further down in this file does the
+      // actual work and has access to the necessary context.
+      return [action({
+        type: 'setStatus',
+        value: 'open branches / tags / history and press m on the cursored ref',
+      })]
     case 'navigateBack':
       return [action({ type: 'popView' })]
     case 'openSelected': {
@@ -1508,6 +1582,31 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // Compare-flow Enter override (#779). When `compareBase` is set and
+  // the user presses Enter on a branch / tag / history commit row, we
+  // open the compare diff (base..head) instead of the row's normal
+  // action (checkout / drill-in / diff). Scoped to compare-flow
+  // targets so non-flow views keep their Enter intact. Runs BEFORE
+  // the per-row Enter handlers below so the override wins, including
+  // before the history-row drill-in.
+  if (key.return && state.compareBase && isCompareFlowTarget(state)) {
+    const head = getCursoredCompareRef(state, context)
+    if (!head) {
+      return [action({ type: 'setStatus', value: 'No ref under cursor — move to a branch / tag / commit row first' })]
+    }
+    if (head.ref === state.compareBase.ref && head.kind === state.compareBase.kind) {
+      return [action({ type: 'setStatus', value: 'Compare base and head are the same ref — pick a different one' })]
+    }
+    return [
+      action({
+        type: 'navigateOpenDiffForCompare',
+        base: state.compareBase,
+        head,
+      }),
+      action({ type: 'setStatus', value: `Comparing ${state.compareBase.label} → ${head.label}` }),
+    ]
+  }
+
   if (
     key.return &&
     state.activeView === 'history' &&
@@ -1751,6 +1850,28 @@ export function getLogInkInputEvents(
   // (especially the `R` rename binding on the branches target).
   if (inputValue === 'R' && isTagActionTarget(state) && context.tagCount) {
     return [action({ type: 'setPendingConfirmation', value: 'delete-remote-tag' })]
+  }
+
+  // `m` marks (or un-marks) the cursored ref as the compare base
+  // (#779). Scoped to compare-flow targets so it doesn't collide with
+  // the `m` PR-merge handler further down. The toggle behavior — `m`
+  // again on the same ref clears the base — gives the user a way to
+  // bail out without remembering a separate cancel key.
+  if (inputValue === 'm' && isCompareFlowTarget(state)) {
+    const ref = getCursoredCompareRef(state, context)
+    if (!ref) {
+      return [action({ type: 'setStatus', value: 'No ref under cursor — move to a branch / tag / commit row first' })]
+    }
+    if (state.compareBase && state.compareBase.ref === ref.ref && state.compareBase.kind === ref.kind) {
+      return [
+        action({ type: 'clearCompareBase' }),
+        action({ type: 'setStatus', value: `Cleared compare base ${ref.label}` }),
+      ]
+    }
+    return [
+      action({ type: 'setCompareBase', value: ref }),
+      action({ type: 'setStatus', value: `Compare base: ${ref.label} — press enter on another ref to diff` }),
+    ]
   }
 
   // Per-view worktree action: `D` removes the worktree AND deletes

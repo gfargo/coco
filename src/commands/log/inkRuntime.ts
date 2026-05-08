@@ -227,6 +227,7 @@ import {
     stageHunk,
     unstageHunk,
 } from './statusHunks'
+import { getCompareDiff } from './compareData'
 import { ReflogOverview, getReflogOverview, splitReflogSubject } from './reflogData'
 import { TagOverview, getTagOverview } from './tagData'
 import {
@@ -896,6 +897,10 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // colors match the commit-diff path.
   const [stashDiffLines, setStashDiffLines] = React.useState<string[] | undefined>(undefined)
   const [stashDiffLoading, setStashDiffLoading] = React.useState(false)
+  // #779 — compare-two-refs diff state. Loaded lazily when the diff
+  // view becomes active with `diffSource === 'compare'`.
+  const [compareDiffLines, setCompareDiffLines] = React.useState<string[] | undefined>(undefined)
+  const [compareDiffLoading, setCompareDiffLoading] = React.useState(false)
   const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
     Boolean(logArgv?.interactive && !logArgv.limit) &&
     getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
@@ -1233,6 +1238,45 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     })()
     return () => { active = false }
   }, [git, state.activeView, state.diffSource, state.stashDiffRef])
+
+  // #779 — load `git diff <base>..<head>` once the diff view becomes
+  // active with diffSource='compare'. Mirrors the stash loader's
+  // shape; the surface renders the lines via the same +/-/@@ coloring
+  // path. On unknown ref / git error, `safe()` swallows and the
+  // surface falls back to a "no diff" hint.
+  const compareBaseRef = state.compareBase?.ref
+  const compareHeadRef = state.compareHead?.ref
+  React.useEffect(() => {
+    if (
+      state.activeView !== 'diff' ||
+      state.diffSource !== 'compare' ||
+      !compareBaseRef ||
+      !compareHeadRef
+    ) {
+      return
+    }
+    let active = true
+    setCompareDiffLoading(true)
+    void (async () => {
+      const lines = await safe(getCompareDiff(git, compareBaseRef, compareHeadRef))
+      if (active) {
+        setCompareDiffLines(lines || [])
+        setCompareDiffLoading(false)
+      }
+    })()
+    return () => { active = false }
+  }, [git, state.activeView, state.diffSource, compareBaseRef, compareHeadRef])
+
+  // Reset compare-diff state whenever the diff view exits. Without
+  // this, opening a new compare immediately after closing one would
+  // briefly show the previous comparison's lines while the new
+  // loader runs.
+  React.useEffect(() => {
+    if (state.diffSource !== 'compare') {
+      setCompareDiffLines(undefined)
+      setCompareDiffLoading(false)
+    }
+  }, [state.diffSource])
 
   React.useEffect(() => {
     let active = true
@@ -2461,7 +2505,13 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // perf pass) — reading them here is O(1) instead of O(branches +
     // tags + stashes + worktrees) per keystroke.
     const branchVisibleCount = filteredBranchList.length
+    const branchSelectedShortName = filteredBranchList[
+      Math.min(state.selectedBranchIndex, Math.max(0, filteredBranchList.length - 1))
+    ]?.shortName
     const tagVisibleCount = filteredTagList.length
+    const tagSelectedName = filteredTagList[
+      Math.min(state.selectedTagIndex, Math.max(0, filteredTagList.length - 1))
+    ]?.name
     const stashVisibleCount = filteredStashList.length
     const stashSelectedRef = filteredStashList[
       Math.min(state.selectedStashIndex, Math.max(0, filteredStashList.length - 1))
@@ -2497,7 +2547,9 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
       commitDiffHunkOffsets,
       branchCount: branchVisibleCount,
+      branchSelectedShortName,
       tagCount: tagVisibleCount,
+      tagSelectedName,
       stashCount: stashVisibleCount,
       reflogCount: reflogVisibleCount,
       reflogSelectedHash,
@@ -2622,6 +2674,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         selectedDetailFile,
         stashDiffLines,
         stashDiffLoading,
+        compareDiffLines,
+        compareDiffLoading,
         layout.bodyRows,
         layout.mainPanelWidth,
         theme,
@@ -3007,6 +3061,8 @@ function renderMainPanel(
   selectedDetailFile: GitCommitDetail['files'][number] | undefined,
   stashDiffLines: string[] | undefined,
   stashDiffLoading: boolean,
+  compareDiffLines: string[] | undefined,
+  compareDiffLoading: boolean,
   bodyRows: number,
   width: number,
   theme: LogInkTheme,
@@ -3034,6 +3090,8 @@ function renderMainPanel(
       selectedDetailFile,
       stashDiffLines,
       stashDiffLoading,
+      compareDiffLines,
+      compareDiffLoading,
       bodyRows,
       width,
       theme
@@ -4328,6 +4386,8 @@ function renderDiffSurface(
   selectedDetailFile: GitCommitDetail['files'][number] | undefined,
   stashDiffLines: string[] | undefined,
   stashDiffLoading: boolean,
+  compareDiffLines: string[] | undefined,
+  compareDiffLoading: boolean,
   bodyRows: number,
   width: number,
   theme: LogInkTheme
@@ -4436,6 +4496,65 @@ function renderDiffSurface(
       dimColor: index > 0,
     }, truncate(line, width - 4))),
     ...stashBodyNodes)
+  }
+
+  // Compare-two-refs branch (#779). Mirrors the stash diff above but
+  // sourced from `git diff <base>..<head>`. No per-file cherry-pick or
+  // hunk apply — comparing arbitrary refs doesn't have a sensible
+  // mutate-from-here flow, so the surface is read-only navigation.
+  if (state.diffSource === 'compare') {
+    const lines = compareDiffLines || []
+    const splitActive = isSplitDiffViable(state, width)
+    const splitRequestedButTooNarrow = state.diffViewMode === 'split' && !splitActive
+    const visibleLines = lines.slice(
+      state.diffPreviewOffset,
+      state.diffPreviewOffset + visibleRows
+    )
+    const baseLabel = state.compareBase?.label || state.compareBase?.ref || '<base>'
+    const headLabel = state.compareHead?.label || state.compareHead?.ref || '<head>'
+    const compareTitle = `${baseLabel} → ${headLabel}`
+    const baseHeaderLines: string[] = compareDiffLoading
+      ? [`Loading diff for ${compareTitle}...`]
+      : lines.length && (lines.length > 1 || lines[0])
+        ? [
+          compareTitle,
+          `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
+          '',
+        ]
+        : ['No diff to display — refs may resolve to the same tree.']
+    const headerLines = splitRequestedButTooNarrow
+      ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
+      : baseHeaderLines
+
+    const compareBodyNodes: ReactTypes.ReactNode[] = compareDiffLoading || !lines.length || (lines.length === 1 && !lines[0])
+      ? []
+      : splitActive
+        ? renderSplitDiffBody(
+          h, components, visibleLines, state.diffPreviewOffset, width, theme,
+          'compare-diff-split'
+        )
+        : visibleLines.map((line, index) => h(Text, {
+          key: `compare-diff-line-${state.diffPreviewOffset + index}`,
+          ...diffLineProps(line, theme),
+        }, truncate(line, width - 4)))
+
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexShrink: 0,
+      paddingX: 1,
+      width,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle(splitActive ? 'Compare (split)' : 'Compare', focused)),
+      h(Text, { dimColor: true }, truncate(compareTitle, Math.max(20, Math.floor(width / 2))))
+    ),
+    ...headerLines.map((line, index) => h(Text, {
+      key: `compare-diff-header-${index}`,
+      dimColor: index > 0,
+    }, truncate(line, width - 4))),
+    ...compareBodyNodes)
   }
 
   // diffSource disambiguates: 'commit' was set when the user opened the
@@ -5650,6 +5769,7 @@ function renderFooter(
     showHelp: state.showHelp,
     sidebarTab: state.sidebarTab,
     sidebarItemCount,
+    compareBaseSet: Boolean(state.compareBase),
   })
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.

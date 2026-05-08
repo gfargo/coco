@@ -14,6 +14,7 @@ export type LogInkCommandId =
   | 'focusNext'
   | 'focusPrevious'
   | 'help'
+  | 'markForCompare'
   | 'moveDown'
   | 'moveToBottom'
   | 'moveToTop'
@@ -273,6 +274,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'markForCompare',
+    keys: ['m'],
+    label: 'mark compare',
+    description: 'Mark the cursored ref (branch / tag / commit) as the base for a compare-two-refs diff (#779). Press again on the same ref to clear; with a base set, Enter on another ref opens the compare diff.',
+    contexts: ['commits'],
+  },
+  {
     id: 'navigateBack',
     keys: ['<', 'esc'],
     label: 'back',
@@ -362,7 +370,7 @@ export type GetLogInkFooterHintsOptions = {
   activeView?: LogInkView
   /** Used to differentiate the diff-view hints between commit / worktree
    *  / stash sources without reaching into runtime state. */
-  diffSource?: 'commit' | 'worktree' | 'stash'
+  diffSource?: 'commit' | 'worktree' | 'stash' | 'compare'
   filterMode: boolean
   focus: LogInkFocus
   showHelp: boolean
@@ -384,6 +392,14 @@ export type GetLogInkFooterHintsOptions = {
    * will switch to.
    */
   diffViewMode?: 'unified' | 'split'
+  /**
+   * True when a compare base is set (#779). Compare-flow target views
+   * (branches / tags / history) swap their `enter` hint to show
+   * "enter compare" so users know the override is active. Also adds
+   * "m clear" so they can bail out of the flow without remembering a
+   * separate cancel key.
+   */
+  compareBaseSet?: boolean
 }
 
 export type LogInkChordContinuation = {
@@ -591,6 +607,15 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
         global: NORMAL_GLOBAL_HINTS,
       }
     }
+    if (options.diffSource === 'compare') {
+      // Compare-two-refs (#779): read-only diff with no per-file
+      // cherry-pick or hunk apply (those don't make sense across
+      // arbitrary refs). Just scroll + back out.
+      return {
+        contextual: ['j/k lines', splitToggleHint, 'esc back'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
     return {
       contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
@@ -605,15 +630,27 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   }
 
   if (options.activeView === 'branches') {
+    if (options.compareBaseSet) {
+      return {
+        contextual: ['↑/↓ branches', 'enter compare', 'm clear', 'esc back'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
     return {
-      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort', 'y yank'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 'm compare', 's sort', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'tags') {
+    if (options.compareBaseSet) {
+      return {
+        contextual: ['↑/↓ tags', 'enter compare', 'm clear', 'esc back'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
     return {
-      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort', 'y yank'],
+      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 'm compare', 's sort', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -657,6 +694,17 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     }
   }
 
+  if (options.compareBaseSet) {
+    // History view with a compare base set — Enter is overridden to
+    // open the compare diff; show the override + the bail-out key.
+    // Mutate / new chips are dropped so the footer doesn't compete
+    // with the active workflow.
+    return {
+      contextual: ['↑/↓ move', 'enter compare', 'm clear', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
   return {
     // History view default hints. Mutating ops (`c` cherry-pick, `R`
     // revert, `Z` reset, `i` interactive-rebase) all route through a
@@ -666,7 +714,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     // Grouped into compact `c/R/Z/i mutate` and `B/gT new` chips so
     // the footer stays scannable; full descriptions live in `?` help
     // and the palette.
-    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'B/gT new', 'y/Y yank', '/ search', 'gg/G top/bottom'],
+    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'B/gT new', 'm compare', 'y/Y yank', '/ search'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
