@@ -88,7 +88,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@commitlint/core": "^20.5.0",
+    "@commitlint/core": "^21.0.0",
     "@inquirer/prompts": "8.4.2",
     "@langchain/anthropic": "^1.0.0",
     "@langchain/community": "^1.0.0",
