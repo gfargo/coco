@@ -28,7 +28,22 @@ export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discar
  * input handlers off this field so a dirty worktree can't bleed staging
  * UI into a commit-diff view.
  */
-export type LogInkDiffSource = 'commit' | 'worktree' | 'stash'
+export type LogInkDiffSource = 'commit' | 'worktree' | 'stash' | 'compare'
+
+/**
+ * A ref in the compare-two-refs flow (#779). `kind` is captured from
+ * the source view (branches / tags / history) so the surface can
+ * label the diff header appropriately. `ref` is the git-resolvable
+ * form passed straight to `git diff`. `label` is the display string
+ * — usually equal to `ref` for branches/tags, or `<shortHash> <subject>`
+ * for commits.
+ */
+export type LogInkCompareRefKind = 'branch' | 'tag' | 'commit'
+export type LogInkCompareRef = {
+  kind: LogInkCompareRefKind
+  ref: string
+  label: string
+}
 /**
  * Diff rendering mode (#785). `unified` is the historical single-column
  * patch view; `split` lays the same lines out side-by-side (removals on
@@ -180,6 +195,17 @@ export type LogInkState = {
    * is popped or replaced.
    */
   stashDiffRef?: string
+  /**
+   * Compare-two-refs flow (#779). `compareBase` is set by `m` on a
+   * branch / tag / history row; while it's defined, the footer shows
+   * a "compare base: <label>" hint and `Enter` on a second ref opens
+   * a compare diff instead of the row's normal action. `compareHead`
+   * is set when the compare diff is active and identifies the right-
+   * hand side of the comparison. Both clear when the diff view is
+   * popped or replaced.
+   */
+  compareBase?: LogInkCompareRef
+  compareHead?: LogInkCompareRef
   /**
    * When true, the cursor sits on the synthetic "(+) new commit" row
    * that the history panel renders above the real commits whenever the
@@ -363,6 +389,9 @@ export type LogInkAction =
   | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
   | { type: 'navigateOpenDiffForStash'; ref: string; stashIndex?: number }
+  | { type: 'navigateOpenDiffForCompare'; base: LogInkCompareRef; head: LogInkCompareRef }
+  | { type: 'setCompareBase'; value: LogInkCompareRef }
+  | { type: 'clearCompareBase' }
   | { type: 'navigateOpenComposeForFile'; fileIndex: number }
   | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
   | { type: 'jumpCommitDiffHunk'; delta: number; hunkOffsets: number[] }
@@ -539,6 +568,7 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
+    compareHead: value === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: value === 'status' ? state.statusGroupHeaderFocused : false,
     pendingKey: undefined,
@@ -552,6 +582,13 @@ function withPoppedView(state: LogInkState): LogInkState {
 
   const viewStack = state.viewStack.slice(0, -1)
   const next = topOfStack(viewStack)
+  // #779 — compareBase is "cleared when the diff view is popped." We
+  // detect that case by checking if the *previous* top was 'diff'.
+  // The compare workflow ends when the user backs out of the compare
+  // diff; on the next mark they re-set the base. Other view pops
+  // preserve compareBase so the user can move between branches / tags /
+  // history while hunting for a head ref.
+  const wasOnDiff = state.activeView === 'diff'
   return {
     ...state,
     activeView: next,
@@ -564,6 +601,8 @@ function withPoppedView(state: LogInkState): LogInkState {
     selectedWorktreeHunkIndex: next === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: next === 'diff' ? state.diffSource : undefined,
     stashDiffRef: next === 'diff' ? state.stashDiffRef : undefined,
+    compareBase: wasOnDiff ? undefined : state.compareBase,
+    compareHead: next === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: next === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: next === 'status' ? state.statusGroupHeaderFocused : false,
     pendingKey: undefined,
@@ -584,6 +623,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
+    compareHead: value === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: value === 'status' ? state.statusGroupHeaderFocused : false,
     pendingKey: undefined,
@@ -1232,6 +1272,31 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         worktreeDiffOffset: 0,
       }
     }
+    case 'navigateOpenDiffForCompare': {
+      const next = withPushedView(state, 'diff')
+      return {
+        ...next,
+        diffSource: 'compare',
+        compareBase: action.base,
+        compareHead: action.head,
+        // Reset scroll offset so the compare patch always opens at
+        // the top — same reasoning as the stash branch above.
+        diffPreviewOffset: 0,
+        worktreeDiffOffset: 0,
+      }
+    }
+    case 'setCompareBase':
+      return {
+        ...state,
+        compareBase: action.value,
+        pendingKey: undefined,
+      }
+    case 'clearCompareBase':
+      return {
+        ...state,
+        compareBase: undefined,
+        pendingKey: undefined,
+      }
     case 'navigateOpenComposeForFile': {
       const next = withPushedView(state, 'status')
       return {

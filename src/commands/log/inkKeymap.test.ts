@@ -20,7 +20,7 @@ describe('log Ink keymap', () => {
       // `c/R/Z/i mutate` is the compact chip for cherry-pick / revert /
       // reset / interactive-rebase — full descriptions in ? help and
       // the palette. `B/gT new` covers create-branch-here / create-tag-here.
-      contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'B/gT new', 'y/Y yank', '/ search', 'gg/G top/bottom'],
+      contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'B/gT new', 'm compare', 'y/Y yank', '/ search'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -77,7 +77,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 's sort', 'y yank'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 'm compare', 's sort', 'y yank'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -87,7 +87,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 's sort', 'y yank'],
+      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 'm compare', 's sort', 'y yank'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
