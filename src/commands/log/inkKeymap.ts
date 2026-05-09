@@ -24,6 +24,7 @@ export type LogInkCommandId =
   | 'navigateConflicts'
   | 'navigateDiff'
   | 'navigateHome'
+  | 'navigateBisect'
   | 'navigatePullRequest'
   | 'navigateReflog'
   | 'navigateStash'
@@ -274,6 +275,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'navigateBisect',
+    keys: ['gB'],
+    label: 'bisect',
+    description: 'Push the bisect workflow view (#784). Capital B disambiguates from gb (branches). Available whenever a bisect is in progress; surfaces the current candidate and the good / bad / skip / reset action keys.',
+    contexts: ['normal'],
+  },
+  {
     id: 'markForCompare',
     keys: ['m'],
     label: 'mark compare',
@@ -467,6 +475,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigatePullRequest',
   'navigateConflicts',
   'navigateReflog',
+  'navigateBisect',
   'navigateBack',
 ]
 
@@ -690,6 +699,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'reflog') {
     return {
       contextual: ['↑/↓ entries', 'enter inspect', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'bisect') {
+    return {
+      contextual: ['g good', 'b bad', 's skip', 'x reset', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

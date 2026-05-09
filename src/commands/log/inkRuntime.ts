@@ -227,6 +227,8 @@ import {
     stageHunk,
     unstageHunk,
 } from './statusHunks'
+import { BisectStatus, getBisectStatus } from './bisectData'
+import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from './bisectActions'
 import { getCompareDiff } from './compareData'
 import { ReflogOverview, getReflogOverview, splitReflogSubject } from './reflogData'
 import { TagOverview, getTagOverview } from './tagData'
@@ -277,6 +279,7 @@ type LogInkOptions = {
 }
 
 type LogInkContext = {
+  bisect?: BisectStatus
   branches?: BranchOverview
   operation?: GitOperationOverview
   provider?: ProviderOverview
@@ -367,7 +370,7 @@ async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
 }
 
 async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
-  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog] =
+  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect] =
     await Promise.all([
       safe(getBranchOverview(git)),
       safe(getPullRequestOverview(git)),
@@ -378,9 +381,11 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
       safe(getGitOperationOverview(git)),
       safe(getProviderOverview(git)),
       safe(getReflogOverview(git)),
+      safe(getBisectStatus(git)),
     ])
 
   return {
+    bisect,
     branches,
     operation,
     provider,
@@ -418,6 +423,10 @@ function loadLogInkContextEntries(git: SimpleGit): Array<{
     {
       key: 'reflog',
       load: () => safe(getReflogOverview(git)),
+    },
+    {
+      key: 'bisect',
+      load: () => safe(getBisectStatus(git)),
     },
     {
       key: 'worktree',
@@ -1819,6 +1828,42 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!stash) return { ok: false, message: 'No stash selected' }
         return popStash(git, stash)
       },
+      'bisect-good': async () => {
+        if (!context.bisect?.active) return { ok: false, message: 'No bisect in progress' }
+        try {
+          const stdout = await bisectGood(git)
+          return { ok: true, message: extractBisectRemainingHint(stdout) || 'Marked good' }
+        } catch (error) {
+          return { ok: false, message: `Bisect good failed: ${(error as Error).message}` }
+        }
+      },
+      'bisect-bad': async () => {
+        if (!context.bisect?.active) return { ok: false, message: 'No bisect in progress' }
+        try {
+          const stdout = await bisectBad(git)
+          return { ok: true, message: extractBisectRemainingHint(stdout) || 'Marked bad' }
+        } catch (error) {
+          return { ok: false, message: `Bisect bad failed: ${(error as Error).message}` }
+        }
+      },
+      'bisect-skip': async () => {
+        if (!context.bisect?.active) return { ok: false, message: 'No bisect in progress' }
+        try {
+          const stdout = await bisectSkip(git)
+          return { ok: true, message: extractBisectRemainingHint(stdout) || 'Skipped' }
+        } catch (error) {
+          return { ok: false, message: `Bisect skip failed: ${(error as Error).message}` }
+        }
+      },
+      'bisect-reset': async () => {
+        if (!context.bisect?.active) return { ok: false, message: 'No bisect in progress' }
+        try {
+          await bisectReset(git)
+          return { ok: true, message: 'Bisect reset' }
+        } catch (error) {
+          return { ok: false, message: `Bisect reset failed: ${(error as Error).message}` }
+        }
+      },
       'checkout-file-from-stash': async () => {
         const path = payload?.trim()
         const ref = state.stashDiffRef
@@ -2713,7 +2758,10 @@ function renderHeader(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const branch = context.branches?.currentBranch || context.provider?.currentBranch || '<detached>'
-  const dirty = context.branches?.dirty ? 'dirty' : 'clean'
+  // #784 — surface bisect-in-progress in the title bar so users entering
+  // the TUI mid-bisect see it immediately, before they navigate to gB.
+  const dirtyBase = context.branches?.dirty ? 'dirty' : 'clean'
+  const dirty = context.bisect?.active ? `${dirtyBase} · BISECTING` : dirtyBase
   const repo = context.provider?.repository.owner && context.provider.repository.name
     ? `${context.provider.repository.owner}/${context.provider.repository.name}`
     : 'local repository'
@@ -3112,6 +3160,10 @@ function renderMainPanel(
 
   if (state.activeView === 'reflog') {
     return renderReflogSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
+  if (state.activeView === 'bisect') {
+    return renderBisectSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   if (state.activeView === 'stash') {
@@ -4076,6 +4128,105 @@ function renderReflogSurface(
     h(Text, { dimColor: true }, headerRight)
   ),
   ...renderPromotedFilterAffordance(h, Text, state, theme),
+  ...lines)
+}
+
+/**
+ * Bisect workflow surface (#784). Shows the current candidate commit
+ * (HEAD), a parsed view of recent decisions from `git bisect log`, and
+ * the four action keys (g good, b bad, s skip, x reset).
+ *
+ * When bisect is inactive, the surface renders an empty-state hint
+ * pointing the user at the CLI to start one. The view stays
+ * navigable so the user can read the documentation before starting
+ * — they can't break anything from here.
+ */
+function renderBisectSurface(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  bodyRows: number,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const focused = state.focus === 'commits'
+  const loading = isLogInkContextKeyLoading(contextStatus, 'bisect')
+  const bisect = context.bisect
+  const accent = theme.noColor ? undefined : theme.colors.accent
+
+  const lines: ReactTypes.ReactNode[] = []
+
+  if (loading) {
+    lines.push(h(Text, { key: 'bisect-loading', dimColor: true },
+      truncate('· Loading bisect status…', width - 4)))
+  } else if (!bisect?.active) {
+    // No bisect active. Surface the CLI on-ramp — starting from the
+    // TUI is intentionally out of scope for this PR (#784 follow-up).
+    // The user is expected to enter via `git bisect start <bad> <good>`
+    // and re-open `coco ui`; once bisect is active this view drives
+    // the rest.
+    lines.push(h(Text, { key: 'bisect-empty-1', bold: true },
+      truncate('No bisect in progress.', width - 4)))
+    lines.push(h(Text, { key: 'bisect-empty-2' }, ''))
+    lines.push(h(Text, { key: 'bisect-empty-3' },
+      truncate('Start one from the shell with:', width - 4)))
+    lines.push(h(Text, { key: 'bisect-empty-4', color: accent },
+      truncate('  git bisect start <bad-ref> <good-ref>', width - 4)))
+    lines.push(h(Text, { key: 'bisect-empty-5' }, ''))
+    lines.push(h(Text, { key: 'bisect-empty-6', dimColor: true },
+      truncate('coco will pick up the active bisect on the next refresh — actions will become available here.', width - 4)))
+  } else {
+    // Active bisect. Two-section body: current candidate, recent
+    // decisions. Action keys live in the footer.
+    const headerSha = bisect.currentSha ? bisect.currentSha.slice(0, 8) : '<unknown>'
+    lines.push(h(Text, { key: 'bisect-active-title', bold: true },
+      truncate(`Bisecting · current candidate ${headerSha}`, width - 4)))
+    lines.push(h(Text, { key: 'bisect-active-spacer' }, ''))
+
+    const decisions = bisect.log.filter((entry) =>
+      entry.kind === 'good' || entry.kind === 'bad' || entry.kind === 'skip'
+    )
+
+    if (decisions.length === 0) {
+      lines.push(h(Text, { key: 'bisect-no-decisions', dimColor: true },
+        truncate('No decisions logged yet — press g (good) or b (bad) to record one.', width - 4)))
+    } else {
+      lines.push(h(Text, { key: 'bisect-decisions-header', bold: true },
+        truncate(`Decisions (${decisions.length}):`, width - 4)))
+      const recent = decisions.slice(-Math.max(4, bodyRows - 8))
+      for (const entry of recent) {
+        const kindLabel = entry.kind.toUpperCase().padEnd(5)
+        const sha = (entry.sha || '<unknown>').padEnd(8)
+        const subject = entry.subject || ''
+        const text = `  ${kindLabel} ${sha} ${subject}`
+        lines.push(h(Text, {
+          key: `bisect-entry-${entry.raw}`,
+          dimColor: entry.kind === 'skip',
+          bold: entry.kind === 'bad',
+        }, truncate(text, width - 4)))
+      }
+    }
+
+    lines.push(h(Text, { key: 'bisect-action-spacer' }, ''))
+    lines.push(h(Text, { key: 'bisect-action-hint', dimColor: true },
+      truncate('Actions: g good · b bad · s skip · x reset', width - 4)))
+  }
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexShrink: 0,
+    paddingX: 1,
+    width,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Bisect', focused)),
+    h(Text, { dimColor: true }, bisect?.active ? 'BISECTING' : 'inactive')
+  ),
   ...lines)
 }
 

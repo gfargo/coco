@@ -817,6 +817,79 @@ describe('log Ink input interactions', () => {
     }
   })
 
+  it('pushes bisect with the gB chord (capital disambiguates from gb branches) (#784)', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'B')
+
+    expect(state.viewStack).toEqual(['history', 'bisect'])
+    expect(state.activeView).toBe('bisect')
+    expect(state.statusMessage).toBe('jumped to bisect')
+  })
+
+  it('lower-case g on the bisect view marks good (no chord trigger) (#784)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 'g', {}, {})
+
+    expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
+    // pendingKey must NOT be set — bisect's g consumed the keystroke.
+    const pendingChange = events.find((event) =>
+      event.type === 'action' && event.action.type === 'setPendingKey'
+    )
+    expect(pendingChange).toBeUndefined()
+  })
+
+  it('b on the bisect view marks bad (does not require g chord) (#784)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 'b', {}, {})
+
+    expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-bad' })
+  })
+
+  it('s on the bisect view skips the candidate (#784)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 's', {}, {})
+
+    expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-skip' })
+  })
+
+  it('x on the bisect view opens the y-confirm for reset (#784)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 'x', {}, {})
+
+    const confirm = events.find((event) =>
+      event.type === 'action' && event.action.type === 'setPendingConfirmation'
+    )
+    expect(confirm).toBeDefined()
+    if (confirm && confirm.type === 'action' && confirm.action.type === 'setPendingConfirmation') {
+      expect(confirm.action.value).toBe('bisect-reset')
+    }
+  })
+
+  it('does not hijack g/b/s/x outside the bisect view (#784)', () => {
+    // Defensive check: pressing `g` on the history view must still set
+    // pendingKey for the chord prefix, not fire bisect-good.
+    const state = createLogInkState(rows)
+    expect(state.activeView).toBe('history')
+
+    const events = getLogInkInputEvents(state, 'g', {}, {})
+
+    expect(events).not.toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
+    const pendingChange = events.find((event) =>
+      event.type === 'action' && event.action.type === 'setPendingKey'
+    )
+    expect(pendingChange).toBeDefined()
+  })
+
   it('preserves per-view selection across navigation', () => {
     let state = createLogInkState(rows)
 
