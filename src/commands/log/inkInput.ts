@@ -489,6 +489,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'conflicts' })]
     case 'navigateReflog':
       return [action({ type: 'pushView', value: 'reflog' })]
+    case 'navigateBisect':
+      return [action({ type: 'pushView', value: 'bisect' })]
     case 'markForCompare':
       // Palette context can't reach the cursored ref (filtered branch /
       // tag lists live in runtime state, not the reducer). Surface a
@@ -1047,6 +1049,17 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // `gB` chord: jump to the bisect workflow view (#784). Capital B
+  // disambiguates from `gb` (branches). Always navigates — even when
+  // bisect is inactive — so the user can see the empty-state hint and
+  // know how to start one. The view's surface tells them the next step.
+  if (state.pendingKey === 'g' && inputValue === 'B') {
+    return [
+      action({ type: 'pushView', value: 'bisect' }),
+      action({ type: 'setStatus', value: 'jumped to bisect' }),
+    ]
+  }
+
   // `gH` chord: apply the cursored hunk to the index (`git apply
   // --cached`). Sibling of bare `H` which targets the worktree.
   // Discoverable via the footer hint on diff views and the help
@@ -1088,6 +1101,30 @@ export function getLogInkInputEvents(
       action({ type: 'setPendingKey', value: undefined }),
       action({ type: 'setStatus', value: 'gT creates a tag at the cursored commit on the history view' }),
     ]
+  }
+
+  // #784 — bisect view action keys. Scoped to `state.activeView ===
+  // 'bisect' && state.focus === 'commits'` so the single-letter keys
+  // stay free everywhere else. `g` and `b` collide with the global
+  // chord prefix and the `gb` continuation respectively — placed
+  // BEFORE the bare-`g` chord trigger below so a `g` keystroke on
+  // the bisect view marks good rather than entering chord mode. The
+  // user's path back out of bisect is `<` / `esc`, never a chord;
+  // the in-bisect view itself can't navigate elsewhere via `g`-prefix
+  // chords until the user exits with `esc` first.
+  if (state.activeView === 'bisect' && state.focus === 'commits') {
+    if (inputValue === 'g' && state.pendingKey !== 'g') {
+      return [{ type: 'runWorkflowAction', id: 'bisect-good' }]
+    }
+    if (inputValue === 'b' && state.pendingKey !== 'g') {
+      return [{ type: 'runWorkflowAction', id: 'bisect-bad' }]
+    }
+    if (inputValue === 's') {
+      return [{ type: 'runWorkflowAction', id: 'bisect-skip' }]
+    }
+    if (inputValue === 'x') {
+      return [action({ type: 'setPendingConfirmation', value: 'bisect-reset' })]
+    }
   }
 
   if (inputValue === 'g') {
@@ -1851,6 +1888,7 @@ export function getLogInkInputEvents(
   if (inputValue === 'R' && isTagActionTarget(state) && context.tagCount) {
     return [action({ type: 'setPendingConfirmation', value: 'delete-remote-tag' })]
   }
+
 
   // `m` marks (or un-marks) the cursored ref as the compare base
   // (#779). Scoped to compare-flow targets so it doesn't collide with

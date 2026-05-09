@@ -481,6 +481,45 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // #784 — bisect workflow actions. All four are scoped per-view in
+      // inkInput (active only when activeView === 'bisect') so the
+      // single-letter keys stay free elsewhere. Empty `key` keeps them
+      // palette-discoverable. Reset is the only destructive one — it
+      // throws away the bisect state — so it routes through y-confirm;
+      // good / bad / skip are recoverable via `git bisect log` and run
+      // immediately.
+      id: 'bisect-good',
+      key: '',
+      label: 'Bisect: mark good',
+      description: 'Mark the current bisect candidate as good and advance to the next one.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'bisect-bad',
+      key: '',
+      label: 'Bisect: mark bad',
+      description: 'Mark the current bisect candidate as bad and advance to the next one.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'bisect-skip',
+      key: '',
+      label: 'Bisect: skip candidate',
+      description: 'Skip the current bisect candidate (e.g. it does not build) and advance.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'bisect-reset',
+      key: '',
+      label: 'Bisect: reset',
+      description: 'End the bisect session and restore HEAD. Discards in-progress bisect state.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'ai-commit-summary',
       key: 'I',
       label: 'AI commit summary',

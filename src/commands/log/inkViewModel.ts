@@ -18,7 +18,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog' | 'bisect'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
