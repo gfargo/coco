@@ -140,6 +140,26 @@ export type LogInkState = {
    */
   pendingConfirmationPayload?: string
   pendingMutationConfirmation?: LogInkMutationConfirmation
+  /**
+   * In-TUI bisect-start flow (#879 item 4). When the user opts in
+   * (`s` from the bisect view's empty state), this captures which
+   * step of the two-pick wizard the user is on:
+   *
+   *   - `'bad'`: pick the commit where the bug is present (Enter on
+   *     a history row → captures hash, transitions to `'good'`).
+   *   - `'good'`: pick a known-good commit older than the bad one
+   *     (Enter on a history row → runs `git bisect start <bad>
+   *     <good>` and clears the mode).
+   *
+   * `Esc` clears the mode at any point.
+   */
+  bisectPickMode?: 'bad' | 'good'
+  /**
+   * Hash captured during the `'bad'` step of the bisect-start
+   * wizard. Carried through to the `'good'` step so the workflow
+   * runner can pass both refs to `git bisect start`.
+   */
+  bisectPickPendingBad?: string
   pendingKey?: string
   focus: LogInkFocus
   sidebarTab: LogInkSidebarTab
@@ -392,6 +412,8 @@ export type LogInkAction =
   | { type: 'navigateOpenDiffForCompare'; base: LogInkCompareRef; head: LogInkCompareRef }
   | { type: 'setCompareBase'; value: LogInkCompareRef }
   | { type: 'clearCompareBase' }
+  | { type: 'setBisectPickMode'; value?: 'bad' | 'good'; pendingBad?: string }
+  | { type: 'clearBisectPickMode' }
   | { type: 'navigateOpenComposeForFile'; fileIndex: number }
   | { type: 'jumpWorktreeHunk'; delta: number; hunkOffsets: number[] }
   | { type: 'jumpCommitDiffHunk'; delta: number; hunkOffsets: number[] }
@@ -1295,6 +1317,26 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         compareBase: undefined,
+        pendingKey: undefined,
+      }
+    case 'setBisectPickMode':
+      // Used by both "enter the wizard" (mode='bad', pendingBad omitted)
+      // and "advance to step 2" (mode='good', pendingBad=captured-bad).
+      // The runner treats `value: undefined` as "exit wizard cleanly"
+      // — used after the start-bisect git command runs successfully.
+      return {
+        ...state,
+        bisectPickMode: action.value,
+        bisectPickPendingBad: action.pendingBad,
+        pendingKey: undefined,
+      }
+    case 'clearBisectPickMode':
+      // Esc key path. Drops both fields together so a partially-
+      // captured "bad" pick doesn't strand the second step.
+      return {
+        ...state,
+        bisectPickMode: undefined,
+        bisectPickPendingBad: undefined,
         pendingKey: undefined,
       }
     case 'navigateOpenComposeForFile': {

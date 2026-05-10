@@ -520,6 +520,21 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #879 item 4 — in-TUI start. Per-view-only: scoped to the
+      // bisect-start wizard's second-step Enter. Empty key keeps it
+      // palette-discoverable but the palette path emits a hint
+      // instead (it can't synthesize the bad/good shas without the
+      // wizard state). Worktree-dirty pre-flight check lives in the
+      // runtime handler — kind='normal' because the operation itself
+      // is recoverable via `git bisect reset`.
+      id: 'bisect-start-from-history',
+      key: '',
+      label: 'Bisect: start from history (pick bad + good)',
+      description: 'Start a bisect session by picking the bad commit and a known-good commit from the history view.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       id: 'ai-commit-summary',
       key: 'I',
       label: 'AI commit summary',

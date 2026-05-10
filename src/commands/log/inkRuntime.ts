@@ -228,7 +228,7 @@ import {
     unstageHunk,
 } from './statusHunks'
 import { BisectStatus, getBisectCompletion, getBisectStatus } from './bisectData'
-import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from './bisectActions'
+import { bisectBad, bisectGood, bisectReset, bisectSkip, bisectStart, extractBisectRemainingHint } from './bisectActions'
 import { getCompareDiff } from './compareData'
 import { ReflogOverview, getReflogOverview, splitReflogSubject } from './reflogData'
 import { TagOverview, getTagOverview } from './tagData'
@@ -1894,6 +1894,52 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return { ok: false, message: `Bisect reset failed: ${(error as Error).message}` }
         }
       },
+      'bisect-start-from-history': async () => {
+        // #879 item 4. Payload format: `<bad-sha>\n<good-sha>`.
+        // Refuses if a bisect is already active (would conflict with
+        // the existing session) or if the worktree is dirty (git
+        // refuses bisect on a dirty tree anyway, but we surface a
+        // friendlier message). Both refs are validated before the
+        // git invocation. On success, clears the wizard mode and
+        // pushes the bisect view so the user lands on the new
+        // candidate's diff (which the candidate-detail loader from
+        // #886 picks up automatically).
+        if (context.bisect?.active) {
+          return { ok: false, message: 'A bisect is already in progress — reset it first (x on the bisect view)' }
+        }
+        if (!payload) {
+          return { ok: false, message: 'Bisect start needs both refs — try the wizard again from the bisect view (s)' }
+        }
+        const newlineIndex = payload.indexOf('\n')
+        if (newlineIndex < 0) {
+          return { ok: false, message: 'Malformed bisect-start payload' }
+        }
+        const badRef = payload.slice(0, newlineIndex).trim()
+        const goodRef = payload.slice(newlineIndex + 1).trim()
+        if (!badRef || !goodRef) {
+          return { ok: false, message: 'Bisect start needs both a bad ref and a good ref' }
+        }
+        if (badRef === goodRef) {
+          return { ok: false, message: 'Bisect: bad and good cannot be the same commit' }
+        }
+        if (context.branches?.dirty) {
+          return { ok: false, message: 'Bisect requires a clean worktree — stash your changes first' }
+        }
+        try {
+          await bisectStart(git, badRef, goodRef)
+          // Clear the wizard mode synchronously so the next render
+          // doesn't keep the sticky banner. Push the bisect view in
+          // the same dispatch so the user lands on the new candidate.
+          dispatch({ type: 'setBisectPickMode', value: undefined })
+          dispatch({ type: 'pushView', value: 'bisect' })
+          return {
+            ok: true,
+            message: `Bisecting between ${badRef.slice(0, 8)} (bad) and ${goodRef.slice(0, 8)} (good)`,
+          }
+        } catch (error) {
+          return { ok: false, message: `Bisect start failed: ${(error as Error).message}` }
+        }
+      },
       'checkout-file-from-stash': async () => {
         const path = payload?.trim()
         const ref = state.stashDiffRef
@@ -2628,6 +2674,7 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashCount: stashVisibleCount,
       reflogCount: reflogVisibleCount,
       reflogSelectedHash,
+      bisectActive: Boolean(context.bisect?.active),
       stashSelectedRef,
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,
@@ -4210,21 +4257,26 @@ function renderBisectSurface(
     lines.push(h(Text, { key: 'bisect-loading', dimColor: true },
       truncate('· Loading bisect status…', width - 4)))
   } else if (!bisect?.active) {
-    // No bisect active. Surface the CLI on-ramp — starting from the
-    // TUI is intentionally out of scope for this PR (#784 follow-up).
-    // The user is expected to enter via `git bisect start <bad> <good>`
-    // and re-open `coco ui`; once bisect is active this view drives
-    // the rest.
+    // No bisect active. Two on-ramps: the in-TUI wizard (#879 item 4,
+    // press s to pick bad + good visually) and the CLI start. The
+    // wizard is faster because the user can see commit history while
+    // picking. Either path lands the user back on this view with the
+    // active bisect's controls.
     lines.push(h(Text, { key: 'bisect-empty-1', bold: true },
       truncate('No bisect in progress.', width - 4)))
     lines.push(h(Text, { key: 'bisect-empty-2' }, ''))
     lines.push(h(Text, { key: 'bisect-empty-3' },
-      truncate('Start one from the shell with:', width - 4)))
+      truncate('Start one — pick visually from history:', width - 4)))
     lines.push(h(Text, { key: 'bisect-empty-4', color: accent },
-      truncate('  git bisect start <bad-ref> <good-ref>', width - 4)))
+      truncate('  s   pick the bad commit, then a known-good commit', width - 4)))
     lines.push(h(Text, { key: 'bisect-empty-5' }, ''))
-    lines.push(h(Text, { key: 'bisect-empty-6', dimColor: true },
-      truncate('coco will pick up the active bisect on the next refresh — actions will become available here.', width - 4)))
+    lines.push(h(Text, { key: 'bisect-empty-6' },
+      truncate('Or from your shell:', width - 4)))
+    lines.push(h(Text, { key: 'bisect-empty-7', color: accent },
+      truncate('  git bisect start <bad-ref> <good-ref>', width - 4)))
+    lines.push(h(Text, { key: 'bisect-empty-8' }, ''))
+    lines.push(h(Text, { key: 'bisect-empty-9', dimColor: true },
+      truncate('Once active you get single-keystroke controls — g good · b bad · s skip · x reset.', width - 4)))
   } else if (getBisectCompletion(bisect.log)) {
     // #879 (item 3) — completion panel. When git's "is the first bad
     // commit" terminator appears in the log, the bisect session is

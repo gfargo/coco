@@ -82,6 +82,14 @@ export type LogInkInputContext = {
   reflogCount?: number
   /** Hash of the cursored reflog entry (#781). Used by Enter to drill into the diff. */
   reflogSelectedHash?: string
+  /**
+   * True when `context.bisect.active` is set on the runtime side
+   * (#879 item 4). Lets the input handler differentiate `s` on the
+   * bisect view between "skip the candidate" (active) vs "enter the
+   * in-TUI start wizard" (inactive) without dragging the full
+   * BisectStatus into this scope.
+   */
+  bisectActive?: boolean
   worktreeListCount?: number
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
@@ -1120,10 +1128,68 @@ export function getLogInkInputEvents(
       return [{ type: 'runWorkflowAction', id: 'bisect-bad' }]
     }
     if (inputValue === 's') {
-      return [{ type: 'runWorkflowAction', id: 'bisect-skip' }]
+      // #879 item 4 — `s` is overloaded by context. When bisect is
+      // active, it skips the candidate (the original behavior from
+      // #868). When bisect is INACTIVE (empty state), it enters the
+      // in-TUI start wizard: pushes to history with mode='bad' so
+      // the user can pick the bad commit visually.
+      if (context.bisectActive) {
+        return [{ type: 'runWorkflowAction', id: 'bisect-skip' }]
+      }
+      return [
+        action({ type: 'setBisectPickMode', value: 'bad' }),
+        action({ type: 'pushView', value: 'history' }),
+        action({ type: 'setStatus', value: 'Bisect: pick the bad commit (where the bug is present). Press Enter, or Esc to cancel.' }),
+      ]
     }
     if (inputValue === 'x') {
       return [action({ type: 'setPendingConfirmation', value: 'bisect-reset' })]
+    }
+  }
+
+  // #879 item 4 — Esc clears the bisect-start wizard mode whenever
+  // it's set, regardless of which view the user is on. Runs BEFORE
+  // the generic Esc handler so the cancel path always works.
+  if (key.escape && state.bisectPickMode) {
+    return [
+      action({ type: 'clearBisectPickMode' }),
+      action({ type: 'setStatus', value: 'Bisect start cancelled.' }),
+    ]
+  }
+
+  // #879 item 4 — Enter on a history commit row while in the
+  // bisect-start wizard captures that commit's hash. The first Enter
+  // captures bad and advances to step 2 ("pick good"); the second
+  // Enter runs `git bisect start <bad> <good>` via the workflow
+  // runner. Both override the normal history-Enter (which would open
+  // the diff view) — placed BEFORE the existing history-Enter handler
+  // below so the wizard wins.
+  if (
+    key.return &&
+    state.bisectPickMode &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    const selected = state.filteredCommits[state.selectedIndex]
+    if (selected) {
+      if (state.bisectPickMode === 'bad') {
+        return [
+          action({ type: 'setBisectPickMode', value: 'good', pendingBad: selected.hash }),
+          action({
+            type: 'setStatus',
+            value: `Bisect: bad = ${selected.shortHash}. Pick a known-good commit (older). Press Enter, or Esc to cancel.`,
+          }),
+        ]
+      }
+      // 'good' step — fire the workflow with both refs in the payload.
+      // Payload format: `<bad-sha>\n<good-sha>` — the runtime parses
+      // it, validates the worktree, and runs git bisect start.
+      const payload = `${state.bisectPickPendingBad ?? ''}\n${selected.hash}`
+      return [
+        { type: 'runWorkflowAction', id: 'bisect-start-from-history', payload },
+      ]
     }
   }
 
