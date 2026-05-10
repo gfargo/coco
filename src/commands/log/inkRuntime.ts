@@ -227,7 +227,7 @@ import {
     stageHunk,
     unstageHunk,
 } from './statusHunks'
-import { BisectStatus, getBisectStatus } from './bisectData'
+import { BisectStatus, getBisectCompletion, getBisectStatus } from './bisectData'
 import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from './bisectActions'
 import { getCompareDiff } from './compareData'
 import { ReflogOverview, getReflogOverview, splitReflogSubject } from './reflogData'
@@ -2793,7 +2793,18 @@ function renderHeader(
   // #784 — surface bisect-in-progress in the title bar so users entering
   // the TUI mid-bisect see it immediately, before they navigate to gB.
   const dirtyBase = context.branches?.dirty ? 'dirty' : 'clean'
-  const dirty = context.bisect?.active ? `${dirtyBase} · BISECTING` : dirtyBase
+  // Three states the title bar surfaces (#779 / #879):
+  //   inactive    → just the worktree clean/dirty
+  //   in-flight   → '· BISECTING' (the original signal from #784)
+  //   completed   → '· BISECTED' so users entering the TUI see at a
+  //                 glance that bisect terminated and is waiting for
+  //                 reset, not that they need to make another decision.
+  const bisectBadge = !context.bisect?.active
+    ? ''
+    : getBisectCompletion(context.bisect.log)
+      ? ' · BISECTED'
+      : ' · BISECTING'
+  const dirty = `${dirtyBase}${bisectBadge}`
   const repo = context.provider?.repository.owner && context.provider.repository.name
     ? `${context.provider.repository.owner}/${context.provider.repository.name}`
     : 'local repository'
@@ -4214,6 +4225,58 @@ function renderBisectSurface(
     lines.push(h(Text, { key: 'bisect-empty-5' }, ''))
     lines.push(h(Text, { key: 'bisect-empty-6', dimColor: true },
       truncate('coco will pick up the active bisect on the next refresh — actions will become available here.', width - 4)))
+  } else if (getBisectCompletion(bisect.log)) {
+    // #879 (item 3) — completion panel. When git's "is the first bad
+    // commit" terminator appears in the log, the bisect session is
+    // technically still active (BISECT_LOG persists until reset) but
+    // from the user's perspective the answer is in. Swap the
+    // in-flight UI for a celebration / next-step panel so the moment
+    // doesn't disappear into the same shape as a regular decision.
+    const completion = getBisectCompletion(bisect.log)!
+    const sha8 = completion.sha.slice(0, 8)
+    lines.push(h(Text, { key: 'bisect-done-title', bold: true, color: accent },
+      truncate('Bisect complete — first bad commit identified.', width - 4)))
+    lines.push(h(Text, { key: 'bisect-done-spacer-1' }, ''))
+    lines.push(h(Text, { key: 'bisect-done-sha-label', dimColor: true },
+      truncate('First bad commit', width - 4)))
+    lines.push(h(Text, { key: 'bisect-done-sha', bold: true },
+      truncate(`  ${sha8}`, width - 4)))
+    if (completion.subject) {
+      lines.push(h(Text, { key: 'bisect-done-subject' },
+        truncate(`  ${completion.subject}`, width - 4)))
+    }
+
+    // Reuse the candidate detail loader's payload — when the bisect
+    // ends, HEAD is at the first-bad commit, so candidateDetail is
+    // already populated with author / date / files / stats.
+    if (candidateDetail) {
+      lines.push(h(Text, { key: 'bisect-done-author', dimColor: true },
+        truncate(`  ${candidateDetail.author} · ${candidateDetail.date}`, width - 4)))
+      const { stats, files } = candidateDetail
+      lines.push(h(Text, { key: 'bisect-done-stats' },
+        truncate(`  ${stats.filesChanged} file${stats.filesChanged === 1 ? '' : 's'} · +${stats.insertions} / -${stats.deletions}`, width - 4)))
+      const sampleFiles = files.slice(0, 3).map((file) => file.path)
+      if (sampleFiles.length > 0) {
+        const overflow = files.length > sampleFiles.length ? ` (+${files.length - sampleFiles.length} more)` : ''
+        lines.push(h(Text, { key: 'bisect-done-files', dimColor: true },
+          truncate(`    ${sampleFiles.join(', ')}${overflow}`, width - 4)))
+      }
+    }
+
+    lines.push(h(Text, { key: 'bisect-done-spacer-2' }, ''))
+    lines.push(h(Text, { key: 'bisect-done-actions-h', bold: true },
+      truncate('Next', width - 4)))
+    lines.push(h(Text, { key: 'bisect-done-action-y', color: accent },
+      truncate('  y  yank the hash to clipboard', width - 4)))
+    lines.push(h(Text, { key: 'bisect-done-action-x', color: accent },
+      truncate('  x  exit bisect (git bisect reset)', width - 4)))
+    lines.push(h(Text, { key: 'bisect-done-action-esc', dimColor: true },
+      truncate('  esc / <  back to history', width - 4)))
+    lines.push(h(Text, { key: 'bisect-done-spacer-3' }, ''))
+    lines.push(h(Text, { key: 'bisect-done-tip', dimColor: true },
+      truncate('Tip: `git bisect log > /tmp/replay` from the shell saves this', width - 4)))
+    lines.push(h(Text, { key: 'bisect-done-tip-2', dimColor: true },
+      truncate('session — replay it later with `git bisect replay /tmp/replay`.', width - 4)))
   } else {
     // Active bisect. Three-section body: current candidate (sha +
     // commit summary so the user can judge the diff at a glance),
@@ -4303,7 +4366,16 @@ function renderBisectSurface(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Bisect', focused)),
-    h(Text, { dimColor: true }, bisect?.active ? 'BISECTING' : 'inactive')
+    h(Text, { dimColor: true },
+      // Three states: not running ('inactive'), running ('BISECTING'),
+      // ran-to-completion ('COMPLETE'). Same per-key color treatment;
+      // the surface body tells the rest.
+      !bisect?.active
+        ? 'inactive'
+        : getBisectCompletion(bisect.log)
+          ? 'COMPLETE'
+          : 'BISECTING'
+    )
   ),
   ...lines)
 }

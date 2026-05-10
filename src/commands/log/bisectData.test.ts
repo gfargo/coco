@@ -1,5 +1,5 @@
 import { SimpleGit } from 'simple-git'
-import { getBisectStatus, parseBisectLog } from './bisectData'
+import { getBisectCompletion, getBisectStatus, parseBisectLog } from './bisectData'
 
 jest.mock('fs', () => {
   const actual = jest.requireActual('fs')
@@ -239,5 +239,55 @@ describe('getBisectStatus', () => {
     const status = await getBisectStatus(git)
 
     expect(status.active).toBe(false)
+  })
+})
+
+describe('getBisectCompletion', () => {
+  it('returns undefined for a log without the first-bad terminator', () => {
+    const log = parseBisectLog([
+      'git bisect start',
+      '# bad: [abc1234] feat: introduces the bug',
+      'git bisect bad abc1234',
+      '# good: [def5678] fix: previous state',
+      'git bisect good def5678',
+    ].join('\n'))
+    expect(getBisectCompletion(log)).toBeUndefined()
+  })
+
+  it('extracts the sha + subject from the first-bad terminator', () => {
+    const log = parseBisectLog([
+      'git bisect start',
+      'git bisect bad abc1234',
+      'git bisect good def5678',
+      '# first bad commit: [abc1234] feat: introduces the bug',
+    ].join('\n'))
+    expect(getBisectCompletion(log)).toEqual({
+      sha: 'abc1234',
+      subject: 'feat: introduces the bug',
+    })
+  })
+
+  it('returns the most recent terminator when multiple are present', () => {
+    // Defensive — a session that was completed, partially edited, and
+    // re-completed could in principle have two `# first bad commit`
+    // markers. Walk last-to-first so the latest one wins.
+    const log = parseBisectLog([
+      '# first bad commit: [abc1234] earlier conclusion',
+      'git bisect start',
+      '# first bad commit: [9999fff] later conclusion',
+    ].join('\n'))
+    expect(getBisectCompletion(log)?.sha).toBe('9999fff')
+  })
+
+  it('handles a terminator without subject text', () => {
+    const log = parseBisectLog('# first bad commit: [abc1234]')
+    expect(getBisectCompletion(log)).toEqual({
+      sha: 'abc1234',
+      subject: undefined,
+    })
+  })
+
+  it('returns undefined for an empty log', () => {
+    expect(getBisectCompletion([])).toBeUndefined()
   })
 })
