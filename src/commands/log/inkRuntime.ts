@@ -105,10 +105,8 @@ import {
 } from '../../workstation/chrome/layout'
 import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from '../../workstation/chrome/theme'
 import {
-    STAGE_STATUS_DOT,
     branchRowMarker,
     getPullRequestStateGlyph,
-    getStageStatusDotColor,
     sidebarTabCount,
 } from '../../workstation/chrome/iconography'
 import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../../workstation/chrome/idleTips'
@@ -125,14 +123,12 @@ import {
 import {
     formatLogInkHistoryEmpty,
     formatLogInkLoading,
-    formatLogInkStatusEmpty,
 } from '../../workstation/chrome/surfaceStates'
 import { cellWidth, truncateCells, wrapCells } from '../../workstation/chrome/text'
 import {
     LogInkHistoryFetchArgs,
     LogInkSidebarTab,
     LogInkState,
-    LogInkStatusFilterMask,
     LogInkView,
     applyLogInkAction,
     createLogInkState,
@@ -195,8 +191,6 @@ import {
     unstageFile,
 } from '../../git/statusActions'
 import {
-    WorktreeFile,
-    WorktreeFileGroup,
     applyStatusFilterMask,
     flattenWorktreeGroups,
     getWorktreeOverview,
@@ -290,15 +284,17 @@ import {
 // LogInkState filter-mode shape.
 import { matchesPromotedFilter } from '../../workstation/runtime/promotedFilter'
 
-// Per-surface renderers extracted in phases 5a.1-5a.2 (#890). Surfaces
-// still living in this file (history, status, conflicts, diff, detail)
-// follow in 5a.3.
+// Per-surface renderers extracted in phases 5a.1-5a.3 (#890). Surfaces
+// still living in this file (history, diff, detail) follow in
+// 5a.4-5a.6.
 import { renderBisectSurface } from '../../workstation/surfaces/bisect'
 import { renderBranchesSurface } from '../../workstation/surfaces/branches'
 import { renderComposeSurface } from '../../workstation/surfaces/compose'
+import { renderConflictsSurface } from '../../workstation/surfaces/conflicts'
 import { renderPullRequestSurface } from '../../workstation/surfaces/pullRequest'
 import { renderReflogSurface } from '../../workstation/surfaces/reflog'
 import { renderStashSurface } from '../../workstation/surfaces/stash'
+import { renderStatusSurface } from '../../workstation/surfaces/status'
 import { renderTagsSurface } from '../../workstation/surfaces/tags'
 import { renderWorktreesSurface } from '../../workstation/surfaces/worktrees'
 
@@ -3322,279 +3318,6 @@ function renderPendingCommitRow(
   }, truncate(label, 140))
 }
 
-// Row descriptor for the status surface's grouped layout. Each
-// rendered row is either a group header (e.g. "▾ Unstaged (3)") or a
-// file under that group; both are first-class cursor targets.
-type StatusSurfaceRow =
-  | { kind: 'header'; group: WorktreeFileGroup }
-  | { kind: 'file'; group: WorktreeFileGroup; file: WorktreeFile; flatIndex: number }
-
-function buildStatusSurfaceRows(groups: WorktreeFileGroup[]): StatusSurfaceRow[] {
-  const rows: StatusSurfaceRow[] = []
-  for (const group of groups) {
-    rows.push({ kind: 'header', group })
-    group.files.forEach((file, offset) => {
-      rows.push({ kind: 'file', group, file, flatIndex: group.startIndex + offset })
-    })
-  }
-  return rows
-}
-
-function renderConflictsSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const loading = isLogInkContextKeyLoading(contextStatus, 'operation')
-  const operation = context.operation
-  const conflictedFiles = operation?.conflictedFiles || []
-  const operationType = operation?.operation || 'none'
-
-  // If no operation is in progress, show a fallback message.
-  if (!loading && operationType === 'none') {
-    return h(Box, {
-      borderColor: focusBorderColor(theme, focused),
-      borderStyle: theme.borderStyle,
-      flexDirection: 'column',
-      flexShrink: 0,
-      paddingX: 1,
-      width,
-    },
-    h(Box, { justifyContent: 'space-between' },
-      h(Text, { bold: true }, panelTitle('Conflicts', focused)),
-      h(Text, { dimColor: true }, 'no operation in progress')
-    ),
-    h(Text, { key: 'conflicts-empty', dimColor: true },
-      'No merge, rebase, cherry-pick, or revert in progress.'
-    ))
-  }
-
-  // All conflicts resolved — show the "continue" hint.
-  if (!loading && conflictedFiles.length === 0 && operationType !== 'none') {
-    return h(Box, {
-      borderColor: focusBorderColor(theme, focused),
-      borderStyle: theme.borderStyle,
-      flexDirection: 'column',
-      flexShrink: 0,
-      paddingX: 1,
-      width,
-    },
-    h(Box, { justifyContent: 'space-between' },
-      h(Text, { bold: true }, panelTitle('Conflicts', focused)),
-      h(Text, { dimColor: true }, `${operationType} — all conflicts resolved`)
-    ),
-    h(Text, { key: 'conflicts-hint', dimColor: true },
-      `All conflicts resolved. Press C to continue the ${operationType}, or < to go back.`
-    ))
-  }
-
-  const selected = Math.max(0, Math.min(state.selectedConflictFileIndex, Math.max(0, conflictedFiles.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
-  const visible = conflictedFiles.slice(startIndex, startIndex + listRows)
-  const remaining = conflictedFiles.length
-  const headerRight = loading
-    ? 'loading conflicts'
-    : `${operationType} — ${remaining} ${remaining === 1 ? 'conflict' : 'conflicts'} remaining`
-
-  const statusLabel = (file: { indexStatus: string; worktreeStatus: string }): string => {
-    const code = `${file.indexStatus}${file.worktreeStatus}`
-    switch (code) {
-      case 'UU': return 'both modified'
-      case 'AA': return 'added by both'
-      case 'DD': return 'both deleted'
-      case 'AU': case 'UA': return 'added by one'
-      case 'DU': return 'deleted by us'
-      case 'UD': return 'deleted by them'
-      default: return code
-    }
-  }
-
-  const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'conflicts-loading', dimColor: true }, formatLogInkLoading({ resource: 'conflicts' }))]
-    : visible.map((file, offset) => {
-      const index = startIndex + offset
-      const isSelected = index === selected
-      const cursor = isSelected ? '>' : ' '
-      const code = `${file.indexStatus}${file.worktreeStatus}`
-      const label = statusLabel(file)
-      return h(Text, {
-        key: `conflict-${index}`,
-        bold: isSelected,
-        dimColor: !isSelected,
-      }, truncate(
-        `${cursor} ${code} ${file.path}  (${label})`,
-        width - 4
-      ))
-    })
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Conflicts', focused)),
-    h(Text, { dimColor: true }, headerRight)
-  ),
-  ...lines)
-}
-
-function renderStatusSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const worktree = context.worktree
-  // Apply the status visibility mask (#776) at render time so the
-  // rendered rows match the filtered count the input context already
-  // uses for j/k navigation. `visibleFiles` may be a strict subset of
-  // worktree.files when the user has narrowed via 1/2/3.
-  const visibleFiles = applyStatusFilterMask(worktree?.files || [], state.statusFilterMask)
-  // Group + canonical-sort. The runtime + input handler agree on this
-  // order so a `selectedWorktreeFileIndex` of N always points to the
-  // same file across all three (renderer / input / workflow handlers).
-  const visibleGroups = groupWorktreeFiles(visibleFiles)
-  const surfaceRows = buildStatusSurfaceRows(visibleGroups)
-  const listRows = Math.max(4, bodyRows - 5)
-  const selectedIndex = state.selectedWorktreeFileIndex
-  const headerFocused = state.statusGroupHeaderFocused
-  // Resolve the cursor's row index in the flat (header-and-file) row
-  // list. Used to window the visible slice around the cursor.
-  const cursorRowIndex = (() => {
-    if (!surfaceRows.length) return 0
-    const currentGroup = visibleGroups.find((group) =>
-      selectedIndex >= group.startIndex && selectedIndex < group.startIndex + group.files.length
-    )
-    if (!currentGroup) return 0
-    if (headerFocused) {
-      const idx = surfaceRows.findIndex((row) => row.kind === 'header' && row.group === currentGroup)
-      return idx >= 0 ? idx : 0
-    }
-    const idx = surfaceRows.findIndex((row) => row.kind === 'file' && row.flatIndex === selectedIndex)
-    return idx >= 0 ? idx : 0
-  })()
-  const cleanHint = formatLogInkStatusEmpty({ hasChanges: Boolean(worktree?.files.length) })
-  const windowStart = Math.max(
-    0,
-    Math.min(
-      Math.max(0, surfaceRows.length - listRows),
-      cursorRowIndex - Math.floor(listRows / 2)
-    )
-  )
-  const isLoading = isLogInkContextKeyLoading(contextStatus, 'worktree')
-  const renderedRows: ReactTypes.ReactNode[] = isLoading || !surfaceRows.length
-    ? []
-    : surfaceRows.slice(windowStart, windowStart + listRows).map((row, offset) => {
-      const rowIndex = windowStart + offset
-      if (row.kind === 'header') {
-        const groupContainsCursor =
-          selectedIndex >= row.group.startIndex &&
-          selectedIndex < row.group.startIndex + row.group.files.length
-        const headerSelected = focused && headerFocused && groupContainsCursor
-        const arrow = theme.ascii ? '>' : '▾'
-        const groupLabel = capitalizeGroupName(row.group.state)
-        const text = `  ${arrow} ${groupLabel} (${row.group.files.length})`
-        return h(Text, {
-          key: `status-group-${row.group.state}-${rowIndex}`,
-          bold: true,
-          dimColor: !headerSelected && rowIndex > cursorRowIndex,
-          backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
-          inverse: headerSelected,
-        }, truncate(text, 140))
-      }
-      const isSelected = !headerFocused && row.flatIndex === selectedIndex
-      const cursorPart = `${isSelected ? '>' : ' '} `
-      const dotColor = getStageStatusDotColor(row.file.state, theme)
-      const useDot = dotColor !== undefined
-      const dotCells = useDot ? cellWidth(STAGE_STATUS_DOT) + 1 : 0
-      const tail = `${row.file.indexStatus}${row.file.worktreeStatus} ${row.file.path}`
-      const tailTrunc = truncate(tail, Math.max(0, 140 - cellWidth(cursorPart) - dotCells - 2))
-      return h(Text, {
-        key: `status-file-${row.flatIndex}-${rowIndex}`,
-        dimColor: !isSelected && rowIndex > cursorRowIndex,
-        backgroundColor: isSelected && focused && !theme.noColor ? theme.colors.selection : undefined,
-        inverse: isSelected && focused,
-      },
-      `  ${cursorPart}`,
-      ...(useDot ? [h(Text, { color: dotColor }, STAGE_STATUS_DOT), ' '] : []),
-      tailTrunc)
-    })
-  // When the mask narrows the list to nothing but the underlying repo
-  // is non-clean, surface why the panel looks empty so the user can
-  // un-narrow rather than wonder if the repo is actually clean.
-  const maskHidesAll =
-    Boolean(worktree?.files.length) && visibleFiles.length === 0
-  const fallbackLines = isLoading
-    ? [formatLogInkLoading({ resource: 'worktree status' })]
-    : visibleFiles.length
-      ? []
-      : maskHidesAll
-        ? [`No files match the active filter (${formatStatusFilterMask(state.statusFilterMask)}). Press 1/2/3 to widen.`]
-        : cleanHint
-          ? [cleanHint]
-          : ['Worktree clean']
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Worktree', focused)),
-    h(Text, { dimColor: true }, worktree
-      ? `${worktree.stagedCount} staged | ${worktree.unstagedCount} unstaged | ${worktree.untrackedCount} untracked`
-      : 'status loading')
-  ),
-  // Mask indicator (#776). Only rendered when the mask is narrower
-  // than the all-on default — keeps the chrome clean for users who
-  // never touch the filter.
-  ...(isStatusFilterMaskActive(state.statusFilterMask)
-    ? [h(Text, { key: 'status-mask-indicator', dimColor: true },
-        `filter: ${formatStatusFilterMask(state.statusFilterMask)}  (1/2/3 to toggle)`)]
-    : []),
-  ...renderedRows,
-  ...fallbackLines.map((line, index) => h(Text, {
-    key: `status-surface-fallback-${index}`,
-    dimColor: index > 0,
-  }, truncate(line, 140))))
-}
-
-function capitalizeGroupName(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1)
-}
-
-function isStatusFilterMaskActive(mask: LogInkStatusFilterMask): boolean {
-  return !mask.staged || !mask.unstaged || !mask.untracked
-}
-
-function formatStatusFilterMask(mask: LogInkStatusFilterMask): string {
-  const active: string[] = []
-  if (mask.staged) active.push('staged')
-  if (mask.unstaged) active.push('unstaged')
-  if (mask.untracked) active.push('untracked')
-  return active.join(' + ') || 'none'
-}
 
 function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
   const parts: string[] = []
