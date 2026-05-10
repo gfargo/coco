@@ -1,12 +1,12 @@
-import { BranchOverview } from './branchData'
+import { BranchOverview } from '../../git/branchData'
 import { GitLogCommitRow } from './data'
-import { GitOperationOverview } from './operationData'
-import { ProviderOverview } from './providerData'
-import { PullRequestOverview } from './pullRequestData'
-import { StashOverview } from './stashData'
-import { WorktreeOverview } from './statusData'
-import { TagOverview } from './tagData'
-import { WorktreeOverview as WorktreeListOverview } from './worktreeData'
+import { GitOperationOverview } from '../../git/operationData'
+import { ProviderOverview } from '../../git/providerData'
+import { PullRequestOverview } from '../../git/pullRequestData'
+import { StashOverview } from '../../git/stashData'
+import { WorktreeOverview } from '../../git/statusData'
+import { TagOverview } from '../../git/tagData'
+import { WorktreeOverview as WorktreeListOverview } from '../../git/worktreeData'
 
 export type LogInkWorkflowContext = {
   branches?: BranchOverview

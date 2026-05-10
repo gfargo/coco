@@ -1,5 +1,5 @@
 import { formatStashHeaderIdentity } from './inkStashHeader'
-import { StashEntry } from './stashData'
+import { StashEntry } from '../../git/stashData'
 
 const stashes: StashEntry[] = [
   {
