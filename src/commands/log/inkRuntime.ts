@@ -85,7 +85,6 @@ import {
 import { hasSeenOnboarding, markOnboardingSeen } from '../../workstation/chrome/onboarding'
 import { getSavedDiffViewMode, saveDiffViewMode } from '../../workstation/chrome/diffViewModePersistence'
 import { getSavedSidebarTab, saveSidebarTab } from '../../workstation/chrome/sidebarPersistence'
-import { SplitDiffRow, buildSplitDiffRows } from '../../workstation/chrome/splitDiff'
 import { getSidebarVisibleWindow } from '../../workstation/chrome/sidebarSelection'
 import {
     PromotedSelectionsSnapshot,
@@ -182,7 +181,6 @@ import {
     getStashOverview,
     parseStashDiffFiles,
 } from '../../git/stashData'
-import { formatStashHeaderIdentity } from '../../workstation/chrome/stashHeader'
 import {
     revertFile,
     stageAllFiles,
@@ -271,7 +269,6 @@ import {
   buildCommitUrl,
   buildRefUrl,
   compactHash,
-  diffLineProps,
   focusBorderColor,
   formatChangedFileStats,
   panelTitle,
@@ -284,13 +281,13 @@ import {
 // LogInkState filter-mode shape.
 import { matchesPromotedFilter } from '../../workstation/runtime/promotedFilter'
 
-// Per-surface renderers extracted in phases 5a.1-5a.3 (#890). Surfaces
-// still living in this file (history, diff, detail) follow in
-// 5a.4-5a.6.
+// Per-surface renderers extracted in phases 5a.1-5a.4 (#890). Surfaces
+// still living in this file (history, detail) follow in 5a.5-5a.6.
 import { renderBisectSurface } from '../../workstation/surfaces/bisect'
 import { renderBranchesSurface } from '../../workstation/surfaces/branches'
 import { renderComposeSurface } from '../../workstation/surfaces/compose'
 import { renderConflictsSurface } from '../../workstation/surfaces/conflicts'
+import { renderDiffSurface } from '../../workstation/surfaces/diff'
 import { renderPullRequestSurface } from '../../workstation/surfaces/pullRequest'
 import { renderReflogSurface } from '../../workstation/surfaces/reflog'
 import { renderStashSurface } from '../../workstation/surfaces/stash'
@@ -402,112 +399,6 @@ async function loadInkRuntime(): Promise<LogInkRuntime> {
   }
 }
 
-/**
- * Minimum terminal width below which the split diff falls back to
- * unified rendering (#785). Each column needs ~50 columns for code to
- * read comfortably plus border + padding overhead, so anything narrower
- * than ~120 columns gets the unified view regardless of the user's
- * preference. The preference is preserved — switching back to a wide
- * terminal restores split mode automatically.
- */
-const MIN_SPLIT_DIFF_WIDTH = 120
-
-function isSplitDiffViable(state: LogInkState, width: number): boolean {
-  return state.diffViewMode === 'split' && width >= MIN_SPLIT_DIFF_WIDTH
-}
-
-/**
- * Style props for one side of a split-diff row, derived from the row's
- * `kind` rather than the leading character (because the helper has
- * already stripped the leading +/-/space). Keeps the colors aligned with
- * `diffLineProps`.
- */
-function splitDiffSideProps(
-  kind: SplitDiffRow['left']['kind'] | SplitDiffRow['right']['kind'],
-  theme: LogInkTheme
-): { color?: string; dimColor?: boolean } {
-  if (kind === 'header') {
-    if (theme.noColor) return { dimColor: true }
-    return { color: theme.colors.accent }
-  }
-  if (kind === 'empty') {
-    return { dimColor: true }
-  }
-  if (theme.noColor) {
-    return { dimColor: kind === 'context' }
-  }
-  if (kind === 'add') return { color: theme.colors.gitAdded }
-  if (kind === 'remove') return { color: theme.colors.gitDeleted }
-  return {}
-}
-
-/**
- * Format one column of a split-diff row: an optional 4-digit line
- * number prefix + the line text, padded/truncated to the column width.
- * Empty rows render a faint `·` placeholder so the alignment gap is
- * visible at a glance.
- */
-function formatSplitDiffCell(
-  side: SplitDiffRow['left'] | SplitDiffRow['right'],
-  columnWidth: number
-): string {
-  if (side.kind === 'empty') {
-    const placeholder = ' · '
-    return placeholder.padEnd(columnWidth)
-  }
-  if (side.kind === 'header') {
-    return truncate(side.text, columnWidth).padEnd(columnWidth)
-  }
-  const lineNo = side.lineNumber !== undefined ? String(side.lineNumber).padStart(4) : '    '
-  // Strip the trailing newline that some diffs include. Keeps column
-  // widths predictable.
-  const text = side.text.replace(/\n$/, '')
-  // 4 digits + 1 space gutter = 5 chars; reserve that off the column
-  // before truncating the text.
-  const textRoom = Math.max(1, columnWidth - 5)
-  return `${lineNo} ${truncate(text, textRoom)}`.padEnd(columnWidth)
-}
-
-/**
- * Render the split-diff body as a list of two-column rows. The caller
- * is responsible for slicing the unified-line array to the visible
- * window — the helper just transforms that slice into Ink nodes.
- */
-function renderSplitDiffBody(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  unifiedSlice: string[],
-  startOffset: number,
-  width: number,
-  theme: LogInkTheme,
-  keyPrefix: string
-): ReactTypes.ReactElement[] {
-  const { Box, Text } = components
-  const rows = buildSplitDiffRows(unifiedSlice)
-  // Reserve 3 columns of gutter (1 left padding from the Box + 1 column
-  // separator + 1 right padding) so neither side touches the border.
-  const usable = Math.max(20, width - 4)
-  const gutter = 1
-  const half = Math.max(10, Math.floor((usable - gutter) / 2))
-  return rows.map((row, index) => {
-    const leftProps = splitDiffSideProps(row.left.kind, theme)
-    const rightProps = splitDiffSideProps(row.right.kind, theme)
-    const leftText = formatSplitDiffCell(row.left, half)
-    const rightText = formatSplitDiffCell(row.right, half)
-    return h(Box, {
-      key: `${keyPrefix}-${startOffset + index}`,
-      flexDirection: 'row',
-    },
-    h(Box, { width: half, flexShrink: 0 },
-      h(Text, leftProps, leftText)
-    ),
-    h(Box, { width: gutter, flexShrink: 0 }, h(Text, { dimColor: true }, ' ')),
-    h(Box, { width: half, flexShrink: 0 },
-      h(Text, rightProps, rightText)
-    )
-    )
-  })
-}
 
 // compactHash, focusBorderColor, panelTitle, diffLineProps, statusCodeColor,
 // formatChangedFileStats, and sidebarTabLabel moved to
@@ -3330,314 +3221,6 @@ function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
 
 
 
-function renderDiffSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  worktreeDiff: WorktreeFileDiff | undefined,
-  worktreeDiffLoading: boolean,
-  worktreeHunks: WorktreeHunkOverview | undefined,
-  worktreeHunksLoading: boolean,
-  filePreview: GitCommitFilePreview | undefined,
-  filePreviewLoading: boolean,
-  commitDiffHunkOffsets: number[] | undefined,
-  selectedDetailFile: GitCommitDetail['files'][number] | undefined,
-  stashDiffLines: string[] | undefined,
-  stashDiffLoading: boolean,
-  compareDiffLines: string[] | undefined,
-  compareDiffLoading: boolean,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const worktree = context.worktree
-  const worktreeFile = worktree?.files[state.selectedWorktreeFileIndex]
-  const visibleRows = Math.max(4, bodyRows - 4)
-
-  // Stash diff branch: when the user opened the diff via Enter on a stash
-  // row, render the stash patch text directly. The patch is parsed into
-  // per-file sections so `]` / `[` jumps between files and `c`
-  // cherry-picks the file at the cursor.
-  if (state.diffSource === 'stash') {
-    const lines = stashDiffLines || []
-    const splitActive = isSplitDiffViable(state, width)
-    const splitRequestedButTooNarrow = state.diffViewMode === 'split' && !splitActive
-    const visibleLines = lines.slice(
-      state.diffPreviewOffset,
-      state.diffPreviewOffset + visibleRows
-    )
-    const stashFiles = parseStashDiffFiles(lines)
-    const fileCount = stashFiles.length
-    const currentFile = findStashFileForOffset(stashFiles, state.diffPreviewOffset)
-    const currentFileIndex = currentFile
-      ? Math.max(0, stashFiles.findIndex((file) => file.startLine === currentFile.startLine))
-      : -1
-    // Look up the active stash entry so the panel header can show a
-    // human-identifier instead of the raw `stash@{<iso-date>}` ref.
-    // The git ref is the timestamp form (we fetch with --date=iso for
-    // stable parsing) which reads as noise in the title bar; the
-    // message + branch + index combination is what the user wrote down
-    // when they ran `git stash`. Body still shows the full ref so it
-    // stays unambiguous.
-    const stashIdentity = formatStashHeaderIdentity(state.stashDiffRef, context.stashes?.stashes)
-    const baseHeaderLines: string[] = stashDiffLoading
-      ? [`Loading diff for ${stashIdentity.subtitle}...`]
-      : lines.length
-        ? [
-          stashIdentity.bodyLine,
-          fileCount > 0 && currentFile
-            ? `File ${currentFileIndex + 1}/${fileCount}: ${currentFile.path}`
-            : 'No files in this stash.',
-          `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
-          '',
-        ]
-        : ['No diff to display for this stash.']
-    const headerLines = splitRequestedButTooNarrow
-      ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
-      : baseHeaderLines
-
-    // File header anchor map: absolute line index → owning stash file.
-    // Lets the body-render pass restyle each `diff --git` row in O(1)
-    // and decide which one is the *active* file (the one currently
-    // containing `diffPreviewOffset`). The active header gets the
-    // selection background to mark "the file the cursor is inside."
-    const stashFileByStartLine = new Map(stashFiles.map((file) => [file.startLine, file]))
-    const activeStartLine = currentFile?.startLine
-    const stashBodyNodes: ReactTypes.ReactNode[] = stashDiffLoading || !lines.length
-      ? []
-      : splitActive
-        ? renderSplitDiffBody(
-          h, components, visibleLines, state.diffPreviewOffset, width, theme,
-          'stash-diff-split'
-        )
-        : visibleLines.map((line, index) => {
-          const absoluteIndex = state.diffPreviewOffset + index
-          const headerFile = stashFileByStartLine.get(absoluteIndex)
-          if (headerFile) {
-            // Replace the verbose `diff --git a/<path> b/<path>` text
-            // with a compact `▾ <path>` marker — the path itself is
-            // the meaningful identifier, not the a/b duplication. The
-            // active file's header gets selection styling so the user
-            // sees at a glance which file the cursor is inside.
-            const isActive = absoluteIndex === activeStartLine
-            const arrow = theme.ascii ? '> ' : '▾ '
-            return h(Text, {
-              key: `stash-diff-line-${absoluteIndex}`,
-              bold: true,
-              color: theme.noColor ? undefined : theme.colors.accent,
-              backgroundColor: isActive && focused && !theme.noColor ? theme.colors.selection : undefined,
-              inverse: isActive && focused,
-            }, truncate(`${arrow}${headerFile.path}`, width - 4))
-          }
-          return h(Text, {
-            key: `stash-diff-line-${absoluteIndex}`,
-            ...diffLineProps(line, theme),
-          }, truncate(line, width - 4))
-        })
-
-    return h(Box, {
-      borderColor: focusBorderColor(theme, focused),
-      borderStyle: theme.borderStyle,
-      flexDirection: 'column',
-      flexShrink: 0,
-      paddingX: 1,
-      width,
-    },
-    h(Box, { justifyContent: 'space-between' },
-      h(Text, { bold: true }, panelTitle(splitActive ? 'Stash diff (split)' : 'Stash diff', focused)),
-      h(Text, { dimColor: true }, stashIdentity.subtitle)
-    ),
-    ...headerLines.map((line, index) => h(Text, {
-      key: `stash-diff-header-${index}`,
-      dimColor: index > 0,
-    }, truncate(line, width - 4))),
-    ...stashBodyNodes)
-  }
-
-  // Compare-two-refs branch (#779). Mirrors the stash diff above but
-  // sourced from `git diff <base>..<head>`. No per-file cherry-pick or
-  // hunk apply — comparing arbitrary refs doesn't have a sensible
-  // mutate-from-here flow, so the surface is read-only navigation.
-  if (state.diffSource === 'compare') {
-    const lines = compareDiffLines || []
-    const splitActive = isSplitDiffViable(state, width)
-    const splitRequestedButTooNarrow = state.diffViewMode === 'split' && !splitActive
-    const visibleLines = lines.slice(
-      state.diffPreviewOffset,
-      state.diffPreviewOffset + visibleRows
-    )
-    const baseLabel = state.compareBase?.label || state.compareBase?.ref || '<base>'
-    const headLabel = state.compareHead?.label || state.compareHead?.ref || '<head>'
-    const compareTitle = `${baseLabel} → ${headLabel}`
-    const baseHeaderLines: string[] = compareDiffLoading
-      ? [`Loading diff for ${compareTitle}...`]
-      : lines.length && (lines.length > 1 || lines[0])
-        ? [
-          compareTitle,
-          `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
-          '',
-        ]
-        : ['No diff to display — refs may resolve to the same tree.']
-    const headerLines = splitRequestedButTooNarrow
-      ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
-      : baseHeaderLines
-
-    const compareBodyNodes: ReactTypes.ReactNode[] = compareDiffLoading || !lines.length || (lines.length === 1 && !lines[0])
-      ? []
-      : splitActive
-        ? renderSplitDiffBody(
-          h, components, visibleLines, state.diffPreviewOffset, width, theme,
-          'compare-diff-split'
-        )
-        : visibleLines.map((line, index) => h(Text, {
-          key: `compare-diff-line-${state.diffPreviewOffset + index}`,
-          ...diffLineProps(line, theme),
-        }, truncate(line, width - 4)))
-
-    return h(Box, {
-      borderColor: focusBorderColor(theme, focused),
-      borderStyle: theme.borderStyle,
-      flexDirection: 'column',
-      flexShrink: 0,
-      paddingX: 1,
-      width,
-    },
-    h(Box, { justifyContent: 'space-between' },
-      h(Text, { bold: true }, panelTitle(splitActive ? 'Compare (split)' : 'Compare', focused)),
-      h(Text, { dimColor: true }, truncate(compareTitle, Math.max(20, Math.floor(width / 2))))
-    ),
-    ...headerLines.map((line, index) => h(Text, {
-      key: `compare-diff-header-${index}`,
-      dimColor: index > 0,
-    }, truncate(line, width - 4))),
-    ...compareBodyNodes)
-  }
-
-  // diffSource disambiguates: 'commit' was set when the user opened the
-  // diff via history → Enter (read-only commit-diff explore), 'worktree'
-  // was set when they came from status → Enter (stage / hunk / revert).
-  // Falls back to the previous heuristic when no source is recorded so
-  // older entry paths still render something sensible.
-  const useCommitDiff = state.diffSource === 'commit' ||
-    (state.diffSource === undefined && !worktreeFile && Boolean(selectedDetailFile))
-
-  if (useCommitDiff) {
-    const previewHunks = filePreview?.hunks || []
-    const splitActive = isSplitDiffViable(state, width)
-    const splitRequestedButTooNarrow = state.diffViewMode === 'split' && !splitActive
-    const visiblePreviewHunks = previewHunks.slice(
-      state.diffPreviewOffset,
-      state.diffPreviewOffset + visibleRows
-    )
-    const hunkCount = commitDiffHunkOffsets?.length || 0
-    const currentHunkIndex = hunkCount > 0
-      ? Math.max(0, [...(commitDiffHunkOffsets || [])]
-          .reverse()
-          .findIndex((offset) => offset <= state.diffPreviewOffset))
-      : 0
-    const currentHunkLabel = hunkCount > 0
-      ? `Hunk ${Math.min(hunkCount - currentHunkIndex, hunkCount)}/${hunkCount}`
-      : 'No hunks for this file.'
-
-    const baseHeaderLines: string[] = filePreviewLoading
-      ? [`Loading diff for ${selectedDetailFile?.path || 'selected file'}...`]
-      : previewHunks.length
-        ? [
-          `Selected file: ${selectedDetailFile?.path || ''}`,
-          currentHunkLabel,
-          `Lines ${Math.min(state.diffPreviewOffset + 1, previewHunks.length || 1)}-${Math.min(state.diffPreviewOffset + visiblePreviewHunks.length, previewHunks.length)}/${previewHunks.length}`,
-          '',
-        ]
-        : ['No diff preview available for this file.']
-    const headerLines = splitRequestedButTooNarrow
-      ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
-      : baseHeaderLines
-
-    const commitBodyNodes: ReactTypes.ReactNode[] = filePreviewLoading || !previewHunks.length
-      ? []
-      : splitActive
-        ? renderSplitDiffBody(
-          h, components, visiblePreviewHunks, state.diffPreviewOffset, width, theme,
-          'commit-diff-split'
-        )
-        : visiblePreviewHunks.map((line, index) => h(Text, {
-          key: `diff-surface-line-${state.diffPreviewOffset + index}`,
-          ...diffLineProps(line, theme),
-        }, truncate(line, 140)))
-
-    return h(Box, {
-      borderColor: focusBorderColor(theme, focused),
-      borderStyle: theme.borderStyle,
-      flexDirection: 'column',
-      flexShrink: 0,
-      paddingX: 1,
-      width,
-    },
-    h(Box, { justifyContent: 'space-between' },
-      h(Text, { bold: true }, panelTitle(splitActive ? 'Diff (split)' : 'Diff', focused)),
-      h(Text, { dimColor: true }, selectedDetailFile?.path || 'no file')
-    ),
-    ...headerLines.map((line, index) => h(Text, {
-      key: `diff-surface-header-${index}`,
-      dimColor: index > 0,
-    }, truncate(line, 140))),
-    ...commitBodyNodes)
-  }
-
-  const diffLines = worktreeDiff?.lines || []
-  const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
-  const visibleDiffLines = diffLines.slice(
-    state.worktreeDiffOffset,
-    state.worktreeDiffOffset + visibleRows
-  )
-  const headerLines: string[] = isLogInkContextKeyLoading(contextStatus, 'worktree')
-    ? ['Loading file context...']
-    : worktreeDiffLoading
-      ? [`Loading diff for ${worktreeFile?.path || 'selected file'}...`]
-      : worktreeFile
-      ? [
-        `Selected file: ${worktreeFile.path}`,
-        worktreeHunksLoading
-          ? 'Hunks loading...'
-          : worktreeHunks?.hunks.length
-            ? `Hunk ${state.selectedWorktreeHunkIndex + 1}/${worktreeHunks.hunks.length} ${selectedHunk?.state || ''}`
-            : 'No stageable hunks for this file.',
-        `Lines ${Math.min(state.worktreeDiffOffset + 1, diffLines.length || 1)}-${Math.min(state.worktreeDiffOffset + visibleDiffLines.length, diffLines.length)}/${diffLines.length}`,
-        '',
-      ]
-      : ['No changed file selected.']
-
-  const showDiffLines = Boolean(worktreeFile) &&
-    !worktreeDiffLoading &&
-    !isLogInkContextKeyLoading(contextStatus, 'worktree')
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Diff', focused)),
-    h(Text, { dimColor: true }, worktreeFile ? worktreeFile.path : 'no file')
-  ),
-  ...headerLines.map((line, index) => h(Text, {
-    key: `diff-surface-header-${index}`,
-    dimColor: index > 0,
-  }, truncate(line, 140))),
-  ...(showDiffLines
-    ? visibleDiffLines.map((line, index) => h(Text, {
-      key: `diff-surface-line-${state.worktreeDiffOffset + index}`,
-      ...diffLineProps(line, theme),
-    }, truncate(line, 140)))
-    : []))
-}
 
 function renderDetailPanel(
   h: typeof ReactTypes.createElement,
