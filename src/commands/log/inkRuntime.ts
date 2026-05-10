@@ -38,7 +38,7 @@
 import { spawnSync } from 'node:child_process'
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
-import { BranchOverview, getBranchOverview } from '../../git/branchData'
+import { getBranchOverview } from '../../git/branchData'
 import { createManualCommit } from './commitCompose'
 import { runCommitDraftWorkflow } from '../../git/commitWorkflowActions'
 import {
@@ -148,9 +148,9 @@ import {
     getSelectedInkCommit,
 } from './inkViewModel'
 import { startInteractiveLog } from './interactive'
-import { GitOperationOverview, getGitOperationOverview } from '../../git/operationData'
+import { getGitOperationOverview } from '../../git/operationData'
 import { openProviderUrl } from '../../git/providerActions'
-import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from '../../git/providerData'
+import { ProviderRepository, buildProviderUrl, getProviderOverview } from '../../git/providerData'
 import {
     checkoutBranch,
     createBranch,
@@ -179,7 +179,7 @@ import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } f
 import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
-import { PullRequestOverview, getPullRequestOverview } from '../../git/pullRequestData'
+import { getPullRequestOverview } from '../../git/pullRequestData'
 import {
     approvePullRequest,
     closePullRequest,
@@ -189,7 +189,6 @@ import {
     requestChangesPullRequest,
 } from '../../git/pullRequestActions'
 import {
-    StashOverview,
     findStashFileForOffset,
     getStashDiff,
     getStashOverview,
@@ -214,7 +213,6 @@ import {
 import {
     WorktreeFile,
     WorktreeFileGroup,
-    WorktreeOverview,
     applyStatusFilterMask,
     flattenWorktreeGroups,
     getWorktreeOverview,
@@ -227,11 +225,11 @@ import {
     stageHunk,
     unstageHunk,
 } from '../../git/statusHunks'
-import { BisectStatus, getBisectStatus } from '../../git/bisectData'
+import { getBisectStatus } from '../../git/bisectData'
 import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from '../../git/bisectActions'
 import { getCompareDiff } from '../../git/compareData'
-import { ReflogOverview, getReflogOverview, splitReflogSubject } from '../../git/reflogData'
-import { TagOverview, getTagOverview } from '../../git/tagData'
+import { getReflogOverview, splitReflogSubject } from '../../git/reflogData'
+import { getTagOverview } from '../../git/tagData'
 import {
     getLogInkWorkflowActionById,
 } from './inkWorkflows'
@@ -240,7 +238,7 @@ import {
     InspectorActionContext,
     getInspectorActions,
 } from '../../workstation/chrome/inspectorActions'
-import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from '../../git/worktreeData'
+import { getWorktreeListOverview } from '../../git/worktreeData'
 import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
 import { canStartLogInkTui, getLogInkRenderOptions } from '../../workstation/chrome/terminal'
 import { LogArgv } from './config'
@@ -278,88 +276,30 @@ type LogInkOptions = {
   theme?: LogInkThemeConfig
 }
 
-type LogInkContext = {
-  bisect?: BisectStatus
-  branches?: BranchOverview
-  operation?: GitOperationOverview
-  provider?: ProviderOverview
-  pullRequest?: PullRequestOverview
-  reflog?: ReflogOverview
-  stashes?: StashOverview
-  tags?: TagOverview
-  worktree?: WorktreeOverview
-  worktreeList?: WorktreeListOverview
-}
+// Shared workstation runtime types live in src/workstation/runtime/types.ts.
+// They're imported here under their original names so existing intra-file
+// references continue to work without rewriting every render helper.
+import type {
+  LogInkComponentDeps,
+  LogInkComponents,
+  LogInkContext,
+  LogInkRuntime,
+} from '../../workstation/runtime/types'
 
-type LogInkRuntime = {
-  ink: {
-    Box: ReactTypes.ComponentType<Record<string, unknown>>
-    Text: ReactTypes.ComponentType<Record<string, unknown>>
-    render: (
-      app: ReactTypes.ReactElement,
-      options: {
-        alternateScreen?: boolean
-        exitOnCtrlC?: boolean
-        patchConsole?: boolean
-        stderr?: NodeJS.WriteStream
-        stdin?: NodeJS.ReadStream
-        stdout?: NodeJS.WriteStream
-      }
-    ) => {
-      waitUntilExit: () => Promise<void>
-      unmount: () => void
-    }
-    useApp: () => {
-      exit: () => void
-    }
-    useInput: (handler: (input: string, key: LogInkInputKey) => void) => void
-    useWindowSize: () => {
-      columns: number
-      rows: number
-    }
-  }
-  React: typeof ReactTypes
-}
-
-type LogInkComponents = Pick<LogInkRuntime['ink'], 'Box' | 'Text'>
-
-type LogInkComponentDeps = LogInkRuntime & {
-  appLabel: string
-  git: SimpleGit
-  /** Drives P4.3 idle status-line tip rotation when truthy. */
-  idleTipsEnabled?: boolean
-  initialView: LogInkView
-  logArgv?: LogArgv
-  rows: GitLogRow[]
-  /**
-   * Optional deferred commit-log loader (#808). When set, the React
-   * tree mounts with `rows` (typically `[]`) and runs the loader on
-   * mount, dispatching `replaceRows` on completion. Boot UX is the
-   * sole motivator — for a moderately large repo, awaiting `git log`
-   * before mount produces 1-3 seconds of black terminal that reads as
-   * "is this hanging?".
-   */
-  loadRows?: () => Promise<GitLogRow[]>
-  theme: LogInkTheme
-  /**
-   * Mutable ref the runtime fills with a force-render callback. The
-   * terminal-lifecycle module invokes it on `SIGCONT` so users land on a
-   * painted screen after `fg` instead of an empty alt buffer.
-   */
-  resumeRef?: { current: (() => void) | null }
-  /**
-   * Test seam — when set, the yank-to-clipboard handler uses this runner
-   * instead of `defaultClipboardRunner`. Lets unit tests assert that the
-   * right value reached the clipboard without spawning pbcopy/wl-copy.
-   */
-  clipboardRunner?: ClipboardRunner
-}
+// Pure visual helpers shared with future per-surface modules. Moved out of
+// this file so a surface module can render with the same color / glyph rules
+// without pulling in the orchestration code.
+import {
+  compactHash,
+  diffLineProps,
+  focusBorderColor,
+  formatChangedFileStats,
+  panelTitle,
+  sidebarTabLabel,
+  statusCodeColor,
+} from '../../workstation/runtime/utils'
 
 const truncate = truncateCells
-
-function compactHash(hash: string | undefined): string {
-  return hash ? hash.slice(0, 7) : '<none>'
-}
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
   try {
@@ -461,54 +401,6 @@ async function loadInkRuntime(): Promise<LogInkRuntime> {
     ink,
     React,
   }
-}
-
-function focusBorderColor(
-  theme: LogInkTheme,
-  focused: boolean
-): string | undefined {
-  if (theme.noColor) {
-    return undefined
-  }
-
-  return focused ? theme.colors.focusBorder : theme.colors.border
-}
-
-function panelTitle(title: string, focused: boolean): string {
-  return focused ? `${title} *` : title
-}
-
-/**
- * Map a unified-diff line to the props passed to an Ink `<Text>` so the
- * standard +/-/@@ prefixes render in their conventional colors. File
- * headers (`+++`, `---`, `diff --git`, `index`) get a softer treatment so
- * they don't compete with the actual hunk content.
- *
- * `theme.noColor` collapses everything to dim/normal so we stay readable
- * under `NO_COLOR` and the `monochrome` preset.
- */
-function diffLineProps(
-  line: string,
-  theme: LogInkTheme
-): { color?: string; dimColor?: boolean } {
-  if (theme.noColor) {
-    return { dimColor: line.startsWith(' ') || line.startsWith('diff ') || line.startsWith('index ') }
-  }
-
-  if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('+++') || line.startsWith('---')) {
-    return { dimColor: true }
-  }
-  if (line.startsWith('@@')) {
-    return { color: theme.colors.accent }
-  }
-  if (line.startsWith('+')) {
-    return { color: theme.colors.gitAdded }
-  }
-  if (line.startsWith('-')) {
-    return { color: theme.colors.gitDeleted }
-  }
-
-  return {}
 }
 
 /**
@@ -618,62 +510,10 @@ function renderSplitDiffBody(
   })
 }
 
-/**
- * Pick a theme color for a single name-status code (`A`, `M`, `D`,
- * `R100`, etc.) so the inspector and commit-diff file list render with
- * familiar git colors at a glance. Letters stay in the line so the
- * meaning survives `NO_COLOR`.
- */
-function statusCodeColor(status: string, theme: LogInkTheme): string | undefined {
-  if (theme.noColor) {
-    return undefined
-  }
-
-  const head = status.charAt(0)
-  switch (head) {
-    case 'A':
-      return theme.colors.gitAdded
-    case 'D':
-      return theme.colors.gitDeleted
-    case 'U':
-      return theme.colors.danger
-    case 'M':
-    case 'T':
-      return theme.colors.gitModified
-    case 'R':
-    case 'C':
-      return theme.colors.accent
-    default:
-      return undefined
-  }
-}
-
-function formatChangedFileStats(file: GitCommitDetail['files'][number]): string {
-  if (file.binary) {
-    return 'bin'
-  }
-  if (file.additions === undefined && file.deletions === undefined) {
-    return ''
-  }
-  return `+${file.additions || 0}/-${file.deletions || 0}`
-}
-
-function sidebarTabLabel(tab: LogInkSidebarTab): string {
-  switch (tab) {
-    case 'status':
-      return 'Status'
-    case 'branches':
-      return 'Branches'
-    case 'tags':
-      return 'Tags'
-    case 'stashes':
-      return 'Stashes'
-    case 'worktrees':
-      return 'Worktrees'
-    default:
-      return tab
-  }
-}
+// compactHash, focusBorderColor, panelTitle, diffLineProps, statusCodeColor,
+// formatChangedFileStats, and sidebarTabLabel moved to
+// src/workstation/runtime/utils.ts so per-surface modules can import them
+// without pulling in this entire orchestration file.
 
 export async function startInkInteractiveLog(
   git: SimpleGit,
