@@ -107,8 +107,6 @@ import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from '../../worksta
 import {
     STAGE_STATUS_DOT,
     branchRowMarker,
-    formatBranchDivergence,
-    formatBranchLastTouched,
     getPullRequestStateGlyph,
     getStageStatusDotColor,
     sidebarTabCount,
@@ -121,17 +119,13 @@ import {
     formatTagPreview,
 } from '../../workstation/chrome/previewPane'
 import {
-    formatSortIndicator,
     sortBranches,
     sortTags,
 } from '../../workstation/chrome/sorting'
 import {
-    formatLogInkBranchesEmpty,
-    formatLogInkComposeEmpty,
     formatLogInkHistoryEmpty,
     formatLogInkLoading,
     formatLogInkStatusEmpty,
-    formatLogInkTagsEmpty,
 } from '../../workstation/chrome/surfaceStates'
 import { cellWidth, truncateCells, wrapCells } from '../../workstation/chrome/text'
 import {
@@ -148,7 +142,7 @@ import {
 import { startInteractiveLog } from './interactive'
 import { getGitOperationOverview } from '../../git/operationData'
 import { openProviderUrl } from '../../git/providerActions'
-import { ProviderRepository, buildProviderUrl, getProviderOverview } from '../../git/providerData'
+import { ProviderRepository, getProviderOverview } from '../../git/providerData'
 import {
     checkoutBranch,
     createBranch,
@@ -193,14 +187,6 @@ import {
     parseStashDiffFiles,
 } from '../../git/stashData'
 import { formatStashHeaderIdentity } from '../../workstation/chrome/stashHeader'
-import {
-    buildPullRequestCheckRows,
-    formatPullRequestChecksSummary,
-    formatPullRequestReviewsSummary,
-    formatPullRequestStateLine,
-    summarizePullRequestChecks,
-    summarizePullRequestReviews,
-} from '../../workstation/chrome/pullRequestPanel'
 import {
     revertFile,
     stageAllFiles,
@@ -288,6 +274,8 @@ import type {
 // this file so a surface module can render with the same color / glyph rules
 // without pulling in the orchestration code.
 import {
+  buildCommitUrl,
+  buildRefUrl,
   compactHash,
   diffLineProps,
   focusBorderColor,
@@ -300,17 +288,18 @@ import {
 // Promoted-list filter helpers shared by every promoted surface. Live in
 // runtime/ rather than chrome/ because they're tightly coupled to the
 // LogInkState filter-mode shape.
-import {
-  matchesPromotedFilter,
-  renderPromotedFilterAffordance,
-} from '../../workstation/runtime/promotedFilter'
+import { matchesPromotedFilter } from '../../workstation/runtime/promotedFilter'
 
-// Per-surface renderers extracted in phase 5a.1 (#890). Surfaces still
-// living in this file (history, status, compose, branches, tags,
-// pullRequest, diff, detail) follow in subsequent phase 5a sub-PRs.
+// Per-surface renderers extracted in phases 5a.1-5a.2 (#890). Surfaces
+// still living in this file (history, status, conflicts, diff, detail)
+// follow in 5a.3.
 import { renderBisectSurface } from '../../workstation/surfaces/bisect'
+import { renderBranchesSurface } from '../../workstation/surfaces/branches'
+import { renderComposeSurface } from '../../workstation/surfaces/compose'
+import { renderPullRequestSurface } from '../../workstation/surfaces/pullRequest'
 import { renderReflogSurface } from '../../workstation/surfaces/reflog'
 import { renderStashSurface } from '../../workstation/surfaces/stash'
+import { renderTagsSurface } from '../../workstation/surfaces/tags'
 import { renderWorktreesSurface } from '../../workstation/surfaces/worktrees'
 
 const truncate = truncateCells
@@ -3614,458 +3603,10 @@ function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
   return parts.join(' ') || 'none'
 }
 
-function renderComposeSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const compose = state.commitCompose
-  const focused = state.focus === 'commits'
-  const worktree = context.worktree
-  const statusLine = isLogInkContextKeyLoading(contextStatus, 'worktree')
-    ? 'Status loading'
-    : worktree
-      ? `${worktree.stagedCount} staged | ${worktree.unstagedCount} unstaged | ${worktree.untrackedCount} untracked`
-      : 'No worktree info yet'
-  const summaryCursor = compose.editing && compose.field === 'summary' ? '_' : ''
-  const bodyCursor = compose.editing && compose.field === 'body' ? '_' : ''
-  const bodyRowsAvailable = Math.max(4, bodyRows - 10)
-  // Wrap each source line of the body to the panel width so long messages
-  // line-wrap inside the compose surface instead of getting trimmed by an
-  // outer truncate(line, 140). The 2-space indent eats 2 cells; chrome
-  // (border + paddingX) eats 4 — same budget as renderCommitPanel.
-  const bodyTextWidth = Math.max(8, width - 6)
-  const bodyVisualLines = compose.body
-    ? compose.body.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth)).slice(0, bodyRowsAvailable)
-    : ['<empty>']
-  const summaryVisualLines = wrapCells(
-    `${compose.summary || '<empty>'}${summaryCursor}`,
-    Math.max(8, width - 11) // "Summary  " (9) + 2 chrome = 11
-  )
-  const stateLine = compose.editing
-    ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
-    : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
-  const hasStagedFiles = (worktree?.files || [])
-    .some((file) => file.indexStatus !== ' ' && file.indexStatus !== '?')
-  // Staged file list is rendered in the right Worktree panel
-  // (renderComposeContextPanel); duplicating it here was confusing.
-  // Keep only the actionable "stage something first" hint when nothing is
-  // staged yet.
-  const noStagedHint = !isLogInkContextKeyLoading(contextStatus, 'worktree')
-    ? formatLogInkComposeEmpty({ hasStaged: hasStagedFiles })
-    : undefined
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Compose commit', focused)),
-    h(Text, { dimColor: true }, statusLine)
-  ),
-  h(Text, undefined, ''),
-  h(Text, {
-    bold: compose.field === 'summary' && compose.editing,
-  }, `Summary  ${summaryVisualLines[0] || ''}`),
-  ...summaryVisualLines.slice(1).map((line, index) => h(Text, {
-    key: `compose-summary-${index}`,
-    bold: compose.field === 'summary' && compose.editing,
-  }, `         ${line}`)),
-  h(Text, undefined, ''),
-  h(Text, {
-    bold: compose.field === 'body' && compose.editing,
-  }, 'Body'),
-  ...bodyVisualLines.map((line, index) => {
-    const isLast = index === bodyVisualLines.length - 1
-    return h(Text, {
-      key: `compose-body-${index}`,
-      dimColor: line === '<empty>',
-    }, `  ${line}${bodyCursor && isLast ? bodyCursor : ''}`)
-  }),
-  // Loading indicator + post-action message belong inline with the draft
-  // (they describe what just happened to the fields above). The state-
-  // line ("Editing — Enter switches summary↔body…" / "Press e to edit
-  // …") is footer-style guidance and now sits at the very bottom of the
-  // pane so it doesn't visually separate the body from any
-  // result/details.
-  ...(compose.loading
-    ? [
-      h(Text, undefined, ''),
-      h(Text, {
-        key: 'compose-loading',
-        bold: true,
-        color: theme.noColor ? undefined : theme.colors.accent,
-      }, theme.ascii
-        ? '[...] Generating AI commit draft (this can take a moment)'
-        : '⏳ Generating AI commit draft… (this can take a moment)'),
-    ]
-    : []),
-  ...(compose.message ? [h(Text, undefined, ''), h(Text, { key: 'compose-msg' }, truncate(compose.message, 140))] : []),
-  ...(compose.details || []).map((line, index) => h(Text, {
-    key: `compose-detail-${index}`,
-    dimColor: true,
-  }, truncate(`  ${line}`, 140))),
-  ...(!hasStagedFiles && noStagedHint
-    ? [
-      h(Text, { key: 'compose-no-staged-spacer' }, ''),
-      h(Text, { key: 'compose-no-staged', dimColor: true }, truncate(noStagedHint, 140)),
-    ]
-    : []),
-  h(Box, { flexGrow: 1 }),
-  h(Text, { key: 'compose-stateline', dimColor: true }, truncate(stateLine, width - 4)))
-}
-
-function renderBranchesSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const branches = context.branches
-  const loading = isLogInkContextKeyLoading(contextStatus, 'branches')
-  const sortedAll = sortBranches(branches?.localBranches || [], state.branchSort)
-  const localBranches = state.filter
-    ? sortedAll.filter((branch) =>
-      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter)
-    )
-    : sortedAll
-  const selected = Math.max(0, Math.min(state.selectedBranchIndex, Math.max(0, localBranches.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
-  const visible = localBranches.slice(startIndex, startIndex + listRows)
-  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
-  const sortLabel = ` | ${formatSortIndicator(state.branchSort, { ascii: theme.ascii })}`
-  const headerRight = loading
-    ? 'loading branches'
-    : `${localBranches.length}/${sortedAll.length} local | current: ${branches?.currentBranch || '<detached>'}${filterLabel}${sortLabel}`
-  const emptyLabel = formatLogInkBranchesEmpty({ filter: state.filter })
-  const loadingLabel = formatLogInkLoading({ resource: 'branches' })
-  // Per-column width derived from the visible window (#833) so columns
-  // align across rows regardless of name length. Padded to the longest
-  // name in view so short rows fill out instead of leaving a gutter;
-  // capped at 40 cells so one runaway long branch name doesn't blow
-  // out the timestamp column entirely (longer names get truncated and
-  // the timestamp stays where the user expects it).
-  const nameColWidth = visible.length === 0
-    ? 28
-    : Math.min(40, Math.max(8, ...visible.map((branch) => branch.shortName.length)))
-  const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'branches-loading', dimColor: true }, loadingLabel)]
-    : localBranches.length === 0
-      ? [h(Text, { key: 'branches-empty', dimColor: true }, emptyLabel)]
-      : visible.map((branch, offset) => {
-        const index = startIndex + offset
-        const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
-        const marker = branchRowMarker(branch, { ascii: theme.ascii })
-        const divergence = formatBranchDivergence(branch, { ascii: theme.ascii })
-        const lastTouched = formatBranchLastTouched(branch.date, new Date())
-        // Split the row into spans so the timestamp stays dim even on the
-        // currently-selected (bold) row. The leading marker + name keep
-        // their per-window-derived column widths; the timestamp is
-        // right-padded so the divergence column stays aligned across rows.
-        const namePadded = truncate(branch.shortName, nameColWidth).padEnd(nameColWidth)
-        const timestampPadded = lastTouched.padEnd(8)
-        const lineDim = !isSelected && !branch.current
-        const head = `${cursor} ${marker} ${namePadded} `
-        const trailingDivergence = divergence ? ` ${divergence}` : ''
-        // Truncate the assembled line to the actual panel width so a
-        // narrow inspector / sidebar focus doesn't push branch rows
-        // onto a second visual line (#830).
-        const fullText = `${head}${timestampPadded}${trailingDivergence}`
-        const truncated = truncate(fullText, Math.max(20, width - 4))
-        // If truncation chopped into the timestamp/divergence portion,
-        // fall back to a single Text to keep the visible width honest.
-        if (truncated !== fullText) {
-          return h(Text, {
-            key: `branch-${index}`,
-            bold: isSelected,
-            dimColor: lineDim,
-          }, truncated)
-        }
-        return h(Text, {
-          key: `branch-${index}`,
-          bold: isSelected,
-          dimColor: lineDim,
-        },
-        head,
-        h(Text, { dimColor: true }, timestampPadded),
-        trailingDivergence
-        )
-      })
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Branches', focused)),
-    h(Text, { dimColor: true }, headerRight)
-  ),
-  ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
-}
-
-function renderTagsSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const loading = isLogInkContextKeyLoading(contextStatus, 'tags')
-  const sortedAll = sortTags(context.tags?.tags || [], state.tagSort)
-  const tags = state.filter
-    ? sortedAll.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
-    : sortedAll
-  const selected = Math.max(0, Math.min(state.selectedTagIndex, Math.max(0, tags.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
-  const visible = tags.slice(startIndex, startIndex + listRows)
-  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
-  const sortLabel = ` | ${formatSortIndicator(state.tagSort, { ascii: theme.ascii })}`
-  const headerRight = loading
-    ? 'loading tags'
-    : `${tags.length}/${sortedAll.length} tags${filterLabel}${sortLabel}`
-  const emptyLabel = formatLogInkTagsEmpty({ filter: state.filter })
-  const loadingLabel = formatLogInkLoading({ resource: 'tags' })
-  // Per-window name column width (#833) so short tags don't leave a
-  // wide gutter and long tags don't push the subject off-screen. Cap
-  // matches the branches surface for visual consistency across the
-  // promoted views.
-  const tagNameColWidth = visible.length === 0
-    ? 20
-    : Math.min(40, Math.max(8, ...visible.map((tag) => tag.name.length)))
-  const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'tags-loading', dimColor: true }, loadingLabel)]
-    : tags.length === 0
-      ? [h(Text, { key: 'tags-empty', dimColor: true }, emptyLabel)]
-      : visible.map((tag, offset) => {
-        const index = startIndex + offset
-        const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
-        // P5.1 — link the tag name to its GitHub tree page when we know
-        // the remote. Truncation runs on the visible (pre-OSC) text;
-        // formatHyperlink wraps just the tag name, leaving width math
-        // intact.
-        const url = buildRefUrl(context.provider?.repository, tag.name)
-        const namePadded = truncate(tag.name, tagNameColWidth).padEnd(tagNameColWidth)
-        const lineText = truncate(
-          `${cursor} ${namePadded} ${tag.subject}`,
-          Math.max(20, width - 4)
-        )
-        if (!url || lineText.indexOf(namePadded) < 0) {
-          return h(Text, {
-            key: `tag-${index}`,
-            bold: isSelected,
-            dimColor: !isSelected,
-          }, lineText)
-        }
-        const linkStart = lineText.indexOf(namePadded)
-        const before = lineText.slice(0, linkStart)
-        const after = lineText.slice(linkStart + namePadded.length)
-        return h(Text, {
-          key: `tag-${index}`,
-          bold: isSelected,
-          dimColor: !isSelected,
-        }, before, formatHyperlink(namePadded, url), after)
-      })
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Tags', focused)),
-    h(Text, { dimColor: true }, headerRight)
-  ),
-  ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
-}
-
-/**
- * Promoted reflog browser (#781). Mirrors `renderTagsSurface` visually
- * — same header / filter affordance / footer hint conventions — but
- * lays out four columns per row: relative date, action prefix, short
- * hash, and message. Filtering matches against all four (so typing
- * "checkout" narrows to checkout entries, "abc" narrows to a hash).
- *
- * Per-row layout uses fixed column widths derived from the visible
- * window so short-action rows don't leave a wide gutter and long
- * actions don't push the message off-screen. The cap mirrors the
- * tags surface's name-column treatment.
- */
 
 
-/**
- * Pull-request action panel (#783) — renders the current branch's PR
- * with header, checks table, reviews summary, and a body preview.
- * Action keys (m / x / a / R / c / O) are wired in inkInput.ts and
- * surfaced via the footer; this renderer is read-only.
- *
- * Three loading / fallback states matter:
- * - Provider data still loading → "Loading pull request..."
- * - GitHub remote present but no PR for the current branch → empty
- *   state hint pointing the user at `C` to create one.
- * - GitHub CLI missing / unauthenticated → unavailable hint.
- */
-function renderPullRequestSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const loading = isLogInkContextKeyLoading(contextStatus, 'pullRequest')
-  const pullRequestOverview = context.pullRequest
-  // Use the dedicated `pullRequest` overview only — the `provider`
-  // shape carries a slimmer ProviderPullRequestStatus that lacks
-  // url / headRefName / body / mergeable / reviews. The dedicated
-  // overview hits `gh pr view --json` with the full enriched field
-  // list (PULL_REQUEST_VIEW_JSON_FIELDS) so the panel has everything.
-  const pr = pullRequestOverview?.currentPullRequest
-  const muted = theme.noColor ? undefined : theme.colors.muted
-  const accent = theme.noColor ? undefined : theme.colors.accent
 
-  const containerProps = {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column' as const,
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  }
 
-  if (loading && !pr) {
-    return h(Box, containerProps,
-      h(Box, { justifyContent: 'space-between' },
-        h(Text, { bold: true }, panelTitle('Pull request', focused)),
-        h(Text, { dimColor: true }, 'loading')
-      ),
-      h(Text, { dimColor: true }, formatLogInkLoading({ resource: 'pull request' })))
-  }
-
-  if (!pr) {
-    const hint = pullRequestOverview?.message
-      || 'No pull request detected for this branch. Press `C` (or `:create-pr`) to create one.'
-    return h(Box, containerProps,
-      h(Box, { justifyContent: 'space-between' },
-        h(Text, { bold: true }, panelTitle('Pull request', focused)),
-        h(Text, { dimColor: true }, 'no PR')
-      ),
-      h(Text, { dimColor: true }, truncate(hint, width - 4)))
-  }
-
-  const checks = summarizePullRequestChecks(pr.statusCheckRollup)
-  const reviews = summarizePullRequestReviews(pr.reviews, pr.reviewDecision)
-  const checkRows = buildPullRequestCheckRows(pr.statusCheckRollup, { ascii: theme.ascii })
-  const checkColor = (s: 'success' | 'failure' | 'pending' | 'neutral' | 'skipped'): string | undefined => {
-    if (theme.noColor) return undefined
-    if (s === 'success') return theme.colors.success
-    if (s === 'failure') return theme.colors.danger
-    if (s === 'pending') return theme.colors.warning
-    return theme.colors.muted
-  }
-
-  // Reserve a few rows for the header/section labels; the rest go to
-  // the checks table. Body preview gets the leftover rows so the
-  // surface stays vertically balanced even on tall terminals.
-  const checkBudget = Math.max(3, Math.min(checkRows.length, Math.floor(bodyRows / 2)))
-  const visibleChecks = checkRows.slice(0, checkBudget)
-  const truncatedChecks = checkRows.length - visibleChecks.length
-  const bodyPreviewBudget = Math.max(2, bodyRows - 8 - visibleChecks.length)
-  const bodyLines = (pr.body || '').split(/\r?\n/).filter((line) => line.trim().length > 0)
-  const visibleBodyLines = bodyLines.slice(0, bodyPreviewBudget)
-  const truncatedBodyLines = bodyLines.length - visibleBodyLines.length
-
-  const headerRight = `#${pr.number} · ${pr.headRefName} → ${pr.baseRefName}`
-  const stateLine = formatPullRequestStateLine(pr)
-  const author = pr.author ? `by @${pr.author}` : ''
-
-  return h(Box, containerProps,
-    h(Box, { justifyContent: 'space-between' },
-      h(Text, { bold: true }, panelTitle('Pull request', focused)),
-      h(Text, { dimColor: true }, headerRight)
-    ),
-    h(Text, undefined, truncate(pr.title, width - 4)),
-    h(Text, { dimColor: true }, truncate(`${stateLine}${author ? ` · ${author}` : ''}`, width - 4)),
-    h(Text, undefined, ''),
-
-    // Checks section
-    h(Text, { bold: true, color: accent }, 'Checks'),
-    h(Text, { dimColor: true }, truncate(`  ${formatPullRequestChecksSummary(checks, { ascii: theme.ascii })}`, width - 4)),
-    ...visibleChecks.map((row, index) => h(Text, {
-      key: `pr-check-${index}`,
-      color: checkColor(row.status),
-    }, truncate(`  ${row.glyph} ${row.name.padEnd(28)} ${row.detail}`, width - 4))),
-    ...(truncatedChecks > 0
-      ? [h(Text, { key: 'pr-checks-trunc', dimColor: true }, truncate(`  … ${truncatedChecks} more`, width - 4))]
-      : []),
-    h(Text, undefined, ''),
-
-    // Reviews section
-    h(Text, { bold: true, color: accent }, 'Reviews'),
-    h(Text, { dimColor: true }, truncate(`  ${formatPullRequestReviewsSummary(reviews)}`, width - 4)),
-    h(Text, undefined, ''),
-
-    // Body preview
-    ...(visibleBodyLines.length > 0
-      ? [
-        h(Text, { key: 'pr-body-label', bold: true, color: accent }, 'Description'),
-        ...visibleBodyLines.map((line, index) => h(Text, {
-          key: `pr-body-${index}`,
-          color: muted,
-        }, truncate(`  ${line}`, width - 4))),
-        ...(truncatedBodyLines > 0
-          ? [h(Text, { key: 'pr-body-trunc', dimColor: true }, truncate(`  … ${truncatedBodyLines} more lines`, width - 4))]
-          : []),
-      ]
-      : []))
-}
-
-/**
- * Filter input cursor for the promoted views (branches/tags/stash).
- * History already shows the same `filter: foo_` affordance in its header
- * — this mirrors that into the other surfaces so the user can see what
- * they're typing instead of watching the list silently shrink (P2.1).
- *
- * Returns an empty array when the surface isn't in filter mode so call
- * sites can spread it unconditionally.
- */
 function renderDiffSurface(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -4694,33 +4235,6 @@ function renderInspectorActionsSection(
   return nodes
 }
 
-/**
- * Build a commit URL for the repo when GitHub provider info is available.
- * Returns undefined for unsupported remotes — formatHyperlink falls through
- * to plain text in that case.
- */
-function buildCommitUrl(
-  repository: ProviderRepository | undefined,
-  hash: string
-): string | undefined {
-  if (!repository) return undefined
-  return buildProviderUrl(repository, { type: 'commit', commit: hash })
-}
-
-/**
- * Build a branch URL for a ref name. Strips the `HEAD -> ` and `tag: `
- * prefixes git decoration uses. For everything else we treat the ref as a
- * branch — GitHub's `/tree/<ref>` resolves both branches and tags.
- */
-function buildRefUrl(
-  repository: ProviderRepository | undefined,
-  ref: string
-): string | undefined {
-  if (!repository) return undefined
-  const stripped = ref.replace(/^HEAD -> /, '').replace(/^tag: /, '').trim()
-  if (!stripped) return undefined
-  return buildProviderUrl(repository, { type: 'branch', branch: stripped })
-}
 
 /**
  * Render `refs` as a comma-separated sequence of <Text> fragments, each

@@ -9,6 +9,8 @@
 
 import type { GitCommitDetail } from '../../commands/log/data'
 import type { LogInkSidebarTab } from '../../commands/log/inkViewModel'
+import type { ProviderRepository } from '../../git/providerData'
+import { buildProviderUrl } from '../../git/providerData'
 import type { LogInkTheme } from '../chrome/theme'
 
 /**
@@ -120,6 +122,34 @@ export function formatChangedFileStats(file: GitCommitDetail['files'][number]): 
     return ''
   }
   return `+${file.additions || 0}/-${file.deletions || 0}`
+}
+
+/**
+ * Build a commit URL for the given hash. Returns undefined when no
+ * provider is detected so callers can render plain text without
+ * branching on the result.
+ */
+export function buildCommitUrl(
+  repository: ProviderRepository | undefined,
+  hash: string
+): string | undefined {
+  if (!repository) return undefined
+  return buildProviderUrl(repository, { type: 'commit', commit: hash })
+}
+
+/**
+ * Build a branch URL for a ref name. Strips the `HEAD -> ` and `tag: `
+ * prefixes git decoration uses. For everything else we treat the ref as
+ * a branch — GitHub's `/tree/<ref>` resolves both branches and tags.
+ */
+export function buildRefUrl(
+  repository: ProviderRepository | undefined,
+  ref: string
+): string | undefined {
+  if (!repository) return undefined
+  const stripped = ref.replace(/^HEAD -> /, '').replace(/^tag: /, '').trim()
+  if (!stripped) return undefined
+  return buildProviderUrl(repository, { type: 'branch', branch: stripped })
 }
 
 /**
