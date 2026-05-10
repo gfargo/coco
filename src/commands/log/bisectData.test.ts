@@ -70,6 +70,74 @@ describe('parseBisectLog', () => {
       { kind: 'bad', sha: 'abc1234', raw: 'git bisect bad abc1234 def5678' },
     ])
   })
+
+  it('parses a `git bisect start <bad> <good>` row with both refs, capturing only the first', () => {
+    // The `start` command takes its own bad/good arguments. We capture
+    // the first ref (the bad commit) for display purposes; downstream
+    // surfaces don't currently render the start args, but the log
+    // entry should still parse without falling into the 'unknown' bucket.
+    const log = 'git bisect start abc1234 def5678'
+    expect(parseBisectLog(log)).toEqual([
+      { kind: 'start', sha: 'abc1234', raw: 'git bisect start abc1234 def5678' },
+    ])
+  })
+
+  it('preserves subjects with quotes / parentheses / colons in comment rows', () => {
+    // Real-world commit subjects routinely contain conventional-commit
+    // scope parens, quoted strings, and colons. The regex must not
+    // truncate at the first inline ':' or get confused by the quoting.
+    const log = '# bad: [abc1234] feat(parser): handle "quoted" inputs (#42)'
+    expect(parseBisectLog(log)).toEqual([
+      {
+        kind: 'bad',
+        sha: 'abc1234',
+        subject: 'feat(parser): handle "quoted" inputs (#42)',
+        raw: '# bad: [abc1234] feat(parser): handle "quoted" inputs (#42)',
+      },
+    ])
+  })
+
+  it('falls through to unknown for `git bisect <verb>` rows we do not classify', () => {
+    // git supports `git bisect run <cmd>`, `git bisect view`, `git bisect
+    // visualize`, etc. The parser only classifies the four user-decision
+    // verbs (start / good / bad / skip). Anything else stays as 'unknown'
+    // so the surface can dim it without crashing on a custom verb.
+    const log = [
+      'git bisect view --oneline',
+      'git bisect run npm test',
+      'git bisect replay /tmp/log',
+    ].join('\n')
+
+    const parsed = parseBisectLog(log)
+    expect(parsed).toHaveLength(3)
+    expect(parsed.every((entry) => entry.kind === 'unknown')).toBe(true)
+  })
+
+  it('handles a multi-line log mixing command rows and comment rows in any order', () => {
+    // git bisect log emits a mix of executable command rows + `#`-prefixed
+    // comment rows that record what each step landed on. The parser must
+    // keep them both, in order.
+    const log = [
+      '# status: bisecting',
+      'git bisect start',
+      '# bad: [abc1234] feat: introduces the bug',
+      'git bisect bad abc1234',
+      '# good: [def5678] feat: previous-known-good',
+      'git bisect good def5678',
+    ].join('\n')
+
+    const parsed = parseBisectLog(log)
+    expect(parsed.map((e) => e.kind)).toEqual([
+      'unknown', 'start', 'bad', 'bad', 'good', 'good',
+    ])
+    // Comment rows keep their parsed sha + subject; command rows keep
+    // only the sha.
+    expect(parsed[2]).toMatchObject({ kind: 'bad', sha: 'abc1234', subject: 'feat: introduces the bug' })
+    // Command-row entries (parsed[3]) have no subject field — only
+    // comment rows carry the parsed subject text.
+    expect(parsed[3]).toMatchObject({ kind: 'bad', sha: 'abc1234' })
+    expect(parsed[3].subject).toBeUndefined()
+  })
 })
 
 describe('getBisectStatus', () => {
@@ -138,5 +206,38 @@ describe('getBisectStatus', () => {
     expect(status.active).toBe(true)
     expect(status.currentSha).toBe('')
     expect(status.log).toHaveLength(1)
+  })
+
+  it('treats an empty BISECT_LOG file as "active but no decisions yet"', async () => {
+    // git can create BISECT_LOG with the start command and no
+    // subsequent decisions. The file exists but `git bisect log` returns
+    // an empty string (or just whitespace). Surface should still
+    // route to the bisect view with the badge so the user knows the
+    // session is active.
+    mockExistsSync.mockReturnValue(true)
+    const revparse = jest.fn()
+      .mockResolvedValueOnce('/repo/.git/BISECT_LOG\n')
+      .mockResolvedValueOnce('abc1234\n')
+    const raw = jest.fn().mockResolvedValue('   \n\n')
+    const git = { revparse, raw } as unknown as SimpleGit
+
+    const status = await getBisectStatus(git)
+
+    expect(status.active).toBe(true)
+    expect(status.currentSha).toBe('abc1234')
+    expect(status.log).toEqual([])
+  })
+
+  it('treats `git rev-parse --git-path` returning empty as inactive', async () => {
+    // Defensive — if --git-path can't resolve the BISECT_LOG location
+    // for some reason (worktree edge case, permissions), don't crash.
+    // Treat as inactive rather than throwing.
+    mockExistsSync.mockReturnValue(true)
+    const revparse = jest.fn().mockResolvedValueOnce('\n')
+    const git = { revparse } as unknown as SimpleGit
+
+    const status = await getBisectStatus(git)
+
+    expect(status.active).toBe(false)
   })
 })
