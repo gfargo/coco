@@ -110,6 +110,45 @@ export function parseBisectLog(output: string): BisectLogEntry[] {
 }
 
 /**
+ * Detect bisect completion (#879, item 3). When git identifies the
+ * first bad commit it appends a comment row to BISECT_LOG of the
+ * form `# first bad commit: [<sha>] <subject>` and stops moving
+ * HEAD between candidates. The session technically remains "active"
+ * (BISECT_LOG and refs/bisect/* persist until `git bisect reset`),
+ * but from the user's perspective the answer is in — surfaces should
+ * render a completion panel rather than the same decision-log shape.
+ *
+ * Returns the first-bad sha + parsed subject when the terminator is
+ * present, or undefined when bisect is still in flight.
+ */
+export type BisectCompletion = {
+  /** Short or full hash of the first bad commit, as recorded by git. */
+  sha: string
+  /** Subject of the first bad commit, when git included one in the marker. */
+  subject?: string
+}
+
+export function getBisectCompletion(log: BisectLogEntry[]): BisectCompletion | undefined {
+  // Walk last-to-first so a completion-then-reset-then-restart
+  // sequence (rare but possible if a session is reused after a partial
+  // reset) reports the most recent terminator. The marker lives in
+  // an `unknown`-kind entry because the parser intentionally only
+  // classifies the four user-decision verbs.
+  for (let i = log.length - 1; i >= 0; i--) {
+    const entry = log[i]
+    if (entry.kind !== 'unknown') continue
+    const match = entry.raw.match(/^#\s+first\s+bad\s+commit:\s+\[([^\]]+)\]\s*(.*)$/)
+    if (match) {
+      return {
+        sha: match[1],
+        subject: match[2]?.trim() || undefined,
+      }
+    }
+  }
+  return undefined
+}
+
+/**
  * Load the live bisect status. Best-effort — when bisect isn't
  * active the empty-status sentinel returns immediately so callers
  * don't pay for a `git bisect log` round-trip on every refresh.
