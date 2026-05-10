@@ -5,7 +5,7 @@ import {
     applyCommitComposeAction,
     createCommitComposeState,
 } from './commitCompose'
-import { PromotedSelectionsSnapshot } from './inkSelectionRectify'
+import { PromotedSelectionsSnapshot } from '../../workstation/chrome/selectionRectify'
 import {
     BranchSortMode,
     DEFAULT_BRANCH_SORT_MODE,
@@ -13,7 +13,7 @@ import {
     TagSortMode,
     cycleBranchSort,
     cycleTagSort,
-} from './inkSorting'
+} from '../../workstation/chrome/sorting'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 

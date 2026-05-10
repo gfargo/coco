@@ -7,8 +7,8 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { LogArgv, LogOptions } from '../log/config'
 import { GitLogRow, getLogRows } from '../log/data'
 import { startInkInteractiveLog } from '../log/inkRuntime'
-import { readCachedCommits, writeCachedCommits } from '../log/inkOverviewCache'
-import { LogInkThemeConfig } from '../log/inkTheme'
+import { readCachedCommits, writeCachedCommits } from '../../workstation/chrome/overviewCache'
+import { LogInkThemeConfig } from '../../workstation/chrome/theme'
 import { UiArgv } from './config'
 
 export function createLogArgvFromUiArgv(argv: UiArgv): LogArgv {

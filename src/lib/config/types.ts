@@ -1,5 +1,5 @@
 import { BaseCommandOptions } from '../../commands/types'
-import { LogInkThemeConfig } from '../../commands/log/inkTheme'
+import { LogInkThemeConfig } from '../../workstation/chrome/theme'
 import { LLMService } from '../langchain/types'
 
 type BaseConfig = {

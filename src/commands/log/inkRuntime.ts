@@ -60,11 +60,11 @@ import {
     isLogInkContextKeyLoading,
     isLogInkContextLoading,
     updateLogInkContextStatus,
-} from './inkContext'
+} from '../../workstation/chrome/context'
 import {
     formatInkRefLabels,
     getVisibleLogInkHistory,
-} from './inkHistoryRows'
+} from '../../workstation/chrome/historyRows'
 import {
     formatBindingKeys,
     formatLogInkBreadcrumb,
@@ -74,36 +74,36 @@ import {
     getLogInkFooterHints,
     getLogInkHelpSections,
 } from './inkKeymap'
-import { substituteGraphChars } from './inkGraphChars'
-import { LaneSegment, getLaneColor } from './inkGraphLanes'
-import { formatHyperlink } from './inkHyperlinks'
+import { substituteGraphChars } from '../../workstation/chrome/graphChars'
+import { LaneSegment, getLaneColor } from '../../workstation/chrome/graphLanes'
+import { formatHyperlink } from '../../workstation/chrome/hyperlinks'
 import {
     LogInkInputKey,
     getInspectorActionsForState,
     getLogInkInputEvents,
 } from './inkInput'
-import { hasSeenOnboarding, markOnboardingSeen } from './inkOnboarding'
-import { getSavedDiffViewMode, saveDiffViewMode } from './inkDiffViewModePersistence'
-import { getSavedSidebarTab, saveSidebarTab } from './inkSidebarPersistence'
-import { SplitDiffRow, buildSplitDiffRows } from './inkSplitDiff'
-import { getSidebarVisibleWindow } from './inkSidebarSelection'
+import { hasSeenOnboarding, markOnboardingSeen } from '../../workstation/chrome/onboarding'
+import { getSavedDiffViewMode, saveDiffViewMode } from '../../workstation/chrome/diffViewModePersistence'
+import { getSavedSidebarTab, saveSidebarTab } from '../../workstation/chrome/sidebarPersistence'
+import { SplitDiffRow, buildSplitDiffRows } from '../../workstation/chrome/splitDiff'
+import { getSidebarVisibleWindow } from '../../workstation/chrome/sidebarSelection'
 import {
     PromotedSelectionsSnapshot,
     rectifyPromotedSelectionIndex,
-} from './inkSelectionRectify'
+} from '../../workstation/chrome/selectionRectify'
 import {
     LogInkRefreshWatcher,
     createRefreshWatcher,
-} from './inkRefreshWatcher'
-import { installTerminalLifecycle } from './inkTerminalLifecycle'
+} from '../../workstation/chrome/refreshWatcher'
+import { installTerminalLifecycle } from '../../workstation/chrome/terminalLifecycle'
 import {
     LOG_INK_DEFAULT_COLUMNS,
     LOG_INK_DEFAULT_ROWS,
     LOG_INK_MIN_COLUMNS,
     LOG_INK_MIN_ROWS,
     getLogInkLayout,
-} from './inkLayout'
-import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from './inkTheme'
+} from '../../workstation/chrome/layout'
+import { createLogInkTheme, LogInkTheme, LogInkThemeConfig } from '../../workstation/chrome/theme'
 import {
     STAGE_STATUS_DOT,
     branchRowMarker,
@@ -112,19 +112,19 @@ import {
     getPullRequestStateGlyph,
     getStageStatusDotColor,
     sidebarTabCount,
-} from './inkIconography'
-import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from './inkIdleTips'
+} from '../../workstation/chrome/iconography'
+import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../../workstation/chrome/idleTips'
 import {
     PreviewLine,
     formatBranchPreview,
     formatStashPreview,
     formatTagPreview,
-} from './inkPreviewPane'
+} from '../../workstation/chrome/previewPane'
 import {
     formatSortIndicator,
     sortBranches,
     sortTags,
-} from './inkSorting'
+} from '../../workstation/chrome/sorting'
 import {
     formatLogInkBranchesEmpty,
     formatLogInkComposeEmpty,
@@ -134,8 +134,8 @@ import {
     formatLogInkStashEmpty,
     formatLogInkStatusEmpty,
     formatLogInkTagsEmpty,
-} from './inkSurfaceStates'
-import { cellWidth, truncateCells, wrapCells } from './inkText'
+} from '../../workstation/chrome/surfaceStates'
+import { cellWidth, truncateCells, wrapCells } from '../../workstation/chrome/text'
 import {
     LogInkHistoryFetchArgs,
     LogInkSidebarTab,
@@ -195,7 +195,7 @@ import {
     getStashOverview,
     parseStashDiffFiles,
 } from '../../git/stashData'
-import { formatStashHeaderIdentity } from './inkStashHeader'
+import { formatStashHeaderIdentity } from '../../workstation/chrome/stashHeader'
 import {
     buildPullRequestCheckRows,
     formatPullRequestChecksSummary,
@@ -203,7 +203,7 @@ import {
     formatPullRequestStateLine,
     summarizePullRequestChecks,
     summarizePullRequestReviews,
-} from './inkPullRequestPanel'
+} from '../../workstation/chrome/pullRequestPanel'
 import {
     revertFile,
     stageAllFiles,
@@ -239,10 +239,10 @@ import {
     InspectorAction,
     InspectorActionContext,
     getInspectorActions,
-} from './inkInspectorActions'
+} from '../../workstation/chrome/inspectorActions'
 import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from '../../git/worktreeData'
 import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
-import { canStartLogInkTui, getLogInkRenderOptions } from './inkTerminal'
+import { canStartLogInkTui, getLogInkRenderOptions } from '../../workstation/chrome/terminal'
 import { LogArgv } from './config'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>

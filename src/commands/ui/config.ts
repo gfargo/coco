@@ -1,6 +1,6 @@
 import { Arguments, Argv, Options } from 'yargs'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
-import { LogInkThemePreset } from '../log/inkTheme'
+import { LogInkThemePreset } from '../../workstation/chrome/theme'
 import { BaseCommandOptions } from '../types'
 
 export type UiView = 'history' | 'status' | 'diff'

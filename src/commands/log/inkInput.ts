@@ -1,9 +1,9 @@
-import { extractDiffHunk } from './inkHunkExtraction'
+import { extractDiffHunk } from '../../workstation/chrome/hunkExtraction'
 import {
     InspectorAction,
     InspectorActionContext,
     getInspectorActions,
-} from './inkInspectorActions'
+} from '../../workstation/chrome/inspectorActions'
 import {
     LogInkPaletteCommand,
     filterLogInkPaletteCommands,
@@ -20,7 +20,7 @@ import {
     getLogInkWorkflowActionById,
     getLogInkWorkflowActionByKey,
 } from './inkWorkflows'
-import { sidebarTabHasSelectableItems } from './inkSidebarSelection'
+import { sidebarTabHasSelectableItems } from '../../workstation/chrome/sidebarSelection'
 
 export type LogInkInputKey = {
   backspace?: boolean
