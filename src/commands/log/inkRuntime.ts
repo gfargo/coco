@@ -130,8 +130,6 @@ import {
     formatLogInkComposeEmpty,
     formatLogInkHistoryEmpty,
     formatLogInkLoading,
-    formatLogInkReflogEmpty,
-    formatLogInkStashEmpty,
     formatLogInkStatusEmpty,
     formatLogInkTagsEmpty,
 } from '../../workstation/chrome/surfaceStates'
@@ -228,7 +226,7 @@ import {
 import { getBisectStatus } from '../../git/bisectData'
 import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from '../../git/bisectActions'
 import { getCompareDiff } from '../../git/compareData'
-import { getReflogOverview, splitReflogSubject } from '../../git/reflogData'
+import { getReflogOverview } from '../../git/reflogData'
 import { getTagOverview } from '../../git/tagData'
 import {
     getLogInkWorkflowActionById,
@@ -298,6 +296,22 @@ import {
   sidebarTabLabel,
   statusCodeColor,
 } from '../../workstation/runtime/utils'
+
+// Promoted-list filter helpers shared by every promoted surface. Live in
+// runtime/ rather than chrome/ because they're tightly coupled to the
+// LogInkState filter-mode shape.
+import {
+  matchesPromotedFilter,
+  renderPromotedFilterAffordance,
+} from '../../workstation/runtime/promotedFilter'
+
+// Per-surface renderers extracted in phase 5a.1 (#890). Surfaces still
+// living in this file (history, status, compose, branches, tags,
+// pullRequest, diff, detail) follow in subsequent phase 5a sub-PRs.
+import { renderBisectSurface } from '../../workstation/surfaces/bisect'
+import { renderReflogSurface } from '../../workstation/surfaces/reflog'
+import { renderStashSurface } from '../../workstation/surfaces/stash'
+import { renderWorktreesSurface } from '../../workstation/surfaces/worktrees'
 
 const truncate = truncateCells
 
@@ -3711,14 +3725,6 @@ function renderComposeSurface(
   h(Text, { key: 'compose-stateline', dimColor: true }, truncate(stateLine, width - 4)))
 }
 
-function matchesPromotedFilter(haystacks: string[], filter: string): boolean {
-  if (!filter.trim()) {
-    return true
-  }
-  const needle = filter.toLowerCase()
-  return haystacks.some((value) => value.toLowerCase().includes(needle))
-}
-
 function renderBranchesSurface(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -3918,392 +3924,7 @@ function renderTagsSurface(
  * actions don't push the message off-screen. The cap mirrors the
  * tags surface's name-column treatment.
  */
-function renderReflogSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const loading = isLogInkContextKeyLoading(contextStatus, 'reflog')
-  const allEntries = context.reflog?.entries || []
-  const entries = state.filter
-    ? allEntries.filter((entry) => matchesPromotedFilter(
-      [entry.selector, entry.hash, entry.relativeDate, entry.subject],
-      state.filter
-    ))
-    : allEntries
-  const selected = Math.max(0, Math.min(state.selectedReflogIndex, Math.max(0, entries.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
-  const visible = entries.slice(startIndex, startIndex + listRows)
-  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
-  const headerRight = loading
-    ? 'loading reflog'
-    : `${entries.length}/${allEntries.length} entries${filterLabel}`
-  const emptyLabel = formatLogInkReflogEmpty({ filter: state.filter })
-  const loadingLabel = formatLogInkLoading({ resource: 'reflog' })
 
-  // Column widths derived from the visible window. The hash column is
-  // fixed (short SHA is always 7 chars) and the date column caps so
-  // "X minutes ago" / "Y hours ago" stays readable without dominating
-  // the row. Action column scales to the longest visible action so
-  // commit / checkout / merge align cleanly.
-  const splitVisible = visible.map((entry) => ({
-    entry,
-    parts: splitReflogSubject(entry.subject),
-  }))
-  const dateColWidth = splitVisible.length === 0
-    ? 16
-    : Math.min(20, Math.max(6, ...splitVisible.map(({ entry }) => entry.relativeDate.length)))
-  const actionColWidth = splitVisible.length === 0
-    ? 12
-    : Math.min(24, Math.max(6, ...splitVisible.map(({ parts }) => parts.action.length)))
-  const hashColWidth = 8
-
-  const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'reflog-loading', dimColor: true }, loadingLabel)]
-    : entries.length === 0
-      ? [h(Text, { key: 'reflog-empty', dimColor: true }, emptyLabel)]
-      : splitVisible.map(({ entry, parts }, offset) => {
-        const index = startIndex + offset
-        const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
-        const datePadded = truncate(entry.relativeDate, dateColWidth).padEnd(dateColWidth)
-        const actionPadded = truncate(parts.action, actionColWidth).padEnd(actionColWidth)
-        const hashPadded = truncate(entry.hash, hashColWidth).padEnd(hashColWidth)
-        const message = parts.message || entry.subject
-        const lineText = truncate(
-          `${cursor} ${datePadded} ${actionPadded} ${hashPadded} ${message}`,
-          Math.max(20, width - 4)
-        )
-        return h(Text, {
-          key: `reflog-${index}`,
-          bold: isSelected,
-          dimColor: !isSelected,
-        }, lineText)
-      })
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Reflog', focused)),
-    h(Text, { dimColor: true }, headerRight)
-  ),
-  ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
-}
-
-/**
- * Bisect workflow surface (#784). Shows the current candidate commit
- * (HEAD), a parsed view of recent decisions from `git bisect log`, and
- * the four action keys (g good, b bad, s skip, x reset).
- *
- * When bisect is inactive, the surface renders an empty-state hint
- * pointing the user at the CLI to start one. The view stays
- * navigable so the user can read the documentation before starting
- * — they can't break anything from here.
- */
-function renderBisectSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  candidateDetail: GitCommitDetail | undefined,
-  candidateLoading: boolean,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const loading = isLogInkContextKeyLoading(contextStatus, 'bisect')
-  const bisect = context.bisect
-  const accent = theme.noColor ? undefined : theme.colors.accent
-
-  const lines: ReactTypes.ReactNode[] = []
-
-  if (loading) {
-    lines.push(h(Text, { key: 'bisect-loading', dimColor: true },
-      truncate('· Loading bisect status…', width - 4)))
-  } else if (!bisect?.active) {
-    // Empty-state explainer (#879). Teaches the bisect workflow in
-    // ~30 seconds: what it is, how it works, how to start one (CLI
-    // entry remains the supported on-ramp until the in-TUI start
-    // child item lands), and a tip about picking the good anchor.
-    // Bisect is a rarely-used feature even for experienced users —
-    // shipping it with terse copy assumes muscle memory the median
-    // user doesn't have.
-    const empty: Array<{ key: string; text: string; opts?: { bold?: boolean; dim?: boolean; accent?: boolean } }> = [
-      { key: 'title', text: 'Bisect — find the commit that introduced a bug.', opts: { bold: true } },
-      { key: 'spacer-1', text: '' },
-      { key: 'how-h', text: 'How it works', opts: { bold: true } },
-      { key: 'how-1', text: '  Binary search through history. You mark commits as "good" (bug' },
-      { key: 'how-2', text: '  not present) or "bad" (bug present); git narrows the range until' },
-      { key: 'how-3', text: '  it identifies the first bad commit.' },
-      { key: 'spacer-2', text: '' },
-      { key: 'start-h', text: 'How to start', opts: { bold: true } },
-      { key: 'start-1', text: '  From your shell:' },
-      { key: 'start-2', text: '    git bisect start <bad-ref> <good-ref>', opts: { accent: true } },
-      { key: 'start-3', text: '  Then come back here — coco picks up the active bisect and gives' },
-      { key: 'start-4', text: '  you single-keystroke controls:' },
-      { key: 'start-5', text: '    g  mark good      s  skip (e.g. doesn\'t build)', opts: { accent: true } },
-      { key: 'start-6', text: '    b  mark bad       x  reset / cancel', opts: { accent: true } },
-      { key: 'spacer-3', text: '' },
-      { key: 'tip-h', text: 'Tip', opts: { bold: true } },
-      { key: 'tip-1', text: '  Pick a recent release tag as your "good" anchor if you don\'t' },
-      { key: 'tip-2', text: '  remember when the bug appeared. Tags are visible from the tags' },
-      { key: 'tip-3', text: '  view (g t).' },
-    ]
-    for (const row of empty) {
-      lines.push(h(Text, {
-        key: `bisect-empty-${row.key}`,
-        bold: row.opts?.bold,
-        dimColor: row.opts?.dim,
-        color: row.opts?.accent ? accent : undefined,
-      }, truncate(row.text, width - 4)))
-    }
-  } else {
-    // Active bisect. Three-section body: current candidate (sha +
-    // commit summary so the user can judge the diff at a glance),
-    // recent decisions, action hints. Action keys live in the footer.
-    const headerSha = bisect.currentSha ? bisect.currentSha.slice(0, 8) : '<unknown>'
-    lines.push(h(Text, { key: 'bisect-active-title', bold: true },
-      truncate(`Bisecting · current candidate ${headerSha}`, width - 4)))
-
-    // #879 (item 2) — render commit detail for the current candidate.
-    // Lets the user judge "does this look like it would cause the bug?"
-    // before they run their tests, instead of dropping to shell to
-    // git show. Loading is brief (one git show invocation) and the
-    // surface falls back to just the sha header when the detail
-    // hasn't arrived yet (or git rejected the lookup).
-    if (candidateLoading) {
-      lines.push(h(Text, { key: 'bisect-candidate-loading', dimColor: true },
-        truncate('  loading commit detail…', width - 4)))
-    } else if (candidateDetail) {
-      const { author, date, message, body, stats, files } = candidateDetail
-      lines.push(h(Text, { key: 'bisect-candidate-subject' },
-        truncate(`  ${message}`, width - 4)))
-      lines.push(h(Text, { key: 'bisect-candidate-author', dimColor: true },
-        truncate(`  ${author} · ${date}`, width - 4)))
-      // Body line — first non-empty line of the commit body, truncated.
-      // Skip the noisy preamble (subject + blank line) by taking the
-      // first paragraph after the title; body===subject is common for
-      // single-line commits and we filter that out.
-      const firstBodyLine = (body || '')
-        .split('\n')
-        .map((line) => line.trim())
-        .find((line) => line.length > 0 && line !== message)
-      if (firstBodyLine) {
-        lines.push(h(Text, { key: 'bisect-candidate-body', dimColor: true },
-          truncate(`  ${firstBodyLine}`, width - 4)))
-      }
-      // Stats summary: total file count + +/- numbers, then a few
-      // file names so the user sees scope at a glance. Cap the
-      // file-name list at 3 entries to keep the section bounded.
-      lines.push(h(Text, { key: 'bisect-candidate-stats' },
-        truncate(`  ${stats.filesChanged} file${stats.filesChanged === 1 ? '' : 's'} · +${stats.insertions} / -${stats.deletions}`, width - 4)))
-      const sampleFiles = files.slice(0, 3).map((file) => file.path)
-      if (sampleFiles.length > 0) {
-        const overflow = files.length > sampleFiles.length ? ` (+${files.length - sampleFiles.length} more)` : ''
-        lines.push(h(Text, { key: 'bisect-candidate-files', dimColor: true },
-          truncate(`    ${sampleFiles.join(', ')}${overflow}`, width - 4)))
-      }
-    }
-    // Spacer separates the candidate section from decisions.
-    lines.push(h(Text, { key: 'bisect-active-spacer' }, ''))
-
-    const decisions = bisect.log.filter((entry) =>
-      entry.kind === 'good' || entry.kind === 'bad' || entry.kind === 'skip'
-    )
-
-    if (decisions.length === 0) {
-      lines.push(h(Text, { key: 'bisect-no-decisions', dimColor: true },
-        truncate('No decisions logged yet — press g (good) or b (bad) to record one.', width - 4)))
-    } else {
-      lines.push(h(Text, { key: 'bisect-decisions-header', bold: true },
-        truncate(`Decisions (${decisions.length}):`, width - 4)))
-      const recent = decisions.slice(-Math.max(4, bodyRows - 8))
-      for (const entry of recent) {
-        const kindLabel = entry.kind.toUpperCase().padEnd(5)
-        const sha = (entry.sha || '<unknown>').padEnd(8)
-        const subject = entry.subject || ''
-        const text = `  ${kindLabel} ${sha} ${subject}`
-        lines.push(h(Text, {
-          key: `bisect-entry-${entry.raw}`,
-          dimColor: entry.kind === 'skip',
-          bold: entry.kind === 'bad',
-        }, truncate(text, width - 4)))
-      }
-    }
-
-    lines.push(h(Text, { key: 'bisect-action-spacer' }, ''))
-    lines.push(h(Text, { key: 'bisect-action-hint', dimColor: true },
-      truncate('Actions: g good · b bad · s skip · x reset', width - 4)))
-  }
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Bisect', focused)),
-    h(Text, { dimColor: true }, bisect?.active ? 'BISECTING' : 'inactive')
-  ),
-  ...lines)
-}
-
-function renderStashSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const loading = isLogInkContextKeyLoading(contextStatus, 'stashes')
-  const allStashes = context.stashes?.stashes || []
-  const stashes = state.filter
-    ? allStashes.filter((stash) =>
-      matchesPromotedFilter([stash.ref, stash.message], state.filter)
-    )
-    : allStashes
-  const selected = Math.max(0, Math.min(state.selectedStashIndex, Math.max(0, stashes.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
-  const visible = stashes.slice(startIndex, startIndex + listRows)
-  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
-  const headerRight = loading
-    ? 'loading stashes'
-    : `${stashes.length}/${allStashes.length} stashes${filterLabel}`
-  const emptyLabel = formatLogInkStashEmpty({ filter: state.filter })
-  const loadingLabel = formatLogInkLoading({ resource: 'stashes' })
-  const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'stash-loading', dimColor: true }, loadingLabel)]
-    : stashes.length === 0
-      ? [h(Text, { key: 'stash-empty', dimColor: true }, emptyLabel)]
-      : visible.map((stash, offset) => {
-        const index = startIndex + offset
-        const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
-        return h(Text, {
-          key: `stash-${index}`,
-          bold: isSelected,
-          dimColor: !isSelected,
-        }, truncate(`${cursor} ${stash.ref.padEnd(12)} ${stash.message}`, 140))
-      })
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Stash', focused)),
-    h(Text, { dimColor: true }, headerRight)
-  ),
-  ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
-}
-
-function renderWorktreesSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  const focused = state.focus === 'commits'
-  const loading = isLogInkContextKeyLoading(contextStatus, 'worktreeList')
-  const allWorktrees = context.worktreeList?.worktrees || []
-  const worktrees = state.filter
-    ? allWorktrees.filter((entry) =>
-      matchesPromotedFilter([entry.path, entry.branch || '', entry.head || ''], state.filter)
-    )
-    : allWorktrees
-  const selected = Math.max(0, Math.min(state.selectedWorktreeListIndex, Math.max(0, worktrees.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
-  const visible = worktrees.slice(startIndex, startIndex + listRows)
-  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
-  const headerRight = loading
-    ? 'loading worktrees'
-    : `${worktrees.length}/${allWorktrees.length} worktrees${filterLabel}`
-  // Per-window branch column width (#833). Worktrees often track
-  // branches with names varying widely in length (`main` vs.
-  // `feat/tui-something-long`); fixed-width padding either left a
-  // huge gutter on short rows or pushed the path column off-screen on
-  // long ones. Cap matches the other promoted surfaces.
-  const branchColWidth = visible.length === 0
-    ? 28
-    : Math.min(40, Math.max(8, ...visible.map((entry) => {
-      const label = entry.branch ? entry.branch : entry.head || '<detached>'
-      return label.length
-    })))
-  const lines: ReactTypes.ReactNode[] = loading
-    ? [h(Text, { key: 'worktrees-loading', dimColor: true }, formatLogInkLoading({ resource: 'worktrees' }))]
-    : worktrees.length === 0
-      ? [h(Text, { key: 'worktrees-empty', dimColor: true }, 'No linked worktrees.')]
-      : visible.map((entry, offset) => {
-        const index = startIndex + offset
-        const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
-        const marker = entry.current ? '*' : ' '
-        const branchLabel = entry.branch ? entry.branch : entry.head || '<detached>'
-        const stateLabel = entry.dirty ? 'dirty' : 'clean'
-        const branchPadded = truncate(branchLabel, branchColWidth).padEnd(branchColWidth)
-        return h(Text, {
-          key: `worktree-${index}`,
-          bold: isSelected,
-          dimColor: !isSelected && !entry.current,
-        }, truncate(
-          `${cursor} ${marker} ${branchPadded} ${stateLabel.padEnd(6)} ${entry.path}`,
-          width - 4
-        ))
-      })
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    flexShrink: 0,
-    paddingX: 1,
-    width,
-  },
-  h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Worktrees', focused)),
-    h(Text, { dimColor: true }, headerRight)
-  ),
-  ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
-}
 
 /**
  * Pull-request action panel (#783) — renders the current branch's PR
@@ -4445,21 +4066,6 @@ function renderPullRequestSurface(
  * Returns an empty array when the surface isn't in filter mode so call
  * sites can spread it unconditionally.
  */
-function renderPromotedFilterAffordance(
-  h: typeof ReactTypes.createElement,
-  Text: LogInkComponents['Text'],
-  state: LogInkState,
-  theme: LogInkTheme
-): ReactTypes.ReactElement[] {
-  if (!state.filterMode) {
-    return []
-  }
-  const accent = theme.noColor ? undefined : theme.colors.accent
-  return [
-    h(Text, { key: 'promoted-filter-input', color: accent }, `filter: ${state.filter}_`),
-  ]
-}
-
 function renderDiffSurface(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
