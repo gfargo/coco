@@ -3,6 +3,7 @@ import {
   bisectBad,
   bisectGood,
   bisectReset,
+  bisectRun,
   bisectSkip,
   bisectStart,
   extractBisectRemainingHint,
@@ -47,6 +48,13 @@ describe('bisect action wrappers', () => {
     const git = { raw } as unknown as SimpleGit
     await bisectReset(git)
     expect(raw).toHaveBeenCalledWith(['bisect', 'reset'])
+  })
+
+  it('bisectRun invokes `git bisect run sh -c <command>` so shell snippets work without escaping', async () => {
+    const raw = jest.fn().mockResolvedValue('')
+    const git = { raw } as unknown as SimpleGit
+    await bisectRun(git, 'npm test -- --filter=regression')
+    expect(raw).toHaveBeenCalledWith(['bisect', 'run', 'sh', '-c', 'npm test -- --filter=regression'])
   })
 })
 

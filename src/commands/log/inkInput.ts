@@ -673,6 +673,18 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       action({ type: 'closeInputPrompt' }),
     ]
   }
+  if (state.inputPrompt.kind === 'bisect-run-command') {
+    // #879 item 5 — submit-from-prompt fires the bisect-run workflow
+    // with the raw shell command as payload. The workflow handler in
+    // the runtime spawns `git bisect run <cmd>` and surfaces the
+    // result via the status line. Mapped explicitly here because the
+    // prompt-kind name differs from the workflow id (workflow is
+    // 'bisect-run', not 'bisect-run-command').
+    return [
+      { type: 'runWorkflowAction', id: 'bisect-run', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
   const id = state.inputPrompt.kind
   return [
     { type: 'runWorkflowAction', id, payload: value },
@@ -1144,6 +1156,17 @@ export function getLogInkInputEvents(
     }
     if (inputValue === 'x') {
       return [action({ type: 'setPendingConfirmation', value: 'bisect-reset' })]
+    }
+    // #879 item 5 — `R` opens the bisect-run command prompt. Capital
+    // disambiguates from the global `r` (refresh) which still works
+    // outside the bisect view. Only fires when bisect is active —
+    // otherwise the prompt would have nothing to drive.
+    if (inputValue === 'R' && context.bisectActive) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'bisect-run-command',
+        label: 'Bisect run command (e.g. npm test, pytest -k regression)',
+      })]
     }
   }
 

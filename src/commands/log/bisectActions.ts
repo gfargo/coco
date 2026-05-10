@@ -45,6 +45,28 @@ export async function bisectReset(git: SimpleGit): Promise<string> {
 }
 
 /**
+ * Drive a bisect by automating `git bisect run <command>` (#879 item
+ * 5). The user's command runs once per candidate; git interprets
+ * the exit code:
+ *
+ *   0       → mark good
+ *   125     → skip (the "untestable" code reserved by git)
+ *   1..127  → mark bad (anything non-zero except 125)
+ *   128+    → abort (e.g. SIGSEGV, killed)
+ *
+ * The CLI form is `git bisect run sh -c '<cmd>'` so users can pass
+ * any shell snippet without escaping flags into git's argv.
+ *
+ * Returns full stdout. Caller surfaces git's `Bisecting: ...` /
+ * `<sha> is the first bad commit` lines via
+ * `extractBisectRemainingHint`. Errors propagate — git non-zero
+ * exits become rejections, the same as the other action wrappers.
+ */
+export async function bisectRun(git: SimpleGit, command: string): Promise<string> {
+  return git.raw(['bisect', 'run', 'sh', '-c', command])
+}
+
+/**
  * Pull the user-facing remaining-revisions hint out of `git bisect`
  * stdout. Looks for the canonical line:
  *
