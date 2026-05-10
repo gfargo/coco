@@ -1248,6 +1248,36 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     return () => { active = false }
   }, [git, state.activeView, state.diffSource, state.stashDiffRef])
 
+  // #879 (item 2) — load commit detail for the active bisect's
+  // current candidate so the bisect surface can show "what changed
+  // here" alongside the decision keys. Mirrors the history-detail
+  // loader's shape but keyed on `bisect.currentSha` and only fires
+  // when the bisect view is active. Best-effort: any failure leaves
+  // the surface in its non-detail mode (decision log only) — never
+  // crash the workstation because git couldn't resolve a sha.
+  const [bisectCandidateDetail, setBisectCandidateDetail] = React.useState<GitCommitDetail | undefined>(undefined)
+  const [bisectCandidateLoading, setBisectCandidateLoading] = React.useState(false)
+  const bisectCandidateSha = state.activeView === 'bisect' && context.bisect?.active
+    ? context.bisect.currentSha
+    : ''
+  React.useEffect(() => {
+    if (!bisectCandidateSha) {
+      setBisectCandidateDetail(undefined)
+      setBisectCandidateLoading(false)
+      return
+    }
+    let active = true
+    setBisectCandidateLoading(true)
+    void (async () => {
+      const next = await safe(getCommitDetail(git, bisectCandidateSha))
+      if (active) {
+        setBisectCandidateDetail(next)
+        setBisectCandidateLoading(false)
+      }
+    })()
+    return () => { active = false }
+  }, [git, bisectCandidateSha])
+
   // #779 — load `git diff <base>..<head>` once the diff view becomes
   // active with diffSource='compare'. Mirrors the stash loader's
   // shape; the surface renders the lines via the same +/-/@@ coloring
@@ -2721,6 +2751,8 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         stashDiffLoading,
         compareDiffLines,
         compareDiffLoading,
+        bisectCandidateDetail,
+        bisectCandidateLoading,
         layout.bodyRows,
         layout.mainPanelWidth,
         theme,
@@ -3111,6 +3143,8 @@ function renderMainPanel(
   stashDiffLoading: boolean,
   compareDiffLines: string[] | undefined,
   compareDiffLoading: boolean,
+  bisectCandidateDetail: GitCommitDetail | undefined,
+  bisectCandidateLoading: boolean,
   bodyRows: number,
   width: number,
   theme: LogInkTheme,
@@ -3163,7 +3197,7 @@ function renderMainPanel(
   }
 
   if (state.activeView === 'bisect') {
-    return renderBisectSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderBisectSurface(h, components, state, context, contextStatus, bisectCandidateDetail, bisectCandidateLoading, bodyRows, width, theme)
   }
 
   if (state.activeView === 'stash') {
@@ -4147,6 +4181,8 @@ function renderBisectSurface(
   state: LogInkState,
   context: LogInkContext,
   contextStatus: LogInkContextStatus,
+  candidateDetail: GitCommitDetail | undefined,
+  candidateLoading: boolean,
   bodyRows: number,
   width: number,
   theme: LogInkTheme
@@ -4179,11 +4215,53 @@ function renderBisectSurface(
     lines.push(h(Text, { key: 'bisect-empty-6', dimColor: true },
       truncate('coco will pick up the active bisect on the next refresh — actions will become available here.', width - 4)))
   } else {
-    // Active bisect. Two-section body: current candidate, recent
-    // decisions. Action keys live in the footer.
+    // Active bisect. Three-section body: current candidate (sha +
+    // commit summary so the user can judge the diff at a glance),
+    // recent decisions, action hints. Action keys live in the footer.
     const headerSha = bisect.currentSha ? bisect.currentSha.slice(0, 8) : '<unknown>'
     lines.push(h(Text, { key: 'bisect-active-title', bold: true },
       truncate(`Bisecting · current candidate ${headerSha}`, width - 4)))
+
+    // #879 (item 2) — render commit detail for the current candidate.
+    // Lets the user judge "does this look like it would cause the bug?"
+    // before they run their tests, instead of dropping to shell to
+    // git show. Loading is brief (one git show invocation) and the
+    // surface falls back to just the sha header when the detail
+    // hasn't arrived yet (or git rejected the lookup).
+    if (candidateLoading) {
+      lines.push(h(Text, { key: 'bisect-candidate-loading', dimColor: true },
+        truncate('  loading commit detail…', width - 4)))
+    } else if (candidateDetail) {
+      const { author, date, message, body, stats, files } = candidateDetail
+      lines.push(h(Text, { key: 'bisect-candidate-subject' },
+        truncate(`  ${message}`, width - 4)))
+      lines.push(h(Text, { key: 'bisect-candidate-author', dimColor: true },
+        truncate(`  ${author} · ${date}`, width - 4)))
+      // Body line — first non-empty line of the commit body, truncated.
+      // Skip the noisy preamble (subject + blank line) by taking the
+      // first paragraph after the title; body===subject is common for
+      // single-line commits and we filter that out.
+      const firstBodyLine = (body || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.length > 0 && line !== message)
+      if (firstBodyLine) {
+        lines.push(h(Text, { key: 'bisect-candidate-body', dimColor: true },
+          truncate(`  ${firstBodyLine}`, width - 4)))
+      }
+      // Stats summary: total file count + +/- numbers, then a few
+      // file names so the user sees scope at a glance. Cap the
+      // file-name list at 3 entries to keep the section bounded.
+      lines.push(h(Text, { key: 'bisect-candidate-stats' },
+        truncate(`  ${stats.filesChanged} file${stats.filesChanged === 1 ? '' : 's'} · +${stats.insertions} / -${stats.deletions}`, width - 4)))
+      const sampleFiles = files.slice(0, 3).map((file) => file.path)
+      if (sampleFiles.length > 0) {
+        const overflow = files.length > sampleFiles.length ? ` (+${files.length - sampleFiles.length} more)` : ''
+        lines.push(h(Text, { key: 'bisect-candidate-files', dimColor: true },
+          truncate(`    ${sampleFiles.join(', ')}${overflow}`, width - 4)))
+      }
+    }
+    // Spacer separates the candidate section from decisions.
     lines.push(h(Text, { key: 'bisect-active-spacer' }, ''))
 
     const decisions = bisect.log.filter((entry) =>
