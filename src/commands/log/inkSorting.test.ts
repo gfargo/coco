@@ -1,5 +1,5 @@
-import { BranchRef } from './branchData'
-import { GitTagRef } from './tagData'
+import { BranchRef } from '../../git/branchData'
+import { GitTagRef } from '../../git/tagData'
 import {
   BRANCH_SORT_MODES,
   TAG_SORT_MODES,

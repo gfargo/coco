@@ -1,10 +1,10 @@
 import { Arguments } from 'yargs'
-import { handler as changelogHandler } from '../changelog/handler'
-import { ChangelogOptions } from '../changelog/config'
+import { handler as changelogHandler } from '../commands/changelog/handler'
+import { ChangelogOptions } from '../commands/changelog/config'
 import { runCommitWorkflow } from './commitWorkflowActions'
 import { HistoryCommitRef } from './historyActions'
 import { TagRangeSummary } from './tagData'
-import { Logger } from '../../lib/utils/logger'
+import { Logger } from '../lib/utils/logger'
 
 export type LogAiAction =
   | 'summarize-commit'

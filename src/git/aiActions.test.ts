@@ -1,4 +1,4 @@
-import { handler as changelogHandler } from '../changelog/handler'
+import { handler as changelogHandler } from '../commands/changelog/handler'
 import { runCommitWorkflow } from './commitWorkflowActions'
 import {
   aiActionTestInternals,
@@ -6,7 +6,7 @@ import {
   runLogAiAction,
 } from './aiActions'
 
-jest.mock('../changelog/handler', () => ({
+jest.mock('../commands/changelog/handler', () => ({
   handler: jest.fn(),
 }))
 

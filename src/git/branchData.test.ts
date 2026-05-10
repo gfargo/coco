@@ -1,4 +1,4 @@
-import { FIELD_SEPARATOR } from './data'
+import { FIELD_SEPARATOR } from '../commands/log/data'
 import { parseBranchRefs, parseDivergence } from './branchData'
 
 describe('log branch data', () => {

@@ -1,4 +1,4 @@
-import { PullRequestInfo, PullRequestStatusCheck } from './pullRequestData'
+import { PullRequestInfo, PullRequestStatusCheck } from '../../git/pullRequestData'
 
 /**
  * Pull request panel formatting helpers (#783).
