@@ -228,7 +228,7 @@ import {
     unstageHunk,
 } from './statusHunks'
 import { BisectStatus, getBisectCompletion, getBisectStatus } from './bisectData'
-import { bisectBad, bisectGood, bisectReset, bisectSkip, bisectStart, extractBisectRemainingHint } from './bisectActions'
+import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from './bisectActions'
 import { getCompareDiff } from './compareData'
 import { ReflogOverview, getReflogOverview, splitReflogSubject } from './reflogData'
 import { TagOverview, getTagOverview } from './tagData'
@@ -1892,6 +1892,34 @@ function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return { ok: true, message: 'Bisect reset' }
         } catch (error) {
           return { ok: false, message: `Bisect reset failed: ${(error as Error).message}` }
+        }
+      },
+      'bisect-run': async () => {
+        // #879 item 5 — `git bisect run <cmd>` automation. The user
+        // typed a shell command in the prompt; bisectRun shells it
+        // through `sh -c` per candidate and lets git's exit-code
+        // contract drive good/bad/skip. Returns the final stdout
+        // which includes git's "is the first bad commit" terminator
+        // if the run succeeded — surface that as the status message.
+        if (!context.bisect?.active) {
+          return { ok: false, message: 'No bisect in progress — start one first (s on the bisect view)' }
+        }
+        const command = payload?.trim()
+        if (!command) {
+          return { ok: false, message: 'Bisect run needs a command — try again with `R`' }
+        }
+        try {
+          const stdout = await bisectRun(git, command)
+          const hint = extractBisectRemainingHint(stdout)
+          return {
+            ok: true,
+            message: hint || 'Bisect run completed — see git output for results',
+          }
+        } catch (error) {
+          // Common failure modes: command exits 128 (abort), or 125
+          // every time (untestable everywhere → bisect aborts).
+          // Either way surface the underlying git message.
+          return { ok: false, message: `Bisect run failed: ${(error as Error).message}` }
         }
       },
       'bisect-start-from-history': async () => {
@@ -4405,7 +4433,7 @@ function renderBisectSurface(
 
     lines.push(h(Text, { key: 'bisect-action-spacer' }, ''))
     lines.push(h(Text, { key: 'bisect-action-hint', dimColor: true },
-      truncate('Actions: g good · b bad · s skip · x reset', width - 4)))
+      truncate('Actions: g good · b bad · s skip · R run · x reset', width - 4)))
   }
 
   return h(Box, {

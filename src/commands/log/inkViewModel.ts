@@ -345,6 +345,7 @@ export type LogInkInputPromptKind =
   | 'pr-merge-strategy'
   | 'pr-comment'
   | 'pr-request-changes'
+  | 'bisect-run-command'
 
 export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind

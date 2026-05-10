@@ -535,6 +535,21 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // #879 item 5 — `git bisect run <script>` automation. Per-view
+      // only (R on the active bisect view). Triggers an input prompt
+      // for the user's command; on submit, runs git bisect run. The
+      // typed command itself is the affirmative gate (mirrors
+      // create-branch-here's prompt-as-confirmation pattern), so no
+      // additional y-confirm. Exit code drives the decision: 0 →
+      // good, 125 → skip, else → bad.
+      id: 'bisect-run',
+      key: '',
+      label: 'Bisect: run automated command',
+      description: 'Automate the bisect by running a command for each candidate. Exit 0 = good, 125 = skip, else = bad.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       id: 'ai-commit-summary',
       key: 'I',
       label: 'AI commit summary',

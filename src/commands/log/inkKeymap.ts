@@ -705,7 +705,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'bisect') {
     return {
-      contextual: ['g good', 'b bad', 's skip', 'x reset', 'esc back'],
+      contextual: ['g good', 'b bad', 's skip', 'R run', 'x reset', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
