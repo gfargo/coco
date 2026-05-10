@@ -1,6 +1,6 @@
-import { BranchRef } from './branchData'
-import { StashEntry } from './stashData'
-import { GitTagRef } from './tagData'
+import { BranchRef } from '../../git/branchData'
+import { StashEntry } from '../../git/stashData'
+import { GitTagRef } from '../../git/tagData'
 import {
   PreviewLine,
   formatBranchPreview,

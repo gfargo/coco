@@ -1,21 +1,21 @@
-import { handler as commitHandler } from '../commit/handler'
-import { generateCommitDraft } from '../commit/generateCommitDraft'
-import { createCommit } from '../../lib/simple-git/createCommit'
+import { handler as commitHandler } from '../commands/commit/handler'
+import { generateCommitDraft } from '../commands/commit/generateCommitDraft'
+import { createCommit } from '../lib/simple-git/createCommit'
 import {
   commitWorkflowTestInternals,
   runCommitDraftWorkflow,
   runCommitWorkflow,
 } from './commitWorkflowActions'
 
-jest.mock('../commit/handler', () => ({
+jest.mock('../commands/commit/handler', () => ({
   handler: jest.fn(),
 }))
 
-jest.mock('../commit/generateCommitDraft', () => ({
+jest.mock('../commands/commit/generateCommitDraft', () => ({
   generateCommitDraft: jest.fn(),
 }))
 
-jest.mock('../../lib/simple-git/createCommit', () => ({
+jest.mock('../lib/simple-git/createCommit', () => ({
   createCommit: jest.fn(),
   PreCommitHookError: class PreCommitHookError extends Error {
     readonly hookOutput: string
@@ -219,7 +219,7 @@ describe('log commit workflow actions', () => {
     mockedCommitHandler.mockImplementation(async () => {
       process.stdout.write('Commitlint failed\nsubject may not be empty\nbody may not be empty\n')
 
-      const { CommandExitError } = await import('../../lib/utils/commandExit')
+      const { CommandExitError } = await import('../lib/utils/commandExit')
       throw new CommandExitError(1)
     })
 

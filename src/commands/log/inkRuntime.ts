@@ -38,9 +38,9 @@
 import { spawnSync } from 'node:child_process'
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
-import { BranchOverview, getBranchOverview } from './branchData'
+import { BranchOverview, getBranchOverview } from '../../git/branchData'
 import { createManualCommit } from './commitCompose'
-import { runCommitDraftWorkflow } from './commitWorkflowActions'
+import { runCommitDraftWorkflow } from '../../git/commitWorkflowActions'
 import {
     GitCommitDetail,
     GitCommitFilePreview,
@@ -148,9 +148,9 @@ import {
     getSelectedInkCommit,
 } from './inkViewModel'
 import { startInteractiveLog } from './interactive'
-import { GitOperationOverview, getGitOperationOverview } from './operationData'
-import { openProviderUrl } from './providerActions'
-import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from './providerData'
+import { GitOperationOverview, getGitOperationOverview } from '../../git/operationData'
+import { openProviderUrl } from '../../git/providerActions'
+import { ProviderOverview, ProviderRepository, buildProviderUrl, getProviderOverview } from '../../git/providerData'
 import {
     checkoutBranch,
     createBranch,
@@ -160,8 +160,8 @@ import {
     pushCurrentBranch,
     renameBranch,
     setUpstream,
-} from './branchActions'
-import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from './tagActions'
+} from '../../git/branchActions'
+import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
 import {
     ClipboardRunner,
     ResetMode,
@@ -174,12 +174,12 @@ import {
     resetToCommit,
     revertCommit,
     startInteractiveRebase,
-} from './historyActions'
-import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from './stashActions'
-import { ApplyHunkTarget, applyHunkPatch } from './hunkActions'
-import { removeWorktree, removeWorktreeAndBranch } from './worktreeActions'
-import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from './operationActions'
-import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
+} from '../../git/historyActions'
+import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from '../../git/stashActions'
+import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
+import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
+import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
+import { PullRequestOverview, getPullRequestOverview } from '../../git/pullRequestData'
 import {
     approvePullRequest,
     closePullRequest,
@@ -187,14 +187,14 @@ import {
     isPullRequestMergeStrategy,
     mergePullRequest,
     requestChangesPullRequest,
-} from './pullRequestActions'
+} from '../../git/pullRequestActions'
 import {
     StashOverview,
     findStashFileForOffset,
     getStashDiff,
     getStashOverview,
     parseStashDiffFiles,
-} from './stashData'
+} from '../../git/stashData'
 import { formatStashHeaderIdentity } from './inkStashHeader'
 import {
     buildPullRequestCheckRows,
@@ -210,7 +210,7 @@ import {
     stageFile,
     unstageAllFiles,
     unstageFile,
-} from './statusActions'
+} from '../../git/statusActions'
 import {
     WorktreeFile,
     WorktreeFileGroup,
@@ -219,19 +219,19 @@ import {
     flattenWorktreeGroups,
     getWorktreeOverview,
     groupWorktreeFiles,
-} from './statusData'
+} from '../../git/statusData'
 import {
     WorktreeHunkOverview,
     getWorktreeHunks,
     revertHunk,
     stageHunk,
     unstageHunk,
-} from './statusHunks'
-import { BisectStatus, getBisectStatus } from './bisectData'
-import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from './bisectActions'
-import { getCompareDiff } from './compareData'
-import { ReflogOverview, getReflogOverview, splitReflogSubject } from './reflogData'
-import { TagOverview, getTagOverview } from './tagData'
+} from '../../git/statusHunks'
+import { BisectStatus, getBisectStatus } from '../../git/bisectData'
+import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from '../../git/bisectActions'
+import { getCompareDiff } from '../../git/compareData'
+import { ReflogOverview, getReflogOverview, splitReflogSubject } from '../../git/reflogData'
+import { TagOverview, getTagOverview } from '../../git/tagData'
 import {
     getLogInkWorkflowActionById,
 } from './inkWorkflows'
@@ -240,8 +240,8 @@ import {
     InspectorActionContext,
     getInspectorActions,
 } from './inkInspectorActions'
-import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from './worktreeData'
-import { WorktreeFileDiff, getWorktreeFileDiff } from './worktreeDiffData'
+import { WorktreeOverview as WorktreeListOverview, getWorktreeListOverview } from '../../git/worktreeData'
+import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
 import { canStartLogInkTui, getLogInkRenderOptions } from './inkTerminal'
 import { LogArgv } from './config'
 

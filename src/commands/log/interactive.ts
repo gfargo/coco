@@ -1,20 +1,20 @@
 import { SimpleGit } from 'simple-git'
-import { LogAiAction, LogAiActionImpact } from './aiActions'
-import { BranchOverview, BranchRef, getBranchOverview } from './branchData'
+import { LogAiAction, LogAiActionImpact } from '../../git/aiActions'
+import { BranchOverview, BranchRef, getBranchOverview } from '../../git/branchData'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
-import { HistoryCommitRef, ReflogEntry, ResetMode } from './historyActions'
-import { PullRequestOverview, getPullRequestOverview } from './pullRequestData'
-import { StashOverview, getStashOverview } from './stashData'
-import { WorktreeOverview, getWorktreeOverview } from './statusData'
-import { WorktreeHunkOverview } from './statusHunks'
-import { TagOverview, TagRangeSummary, getTagOverview } from './tagData'
+import { HistoryCommitRef, ReflogEntry, ResetMode } from '../../git/historyActions'
+import { PullRequestOverview, getPullRequestOverview } from '../../git/pullRequestData'
+import { StashOverview, getStashOverview } from '../../git/stashData'
+import { WorktreeOverview, getWorktreeOverview } from '../../git/statusData'
+import { WorktreeHunkOverview } from '../../git/statusHunks'
+import { TagOverview, TagRangeSummary, getTagOverview } from '../../git/tagData'
 import {
   WorktreeOverview as WorktreeListOverview,
   getWorktreeListOverview,
-} from './worktreeData'
+} from '../../git/worktreeData'
 import { LogTuiState, createLogTuiState, getSelectedCommit } from './interactiveState'
-import { GitOperationOverview, getGitOperationOverview } from './operationData'
-import { ProviderOverview, getProviderOverview } from './providerData'
+import { GitOperationOverview, getGitOperationOverview } from '../../git/operationData'
+import { ProviderOverview, getProviderOverview } from '../../git/providerData'
 
 type LogTuiStreams = {
   appLabel?: string

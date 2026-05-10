@@ -1,4 +1,4 @@
-import { StashEntry } from './stashData'
+import { StashEntry } from '../../git/stashData'
 
 /**
  * Header identity strings for the stash diff surface.
