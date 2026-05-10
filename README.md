@@ -18,7 +18,7 @@ An AI-powered git assistant that generates meaningful commit messages, creates c
 - 📋 **Conventional Commits** - Full support with automatic validation and formatting  
 - 🔧 **Commitlint Integration** - Seamless integration with your existing commitlint configuration
 - 🏠 **Local AI Support** - Run completely offline with Ollama (no API costs, full privacy)
-- 🖥️ **Coco UI Git Workstation** - Eleven top-level views (history, status, diff, compose, branches, tags, stash, worktrees, pull-request, conflicts, reflog) reachable via `g`-prefixed chords, with an interactive command palette (`:`), global search (`/`), and cross-view flows like compare-two-refs
+- 🖥️ **Coco UI Git Workstation** - Twelve top-level views (history, status, diff, compose, branches, tags, stash, worktrees, pull-request, conflicts, reflog, bisect) reachable via `g`-prefixed chords, with an interactive command palette (`:`), global search (`/`), and cross-view flows like compare-two-refs and the bisect decision keys
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
 - 👥 **Team Ready** - Shared configurations and enterprise deployment
 
