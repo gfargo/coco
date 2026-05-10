@@ -4163,21 +4163,42 @@ function renderBisectSurface(
     lines.push(h(Text, { key: 'bisect-loading', dimColor: true },
       truncate('· Loading bisect status…', width - 4)))
   } else if (!bisect?.active) {
-    // No bisect active. Surface the CLI on-ramp — starting from the
-    // TUI is intentionally out of scope for this PR (#784 follow-up).
-    // The user is expected to enter via `git bisect start <bad> <good>`
-    // and re-open `coco ui`; once bisect is active this view drives
-    // the rest.
-    lines.push(h(Text, { key: 'bisect-empty-1', bold: true },
-      truncate('No bisect in progress.', width - 4)))
-    lines.push(h(Text, { key: 'bisect-empty-2' }, ''))
-    lines.push(h(Text, { key: 'bisect-empty-3' },
-      truncate('Start one from the shell with:', width - 4)))
-    lines.push(h(Text, { key: 'bisect-empty-4', color: accent },
-      truncate('  git bisect start <bad-ref> <good-ref>', width - 4)))
-    lines.push(h(Text, { key: 'bisect-empty-5' }, ''))
-    lines.push(h(Text, { key: 'bisect-empty-6', dimColor: true },
-      truncate('coco will pick up the active bisect on the next refresh — actions will become available here.', width - 4)))
+    // Empty-state explainer (#879). Teaches the bisect workflow in
+    // ~30 seconds: what it is, how it works, how to start one (CLI
+    // entry remains the supported on-ramp until the in-TUI start
+    // child item lands), and a tip about picking the good anchor.
+    // Bisect is a rarely-used feature even for experienced users —
+    // shipping it with terse copy assumes muscle memory the median
+    // user doesn't have.
+    const empty: Array<{ key: string; text: string; opts?: { bold?: boolean; dim?: boolean; accent?: boolean } }> = [
+      { key: 'title', text: 'Bisect — find the commit that introduced a bug.', opts: { bold: true } },
+      { key: 'spacer-1', text: '' },
+      { key: 'how-h', text: 'How it works', opts: { bold: true } },
+      { key: 'how-1', text: '  Binary search through history. You mark commits as "good" (bug' },
+      { key: 'how-2', text: '  not present) or "bad" (bug present); git narrows the range until' },
+      { key: 'how-3', text: '  it identifies the first bad commit.' },
+      { key: 'spacer-2', text: '' },
+      { key: 'start-h', text: 'How to start', opts: { bold: true } },
+      { key: 'start-1', text: '  From your shell:' },
+      { key: 'start-2', text: '    git bisect start <bad-ref> <good-ref>', opts: { accent: true } },
+      { key: 'start-3', text: '  Then come back here — coco picks up the active bisect and gives' },
+      { key: 'start-4', text: '  you single-keystroke controls:' },
+      { key: 'start-5', text: '    g  mark good      s  skip (e.g. doesn\'t build)', opts: { accent: true } },
+      { key: 'start-6', text: '    b  mark bad       x  reset / cancel', opts: { accent: true } },
+      { key: 'spacer-3', text: '' },
+      { key: 'tip-h', text: 'Tip', opts: { bold: true } },
+      { key: 'tip-1', text: '  Pick a recent release tag as your "good" anchor if you don\'t' },
+      { key: 'tip-2', text: '  remember when the bug appeared. Tags are visible from the tags' },
+      { key: 'tip-3', text: '  view (g t).' },
+    ]
+    for (const row of empty) {
+      lines.push(h(Text, {
+        key: `bisect-empty-${row.key}`,
+        bold: row.opts?.bold,
+        dimColor: row.opts?.dim,
+        color: row.opts?.accent ? accent : undefined,
+      }, truncate(row.text, width - 4)))
+    }
   } else {
     // Active bisect. Two-section body: current candidate, recent
     // decisions. Action keys live in the footer.
