@@ -20,8 +20,13 @@ jobs:
       fail-fast: false
       matrix:
         node-version:
-          - 22.13.0
-          - 24.x
+          # Pinned to the floor declared in package.json engines
+          # (^22.22.2 || ^24.15.0 || >=26.0.0). The floor moved when
+          # ini@7 + commitlint@21 landed; CI exercises both LTS lines
+          # at the lower bound so a future transitive bump can't
+          # silently raise the floor without us noticing here first.
+          - 22.22.2
+          - 24.15.0
 
     steps:
       - name: Checkout
