@@ -18,6 +18,11 @@ import { getTokenCounter } from '../lib/utils/tokenizer'
 import { Logger } from '../lib/utils/logger'
 import { Config } from '../commands/types'
 import { createTempGitRepo, TempGitRepo } from '../lib/testUtils/tempGitRepo'
+import {
+  featureBranchOneCommitScenario,
+  singleStagedFileScenario,
+  twoCommitFeatureScenario,
+} from '../lib/testUtils/scenarios'
 
 jest.mock('@langchain/classic/chains', () => ({
   loadSummarizationChain: jest.fn(),
@@ -154,10 +159,7 @@ describe('command integration with temp git repos', () => {
       mode: 'stdout',
     }))
 
-    await repo.writeFile('.gitkeep', '\n')
-    await repo.commitAll('chore: initial commit')
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.git.add('README.md')
+    await singleStagedFileScenario.setup(repo)
 
     await commitHandler({
       $0: 'coco',
@@ -198,10 +200,7 @@ describe('command integration with temp git repos', () => {
       },
     } as unknown as Config))
 
-    await repo.writeFile('.gitkeep', '\n')
-    await repo.commitAll('chore: initial commit')
-    await repo.writeFile('README.md', '# Dynamic repo\n')
-    await repo.git.add('README.md')
+    await singleStagedFileScenario.setup(repo)
 
     await commitHandler({
       $0: 'coco',
@@ -632,11 +631,7 @@ describe('command integration with temp git repos', () => {
       mode: 'stdout',
     }))
 
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.commitAll('chore: initial commit')
-    await repo.git.checkoutLocalBranch('feature/changelog-test')
-    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
-    await repo.commitAll('feat: add feature module')
+    await featureBranchOneCommitScenario.setup(repo)
 
     await changelogHandler({
       $0: 'coco',
@@ -658,7 +653,7 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('Generated changelog')
     expect(stdout).toContain('- Summarized feature work')
     expect(variables.summary).toContain('feat: add feature module')
-    expect(variables.summary).toContain('feature/changelog-test')
+    expect(variables.summary).toContain('feat/x')
   })
 
   it('reviews real working tree changes from a temp git repo', async () => {
@@ -709,11 +704,7 @@ describe('command integration with temp git repos', () => {
       },
     ])
 
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.commitAll('chore: initial commit')
-    await repo.git.checkoutLocalBranch('feature/review-test')
-    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
-    await repo.commitAll('feat: add review feature')
+    await featureBranchOneCommitScenario.setup(repo)
 
     await reviewHandler({
       $0: 'coco',
@@ -767,10 +758,7 @@ describe('command integration with temp git repos', () => {
       mode: 'stdout',
     }))
 
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.commitAll('chore: initial commit')
-    await repo.writeFile('src/interactive.ts', 'export const interactive = true\n')
-    await repo.commitAll('feat: add interactive log coverage')
+    await twoCommitFeatureScenario.setup(repo)
 
     await logHandler({
       $0: 'coco',
@@ -784,9 +772,13 @@ describe('command integration with temp git repos', () => {
     } as Arguments<LogOptions>, createLogger())
 
     expect(stdout).toContain('coco')
-    expect(stdout).toContain('feat: add interactive log coverage')
+    // Assertions match the scenario's commit subject + filename. The
+    // specific names are incidental to the smoke test — it's verifying
+    // that interactive log rendering surfaces commit subjects and
+    // changed files, not testing any particular subject/path.
+    expect(stdout).toContain('feat: add feature module')
     expect(stdout).toContain('Changed files:')
-    expect(stdout).toContain('src/interactive.ts')
+    expect(stdout).toContain('src/feature.ts')
   })
 
   it('renders the ui command smoke view in a non-TTY environment', async () => {
@@ -794,10 +786,7 @@ describe('command integration with temp git repos', () => {
       mode: 'stdout',
     }))
 
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.commitAll('chore: initial commit')
-    await repo.writeFile('src/ui.ts', 'export const ui = true\n')
-    await repo.commitAll('feat: add ui workstation coverage')
+    await twoCommitFeatureScenario.setup(repo)
 
     await uiHandler({
       $0: 'coco',
@@ -812,9 +801,11 @@ describe('command integration with temp git repos', () => {
     } as Arguments<UiOptions>, createLogger())
 
     expect(stdout).toContain('coco')
-    expect(stdout).toContain('feat: add ui workstation coverage')
+    // See the interactive-log test above re: scenario-default subject /
+    // filename — same rationale applies here.
+    expect(stdout).toContain('feat: add feature module')
     expect(stdout).toContain('Changed files:')
-    expect(stdout).toContain('src/ui.ts')
+    expect(stdout).toContain('src/feature.ts')
   })
 
   it('prints machine-readable git log output', async () => {
@@ -822,10 +813,7 @@ describe('command integration with temp git repos', () => {
       mode: 'stdout',
     }))
 
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.commitAll('chore: initial commit')
-    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
-    await repo.commitAll('feat: add json log output')
+    await twoCommitFeatureScenario.setup(repo)
 
     await logHandler({
       $0: 'coco',
@@ -842,7 +830,7 @@ describe('command integration with temp git repos', () => {
 
     expect(entries).toHaveLength(2)
     expect(entries[0]).toEqual(expect.objectContaining({
-      message: 'feat: add json log output',
+      message: 'feat: add feature module',
       shortHash: expect.any(String),
       hash: expect.any(String),
       refs: expect.any(Array),
@@ -854,10 +842,7 @@ describe('command integration with temp git repos', () => {
       mode: 'stdout',
     }))
 
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.commitAll('chore: initial commit')
-    await repo.writeFile('src/detail.ts', 'export const detail = true\n')
-    await repo.commitAll('feat: add commit detail file')
+    await twoCommitFeatureScenario.setup(repo)
 
     const commit = (await repo.git.revparse(['HEAD'])).trim()
 
@@ -873,8 +858,8 @@ describe('command integration with temp git repos', () => {
     } as Arguments<LogOptions>, createLogger())
 
     expect(stdout).toContain(`commit ${commit}`)
-    expect(stdout).toContain('feat: add commit detail file')
+    expect(stdout).toContain('feat: add feature module')
     expect(stdout).toContain('Changed files:')
-    expect(stdout).toContain('A  src/detail.ts')
+    expect(stdout).toContain('A  src/feature.ts')
   })
 })
