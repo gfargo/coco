@@ -1,5 +1,6 @@
 import {
   buildProviderUrl,
+  detectLocalDefaultBranch,
   getProviderOverview,
   getProviderRepository,
   parseGitHubRemoteUrl,
@@ -63,6 +64,38 @@ describe('log provider data', () => {
     )
   })
 
+  // git.raw now answers three commands during a single getProviderOverview
+  // call: branch --show-current, symbolic-ref origin/HEAD (for local
+  // default-branch detection), and possibly rev-parse fallbacks. This
+  // helper builds a mock that dispatches on the command rather than
+  // returning one value for all of them.
+  function buildGitRawMock(answers: {
+    currentBranch?: string
+    originHead?: string | null
+    localBranches?: string[]
+  }): jest.Mock {
+    const localBranches = new Set(answers.localBranches || [])
+    return jest.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'branch' && args[1] === '--show-current') {
+        return `${answers.currentBranch || ''}\n`
+      }
+      if (args[0] === 'symbolic-ref' && args[1] === 'refs/remotes/origin/HEAD') {
+        if (answers.originHead === null || answers.originHead === undefined) {
+          throw new Error('fatal: ref refs/remotes/origin/HEAD is not a symbolic ref')
+        }
+        return `refs/remotes/origin/${answers.originHead}\n`
+      }
+      if (args[0] === 'rev-parse' && args[1] === '--verify') {
+        const ref = args[3]?.replace('refs/heads/', '')
+        if (ref && localBranches.has(ref)) {
+          return 'abc123\n'
+        }
+        throw new Error('fatal: Needed a single revision')
+      }
+      throw new Error(`unexpected git.raw call: ${args.join(' ')}`)
+    })
+  }
+
   it('loads provider overview with default branch and PR status when authenticated', async () => {
     const git = {
       getRemotes: jest.fn().mockResolvedValue([
@@ -74,7 +107,7 @@ describe('log provider data', () => {
           },
         },
       ]),
-      raw: jest.fn().mockResolvedValue('feature/log\n'),
+      raw: buildGitRawMock({ currentBranch: 'feature/log', originHead: 'main' }),
     }
     const runner = jest.fn().mockImplementation(async (args: string[]) => {
       if (args[0] === 'auth') {
@@ -130,7 +163,7 @@ describe('log provider data', () => {
           },
         },
       ]),
-      raw: jest.fn().mockResolvedValue('main\n'),
+      raw: buildGitRawMock({ currentBranch: 'main', originHead: 'main' }),
     }
     const runner = jest.fn().mockRejectedValue(new Error('not authenticated'))
 
@@ -141,7 +174,97 @@ describe('log provider data', () => {
         provider: 'github',
         owner: 'gfargo',
         name: 'coco',
+        // Local fallback still populates defaultBranch even though gh
+        // auth failed — this is the whole point of the offline path.
+        defaultBranch: 'main',
       },
+    })
+  })
+
+  describe('detectLocalDefaultBranch', () => {
+    it('returns the branch tracked by origin/HEAD when set', async () => {
+      const git = { raw: buildGitRawMock({ originHead: 'develop' }) }
+      await expect(detectLocalDefaultBranch(git as never)).resolves.toBe('develop')
+    })
+
+    it('falls back to "main" when origin/HEAD is missing and main exists locally', async () => {
+      const git = { raw: buildGitRawMock({ originHead: null, localBranches: ['main', 'feat/x'] }) }
+      await expect(detectLocalDefaultBranch(git as never)).resolves.toBe('main')
+    })
+
+    it('falls back to "master" when neither origin/HEAD nor main exists', async () => {
+      const git = { raw: buildGitRawMock({ originHead: null, localBranches: ['master'] }) }
+      await expect(detectLocalDefaultBranch(git as never)).resolves.toBe('master')
+    })
+
+    it('tries develop and trunk before giving up', async () => {
+      // Only develop is present — main and master miss, develop hits
+      // before trunk gets checked.
+      const developOnly = { raw: buildGitRawMock({ originHead: null, localBranches: ['develop'] }) }
+      await expect(detectLocalDefaultBranch(developOnly as never)).resolves.toBe('develop')
+
+      const trunkOnly = { raw: buildGitRawMock({ originHead: null, localBranches: ['trunk'] }) }
+      await expect(detectLocalDefaultBranch(trunkOnly as never)).resolves.toBe('trunk')
+    })
+
+    it('returns undefined when nothing matches', async () => {
+      const git = {
+        raw: buildGitRawMock({ originHead: null, localBranches: ['feat/x', 'feat/y'] }),
+      }
+      await expect(detectLocalDefaultBranch(git as never)).resolves.toBeUndefined()
+    })
+  })
+
+  it('populates defaultBranch from local refs when no remote is configured', async () => {
+    // Scenario-test shape: `git init` + a couple branches, no `origin`
+    // remote at all. Provider can't reach gh; local fallback should
+    // still surface a sensible defaultBranch so the workstation's PR /
+    // changelog flows can derive a base.
+    const git = {
+      getRemotes: jest.fn().mockResolvedValue([]),
+      raw: buildGitRawMock({
+        currentBranch: 'feat/widget-v2',
+        originHead: null,
+        localBranches: ['main'],
+      }),
+    }
+    const runner = jest.fn()
+
+    await expect(getProviderOverview(git as never, runner)).resolves.toMatchObject({
+      authenticated: false,
+      repository: {
+        provider: 'unsupported',
+        defaultBranch: 'main',
+      },
+      currentBranch: 'feat/widget-v2',
+    })
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  it('prefers the gh-reported default branch over local fallback when both are available', async () => {
+    // Edge case: a fork where the remote's default branch differs from
+    // what local refs would suggest. gh's answer wins because it
+    // reflects the actual remote-side configuration.
+    const git = {
+      getRemotes: jest.fn().mockResolvedValue([
+        {
+          name: 'origin',
+          refs: { fetch: 'git@github.com:fork/coco.git', push: 'git@github.com:fork/coco.git' },
+        },
+      ]),
+      raw: buildGitRawMock({ currentBranch: 'main', originHead: 'main', localBranches: ['main'] }),
+    }
+    const runner = jest.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'auth') return ''
+      if (args[0] === 'repo') {
+        return JSON.stringify({ defaultBranchRef: { name: 'develop' } })
+      }
+      return ''
+    })
+
+    await expect(getProviderOverview(git as never, runner)).resolves.toMatchObject({
+      authenticated: true,
+      repository: { defaultBranch: 'develop' },
     })
   })
 

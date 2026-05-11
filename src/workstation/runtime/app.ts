@@ -1270,7 +1270,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
     const defaultBranch = context.provider?.repository.defaultBranch
     if (!defaultBranch) {
-      dispatch({ type: 'setStatus', value: 'No default branch detected — is the GitHub remote configured?' })
+      dispatch({
+        type: 'setStatus',
+        value: 'No default branch detected. Set origin/HEAD or ensure main/master exists locally.',
+      })
       return
     }
     if (head === defaultBranch) {
