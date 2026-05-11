@@ -13,23 +13,34 @@
 
 import type { Scenario } from './types'
 import { dirtyManyFilesScenario } from './dirty-many-files'
+import { featureBranchOneCommitScenario } from './feature-branch-one-commit'
 import { featurePrReadyScenario } from './feature-pr-ready'
 import { midBisectScenario } from './mid-bisect'
+import { midMergeConflictScenario } from './mid-merge-conflict'
 import { multiCommitBranchScenario } from './multi-commit-branch'
+import { singleStagedFileScenario } from './single-staged-file'
+import { stashedChangesScenario } from './stashed-changes'
+import { twoCommitFeatureScenario } from './two-commit-feature'
 
 /**
  * Ordered list of all available scenarios. The order is shown in
  * `npm run scenario list` so we group related ones together —
- * branch-y scenarios first, then worktree, then operations.
+ * branch-y scenarios first, then worktree, then operations, then stash.
  */
 export const allScenarios: readonly Scenario[] = [
   // branch shapes
   featurePrReadyScenario,
+  featureBranchOneCommitScenario,
   multiCommitBranchScenario,
+  twoCommitFeatureScenario,
   // worktree shapes
+  singleStagedFileScenario,
   dirtyManyFilesScenario,
   // in-progress operations
   midBisectScenario,
+  midMergeConflictScenario,
+  // stash shapes
+  stashedChangesScenario,
 ]
 
 /**
@@ -43,6 +54,11 @@ export function findScenario(name: string): Scenario | undefined {
 
 export type { Scenario, ScenarioKind } from './types'
 export { dirtyManyFilesScenario } from './dirty-many-files'
+export { featureBranchOneCommitScenario } from './feature-branch-one-commit'
 export { featurePrReadyScenario } from './feature-pr-ready'
 export { midBisectScenario } from './mid-bisect'
+export { midMergeConflictScenario } from './mid-merge-conflict'
 export { multiCommitBranchScenario } from './multi-commit-branch'
+export { singleStagedFileScenario } from './single-staged-file'
+export { stashedChangesScenario } from './stashed-changes'
+export { twoCommitFeatureScenario } from './two-commit-feature'
