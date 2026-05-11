@@ -2129,6 +2129,38 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    it('L globally starts the changelog-view flow', () => {
+      // From the history view — `L` should start the changelog flow.
+      // Runtime callback handles the changelog fetch + prompt-open
+      // side effects; from the input handler's perspective it's a
+      // single event the dispatcher routes to startChangelogView.
+      const historyState = createLogInkState(rows, { activeView: 'history' })
+      expect(getLogInkInputEvents(historyState, 'L')).toEqual([
+        { type: 'startChangelogView' },
+      ])
+
+      // From the branches view — same dispatch.
+      const branchesState = createLogInkState(rows, { activeView: 'branches' })
+      expect(getLogInkInputEvents(branchesState, 'L')).toEqual([
+        { type: 'startChangelogView' },
+      ])
+    })
+
+    it('L is scoped away from the compose view', () => {
+      // Compose: explicit guard so users mid-draft can't fat-finger
+      // out of their commit into the changelog flow.
+      const composeState = createLogInkState(rows, { activeView: 'compose' })
+      expect(getLogInkInputEvents(composeState, 'L')).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setStatus',
+            value: 'Finish or cancel the commit draft before generating a changelog.',
+          },
+        },
+      ])
+    })
+
     it('submitting a create-pr prompt dispatches runWorkflowAction with the raw multi-line value', () => {
       const state = applyLogInkAction(createLogInkState(rows), {
         type: 'openInputPrompt',
@@ -2172,6 +2204,31 @@ describe('log Ink input interactions', () => {
         },
       ])
     })
+
+    it('submitting a changelog-view prompt dispatches yankText with the prompt value', () => {
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'openInputPrompt',
+        kind: 'changelog-view',
+        label: 'Changelog: feat/x (vs main)',
+        initial: 'feat: workstation\n\n- thing one\n- thing two',
+        multiline: true,
+      })
+
+      // Ctrl+D submits the multi-line prompt. For the changelog-view
+      // kind specifically, "submit" means copy-to-clipboard — the
+      // value travels with the event so the clipboard handler can
+      // read it before the close-prompt dispatch wipes the prompt.
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).toEqual([
+        {
+          type: 'yankText',
+          value: 'feat: workstation\n\n- thing one\n- thing two',
+          label: 'changelog',
+        },
+        { type: 'action', action: { type: 'closeInputPrompt' } },
+      ])
+    })
+
 
     it('keeps single-line prompts (create-branch, reset-mode, etc.) untouched', () => {
       // Sanity check: opening a non-multiline prompt and pressing

@@ -3,6 +3,7 @@ import { runCommitWorkflow } from './commitWorkflowActions'
 import {
   aiActionTestInternals,
   estimateLogAiActionImpact,
+  runChangelogTextWorkflow,
   runLogAiAction,
   runPullRequestBodyWorkflow,
 } from './aiActions'
@@ -230,6 +231,94 @@ describe('log AI actions', () => {
       // hand.
       expect(result.title).toBeUndefined()
       expect(result.body).toBeUndefined()
+    })
+  })
+
+  describe('runChangelogTextWorkflow', () => {
+    it('returns the raw changelog output with blank lines + section structure intact', async () => {
+      mockedChangelogHandler.mockImplementation(async () => {
+        process.stdout.write([
+          'feat: workstation v0.49.0',
+          '',
+          '## Highlights',
+          '',
+          '- create-pr now seeds the body from coco changelog',
+          '- new `L` keystroke generates a changelog for the current branch',
+        ].join('\n'))
+      })
+
+      const result = await runChangelogTextWorkflow({ branch: 'main' })
+
+      expect(result.ok).toBe(true)
+      // The text field preserves blank lines unlike runChangelogAction
+      // (which strips them via compactOutputLines). That's the whole
+      // point of this helper — UI surfaces want the full prose.
+      expect(result.text).toBe([
+        'feat: workstation v0.49.0',
+        '',
+        '## Highlights',
+        '',
+        '- create-pr now seeds the body from coco changelog',
+        '- new `L` keystroke generates a changelog for the current branch',
+      ].join('\n'))
+      expect(result.message).toBe('feat: workstation v0.49.0')
+
+      const argv = mockedChangelogHandler.mock.calls[0][0]
+      expect(argv).toMatchObject({ branch: 'main', mode: 'stdout' })
+    })
+
+    it('skips leading blank lines when computing the first-line message', async () => {
+      mockedChangelogHandler.mockImplementation(async () => {
+        process.stdout.write('\n\nfeat: x\n')
+      })
+
+      const result = await runChangelogTextWorkflow({ sinceLastTag: true })
+
+      expect(result.ok).toBe(true)
+      expect(result.message).toBe('feat: x')
+    })
+
+    it('surfaces an empty-output result when the changelog produces nothing', async () => {
+      mockedChangelogHandler.mockImplementation(async () => {
+        // Common case: branch has no commits ahead of base.
+        process.stdout.write('   \n\n  ')
+      })
+
+      const result = await runChangelogTextWorkflow({ branch: 'main' })
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('No changelog output')
+      expect(result.text).toBeUndefined()
+    })
+
+    it('propagates changelog handler errors', async () => {
+      mockedChangelogHandler.mockImplementation(async () => {
+        throw new Error('LLM provider not configured')
+      })
+
+      const result = await runChangelogTextWorkflow({ branch: 'main' })
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('LLM provider not configured')
+      expect(result.text).toBeUndefined()
+    })
+
+    it('accepts the full set of changelog argv shapes (sinceLastTag, tag, range)', async () => {
+      mockedChangelogHandler.mockImplementation(async () => {
+        process.stdout.write('feat: changelog')
+      })
+
+      await runChangelogTextWorkflow({ sinceLastTag: true })
+      await runChangelogTextWorkflow({ tag: 'v1.0.0' })
+      await runChangelogTextWorkflow({ range: 'abc..def' })
+
+      // Each invocation forwards the input through createChangelogArgv,
+      // leaving the rest of the argv at its defaults (mode: 'stdout',
+      // interactive: false, etc.).
+      const calls = mockedChangelogHandler.mock.calls
+      expect(calls[0][0]).toMatchObject({ sinceLastTag: true, mode: 'stdout' })
+      expect(calls[1][0]).toMatchObject({ tag: 'v1.0.0', mode: 'stdout' })
+      expect(calls[2][0]).toMatchObject({ range: 'abc..def', mode: 'stdout' })
     })
   })
 })

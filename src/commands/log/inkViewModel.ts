@@ -326,6 +326,7 @@ export type LogInkInputPromptKind =
   | 'pr-comment'
   | 'pr-request-changes'
   | 'create-pr'
+  | 'changelog-view'
 
 export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind

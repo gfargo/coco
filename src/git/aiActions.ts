@@ -284,6 +284,54 @@ export async function runPullRequestBodyWorkflow(
   }
 }
 
+/**
+ * Run `coco changelog` and return the raw captured stdout, intact —
+ * blank lines preserved, no telemetry stripping. Use this when you
+ * want to show or copy the changelog as the user would see it from
+ * the CLI (the chromed-up `runChangelogAction` collapses blank lines
+ * via `compactOutputLines` which is wrong for any UI that wants the
+ * full prose output).
+ *
+ * The argv defaults match `createChangelogArgv` — pass overrides via
+ * `input`. Common shapes:
+ *
+ *   - { branch: 'main' }           — commits on current branch vs main
+ *   - { sinceLastTag: true }       — since last tag
+ *   - { tag: 'v1.0.0' }            — since a specific tag
+ *   - { range: 'abc..def' }        — between two refs
+ *
+ * Returns:
+ *   - { ok: true, message, text } on success (message = first non-blank
+ *     line, useful for status surface; text = full raw output)
+ *   - { ok: false, message } on changelog handler error or empty output
+ */
+export async function runChangelogTextWorkflow(
+  input: Partial<ChangelogOptions> = {}
+): Promise<{ ok: boolean; message: string; text?: string }> {
+  const argv = createChangelogArgv(input)
+
+  let raw = ''
+  try {
+    raw = await captureStdout(() => changelogHandler(argv, new Logger({
+      verbose: true,
+      silent: false,
+    })))
+  } catch (error) {
+    return { ok: false, message: (error as Error).message }
+  }
+
+  const text = raw.trim()
+  if (!text) {
+    return {
+      ok: false,
+      message: 'No changelog output produced — branch may have no commits ahead of base.',
+    }
+  }
+
+  const firstLine = text.split('\n').find((line) => line.trim()) || 'Changelog generated.'
+  return { ok: true, message: firstLine, text }
+}
+
 export const aiActionTestInternals = {
   compactOutputLines,
   createChangelogArgv,
