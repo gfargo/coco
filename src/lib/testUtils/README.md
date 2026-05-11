@@ -1,15 +1,54 @@
 # `testUtils/` — temp git repos + named scenarios
 
-This directory hosts the test-infrastructure layer for spinning up git
-repositories in known states. Two consumers:
+The test-infrastructure layer for spinning up git repositories in
+known states. Two audiences:
 
-1. **Integration tests** — `spinUpScenario('feature-pr-ready')` returns
-   a `TempGitRepo` in a predictable state, so tests don't have to
-   reinvent the same `writeFile / commitAll` setup boilerplate every
-   time.
-2. **Manual testing & demos** — `npm run scenario create <name>`
-   materializes a scenario on disk for hand-testing the workstation
-   (or any other git-related tool).
+1. **You're writing an integration test.** Use `spinUpScenario()` to
+   start from a deterministic baseline instead of hand-building the
+   same `tempGitRepo + writeFile + commitAll` setup every time.
+2. **You're hand-testing the workstation (or anything else).** Use
+   `npm run scenario create <name>` to materialize a scenario on disk
+   and (optionally) launch `coco ui` against it in one command.
+
+Both paths share the same nine scenarios.
+
+## Quick start
+
+### Manual testing — drive `coco ui` against a known state
+
+```bash
+# Spin up a feature branch ready to PR, launch coco ui against it
+npm run scenario create feature-pr-ready -- --run-ui
+
+# Spin up a dirty worktree with many files, launch coco ui
+npm run scenario create dirty-many-files -- --run-ui
+
+# Spin up an in-progress merge conflict
+npm run scenario create mid-merge-conflict -- --run-ui
+```
+
+### Integration tests — start from a baseline
+
+```ts
+import { spinUpScenario } from 'src/lib/testUtils/spinUpScenario'
+
+describe('changelog flow against a PR-ready branch', () => {
+  let repo: TempGitRepo
+
+  beforeAll(async () => {
+    repo = await spinUpScenario('feature-pr-ready')
+  })
+
+  afterAll(async () => {
+    await repo.cleanup()
+  })
+
+  it('generates a changelog vs main', async () => {
+    // repo is on feat/widget-v2, 4 commits ahead of main, clean.
+    // Run the thing under test from here.
+  })
+})
+```
 
 ## Layout
 
@@ -18,6 +57,7 @@ testUtils/
 ├── README.md             (this file)
 ├── tempGitRepo.ts        (low-level: init + user config + main branch)
 ├── spinUpScenario.ts     (programmatic API for tests)
+├── spinUpScenario.test.ts
 └── scenarios/
     ├── types.ts          (Scenario type)
     ├── index.ts          (registry + lookup)
@@ -34,8 +74,8 @@ testUtils/
     └── stashed-changes.ts
 ```
 
-The CLI driver lives in `bin/scenario.ts` and is exposed via
-`npm run scenario`.
+The CLI driver lives at `bin/scenario.ts` and is wired via the
+`scenario` npm script.
 
 ## Available scenarios
 
@@ -53,69 +93,333 @@ Run `npm run scenario list` for the live list. Current set (9 scenarios across 4
 | `mid-merge-conflict` | operation | in-progress merge with 1 unresolved conflict on `src/widget.ts` — for the conflicts view |
 | `stashed-changes` | stash | clean `main` + 3 stashes (LIFO ordered, each touching a distinct file) — for the stash view |
 
-## Programmatic API
+`npm run scenario describe <name>` prints the full description and
+the contract assertions for a single scenario.
+
+## The CLI (manual testing)
+
+```bash
+npm run scenario list                              # show all scenarios grouped by kind
+npm run scenario describe feature-pr-ready         # one-scenario detail + contract list
+npm run scenario create feature-pr-ready           # materialize in /tmp/coco-git-test-<rand>
+npm run scenario create feature-pr-ready -- --path ~/sandbox/widget   # custom location
+npm run scenario create feature-pr-ready -- --run-ui                  # materialize + launch coco ui
+npm run scenario create feature-pr-ready -- --ephemeral               # auto-clean on exit
+```
+
+### Flags
+
+| Flag | Behavior |
+|---|---|
+| `--path <dir>` | Materialize at `<dir>` instead of `/tmp`. Useful when you want to `cd` into it later and poke around. |
+| `--run-ui` | After materializing, spawn `coco ui` against the scenario dir (cwd = scenario dir, not the coco repo). Tightest dev loop for trying workstation changes. |
+| `--ephemeral` | Auto-clean the temp dir on CLI exit. Skip for normal use — without `--ephemeral`, the dir persists so you can re-inspect after `coco ui` quits. |
+
+### Cleanup
+
+Without `--ephemeral`, scenarios persist. The CLI prints the path
+and a cleanup hint at exit:
+
+```
+✓ Scenario "feature-pr-ready" ready at:
+    /var/folders/.../coco-git-test-xR2qwz
+
+When you're done, clean up with:
+    rm -rf /var/folders/.../coco-git-test-xR2qwz
+```
+
+Over time, `/tmp` accumulates these dirs. Periodically clean them with:
+
+```bash
+rm -rf $(ls -d /var/folders/**/coco-git-test-* 2>/dev/null)
+```
+
+## Programmatic API (integration tests)
+
+### `spinUpScenario(name)`
+
+The single import point for tests. Returns a `TempGitRepo` already
+brought into the named state:
 
 ```ts
 import { spinUpScenario } from 'src/lib/testUtils/spinUpScenario'
 
-describe('my integration test', () => {
-  let repo: TempGitRepo
-
-  beforeAll(async () => {
-    repo = await spinUpScenario('feature-pr-ready')
-  })
-
-  afterAll(async () => {
-    await repo.cleanup()
-  })
-
-  it('does the thing', async () => {
-    // repo.path     — absolute filesystem path
-    // repo.git      — simple-git instance bound to the path
-    // repo.writeFile, repo.commitAll, repo.cleanup
-    //
-    // The scenario set up the baseline; from here add whatever
-    // extra state the specific test needs.
-  })
-})
+const repo = await spinUpScenario('feature-pr-ready')
+// repo is on feat/widget-v2, 4 commits ahead of main, clean worktree
 ```
 
-## CLI
+Throws if the name doesn't match a registered scenario — typos
+fail at setup time, not buried in an assertion.
 
-```bash
-# Show all scenarios grouped by kind
-npm run scenario list
+### The `TempGitRepo` shape
 
-# Describe one (intent, contracts)
-npm run scenario describe feature-pr-ready
-
-# Materialize in /tmp (persisted — you clean up when done)
-npm run scenario create feature-pr-ready
-
-# Materialize at a specific path
-npm run scenario create feature-pr-ready -- --path ~/sandbox/widget
-
-# Materialize AND launch `coco ui` against it (manual testing)
-npm run scenario create feature-pr-ready -- --run-ui
-
-# Materialize + auto-clean on exit (one-shot smoke test)
-npm run scenario create feature-pr-ready -- --ephemeral
+```ts
+type TempGitRepo = {
+  path: string                                          // absolute filesystem path
+  git: SimpleGit                                        // simple-git instance bound to path
+  writeFile: (path: string, content: string) => Promise<void>
+  commitAll: (message: string) => Promise<void>
+  cleanup: () => Promise<void>
+}
 ```
+
+- **`path`** — absolute path to the temp dir. Use for shell-out
+  operations or anywhere a string path is needed.
+- **`git`** — pre-configured `simple-git` instance. User identity
+  (`Coco Test <coco@example.com>`) and `commit.gpgsign=false` are
+  already set. Use for any git command in your test.
+- **`writeFile(rel, content)`** — write to a path relative to the
+  repo root. Parent directories created automatically.
+- **`commitAll(message)`** — `git add . && git commit -m <message>`
+  in one call. Convenience for the common case.
+- **`cleanup()`** — `rm -rf` the temp dir. Call in `afterAll` /
+  `afterEach`. Idempotent (safe to call twice).
+
+### Extending a scenario in your test
+
+A scenario sets up the baseline. From there, do whatever your test
+needs:
+
+```ts
+const repo = await spinUpScenario('feature-pr-ready')
+
+// Add an extra commit on top of the 4 the scenario gave you
+await repo.writeFile('src/widget-v3.ts', 'export const v3 = true\n')
+await repo.commitAll('feat: widget v3 stub')
+
+// Make the worktree dirty
+await repo.writeFile('src/extra.ts', 'console.log("dirty")\n')
+
+// Now exercise the thing under test against this state
+const log = await getLogRows(repo.git, { branch: 'main' })
+expect(log).toHaveLength(5)
+```
+
+### Reading state after the action
+
+After exercising the code under test, inspect the repo with the
+provided `git` instance:
+
+```ts
+// Inspect commits
+const log = await repo.git.log()
+expect(log.latest?.message).toBe('feat: my new feature')
+
+// Inspect refs
+const branches = await repo.git.branchLocal()
+expect(branches.all).toContain('feat/added-by-test')
+
+// Inspect file content
+const content = await fs.promises.readFile(`${repo.path}/src/foo.ts`, 'utf8')
+expect(content).toContain('updated')
+
+// Inspect status
+const status = await repo.git.status()
+expect(status.staged).toEqual(['src/foo.ts'])
+```
+
+### Raw `createTempGitRepo()` — when scenarios don't fit
+
+`spinUpScenario` is the right entry point for ~95% of tests. The
+underlying `createTempGitRepo()` is exported too, for the rare case
+where none of the named scenarios fit and you really do want to
+build from `git init`:
+
+```ts
+import { createTempGitRepo } from 'src/lib/testUtils/tempGitRepo'
+
+const repo = await createTempGitRepo()
+// fresh git repo with main branch + user config + commit.gpgsign=false
+// no commits, no files — you build everything from here
+```
+
+If you find yourself reaching for `createTempGitRepo()` to build
+something a future test will also want, **add a scenario instead**
+(see "Adding a new scenario" below). Future-you (and future-others)
+will thank present-you.
 
 ## Adding a new scenario
 
 1. Create `src/lib/testUtils/scenarios/<kebab-name>.ts` exporting a
-   `Scenario` (see `types.ts`).
-2. Add it to the registry in `src/lib/testUtils/scenarios/index.ts`.
+   `Scenario`.
+2. Register it in `src/lib/testUtils/scenarios/index.ts`.
 3. Add `<kebab-name>.test.ts` next to it — at minimum, assert each
-   `contract` line holds after setup. Use the existing scenario tests
-   as templates.
-4. The CLI picks it up automatically through the registry.
+   `contract` line holds after setup.
+4. The CLI picks it up automatically.
 
-The scenarios are deliberately small (30–80 LOC each) and focus on git
-state shape, not file content. File content comes from the deterministic
-generators in `src/lib/parsers/default/__fixtures__/generators.ts` —
-seeded so the same scenario name always produces identical content.
+### The `Scenario` shape
+
+```ts
+export type Scenario = {
+  /** Stable identifier — kebab-case. Used as the CLI argument. */
+  name: string
+  /** One-line summary shown in `npm run scenario list`. */
+  summary: string
+  /** Multi-line description shown in `npm run scenario describe <name>`. */
+  description: string
+  /** Filtering category for the list view. */
+  kind: 'branch' | 'worktree' | 'operation' | 'history' | 'stash'
+  /** The actual state factory. Mutates the given repo. */
+  setup: (repo: TempGitRepo) => Promise<void>
+  /**
+   * Human-readable expectations the test layer verifies. Also
+   * documents the scenario's contract — surfaced in
+   * `npm run scenario describe`.
+   */
+  contracts?: string[]
+}
+```
+
+### Worked example
+
+```ts
+// src/lib/testUtils/scenarios/three-commit-feature.ts
+import type { Scenario } from './types'
+import { seededFiles } from './shared/seededFiles'
+
+export const threeCommitFeatureScenario: Scenario = {
+  name: 'three-commit-feature',
+  summary: 'feat/example with 3 commits, clean worktree',
+  description: `
+    Baseline scaffold on main, then \`feat/example\` branched off with
+    three commits. Use for any test that wants a short feature-branch
+    shape without the bigger \`multi-commit-branch\` setup.
+  `,
+  kind: 'branch',
+  contracts: [
+    'main has 1 commit',
+    'feat/example is checked out',
+    'feat/example is 3 commits ahead of main',
+    'worktree is clean',
+  ],
+  async setup(repo) {
+    // Use seededFiles for deterministic content
+    await repo.writeFile('README.md', '# example\n')
+    await repo.commitAll('chore: initial commit')
+
+    await repo.git.raw(['checkout', '-b', 'feat/example'])
+
+    const files = seededFiles('three-commit-feature', 3)
+    for (let i = 0; i < files.length; i += 1) {
+      await repo.writeFile(`src/feature-${i}.ts`, files[i])
+      await repo.commitAll(`feat: add feature ${i}`)
+    }
+  },
+}
+```
+
+```ts
+// src/lib/testUtils/scenarios/three-commit-feature.test.ts
+import { createTempGitRepo } from '../tempGitRepo'
+import { threeCommitFeatureScenario } from './three-commit-feature'
+
+describe('three-commit-feature scenario', () => {
+  it('matches its contracts', async () => {
+    const repo = await createTempGitRepo()
+    await threeCommitFeatureScenario.setup(repo)
+
+    const branches = await repo.git.branchLocal()
+    expect(branches.current).toBe('feat/example')
+    expect(branches.all).toContain('main')
+
+    const log = await repo.git.log(['feat/example', '--not', 'main'])
+    expect(log.total).toBe(3)
+
+    const status = await repo.git.status()
+    expect(status.isClean()).toBe(true)
+
+    await repo.cleanup()
+  })
+})
+```
+
+Then add to the registry:
+
+```ts
+// src/lib/testUtils/scenarios/index.ts
+import { threeCommitFeatureScenario } from './three-commit-feature'
+
+export const allScenarios: Scenario[] = [
+  // ...existing
+  threeCommitFeatureScenario,
+]
+```
+
+### Deterministic content via `seededFiles`
+
+Scenarios are intentionally small (30–80 LOC each) and focus on git
+state shape, not file content. When you need realistic-looking file
+content, use `seededFiles(seed, count)` — it wraps the deterministic
+generators in `src/lib/parsers/default/__fixtures__/generators.ts`.
+The same seed always produces identical content, so two test runs
+produce byte-identical scenario repos.
+
+## Debugging
+
+### "What state did the scenario leave the repo in?"
+
+```bash
+# Spin up without --ephemeral (default) so the dir persists
+npm run scenario create feature-pr-ready
+
+# CLI prints the path; cd in and look around
+cd /var/folders/.../coco-git-test-XXXXXX
+git log --oneline
+git status
+git branch
+```
+
+### "My test fails — what does the repo look like at that point?"
+
+Comment out `repo.cleanup()` temporarily, then re-run the test. The
+temp dir survives the run; the failure message includes `repo.path`
+when you log it:
+
+```ts
+afterAll(async () => {
+  // await repo.cleanup()   // ← comment out to inspect
+})
+
+it('does the thing', async () => {
+  // ...
+  console.log('repo path:', repo.path)   // log so you can cd in
+  // assertion that fails
+})
+```
+
+After inspecting, restore `cleanup()` so subsequent runs don't
+accumulate dirs.
+
+### "How do I run just one scenario's test?"
+
+```bash
+# All scenario tests
+npm run test:jest -- --testPathPatterns scenarios
+
+# A specific scenario
+npm run test:jest -- --testPathPatterns feature-pr-ready
+```
+
+### Mocking the LLM in scenario-based tests
+
+If your test exercises a workflow that hits the LLM (`runCommitDraftWorkflow`,
+`runChangelogTextWorkflow`, etc.), mock the handler the workflow calls
+into. The pattern is captured in `src/git/aiActions.test.ts`:
+
+```ts
+jest.mock('../commands/changelog/handler')
+
+const mockedChangelogHandler = jest.mocked(changelogHandler)
+mockedChangelogHandler.mockImplementation(async () => {
+  process.stdout.write('feat: my deterministic title\n\nbody here.')
+})
+
+const result = await runChangelogTextWorkflow({ branch: 'main' })
+expect(result.text).toContain('feat: my deterministic title')
+```
+
+The scenario sets up the git state; the mock sets up the LLM output.
+Together they make the workflow test deterministic top to bottom.
 
 ## Extraction discipline
 
@@ -149,6 +453,7 @@ extraction path open.
 
 Roughly: after 3–6 months of in-coco use, when at least one of these is
 true:
+
 - A second project we own wants to use it (e.g. `coco-vscode-extension`,
   `create-coco`).
 - An external issue / discussion asks "is this published anywhere?"
