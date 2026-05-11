@@ -51,6 +51,9 @@ export type LogInkInputEvent =
   | { type: 'runAiCommitDraft' }
   | { type: 'startCreatePullRequest' }
   | { type: 'startChangelogView' }
+  | { type: 'regenerateChangelog' }
+  | { type: 'yankChangelog' }
+  | { type: 'openChangelogInEditor' }
   | { type: 'openComposeInEditor' }
   | { type: 'runWorkflowAction'; id: string; payload?: string }
   | { type: 'openFileInEditor'; path: string }
@@ -161,6 +164,13 @@ export type LogInkInputContext = {
    * Used by `o` (open in $EDITOR) and `s` (stage/resolve).
    */
   conflictSelectedPath?: string
+  /**
+   * Number of lines in `state.changelogView.text`. Used by the
+   * changelog view's scroll bindings (`j/k`, `pgup/pgdn`) to clamp
+   * `pageChangelog` deltas. Undefined when the view hasn't been loaded
+   * or generation failed — the scroll handlers no-op in that case.
+   */
+  changelogLineCount?: number
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -680,17 +690,6 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       action({ type: 'closeInputPrompt' }),
     ]
   }
-  if (state.inputPrompt.kind === 'changelog-view') {
-    // The changelog view uses the multi-line prompt as a scrollable +
-    // editable display surface. "Submit" here means copy-to-clipboard,
-    // not run-a-workflow — the user reviewed the text and wants it.
-    // The value travels with the event so the clipboard handler reads
-    // it before the close-prompt dispatch wipes the prompt state.
-    return [
-      { type: 'yankText', value, label: 'changelog' },
-      action({ type: 'closeInputPrompt' }),
-    ]
-  }
   const id = state.inputPrompt.kind
   return [
     { type: 'runWorkflowAction', id, payload: value },
@@ -1150,6 +1149,47 @@ export function getLogInkInputEvents(
     }
     if (inputValue === 'x') {
       return [action({ type: 'setPendingConfirmation', value: 'bisect-reset' })]
+    }
+  }
+
+  // Changelog view local keymap. Scoped to `activeView === 'changelog'`
+  // so the letters stay free everywhere else. Bindings:
+  //
+  //   j / k          → scroll line down / up (1 line)
+  //   pgdn / pgup    → scroll page down / up (10 lines)
+  //   y              → yank text to clipboard
+  //   E              → open in $EDITOR (companion to compose's `E` from #913)
+  //   c              → create-PR seeded with this changelog
+  //   r              → regenerate (skip cache, re-run LLM)
+  //
+  // Back-out is `<` / Esc handled by the global pop-view path lower
+  // down. The view only renders when `state.changelogView.status`
+  // is 'ready' — scroll keystrokes early-return when changelogLineCount
+  // is missing so they no-op gracefully during loading / error states.
+  if (state.activeView === 'changelog') {
+    if (inputValue === 'j' && context.changelogLineCount) {
+      return [action({ type: 'pageChangelog', delta: 1, lineCount: context.changelogLineCount })]
+    }
+    if (inputValue === 'k' && context.changelogLineCount) {
+      return [action({ type: 'pageChangelog', delta: -1, lineCount: context.changelogLineCount })]
+    }
+    if (key.pageDown && context.changelogLineCount) {
+      return [action({ type: 'pageChangelog', delta: 10, lineCount: context.changelogLineCount })]
+    }
+    if (key.pageUp && context.changelogLineCount) {
+      return [action({ type: 'pageChangelog', delta: -10, lineCount: context.changelogLineCount })]
+    }
+    if (inputValue === 'y') {
+      return [{ type: 'yankChangelog' }]
+    }
+    if (inputValue === 'E') {
+      return [{ type: 'openChangelogInEditor' }]
+    }
+    if (inputValue === 'c') {
+      return [{ type: 'startCreatePullRequest' }]
+    }
+    if (inputValue === 'r') {
+      return [{ type: 'regenerateChangelog' }]
     }
   }
 
@@ -2060,19 +2100,14 @@ export function getLogInkInputEvents(
   }
 
   // Global `L` — generate the changelog for the current branch and
-  // open it in a multi-line review prompt. The runtime callback does
-  // the pre-flight (default-branch resolution, current-branch
-  // detection) + the changelog fetch, then opens the prompt for the
-  // user to read / edit / copy. Same scope-guard pattern as `C`:
-  // compose is explicitly intercepted with a helpful status so users
-  // mid-draft don't fat-finger out of their commit.
-  if (inputValue === 'L' && state.activeView === 'compose') {
-    return [action({
-      type: 'setStatus',
-      value: 'Finish or cancel the commit draft before generating a changelog.',
-    })]
-  }
-  if (inputValue === 'L') {
+  // push the dedicated `changelog` view. Scoped to history and branches
+  // — those are the natural "where am I, what landed here recently"
+  // entry points. Avoids polluting every view's global namespace; the
+  // changelog is reachable from anywhere via `g L` (added in keymap).
+  if (
+    inputValue === 'L' &&
+    (state.activeView === 'history' || state.activeView === 'branches')
+  ) {
     return [{ type: 'startChangelogView' }]
   }
 

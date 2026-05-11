@@ -20,6 +20,7 @@ import type { WorktreeHunkOverview } from '../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../git/worktreeDiffData'
 import { renderBisectSurface } from '../surfaces/bisect'
 import { renderBranchesSurface } from '../surfaces/branches'
+import { renderChangelogSurface } from '../surfaces/changelog'
 import { renderComposeSurface } from '../surfaces/compose'
 import { renderConflictsSurface } from '../surfaces/conflicts'
 import { renderDiffSurface } from '../surfaces/diff'
@@ -121,6 +122,10 @@ export function renderMainPanel(
 
   if (state.activeView === 'conflicts') {
     return renderConflictsSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
+  if (state.activeView === 'changelog') {
+    return renderChangelogSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   return renderHistoryPanel(

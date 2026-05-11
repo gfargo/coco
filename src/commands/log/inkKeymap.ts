@@ -718,6 +718,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     }
   }
 
+  if (options.activeView === 'changelog') {
+    return {
+      contextual: ['j/k scroll', 'pg up/dn', 'y yank', 'E $EDITOR', 'c PR', 'r regen', '< back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
   if (options.compareBaseSet) {
     // History view with a compare base set — Enter is overridden to
     // open the compare diff; show the override + the bail-out key.

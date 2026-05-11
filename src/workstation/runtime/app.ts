@@ -1327,59 +1327,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch,
   ])
 
-  // `L` keystroke handler — generate a changelog for the current branch
-  // and open it in a multi-line review prompt. The prompt acts as a
-  // scrollable + editable display: Ctrl+D copies the (possibly edited)
-  // content to clipboard, Esc closes. Runs `coco changelog --branch
-  // <default>` via runChangelogTextWorkflow, which captures the raw
-  // stdout so blank lines / section structure survive intact.
-  const startChangelogView = React.useCallback(async () => {
-    const head = context.branches?.currentBranch || context.provider?.currentBranch
-    if (!head) {
-      dispatch({ type: 'setStatus', value: 'No current branch — check out a branch first.' })
-      return
-    }
-    const defaultBranch = context.provider?.repository.defaultBranch
-    // The changelog command will fall back to its own defaults when no
-    // branch arg is passed, but being explicit about the base is more
-    // honest about what the user is seeing. Skip the default-branch
-    // requirement only when there's no provider detected — in that
-    // case the command's --since-last-tag heuristic kicks in.
-    const argv = defaultBranch && head !== defaultBranch
-      ? { branch: defaultBranch }
-      : { sinceLastTag: true }
-    const baseLabel = defaultBranch && head !== defaultBranch
-      ? `vs ${defaultBranch}`
-      : 'since last tag'
-
-    dispatch({ type: 'setStatus', value: `generating changelog (${baseLabel})…` })
-    const result = await runChangelogTextWorkflow(argv)
-
-    if (!result.ok || !result.text) {
-      dispatch({ type: 'setStatus', value: `Changelog failed: ${result.message}` })
-      return
-    }
-
-    dispatch({ type: 'setStatus', value: 'Changelog ready — Ctrl+D copies, Esc closes.' })
-    dispatch({
-      type: 'openInputPrompt',
-      kind: 'changelog-view',
-      label: `Changelog: ${head} (${baseLabel})  ·  Ctrl+D copy · Esc close`,
-      initial: result.text,
-      multiline: true,
-    })
-  }, [
-    context.branches?.currentBranch,
-    context.provider?.currentBranch,
-    context.provider?.repository.defaultBranch,
-    dispatch,
-  ])
-
   // Copy an arbitrary string to the system clipboard. Distinct from
   // `yankFromActiveView` which derives the value from the current view
   // — this one takes the value as an explicit event payload, used by
-  // the changelog-view prompt (and a candidate for future "copy this"
-  // surfaces). Surfaces a status confirming what landed in clipboard.
+  // the changelog view's `y` keystroke (and a candidate for future
+  // "copy this" surfaces). Surfaces a status confirming what landed
+  // in clipboard.
   const yankText = React.useCallback(async (value: string, label: string) => {
     const clipboard: ClipboardRunner = clipboardRunner || defaultClipboardRunner
     if (!value) {
@@ -1397,6 +1350,198 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [clipboardRunner, dispatch])
 
+  // `L` keystroke handler — generate (or recall from cache) a changelog
+  // for the current branch and push the dedicated `changelog` surface
+  // to display it. The view renders the full text in the main panel
+  // (not cramped into an input prompt), with its own keymap for scroll,
+  // yank, $EDITOR, create-PR, and regenerate.
+  //
+  // Caching: `state.changelogCache` is keyed by branch name. On `L`,
+  // we check the cache first and reuse if hit (no LLM call); the user
+  // presses `r` from inside the view to force a regenerate. Switching
+  // branches naturally produces a fresh generation since the cache key
+  // changes.
+  //
+  // Surface lifecycle: we push the `changelog` view BEFORE awaiting the
+  // workflow, so the user sees a loading state instead of a blank
+  // history view while the LLM runs. On error, we keep the view pushed
+  // and render the error there (with `r` to retry) instead of bailing
+  // back to history with a status-line message that may scroll past.
+  const startChangelogView = React.useCallback(async (options: { force?: boolean } = {}) => {
+    const head = context.branches?.currentBranch || context.provider?.currentBranch
+    if (!head) {
+      dispatch({ type: 'setStatus', value: 'No current branch — check out a branch first.' })
+      return
+    }
+    const defaultBranch = context.provider?.repository.defaultBranch
+    // The changelog command will fall back to its own defaults when no
+    // branch arg is passed, but being explicit about the base is more
+    // honest about what the user is seeing. With the local default-
+    // branch fallback in providerData (#912), `defaultBranch` is
+    // populated even for non-GitHub / offline scenarios — we only fall
+    // through to `--since-last-tag` when truly nothing resolves.
+    const argv = defaultBranch && head !== defaultBranch
+      ? { branch: defaultBranch }
+      : { sinceLastTag: true }
+    const baseLabel = defaultBranch && head !== defaultBranch
+      ? `vs ${defaultBranch}`
+      : 'since last tag'
+
+    // Cache hit — skip the LLM, push view with ready content. The
+    // generated-at timestamp on the cache entry drives the "(cached, N
+    // ago)" hint in the header, so the user knows whether to press `r`.
+    const cached = !options.force ? state.changelogCache[head] : undefined
+    if (cached) {
+      dispatch({ type: 'pushView', value: 'changelog' })
+      dispatch({
+        type: 'setChangelogReady',
+        branch: head,
+        baseLabel: cached.baseLabel,
+        text: cached.text,
+      })
+      dispatch({
+        type: 'setStatus',
+        value: `Changelog loaded from cache (${cached.baseLabel}). r to regenerate.`,
+      })
+      return
+    }
+
+    // No cache (or force=true via `r`) — push view with loading state,
+    // then run the workflow.
+    dispatch({ type: 'pushView', value: 'changelog' })
+    dispatch({ type: 'setChangelogLoading', branch: head, baseLabel })
+    dispatch({ type: 'setStatus', value: `generating changelog (${baseLabel})…` })
+
+    const result = await runChangelogTextWorkflow(argv)
+
+    if (!result.ok || !result.text) {
+      dispatch({
+        type: 'setChangelogError',
+        branch: head,
+        baseLabel,
+        error: result.message,
+      })
+      dispatch({ type: 'setStatus', value: `Changelog failed: ${result.message}` })
+      return
+    }
+
+    dispatch({
+      type: 'setChangelogReady',
+      branch: head,
+      baseLabel,
+      text: result.text,
+    })
+    dispatch({
+      type: 'setStatus',
+      value: 'Changelog ready — y yank · E $EDITOR · c PR · r regen · < back.',
+    })
+  }, [
+    context.branches?.currentBranch,
+    context.provider?.currentBranch,
+    context.provider?.repository.defaultBranch,
+    dispatch,
+    state.changelogCache,
+  ])
+
+  // `r` keystroke inside the changelog view — re-run generation
+  // ignoring any cached result. Thin wrapper since the underlying
+  // logic in `startChangelogView` already supports the force path.
+  const regenerateChangelog = React.useCallback(() => {
+    void startChangelogView({ force: true })
+  }, [startChangelogView])
+
+  // `y` keystroke inside the changelog view — yank the current text
+  // to the system clipboard. Pulled from view state rather than from
+  // wherever the cursor is (no per-row selection on this surface).
+  const yankChangelog = React.useCallback(() => {
+    const text = state.changelogView.text
+    if (!text) {
+      dispatch({ type: 'setStatus', value: 'No changelog text to copy.' })
+      return
+    }
+    void yankText(text, 'changelog')
+  }, [dispatch, state.changelogView.text, yankText])
+
+  // `E` keystroke inside the changelog view — open the current text in
+  // $EDITOR / $VISUAL, read it back, update view + cache. Mirrors the
+  // compose `E` flow (#913) but on the changelog-view state slice.
+  // After save, `setChangelogText` updates both view and cache so the
+  // edits persist across view re-entry.
+  const openChangelogInEditor = React.useCallback(() => {
+    const current = state.changelogView.text
+    if (current === undefined) {
+      dispatch({ type: 'setStatus', value: 'Changelog not loaded yet — wait for generation.' })
+      return
+    }
+
+    let dir: string | undefined
+    try {
+      dir = mkdtempSync(nodePath.join(tmpdir(), 'coco-changelog-'))
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: `Failed to create temp file for editor: ${(error as Error).message}`,
+      })
+      return
+    }
+    const file = nodePath.join(dir, 'CHANGELOG.md')
+    try {
+      writeFileSync(file, current, 'utf8')
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: `Failed to seed temp file: ${(error as Error).message}`,
+      })
+      try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
+      return
+    }
+
+    const editorEnv = process.env.VISUAL || process.env.EDITOR || 'vi'
+    const editorArgs = editorEnv.trim().split(/\s+/).filter(Boolean)
+    const editor = editorArgs[0] || 'vi'
+    const editorPrefixArgs = editorArgs.slice(1)
+    const out = process.stdout
+    const stdin = process.stdin
+    const ENTER_ALT = '\x1b[?1049h'
+    const EXIT_ALT = '\x1b[?1049l'
+    const SHOW_CURSOR = '\x1b[?25h'
+    const HIDE_CURSOR = '\x1b[?25l'
+
+    let editorOk = false
+    try {
+      stdin.setRawMode?.(false)
+      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
+      const result = spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
+      if (result.error) {
+        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}` })
+      } else if (result.signal) {
+        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}` })
+      } else if (typeof result.status === 'number' && result.status !== 0) {
+        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}` })
+      } else {
+        editorOk = true
+      }
+    } finally {
+      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
+      stdin.setRawMode?.(true)
+      resumeRef?.current?.()
+    }
+
+    if (editorOk) {
+      try {
+        const content = readFileSync(file, 'utf8')
+        dispatch({ type: 'setChangelogText', text: content })
+        dispatch({ type: 'setStatus', value: 'Changelog updated from editor.' })
+      } catch (error) {
+        dispatch({
+          type: 'setStatus',
+          value: `Failed to read back edited changelog: ${(error as Error).message}`,
+        })
+      }
+    }
+
+    try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
+  }, [dispatch, resumeRef, state.changelogView.text])
 
   // Open a file in $EDITOR (or $VISUAL) by suspending Ink's hold on the
   // terminal, spawning the editor synchronously inheriting stdio, then
@@ -2494,6 +2639,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         : state.diffSource === 'commit'
           ? filePreview?.hunks
           : undefined,
+      // Line count of the changelog text, used by the changelog view's
+      // j/k/PgUp/PgDn scroll bindings to clamp `pageChangelog` deltas.
+      // Computed from view state rather than threaded through context
+      // because the surface owns its own content — no external loader.
+      changelogLineCount: state.changelogView.text?.split('\n').length,
     }).forEach((event) => {
       if (event.type === 'exit') {
         exit()
@@ -2515,6 +2665,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void startCreatePullRequest()
       } else if (event.type === 'startChangelogView') {
         void startChangelogView()
+      } else if (event.type === 'regenerateChangelog') {
+        regenerateChangelog()
+      } else if (event.type === 'yankChangelog') {
+        yankChangelog()
+      } else if (event.type === 'openChangelogInEditor') {
+        openChangelogInEditor()
       } else if (event.type === 'openComposeInEditor') {
         openComposeInEditor()
       } else if (event.type === 'yankText') {
