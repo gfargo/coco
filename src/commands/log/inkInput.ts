@@ -49,6 +49,7 @@ export type LogInkInputEvent =
   | { type: 'revertSelectedHunk' }
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
+  | { type: 'startCreatePullRequest' }
   | { type: 'runWorkflowAction'; id: string; payload?: string }
   | { type: 'openFileInEditor'; path: string }
   | { type: 'yankFromActiveView'; short?: boolean }
@@ -662,6 +663,17 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   if (state.inputPrompt.kind === 'pr-request-changes') {
     return [
       action({ type: 'setPendingConfirmation', value: 'request-changes-pr', payload: value }),
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'create-pr') {
+    // Multi-line content: line 1 is the PR title, lines 2+ are the body
+    // (leading blank line tolerated). The generic empty-value guard
+    // above (line ~627) covers truly-empty submissions; the workflow
+    // handler in app.ts has the belt-and-suspenders title check for
+    // the "newline-then-body" edge.
+    return [
+      { type: 'runWorkflowAction', id: 'create-pr', payload: value },
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -2012,6 +2024,25 @@ export function getLogInkInputEvents(
   // the global `C` (Create PR) binding when conflicts remain.
   if (inputValue === 'C' && state.activeView === 'conflicts') {
     return [action({ type: 'setStatus', value: 'Resolve all conflicts before continuing' })]
+  }
+  // Global `C` — create a pull request from the current branch. The
+  // runtime callback handles pre-flight (current branch resolution,
+  // provider check) and seeds the input prompt with a changelog-derived
+  // title + body before handing control back to the user for editing.
+  // Conflicts view handles `C` above (continue-operation). Compose view
+  // gets an explicit guard — claiming the keystroke with a status
+  // message — so users mid-draft don't fat-finger out of their commit
+  // into a PR-creation flow. Without this guard the keystroke would
+  // fall through to the generic workflow-by-key dispatch at the end of
+  // this function, which would fire `create-pr` to its handler.
+  if (inputValue === 'C' && state.activeView === 'compose') {
+    return [action({
+      type: 'setStatus',
+      value: 'Finish or cancel the commit draft before creating a PR.',
+    })]
+  }
+  if (inputValue === 'C' && state.activeView !== 'conflicts') {
+    return [{ type: 'startCreatePullRequest' }]
   }
 
   // `c` on a stash diff cherry-picks the file under the cursor —
