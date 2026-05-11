@@ -141,6 +141,55 @@ async function getDefaultBranch(
   }
 }
 
+/**
+ * Local-only fallback for the default branch — used when no GitHub
+ * remote is configured, when `gh` isn't authenticated, or when
+ * `gh repo view` fails (e.g. private repo we can't access, offline).
+ *
+ * Detection order, picking the first that resolves:
+ *   1. `origin/HEAD` — the symbolic ref set by `git clone` pointing at
+ *      whatever the remote's default branch was at clone time. This is
+ *      the most authoritative local signal.
+ *   2. Conventional branch names checked against local refs in order:
+ *      `main`, `master`, `develop`, `trunk`.
+ *
+ * Returns `undefined` when nothing matches — caller surfaces that as
+ * "no default branch detected" without claiming any particular cause.
+ *
+ * Pure local-ref reads (no network) — safe to call on every overview
+ * load regardless of provider state.
+ */
+export async function detectLocalDefaultBranch(git: SimpleGit): Promise<string | undefined> {
+  // origin/HEAD — set by `git clone` to track the remote's HEAD. The
+  // symbolic-ref output is the full ref (refs/remotes/origin/main); we
+  // strip the prefix to get just the branch name. `--short` would do it
+  // too but isn't supported on older git, and the prefix is fixed-length.
+  try {
+    const ref = (await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD'])).trim()
+    const match = ref.match(/^refs\/remotes\/origin\/(.+)$/)
+    if (match) {
+      return match[1]
+    }
+  } catch {
+    // symbolic-ref returns non-zero when origin/HEAD doesn't exist —
+    // expected on fresh repos and `git init`-only working trees. Fall
+    // through to the conventional-name check.
+  }
+
+  // Conventional names — most repos follow one of these. `rev-parse
+  // --verify --quiet <ref>` returns 0 + hash on hit, non-zero on miss.
+  for (const candidate of ['main', 'master', 'develop', 'trunk']) {
+    try {
+      await git.raw(['rev-parse', '--verify', '--quiet', `refs/heads/${candidate}`])
+      return candidate
+    } catch {
+      // Not present — try the next one.
+    }
+  }
+
+  return undefined
+}
+
 async function getCurrentPullRequest(
   runner: GhRunner
 ): Promise<ProviderPullRequestStatus | undefined> {
@@ -160,9 +209,14 @@ export async function getProviderOverview(
   git: SimpleGit,
   runner: GhRunner = defaultGhRunner
 ): Promise<ProviderOverview> {
-  const [remotes, currentBranchOutput] = await Promise.all([
+  const [remotes, currentBranchOutput, localDefaultBranch] = await Promise.all([
     git.getRemotes(true),
     git.raw(['branch', '--show-current']),
+    // Read local default-branch signal up-front in parallel — used as
+    // the fallback when gh is unavailable / unauthenticated / can't see
+    // the repo. Coco aims to be platform-agnostic + work offline; the
+    // GH-specific paths layer on top of this, they don't replace it.
+    detectLocalDefaultBranch(git),
   ])
   const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
   const remoteUrl = remote?.refs.push || remote?.refs.fetch
@@ -177,7 +231,10 @@ export async function getProviderOverview(
 
   if (repository.provider !== 'github') {
     return {
-      repository,
+      repository: {
+        ...repository,
+        defaultBranch: localDefaultBranch,
+      },
       currentBranch,
       authenticated: false,
       message: repository.message || 'Unsupported remote provider.',
@@ -188,14 +245,17 @@ export async function getProviderOverview(
     await runner(['auth', 'status', '--hostname', 'github.com'])
   } catch {
     return {
-      repository,
+      repository: {
+        ...repository,
+        defaultBranch: localDefaultBranch,
+      },
       currentBranch,
       authenticated: false,
       message: 'GitHub CLI is missing or not authenticated.',
     }
   }
 
-  const [defaultBranch, currentPullRequest] = await Promise.all([
+  const [providerDefaultBranch, currentPullRequest] = await Promise.all([
     getDefaultBranch(repository, runner),
     getCurrentPullRequest(runner),
   ])
@@ -203,7 +263,11 @@ export async function getProviderOverview(
   return {
     repository: {
       ...repository,
-      defaultBranch,
+      // gh's answer wins when it has one — it knows the remote's
+      // current state, including custom default-branch settings the
+      // local refs can't reflect. Fall back to local detection when gh
+      // returns undefined (offline, private repo, transient failure).
+      defaultBranch: providerDefaultBranch || localDefaultBranch,
     },
     currentBranch,
     currentPullRequest,
