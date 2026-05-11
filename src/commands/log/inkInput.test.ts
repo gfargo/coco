@@ -2167,11 +2167,11 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('L globally starts the changelog-view flow', () => {
+    it('L from history or branches starts the changelog flow', () => {
       // From the history view — `L` should start the changelog flow.
-      // Runtime callback handles the changelog fetch + prompt-open
-      // side effects; from the input handler's perspective it's a
-      // single event the dispatcher routes to startChangelogView.
+      // Runtime callback handles the fetch + view-push side effects;
+      // from the input handler's perspective it's a single event the
+      // dispatcher routes to startChangelogView.
       const historyState = createLogInkState(rows, { activeView: 'history' })
       expect(getLogInkInputEvents(historyState, 'L')).toEqual([
         { type: 'startChangelogView' },
@@ -2184,19 +2184,67 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('L is scoped away from the compose view', () => {
-      // Compose: explicit guard so users mid-draft can't fat-finger
-      // out of their commit into the changelog flow.
-      const composeState = createLogInkState(rows, { activeView: 'compose' })
-      expect(getLogInkInputEvents(composeState, 'L')).toEqual([
-        {
-          type: 'action',
-          action: {
-            type: 'setStatus',
-            value: 'Finish or cancel the commit draft before generating a changelog.',
-          },
-        },
+    it('L does not fire outside history / branches', () => {
+      // Scoped tight on purpose — the changelog is a "where am I, what
+      // landed here" question that fits history/branches semantics.
+      // Other views keep their own L-bindings (or none) without
+      // colliding with the changelog flow.
+      const compose = createLogInkState(rows, { activeView: 'compose' })
+      const status = createLogInkState(rows, { activeView: 'status' })
+      const diff = createLogInkState(rows, { activeView: 'diff' })
+      const stash = createLogInkState(rows, { activeView: 'stash' })
+
+      for (const state of [compose, status, diff, stash]) {
+        const events = getLogInkInputEvents(state, 'L')
+        expect(events.some((event) => event.type === 'startChangelogView')).toBe(false)
+      }
+    })
+
+    it('inside the changelog view, j/k scrolls one line at a time', () => {
+      const state = createLogInkState(rows, { activeView: 'changelog' })
+      expect(getLogInkInputEvents(state, 'j', {}, { changelogLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageChangelog', delta: 1, lineCount: 50 } },
       ])
+      expect(getLogInkInputEvents(state, 'k', {}, { changelogLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageChangelog', delta: -1, lineCount: 50 } },
+      ])
+    })
+
+    it('inside the changelog view, pgup/pgdn scrolls by 10 lines', () => {
+      const state = createLogInkState(rows, { activeView: 'changelog' })
+      expect(getLogInkInputEvents(state, '', { pageDown: true }, { changelogLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageChangelog', delta: 10, lineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, '', { pageUp: true }, { changelogLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageChangelog', delta: -10, lineCount: 50 } },
+      ])
+    })
+
+    it('inside the changelog view, scroll keystrokes no-op when no content is loaded', () => {
+      // changelogLineCount is undefined during loading / error states —
+      // pressing j/k/pgup/pgdn should fall through cleanly rather than
+      // dispatch a pageChangelog with an undefined line count.
+      const state = createLogInkState(rows, { activeView: 'changelog' })
+      const events = getLogInkInputEvents(state, 'j')
+      expect(events.some((event) =>
+        event.type === 'action' && event.action.type === 'pageChangelog'
+      )).toBe(false)
+    })
+
+    it('inside the changelog view, y/E/c/r dispatch their workflow events', () => {
+      const state = createLogInkState(rows, { activeView: 'changelog' })
+
+      // y → yank text (handler reads view state, not context)
+      expect(getLogInkInputEvents(state, 'y')).toEqual([{ type: 'yankChangelog' }])
+
+      // E → open in $EDITOR (mirrors compose's `E` from #913)
+      expect(getLogInkInputEvents(state, 'E')).toEqual([{ type: 'openChangelogInEditor' }])
+
+      // c → kick off create-PR (handler can reuse the cached changelog)
+      expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'startCreatePullRequest' }])
+
+      // r → regenerate (skip cache, re-run LLM)
+      expect(getLogInkInputEvents(state, 'r')).toEqual([{ type: 'regenerateChangelog' }])
     })
 
     it('submitting a create-pr prompt dispatches runWorkflowAction with the raw multi-line value', () => {
@@ -2243,29 +2291,6 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('submitting a changelog-view prompt dispatches yankText with the prompt value', () => {
-      const state = applyLogInkAction(createLogInkState(rows), {
-        type: 'openInputPrompt',
-        kind: 'changelog-view',
-        label: 'Changelog: feat/x (vs main)',
-        initial: 'feat: workstation\n\n- thing one\n- thing two',
-        multiline: true,
-      })
-
-      // Ctrl+D submits the multi-line prompt. For the changelog-view
-      // kind specifically, "submit" means copy-to-clipboard — the
-      // value travels with the event so the clipboard handler can
-      // read it before the close-prompt dispatch wipes the prompt.
-      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
-      expect(events).toEqual([
-        {
-          type: 'yankText',
-          value: 'feat: workstation\n\n- thing one\n- thing two',
-          label: 'changelog',
-        },
-        { type: 'action', action: { type: 'closeInputPrompt' } },
-      ])
-    })
 
 
     it('keeps single-line prompts (create-branch, reset-mode, etc.) untouched', () => {

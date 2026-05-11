@@ -18,7 +18,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog' | 'bisect'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog' | 'bisect' | 'changelog'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
@@ -273,6 +273,52 @@ export type LogInkState = {
    * looks like "no commits found" rather than "still loading".
    */
   bootLoading: boolean
+  /**
+   * Changelog view (full-screen surface). `status` drives what the
+   * panel renders:
+   *   - 'idle'    : view pushed but no content yet (transient — flips
+   *                 immediately to 'loading' or 'ready'-from-cache)
+   *   - 'loading' : LLM generation in flight
+   *   - 'ready'   : `text` is populated and renderable
+   *   - 'error'   : generation failed; `error` carries the message
+   *
+   * `branch` and `baseLabel` are the metadata that drove generation —
+   * surfaced in the panel header so the user knows what they're looking
+   * at. `scrollOffset` is view-local UI state (line offset into `text`)
+   * the same way `diffPreviewOffset` works for the diff view.
+   */
+  changelogView: ChangelogViewState
+  /**
+   * Per-branch cache of generated changelogs. Keyed by branch name so
+   * switching branches naturally produces a fresh generation; pressing
+   * `r` inside the view forces a regenerate even on the same branch.
+   * Each entry is small (a few KB of text) and there's at most one per
+   * branch, so memory pressure is negligible — the cache lives in
+   * state, not on disk, and clears with the workstation session.
+   */
+  changelogCache: { [branch: string]: ChangelogCacheEntry }
+}
+
+export type ChangelogViewStatus = 'idle' | 'loading' | 'ready' | 'error'
+
+export type ChangelogViewState = {
+  status: ChangelogViewStatus
+  text?: string
+  error?: string
+  branch?: string
+  baseLabel?: string
+  scrollOffset: number
+}
+
+export type ChangelogCacheEntry = {
+  text: string
+  baseLabel: string
+  generatedAt: number
+}
+
+export const DEFAULT_CHANGELOG_VIEW_STATE: ChangelogViewState = {
+  status: 'idle',
+  scrollOffset: 0,
 }
 
 export type LogInkStatusFilterMask = {
@@ -326,7 +372,6 @@ export type LogInkInputPromptKind =
   | 'pr-comment'
   | 'pr-request-changes'
   | 'create-pr'
-  | 'changelog-view'
 
 export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind
@@ -427,6 +472,12 @@ export type LogInkAction =
   | { type: 'setHistoryFetchArgs'; value?: LogInkHistoryFetchArgs }
   | { type: 'toggleDiffViewMode' }
   | { type: 'setDiffViewMode'; value: LogInkDiffViewMode }
+  | { type: 'setChangelogLoading'; branch: string; baseLabel: string }
+  | { type: 'setChangelogReady'; branch: string; baseLabel: string; text: string }
+  | { type: 'setChangelogError'; branch: string; baseLabel: string; error: string }
+  | { type: 'setChangelogText'; text: string }
+  | { type: 'pageChangelog'; delta: number; lineCount: number }
+  | { type: 'clearChangelogCache'; branch?: string }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -800,6 +851,8 @@ export function createLogInkState(
     inspectorTab: 'inspector',
     inspectorActionIndex: 0,
     bootLoading: options.bootLoading ?? false,
+    changelogView: { ...DEFAULT_CHANGELOG_VIEW_STATE },
+    changelogCache: {},
   }
 }
 
@@ -1450,6 +1503,108 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         paletteRecent: next.slice(0, 8),
         pendingKey: undefined,
       }
+    }
+    case 'setChangelogLoading':
+      return {
+        ...state,
+        changelogView: {
+          status: 'loading',
+          branch: action.branch,
+          baseLabel: action.baseLabel,
+          scrollOffset: 0,
+        },
+        pendingKey: undefined,
+      }
+    case 'setChangelogReady': {
+      // Cache the result so re-entry (or `c` to PR) reuses it instead of
+      // re-running the LLM. Keyed by branch so a checkout naturally
+      // produces a fresh generation.
+      const cached: ChangelogCacheEntry = {
+        text: action.text,
+        baseLabel: action.baseLabel,
+        generatedAt: Date.now(),
+      }
+      return {
+        ...state,
+        changelogView: {
+          status: 'ready',
+          text: action.text,
+          branch: action.branch,
+          baseLabel: action.baseLabel,
+          scrollOffset: 0,
+        },
+        changelogCache: {
+          ...state.changelogCache,
+          [action.branch]: cached,
+        },
+        pendingKey: undefined,
+      }
+    }
+    case 'setChangelogError':
+      return {
+        ...state,
+        changelogView: {
+          status: 'error',
+          branch: action.branch,
+          baseLabel: action.baseLabel,
+          error: action.error,
+          scrollOffset: 0,
+        },
+        pendingKey: undefined,
+      }
+    case 'setChangelogText': {
+      // Used by the $EDITOR round-trip: user edits the cached text, we
+      // update the view AND the cache entry so subsequent re-entry
+      // reflects the edits. Branch key is taken from the current view
+      // (which is what the user just edited against).
+      if (state.changelogView.status !== 'ready' || !state.changelogView.branch) {
+        return state
+      }
+      const branch = state.changelogView.branch
+      const existing = state.changelogCache[branch]
+      return {
+        ...state,
+        changelogView: {
+          ...state.changelogView,
+          text: action.text,
+        },
+        changelogCache: {
+          ...state.changelogCache,
+          [branch]: {
+            text: action.text,
+            baseLabel: existing?.baseLabel || state.changelogView.baseLabel || '',
+            // Updated-at timestamp reflects the edit. Not the original
+            // generation time — `r` (regenerate) is the explicit knob
+            // for "I want fresh LLM output, not my edits".
+            generatedAt: Date.now(),
+          },
+        },
+        pendingKey: undefined,
+      }
+    }
+    case 'pageChangelog':
+      return {
+        ...state,
+        changelogView: {
+          ...state.changelogView,
+          scrollOffset: clampIndex(
+            state.changelogView.scrollOffset + action.delta,
+            action.lineCount
+          ),
+        },
+        pendingKey: undefined,
+      }
+    case 'clearChangelogCache': {
+      // Targeted clear for a single branch, or wholesale wipe when
+      // `branch` is omitted. Wholesale used on session reset / config
+      // change; targeted reserved for future "this generation looks
+      // wrong, drop it" UX.
+      if (!action.branch) {
+        return { ...state, changelogCache: {}, pendingKey: undefined }
+      }
+      const next = { ...state.changelogCache }
+      delete next[action.branch]
+      return { ...state, changelogCache: next, pendingKey: undefined }
     }
     default:
       return state
