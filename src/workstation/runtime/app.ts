@@ -231,10 +231,12 @@ import {
     approvePullRequest,
     closePullRequest,
     commentPullRequest,
+    createPullRequest,
     isPullRequestMergeStrategy,
     mergePullRequest,
     requestChangesPullRequest,
 } from '../../git/pullRequestActions'
+import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import {
     findStashFileForOffset,
     getStashDiff,
@@ -1246,6 +1248,78 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch({ type: 'setStatus', value: result.message })
   }, [dispatch])
 
+  // `C` keystroke handler — start the create-pull-request flow. Resolves
+  // the head + base branches from the live context, runs
+  // `coco changelog --branch <base>` (via `runPullRequestBodyWorkflow`)
+  // to seed a title + body, then opens a multi-line input prompt
+  // pre-filled with that content for the user to edit before submission.
+  //
+  // On submit, the workflow handler `'create-pr'` parses the prompt
+  // value (line 1 = title, lines 2+ = body) and runs
+  // `createPullRequest({ base, head, title, body })`. If anything in the
+  // pre-flight goes sideways (no current branch, no provider, gh CLI
+  // missing) we surface the failure on the status line and skip the
+  // prompt entirely — better than opening a prompt the user can't
+  // actually submit successfully.
+  const startCreatePullRequest = React.useCallback(async () => {
+    const head = context.branches?.currentBranch || context.provider?.currentBranch
+    if (!head) {
+      dispatch({ type: 'setStatus', value: 'No current branch to create a PR from.' })
+      return
+    }
+    const defaultBranch = context.provider?.repository.defaultBranch
+    if (!defaultBranch) {
+      dispatch({ type: 'setStatus', value: 'No default branch detected — is the GitHub remote configured?' })
+      return
+    }
+    if (head === defaultBranch) {
+      dispatch({ type: 'setStatus', value: `Current branch is ${defaultBranch}; check out a feature branch first.` })
+      return
+    }
+    if (context.pullRequest?.currentPullRequest || context.provider?.currentPullRequest) {
+      const existing = context.pullRequest?.currentPullRequest || context.provider?.currentPullRequest
+      dispatch({
+        type: 'setStatus',
+        value: existing
+          ? `PR #${existing.number} already open for ${head}. Use the PR view to manage it.`
+          : `A pull request is already open for ${head}.`,
+      })
+      return
+    }
+
+    dispatch({ type: 'setStatus', value: `generating PR body from changelog (vs ${defaultBranch})…` })
+    const body = await runPullRequestBodyWorkflow({ baseBranch: defaultBranch })
+
+    // Fallback shape when the changelog generation fails — open the
+    // prompt with empty title + body rather than aborting, so the user
+    // can still author the PR manually. The status line surfaces why
+    // we couldn't pre-fill.
+    const initialTitle = body.title || head.replace(/^(feat|fix|chore|docs|refactor|test)\//, '').replace(/[-_]/g, ' ')
+    const initialBody = body.body || ''
+    const initial = initialBody ? `${initialTitle}\n\n${initialBody}` : initialTitle
+
+    if (!body.ok) {
+      dispatch({ type: 'setStatus', value: `PR body generation failed: ${body.message}. Edit manually.` })
+    } else {
+      dispatch({ type: 'setStatus', value: 'PR body drafted — review and Ctrl+D to submit.' })
+    }
+
+    dispatch({
+      type: 'openInputPrompt',
+      kind: 'create-pr',
+      label: `Create PR: ${head} → ${defaultBranch}  (line 1 title · rest body · Enter newline · Ctrl+D submit)`,
+      initial,
+      multiline: true,
+    })
+  }, [
+    context.branches?.currentBranch,
+    context.provider?.currentBranch,
+    context.provider?.currentPullRequest,
+    context.provider?.repository.defaultBranch,
+    context.pullRequest?.currentPullRequest,
+    dispatch,
+  ])
+
   // Open a file in $EDITOR (or $VISUAL) by suspending Ink's hold on the
   // terminal, spawning the editor synchronously inheriting stdio, then
   // restoring the alt screen + raw mode and forcing a re-render. The
@@ -1692,6 +1766,32 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // — input prompts validate before they reach here, but the
       // strategy guard stays as a defensive belt-and-suspenders since
       // a future palette path could call us with a raw value.
+      'create-pr': async () => {
+        // The input-prompt submit handler validates non-empty title
+        // already; this is the defensive belt-and-suspenders for
+        // future palette callers passing in a raw payload.
+        const text = (payload || '').trim()
+        if (!text) {
+          return { ok: false, message: 'Pull request title is required (first line of the prompt).' }
+        }
+        const lines = text.split('\n')
+        const title = lines[0].trim()
+        if (!title) {
+          return { ok: false, message: 'Pull request title cannot be blank.' }
+        }
+        // Body: lines 2+, with the leading blank line tolerated. Empty
+        // body is allowed — GitHub renders an empty PR body fine.
+        const body = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd()
+        const head = context.branches?.currentBranch || context.provider?.currentBranch
+        const base = context.provider?.repository.defaultBranch
+        if (!head) {
+          return { ok: false, message: 'No current branch detected.' }
+        }
+        if (!base) {
+          return { ok: false, message: 'No default branch detected. Configure the GitHub remote.' }
+        }
+        return createPullRequest({ base, head, title, body })
+      },
       'merge-pr': async () => {
         const strategy = (payload || 'merge').toLowerCase()
         if (!isPullRequestMergeStrategy(strategy)) {
@@ -2230,6 +2330,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void createCommitFromCompose()
       } else if (event.type === 'runAiCommitDraft') {
         void runAiCommitDraft()
+      } else if (event.type === 'startCreatePullRequest') {
+        void startCreatePullRequest()
       } else if (event.type === 'runWorkflowAction') {
         void runWorkflowAction(event.id, event.payload)
       } else if (event.type === 'openFileInEditor') {

@@ -2074,6 +2074,105 @@ describe('log Ink input interactions', () => {
       })
     })
 
+    it('C globally starts the create-pull-request flow (changelog seed + prompt)', () => {
+      // From the history view — `C` should start the PR creation
+      // workflow. The runtime callback (in app.ts) handles the
+      // changelog-fetch + prompt-open side effects; from the input
+      // handler's perspective it's a single event the dispatcher
+      // routes to `startCreatePullRequest`.
+      const historyState = createLogInkState(rows, { activeView: 'history' })
+      expect(getLogInkInputEvents(historyState, 'C')).toEqual([
+        { type: 'startCreatePullRequest' },
+      ])
+
+      // From the branches view too — the natural starting point when
+      // looking at the current branch.
+      const branchesState = createLogInkState(rows, { activeView: 'branches' })
+      expect(getLogInkInputEvents(branchesState, 'C')).toEqual([
+        { type: 'startCreatePullRequest' },
+      ])
+
+      // From the PR view (when no PR exists yet). The runtime callback
+      // takes care of the "already has an open PR" guard; the input
+      // handler unconditionally fires.
+      const prState = createLogInkState(rows, { activeView: 'pull-request' })
+      expect(getLogInkInputEvents(prState, 'C')).toEqual([
+        { type: 'startCreatePullRequest' },
+      ])
+    })
+
+    it('C is scoped away from the conflicts and compose views', () => {
+      // Conflicts: `C` means "continue the in-progress operation" when
+      // no conflicts remain, otherwise it surfaces a "resolve first"
+      // status. Either way it MUST NOT fall through to startCreate.
+      const conflictsClear = createLogInkState(rows, { activeView: 'conflicts' })
+      const conflictsBlocked = createLogInkState(rows, { activeView: 'conflicts' })
+      expect(getLogInkInputEvents(conflictsClear, 'C', {}, { conflictFileCount: 0 }))
+        .toEqual([{ type: 'runWorkflowAction', id: 'continue-operation' }])
+      expect(getLogInkInputEvents(conflictsBlocked, 'C', {}, { conflictFileCount: 2 })[0])
+        .toMatchObject({
+          type: 'action',
+          action: { type: 'setStatus', value: 'Resolve all conflicts before continuing' },
+        })
+
+      // Compose: claims the keystroke with an explicit "finish draft
+      // first" status so the user mid-draft doesn't fat-finger their
+      // way out. Without this guard the keystroke would fall through
+      // to the generic workflow-by-key dispatch at the bottom of
+      // getLogInkInputEvents.
+      const composeState = createLogInkState(rows, { activeView: 'compose' })
+      expect(getLogInkInputEvents(composeState, 'C')).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setStatus', value: 'Finish or cancel the commit draft before creating a PR.' },
+        },
+      ])
+    })
+
+    it('submitting a create-pr prompt dispatches runWorkflowAction with the raw multi-line value', () => {
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'openInputPrompt',
+        kind: 'create-pr',
+        label: 'Create PR',
+        initial: 'feat: workstation refactor\n\nLine 1 of body.\nLine 2 of body.',
+        multiline: true,
+      })
+
+      // Ctrl+D submits multi-line prompts. The payload arrives as the
+      // raw value — the workflow handler in app.ts splits title (line 1)
+      // from body (lines 2+).
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).toEqual([
+        {
+          type: 'runWorkflowAction',
+          id: 'create-pr',
+          payload: 'feat: workstation refactor\n\nLine 1 of body.\nLine 2 of body.',
+        },
+        { type: 'action', action: { type: 'closeInputPrompt' } },
+      ])
+    })
+
+    it('submitting an empty create-pr prompt falls back to the generic empty-value guard', () => {
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'openInputPrompt',
+        kind: 'create-pr',
+        label: 'Create PR',
+        multiline: true,
+      })
+
+      // Ctrl+D on an empty multi-line prompt is rejected by the generic
+      // empty-value check that runs before the per-kind dispatch. The
+      // prompt stays open and the user sees the same "enter a value or
+      // press esc to cancel" status as every other empty submission.
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setStatus', value: 'enter a value or press esc to cancel' },
+        },
+      ])
+    })
+
     it('keeps single-line prompts (create-branch, reset-mode, etc.) untouched', () => {
       // Sanity check: opening a non-multiline prompt and pressing
       // Enter still submits as before — the new dispatch path is

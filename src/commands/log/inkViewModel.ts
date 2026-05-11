@@ -325,6 +325,7 @@ export type LogInkInputPromptKind =
   | 'pr-merge-strategy'
   | 'pr-comment'
   | 'pr-request-changes'
+  | 'create-pr'
 
 export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind
