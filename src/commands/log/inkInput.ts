@@ -51,6 +51,7 @@ export type LogInkInputEvent =
   | { type: 'runAiCommitDraft' }
   | { type: 'startCreatePullRequest' }
   | { type: 'startChangelogView' }
+  | { type: 'openComposeInEditor' }
   | { type: 'runWorkflowAction'; id: string; payload?: string }
   | { type: 'openFileInEditor'; path: string }
   | { type: 'yankFromActiveView'; short?: boolean }
@@ -2288,6 +2289,27 @@ export function getLogInkInputEvents(
       events.push(action({ type: 'pushView', value: 'compose' }))
     }
     events.push(action({ type: 'commitCompose', action: { type: 'setEditing', value: true } }))
+    return events
+  }
+
+  // Capital `E` — open the commit draft in $EDITOR (or $VISUAL). Companion
+  // to lowercase `e` which activates inline editing inside the panel:
+  // `e` for quick tweaks in-place, `E` for "I want the full power of my
+  // editor — syntax highlighting, multi-line nav, paste buffers, etc."
+  // The runtime callback handles the temp-file write, editor session,
+  // and read-back; the input handler emits a single event the
+  // dispatcher routes there. As with lowercase `e`, fires from status
+  // and diff views too (auto-pushes into compose first), since those
+  // are the natural entry points to commit-message work.
+  if (
+    inputValue === 'E' &&
+    (state.activeView === 'status' || state.activeView === 'diff' || state.activeView === 'compose')
+  ) {
+    const events: LogInkInputEvent[] = []
+    if (state.activeView !== 'compose') {
+      events.push(action({ type: 'pushView', value: 'compose' }))
+    }
+    events.push({ type: 'openComposeInEditor' })
     return events
   }
 

@@ -11,6 +11,7 @@ export type LogInkCommandId =
   | 'commit'
   | 'cycleSort'
   | 'editCommit'
+  | 'editCommitExternal'
   | 'focusNext'
   | 'focusPrevious'
   | 'help'
@@ -320,7 +321,14 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     id: 'editCommit',
     keys: ['e'],
     label: 'edit commit',
-    description: 'Edit the manual commit summary or body.',
+    description: 'Edit the manual commit summary or body inline.',
+    contexts: ['commits'],
+  },
+  {
+    id: 'editCommitExternal',
+    keys: ['E'],
+    label: 'edit in $EDITOR',
+    description: 'Open the current commit draft in $EDITOR (or $VISUAL) for full editing, write-back on save.',
     contexts: ['commits'],
   },
   {
@@ -633,7 +641,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'compose') {
     return {
-      contextual: ['e edit', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
+      contextual: ['e edit', 'E $EDITOR', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

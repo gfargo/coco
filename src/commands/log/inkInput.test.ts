@@ -1031,6 +1031,44 @@ describe('log Ink input interactions', () => {
     expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'createManualCommit' }])
   })
 
+  it('E from compose opens the draft in the external editor', () => {
+    // Capital `E` (companion to lowercase `e` which activates inline
+    // editing). The runtime callback handles the temp-file write + spawn
+    // + read-back; the input handler emits a single openComposeInEditor
+    // event the dispatcher routes there.
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+    expect(getLogInkInputEvents(state, 'E')).toEqual([
+      { type: 'openComposeInEditor' },
+    ])
+  })
+
+  it('E from status or diff pushes compose first, then opens the external editor', () => {
+    // Mirrors the lowercase `e` flow — from worktree views, the
+    // keystroke auto-jumps into compose before invoking the editor.
+    const statusState = createLogInkState(rows, { activeView: 'status' })
+    expect(getLogInkInputEvents(statusState, 'E', {}, { worktreeFileCount: 1 })).toEqual([
+      { type: 'action', action: { type: 'pushView', value: 'compose' } },
+      { type: 'openComposeInEditor' },
+    ])
+
+    const diffState = createLogInkState(rows, { activeView: 'diff' })
+    expect(getLogInkInputEvents(diffState, 'E', {}, { worktreeFileCount: 1 })).toEqual([
+      { type: 'action', action: { type: 'pushView', value: 'compose' } },
+      { type: 'openComposeInEditor' },
+    ])
+  })
+
+  it('E does not fire outside the status / diff / compose triad', () => {
+    // History, branches, tags, etc. should fall through to whatever
+    // other E-binding exists for that view (or no-op) — the editor
+    // keystroke is scoped to commit-message work.
+    const historyState = createLogInkState(rows, { activeView: 'history' })
+    const events = getLogInkInputEvents(historyState, 'E')
+    expect(events.some((event) => event.type === 'openComposeInEditor')).toBe(false)
+  })
+
   it('preserves draft state across compose → history → compose round-trips', () => {
     let state = createLogInkState(rows)
 
