@@ -50,9 +50,11 @@ export type LogInkInputEvent =
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
   | { type: 'startCreatePullRequest' }
+  | { type: 'startChangelogView' }
   | { type: 'runWorkflowAction'; id: string; payload?: string }
   | { type: 'openFileInEditor'; path: string }
   | { type: 'yankFromActiveView'; short?: boolean }
+  | { type: 'yankText'; value: string; label: string }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -674,6 +676,17 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
     // the "newline-then-body" edge.
     return [
       { type: 'runWorkflowAction', id: 'create-pr', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'changelog-view') {
+    // The changelog view uses the multi-line prompt as a scrollable +
+    // editable display surface. "Submit" here means copy-to-clipboard,
+    // not run-a-workflow — the user reviewed the text and wants it.
+    // The value travels with the event so the clipboard handler reads
+    // it before the close-prompt dispatch wipes the prompt state.
+    return [
+      { type: 'yankText', value, label: 'changelog' },
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -2043,6 +2056,23 @@ export function getLogInkInputEvents(
   }
   if (inputValue === 'C' && state.activeView !== 'conflicts') {
     return [{ type: 'startCreatePullRequest' }]
+  }
+
+  // Global `L` — generate the changelog for the current branch and
+  // open it in a multi-line review prompt. The runtime callback does
+  // the pre-flight (default-branch resolution, current-branch
+  // detection) + the changelog fetch, then opens the prompt for the
+  // user to read / edit / copy. Same scope-guard pattern as `C`:
+  // compose is explicitly intercepted with a helpful status so users
+  // mid-draft don't fat-finger out of their commit.
+  if (inputValue === 'L' && state.activeView === 'compose') {
+    return [action({
+      type: 'setStatus',
+      value: 'Finish or cancel the commit draft before generating a changelog.',
+    })]
+  }
+  if (inputValue === 'L') {
+    return [{ type: 'startChangelogView' }]
   }
 
   // `c` on a stash diff cherry-picks the file under the cursor —

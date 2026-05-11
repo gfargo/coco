@@ -57,6 +57,7 @@ import { SimpleGit } from 'simple-git'
 import { getBranchOverview } from '../../git/branchData'
 import { createManualCommit } from '../../commands/log/commitCompose'
 import { runCommitDraftWorkflow } from '../../git/commitWorkflowActions'
+import { runChangelogTextWorkflow } from '../../git/aiActions'
 import {
     GitCommitDetail,
     GitCommitFilePreview,
@@ -1320,6 +1321,77 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch,
   ])
 
+  // `L` keystroke handler — generate a changelog for the current branch
+  // and open it in a multi-line review prompt. The prompt acts as a
+  // scrollable + editable display: Ctrl+D copies the (possibly edited)
+  // content to clipboard, Esc closes. Runs `coco changelog --branch
+  // <default>` via runChangelogTextWorkflow, which captures the raw
+  // stdout so blank lines / section structure survive intact.
+  const startChangelogView = React.useCallback(async () => {
+    const head = context.branches?.currentBranch || context.provider?.currentBranch
+    if (!head) {
+      dispatch({ type: 'setStatus', value: 'No current branch — check out a branch first.' })
+      return
+    }
+    const defaultBranch = context.provider?.repository.defaultBranch
+    // The changelog command will fall back to its own defaults when no
+    // branch arg is passed, but being explicit about the base is more
+    // honest about what the user is seeing. Skip the default-branch
+    // requirement only when there's no provider detected — in that
+    // case the command's --since-last-tag heuristic kicks in.
+    const argv = defaultBranch && head !== defaultBranch
+      ? { branch: defaultBranch }
+      : { sinceLastTag: true }
+    const baseLabel = defaultBranch && head !== defaultBranch
+      ? `vs ${defaultBranch}`
+      : 'since last tag'
+
+    dispatch({ type: 'setStatus', value: `generating changelog (${baseLabel})…` })
+    const result = await runChangelogTextWorkflow(argv)
+
+    if (!result.ok || !result.text) {
+      dispatch({ type: 'setStatus', value: `Changelog failed: ${result.message}` })
+      return
+    }
+
+    dispatch({ type: 'setStatus', value: 'Changelog ready — Ctrl+D copies, Esc closes.' })
+    dispatch({
+      type: 'openInputPrompt',
+      kind: 'changelog-view',
+      label: `Changelog: ${head} (${baseLabel})  ·  Ctrl+D copy · Esc close`,
+      initial: result.text,
+      multiline: true,
+    })
+  }, [
+    context.branches?.currentBranch,
+    context.provider?.currentBranch,
+    context.provider?.repository.defaultBranch,
+    dispatch,
+  ])
+
+  // Copy an arbitrary string to the system clipboard. Distinct from
+  // `yankFromActiveView` which derives the value from the current view
+  // — this one takes the value as an explicit event payload, used by
+  // the changelog-view prompt (and a candidate for future "copy this"
+  // surfaces). Surfaces a status confirming what landed in clipboard.
+  const yankText = React.useCallback(async (value: string, label: string) => {
+    const clipboard: ClipboardRunner = clipboardRunner || defaultClipboardRunner
+    if (!value) {
+      dispatch({ type: 'setStatus', value: `Nothing to copy — ${label} is empty.` })
+      return
+    }
+    try {
+      await clipboard(value)
+      dispatch({ type: 'setStatus', value: `Copied ${label} to clipboard.` })
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: `Copy failed (${label}): ${(error as Error).message}`,
+      })
+    }
+  }, [clipboardRunner, dispatch])
+
+
   // Open a file in $EDITOR (or $VISUAL) by suspending Ink's hold on the
   // terminal, spawning the editor synchronously inheriting stdio, then
   // restoring the alt screen + raw mode and forcing a re-render. The
@@ -2332,6 +2404,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void runAiCommitDraft()
       } else if (event.type === 'startCreatePullRequest') {
         void startCreatePullRequest()
+      } else if (event.type === 'startChangelogView') {
+        void startChangelogView()
+      } else if (event.type === 'yankText') {
+        void yankText(event.value, event.label)
       } else if (event.type === 'runWorkflowAction') {
         void runWorkflowAction(event.id, event.payload)
       } else if (event.type === 'openFileInEditor') {
