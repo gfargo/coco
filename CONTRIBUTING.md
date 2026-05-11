@@ -46,6 +46,41 @@ To set up a development environment for Commit Copilot, follow these steps:
 4. Build the project locally with `npm run build` and ensure that tests pass with `npm test`.
 5. You are now ready to start making changes!
 
+### Where things live
+
+The codebase is split into four top-level concerns under `src/`:
+
+- `commands/` — CLI subcommands (`commit`, `changelog`, `log`, `ui`, `review`, `recap`, etc.)
+- `git/` — Shared git data layer (overview loaders + workstation-shaped action wrappers)
+- `workstation/` — The full Ink-based TUI. **Has its own `README.md`** documenting the layout, the input → state → render flow, and how to add a new view.
+- `lib/` — Core libraries (config, langchain, simple-git, parsers, ui, utils, testUtils)
+
+If you're contributing TUI changes, read `src/workstation/README.md` first.
+
+### Testing the workstation (`coco ui`)
+
+Coco ships with a scenario library that spins up deterministic temp git repos for manual + automated testing. List the available scenarios, then create one and run `coco ui` against it:
+
+```bash
+npm run scenario list                                              # show all scenarios
+npm run scenario describe feature-pr-ready                         # describe one
+npm run scenario create feature-pr-ready -- --run-ui               # create + launch coco ui
+npm run scenario create dirty-many-files -- --run-ui               # different scenario
+```
+
+`--run-ui` spawns `coco ui` against the materialized repo — the tightest dev loop for trying workstation changes against a known state. The scenarios cover the common shapes (feature branch ready to PR, dirty worktree with many files, in-progress bisect, merge conflict, stashed changes, etc.) so you can validate keystroke behaviors and rendering without hand-building repo state every time.
+
+For automated tests, use `spinUpScenario` from `src/lib/testUtils/spinUpScenario` instead of inline `writeFile` / `commitAll` setup:
+
+```ts
+import { spinUpScenario } from 'src/lib/testUtils/spinUpScenario'
+
+const repo = await spinUpScenario('two-commit-feature')
+// repo.path / repo.git / repo.writeFile / repo.commitAll / repo.cleanup
+```
+
+See `src/lib/testUtils/README.md` for the full list of scenarios, the programmatic API, and the discipline for adding new scenarios.
+
 ## Documentation
 
 The GitHub wiki is the canonical source for user-facing documentation. The local wiki checkout lives at `.wiki/` and can be managed with:

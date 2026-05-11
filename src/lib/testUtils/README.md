@@ -24,9 +24,14 @@ testUtils/
     ├── shared/
     │   └── seededFiles.ts (wrapper around __fixtures__/generators)
     ├── feature-pr-ready.ts
+    ├── feature-branch-one-commit.ts
+    ├── multi-commit-branch.ts
+    ├── two-commit-feature.ts
+    ├── single-staged-file.ts
     ├── dirty-many-files.ts
     ├── mid-bisect.ts
-    └── multi-commit-branch.ts
+    ├── mid-merge-conflict.ts
+    └── stashed-changes.ts
 ```
 
 The CLI driver lives in `bin/scenario.ts` and is exposed via
@@ -34,14 +39,19 @@ The CLI driver lives in `bin/scenario.ts` and is exposed via
 
 ## Available scenarios
 
-Run `npm run scenario list` for the live list. Current set:
+Run `npm run scenario list` for the live list. Current set (9 scenarios across 4 kinds):
 
 | Name | Kind | What you get |
 |---|---|---|
-| `feature-pr-ready` | branch | `feat/widget-v2` 4 commits ahead of `main`, clean worktree — for create-pr and changelog flows |
+| `feature-pr-ready` | branch | `feat/widget-v2` 4 commits ahead of `main`, clean worktree — for create-pr (`C`) and changelog (`L`) flows |
+| `feature-branch-one-commit` | branch | `main` + `feat/x` (1 commit ahead, `src/feature.ts`) — minimal branch-vs-base shape |
 | `multi-commit-branch` | branch | `feat/dashboard` with 8 varied commits — baseline for navigation / filter / yank |
+| `two-commit-feature` | branch | baseline + a feat commit on `main`, clean worktree — for changelog / log / review smoke tests |
+| `single-staged-file` | worktree | baseline + 1 staged README — minimum "ready to commit" shape |
 | `dirty-many-files` | worktree | 12 staged + 6 unstaged + 3 untracked files across `src/`, `tests/`, `docs/` — for the future split flow |
 | `mid-bisect` | operation | 20 commits + active `git bisect`, HEAD at midpoint — for the bisect view |
+| `mid-merge-conflict` | operation | in-progress merge with 1 unresolved conflict on `src/widget.ts` — for the conflicts view |
+| `stashed-changes` | stash | clean `main` + 3 stashes (LIFO ordered, each touching a distinct file) — for the stash view |
 
 ## Programmatic API
 
