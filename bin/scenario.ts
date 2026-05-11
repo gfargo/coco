@@ -16,11 +16,12 @@
  * at the end either way.
  *
  * EXTRACTION NOTE: this CLI uses `coco` only for the optional `--run-ui`
- * flag (it spawns `coco ui --path <dir>`). The core scenario logic is
- * agnostic to which tool consumes it; only the convenience launcher
- * knows about coco. When extracted to a standalone package, the
- * `--run-ui` flag becomes `--run <command>` taking an arbitrary shell
- * command — `lazygit`, `gitui`, etc. would all work.
+ * flag (it spawns `tsx <coco>/src/index.ts ui` with the scenario dir as
+ * cwd). The core scenario logic is agnostic to which tool consumes it;
+ * only the convenience launcher knows about coco. When extracted to a
+ * standalone package, the `--run-ui` flag becomes `--run <command>`
+ * taking an arbitrary shell command — `lazygit`, `gitui`, etc. would
+ * all work.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -186,11 +187,25 @@ async function commandCreate(
   if (options.runUi) {
     console.log(`Launching \`coco ui\` against the scenario…`)
     console.log('')
-    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-    const result = spawnSync(npmCmd, ['run', 'coco:ts', '--', 'ui', '--path', finalPath], {
+    // We need TWO different paths here:
+    //   - tsx + src/index.ts come from the coco repo (where bin/scenario.ts lives)
+    //   - process.cwd() inside `coco ui` must be the scenario dir
+    //     (the handler reads cwd to locate the repo; `--path` on `coco ui`
+    //     is the history filter, NOT a "use this directory" flag).
+    // So: resolve absolute paths to tsx + index.ts, then spawn with
+    // cwd: finalPath. That keeps tsx happy and points coco at the
+    // scenario repo.
+    const cocoRepoRoot = path.resolve(__dirname, '..')
+    const tsxBin = path.join(
+      cocoRepoRoot,
+      'node_modules',
+      '.bin',
+      process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+    )
+    const cocoEntry = path.join(cocoRepoRoot, 'src', 'index.ts')
+    const result = spawnSync(tsxBin, [cocoEntry, 'ui'], {
       stdio: 'inherit',
-      // coco:ts uses tsx on the workstation source, so the CLI cwd must
-      // be the coco repo, not the scenario dir.
+      cwd: finalPath,
     })
     if (result.status !== 0 && result.status !== null) {
       // Non-zero exit on quit (q / Ctrl+C) is normal for Ink TUIs; only
