@@ -141,6 +141,49 @@ For an inline keypress on an existing view, you only need:
 
 For a global chord (e.g. a new `g <letter>` view selector), the chord goes in `inkKeymap.ts` plus the route into the action / view-switch in the reducer.
 
+## Calling existing CLI commands from a workstation flow
+
+When a workstation flow needs the full behavior of a `coco <command>` (commit message generation, changelog body for PR creation, etc.), invoke the command's `handler` directly with a synthetic `argv` rather than spawning a subprocess. The pattern lives in `src/git/commitWorkflowActions.ts` and `src/git/aiActions.ts`:
+
+```ts
+// Synthetic argv shape: mode 'stdout', interactive false, silent logger
+const argv = createChangelogArgv({ branch: 'main' })
+
+// Capture stdout via process.stdout.write override
+const captured = await captureStdout(() => changelogHandler(argv, new Logger({ silent: true })))
+
+// Parse / return a typed *WorkflowResult shape
+return { ok: true, message: firstLine(captured), text: captured }
+```
+
+Worked examples:
+
+- `runCommitDraftWorkflow` → drives `coco commit` AI-draft generation from the compose surface's `I` keystroke (`src/git/commitWorkflowActions.ts`)
+- `runCommitWorkflow({ action: 'commit' | 'split-plan' | 'split-apply' })` → drives `coco commit` and its `--split` modes (`src/git/commitWorkflowActions.ts`)
+- `runChangelogTextWorkflow({ branch | sinceLastTag | tag | range })` → drives `coco changelog` and returns raw stdout (`src/git/aiActions.ts`)
+- `runPullRequestBodyWorkflow({ baseBranch })` → uses `coco changelog --branch <base>` to seed a PR title + body (`src/git/aiActions.ts`)
+
+The recipe scales — any CLI command with a `handler(argv, logger)` signature can be wrapped this way. Two rules:
+
+1. **Pass `mode: 'stdout'` and `interactive: false` in the synthetic argv** so the handler emits structured output instead of opening an Inquirer prompt.
+2. **Use the raw-capture variant** (not the chrome-stripping one) if your UI surface wants blank lines / section structure preserved. `runChangelogAction` strips blank lines via `compactOutputLines`; `runChangelogTextWorkflow` keeps them.
+
+## Testing changes
+
+The scenario library in `src/lib/testUtils/scenarios/` is the recommended way to validate workstation changes — both manually and in automated tests.
+
+```bash
+# Manual testing — spin up a known state and launch the workstation
+npm run scenario list
+npm run scenario create feature-pr-ready -- --run-ui
+
+# Automated testing — replace inline writeFile / commitAll setup
+import { spinUpScenario } from 'src/lib/testUtils/spinUpScenario'
+const repo = await spinUpScenario('feature-pr-ready')
+```
+
+Scenarios match common workstation states: feature branch ready to PR, dirty worktree with many files, in-progress bisect, in-progress merge conflict, stashed changes, etc. Adding a new view? Add a scenario alongside it that reproduces the state the view renders against. See `src/lib/testUtils/README.md` for the full list + the contract for adding new scenarios.
+
 ## Conventions
 
 - **Chord prefix.** `g` is the global view-selector prefix. Inside a view, the prefix is bypassed for view-local single-key bindings (`g`, `b`, `s`, `x` on the bisect view fire bisect actions, not chord entry). Path back out is always `<` or `Esc`, never a chord.
