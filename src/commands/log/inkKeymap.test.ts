@@ -67,7 +67,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['e edit', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
+      contextual: ['e edit', 'E $EDITOR', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
@@ -315,7 +315,8 @@ describe('log Ink keymap', () => {
     expect(helpText).toContain('gg Jump to the first visible commit.')
     expect(helpText).toContain('G Jump to the last visible commit.')
     expect(helpText).toContain('z Ask to revert the selected file or hunk.')
-    expect(helpText).toContain('e Edit the manual commit summary or body.')
+    expect(helpText).toContain('e Edit the manual commit summary or body inline.')
+    expect(helpText).toContain('E Open the current commit draft in $EDITOR (or $VISUAL) for full editing, write-back on save.')
     expect(helpText).toContain('c Create a commit from staged changes with the current draft.')
     expect(helpText).toContain('q/ctrl+c Quit the interactive log.')
     expect(helpText).toContain('tab Move focus to the next panel.')

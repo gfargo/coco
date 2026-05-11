@@ -52,10 +52,13 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import * as nodePath from 'node:path'
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { getBranchOverview } from '../../git/branchData'
-import { createManualCommit } from '../../commands/log/commitCompose'
+import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
 import { runCommitDraftWorkflow } from '../../git/commitWorkflowActions'
 import { runChangelogTextWorkflow } from '../../git/aiActions'
 import {
@@ -1449,6 +1452,109 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     void refreshWorktreeContext({ silent: true })
   }, [dispatch, refreshWorktreeContext, resumeRef])
 
+  // `E` keystroke handler — open the current commit draft in $EDITOR
+  // (or $VISUAL), then read the file back and update the compose state
+  // with the saved content. Mirrors the suspend → spawn → resume
+  // terminal dance of `openInEditor` but operates on an in-memory
+  // draft (round-tripped through a temp file) rather than a worktree
+  // file. Useful when the inline compose editor isn't enough — long
+  // bodies, markdown highlighting, paste from elsewhere, etc.
+  //
+  // Empty drafts are still written to the temp file so the user gets
+  // a blank canvas; the read-back uses `setDraft` which splits content
+  // into summary + body via `splitCommitDraft`, so the new content
+  // re-populates both fields correctly regardless of which one was
+  // active before.
+  const openComposeInEditor = React.useCallback(() => {
+    // Build the current draft text the same way `createManualCommit`
+    // would — single string, blank line between summary and body.
+    // Round-tripping through this format keeps the parse symmetric:
+    // the editor sees what a real commit message would look like, and
+    // `splitCommitDraft` on the way back reverses it cleanly.
+    const composeState = state.commitCompose
+    const draft = formatCommitComposeMessage(composeState.summary, composeState.body)
+
+    // Temp dir + file. mkdtemp is cleaned up at the end regardless of
+    // editor success/failure (`finally` block below). `.md` extension
+    // helps editors pick up markdown highlighting — most commit-
+    // message workflows treat the body as markdown-ish.
+    let dir: string | undefined
+    try {
+      dir = mkdtempSync(nodePath.join(tmpdir(), 'coco-compose-'))
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: `Failed to create temp file for editor: ${(error as Error).message}`,
+      })
+      return
+    }
+    const file = nodePath.join(dir, 'COMMIT_EDITMSG.md')
+    try {
+      writeFileSync(file, draft, 'utf8')
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: `Failed to seed temp file: ${(error as Error).message}`,
+      })
+      try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
+      return
+    }
+
+    const editorEnv = process.env.VISUAL || process.env.EDITOR || 'vi'
+    const editorArgs = editorEnv.trim().split(/\s+/).filter(Boolean)
+    const editor = editorArgs[0] || 'vi'
+    const editorPrefixArgs = editorArgs.slice(1)
+    const out = process.stdout
+    const stdin = process.stdin
+    const ENTER_ALT = '\x1b[?1049h'
+    const EXIT_ALT = '\x1b[?1049l'
+    const SHOW_CURSOR = '\x1b[?25h'
+    const HIDE_CURSOR = '\x1b[?25l'
+
+    let editorOk = false
+    try {
+      stdin.setRawMode?.(false)
+      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
+      const result = spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
+      if (result.error) {
+        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}` })
+      } else if (result.signal) {
+        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}` })
+      } else if (typeof result.status === 'number' && result.status !== 0) {
+        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}` })
+      } else {
+        editorOk = true
+      }
+    } finally {
+      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
+      stdin.setRawMode?.(true)
+      resumeRef?.current?.()
+    }
+
+    // Read the (possibly edited) file back and update compose state.
+    // We only do this when the editor exited cleanly — a crash / kill
+    // shouldn't blow away the user's draft. The setDraft action
+    // re-splits into summary + body via splitCommitDraft.
+    if (editorOk) {
+      try {
+        const content = readFileSync(file, 'utf8')
+        dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: content } })
+        dispatch({ type: 'setStatus', value: 'Commit draft updated from editor.' })
+      } catch (error) {
+        dispatch({
+          type: 'setStatus',
+          value: `Failed to read back edited draft: ${(error as Error).message}`,
+        })
+      }
+    }
+
+    // Always clean up the temp dir — even on failure paths above. We
+    // don't want abandoned coco-compose-* directories accumulating in
+    // /tmp across sessions. Best-effort; ignore errors (e.g. file
+    // already removed by the user from inside their editor).
+    try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
+  }, [dispatch, resumeRef, state.commitCompose])
+
   // Resolve the destructive-action target from the live filtered+sorted
   // list the user is looking at, run the action against it, surface the
   // result on the status line, and silently refresh so the deleted item
@@ -2409,6 +2515,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void startCreatePullRequest()
       } else if (event.type === 'startChangelogView') {
         void startChangelogView()
+      } else if (event.type === 'openComposeInEditor') {
+        openComposeInEditor()
       } else if (event.type === 'yankText') {
         void yankText(event.value, event.label)
       } else if (event.type === 'runWorkflowAction') {
