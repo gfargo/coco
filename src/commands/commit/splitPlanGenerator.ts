@@ -12,6 +12,7 @@ import {
   hasPlanValidationIssues,
   HunkInventoryLike,
   PlanValidationIssues,
+  rescuePhantomHunks,
 } from './splitPlanValidation'
 
 export const NO_PREVIOUS_FEEDBACK_PLACEHOLDER = 'None — this is the first attempt.'
@@ -65,7 +66,7 @@ export async function generateValidatedCommitSplitPlan({
       ? formatPlanValidationFeedback(lastIssues)
       : NO_PREVIOUS_FEEDBACK_PLACEHOLDER
 
-    const plan = await executeChainWithSchema<CommitSplitPlan>(
+    const rawPlan = await executeChainWithSchema<CommitSplitPlan>(
       CommitSplitPlanSchema,
       llm,
       prompt,
@@ -83,6 +84,16 @@ export async function generateValidatedCommitSplitPlan({
         },
       }
     )
+
+    // Rescue pass: when the staged set is all new/added files (no
+    // hunk inventory), the LLM commonly emits "file::hunk-1" entries
+    // anyway because the prompt's hunk-aware language convinces it
+    // that's the right format. The validator then rejects them as
+    // unknown hunks and the retry loop just regenerates the same
+    // mistake. Pre-validation, promote phantom hunks back to
+    // file-level assignments — same semantic, accepted by the
+    // validator, no LLM re-roll needed.
+    const plan = rescuePhantomHunks(rawPlan, staged, hunkInventory)
 
     const issues = getPlanValidationIssues(plan, staged, hunkInventory)
     if (!hasPlanValidationIssues(issues)) {

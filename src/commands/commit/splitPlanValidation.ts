@@ -127,6 +127,78 @@ export function formatPlanValidationIssuesError(issues: PlanValidationIssues): s
     .join('; ')
 }
 
+/**
+ * Salvage a plan that references hunk IDs not in the inventory by
+ * promoting those hunks to file-level assignments. The LLM commonly
+ * does this when the staged set is all new/added files (no
+ * inventory) but the prompt's hunk-aware language convinces it to
+ * emit "file::hunk-1" anyway.
+ *
+ * Recovery rules:
+ *   1. For each group, walk `hunks[]`. Any entry whose ID isn't in
+ *      `inventory.byId` is a phantom — extract the file path from
+ *      the `<filepath>::hunk-N` format and drop the hunk.
+ *   2. If the recovered file path is in the staged set AND no other
+ *      group already claims it via `files[]`, append it to THIS
+ *      group's `files[]`. (Across multiple groups referencing the
+ *      same phantom hunk, the first group wins — subsequent groups
+ *      just drop the hunk without duplicating the file claim.)
+ *   3. Real hunk IDs (those in `inventory.byId`) pass through
+ *      untouched. Files already in `files[]` pass through untouched.
+ *
+ * If the inventory has real hunks AND the LLM produces an invalid
+ * one (typo, made-up name), the validator still rejects it. This
+ * function only rescues the "phantom hunks against an empty
+ * inventory" failure mode, which is the dominant failure for
+ * scenarios like `dirty-many-files` where every staged file is new.
+ *
+ * Returns a NEW plan object — original is not mutated.
+ */
+export function rescuePhantomHunks(
+  plan: CommitSplitPlan,
+  staged: FileChange[],
+  hunkInventory?: HunkInventoryLike
+): CommitSplitPlan {
+  const stagedFiles = new Set(staged.map((change) => change.filePath))
+  const claimedFiles = new Set<string>()
+  // First pass: harvest files already claimed via `files[]` so the
+  // recovery pass below doesn't double-claim them.
+  plan.groups.forEach((group) => {
+    (group.files || []).forEach((file) => claimedFiles.add(file))
+  })
+
+  const rescuedGroups = plan.groups.map((group) => {
+    const rescuedFiles = [...(group.files || [])]
+    const keptHunks: string[] = []
+
+    for (const hunkId of group.hunks || []) {
+      if (hunkInventory?.byId.has(hunkId)) {
+        // Real hunk — pass through.
+        keptHunks.push(hunkId)
+        continue
+      }
+      // Phantom hunk. Try to recover the file path.
+      const filePath = hunkId.split('::')[0]
+      if (filePath && stagedFiles.has(filePath) && !claimedFiles.has(filePath)) {
+        rescuedFiles.push(filePath)
+        claimedFiles.add(filePath)
+      }
+      // Either way the phantom hunk gets dropped — if we can't
+      // recover the file, the missingFiles validator will catch it
+      // and surface a real error. We just don't want "unknown hunks"
+      // to be that error when "file-level recovery would have worked".
+    }
+
+    return {
+      ...group,
+      files: rescuedFiles,
+      hunks: keptHunks,
+    }
+  })
+
+  return { ...plan, groups: rescuedGroups }
+}
+
 export function formatPlanValidationFeedback(issues: PlanValidationIssues): string {
   const sections: string[] = []
 
