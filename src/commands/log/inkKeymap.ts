@@ -399,6 +399,15 @@ export type GetLogInkFooterHintsOptions = {
   focus: LogInkFocus
   showHelp: boolean
   showCommandPalette?: boolean
+  /**
+   * Split-plan overlay state (#907 / #919). When `'ready'`, the footer
+   * surfaces overlay-local bindings (y apply / r regen / esc cancel /
+   * scroll keys) instead of the underlying compose-view hints — the
+   * underlying view's keystrokes are all intercepted while the
+   * overlay is open. `'loading'` and `'applying'` get simpler hints
+   * since most keys are no-ops in those phases.
+   */
+  splitPlanStatus?: 'loading' | 'ready' | 'applying'
   /** Set when the user has pressed a chord prefix (e.g. `g`) and the
    * dispatcher is waiting for the second key. The footer surfaces the
    * available continuations inline as a fallback for the popup overlay. */
@@ -558,6 +567,36 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     return {
       contextual: [': close', 'D/T/X confirm', 'I/M AI'],
       global: ['? help', 'q quit'],
+    }
+  }
+
+  // Split-plan overlay claims the footer while open — the underlying
+  // view's keystrokes are intercepted, so surfacing them would be
+  // misleading. Each phase gets its own hint set since most keys
+  // no-op during loading / applying.
+  if (options.splitPlanStatus === 'ready') {
+    return {
+      contextual: [
+        '↑/↓ scroll',
+        'pg up/dn',
+        'g/G top/bot',
+        'y apply',
+        'r regen',
+        'esc cancel',
+      ],
+      global: ['q quit'],
+    }
+  }
+  if (options.splitPlanStatus === 'loading') {
+    return {
+      contextual: ['generating plan…', 'esc cancel'],
+      global: ['q quit'],
+    }
+  }
+  if (options.splitPlanStatus === 'applying') {
+    return {
+      contextual: ['applying split…'],
+      global: ['q quit'],
     }
   }
 

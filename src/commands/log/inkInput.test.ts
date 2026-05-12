@@ -3111,24 +3111,76 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('intercepts j/k as line scroll, PgUp/PgDn as 10-line scroll', () => {
+    it('intercepts j/k and ↑/↓ as line scroll', () => {
       const state = applyLogInkAction(createLogInkState(rows), {
         type: 'setSplitPlanReady',
         plan: mockPlan,
         planContext: mockPlanContext,
       })
 
+      // j/k (vim convention)
       expect(getLogInkInputEvents(state, 'j', {}, { splitPlanLineCount: 50 })).toEqual([
         { type: 'action', action: { type: 'pageSplitPlan', delta: 1, lineCount: 50 } },
       ])
       expect(getLogInkInputEvents(state, 'k', {}, { splitPlanLineCount: 50 })).toEqual([
         { type: 'action', action: { type: 'pageSplitPlan', delta: -1, lineCount: 50 } },
       ])
+
+      // Arrow keys (universal convention) — same dispatch.
+      expect(getLogInkInputEvents(state, '', { downArrow: true }, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: 1, lineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, '', { upArrow: true }, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: -1, lineCount: 50 } },
+      ])
+    })
+
+    it('intercepts PgUp/PgDn and space/b as page scroll', () => {
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      // PgDown / PgUp
       expect(getLogInkInputEvents(state, '', { pageDown: true }, { splitPlanLineCount: 50 })).toEqual([
         { type: 'action', action: { type: 'pageSplitPlan', delta: 10, lineCount: 50 } },
       ])
       expect(getLogInkInputEvents(state, '', { pageUp: true }, { splitPlanLineCount: 50 })).toEqual([
         { type: 'action', action: { type: 'pageSplitPlan', delta: -10, lineCount: 50 } },
+      ])
+
+      // space / b — vim-style aliases, work in every terminal even when
+      // PgUp/PgDn don't deliver cleanly through Ink.
+      expect(getLogInkInputEvents(state, ' ', {}, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: 10, lineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, 'b', {}, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: -10, lineCount: 50 } },
+      ])
+    })
+
+    it('G jumps to bottom, gg jumps to top', () => {
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      // G — single keystroke, jumps to bottom (delta = lineCount).
+      expect(getLogInkInputEvents(state, 'G', {}, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: 50, lineCount: 50 } },
+      ])
+
+      // First g sets pendingKey for the gg chord.
+      expect(getLogInkInputEvents(state, 'g', {}, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'setPendingKey', value: 'g' } },
+      ])
+
+      // Second g (with pendingKey === 'g') jumps to top.
+      state = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      expect(getLogInkInputEvents(state, 'g', {}, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: -50, lineCount: 50 } },
       ])
     })
 

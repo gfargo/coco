@@ -953,17 +953,36 @@ export function getLogInkInputEvents(
     }
 
     if (state.splitPlan.status === 'ready' && lineCount > 0) {
-      if (inputValue === 'j') {
+      // Line-step scroll: j/k OR ↑/↓ arrows. Both feel natural —
+      // vim users reach for j/k, everyone else for arrows.
+      if (inputValue === 'j' || key.downArrow) {
         return [action({ type: 'pageSplitPlan', delta: 1, lineCount })]
       }
-      if (inputValue === 'k') {
+      if (inputValue === 'k' || key.upArrow) {
         return [action({ type: 'pageSplitPlan', delta: -1, lineCount })]
       }
-      if (key.pageDown) {
+      // Page-step scroll: PgDn/PgUp, plus space/b as vim-style aliases.
+      // Some terminals don't deliver PgDn/PgUp cleanly through Ink
+      // (the original report from #919 was that PgUp/PgDn didn't seem
+      // to work) — space/b gives a reliable fallback that works on
+      // every terminal.
+      if (key.pageDown || inputValue === ' ') {
         return [action({ type: 'pageSplitPlan', delta: 10, lineCount })]
       }
-      if (key.pageUp) {
+      if (key.pageUp || inputValue === 'b') {
         return [action({ type: 'pageSplitPlan', delta: -10, lineCount })]
+      }
+      // gg / G for top / bottom — matches the rest of the workstation
+      // (history view, diff view, etc. all use gg/G for first/last).
+      if (inputValue === 'G') {
+        return [action({ type: 'pageSplitPlan', delta: lineCount, lineCount })]
+      }
+      if (inputValue === 'g') {
+        // gg chord: first `g` sets pendingKey, second `g` jumps to top.
+        if (state.pendingKey === 'g') {
+          return [action({ type: 'pageSplitPlan', delta: -lineCount, lineCount })]
+        }
+        return [action({ type: 'setPendingKey', value: 'g' })]
       }
     }
 

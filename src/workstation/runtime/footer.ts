@@ -51,6 +51,7 @@ export function renderFooter(
     sidebarTab: state.sidebarTab,
     sidebarItemCount,
     compareBaseSet: Boolean(state.compareBase),
+    splitPlanStatus: state.splitPlan?.status,
   })
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.
