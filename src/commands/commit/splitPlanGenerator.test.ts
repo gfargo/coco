@@ -116,6 +116,41 @@ describe('generateValidatedCommitSplitPlan', () => {
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
   })
 
+  it('rescues mixed-mode file claims before validation (#919 regression)', async () => {
+    // Exact pattern from #919 manual testing on dirty-many-files:
+    // src/index.ts is the only modified file (has real hunks), but
+    // the LLM put it BOTH in group A's files[] AND used its hunks in
+    // group B's hunks[]. Validator's mixedFiles check rejected it
+    // for 3 attempts running. With rescueMixedFiles, the same output
+    // validates on the first attempt.
+    // baseArgs() has 2 staged files (a.ts, b.ts); include b.ts in
+    // group 2 so the plan satisfies file-coverage post-rescue.
+    const mixedPlan: CommitSplitPlan = {
+      groups: [
+        { title: 'feat: integration', files: ['a.ts'], hunks: [] },
+        { title: 'feat: misc', files: ['b.ts'], hunks: ['a.ts::hunk-1'] },
+      ],
+    }
+    mockExecuteChainWithSchema.mockResolvedValueOnce(mixedPlan)
+
+    // Override baseArgs to provide an inventory with real hunks for a.ts
+    // — this is what makes the mixedFiles validation kick in (without
+    // inventory, the hunks would just get phantom-rescued).
+    const inventoryWithRealHunks = {
+      byId: new Map([['a.ts::hunk-1', { id: 'a.ts::hunk-1', filePath: 'a.ts' }]]),
+      byFile: new Map([['a.ts', [{ id: 'a.ts::hunk-1', filePath: 'a.ts' }]]]),
+    }
+    const result = await generateValidatedCommitSplitPlan({
+      ...baseArgs(),
+      hunkInventory: inventoryWithRealHunks,
+    })
+
+    expect(result.attempts).toBe(1)
+    expect(result.plan.groups[0].files).toEqual(['a.ts'])
+    expect(result.plan.groups[1].hunks).toEqual([])
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
+  })
+
   it('throws after exhausting retries with the final validator complaints in the message', async () => {
     const invalidPlan: CommitSplitPlan = {
       groups: [{ title: 'a', files: ['a.ts'], hunks: [] }],

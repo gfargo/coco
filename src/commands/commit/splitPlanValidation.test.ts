@@ -5,6 +5,7 @@ import {
   getPlanValidationIssues,
   hasPlanValidationIssues,
   HunkInventoryLike,
+  rescueMixedFiles,
   rescuePhantomHunks,
 } from './splitPlanValidation'
 import { CommitSplitPlan } from './splitPlanTypes'
@@ -339,6 +340,104 @@ describe('splitPlanValidation', () => {
       const rescued = rescuePhantomHunks(plan, staged, buildHunkInventory({}))
 
       expect(rescued).toEqual(plan)
+    })
+  })
+
+  describe('rescueMixedFiles', () => {
+    // The dominant failure pattern from #918 testing: src/index.ts is
+    // the only modified file in dirty-many-files (so it has real hunks
+    // in the inventory). The LLM puts it in `files[]` of one group AND
+    // uses its real hunks in `hunks[]` of another group. Validator's
+    // mixedFiles check rejects. Rescue drops the redundant hunks since
+    // the file is already claimed via files[].
+
+    it('drops hunks for a file already claimed via files[]', () => {
+      const inventory = buildHunkInventory({
+        'src/index.ts': ['src/index.ts::hunk-1', 'src/index.ts::hunk-2'],
+      })
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: integration', files: ['src/index.ts'], hunks: [] },
+          { title: 'feat: misc', files: [], hunks: ['src/index.ts::hunk-1', 'src/index.ts::hunk-2'] },
+        ],
+      }
+
+      const rescued = rescueMixedFiles(plan, inventory)
+
+      expect(rescued.groups[0].files).toEqual(['src/index.ts'])
+      expect(rescued.groups[1].hunks).toEqual([])
+    })
+
+    it('drops only the conflicting hunks, leaves others alone', () => {
+      // Mixed group: some hunks are for a files[]-claimed file (drop),
+      // others are for an unclaimed file (keep). Real-world the LLM
+      // often groups several files' hunks together.
+      const inventory = buildHunkInventory({
+        'src/index.ts': ['src/index.ts::hunk-1'],
+        'src/router.ts': ['src/router.ts::hunk-1'],
+      })
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['src/index.ts'], hunks: [] },
+          { title: 'feat: b', files: [], hunks: ['src/index.ts::hunk-1', 'src/router.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescueMixedFiles(plan, inventory)
+
+      expect(rescued.groups[1].hunks).toEqual(['src/router.ts::hunk-1'])
+    })
+
+    it('passes through unknown hunks (phantom-hunk rescue handles them)', () => {
+      // If a hunk ID isn't in the inventory, mixedFiles rescue can't
+      // know which file it belongs to without parsing — leave it for
+      // the phantom-hunk rescue to handle (which runs earlier in the
+      // generator).
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['src/index.ts'], hunks: [] },
+          { title: 'feat: b', files: [], hunks: ['phantom.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescueMixedFiles(plan, buildHunkInventory({}))
+
+      // Unknown hunk left alone — phantom rescue handles it upstream.
+      expect(rescued.groups[1].hunks).toEqual(['phantom.ts::hunk-1'])
+    })
+
+    it('is a no-op when no file is claimed via both modes', () => {
+      const inventory = buildHunkInventory({
+        'src/router.ts': ['src/router.ts::hunk-1'],
+      })
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['src/index.ts'], hunks: [] },
+          { title: 'feat: b', files: [], hunks: ['src/router.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescueMixedFiles(plan, inventory)
+
+      expect(rescued).toEqual(plan)
+    })
+
+    it('handles the same file claimed via files[] AND hunks[] in the SAME group', () => {
+      // Less common LLM mistake but still possible — file appears in
+      // both arrays of the same group. Drop the hunks; files[] wins.
+      const inventory = buildHunkInventory({
+        'src/index.ts': ['src/index.ts::hunk-1'],
+      })
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: combined', files: ['src/index.ts'], hunks: ['src/index.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescueMixedFiles(plan, inventory)
+
+      expect(rescued.groups[0].files).toEqual(['src/index.ts'])
+      expect(rescued.groups[0].hunks).toEqual([])
     })
   })
 })

@@ -47,6 +47,7 @@ Return ONLY valid JSON matching this schema:
 
 Rules:
 - Every staged file MUST be assigned exactly once across all groups, either via "files" OR via every one of its hunk IDs (never both).
+- A SINGLE file is EITHER fully claimed via "files" (its name appears in one group's "files" array) OR fully claimed via "hunks" (every one of its hunk IDs is split across one or more groups). NEVER mix the two modes for the same file. If a file appears in any group's "files" array, that file's hunk IDs MUST NOT appear in any group's "hunks" array.
 - If you assign any hunk for a file, you MUST assign EVERY hunk for that file across the groups — partial coverage is invalid.
 - Do not list the same file in "files" of more than one group, and do not assign the same hunk ID to more than one group.
 - Only use file paths listed in the staged file inventory. Do not invent files.
