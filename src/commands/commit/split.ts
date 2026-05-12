@@ -50,7 +50,8 @@ Rules:
 - If you assign any hunk for a file, you MUST assign EVERY hunk for that file across the groups — partial coverage is invalid.
 - Do not list the same file in "files" of more than one group, and do not assign the same hunk ID to more than one group.
 - Only use file paths listed in the staged file inventory. Do not invent files.
-- Only use hunk IDs listed in the staged hunk inventory. Do not invent hunk IDs.
+- Only use hunk IDs LITERALLY copied from the "Staged hunk inventory" section below. Do not invent or guess hunk IDs.
+- If the hunk inventory says "No hunk-level inventory available" then EVERY group's "hunks" array MUST be empty (use only "files"). Do not write hunk IDs like "path::hunk-1" when no hunk inventory exists — those are not valid.
 - Prefer 2-5 commits unless the changes are truly all one topic.
 - Keep commit titles concise and understandable.
 

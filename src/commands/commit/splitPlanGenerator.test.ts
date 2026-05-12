@@ -45,7 +45,11 @@ describe('generateValidatedCommitSplitPlan', () => {
     const result = await generateValidatedCommitSplitPlan(baseArgs())
 
     expect(result.attempts).toBe(1)
-    expect(result.plan).toBe(validPlan)
+    // toStrictEqual rather than toBe — the generator now passes the
+    // raw plan through rescuePhantomHunks which returns a new object,
+    // so reference equality no longer holds. The semantic content is
+    // identical when the plan has no phantom hunks to rescue.
+    expect(result.plan).toStrictEqual(validPlan)
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
 
     const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, unknown>
@@ -70,7 +74,11 @@ describe('generateValidatedCommitSplitPlan', () => {
     const result = await generateValidatedCommitSplitPlan(baseArgs())
 
     expect(result.attempts).toBe(2)
-    expect(result.plan).toBe(validPlan)
+    // toStrictEqual rather than toBe — the generator now passes the
+    // raw plan through rescuePhantomHunks which returns a new object,
+    // so reference equality no longer holds. The semantic content is
+    // identical when the plan has no phantom hunks to rescue.
+    expect(result.plan).toStrictEqual(validPlan)
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(2)
 
     const firstCallVars = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, unknown>
@@ -79,6 +87,33 @@ describe('generateValidatedCommitSplitPlan', () => {
     expect(firstCallVars.previous_attempt_feedback).toBe(NO_PREVIOUS_FEEDBACK_PLACEHOLDER)
     expect(String(secondCallVars.previous_attempt_feedback)).toContain('Staged files missing')
     expect(String(secondCallVars.previous_attempt_feedback)).toContain('b.ts')
+  })
+
+  it('rescues phantom hunks before validation when the inventory is empty', async () => {
+    // Regression for the #916 failure pattern: LLM emits hunk IDs
+    // against an empty inventory (all staged files are new/added),
+    // validator rejects, retry loop never recovers. With the rescue
+    // pass, the same LLM output validates on the first attempt.
+    const phantomHunkPlan: CommitSplitPlan = {
+      groups: [
+        {
+          title: 'feat: a/b',
+          files: [],
+          hunks: ['a.ts::hunk-1', 'b.ts::hunk-1'],
+        },
+      ],
+    }
+    mockExecuteChainWithSchema.mockResolvedValueOnce(phantomHunkPlan)
+
+    // baseArgs() has 2 staged files (a.ts, b.ts) and no hunk inventory.
+    const result = await generateValidatedCommitSplitPlan(baseArgs())
+
+    expect(result.attempts).toBe(1)
+    // Phantom hunks promoted to files; the rescued plan validates
+    // because the staged files are now claimed via files[].
+    expect(result.plan.groups[0].files).toEqual(['a.ts', 'b.ts'])
+    expect(result.plan.groups[0].hunks).toEqual([])
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
   })
 
   it('throws after exhausting retries with the final validator complaints in the message', async () => {

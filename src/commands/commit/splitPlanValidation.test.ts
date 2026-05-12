@@ -5,6 +5,7 @@ import {
   getPlanValidationIssues,
   hasPlanValidationIssues,
   HunkInventoryLike,
+  rescuePhantomHunks,
 } from './splitPlanValidation'
 import { CommitSplitPlan } from './splitPlanTypes'
 
@@ -184,6 +185,160 @@ describe('splitPlanValidation', () => {
       })
 
       expect(message).toBe('unknown files: ghost.ts; duplicate files: a.ts')
+    })
+  })
+
+  describe('rescuePhantomHunks', () => {
+    // The dominant failure pattern from #916 testing: all staged files
+    // are new/added (so collectHunkInventory skips them, leaving an
+    // empty inventory), but the LLM still emits hunk IDs in the
+    // canonical `<filepath>::hunk-N` shape. Validator rejects them as
+    // unknown; retry loop just regenerates the same mistake. Rescue
+    // promotes those phantom hunks to file-level assignments so the
+    // semantically-equivalent plan survives validation.
+
+    it('rescues phantom hunks to file-level assignments when inventory is empty', () => {
+      const staged = ['src/widgets/button.ts', 'src/widgets/input.ts'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          {
+            title: 'feat: widgets',
+            files: [],
+            hunks: ['src/widgets/button.ts::hunk-1', 'src/widgets/input.ts::hunk-1'],
+          },
+        ],
+      }
+
+      const rescued = rescuePhantomHunks(plan, staged, buildHunkInventory({}))
+
+      expect(rescued.groups[0].files).toEqual([
+        'src/widgets/button.ts',
+        'src/widgets/input.ts',
+      ])
+      expect(rescued.groups[0].hunks).toEqual([])
+    })
+
+    it('preserves real hunk IDs that are in the inventory', () => {
+      const staged = ['src/router.ts'].map(stagedFile)
+      const inventory = buildHunkInventory({
+        'src/router.ts': ['src/router.ts::hunk-1', 'src/router.ts::hunk-2'],
+      })
+      const plan: CommitSplitPlan = {
+        groups: [
+          {
+            title: 'feat: router',
+            files: [],
+            hunks: ['src/router.ts::hunk-1', 'src/router.ts::hunk-2'],
+          },
+        ],
+      }
+
+      const rescued = rescuePhantomHunks(plan, staged, inventory)
+
+      // Real hunks pass through, no file-level promotion.
+      expect(rescued.groups[0].hunks).toEqual([
+        'src/router.ts::hunk-1',
+        'src/router.ts::hunk-2',
+      ])
+      expect(rescued.groups[0].files).toEqual([])
+    })
+
+    it('first group wins when multiple groups reference the same phantom hunk', () => {
+      // LLM mistake: split a "single file's hunks" across groups when
+      // the file actually has zero hunks. Rescue assigns the file to
+      // the first group only; subsequent groups silently drop the
+      // phantom hunk.
+      const staged = ['src/widget.ts'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: [], hunks: ['src/widget.ts::hunk-1'] },
+          { title: 'feat: b', files: [], hunks: ['src/widget.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescuePhantomHunks(plan, staged, buildHunkInventory({}))
+
+      expect(rescued.groups[0].files).toEqual(['src/widget.ts'])
+      expect(rescued.groups[1].files).toEqual([])
+      expect(rescued.groups[0].hunks).toEqual([])
+      expect(rescued.groups[1].hunks).toEqual([])
+    })
+
+    it('does not duplicate-claim a file already in another group\'s files[]', () => {
+      // If group A already legitimately claims the file via files[],
+      // group B's phantom hunk for that file just drops — no
+      // duplicateFiles validator error.
+      const staged = ['src/widget.ts'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['src/widget.ts'], hunks: [] },
+          { title: 'feat: b', files: [], hunks: ['src/widget.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescuePhantomHunks(plan, staged, buildHunkInventory({}))
+
+      expect(rescued.groups[0].files).toEqual(['src/widget.ts'])
+      expect(rescued.groups[1].files).toEqual([])
+    })
+
+    it('drops phantom hunks whose file path is not in the staged set', () => {
+      // LLM hallucinated both the hunk AND a file that doesn't exist.
+      // Drop the hunk; the validator's missingFiles check will catch
+      // any actually-missing staged files separately.
+      const staged = ['src/real.ts'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          {
+            title: 'feat: x',
+            files: ['src/real.ts'],
+            hunks: ['src/hallucinated.ts::hunk-1'],
+          },
+        ],
+      }
+
+      const rescued = rescuePhantomHunks(plan, staged, buildHunkInventory({}))
+
+      expect(rescued.groups[0].files).toEqual(['src/real.ts'])
+      expect(rescued.groups[0].hunks).toEqual([])
+    })
+
+    it('handles a mix of real hunks (kept) and phantom hunks (rescued)', () => {
+      // Edge case: inventory has hunks for one file (modified) but
+      // the LLM also emits a phantom hunk for a different staged
+      // file that has no inventory (added). Both should be handled
+      // correctly — real preserved, phantom rescued.
+      const staged = ['src/router.ts', 'src/widget.ts'].map(stagedFile)
+      const inventory = buildHunkInventory({
+        'src/router.ts': ['src/router.ts::hunk-1'],
+      })
+      const plan: CommitSplitPlan = {
+        groups: [
+          {
+            title: 'feat: combined',
+            files: [],
+            hunks: ['src/router.ts::hunk-1', 'src/widget.ts::hunk-1'],
+          },
+        ],
+      }
+
+      const rescued = rescuePhantomHunks(plan, staged, inventory)
+
+      expect(rescued.groups[0].hunks).toEqual(['src/router.ts::hunk-1'])
+      expect(rescued.groups[0].files).toEqual(['src/widget.ts'])
+    })
+
+    it('is a no-op when there are no hunks anywhere', () => {
+      const staged = ['src/a.ts', 'src/b.ts'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: ab', files: ['src/a.ts', 'src/b.ts'], hunks: [] },
+        ],
+      }
+
+      const rescued = rescuePhantomHunks(plan, staged, buildHunkInventory({}))
+
+      expect(rescued).toEqual(plan)
     })
   })
 })
