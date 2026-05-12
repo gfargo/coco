@@ -12,6 +12,7 @@ import {
   hasPlanValidationIssues,
   HunkInventoryLike,
   PlanValidationIssues,
+  rescueMixedFiles,
   rescuePhantomHunks,
 } from './splitPlanValidation'
 
@@ -85,15 +86,24 @@ export async function generateValidatedCommitSplitPlan({
       }
     )
 
-    // Rescue pass: when the staged set is all new/added files (no
-    // hunk inventory), the LLM commonly emits "file::hunk-1" entries
-    // anyway because the prompt's hunk-aware language convinces it
-    // that's the right format. The validator then rejects them as
-    // unknown hunks and the retry loop just regenerates the same
-    // mistake. Pre-validation, promote phantom hunks back to
-    // file-level assignments — same semantic, accepted by the
-    // validator, no LLM re-roll needed.
-    const plan = rescuePhantomHunks(rawPlan, staged, hunkInventory)
+    // Rescue passes (#918, #919). Run in order — order matters:
+    //
+    //   1. rescuePhantomHunks: LLM commonly emits "file::hunk-1"
+    //      against an empty inventory (all staged files are new).
+    //      Promote those to file-level assignments.
+    //
+    //   2. rescueMixedFiles: LLM commonly puts a file in `files[]`
+    //      of group A AND uses its hunks in `hunks[]` of group B.
+    //      Drop the hunks (the file-level claim is more specific).
+    //      Must run AFTER phantom-hunk rescue because the rescue
+    //      itself can create mixed-files situations (phantom hunks
+    //      get promoted to files; pre-existing real hunks for the
+    //      same file remain elsewhere and now overlap).
+    //
+    // Both rescues are no-ops when there's nothing to rescue, so
+    // running them unconditionally costs nothing on healthy plans.
+    const phantomRescued = rescuePhantomHunks(rawPlan, staged, hunkInventory)
+    const plan = rescueMixedFiles(phantomRescued, hunkInventory)
 
     const issues = getPlanValidationIssues(plan, staged, hunkInventory)
     if (!hasPlanValidationIssues(issues)) {

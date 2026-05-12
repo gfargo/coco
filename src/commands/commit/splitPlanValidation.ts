@@ -199,6 +199,58 @@ export function rescuePhantomHunks(
   return { ...plan, groups: rescuedGroups }
 }
 
+/**
+ * Salvage a plan where a file appears BOTH in some group's `files[]`
+ * AND as covered by hunks in some (possibly different) group's
+ * `hunks[]`. The validator calls this `mixedFiles` and rejects it.
+ *
+ * Common cause after `rescuePhantomHunks` runs: the LLM put one of
+ * the (legitimately modifiable) files in `files[]` of group A, and
+ * put its real hunks in `hunks[]` of group B. The phantom-hunk
+ * rescue doesn't touch this — real hunks pass through — so the
+ * mixed-files combination survives into validation.
+ *
+ * Recovery: drop the hunks. The `files[]` claim is more specific
+ * about user intent ("this whole file goes in commit A"); the hunks
+ * become redundant once the whole file is already committed
+ * somewhere. The validator's coverage check is satisfied because the
+ * file is now claimed exactly once (via `files[]`).
+ *
+ * If a file's hunks are dropped AND the file isn't in any group's
+ * `files[]`, it'll fall through to the `missingFiles` check — but
+ * that's caught upstream by the file-coverage requirement.
+ *
+ * Returns a NEW plan object — original is not mutated.
+ */
+export function rescueMixedFiles(
+  plan: CommitSplitPlan,
+  hunkInventory?: HunkInventoryLike
+): CommitSplitPlan {
+  // First pass: collect every file claimed via files[] across all
+  // groups. These are the files whose `hunks[]` entries become
+  // redundant.
+  const fileClaims = new Set<string>()
+  plan.groups.forEach((group) => {
+    (group.files || []).forEach((file) => fileClaims.add(file))
+  })
+
+  // Second pass: drop hunks whose file path is in fileClaims.
+  const rescuedGroups = plan.groups.map((group) => {
+    const keptHunks = (group.hunks || []).filter((hunkId) => {
+      const hunk = hunkInventory?.byId.get(hunkId)
+      // Hunk isn't in inventory → not our problem here (the phantom-
+      // hunk rescue handles unknown hunks). Pass through.
+      if (!hunk) return true
+      // Hunk's file is claimed via files[] somewhere → redundant.
+      return !fileClaims.has(hunk.filePath)
+    })
+
+    return { ...group, hunks: keptHunks }
+  })
+
+  return { ...plan, groups: rescuedGroups }
+}
+
 export function formatPlanValidationFeedback(issues: PlanValidationIssues): string {
   const sections: string[] = []
 
