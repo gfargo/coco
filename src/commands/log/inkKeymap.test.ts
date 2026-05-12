@@ -71,6 +71,43 @@ describe('log Ink keymap', () => {
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
+    // Split-plan overlay claims the footer while open — underlying
+    // view's bindings are all intercepted, so surfacing them would
+    // mislead the user about what works. Each phase gets its own
+    // hint set since most keys no-op during loading / applying.
+    expect(getLogInkFooterHints({
+      activeView: 'compose',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+      splitPlanStatus: 'ready',
+    })).toEqual({
+      contextual: ['↑/↓ scroll', 'pg up/dn', 'g/G top/bot', 'y apply', 'r regen', 'esc cancel'],
+      global: ['q quit'],
+    })
+
+    expect(getLogInkFooterHints({
+      activeView: 'compose',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+      splitPlanStatus: 'loading',
+    })).toEqual({
+      contextual: ['generating plan…', 'esc cancel'],
+      global: ['q quit'],
+    })
+
+    expect(getLogInkFooterHints({
+      activeView: 'compose',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+      splitPlanStatus: 'applying',
+    })).toEqual({
+      contextual: ['applying split…'],
+      global: ['q quit'],
+    })
+
     expect(getLogInkFooterHints({
       activeView: 'branches',
       filterMode: false,
