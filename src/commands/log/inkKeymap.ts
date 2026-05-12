@@ -12,6 +12,7 @@ export type LogInkCommandId =
   | 'cycleSort'
   | 'editCommit'
   | 'editCommitExternal'
+  | 'commitSplit'
   | 'focusNext'
   | 'focusPrevious'
   | 'help'
@@ -332,6 +333,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['commits'],
   },
   {
+    id: 'commitSplit',
+    keys: ['S'],
+    label: 'split commit',
+    description: 'Generate a plan to split staged changes into multiple coherent commits; review and apply from an overlay.',
+    contexts: ['commits'],
+  },
+  {
     id: 'commit',
     keys: ['c'],
     label: 'commit',
@@ -641,7 +649,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'compose') {
     return {
-      contextual: ['e edit', 'E $EDITOR', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
+      contextual: ['e edit', 'E $EDITOR', 'c commit', 'S split', 'I AI draft', 'gs hunks', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

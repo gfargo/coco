@@ -1,13 +1,28 @@
 import { Arguments } from 'yargs'
+import { type TiktokenModel } from '@langchain/openai'
 import { SimpleGit } from 'simple-git'
 import { handler as commitHandler } from '../commands/commit/handler'
 import { CommitOptions } from '../commands/commit/config'
 import { generateCommitDraft } from '../commands/commit/generateCommitDraft'
+import {
+  CommitSplitPlan,
+  CommitSplitPlanContext,
+  applyCommitSplitPlan,
+  prepareCommitSplitPlan,
+} from '../commands/commit/split'
+import { LLMModel } from '../lib/langchain/types'
+import {
+  getApiKeyForModel,
+  getModelAndProviderFromConfig,
+} from '../lib/langchain/utils'
+import { resolveDynamicService } from '../lib/langchain/utils/dynamicModels'
+import { getLlm } from '../lib/langchain/utils/getLlm'
 import { loadConfig } from '../lib/config/utils/loadConfig'
 import { createCommit, PreCommitHookError } from '../lib/simple-git/createCommit'
 import { getRepo } from '../lib/simple-git/getRepo'
 import { isCommandExitError } from '../lib/utils/commandExit'
 import { Logger } from '../lib/utils/logger'
+import { getTokenCounter } from '../lib/utils/tokenizer'
 
 export type CommitWorkflowAction = 'commit' | 'split-plan' | 'split-apply'
 
@@ -198,6 +213,147 @@ export async function runCommitDraftWorkflow(
       }
     }
 
+    return formatCommitFailure(error)
+  }
+}
+
+/**
+ * Result shape for the workstation-side split-plan workflow. Distinct
+ * from `CommitWorkflowResult` because the workstation needs the
+ * structured plan + context (not just a string message) so the
+ * overlay can render groups one-by-one AND pass the same plan to
+ * apply without re-rolling the LLM.
+ *
+ * `planContext` carries the staged-state snapshot the apply phase
+ * needs (`changes` + `hunkInventory`). The workstation holds it in
+ * state between plan generation and apply.
+ */
+export type CommitSplitPlanResult =
+  | { ok: true; plan: CommitSplitPlan; planContext: CommitSplitPlanContext }
+  | { ok: false; message: string; details?: string[] }
+
+/**
+ * Run plan generation in isolation — no formatting, no apply, no
+ * stdout side effects. Returns the structured plan + the staged-state
+ * context the apply phase needs. The workstation's `S` keystroke
+ * calls this; the overlay renders the result; `y`/Enter passes the
+ * plan straight to `runCommitSplitApplyWorkflow` so the executed
+ * split matches what the user previewed.
+ */
+export async function runCommitSplitPlanWorkflow(
+  input: { git?: SimpleGit } = {}
+): Promise<CommitSplitPlanResult> {
+  const git = input.git || getRepo()
+  const argv = createCommitWorkflowArgv('split-plan')
+  const logger = new Logger({ silent: true })
+  const config = loadConfig<CommitOptions, CommitWorkflowArgv>(argv)
+
+  // Mirror the LLM / tokenizer setup from commit/handler.ts so plan
+  // generation runs against the same provider config as `coco commit
+  // --split --plan` would from the CLI. No fallback if the auth check
+  // fails — surface it as a workflow error instead.
+  const key = getApiKeyForModel(config)
+  const { provider } = getModelAndProviderFromConfig(config)
+  const commitService = resolveDynamicService(config, 'commit')
+  const model = commitService.model
+
+  if (config.service.authentication.type !== 'None' && !key) {
+    return {
+      ok: false,
+      message: 'No API key configured. Set one via env or .coco.config.json before running split.',
+    }
+  }
+
+  try {
+    const tokenizer = await getTokenCounter(
+      provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
+    )
+    const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
+
+    const result = await prepareCommitSplitPlan({
+      argv,
+      config,
+      git,
+      logger,
+      tokenizer,
+      llm,
+    })
+
+    if ('empty' in result) {
+      return {
+        ok: false,
+        message: 'No staged changes to split. Stage some files first.',
+      }
+    }
+
+    return {
+      ok: true,
+      plan: result.plan,
+      planContext: result.context,
+    }
+  } catch (error) {
+    if (isCommandExitError(error)) {
+      const lines = compactOutputLines(error.message)
+      return {
+        ok: false,
+        message: lines[0] || 'Split plan generation failed.',
+        details: lines.slice(1, 6),
+      }
+    }
+    // formatCommitFailure returns the broader CommitWorkflowResult shape
+    // (ok: boolean). Narrow it here — by construction the catch path only
+    // ever produces failures, so we know `ok` will be false.
+    const failure = formatCommitFailure(error)
+    return {
+      ok: false,
+      message: failure.message,
+      details: failure.details,
+    }
+  }
+}
+
+/**
+ * Apply a pre-generated split plan. Takes the plan + context that
+ * `runCommitSplitPlanWorkflow` produced (held in workstation state
+ * during the preview phase) and runs the underlying
+ * `applyCommitSplitPlan` — same code path as `coco commit --split
+ * --apply` would take through the CLI, just skipping the plan
+ * regeneration since the workstation already has the plan to apply.
+ *
+ * No LLM call here — pure git-index mutation. Each plan group becomes
+ * a single commit, in order.
+ */
+export async function runCommitSplitApplyWorkflow(input: {
+  plan: CommitSplitPlan
+  planContext: CommitSplitPlanContext
+  git?: SimpleGit
+  noVerify?: boolean
+}): Promise<CommitWorkflowResult> {
+  const git = input.git || getRepo()
+  const logger = new Logger({ silent: true })
+
+  try {
+    const message = await applyCommitSplitPlan({
+      plan: input.plan,
+      changes: input.planContext.changes,
+      hunkInventory: input.planContext.hunkInventory,
+      git,
+      logger,
+      noVerify: input.noVerify || false,
+    })
+    return {
+      ok: true,
+      message: message || 'Applied commit split plan.',
+    }
+  } catch (error) {
+    if (isCommandExitError(error)) {
+      const lines = compactOutputLines(error.message)
+      return {
+        ok: error.code === 0,
+        message: lines[0] || error.message,
+        details: lines.slice(1, 6),
+      }
+    }
     return formatCommitFailure(error)
   }
 }

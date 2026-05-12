@@ -55,6 +55,9 @@ export type LogInkInputEvent =
   | { type: 'yankChangelog' }
   | { type: 'openChangelogInEditor' }
   | { type: 'openComposeInEditor' }
+  | { type: 'startCommitSplit' }
+  | { type: 'applyCommitSplit' }
+  | { type: 'cancelCommitSplit' }
   | { type: 'runWorkflowAction'; id: string; payload?: string }
   | { type: 'openFileInEditor'; path: string }
   | { type: 'yankFromActiveView'; short?: boolean }
@@ -171,6 +174,13 @@ export type LogInkInputContext = {
    * or generation failed — the scroll handlers no-op in that case.
    */
   changelogLineCount?: number
+  /**
+   * Total rendered line count of the split-plan overlay content.
+   * Used by the overlay's scroll bindings to clamp `pageSplitPlan`
+   * deltas. The runtime computes this from `state.splitPlan.plan`
+   * groups before dispatching to the input handler.
+   */
+  splitPlanLineCount?: number
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -903,6 +913,55 @@ export function getLogInkInputEvents(
       ]
     }
 
+    return []
+  }
+
+  // Split-plan overlay intercept (#907). When the overlay is open we
+  // claim every keystroke — no fall-through to the underlying compose
+  // surface, no accidental `c` commits, no chord prefixes. The overlay
+  // owns the screen until the user accepts (`y`/Enter), cancels (Esc),
+  // or scrolls (`j/k`/PgUp/PgDn). Status / loading / applying phases
+  // intercept keystrokes equally; the only state-dependent variation
+  // is that `y`/Enter is a no-op while loading or applying (nothing
+  // to accept yet, or accept already in flight).
+  if (state.splitPlan) {
+    const lineCount = context.splitPlanLineCount || 0
+
+    if (key.escape) {
+      // Esc during loading is a soft cancel — we can't actually abort
+      // the in-flight LLM call (runs in a sibling promise), but we
+      // close the overlay and the runtime ignores the resolved plan
+      // when it eventually lands (it checks `state.splitPlan?.status`
+      // before dispatching setSplitPlanReady).
+      return [{ type: 'cancelCommitSplit' }]
+    }
+
+    // Apply only fires from the 'ready' state. While loading we have
+    // no plan; while applying we'd race the in-flight apply call. The
+    // intercept consumes the keystroke either way so users don't
+    // fall back into the compose surface.
+    if ((inputValue === 'y' || key.return) && state.splitPlan.status === 'ready') {
+      return [{ type: 'applyCommitSplit' }]
+    }
+
+    if (state.splitPlan.status === 'ready' && lineCount > 0) {
+      if (inputValue === 'j') {
+        return [action({ type: 'pageSplitPlan', delta: 1, lineCount })]
+      }
+      if (inputValue === 'k') {
+        return [action({ type: 'pageSplitPlan', delta: -1, lineCount })]
+      }
+      if (key.pageDown) {
+        return [action({ type: 'pageSplitPlan', delta: 10, lineCount })]
+      }
+      if (key.pageUp) {
+        return [action({ type: 'pageSplitPlan', delta: -10, lineCount })]
+      }
+    }
+
+    // Catch-all: consume the keystroke so it doesn't reach the
+    // underlying compose surface. Returning an empty array keeps the
+    // overlay open without dispatching any state change.
     return []
   }
 
@@ -2030,7 +2089,18 @@ export function getLogInkInputEvents(
   // Global stash hotkey: `S` opens a stash-message prompt and
   // `createStash` runs once submitted. Available everywhere there's
   // not a more modal handler in front of it.
-  if (inputValue === 'S') {
+  //
+  // Scoped away from compose/status/diff (#907) since those views
+  // map `S` to the commit-split flow (handler is further down so
+  // those views fall through past this check). The triad is the
+  // natural commit-message work surface; create-stash is reachable
+  // from anywhere else (history, branches, tags, …).
+  if (
+    inputValue === 'S' &&
+    state.activeView !== 'compose' &&
+    state.activeView !== 'status' &&
+    state.activeView !== 'diff'
+  ) {
     return [action({
       type: 'openInputPrompt',
       kind: 'create-stash',
@@ -2345,6 +2415,26 @@ export function getLogInkInputEvents(
       events.push(action({ type: 'pushView', value: 'compose' }))
     }
     events.push({ type: 'openComposeInEditor' })
+    return events
+  }
+
+  // Capital `S` — start the `coco commit --split` flow as an in-TUI
+  // operation (#907). Generates a split plan against the current
+  // staged set and opens the plan-review overlay; from inside the
+  // overlay, `y`/Enter applies the previewed plan. Fires from the
+  // same triad as `E` (compose / status / diff) since those are the
+  // entry points to commit-message work; from status/diff we push
+  // into compose first so the flow ends with the user inside the
+  // compose surface (now with the split applied).
+  if (
+    inputValue === 'S' &&
+    (state.activeView === 'status' || state.activeView === 'diff' || state.activeView === 'compose')
+  ) {
+    const events: LogInkInputEvent[] = []
+    if (state.activeView !== 'compose') {
+      events.push(action({ type: 'pushView', value: 'compose' }))
+    }
+    events.push({ type: 'startCommitSplit' })
     return events
   }
 

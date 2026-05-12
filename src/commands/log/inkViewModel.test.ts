@@ -1188,4 +1188,121 @@ describe('log Ink view model', () => {
       expect(state.viewStack).toEqual(['history'])
     })
   })
+
+  describe('split-plan overlay state (#907)', () => {
+    const mockPlan = {
+      groups: [
+        { title: 'feat: foo', files: ['src/foo.ts'], hunks: [] },
+        { title: 'feat: bar', files: ['src/bar.ts'], hunks: [] },
+      ],
+    }
+    const mockPlanContext = {
+      changes: { staged: [], unstaged: [], untracked: [] },
+      hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any
+
+    it('startSplitPlanLoad opens the overlay in loading state', () => {
+      let state = createLogInkState(rows)
+      expect(state.splitPlan).toBeUndefined()
+
+      state = applyLogInkAction(state, { type: 'startSplitPlanLoad' })
+      expect(state.splitPlan).toEqual({ status: 'loading', scrollOffset: 0 })
+    })
+
+    it('setSplitPlanReady populates the plan and resets scroll', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'startSplitPlanLoad' })
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      expect(state.splitPlan).toEqual({
+        status: 'ready',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+        scrollOffset: 0,
+      })
+    })
+
+    it('setSplitPlanApplying preserves plan + context, transitions status', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      state = applyLogInkAction(state, { type: 'setSplitPlanApplying' })
+
+      expect(state.splitPlan?.status).toBe('applying')
+      // Plan + context preserved so the overlay can keep rendering
+      // the same content during the apply phase.
+      expect(state.splitPlan?.plan).toEqual(mockPlan)
+      expect(state.splitPlan?.planContext).toEqual(mockPlanContext)
+    })
+
+    it('setSplitPlanError keeps the overlay open when a plan exists', () => {
+      // Apply failed mid-flight — we keep the overlay open so the user
+      // can retry or back out. Status flips back to 'ready' (no longer
+      // applying), with the error annotated for the renderer.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      state = applyLogInkAction(state, { type: 'setSplitPlanApplying' })
+      state = applyLogInkAction(state, { type: 'setSplitPlanError', error: 'patch conflict' })
+
+      expect(state.splitPlan?.status).toBe('ready')
+      expect(state.splitPlan?.error).toBe('patch conflict')
+      expect(state.splitPlan?.plan).toEqual(mockPlan)
+    })
+
+    it('setSplitPlanError closes the overlay when no plan exists', () => {
+      // Initial generation failed — nothing to retry from, close out.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'startSplitPlanLoad' })
+      state = applyLogInkAction(state, { type: 'setSplitPlanError', error: 'LLM unreachable' })
+
+      expect(state.splitPlan).toBeUndefined()
+    })
+
+    it('pageSplitPlan scrolls within the line-count bounds', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      state = applyLogInkAction(state, { type: 'pageSplitPlan', delta: 5, lineCount: 20 })
+      expect(state.splitPlan?.scrollOffset).toBe(5)
+
+      // Clamps to 0 on overshoot the other way.
+      state = applyLogInkAction(state, { type: 'pageSplitPlan', delta: -100, lineCount: 20 })
+      expect(state.splitPlan?.scrollOffset).toBe(0)
+
+      // Clamps to lineCount-1 on overshoot upward.
+      state = applyLogInkAction(state, { type: 'pageSplitPlan', delta: 999, lineCount: 20 })
+      expect(state.splitPlan?.scrollOffset).toBe(19)
+    })
+
+    it('clearSplitPlan closes the overlay regardless of phase', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'startSplitPlanLoad' })
+      state = applyLogInkAction(state, { type: 'clearSplitPlan' })
+      expect(state.splitPlan).toBeUndefined()
+
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      state = applyLogInkAction(state, { type: 'clearSplitPlan' })
+      expect(state.splitPlan).toBeUndefined()
+    })
+  })
 })
