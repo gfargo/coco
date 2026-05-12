@@ -1069,6 +1069,41 @@ describe('log Ink input interactions', () => {
     expect(events.some((event) => event.type === 'openComposeInEditor')).toBe(false)
   })
 
+  it('S from compose starts the split flow', () => {
+    // Capital `S` — split staged changes into multiple commits. From
+    // compose, single dispatch (no view push needed since we're
+    // already in compose). Runtime callback handles pre-flight + plan
+    // generation; from the input handler's perspective it's one event.
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+    expect(getLogInkInputEvents(state, 'S')).toEqual([
+      { type: 'startCommitSplit' },
+    ])
+  })
+
+  it('S from status or diff pushes compose first, then starts the split flow', () => {
+    // Mirrors `E` and lowercase `c` — from worktree views, the
+    // keystroke auto-jumps into compose before invoking the split.
+    const statusState = createLogInkState(rows, { activeView: 'status' })
+    expect(getLogInkInputEvents(statusState, 'S', {}, { worktreeFileCount: 1 })).toEqual([
+      { type: 'action', action: { type: 'pushView', value: 'compose' } },
+      { type: 'startCommitSplit' },
+    ])
+
+    const diffState = createLogInkState(rows, { activeView: 'diff' })
+    expect(getLogInkInputEvents(diffState, 'S', {}, { worktreeFileCount: 1 })).toEqual([
+      { type: 'action', action: { type: 'pushView', value: 'compose' } },
+      { type: 'startCommitSplit' },
+    ])
+  })
+
+  it('S does not fire outside the status / diff / compose triad', () => {
+    const historyState = createLogInkState(rows, { activeView: 'history' })
+    const events = getLogInkInputEvents(historyState, 'S')
+    expect(events.some((event) => event.type === 'startCommitSplit')).toBe(false)
+  })
+
   it('preserves draft state across compose → history → compose round-trips', () => {
     let state = createLogInkState(rows)
 
@@ -3025,6 +3060,101 @@ describe('log Ink input interactions', () => {
         (e) => e.type === 'runWorkflowAction' && (e as { id: string }).id === 'resolve-conflict-stage'
       )
       expect(hasConflictStage).toBe(false)
+    })
+  })
+
+  describe('split-plan overlay intercept (#907)', () => {
+    // Mock plan + context for the 'ready' state tests. The shape is
+    // what runCommitSplitPlanWorkflow would return on success — the
+    // input handler doesn't validate it deeply, just checks presence.
+    const mockPlan = {
+      groups: [
+        { title: 'feat: foo', files: ['src/foo.ts'], hunks: [] },
+        { title: 'feat: bar', files: ['src/bar.ts'], hunks: [] },
+      ],
+    }
+    const mockPlanContext = {
+      changes: { staged: [], unstaged: [], untracked: [] },
+      hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any
+
+    it('intercepts y/Enter as apply when the plan is ready', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      expect(getLogInkInputEvents(state, 'y', {}, { splitPlanLineCount: 10 })).toEqual([
+        { type: 'applyCommitSplit' },
+      ])
+      expect(getLogInkInputEvents(state, '', { return: true }, { splitPlanLineCount: 10 })).toEqual([
+        { type: 'applyCommitSplit' },
+      ])
+    })
+
+    it('intercepts Esc as cancel from any phase', () => {
+      const loadingState = applyLogInkAction(createLogInkState(rows), { type: 'startSplitPlanLoad' })
+      expect(getLogInkInputEvents(loadingState, '', { escape: true })).toEqual([
+        { type: 'cancelCommitSplit' },
+      ])
+
+      const readyState = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      expect(getLogInkInputEvents(readyState, '', { escape: true })).toEqual([
+        { type: 'cancelCommitSplit' },
+      ])
+    })
+
+    it('intercepts j/k as line scroll, PgUp/PgDn as 10-line scroll', () => {
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      expect(getLogInkInputEvents(state, 'j', {}, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: 1, lineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, 'k', {}, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: -1, lineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, '', { pageDown: true }, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: 10, lineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, '', { pageUp: true }, { splitPlanLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageSplitPlan', delta: -10, lineCount: 50 } },
+      ])
+    })
+
+    it('y/Enter no-op while loading (no plan to apply)', () => {
+      const state = applyLogInkAction(createLogInkState(rows), { type: 'startSplitPlanLoad' })
+
+      // Returns empty array — keystroke consumed, no dispatch.
+      expect(getLogInkInputEvents(state, 'y')).toEqual([])
+      expect(getLogInkInputEvents(state, '', { return: true })).toEqual([])
+    })
+
+    it('consumes all other keystrokes without falling through to compose bindings', () => {
+      // While the overlay is open, none of the compose keystrokes
+      // (`c` commit, `e` inline-edit, `E` external editor) should
+      // reach the underlying view.
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      // `c` on compose normally fires createManualCommit. With the
+      // overlay open, it should be consumed (empty array, no event).
+      expect(getLogInkInputEvents(state, 'c', {}, { splitPlanLineCount: 10 })).toEqual([])
+      expect(getLogInkInputEvents(state, 'e', {}, { splitPlanLineCount: 10 })).toEqual([])
+      expect(getLogInkInputEvents(state, 'E', {}, { splitPlanLineCount: 10 })).toEqual([])
     })
   })
 })

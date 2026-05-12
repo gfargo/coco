@@ -99,10 +99,22 @@ type StagedHunk = {
   preview: string
 }
 
-type HunkInventory = {
+export type HunkInventory = {
   hunks: StagedHunk[]
   byId: Map<string, StagedHunk>
   byFile: Map<string, StagedHunk[]>
+}
+
+/**
+ * Snapshot of the staged-state context needed to apply a previously-
+ * generated split plan without re-running the plan generator. The
+ * workstation flow holds onto this between the plan preview and the
+ * `y` to apply, so the executed split matches exactly what the user
+ * reviewed — no LLM re-roll between preview and execution.
+ */
+export type CommitSplitPlanContext = {
+  changes: Awaited<ReturnType<typeof getChanges>>
+  hunkInventory: HunkInventory
 }
 
 function getGroupFiles(group: CommitSplitGroup): string[] {
@@ -265,7 +277,7 @@ async function applyPatchToIndex(
   })
 }
 
-async function applyCommitSplitPlan({
+export async function applyCommitSplitPlan({
   plan,
   changes,
   hunkInventory,
@@ -305,7 +317,27 @@ async function applyCommitSplitPlan({
   return `Created ${plan.groups.length} split commit(s).`
 }
 
-export async function handleCommitSplit({
+/**
+ * Generate a validated commit split plan against the current staged
+ * state. Pure plan generation — no formatting, no apply, no side
+ * effects on the index. Returns the structured plan plus the context
+ * (`changes` + `hunkInventory`) needed to apply it later via
+ * `applyCommitSplitPlan`.
+ *
+ * Used by:
+ *   - `handleCommitSplit` (the CLI handler — formats the plan into
+ *     markdown for stdout or applies it directly when `argv.apply`).
+ *   - `runCommitSplitPlanWorkflow` (the workstation workflow — returns
+ *     the structured plan so the overlay can render it group-by-group
+ *     and pass the same plan to apply without re-rolling the LLM).
+ *
+ * The split between "generate the plan" and "apply the plan" is what
+ * lets the workstation guarantee the executed split matches the
+ * previewed plan exactly. Re-running the generator between preview
+ * and apply would risk drift (small LLM nondeterminism, staged-state
+ * changes the user didn't intend, etc.).
+ */
+export async function prepareCommitSplitPlan({
   argv,
   config,
   git,
@@ -319,7 +351,7 @@ export async function handleCommitSplit({
   logger: Logger
   tokenizer: TokenCounter
   llm: ReturnType<typeof getLlm>
-}): Promise<string> {
+}): Promise<{ plan: CommitSplitPlan; context: CommitSplitPlanContext } | { empty: true }> {
   const changes = await getChanges({
     git,
     options: {
@@ -329,7 +361,7 @@ export async function handleCommitSplit({
   })
 
   if (changes.staged.length === 0) {
-    return 'No staged changes found.'
+    return { empty: true }
   }
 
   const hunkInventory = await collectHunkInventory(changes.staged, git)
@@ -374,11 +406,37 @@ export async function handleCommitSplit({
     maxAttempts: DEFAULT_MAX_PLAN_ATTEMPTS,
   })
 
+  return { plan, context: { changes, hunkInventory } }
+}
+
+export async function handleCommitSplit({
+  argv,
+  config,
+  git,
+  logger,
+  tokenizer,
+  llm,
+}: {
+  argv: Arguments<CommitOptions>
+  config: Config & CommitOptions
+  git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>
+  logger: Logger
+  tokenizer: TokenCounter
+  llm: ReturnType<typeof getLlm>
+}): Promise<string> {
+  const result = await prepareCommitSplitPlan({ argv, config, git, logger, tokenizer, llm })
+
+  if ('empty' in result) {
+    return 'No staged changes found.'
+  }
+
+  const { plan, context } = result
+
   if (argv.apply) {
     return await applyCommitSplitPlan({
       plan,
-      changes,
-      hunkInventory,
+      changes: context.changes,
+      hunkInventory: context.hunkInventory,
       git,
       logger,
       noVerify: argv.noVerify || config.noVerify || false,

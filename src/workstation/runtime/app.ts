@@ -59,7 +59,11 @@ import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { getBranchOverview } from '../../git/branchData'
 import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
-import { runCommitDraftWorkflow } from '../../git/commitWorkflowActions'
+import {
+  runCommitDraftWorkflow,
+  runCommitSplitApplyWorkflow,
+  runCommitSplitPlanWorkflow,
+} from '../../git/commitWorkflowActions'
 import { runChangelogTextWorkflow } from '../../git/aiActions'
 import {
     GitCommitDetail,
@@ -1700,6 +1704,100 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
   }, [dispatch, resumeRef, state.commitCompose])
 
+  // `S` keystroke — start the `coco commit --split` flow (#907).
+  // Pre-flight refuses cleanly when:
+  //   - Nothing is staged (suggests `g s` to pick files)
+  //   - A bisect / merge / rebase is in progress (split would be confusing)
+  // Then opens the overlay in 'loading' state, kicks off the plan
+  // workflow, and dispatches setSplitPlanReady (or setSplitPlanError)
+  // when it resolves. The overlay handles the rest from there.
+  const startCommitSplit = React.useCallback(async () => {
+    const stagedCount = context.worktree?.stagedCount || 0
+    if (stagedCount === 0) {
+      dispatch({
+        type: 'setStatus',
+        value: 'Nothing staged to split. Stage some files first (`g s` to pick).',
+      })
+      return
+    }
+    const operation = context.operation
+    if (operation?.operation && operation.operation !== 'none') {
+      dispatch({
+        type: 'setStatus',
+        value: `A ${operation.operation} is in progress — finish or abort it before splitting.`,
+      })
+      return
+    }
+
+    dispatch({ type: 'startSplitPlanLoad' })
+    dispatch({ type: 'setStatus', value: 'Generating split plan (this can take a minute)…' })
+
+    const result = await runCommitSplitPlanWorkflow({ git })
+
+    if (!result.ok) {
+      dispatch({ type: 'setSplitPlanError', error: result.message })
+      dispatch({ type: 'setStatus', value: `Split plan failed: ${result.message}` })
+      return
+    }
+
+    dispatch({
+      type: 'setSplitPlanReady',
+      plan: result.plan,
+      planContext: result.planContext,
+    })
+    dispatch({
+      type: 'setStatus',
+      value: `Split plan ready: ${result.plan.groups.length} commit(s). y/Enter to apply, Esc to cancel.`,
+    })
+  }, [context.operation, context.worktree?.stagedCount, dispatch, git])
+
+  // `y`/Enter inside the overlay — apply the previewed plan. Uses the
+  // plan + planContext from state (set by setSplitPlanReady) so the
+  // executed split matches what the user reviewed exactly. No LLM
+  // re-roll, no plan drift.
+  const applyCommitSplit = React.useCallback(async () => {
+    const splitPlan = state.splitPlan
+    if (!splitPlan?.plan || !splitPlan.planContext) {
+      dispatch({ type: 'setStatus', value: 'No split plan loaded yet — wait for generation.' })
+      return
+    }
+
+    dispatch({ type: 'setSplitPlanApplying' })
+    dispatch({ type: 'setStatus', value: 'Applying split plan…' })
+
+    const result = await runCommitSplitApplyWorkflow({
+      plan: splitPlan.plan,
+      planContext: splitPlan.planContext,
+      git,
+    })
+
+    if (!result.ok) {
+      // Keep the overlay open so the user can see what happened and
+      // try again. setSplitPlanError preserves the existing plan in
+      // 'ready' state with the error annotation.
+      dispatch({ type: 'setSplitPlanError', error: result.message })
+      dispatch({ type: 'setStatus', value: `Split apply failed: ${result.message}` })
+      return
+    }
+
+    // Success — close the overlay, reset compose (the staged set is
+    // now empty since the plan committed everything), and refresh so
+    // the new commits appear in history.
+    dispatch({ type: 'clearSplitPlan' })
+    dispatch({ type: 'commitCompose', action: { type: 'reset' } })
+    dispatch({ type: 'setStatus', value: result.message })
+    await refreshWorktreeContext()
+    // Re-fetch the commit log so the new commits show up in history.
+    await refreshContext()
+  }, [dispatch, git, refreshContext, refreshWorktreeContext, state.splitPlan])
+
+  // Esc inside the overlay — close without applying. Status line gets
+  // a confirmation so the user knows the operation was abandoned.
+  const cancelCommitSplit = React.useCallback(() => {
+    dispatch({ type: 'clearSplitPlan' })
+    dispatch({ type: 'setStatus', value: 'Split plan cancelled.' })
+  }, [dispatch])
+
   // Resolve the destructive-action target from the live filtered+sorted
   // list the user is looking at, run the action against it, surface the
   // result on the status line, and silently refresh so the deleted item
@@ -2644,6 +2742,21 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // Computed from view state rather than threaded through context
       // because the surface owns its own content — no external loader.
       changelogLineCount: state.changelogView.text?.split('\n').length,
+      // Approximate line count for the split-plan overlay. Each group
+      // renders as a header + (body if any) + files block + (rationale
+      // if any) + blank separator. Used by j/k/PgUp/PgDn to clamp the
+      // scroll offset. The exact render math lives in the overlay
+      // module — this is a close-enough heuristic for clamping.
+      splitPlanLineCount: state.splitPlan?.plan
+        ? state.splitPlan.plan.groups.reduce((sum, group) => {
+          let lines = 2 // title + separator
+          if (group.body) lines += group.body.split('\n').length + 1
+          if (group.rationale) lines += 2
+          lines += (group.files?.length || 0) + 1
+          if ((group.hunks?.length || 0) > 0) lines += group.hunks.length + 1
+          return sum + lines
+        }, 0)
+        : undefined,
     }).forEach((event) => {
       if (event.type === 'exit') {
         exit()
@@ -2673,6 +2786,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         openChangelogInEditor()
       } else if (event.type === 'openComposeInEditor') {
         openComposeInEditor()
+      } else if (event.type === 'startCommitSplit') {
+        void startCommitSplit()
+      } else if (event.type === 'applyCommitSplit') {
+        void applyCommitSplit()
+      } else if (event.type === 'cancelCommitSplit') {
+        cancelCommitSplit()
       } else if (event.type === 'yankText') {
         void yankText(event.value, event.label)
       } else if (event.type === 'runWorkflowAction') {

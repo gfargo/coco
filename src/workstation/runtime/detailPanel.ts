@@ -36,6 +36,7 @@ import {
   renderConfirmationPanel,
   renderHelpPanel,
   renderInputPromptPanel,
+  renderSplitPlanOverlay,
 } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
@@ -57,6 +58,19 @@ export function renderDetailPanel(
 
   if (state.showHelp) {
     return renderHelpPanel(h, components, state, width, theme, focused)
+  }
+
+  // Split-plan overlay (#907) sits above the regular palette/input/
+  // confirmation flow because the underlying input handler already
+  // intercepts all keystrokes while it's open — only the rendering
+  // needs to match. Bound by `bodyRows` so the scroll/clamp math has
+  // a real viewport; falls back to a sensible minimum elsewhere.
+  if (state.splitPlan) {
+    // Use the same height heuristic the diff/changelog surfaces use —
+    // detail panel body is roughly the panel width column count, but
+    // we don't have that here. Pass a permissive default; the overlay
+    // computes its own visible-line window from listRows.
+    return renderSplitPlanOverlay(h, components, state, width, 24, theme, focused)
   }
 
   if (state.showCommandPalette) {

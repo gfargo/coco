@@ -5,6 +5,7 @@ import {
     applyCommitComposeAction,
     createCommitComposeState,
 } from './commitCompose'
+import type { CommitSplitPlan, CommitSplitPlanContext } from '../commit/split'
 import { PromotedSelectionsSnapshot } from '../../workstation/chrome/selectionRectify'
 import {
     BranchSortMode,
@@ -274,6 +275,21 @@ export type LogInkState = {
    */
   bootLoading: boolean
   /**
+   * Split-plan overlay state (#907). When defined, the overlay is
+   * open. Three phases:
+   *   - 'loading'  : plan generation in flight, overlay shows a
+   *                  spinner. plan + planContext are undefined.
+   *   - 'ready'    : plan generated, overlay shows scrollable groups
+   *                  for review. `y`/Enter applies, Esc cancels.
+   *   - 'applying' : user accepted the plan, apply in flight. Overlay
+   *                  shows "applying…" until the workflow returns.
+   *
+   * Cleared (set to undefined) on cancel or successful apply. Apply
+   * failures keep the overlay open in 'ready' so the user can retry
+   * or back out — the status line carries the error message.
+   */
+  splitPlan?: SplitPlanState
+  /**
    * Changelog view (full-screen surface). `status` drives what the
    * panel renders:
    *   - 'idle'    : view pushed but no content yet (transient — flips
@@ -319,6 +335,22 @@ export type ChangelogCacheEntry = {
 export const DEFAULT_CHANGELOG_VIEW_STATE: ChangelogViewState = {
   status: 'idle',
   scrollOffset: 0,
+}
+
+/**
+ * Split-plan overlay state. Held on root state (not on a per-view
+ * surface) because the overlay can be triggered from compose and
+ * dismissed back to whatever view was active beneath. The plan +
+ * context come from `runCommitSplitPlanWorkflow`; the workstation
+ * holds them between preview and apply so the executed split matches
+ * exactly what was previewed.
+ */
+export type SplitPlanState = {
+  status: 'loading' | 'ready' | 'applying'
+  plan?: CommitSplitPlan
+  planContext?: CommitSplitPlanContext
+  scrollOffset: number
+  error?: string
 }
 
 export type LogInkStatusFilterMask = {
@@ -478,6 +510,12 @@ export type LogInkAction =
   | { type: 'setChangelogText'; text: string }
   | { type: 'pageChangelog'; delta: number; lineCount: number }
   | { type: 'clearChangelogCache'; branch?: string }
+  | { type: 'startSplitPlanLoad' }
+  | { type: 'setSplitPlanReady'; plan: CommitSplitPlan; planContext: CommitSplitPlanContext }
+  | { type: 'setSplitPlanApplying' }
+  | { type: 'setSplitPlanError'; error: string }
+  | { type: 'pageSplitPlan'; delta: number; lineCount: number }
+  | { type: 'clearSplitPlan' }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -1606,6 +1644,76 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       delete next[action.branch]
       return { ...state, changelogCache: next, pendingKey: undefined }
     }
+    case 'startSplitPlanLoad':
+      // Overlay opens immediately so the user sees the loading state
+      // (rather than the compose view sitting frozen while the LLM
+      // call resolves). plan + planContext stay undefined until ready.
+      return {
+        ...state,
+        splitPlan: { status: 'loading', scrollOffset: 0 },
+        pendingKey: undefined,
+      }
+    case 'setSplitPlanReady':
+      return {
+        ...state,
+        splitPlan: {
+          status: 'ready',
+          plan: action.plan,
+          planContext: action.planContext,
+          scrollOffset: 0,
+        },
+        pendingKey: undefined,
+      }
+    case 'setSplitPlanApplying':
+      // Preserve plan + planContext so the overlay can keep rendering
+      // the same content during apply (just with a "applying…" hint
+      // overlaid). If somehow this fires without a plan loaded, fall
+      // back to the loading shape.
+      if (!state.splitPlan?.plan || !state.splitPlan.planContext) {
+        return { ...state, splitPlan: { status: 'loading', scrollOffset: 0 }, pendingKey: undefined }
+      }
+      return {
+        ...state,
+        splitPlan: {
+          ...state.splitPlan,
+          status: 'applying',
+        },
+        pendingKey: undefined,
+      }
+    case 'setSplitPlanError':
+      // Apply / plan failure path. We KEEP the overlay open in 'ready'
+      // shape with the previous plan if we have one, so the user can
+      // either retry or back out without losing context. If no plan
+      // yet (failure during initial load), close the overlay — there's
+      // nothing to retry from. The status line carries the message
+      // either way; the `error` field is for the overlay's own copy.
+      if (!state.splitPlan?.plan) {
+        return { ...state, splitPlan: undefined, pendingKey: undefined }
+      }
+      return {
+        ...state,
+        splitPlan: {
+          ...state.splitPlan,
+          status: 'ready',
+          error: action.error,
+        },
+        pendingKey: undefined,
+      }
+    case 'pageSplitPlan':
+      if (!state.splitPlan) return state
+      return {
+        ...state,
+        splitPlan: {
+          ...state.splitPlan,
+          scrollOffset: clampIndex(
+            state.splitPlan.scrollOffset + action.delta,
+            action.lineCount
+          ),
+        },
+        pendingKey: undefined,
+      }
+    case 'clearSplitPlan':
+      return { ...state, splitPlan: undefined, pendingKey: undefined }
     default:
       return state
   }

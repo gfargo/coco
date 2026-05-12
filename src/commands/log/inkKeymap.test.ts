@@ -67,7 +67,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['e edit', 'E $EDITOR', 'c commit', 'I AI draft', 'gs hunks', 'esc back'],
+      contextual: ['e edit', 'E $EDITOR', 'c commit', 'S split', 'I AI draft', 'gs hunks', 'esc back'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 

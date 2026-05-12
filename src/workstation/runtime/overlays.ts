@@ -333,3 +333,125 @@ export function renderCommandPalette(
     : []),
   ...itemLines)
 }
+
+/**
+ * Split-plan overlay (#907) — renders the proposed commit groups for
+ * the user to review before applying. Three phases driven by
+ * `state.splitPlan.status`:
+ *
+ *   - 'loading'  : spinner-ish copy while plan generation is in flight.
+ *                  Esc cancels (soft — the in-flight LLM resolves
+ *                  silently after; runtime ignores the result).
+ *   - 'ready'    : scrollable list of groups. Each group shows the
+ *                  proposed title, optional body, files, and (when
+ *                  available) rationale. Footer hints: j/k scroll,
+ *                  y/Enter apply, Esc cancel.
+ *   - 'applying' : same content as 'ready' but a status banner
+ *                  surfaces "Applying…" so the user knows the apply
+ *                  is in flight. Keystrokes are consumed but no-op.
+ *
+ * Errors during apply keep the overlay open in 'ready' state with
+ * an `error` annotation in the header — user can retry or back out.
+ */
+export function renderSplitPlanOverlay(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  bodyRows: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const overlay = state.splitPlan
+  if (!overlay) {
+    return h(Box, { width })
+  }
+
+  const maxLineWidth = Math.max(20, width - 4)
+  const listRows = Math.max(4, bodyRows - 3)
+
+  // Loading state — overlay opens immediately so the user sees the
+  // "in flight" feedback without staring at a frozen compose view.
+  if (overlay.status === 'loading') {
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      width,
+      paddingX: 1,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle('Commit split', focused)),
+      h(Text, { dimColor: true }, 'generating plan…')
+    ),
+    h(Text, undefined, ''),
+    h(Text, { dimColor: true }, 'Asking the model to split the staged changes into coherent commits.'),
+    h(Text, { dimColor: true }, 'This can take a minute on larger sets.'),
+    h(Text, undefined, ''),
+    h(Text, { dimColor: true }, 'Esc cancels.'))
+  }
+
+  // Ready / applying — render the groups. We render to a virtual
+  // line list first, then slice by scrollOffset so j/k/PgUp/PgDn
+  // behave like every other scrollable surface in the workstation.
+  const plan = overlay.plan
+  if (!plan) {
+    // Safety: shouldn't hit this since the reducer guarantees plan
+    // is set when status is 'ready' or 'applying'. Render an empty
+    // overlay rather than crashing.
+    return h(Box, { width },
+      h(Text, { dimColor: true }, 'No plan data available.'))
+  }
+
+  const lines: string[] = []
+  plan.groups.forEach((group, index) => {
+    lines.push(`▎ ${index + 1}. ${group.title}`)
+    if (group.body) {
+      group.body.split('\n').forEach((bodyLine) => lines.push(`  ${bodyLine}`))
+    }
+    if (group.rationale) {
+      lines.push('')
+      lines.push(`  why: ${group.rationale}`)
+    }
+    const files = group.files || []
+    if (files.length > 0) {
+      lines.push('')
+      lines.push(`  files (${files.length}):`)
+      files.forEach((file) => lines.push(`    · ${file}`))
+    }
+    const hunks = group.hunks || []
+    if (hunks.length > 0) {
+      lines.push('')
+      lines.push(`  hunks (${hunks.length}):`)
+      hunks.forEach((hunkId) => lines.push(`    · ${hunkId}`))
+    }
+    lines.push('')
+  })
+
+  const totalLines = lines.length
+  const scrollOffset = Math.min(overlay.scrollOffset, Math.max(0, totalLines - 1))
+  const visible = lines.slice(scrollOffset, scrollOffset + listRows)
+
+  const headerRight = overlay.status === 'applying'
+    ? 'applying…'
+    : `${plan.groups.length} commit(s) · ${scrollOffset + 1}–${Math.min(totalLines, scrollOffset + listRows)} / ${totalLines}`
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Commit split — review plan', focused)),
+    h(Text, { dimColor: true }, headerRight)
+  ),
+  ...(overlay.error
+    ? [h(Text, { key: 'split-plan-error', color: 'red' }, truncateCells(`error: ${overlay.error}`, maxLineWidth))]
+    : []),
+  ...visible.map((line, offset) => h(Text, {
+    key: `split-plan-${scrollOffset + offset}`,
+  }, truncateCells(line || ' ', maxLineWidth))))
+}
