@@ -509,6 +509,34 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }, [idleTipsEnabled, state.statusMessage])
   const idleTip = idleTipsEnabled && !state.statusMessage ? pickIdleTip(idleTipIndex) : undefined
 
+  // Animation tick driver for loading states. Increments every 80ms
+  // while any overlay/surface is in a loading state — the renderer
+  // derives a spinner frame from `spinnerFrame % FRAMES.length` so
+  // the user sees motion instead of static "generating…" copy.
+  //
+  // Driven by a single shared tick rather than per-surface intervals
+  // because the cost of an Ink re-render is the whole app; one
+  // interval is the same cost as N. We pause the tick entirely when
+  // nothing is loading so an idle workstation doesn't waste cycles
+  // re-rendering the same frame.
+  const [spinnerFrame, setSpinnerFrame] = React.useState(0)
+  const anyLoading =
+    state.splitPlan?.status === 'loading' ||
+    state.splitPlan?.status === 'applying' ||
+    state.changelogView.status === 'loading'
+  React.useEffect(() => {
+    if (!anyLoading) {
+      // Reset to 0 so the next loading state starts from a known
+      // frame instead of wherever the last animation left off.
+      setSpinnerFrame(0)
+      return
+    }
+    // DevSkim: ignore DS172411 — callback is a function literal, delay
+    // is our own constant, no caller-supplied data flows through.
+    const id = setInterval(() => setSpinnerFrame((tick) => tick + 1), 80)
+    return () => clearInterval(id)
+  }, [anyLoading])
+
   const selected = getSelectedInkCommit(state)
   const selectedDetailFile = detail?.files[state.selectedFileIndex]
   // Status surface visibility mask (#776). `visibleWorktreeFiles` is the
@@ -1717,6 +1745,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: 'Nothing staged to split. Stage some files first (`g s` to pick).',
+        kind: 'error',
       })
       return
     }
@@ -1725,6 +1754,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: `A ${operation.operation} is in progress — finish or abort it before splitting.`,
+        kind: 'error',
       })
       return
     }
@@ -1736,7 +1766,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
     if (!result.ok) {
       dispatch({ type: 'setSplitPlanError', error: result.message })
-      dispatch({ type: 'setStatus', value: `Split plan failed: ${result.message}` })
+      dispatch({
+        type: 'setStatus',
+        value: `Split plan failed: ${result.message}`,
+        kind: 'error',
+      })
       return
     }
 
@@ -1748,6 +1782,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch({
       type: 'setStatus',
       value: `Split plan ready: ${result.plan.groups.length} commit(s). y/Enter to apply, Esc to cancel.`,
+      kind: 'success',
     })
   }, [context.operation, context.worktree?.stagedCount, dispatch, git])
 
@@ -1776,7 +1811,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // try again. setSplitPlanError preserves the existing plan in
       // 'ready' state with the error annotation.
       dispatch({ type: 'setSplitPlanError', error: result.message })
-      dispatch({ type: 'setStatus', value: `Split apply failed: ${result.message}` })
+      dispatch({
+        type: 'setStatus',
+        value: `Split apply failed: ${result.message}`,
+        kind: 'error',
+      })
       return
     }
 
@@ -1785,7 +1824,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // the new commits appear in history.
     dispatch({ type: 'clearSplitPlan' })
     dispatch({ type: 'commitCompose', action: { type: 'reset' } })
-    dispatch({ type: 'setStatus', value: result.message })
+    dispatch({ type: 'setStatus', value: result.message, kind: 'success' })
     await refreshWorktreeContext()
     // Re-fetch the commit log so the new commits show up in history.
     await refreshContext()
@@ -2870,7 +2909,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         layout.mainPanelWidth,
         theme,
         hasMoreCommits,
-        loadingMoreCommits
+        loadingMoreCommits,
+        spinnerFrame
       ),
       renderDetailPanel(
         h,

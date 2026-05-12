@@ -185,6 +185,22 @@ export type LogInkState = {
   statusGroupHeaderFocused: boolean
   statusMessage?: string
   /**
+   * Visual category for `statusMessage` — drives footer styling.
+   *   - 'info'    (default) : dim muted text, regular contextual hints
+   *   - 'error'              : red text + footer hides the global hints
+   *                            on the right so long error messages get
+   *                            the full width to render. Set explicitly
+   *                            by failure paths (LLM errors, validator
+   *                            issues, etc.) so users notice them.
+   *   - 'success'            : accent-colored text. Set by ops that
+   *                            mutate state successfully (commit
+   *                            created, split applied, PR opened, …)
+   *                            so the affirmative feedback stands out.
+   * Cleared alongside `statusMessage` when `setStatus` fires without
+   * a `kind` (or with `kind: 'info'`).
+   */
+  statusKind?: 'info' | 'error' | 'success'
+  /**
    * Set by `navigateOpenDiffForCommit` / `navigateOpenDiffForWorktreeFile`
    * to disambiguate the diff view when both a worktree file and a commit
    * are selectable. Cleared when the diff view is popped or replaced.
@@ -480,7 +496,7 @@ export type LogInkAction =
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
-  | { type: 'setStatus'; value?: string }
+  | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' }
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
@@ -1441,6 +1457,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         statusMessage: action.value,
+        // Clearing the message resets kind to undefined so a previous
+        // 'error' doesn't bleed into the next info update. Explicit
+        // 'info' also clears kind for the same reason.
+        statusKind: !action.value || action.kind === 'info' ? undefined : action.kind,
         pendingKey: undefined,
       }
     case 'setWorkflowAction':

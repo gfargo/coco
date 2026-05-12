@@ -25,6 +25,7 @@ import { renderComposeSurface } from '../surfaces/compose'
 import { renderConflictsSurface } from '../surfaces/conflicts'
 import { renderDiffSurface } from '../surfaces/diff'
 import { renderHistoryPanel } from '../surfaces/history'
+import { renderSplitPlanOverlay } from './overlays'
 import { renderPullRequestSurface } from '../surfaces/pullRequest'
 import { renderReflogSurface } from '../surfaces/reflog'
 import { renderStashSurface } from '../surfaces/stash'
@@ -57,8 +58,20 @@ export function renderMainPanel(
   width: number,
   theme: LogInkTheme,
   hasMoreCommits: boolean,
-  loadingMoreCommits: boolean
+  loadingMoreCommits: boolean,
+  spinnerFrame: number
 ): ReactTypes.ReactElement {
+  // Split-plan overlay (#907 polish): renders in the MAIN panel (not
+  // detail) when active, because the content — multiple commit groups
+  // with file lists, rationale, hunks — needs the full center width
+  // to be readable. The detail panel is too narrow for prose lists.
+  // Overlay sits at the top of dispatch so it pre-empts every regular
+  // view; the input handler already intercepts all keystrokes while
+  // `state.splitPlan` is set, so the underlying view is dormant.
+  if (state.splitPlan) {
+    return renderSplitPlanOverlay(h, components, state, width, bodyRows, theme, true, spinnerFrame)
+  }
+
   if (state.activeView === 'status') {
     return renderStatusSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }

@@ -1189,6 +1189,37 @@ describe('log Ink view model', () => {
     })
   })
 
+  describe('status message kind (info / error / success)', () => {
+    it('defaults to no kind when setStatus is called without one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatus', value: 'hello' })
+      expect(state.statusMessage).toBe('hello')
+      expect(state.statusKind).toBeUndefined()
+    })
+
+    it('preserves the kind across error / success / info transitions', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatus', value: 'oops', kind: 'error' })
+      expect(state.statusKind).toBe('error')
+
+      state = applyLogInkAction(state, { type: 'setStatus', value: 'yay', kind: 'success' })
+      expect(state.statusKind).toBe('success')
+
+      // Explicit 'info' clears the kind back to undefined so the error
+      // styling doesn't bleed through.
+      state = applyLogInkAction(state, { type: 'setStatus', value: 'fyi', kind: 'info' })
+      expect(state.statusKind).toBeUndefined()
+    })
+
+    it('clearing the message clears the kind', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setStatus', value: 'oops', kind: 'error' })
+      state = applyLogInkAction(state, { type: 'setStatus', value: undefined })
+      expect(state.statusMessage).toBeUndefined()
+      expect(state.statusKind).toBeUndefined()
+    })
+  })
+
   describe('split-plan overlay state (#907)', () => {
     const mockPlan = {
       groups: [

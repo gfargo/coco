@@ -353,6 +353,11 @@ export function renderCommandPalette(
  * Errors during apply keep the overlay open in 'ready' state with
  * an `error` annotation in the header — user can retry or back out.
  */
+// Braille-dot spinner frames — same set used by ora, ink-spinner, and
+// most other Node TUI tools. 10 frames at 80ms each gives a smooth
+// loop that reads as a true spinner rather than a flicker.
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
 export function renderSplitPlanOverlay(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -360,7 +365,8 @@ export function renderSplitPlanOverlay(
   width: number,
   bodyRows: number,
   theme: LogInkTheme,
-  focused: boolean
+  focused: boolean,
+  spinnerFrame: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const overlay = state.splitPlan
@@ -370,9 +376,13 @@ export function renderSplitPlanOverlay(
 
   const maxLineWidth = Math.max(20, width - 4)
   const listRows = Math.max(4, bodyRows - 3)
+  const spinner = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length]
 
   // Loading state — overlay opens immediately so the user sees the
   // "in flight" feedback without staring at a frozen compose view.
+  // The spinner gives motion so the user knows something's still
+  // happening even on slow LLM responses (which can take 30s+ on
+  // larger staged sets).
   if (overlay.status === 'loading') {
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
@@ -383,13 +393,13 @@ export function renderSplitPlanOverlay(
     },
     h(Box, { justifyContent: 'space-between' },
       h(Text, { bold: true }, panelTitle('Commit split', focused)),
-      h(Text, { dimColor: true }, 'generating plan…')
+      h(Text, { color: theme.colors.accent }, `${spinner} generating plan…`)
     ),
     h(Text, undefined, ''),
-    h(Text, { dimColor: true }, 'Asking the model to split the staged changes into coherent commits.'),
-    h(Text, { dimColor: true }, 'This can take a minute on larger sets.'),
+    h(Text, { color: theme.colors.accent }, `${spinner}  Asking the model to split the staged changes into coherent commits.`),
+    h(Text, { dimColor: true }, '   This can take 30 seconds to a minute on larger sets.'),
     h(Text, undefined, ''),
-    h(Text, { dimColor: true }, 'Esc cancels.'))
+    h(Text, { dimColor: true }, '   Esc cancels.'))
   }
 
   // Ready / applying — render the groups. We render to a virtual
@@ -434,8 +444,17 @@ export function renderSplitPlanOverlay(
   const visible = lines.slice(scrollOffset, scrollOffset + listRows)
 
   const headerRight = overlay.status === 'applying'
-    ? 'applying…'
+    ? `${spinner} applying…`
     : `${plan.groups.length} commit(s) · ${scrollOffset + 1}–${Math.min(totalLines, scrollOffset + listRows)} / ${totalLines}`
+
+  // Apply errors get the full available width — long validator
+  // messages (the failure path that surfaced in PR #916 testing was
+  // "unknown hunks: src/widgets/button.ts::hunk-1, ...") frequently
+  // exceed footer-status-line capacity. We wrap into multiple lines
+  // here, color them red + bold, and surface a retry hint underneath.
+  const errorBlock = overlay.error
+    ? wrapErrorMessage(overlay.error, maxLineWidth)
+    : []
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -446,12 +465,53 @@ export function renderSplitPlanOverlay(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Commit split — review plan', focused)),
-    h(Text, { dimColor: true }, headerRight)
+    h(Text, {
+      bold: overlay.status === 'applying',
+      color: overlay.status === 'applying' ? theme.colors.accent : undefined,
+      dimColor: overlay.status !== 'applying',
+    }, headerRight)
   ),
+  ...errorBlock.map((line, offset) => h(Text, {
+    key: `split-plan-error-${offset}`,
+    color: 'red',
+    bold: offset === 0,
+  }, line)),
   ...(overlay.error
-    ? [h(Text, { key: 'split-plan-error', color: 'red' }, truncateCells(`error: ${overlay.error}`, maxLineWidth))]
+    ? [h(Text, { key: 'split-plan-error-hint', dimColor: true }, '   Press `r` to retry, `Esc` to cancel.')]
     : []),
   ...visible.map((line, offset) => h(Text, {
     key: `split-plan-${scrollOffset + offset}`,
   }, truncateCells(line || ' ', maxLineWidth))))
+}
+
+/**
+ * Wrap a long error message into multiple lines fit to the overlay
+ * width. Used for split-plan errors which can carry validator output
+ * listing offending hunks/files — frequently long enough to overflow
+ * a single line. Returns `[]` for empty input so callers can spread
+ * directly into a child list.
+ */
+function wrapErrorMessage(message: string, maxWidth: number): string[] {
+  if (!message) return []
+  const prefix = '✗ '
+  const continuation = '  '
+  // Naive wrapping by words. Good enough for validator-style
+  // messages which are space-delimited; longer words just get
+  // truncated by Ink's natural rendering, which is acceptable.
+  const words = message.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let current = prefix
+  for (const word of words) {
+    const candidate = current === prefix ? `${current}${word}` : `${current} ${word}`
+    if (candidate.length > maxWidth && current !== prefix) {
+      lines.push(current)
+      current = `${continuation}${word}`
+    } else {
+      current = candidate
+    }
+  }
+  if (current.trim()) {
+    lines.push(current)
+  }
+  return lines
 }
