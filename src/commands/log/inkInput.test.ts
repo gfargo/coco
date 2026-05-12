@@ -3132,6 +3132,35 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    it('r retries (re-runs the plan workflow) from the ready state', () => {
+      // After an error, the overlay surfaces "Press `r` to retry" —
+      // this keystroke should re-fire startCommitSplit. Also valid
+      // from a healthy 'ready' state (regenerate, like the changelog
+      // surface's `r`).
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      expect(getLogInkInputEvents(state, 'r', {}, { splitPlanLineCount: 10 })).toEqual([
+        { type: 'startCommitSplit' },
+      ])
+    })
+
+    it('r is a no-op during loading / applying (no workflow stacking)', () => {
+      const loadingState = applyLogInkAction(createLogInkState(rows), { type: 'startSplitPlanLoad' })
+      expect(getLogInkInputEvents(loadingState, 'r')).toEqual([])
+
+      let applyingState = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      applyingState = applyLogInkAction(applyingState, { type: 'setSplitPlanApplying' })
+      expect(getLogInkInputEvents(applyingState, 'r', {}, { splitPlanLineCount: 10 })).toEqual([])
+    })
+
     it('y/Enter no-op while loading (no plan to apply)', () => {
       const state = applyLogInkAction(createLogInkState(rows), { type: 'startSplitPlanLoad' })
 

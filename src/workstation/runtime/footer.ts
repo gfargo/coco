@@ -56,8 +56,27 @@ export function renderFooter(
   // would otherwise be empty.
   const trailing = state.statusMessage || idleTip || ''
   const status = trailing ? `  ${trailing}` : ''
-  const contextualText = `${hints.contextual.join('   ')}${status}`
+  const isError = state.statusKind === 'error'
+  const isSuccess = state.statusKind === 'success'
+  const contextualText = isError
+    // Errors get the full footer width and a `✗` prefix so they read
+    // as alarming. We drop the contextual hints when an error is
+    // active — they'd compete for attention with the message and
+    // long validator outputs (#907 polish: split-plan validator
+    // errors are often 100+ chars and got truncated against the hints).
+    ? `✗ ${state.statusMessage || ''}`
+    : `${hints.contextual.join('   ')}${status}`
   const globalText = hints.global.join(' · ')
+
+  // Error rendering: hide the global hints on the right so the
+  // message can wrap into that space. Success rendering: accent
+  // color on the message, hints stay visible. Default: existing
+  // muted styling.
+  const contextualColor = isError
+    ? 'red'
+    : isSuccess
+      ? theme.colors.accent
+      : theme.colors.muted
 
   return h(Box, {
     flexDirection: 'row',
@@ -65,6 +84,15 @@ export function renderFooter(
     justifyContent: 'space-between',
     paddingX: 1,
   },
-  h(Text, { color: theme.colors.muted, dimColor: true }, contextualText),
-  h(Text, { color: theme.colors.muted, dimColor: true }, globalText))
+  h(Text, {
+    color: contextualColor,
+    dimColor: !isError && !isSuccess,
+    bold: isError,
+  }, contextualText),
+  // Globals are dropped entirely when an error is on screen — that
+  // space is what the long message needs to render. They come back
+  // the moment the status flips to info / success / cleared.
+  isError
+    ? h(Text, undefined, '')
+    : h(Text, { color: theme.colors.muted, dimColor: true }, globalText))
 }

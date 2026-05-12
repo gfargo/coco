@@ -944,6 +944,14 @@ export function getLogInkInputEvents(
       return [{ type: 'applyCommitSplit' }]
     }
 
+    // `r` retries from the error state (or regenerates from ready,
+    // for parity with the changelog surface). Re-runs the LLM call.
+    // While loading or applying, retry is a no-op — we don't want to
+    // stack workflows.
+    if (inputValue === 'r' && state.splitPlan.status === 'ready') {
+      return [{ type: 'startCommitSplit' }]
+    }
+
     if (state.splitPlan.status === 'ready' && lineCount > 0) {
       if (inputValue === 'j') {
         return [action({ type: 'pageSplitPlan', delta: 1, lineCount })]
