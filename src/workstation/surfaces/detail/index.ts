@@ -43,6 +43,8 @@ import {
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import type { LfsAttributeStatus } from '../../../git/lfsAttributes'
 import { isPathLfsTracked } from '../../../git/lfsAttributes'
+import type { SubmoduleEntry, SubmoduleOverview } from '../../../git/submoduleData'
+import { findSubmoduleByPath } from '../../../git/submoduleData'
 import { truncateCells, wrapCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type {
@@ -231,6 +233,61 @@ function renderPreviewPanel(
   }))
 }
 
+/**
+ * Submodule info block (#884). When the cursored file is a
+ * registered submodule, append a short metadata block to the
+ * inspector so the user sees what they're looking at:
+ *
+ *   Submodule: vendor/lib
+ *     pinned:    1234567a  (modified)
+ *     tracking:  main
+ *     remote:    git@github.com:org/lib.git
+ *
+ * Returns an empty array when the cursored file isn't a submodule
+ * or the loader hasn't populated the overview yet — the inspector
+ * falls back to its existing rendering.
+ */
+function renderSubmoduleInspectorBlock(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  width: number,
+  cursoredFilePath: string | undefined,
+  submodules: SubmoduleOverview | undefined,
+): ReactTypes.ReactElement[] {
+  if (!cursoredFilePath || !submodules?.hasSubmodules) return []
+  const entry = findSubmoduleByPath(submodules, cursoredFilePath)
+  if (!entry) return []
+  return renderSubmoduleEntryLines(h, Text, width, entry)
+}
+
+function renderSubmoduleEntryLines(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  width: number,
+  entry: SubmoduleEntry,
+): ReactTypes.ReactElement[] {
+  const flagLabel = entry.flag === 'clean' ? ''
+    : entry.flag === 'modified' ? '  (modified)'
+      : entry.flag === 'uninitialized' ? '  (uninitialized)'
+        : '  (conflicted)'
+  const sha = entry.pinnedSha ? entry.pinnedSha.slice(0, 8) : '<unknown>'
+  return [
+    h(Text, { key: 'submodule-spacer' }, ''),
+    h(Text, { key: 'submodule-header', bold: true },
+      truncateCells(`Submodule: ${entry.name}`, width - 4)),
+    h(Text, { key: 'submodule-pinned', dimColor: true },
+      truncateCells(`  pinned:    ${sha}${flagLabel}`, width - 4)),
+    ...(entry.trackingBranch
+      ? [h(Text, { key: 'submodule-tracking', dimColor: true },
+        truncateCells(`  tracking:  ${entry.trackingBranch}`, width - 4))]
+      : []),
+    ...(entry.url
+      ? [h(Text, { key: 'submodule-url', dimColor: true },
+        truncateCells(`  remote:    ${entry.url}`, width - 4))]
+      : []),
+  ]
+}
+
 export function renderHistoryInspector(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -324,6 +381,15 @@ export function renderHistoryInspector(
   const fileListNodes = renderCommitFileList(
     h, Text, detail.files, state.selectedFileIndex, fileListFocused, fileListMaxRows, width, theme, context.lfs
   )
+  // #884 — submodule info block. Renders when the cursored file is a
+  // registered submodule; otherwise empty so the inspector keeps its
+  // existing layout.
+  const cursoredFilePath = detail.files[
+    Math.max(0, Math.min(state.selectedFileIndex, detail.files.length - 1))
+  ]?.path
+  const submoduleBlockNodes = renderSubmoduleInspectorBlock(
+    h, Text, width, cursoredFilePath, context.submodules
+  )
 
   // Tab indicator. Renders in BOTH tabbed (short-terminal) mode and
   // tall-stacked mode so the user can always see which tab the cursor
@@ -366,7 +432,7 @@ export function renderHistoryInspector(
     tabHeader,
     h(Text, { key: 'inspector-tabs-spacer' }, ''),
     ...(activeTab === 'inspector'
-      ? [...headerNodes, ...fileListNodes]
+      ? [...headerNodes, ...fileListNodes, ...submoduleBlockNodes]
       : renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
           cursorIndex: state.inspectorActionIndex,
           cursorActive: focused,
@@ -388,6 +454,7 @@ export function renderHistoryInspector(
   h(Text, { key: 'inspector-tabs-spacer' }, ''),
   ...headerNodes,
   ...fileListNodes,
+  ...submoduleBlockNodes,
   ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
     cursorIndex: state.inspectorActionIndex,
     cursorActive: focused && state.inspectorTab === 'actions',
