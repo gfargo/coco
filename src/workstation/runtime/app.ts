@@ -89,7 +89,7 @@ import {
     getLogInkInputEvents,
 } from '../../commands/log/inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
-import { formatRemainingWorktreeHint } from '../chrome/postApplyHints'
+import { formatSplitApplySuccess } from '../chrome/postApplyHints'
 import { SPINNER_TICK_MS } from '../chrome/spinner'
 
 
@@ -1884,19 +1884,22 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const fresh = await getWorktreeOverview(git).catch(() => undefined)
     const unstaged = fresh?.unstagedCount || 0
     const untracked = fresh?.untrackedCount || 0
-    const remaining = unstaged + untracked
 
     // Compute the freshly-created commit hashes and mark them so the
     // history surface renders them with a "new" indicator. Auto-
     // clears after 5s so the marker doesn't linger across later
     // operations. Best-effort — a rev-list failure (e.g. headBefore
     // capture failed earlier) just skips the marker, no impact on
-    // the apply itself.
+    // the apply itself. The count from this rev-list also drives
+    // the success message — counting hashes is more accurate than
+    // parsing the workflow's string result.
+    let commitCount = 0
     if (headBefore) {
       try {
         const range = `${headBefore}..HEAD`
         const raw = await git.raw(['rev-list', range])
         const hashes = raw.split('\n').map((line) => line.trim()).filter(Boolean)
+        commitCount = hashes.length
         if (hashes.length > 0) {
           dispatch({ type: 'markRecentCommits', hashes })
           // DevSkim: ignore DS172411 — function literal, fixed delay,
@@ -1906,10 +1909,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       } catch { /* ignore — marker is a nice-to-have, not load-bearing */ }
     }
 
-    const baseMessage = result.message || 'Applied split plan.'
-    const successMessage = remaining > 0
-      ? `${baseMessage} ${formatRemainingWorktreeHint(unstaged, untracked)}`
-      : `${baseMessage} Worktree is clean.`
+    // Fall back to parsing the workflow result message ("Created N
+    // split commit(s).") if the rev-list path didn't yield a count.
+    if (commitCount === 0 && result.message) {
+      const match = result.message.match(/^Created (\d+)/)
+      if (match) commitCount = parseInt(match[1], 10) || 0
+    }
+
+    // Compose the success message with explicit nav cue (where to
+    // see the commits) + remaining-work hint. Closes the loop on the
+    // "what should I expect to see?" confusion from manual testing.
+    const successMessage = commitCount > 0
+      ? formatSplitApplySuccess(commitCount, unstaged, untracked)
+      : (result.message || 'Applied split plan.')
 
     dispatch({ type: 'setStatus', value: successMessage, kind: 'success' })
   }, [dispatch, git, refreshContext, refreshWorktreeContext, state.activeView, state.splitPlan, state.viewStack.length])

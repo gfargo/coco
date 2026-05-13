@@ -1,4 +1,4 @@
-import { formatRemainingWorktreeHint } from './postApplyHints'
+import { formatRemainingWorktreeHint, formatSplitApplySuccess } from './postApplyHints'
 
 describe('formatRemainingWorktreeHint', () => {
   it('returns an empty string when nothing is left to commit', () => {
@@ -39,5 +39,41 @@ describe('formatRemainingWorktreeHint', () => {
     expect(formatRemainingWorktreeHint(-1, -1)).toBe('')
     expect(formatRemainingWorktreeHint(-5, 3)).toContain('3 untracked')
     expect(formatRemainingWorktreeHint(5, -3)).toContain('5 unstaged')
+  })
+})
+
+describe('formatSplitApplySuccess', () => {
+  it('surfaces the commit count + nav cue + remaining-work hint', () => {
+    const msg = formatSplitApplySuccess(5, 6, 3)
+    expect(msg).toContain('Created 5 commits')
+    expect(msg).toContain('press gh to view them in history')
+    expect(msg).toContain('6 unstaged')
+    expect(msg).toContain('3 untracked')
+    expect(msg).toContain('press gs to stage')
+  })
+
+  it('uses singular grammar when exactly one commit was created', () => {
+    // "Created 1 commits" reads as broken English; the helper
+    // branches on count for the singular case.
+    const msg = formatSplitApplySuccess(1, 0, 0)
+    expect(msg).toContain('Created 1 commit')
+    expect(msg).not.toContain('Created 1 commits')
+  })
+
+  it('elides the remaining-work hint when the worktree is clean', () => {
+    const msg = formatSplitApplySuccess(3, 0, 0)
+    expect(msg).toContain('Created 3 commits')
+    expect(msg).toContain('Worktree is clean')
+    expect(msg).not.toContain('remaining')
+  })
+
+  it('always surfaces the nav cue regardless of remaining work', () => {
+    // The nav cue ("press gh to view them in history") is the key
+    // closure for the "what should I expect to see?" confusion — it
+    // should appear in every successful apply, whether or not there's
+    // residue.
+    expect(formatSplitApplySuccess(5, 0, 0)).toContain('gh')
+    expect(formatSplitApplySuccess(5, 6, 3)).toContain('gh')
+    expect(formatSplitApplySuccess(1, 0, 3)).toContain('gh')
   })
 })

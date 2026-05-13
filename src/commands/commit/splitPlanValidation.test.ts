@@ -1,5 +1,6 @@
 import { FileChange } from '../../lib/types'
 import {
+  dropEmptyGroups,
   formatPlanValidationFeedback,
   formatPlanValidationIssuesError,
   getPlanValidationIssues,
@@ -529,6 +530,53 @@ describe('splitPlanValidation', () => {
 
       expect(rescued.groups).toHaveLength(2)
       expect(rescued.groups[1].files).toEqual(['b.ts', 'c.ts', 'd.ts'])
+    })
+  })
+
+  describe('dropEmptyGroups', () => {
+    it('removes groups with empty files[] AND empty hunks[]', () => {
+      // Reproduces the failure pattern that broke apply: a group
+      // left empty after rescueMixedFiles dropped its only hunks.
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['a.ts'], hunks: [] },
+          { title: 'feat: leftover', files: [], hunks: [] },
+          { title: 'feat: b', files: ['b.ts'], hunks: [] },
+        ],
+      }
+
+      const cleaned = dropEmptyGroups(plan)
+
+      expect(cleaned.groups).toHaveLength(2)
+      expect(cleaned.groups.map((g) => g.title)).toEqual(['feat: a', 'feat: b'])
+    })
+
+    it('keeps groups that have files but no hunks', () => {
+      // File-only groups are the normal new-files case — must not
+      // be confused with "empty".
+      const plan: CommitSplitPlan = {
+        groups: [{ title: 'feat: a', files: ['a.ts'], hunks: [] }],
+      }
+      expect(dropEmptyGroups(plan)).toEqual(plan)
+    })
+
+    it('keeps groups that have hunks but no files', () => {
+      // Hunk-only groups are normal partial-file claims — must not
+      // be dropped either.
+      const plan: CommitSplitPlan = {
+        groups: [{ title: 'feat: a', files: [], hunks: ['a.ts::hunk-1'] }],
+      }
+      expect(dropEmptyGroups(plan)).toEqual(plan)
+    })
+
+    it('is a no-op when every group has content', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['a.ts'], hunks: [] },
+          { title: 'feat: b', files: [], hunks: ['b.ts::hunk-1'] },
+        ],
+      }
+      expect(dropEmptyGroups(plan)).toBe(plan)
     })
   })
 })
