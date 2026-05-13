@@ -5,6 +5,7 @@ import {
   getPlanValidationIssues,
   hasPlanValidationIssues,
   HunkInventoryLike,
+  rescueMissingFiles,
   rescueMixedFiles,
   rescuePhantomHunks,
 } from './splitPlanValidation'
@@ -438,6 +439,96 @@ describe('splitPlanValidation', () => {
 
       expect(rescued.groups[0].files).toEqual(['src/index.ts'])
       expect(rescued.groups[0].hunks).toEqual([])
+    })
+  })
+
+  describe('rescueMissingFiles', () => {
+    // The dominant failure pattern from #920 testing on dirty-many-files
+    // after the first split landed: the LLM omitted `scratch.md` from
+    // every group. Validator's missingFiles check rejected. Rescue
+    // appends a synthetic "misc" group so the plan covers every staged
+    // file and survives validation.
+
+    it('appends a misc group containing files no other group claimed', () => {
+      const staged = ['src/a.ts', 'src/b.ts', 'scratch.md'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: ab', files: ['src/a.ts', 'src/b.ts'], hunks: [] },
+        ],
+      }
+
+      const rescued = rescueMissingFiles(plan, staged, buildHunkInventory({}))
+
+      expect(rescued.groups).toHaveLength(2)
+      expect(rescued.groups[1].title).toBe('chore: misc unclaimed changes')
+      expect(rescued.groups[1].files).toEqual(['scratch.md'])
+      expect(rescued.groups[1].hunks).toEqual([])
+      // First group passes through unchanged.
+      expect(rescued.groups[0]).toEqual(plan.groups[0])
+    })
+
+    it('counts hunk-covered files as claimed (no double-attribution)', () => {
+      // File covered via hunks should not be flagged as missing — the
+      // rescue's claim calculation has to mirror the validator's.
+      const staged = ['src/router.ts'].map(stagedFile)
+      const inventory = buildHunkInventory({
+        'src/router.ts': ['src/router.ts::hunk-1'],
+      })
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: router', files: [], hunks: ['src/router.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescueMissingFiles(plan, staged, inventory)
+
+      // No misc group appended — router.ts is already claimed via hunks.
+      expect(rescued.groups).toHaveLength(1)
+    })
+
+    it('is a no-op when every staged file is already claimed', () => {
+      const staged = ['src/a.ts', 'src/b.ts'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['src/a.ts'], hunks: [] },
+          { title: 'feat: b', files: ['src/b.ts'], hunks: [] },
+        ],
+      }
+
+      const rescued = rescueMissingFiles(plan, staged, buildHunkInventory({}))
+
+      expect(rescued).toEqual(plan)
+    })
+
+    it('sorts the missing files in the misc group for deterministic output', () => {
+      // LLM output isn't stable across runs; our recovery should be.
+      const staged = ['zeta.ts', 'alpha.ts', 'mu.ts'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'wip', files: [], hunks: [] },
+        ],
+      }
+
+      const rescued = rescueMissingFiles(plan, staged, buildHunkInventory({}))
+
+      expect(rescued.groups[1].files).toEqual(['alpha.ts', 'mu.ts', 'zeta.ts'])
+    })
+
+    it('handles multiple missing files together in a single misc group', () => {
+      // We don't try to be clever about thematic grouping — every
+      // missing file goes in one bucket. User can re-roll if they
+      // want a specific commit for any of them.
+      const staged = ['a.ts', 'b.ts', 'c.ts', 'd.ts'].map(stagedFile)
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['a.ts'], hunks: [] },
+        ],
+      }
+
+      const rescued = rescueMissingFiles(plan, staged, buildHunkInventory({}))
+
+      expect(rescued.groups).toHaveLength(2)
+      expect(rescued.groups[1].files).toEqual(['b.ts', 'c.ts', 'd.ts'])
     })
   })
 })

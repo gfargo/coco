@@ -12,6 +12,7 @@ import {
   hasPlanValidationIssues,
   HunkInventoryLike,
   PlanValidationIssues,
+  rescueMissingFiles,
   rescueMixedFiles,
   rescuePhantomHunks,
 } from './splitPlanValidation'
@@ -86,7 +87,7 @@ export async function generateValidatedCommitSplitPlan({
       }
     )
 
-    // Rescue passes (#918, #919). Run in order — order matters:
+    // Rescue passes (#918, #919, #921). Run in order — order matters:
     //
     //   1. rescuePhantomHunks: LLM commonly emits "file::hunk-1"
     //      against an empty inventory (all staged files are new).
@@ -96,14 +97,18 @@ export async function generateValidatedCommitSplitPlan({
     //      of group A AND uses its hunks in `hunks[]` of group B.
     //      Drop the hunks (the file-level claim is more specific).
     //      Must run AFTER phantom-hunk rescue because the rescue
-    //      itself can create mixed-files situations (phantom hunks
-    //      get promoted to files; pre-existing real hunks for the
-    //      same file remain elsewhere and now overlap).
+    //      itself can create mixed-files situations.
     //
-    // Both rescues are no-ops when there's nothing to rescue, so
-    // running them unconditionally costs nothing on healthy plans.
+    //   3. rescueMissingFiles: LLM occasionally forgets a staged
+    //      file across every group. Append a synthetic "misc" group
+    //      so the plan covers every staged file. Must run LAST so
+    //      it has the final claim picture from earlier rescues.
+    //
+    // All three rescues are no-ops when there's nothing to rescue,
+    // so running them unconditionally costs nothing on healthy plans.
     const phantomRescued = rescuePhantomHunks(rawPlan, staged, hunkInventory)
-    const plan = rescueMixedFiles(phantomRescued, hunkInventory)
+    const mixedRescued = rescueMixedFiles(phantomRescued, hunkInventory)
+    const plan = rescueMissingFiles(mixedRescued, staged, hunkInventory)
 
     const issues = getPlanValidationIssues(plan, staged, hunkInventory)
     if (!hasPlanValidationIssues(issues)) {

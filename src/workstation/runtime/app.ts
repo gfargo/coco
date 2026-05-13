@@ -1820,15 +1820,25 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
 
     // Success — close the overlay, reset compose (the staged set is
-    // now empty since the plan committed everything), and refresh so
-    // the new commits appear in history.
+    // now empty since the plan committed everything), and pop the
+    // compose view so the user lands on whatever was beneath (usually
+    // status, sometimes history). An empty compose pane after the
+    // commits land is a dead end; the surface beneath shows real
+    // state — remaining unstaged/untracked files, or the freshly
+    // landed commits in history. Either is more useful than staring
+    // at an empty draft.
     dispatch({ type: 'clearSplitPlan' })
     dispatch({ type: 'commitCompose', action: { type: 'reset' } })
+    // Only pop if compose is on top — the apply could have been
+    // invoked from a deeper stack and we don't want to over-pop.
+    if (state.activeView === 'compose' && state.viewStack.length > 1) {
+      dispatch({ type: 'popView' })
+    }
     dispatch({ type: 'setStatus', value: result.message, kind: 'success' })
     await refreshWorktreeContext()
     // Re-fetch the commit log so the new commits show up in history.
     await refreshContext()
-  }, [dispatch, git, refreshContext, refreshWorktreeContext, state.splitPlan])
+  }, [dispatch, git, refreshContext, refreshWorktreeContext, state.activeView, state.splitPlan, state.viewStack.length])
 
   // Esc inside the overlay — close without applying. Status line gets
   // a confirmation so the user knows the operation was abandoned.

@@ -74,7 +74,14 @@ export function renderDetailPanel(
   // which-key style overlay — shows the available chord continuations
   // when the user has pressed the prefix and we're waiting for the
   // second key. Mirrors helix / which-key.nvim / doom-emacs.
-  if (state.pendingKey) {
+  //
+  // Suppressed when the split-plan overlay is open (#920 follow-up):
+  // the overlay re-uses `pendingKey='g'` for its own `gg` chord
+  // (jump-to-top scroll), and surfacing the global g-chord menu
+  // (gB / gT / gS / …) at that moment would mislead the user into
+  // thinking the global view-selector overrode the overlay's
+  // navigation. The overlay's footer hint already documents `g/G top/bot`.
+  if (state.pendingKey && !state.splitPlan) {
     return renderChordOverlay(h, components, state, width, theme, focused)
   }
 
