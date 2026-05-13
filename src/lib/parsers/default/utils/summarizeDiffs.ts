@@ -184,6 +184,10 @@ export type SummarizeDiffsOptions = {
    */
   fastPath?: {
     markdown?: boolean
+    languageAware?: {
+      enabled?: boolean
+      languages?: ('ts' | 'js')[]
+    }
   }
   handleOutput?: typeof defaultOutputCallback
 } & SummarizeContext

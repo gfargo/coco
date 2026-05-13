@@ -294,6 +294,29 @@
               "type": "boolean",
               "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
               "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`"
             }
           },
           "additionalProperties": false,
@@ -719,6 +742,29 @@
               "type": "boolean",
               "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
               "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`"
             }
           },
           "additionalProperties": false,
@@ -887,6 +933,29 @@
               "type": "boolean",
               "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
               "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`"
             }
           },
           "additionalProperties": false,

@@ -80,6 +80,22 @@ export interface BaseParserOptions {
      * @default false
      */
     markdown?: boolean
+    /**
+     * Language-aware structural fast path (#883). Replaces the LLM
+     * summary with a symbol-level extract ("added parseRequest();
+     * removed legacyParse()") for source files in the listed
+     * languages. Off by default — lossy by design, and quality is
+     * harder to validate than the markdown fast path.
+     */
+    languageAware?: {
+      enabled?: boolean
+      /**
+       * Languages to opt in. Omit / empty to enable all currently
+       * supported languages. Today: 'ts' (covers .ts/.tsx/.mts/.cts),
+       * 'js' (covers .js/.jsx/.mjs/.cjs).
+       */
+      languages?: ('ts' | 'js')[]
+    }
   }
   metadata?: Partial<LlmCallMetadata>
 }

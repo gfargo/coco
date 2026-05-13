@@ -12,6 +12,10 @@ export type FileChangeParserServiceBudget = {
   maxConcurrent?: number
   fastPath?: {
     markdown?: boolean
+    languageAware?: {
+      enabled?: boolean
+      languages?: ('ts' | 'js')[]
+    }
   }
 }
 
