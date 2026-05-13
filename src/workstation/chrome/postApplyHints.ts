@@ -50,3 +50,38 @@ export function formatRemainingWorktreeHint(unstaged: number, untracked: number)
   }
   return `${counts} remaining — press gs to stage them, then I for an AI draft.`
 }
+
+/**
+ * Format the full post-apply success message: count of commits
+ * created + where to see them + what's left + how to act on it.
+ *
+ * The user feedback that motivated this: "I click apply and at the
+ * end the staged files just disappear — what should I expect to see
+ * in my git history graph when I navigate back to it?" The previous
+ * success message was just "Created N split commits" with no nav
+ * cue. New users (and even experienced ones returning to the
+ * workstation) don't immediately know that the new commits are now
+ * in the history view.
+ *
+ * Output shape:
+ *   "Created N commits — press gh to view them in history.
+ *    6 unstaged + 3 untracked remaining — press gs to stage, I to draft AI commit message."
+ *
+ * When the worktree is clean post-apply:
+ *   "Created N commits — press gh to view them in history. Worktree is clean."
+ */
+export function formatSplitApplySuccess(
+  commitCount: number,
+  unstaged: number,
+  untracked: number
+): string {
+  const created = commitCount === 1
+    ? 'Created 1 commit'
+    : `Created ${commitCount} commits`
+  const navCue = `${created} — press gh to view them in history.`
+  const remainingHint = formatRemainingWorktreeHint(unstaged, untracked)
+  if (!remainingHint) {
+    return `${navCue} Worktree is clean.`
+  }
+  return `${navCue} ${remainingHint}`
+}

@@ -297,9 +297,24 @@ export async function applyCommitSplitPlan({
   validatePlanForStagedFiles(plan, changes.staged, hunkInventory)
   assertNoUnstagedOverlap(plan, changes, hunkInventory)
 
+  // Defensive: drop any group with empty files[] AND empty hunks[].
+  // `dropEmptyGroups` runs in the generator's rescue chain but we
+  // re-filter here so a direct caller (or a future rescue that
+  // forgets to compose with dropEmptyGroups) can't hit the
+  // "git commit with nothing staged" failure mode mid-loop after
+  // the up-front `git reset` has already wiped the index.
+  const applicableGroups = plan.groups.filter((group) => {
+    const fileCount = (group.files || []).length
+    const hunkCount = (group.hunks || []).length
+    return fileCount + hunkCount > 0
+  })
+  if (applicableGroups.length === 0) {
+    throw new Error('Split plan has no applicable groups (every group was empty).')
+  }
+
   await git.raw(['reset'])
 
-  for (const group of plan.groups) {
+  for (const group of applicableGroups) {
     const groupFiles = getGroupFiles(group)
     const groupHunks = getGroupHunks(group).map((hunkId) => hunkInventory.byId.get(hunkId))
 
@@ -312,11 +327,14 @@ export async function applyCommitSplitPlan({
       await applyPatchToIndex(patch, git)
     }
 
-    await createCommit(`${group.title}\n\n${group.body}`.trim(), git, undefined, { noVerify })
+    // Avoid the literal string "undefined" in the commit body when
+    // the LLM omitted the body field — fall back to title-only.
+    const body = group.body ? `\n\n${group.body}` : ''
+    await createCommit(`${group.title}${body}`.trim(), git, undefined, { noVerify })
     logger.verbose(`Created split commit: ${group.title}`, { color: 'green' })
   }
 
-  return `Created ${plan.groups.length} split commit(s).`
+  return `Created ${applicableGroups.length} split commit(s).`
 }
 
 /**

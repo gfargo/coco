@@ -318,6 +318,44 @@ export function rescueMissingFiles(
   }
 }
 
+/**
+ * Drop groups that ended up with no claims at all — empty `files[]`
+ * AND empty `hunks[]`. These can be produced by the earlier rescue
+ * passes:
+ *   - `rescueMixedFiles` drops all of a group's hunks when the file
+ *     is claimed via `files[]` elsewhere. If the group had ONLY those
+ *     hunks (no files of its own), it's left empty.
+ *   - LLM output can independently produce empty groups (rare but
+ *     observed once the schema's `groups.min(1)` validation passes —
+ *     each group only needs the array to exist, not to be non-empty).
+ *
+ * Apply-time, an empty group means `git add []` (no-op) followed by
+ * `git commit` with nothing staged — which throws "nothing to commit"
+ * and aborts the entire split-apply mid-loop. The user sees no
+ * commits land but their staged set is gone (the up-front
+ * `git reset` ran). This filter removes the failure mode entirely.
+ *
+ * Run LAST in the rescue chain so the filter sees the final state
+ * after `rescuePhantomHunks` + `rescueMixedFiles` have done their
+ * work and `rescueMissingFiles` has filled in unclaimed files.
+ *
+ * Returns a NEW plan object. If every group survives, the schema
+ * still requires `groups.min(1)` — but if every group dropped, we
+ * return an empty groups array and let the validator's coverage
+ * check (missingFiles or similar) surface the right error.
+ */
+export function dropEmptyGroups(plan: CommitSplitPlan): CommitSplitPlan {
+  const surviving = plan.groups.filter((group) => {
+    const fileCount = (group.files || []).length
+    const hunkCount = (group.hunks || []).length
+    return fileCount + hunkCount > 0
+  })
+  if (surviving.length === plan.groups.length) {
+    return plan
+  }
+  return { ...plan, groups: surviving }
+}
+
 export function formatPlanValidationFeedback(issues: PlanValidationIssues): string {
   const sections: string[] = []
 
