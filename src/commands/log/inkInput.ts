@@ -181,6 +181,12 @@ export type LogInkInputContext = {
    * groups before dispatching to the input handler.
    */
   splitPlanLineCount?: number
+  /**
+   * Short sha of the bisect's "first bad commit" terminator, when
+   * present (#879 item 3). Drives `y` on the bisect-complete panel —
+   * the headline answer is the value the user wants to copy.
+   */
+  bisectCompletionSha?: string
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -2380,6 +2386,13 @@ export function getLogInkInputEvents(
       ) {
         return [{ type: 'yankFromActiveView', short }]
       }
+    }
+    // #879 item 3: yank the first-bad commit sha from the bisect
+    // completion panel. The headline answer is what the user came
+    // here to copy; surfacing it via the same y/Y idiom (Y = short)
+    // is faster than dropping to shell.
+    if (state.activeView === 'bisect' && context.bisectCompletionSha) {
+      return [{ type: 'yankFromActiveView', short }]
     }
   }
 

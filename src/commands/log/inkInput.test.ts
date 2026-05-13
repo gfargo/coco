@@ -1380,6 +1380,23 @@ describe('log Ink input interactions', () => {
       expect(getLogInkInputEvents(state, 'y', {}, { worktreeFileCount: 0 })).toEqual([])
     })
 
+    it('emits yankFromActiveView from the bisect completion panel (#879 item 3)', () => {
+      // Bisect completion: y / Y yank the first-bad commit sha. The
+      // input dispatcher gates on `bisectCompletionSha` so the bisect
+      // view falls through to the existing bisect-active handlers
+      // (g/b/s/x) when no terminator is present.
+      const state = createLogInkState(rows, { activeView: 'bisect' })
+
+      expect(
+        getLogInkInputEvents(state, 'y', {}, { bisectCompletionSha: 'abc12345' })
+      ).toEqual([{ type: 'yankFromActiveView', short: false }])
+      expect(
+        getLogInkInputEvents(state, 'Y', {}, { bisectCompletionSha: 'abc12345' })
+      ).toEqual([{ type: 'yankFromActiveView', short: true }])
+      // No terminator → falls through.
+      expect(getLogInkInputEvents(state, 'y', {}, {})).toEqual([])
+    })
+
     it('emits yankFromActiveView from diff view across worktree/stash/commit sources', () => {
       const state = createLogInkState(rows, { activeView: 'diff' })
 
