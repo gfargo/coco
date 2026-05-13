@@ -66,3 +66,9 @@ specs/
 # COCO_BENCH=1 stays local too.
 .bench/run-*.json
 .coco-bench.json
+
+# Structural-extract eval output (#934). Each run lands under
+# .bench/structural-extract-eval/<timestamp>/ — JSON + Markdown per
+# input. These are local artifacts; no committed baseline yet
+# (regression-detection follow-up).
+.bench/structural-extract-eval/

@@ -41,6 +41,7 @@
     "test:cli": "tsx bin/smokeCli.ts",
     "bench": "tsx bin/benchmark.ts",
     "scenario": "tsx bin/scenario.ts",
+    "eval:structural-extract": "tsx bin/structuralExtractEval.ts",
     "pretest:jest": "npm run build:info",
     "test:jest": "jest",
     "test:jest:watch": "jest --watch",
