@@ -10,8 +10,46 @@ import {
   writeDiffSummary,
 } from './diffSummaryCache'
 import { summarizeMarkdownDiff } from './markdownDiff'
-import { detectStructuralLanguage, summarizeTsStructuralDiff } from './tsStructuralDiff'
+import { summarizeGoStructuralDiff, isGoFile } from './goStructuralDiff'
+import { summarizePythonStructuralDiff, isPythonFile } from './pythonStructuralDiff'
+import { summarizeRustStructuralDiff, isRustFile } from './rustStructuralDiff'
+import { detectTsLanguage, summarizeTsStructuralDiff } from './tsStructuralDiff'
 import { summarizeTrivialDiff } from './trivialDiff'
+
+/**
+ * Language identifier shared by the `service.fastPath.languageAware`
+ * config knob and the dispatcher below. Adding a new language is two
+ * lines: append the identifier to this union (mirrored in
+ * `lib/langchain/types.ts` for schema generation), and add a case to
+ * `dispatchStructuralSummary`.
+ */
+type StructuralLanguageId = 'ts' | 'js' | 'py' | 'rs' | 'go'
+
+function detectStructuralLanguageId(path: string): StructuralLanguageId | undefined {
+  const ts = detectTsLanguage(path)
+  if (ts) return ts
+  if (isPythonFile(path)) return 'py'
+  if (isRustFile(path)) return 'rs'
+  if (isGoFile(path)) return 'go'
+  return undefined
+}
+
+function dispatchStructuralSummary(
+  language: StructuralLanguageId,
+  fileDiff: import('../../../types').FileDiff,
+): string | undefined {
+  switch (language) {
+    case 'ts':
+    case 'js':
+      return summarizeTsStructuralDiff(fileDiff)
+    case 'py':
+      return summarizePythonStructuralDiff(fileDiff)
+    case 'rs':
+      return summarizeRustStructuralDiff(fileDiff)
+    case 'go':
+      return summarizeGoStructuralDiff(fileDiff)
+  }
+}
 
 /**
  * Cache opt-out: COCO_NO_CACHE=1 disables both reads and writes
@@ -60,7 +98,7 @@ export type SummarizeLargeFilesOptions = {
      */
     languageAware?: {
       enabled?: boolean
-      languages?: ('ts' | 'js')[]
+      languages?: ('ts' | 'js' | 'py' | 'rs' | 'go')[]
     }
   }
   tokenizer: TokenCounter
@@ -135,12 +173,12 @@ async function summarizeFileDiff(
   // via regex extraction; richer (tree-sitter-backed) languages
   // arrive in follow-up PRs.
   if (fastPath?.languageAware?.enabled) {
-    const language = detectStructuralLanguage(fileDiff.file)
+    const language = detectStructuralLanguageId(fileDiff.file)
     const allowed = fastPath.languageAware.languages
     const languageEnabled = language !== undefined &&
       (!allowed || allowed.length === 0 || allowed.includes(language))
     if (languageEnabled) {
-      const structuralSummary = summarizeTsStructuralDiff(fileDiff)
+      const structuralSummary = dispatchStructuralSummary(language, fileDiff)
       if (structuralSummary !== undefined) {
         logger.verbose(
           ` - ${fileDiff.file}: language-aware fast-path skip (no LLM call)`,

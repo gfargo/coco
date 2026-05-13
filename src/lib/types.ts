@@ -94,7 +94,7 @@ export interface BaseParserOptions {
        * supported languages. Today: 'ts' (covers .ts/.tsx/.mts/.cts),
        * 'js' (covers .js/.jsx/.mjs/.cjs).
        */
-      languages?: ('ts' | 'js')[]
+      languages?: ('ts' | 'js' | 'py' | 'rs' | 'go')[]
     }
   }
   metadata?: Partial<LlmCallMetadata>

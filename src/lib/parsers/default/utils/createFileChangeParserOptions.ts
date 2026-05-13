@@ -14,7 +14,7 @@ export type FileChangeParserServiceBudget = {
     markdown?: boolean
     languageAware?: {
       enabled?: boolean
-      languages?: ('ts' | 'js')[]
+      languages?: ('ts' | 'js' | 'py' | 'rs' | 'go')[]
     }
   }
 }

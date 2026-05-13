@@ -206,6 +206,9 @@ export type BaseLLMService = {
      * Currently supports:
      *   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`
      *   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`
+     *   - 'py' : `.py` / `.pyi`
+     *   - 'rs' : `.rs`
+     *   - 'go' : `.go`
      */
     languageAware?: {
       /**
@@ -219,7 +222,7 @@ export type BaseLLMService = {
        * Languages to opt in. Omit / empty to enable all supported
        * languages.
        */
-      languages?: ('ts' | 'js')[]
+      languages?: ('ts' | 'js' | 'py' | 'rs' | 'go')[]
     }
   }
 }
