@@ -3,12 +3,15 @@ import {
     DEFAULT_LOG_INK_STATUS_FILTER_MASK,
     applyLogInkAction,
     createLogInkState,
+    getActiveLogInkRepoFrame,
+    getLogInkRepoStackLabels,
     getLogInkSidebarTabs,
     getSelectedInkCommit,
     intentGoHome,
     intentOpenComposeForFile,
     intentOpenDiffForCommit,
     intentOpenDiffForWorktreeFile,
+    isLogInkNestedRepo,
     parseLogInkHistoryFetchPrefix,
     scoreLogInkCommitFilter,
 } from './inkViewModel'
@@ -1388,6 +1391,60 @@ describe('log Ink view model', () => {
       })
 
       expect(state.recentCommitHashes?.hashes).toEqual(['new1'])
+    })
+  })
+
+  describe('repoStack foundation (#931)', () => {
+    it('initializes the state with a single root frame labeled "root"', () => {
+      const state = createLogInkState(rows)
+      expect(state.repoStack).toHaveLength(1)
+      expect(state.repoStack[0].label).toBe('root')
+      expect(state.repoStack[0].parentReturn).toBeUndefined()
+      expect(state.repoStack[0].entryRange).toBeUndefined()
+    })
+
+    it('uses the supplied repoLabel for the root frame', () => {
+      const state = createLogInkState(rows, { repoLabel: 'coco' })
+      expect(state.repoStack[0].label).toBe('coco')
+    })
+
+    it('getActiveLogInkRepoFrame returns the top of the stack', () => {
+      const state = createLogInkState(rows, { repoLabel: 'coco' })
+      expect(getActiveLogInkRepoFrame(state).label).toBe('coco')
+    })
+
+    it('isLogInkNestedRepo is false for a freshly-created state', () => {
+      const state = createLogInkState(rows)
+      expect(isLogInkNestedRepo(state)).toBe(false)
+    })
+
+    it('isLogInkNestedRepo returns true when the stack has more than one frame', () => {
+      const state = createLogInkState(rows, { repoLabel: 'coco' })
+      // Direct mutation here — the push/pop actions don't exist yet
+      // (PR 2). This test asserts the selector reads the stack
+      // shape correctly; the action paths get their own tests when
+      // they land.
+      const nested = {
+        ...state,
+        repoStack: [...state.repoStack, { label: 'vendor/lib' }],
+      }
+      expect(isLogInkNestedRepo(nested)).toBe(true)
+      expect(getActiveLogInkRepoFrame(nested).label).toBe('vendor/lib')
+    })
+
+    it('getLogInkRepoStackLabels returns ordered labels root-first', () => {
+      const state = createLogInkState(rows, { repoLabel: 'coco' })
+      const nested = {
+        ...state,
+        repoStack: [
+          ...state.repoStack,
+          { label: 'vendor/lib' },
+          { label: 'vendor/lib/deep' },
+        ],
+      }
+      expect(getLogInkRepoStackLabels(nested)).toEqual([
+        'coco', 'vendor/lib', 'vendor/lib/deep',
+      ])
     })
   })
 })
