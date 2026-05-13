@@ -22,6 +22,11 @@ export const IDLE_TIPS: string[] = [
   's cycles sort modes in branches and tags',
   'gz opens the stash view',
   '< or esc walks the navigation stack back',
+  'S splits a large staged set into multiple commits',
+  'L generates a changelog for the current branch',
+  'C creates a PR seeded from the changelog',
+  'E opens the commit draft in $EDITOR or $VISUAL',
+  'I drafts an AI commit message from staged changes',
 ]
 
 /**

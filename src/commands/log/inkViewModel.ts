@@ -201,6 +201,17 @@ export type LogInkState = {
    */
   statusKind?: 'info' | 'error' | 'success'
   /**
+   * Transient loading flag for the status line. When true, the footer
+   * prefixes the message with the shared spinner frame so users see
+   * motion during sub-second LLM calls (create-PR body generation,
+   * tag/PR fetches, etc.) that don't have a dedicated overlay.
+   *
+   * Set via `setStatus({ ..., loading: true })`; cleared on the next
+   * `setStatus` without `loading: true` (or when the message is
+   * cleared entirely).
+   */
+  statusLoading?: boolean
+  /**
    * Set by `navigateOpenDiffForCommit` / `navigateOpenDiffForWorktreeFile`
    * to disambiguate the diff view when both a worktree file and a commit
    * are selectable. Cleared when the diff view is popped or replaced.
@@ -512,7 +523,7 @@ export type LogInkAction =
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
-  | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' }
+  | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success'; loading?: boolean }
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
@@ -1479,6 +1490,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // 'error' doesn't bleed into the next info update. Explicit
         // 'info' also clears kind for the same reason.
         statusKind: !action.value || action.kind === 'info' ? undefined : action.kind,
+        // Same clearing semantics for loading — every setStatus that
+        // doesn't explicitly opt in (loading: true) clears the flag so
+        // a stale spinner doesn't linger after the LLM call finishes.
+        statusLoading: !action.value ? undefined : (action.loading ? true : undefined),
         pendingKey: undefined,
       }
     case 'setWorkflowAction':

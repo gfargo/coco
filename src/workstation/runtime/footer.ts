@@ -13,6 +13,7 @@
  */
 
 import type * as ReactTypes from 'react'
+import { pickSpinnerFrame } from '../chrome/spinner'
 import type { LogInkTheme } from '../chrome/theme'
 import { getLogInkFooterHints } from '../../commands/log/inkKeymap'
 import type { LogInkState } from '../../commands/log/inkViewModel'
@@ -24,7 +25,8 @@ export function renderFooter(
   state: LogInkState,
   context: LogInkContext,
   theme: LogInkTheme,
-  idleTip?: string
+  idleTip?: string,
+  spinnerFrame: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   // Sidebar item count drives the per-tab footer hints — when items are
@@ -55,8 +57,14 @@ export function renderFooter(
   })
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.
+  const isLoading = Boolean(state.statusLoading && state.statusMessage)
   const trailing = state.statusMessage || idleTip || ''
-  const status = trailing ? `  ${trailing}` : ''
+  // Loading status gets a spinner prefix in front of the message —
+  // motion makes transient LLM calls (create-PR body, PR fetches,
+  // etc.) feel less frozen even when they're sub-second.
+  const spinnerPrefix = isLoading ? `${pickSpinnerFrame(spinnerFrame)} ` : ''
+  const trailingWithSpinner = trailing ? `${spinnerPrefix}${trailing}` : ''
+  const status = trailingWithSpinner ? `  ${trailingWithSpinner}` : ''
   const isError = state.statusKind === 'error'
   const isSuccess = state.statusKind === 'success'
   const contextualText = isError

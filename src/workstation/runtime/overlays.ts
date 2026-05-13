@@ -17,6 +17,7 @@
  */
 
 import type * as ReactTypes from 'react'
+import { pickSpinnerFrame } from '../chrome/spinner'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import {
@@ -353,10 +354,9 @@ export function renderCommandPalette(
  * Errors during apply keep the overlay open in 'ready' state with
  * an `error` annotation in the header — user can retry or back out.
  */
-// Braille-dot spinner frames — same set used by ora, ink-spinner, and
-// most other Node TUI tools. 10 frames at 80ms each gives a smooth
-// loop that reads as a true spinner rather than a flicker.
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+// Spinner frames live in `chrome/spinner.ts` so every surface that
+// renders a loading state (overlays, surfaces, footer) shares one
+// vocabulary of motion.
 
 export function renderSplitPlanOverlay(
   h: typeof ReactTypes.createElement,
@@ -376,7 +376,7 @@ export function renderSplitPlanOverlay(
 
   const maxLineWidth = Math.max(20, width - 4)
   const listRows = Math.max(4, bodyRows - 3)
-  const spinner = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length]
+  const spinner = pickSpinnerFrame(spinnerFrame)
 
   // Loading state — overlay opens immediately so the user sees the
   // "in flight" feedback without staring at a frozen compose view.

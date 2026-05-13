@@ -102,7 +102,7 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'compose') {
-    return renderComposeSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderComposeSurface(h, components, state, context, contextStatus, bodyRows, width, theme, spinnerFrame)
   }
 
   if (state.activeView === 'branches') {

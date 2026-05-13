@@ -89,6 +89,7 @@ import {
     getLogInkInputEvents,
 } from '../../commands/log/inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
+import { SPINNER_TICK_MS } from '../chrome/spinner'
 
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -537,7 +538,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const anyLoading =
     state.splitPlan?.status === 'loading' ||
     state.splitPlan?.status === 'applying' ||
-    state.changelogView.status === 'loading'
+    state.changelogView.status === 'loading' ||
+    state.commitCompose.loading ||
+    Boolean(state.statusLoading)
   React.useEffect(() => {
     if (!anyLoading) {
       // Reset to 0 so the next loading state starts from a known
@@ -547,7 +550,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
     // DevSkim: ignore DS172411 — callback is a function literal, delay
     // is our own constant, no caller-supplied data flows through.
-    const id = setInterval(() => setSpinnerFrame((tick) => tick + 1), 80)
+    const id = setInterval(() => setSpinnerFrame((tick) => tick + 1), SPINNER_TICK_MS)
     return () => clearInterval(id)
   }, [anyLoading])
 
@@ -1282,7 +1285,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   const runAiCommitDraft = React.useCallback(async () => {
     dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: true } })
-    dispatch({ type: 'setStatus', value: 'generating AI commit draft' })
+    dispatch({ type: 'setStatus', value: 'generating AI commit draft', loading: true })
     const result = await runCommitDraftWorkflow()
 
     if (result.ok && result.draft) {
@@ -1340,7 +1343,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
-    dispatch({ type: 'setStatus', value: `generating PR body from changelog (vs ${defaultBranch})…` })
+    dispatch({
+      type: 'setStatus',
+      value: `generating PR body from changelog (vs ${defaultBranch})…`,
+      loading: true,
+    })
     const body = await runPullRequestBodyWorkflow({ baseBranch: defaultBranch })
 
     // Fallback shape when the changelog generation fails — open the
@@ -1456,7 +1463,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // then run the workflow.
     dispatch({ type: 'pushView', value: 'changelog' })
     dispatch({ type: 'setChangelogLoading', branch: head, baseLabel })
-    dispatch({ type: 'setStatus', value: `generating changelog (${baseLabel})…` })
+    dispatch({ type: 'setStatus', value: `generating changelog (${baseLabel})…`, loading: true })
 
     const result = await runChangelogTextWorkflow(argv)
 
@@ -1774,7 +1781,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
 
     dispatch({ type: 'startSplitPlanLoad' })
-    dispatch({ type: 'setStatus', value: 'Generating split plan (this can take a minute)…' })
+    dispatch({ type: 'setStatus', value: 'Generating split plan (this can take a minute)…', loading: true })
 
     const result = await runCommitSplitPlanWorkflow({ git })
 
@@ -1812,7 +1819,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
 
     dispatch({ type: 'setSplitPlanApplying' })
-    dispatch({ type: 'setStatus', value: 'Applying split plan…' })
+    dispatch({ type: 'setStatus', value: 'Applying split plan…', loading: true })
 
     const result = await runCommitSplitApplyWorkflow({
       plan: splitPlan.plan,
@@ -3033,7 +3040,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         theme
       )
     ),
-    renderFooter(h, { Box, Text }, state, context, theme, idleTip)
+    renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame)
   )
 }
 
