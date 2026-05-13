@@ -1,6 +1,7 @@
 export const LOG_INK_CONTEXT_KEYS = [
   'bisect',
   'branches',
+  'lfs',
   'operation',
   'provider',
   'pullRequest',
