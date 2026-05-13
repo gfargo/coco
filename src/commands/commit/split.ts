@@ -279,6 +279,20 @@ async function applyPatchToIndex(
   })
 }
 
+/**
+ * Result of applying a split plan. Distinguishes the no-op case
+ * (`message` only) from the actually-created-commits case
+ * (`commitHashes` populated) so the workstation surface can render
+ * an accurate "N commits landed" message and skip the post-apply
+ * `git rev-list` round-trip.
+ */
+export type CommitSplitApplyResult = {
+  /** SHA of every commit created by this apply, in order. */
+  commitHashes: string[]
+  /** Human-readable summary, suitable for the CLI handler / status line. */
+  message: string
+}
+
 export async function applyCommitSplitPlan({
   plan,
   changes,
@@ -293,7 +307,7 @@ export async function applyCommitSplitPlan({
   git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>
   logger: Logger
   noVerify: boolean
-}): Promise<string> {
+}): Promise<CommitSplitApplyResult> {
   validatePlanForStagedFiles(plan, changes.staged, hunkInventory)
   assertNoUnstagedOverlap(plan, changes, hunkInventory)
 
@@ -312,29 +326,109 @@ export async function applyCommitSplitPlan({
     throw new Error('Split plan has no applicable groups (every group was empty).')
   }
 
+  // Capture HEAD up-front so we can verify each commit actually
+  // advanced the tip — silent no-op commits (empty index, hook
+  // returning success without committing, etc.) get caught and
+  // surface as a loud error instead of returning a misleading
+  // "Created N commits" message when zero commits actually landed.
+  let previousHead: string
+  try {
+    previousHead = (await git.revparse(['HEAD'])).trim()
+  } catch (error) {
+    // Brand-new repo with no commits — `git revparse HEAD` fails.
+    // Use the empty-tree sentinel so the post-commit comparison
+    // still detects "no change".
+    previousHead = 'EMPTY'
+  }
+
   await git.raw(['reset'])
+
+  const commitHashes: string[] = []
+  const failures: { title: string; reason: string }[] = []
 
   for (const group of applicableGroups) {
     const groupFiles = getGroupFiles(group)
     const groupHunks = getGroupHunks(group).map((hunkId) => hunkInventory.byId.get(hunkId))
 
-    if (groupFiles.length > 0) {
-      await git.add(groupFiles)
-    }
+    try {
+      if (groupFiles.length > 0) {
+        await git.add(groupFiles)
+      }
 
-    if (groupHunks.length > 0) {
-      const patch = buildPatchForHunks(groupHunks.filter((hunk): hunk is StagedHunk => Boolean(hunk)))
-      await applyPatchToIndex(patch, git)
-    }
+      if (groupHunks.length > 0) {
+        const patch = buildPatchForHunks(groupHunks.filter((hunk): hunk is StagedHunk => Boolean(hunk)))
+        await applyPatchToIndex(patch, git)
+      }
 
-    // Avoid the literal string "undefined" in the commit body when
-    // the LLM omitted the body field — fall back to title-only.
-    const body = group.body ? `\n\n${group.body}` : ''
-    await createCommit(`${group.title}${body}`.trim(), git, undefined, { noVerify })
-    logger.verbose(`Created split commit: ${group.title}`, { color: 'green' })
+      // Sanity-check the staged set before committing — if everything
+      // got dropped (e.g. .gitignore filtered all the group's files,
+      // or the paths point at things that don't exist on disk), git
+      // commit would throw "nothing to commit" mid-loop. Surface a
+      // clearer error instead.
+      const status = await git.status()
+      const stagedAfterAdd = status.staged.length + status.created.length + status.renamed.length
+      if (stagedAfterAdd === 0) {
+        failures.push({
+          title: group.title,
+          reason: `git add succeeded but nothing ended up staged — paths may not exist on disk or be gitignored. files=[${groupFiles.join(', ')}]`,
+        })
+        continue
+      }
+
+      // Avoid the literal string "undefined" in the commit body when
+      // the LLM omitted the body field — fall back to title-only.
+      const body = group.body ? `\n\n${group.body}` : ''
+      await createCommit(`${group.title}${body}`.trim(), git, undefined, { noVerify })
+
+      // Verify the commit actually advanced HEAD. Some hooks can
+      // exit success without committing (e.g. `--no-verify`-mode
+      // hooks misconfigured to skip silently). If HEAD didn't move,
+      // we didn't create a commit — record it as a failure instead
+      // of returning a misleading success.
+      const newHead = (await git.revparse(['HEAD'])).trim()
+      if (newHead === previousHead) {
+        failures.push({
+          title: group.title,
+          reason: 'git commit returned success but HEAD did not advance — commit may have been silently skipped',
+        })
+        continue
+      }
+      commitHashes.push(newHead)
+      previousHead = newHead
+      logger.verbose(`Created split commit ${newHead.slice(0, 8)}: ${group.title}`, { color: 'green' })
+    } catch (error) {
+      failures.push({
+        title: group.title,
+        reason: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
-  return `Created ${applicableGroups.length} split commit(s).`
+  // If every group failed, throw — there's nothing to recover and
+  // the caller needs a clear error path. Partial-success (some
+  // groups landed, some failed) is returned with a warning summary
+  // so the user keeps the work that did land.
+  if (commitHashes.length === 0) {
+    const detail = failures.map((f) => `  - ${f.title}: ${f.reason}`).join('\n')
+    throw new Error(
+      `Split apply created zero commits across ${applicableGroups.length} group(s).\n${detail}`
+    )
+  }
+
+  if (failures.length > 0) {
+    const partial = failures
+      .map((f) => `${f.title} (${f.reason.split('\n')[0]})`)
+      .join('; ')
+    return {
+      commitHashes,
+      message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}`,
+    }
+  }
+
+  return {
+    commitHashes,
+    message: `Created ${commitHashes.length} split commit(s).`,
+  }
 }
 
 /**
@@ -453,7 +547,7 @@ export async function handleCommitSplit({
   const { plan, context } = result
 
   if (argv.apply) {
-    return await applyCommitSplitPlan({
+    const applied = await applyCommitSplitPlan({
       plan,
       changes: context.changes,
       hunkInventory: context.hunkInventory,
@@ -461,6 +555,7 @@ export async function handleCommitSplit({
       logger,
       noVerify: argv.noVerify || config.noVerify || false,
     })
+    return applied.message
   }
 
   return formatCommitSplitPlan(plan)
