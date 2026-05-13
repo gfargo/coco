@@ -271,7 +271,7 @@ import {
     stageHunk,
     unstageHunk,
 } from '../../git/statusHunks'
-import { getBisectStatus } from '../../git/bisectData'
+import { getBisectCompletion, getBisectStatus } from '../../git/bisectData'
 import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from '../../git/bisectActions'
 import { getCompareDiff } from '../../git/compareData'
 import { getReflogOverview } from '../../git/reflogData'
@@ -2385,6 +2385,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         value = path
         label = `path ${path}`
       }
+    } else if (view === 'bisect') {
+      // #879 item 3 — yank the first-bad commit sha from the
+      // completion panel. The headline answer is what the user
+      // came here to copy. Y opts into the short form; y returns
+      // the full sha as recorded in BISECT_LOG.
+      const completion = context.bisect?.active
+        ? getBisectCompletion(context.bisect.log)
+        : undefined
+      if (completion) {
+        value = short ? completion.sha.slice(0, 8) : completion.sha
+        label = short
+          ? `short hash ${completion.sha.slice(0, 8)} (first bad)`
+          : `commit ${completion.sha.slice(0, 8)} (first bad)`
+      }
     } else if (view === 'diff') {
       if (state.diffSource === 'worktree') {
         const path = visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path
@@ -2431,6 +2445,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [
     clipboardRunner,
+    context.bisect,
     context.branches,
     context.stashes,
     context.tags,
@@ -2786,6 +2801,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // if any) + blank separator. Used by j/k/PgUp/PgDn to clamp the
       // scroll offset. The exact render math lives in the overlay
       // module — this is a close-enough heuristic for clamping.
+      // #879 item 3 — short sha of the bisect terminator (if any).
+      // Gates `y`/`Y` yank on the completion panel and lets the
+      // runtime resolve the value without re-parsing the log.
+      bisectCompletionSha: context.bisect?.active
+        ? getBisectCompletion(context.bisect.log)?.sha
+        : undefined,
       splitPlanLineCount: state.splitPlan?.plan
         ? state.splitPlan.plan.groups.reduce((sum, group) => {
           let lines = 2 // title + separator

@@ -1,5 +1,5 @@
 import { SimpleGit } from 'simple-git'
-import { getBisectStatus, parseBisectLog } from './bisectData'
+import { getBisectCompletion, getBisectStatus, parseBisectLog } from './bisectData'
 
 jest.mock('fs', () => {
   const actual = jest.requireActual('fs')
@@ -137,6 +137,46 @@ describe('parseBisectLog', () => {
     // comment rows carry the parsed subject text.
     expect(parsed[3]).toMatchObject({ kind: 'bad', sha: 'abc1234' })
     expect(parsed[3].subject).toBeUndefined()
+  })
+})
+
+describe('getBisectCompletion', () => {
+  it('returns undefined when no terminator is present', () => {
+    const log = parseBisectLog(['git bisect start', 'git bisect bad abc1234'].join('\n'))
+    expect(getBisectCompletion(log)).toBeUndefined()
+  })
+
+  it('returns the sha + subject from a well-formed terminator', () => {
+    const log = parseBisectLog(
+      ['git bisect start', '# first bad commit: [abc1234] feat: regression-y change'].join('\n')
+    )
+    expect(getBisectCompletion(log)).toEqual({
+      sha: 'abc1234',
+      subject: 'feat: regression-y change',
+    })
+  })
+
+  it('returns the latest terminator when multiple are present', () => {
+    // Rare but real: a user `git bisect reset` then re-runs in the
+    // same .git directory can leave two terminators in the parsed
+    // log. The latest one is the one that matters.
+    const log = parseBisectLog(
+      [
+        '# first bad commit: [old1111] feat: old answer',
+        'git bisect start',
+        '# first bad commit: [new2222] feat: new answer',
+      ].join('\n')
+    )
+    expect(getBisectCompletion(log)).toEqual({ sha: 'new2222', subject: 'feat: new answer' })
+  })
+
+  it('returns the sha with subject undefined when the comment has no subject', () => {
+    const log = parseBisectLog('# first bad commit: [abc1234]')
+    expect(getBisectCompletion(log)).toEqual({ sha: 'abc1234', subject: undefined })
+  })
+
+  it('returns undefined for an empty log', () => {
+    expect(getBisectCompletion([])).toBeUndefined()
   })
 })
 

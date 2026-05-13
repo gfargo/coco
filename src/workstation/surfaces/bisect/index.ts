@@ -19,6 +19,7 @@ import { truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { GitCommitDetail } from '../../../commands/log/data'
 import type { LogInkState } from '../../../commands/log/inkViewModel'
+import { getBisectCompletion } from '../../../git/bisectData'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
@@ -39,6 +40,11 @@ export function renderBisectSurface(
   const loading = isLogInkContextKeyLoading(contextStatus, 'bisect')
   const bisect = context.bisect
   const accent = theme.noColor ? undefined : theme.colors.accent
+  // #879 item 3 — detect git's "first bad commit" terminator so we
+  // can swap the in-flight UI for a completion panel. The session is
+  // technically still active until `git bisect reset`, so the answer
+  // panel piggy-backs on the same `bisect.active` branch.
+  const completion = bisect?.active ? getBisectCompletion(bisect.log) : undefined
 
   const lines: ReactTypes.ReactNode[] = []
 
@@ -82,6 +88,54 @@ export function renderBisectSurface(
         color: row.opts?.accent ? accent : undefined,
       }, truncateCells(row.text, width - 4)))
     }
+  } else if (completion) {
+    // Bisect terminated: git emitted the "first bad commit" line into
+    // BISECT_LOG. Render a dedicated answer panel rather than leaving
+    // the surface in the same shape as a regular decision step. HEAD
+    // is parked on the first-bad commit at this point, so the
+    // candidateDetail loaded via #879 item 2 carries the right
+    // author / date / file stats — we reuse it instead of issuing
+    // another git-show round-trip.
+    const shortSha = completion.sha.slice(0, 8)
+    lines.push(h(Text, { key: 'bisect-complete-title', bold: true, color: accent },
+      truncateCells('✓ Bisect complete — first bad commit identified', width - 4)))
+    lines.push(h(Text, { key: 'bisect-complete-spacer-1' }, ''))
+
+    // Headline: short sha + subject, prominent.
+    const subjectText = completion.subject || candidateDetail?.message || '<subject unavailable>'
+    lines.push(h(Text, { key: 'bisect-complete-sha', bold: true },
+      truncateCells(`  ${shortSha}  ${subjectText}`, width - 4)))
+
+    if (candidateLoading) {
+      lines.push(h(Text, { key: 'bisect-complete-loading', dimColor: true },
+        truncateCells('  loading commit detail…', width - 4)))
+    } else if (candidateDetail) {
+      lines.push(h(Text, { key: 'bisect-complete-author', dimColor: true },
+        truncateCells(`  ${candidateDetail.author} · ${candidateDetail.date}`, width - 4)))
+      const { stats, files } = candidateDetail
+      lines.push(h(Text, { key: 'bisect-complete-stats' },
+        truncateCells(
+          `  ${stats.filesChanged} file${stats.filesChanged === 1 ? '' : 's'} · +${stats.insertions} / -${stats.deletions}`,
+          width - 4,
+        )))
+      const sampleFiles = files.slice(0, 3).map((file) => file.path)
+      if (sampleFiles.length > 0) {
+        const overflow = files.length > sampleFiles.length ? ` (+${files.length - sampleFiles.length} more)` : ''
+        lines.push(h(Text, { key: 'bisect-complete-files', dimColor: true },
+          truncateCells(`    ${sampleFiles.join(', ')}${overflow}`, width - 4)))
+      }
+    }
+
+    lines.push(h(Text, { key: 'bisect-complete-spacer-2' }, ''))
+    lines.push(h(Text, { key: 'bisect-complete-next-h', bold: true },
+      truncateCells('Next', width - 4)))
+    lines.push(h(Text, { key: 'bisect-complete-next-1' },
+      truncateCells('  y  yank short sha       x  reset / exit bisect', width - 4)))
+    lines.push(h(Text, { key: 'bisect-complete-next-2', dimColor: true },
+      truncateCells('  <  back to history      esc  back', width - 4)))
+    lines.push(h(Text, { key: 'bisect-complete-spacer-3' }, ''))
+    lines.push(h(Text, { key: 'bisect-complete-tip', dimColor: true },
+      truncateCells('Tip: `git bisect log > /tmp/replay` saves the session for later replay.', width - 4)))
   } else {
     // Active bisect. Three-section body: current candidate (sha +
     // commit summary so the user can judge the diff at a glance),
@@ -171,7 +225,8 @@ export function renderBisectSurface(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Bisect', focused)),
-    h(Text, { dimColor: true }, bisect?.active ? 'BISECTING' : 'inactive')
+    h(Text, { dimColor: true },
+      completion ? 'COMPLETE' : bisect?.active ? 'BISECTING' : 'inactive')
   ),
   ...lines)
 }

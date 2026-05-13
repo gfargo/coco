@@ -39,6 +39,38 @@ export type BisectStatus = {
   log: BisectLogEntry[]
 }
 
+export type BisectCompletion = {
+  /** The "first bad commit" sha as recorded by git in the log. */
+  sha: string
+  /** Commit subject as recorded in the comment row, if any. */
+  subject?: string
+}
+
+/**
+ * Detect the bisect terminator in a parsed log. When git's binary
+ * search lands on the first bad commit it emits a
+ * `# first bad commit: [<sha>] <subject>` comment row into BISECT_LOG.
+ * The session is technically still "active" (the log file persists
+ * until `git bisect reset`), so callers need an explicit signal that
+ * the answer is in.
+ *
+ * Walks last-to-first so a re-bisect that left a stale terminator at
+ * the top still resolves to the most recent one. Returns undefined
+ * when no terminator is present.
+ */
+export function getBisectCompletion(log: BisectLogEntry[]): BisectCompletion | undefined {
+  for (let i = log.length - 1; i >= 0; i--) {
+    const entry = log[i]
+    if (entry.kind !== 'unknown') continue
+    const match = entry.raw.match(/^#\s+first\s+bad\s+commit:\s+\[([^\]]+)\]\s*(.*)$/)
+    if (match) {
+      const subject = match[2]?.trim()
+      return { sha: match[1], subject: subject || undefined }
+    }
+  }
+  return undefined
+}
+
 const EMPTY_STATUS: BisectStatus = {
   active: false,
   currentSha: '',
