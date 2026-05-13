@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
+import { extractSubmoduleChange, renderSubmoduleSummary } from './submoduleDiff'
 import { WorktreeFile } from './statusData'
 
 export type WorktreeFileDiff = {
@@ -15,12 +16,17 @@ function sectionLines(title: string, diff: string): string[] {
   const lines = diff.split('\n').map((line) => line.trimEnd())
   const body = lines.filter(Boolean)
 
-  // #884 — replace pointer-body hunks for LFS-tracked files with a
-  // single human-readable summary. Operates on the post-trim body so
-  // the rest of the section (title + structure) is preserved.
+  // #884 — replace pointer-body hunks (LFS) and `Subproject commit`
+  // hunks (submodules) with one-line summaries. Both are checked
+  // in priority order; mutually exclusive in practice (a file is
+  // either LFS-tracked or a submodule path, never both).
   const lfsChange = extractLfsPatchChange(body)
   if (lfsChange) {
     return [title, renderLfsSummary(lfsChange)]
+  }
+  const submoduleChange = extractSubmoduleChange(body)
+  if (submoduleChange) {
+    return [title, renderSubmoduleSummary(submoduleChange)]
   }
 
   return [title, ...body]

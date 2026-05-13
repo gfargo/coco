@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { extractLfsPatchChange, renderLfsSummary } from '../../git/lfsPointer'
+import { extractSubmoduleChange, renderSubmoduleSummary } from '../../git/submoduleDiff'
 import { LogArgv, LogView } from './config'
 
 export const FIELD_SEPARATOR = '\x1f'
@@ -384,14 +385,18 @@ export async function getCommitFilePreview(
     ))
     .slice(0, limit)
 
-  // #884 — replace the noisy pointer-body hunks for LFS-tracked files
-  // with a one-line summary. The pointer format is recognizable
-  // directly from the patch content, so no `.gitattributes` parsing
-  // or `git lfs` subprocess is required for this win.
+  // #884 — replace LFS pointer hunks and submodule "Subproject
+  // commit" hunks with one-line summaries. Both detections are
+  // mutually exclusive (a file is either LFS-tracked or a
+  // submodule, never both) so the priority order doesn't matter;
+  // we check LFS first because the pattern is more specific.
   const lfsChange = extractLfsPatchChange(hunks)
+  const submoduleChange = lfsChange ? undefined : extractSubmoduleChange(hunks)
   const finalHunks = lfsChange
     ? [renderLfsSummary(lfsChange)]
-    : hunks
+    : submoduleChange
+      ? [renderSubmoduleSummary(submoduleChange)]
+      : hunks
 
   return {
     path: file.path,
