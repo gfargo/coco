@@ -421,6 +421,28 @@ expect(result.text).toContain('feat: my deterministic title')
 The scenario sets up the git state; the mock sets up the LLM output.
 Together they make the workflow test deterministic top to bottom.
 
+## Consumers outside of tests
+
+The scenario library is also the golden-set provider for the
+structural-extract eval harness (#934). Each scenario's commits are
+walked into per-file diffs and fed through the parser pipeline with
+the language-aware fast path toggled on vs. off; the harness reports
+LLM-calls-saved + fast-path hit rate per input.
+
+```bash
+npm run eval:structural-extract                 # all scenarios + fixtures
+npm run eval:structural-extract -- --scenario feature-pr-ready
+npm run eval:structural-extract -- --fixtures-only
+```
+
+The adapter lives at
+`src/lib/parsers/default/__evals__/scenarioInputs.ts` and the
+extraction-boundary rule still holds: it imports from
+`src/lib/testUtils/scenarios` and the public `findScenario` helper,
+not from any individual scenario module. When the testUtils layer
+moves out to its own package, the eval depends on the published
+package the same way any other consumer would.
+
 ## Extraction discipline
 
 This layer is intentionally **git-tool-agnostic** and a candidate for
