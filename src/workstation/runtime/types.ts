@@ -17,6 +17,7 @@ import type { SimpleGit } from 'simple-git'
 import type { BisectStatus } from '../../git/bisectData'
 import type { BranchOverview } from '../../git/branchData'
 import type { LfsAttributeStatus } from '../../git/lfsAttributes'
+import type { SubmoduleOverview } from '../../git/submoduleData'
 import type { GitOperationOverview } from '../../git/operationData'
 import type { ProviderOverview } from '../../git/providerData'
 import type { PullRequestOverview } from '../../git/pullRequestData'
@@ -47,6 +48,14 @@ export type LogInkContext = {
   pullRequest?: PullRequestOverview
   reflog?: ReflogOverview
   stashes?: StashOverview
+  /**
+   * Submodule overview (#884). Carries per-submodule metadata
+   * (name / path / pinned commit / status flag / tracking branch /
+   * url) parsed from `.gitmodules` + `git submodule status`. The
+   * inspector and diff renderers use this to format submodule rows
+   * with real context instead of raw `Subproject commit` lines.
+   */
+  submodules?: SubmoduleOverview
   tags?: TagOverview
   worktree?: WorktreeOverview
   worktreeList?: WorktreeListOverview

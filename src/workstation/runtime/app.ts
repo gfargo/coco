@@ -59,6 +59,7 @@ import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { getBranchOverview } from '../../git/branchData'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
+import { getSubmoduleOverview } from '../../git/submoduleData'
 import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
 import {
   runCommitDraftWorkflow,
@@ -99,7 +100,7 @@ async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
 }
 
 async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
-  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs] =
+  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules] =
     await Promise.all([
       safe(getBranchOverview(git)),
       safe(getPullRequestOverview(git)),
@@ -112,6 +113,7 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
       safe(getReflogOverview(git)),
       safe(getBisectStatus(git)),
       safe(getLfsAttributeStatus(git)),
+      safe(getSubmoduleOverview(git)),
     ])
 
   return {
@@ -123,6 +125,7 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
     pullRequest,
     reflog,
     stashes,
+    submodules,
     tags,
     worktree,
     worktreeList,
@@ -162,6 +165,10 @@ function loadLogInkContextEntries(git: SimpleGit): Array<{
     {
       key: 'lfs',
       load: () => safe(getLfsAttributeStatus(git)),
+    },
+    {
+      key: 'submodules',
+      load: () => safe(getSubmoduleOverview(git)),
     },
     {
       key: 'worktree',
