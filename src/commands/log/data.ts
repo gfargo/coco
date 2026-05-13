@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { extractLfsPatchChange, renderLfsSummary } from '../../git/lfsPointer'
 import { LogArgv, LogView } from './config'
 
 export const FIELD_SEPARATOR = '\x1f'
@@ -383,6 +384,15 @@ export async function getCommitFilePreview(
     ))
     .slice(0, limit)
 
+  // #884 — replace the noisy pointer-body hunks for LFS-tracked files
+  // with a one-line summary. The pointer format is recognizable
+  // directly from the patch content, so no `.gitattributes` parsing
+  // or `git lfs` subprocess is required for this win.
+  const lfsChange = extractLfsPatchChange(hunks)
+  const finalHunks = lfsChange
+    ? [renderLfsSummary(lfsChange)]
+    : hunks
+
   return {
     path: file.path,
     oldPath: file.oldPath,
@@ -391,6 +401,6 @@ export async function getCommitFilePreview(
       binary: file.binary,
       deletions: file.deletions,
     },
-    hunks,
+    hunks: finalHunks,
   }
 }

@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
 import { WorktreeFile } from './statusData'
 
 export type WorktreeFileDiff = {
@@ -12,11 +13,17 @@ export type WorktreeFileDiff = {
 
 function sectionLines(title: string, diff: string): string[] {
   const lines = diff.split('\n').map((line) => line.trimEnd())
+  const body = lines.filter(Boolean)
 
-  return [
-    title,
-    ...lines.filter(Boolean),
-  ]
+  // #884 — replace pointer-body hunks for LFS-tracked files with a
+  // single human-readable summary. Operates on the post-trim body so
+  // the rest of the section (title + structure) is preserved.
+  const lfsChange = extractLfsPatchChange(body)
+  if (lfsChange) {
+    return [title, renderLfsSummary(lfsChange)]
+  }
+
+  return [title, ...body]
 }
 
 export async function getWorktreeFileDiff(
