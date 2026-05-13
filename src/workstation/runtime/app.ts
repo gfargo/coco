@@ -639,6 +639,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       )
     )
   }, [context.reflog?.entries, state.filter])
+  const filteredSubmoduleList = React.useMemo(() => {
+    const all = context.submodules?.entries || []
+    if (!state.filter) return all
+    return all.filter((entry) =>
+      matchesPromotedFilter(
+        [entry.name, entry.path, entry.trackingBranch || '', entry.url || ''],
+        state.filter,
+      )
+    )
+  }, [context.submodules?.entries, state.filter])
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
@@ -2491,6 +2501,31 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         value = path
         label = `path ${path}`
       }
+    } else if (view === 'submodules') {
+      // #932 — yank from the dedicated submodules view. `y` (default)
+      // copies the cursored submodule's path; `Y` (short) copies the
+      // pinned commit's short sha. Either is what the user most
+      // likely wants — path for `git submodule update <path>`, sha
+      // for cross-referencing in logs or other repos.
+      const entries = context.submodules?.entries || []
+      const filtered = state.filter
+        ? entries.filter((entry) => matchesPromotedFilter(
+          [entry.name, entry.path, entry.trackingBranch || '', entry.url || ''],
+          state.filter,
+        ))
+        : entries
+      const entry = filtered[Math.min(state.selectedSubmoduleIndex, Math.max(0, filtered.length - 1))]
+      if (entry) {
+        if (short) {
+          if (entry.pinnedSha) {
+            value = entry.pinnedSha.slice(0, 8)
+            label = `short sha ${value} (submodule ${entry.name})`
+          }
+        } else {
+          value = entry.path
+          label = `submodule path ${entry.path}`
+        }
+      }
     } else if (view === 'bisect') {
       // #879 item 3 — yank the first-bad commit sha from the
       // completion panel. The headline answer is what the user
@@ -2554,6 +2589,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context.bisect,
     context.branches,
     context.stashes,
+    context.submodules,
     context.tags,
     dispatch,
     selected,
@@ -2569,6 +2605,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedBranchIndex,
     state.selectedIndex,
     state.selectedStashIndex,
+    state.selectedSubmoduleIndex,
     state.selectedTagIndex,
     state.selectedWorktreeFileIndex,
     state.tagSort,
@@ -2828,6 +2865,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const reflogSelectedHash = filteredReflogList[
       Math.min(state.selectedReflogIndex, Math.max(0, filteredReflogList.length - 1))
     ]?.hash
+    const submoduleVisibleCount = filteredSubmoduleList.length
+    const submoduleSelectedPath = filteredSubmoduleList[
+      Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
+    ]?.path
     const worktreeVisibleCount = filteredWorktreeList.length
 
     // When the diff view is showing a stash patch, swap the previewLineCount
@@ -2861,6 +2902,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashCount: stashVisibleCount,
       reflogCount: reflogVisibleCount,
       reflogSelectedHash,
+      submoduleCount: submoduleVisibleCount,
+      submoduleSelectedPath,
       stashSelectedRef,
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,

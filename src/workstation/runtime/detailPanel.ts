@@ -28,6 +28,7 @@ import {
   renderComposeContextPanel,
   renderHistoryInspector,
   renderStashPreviewPanel,
+  renderSubmodulePreviewPanel,
   renderTagPreviewPanel,
 } from '../surfaces/detail'
 import {
@@ -125,6 +126,10 @@ export function renderDetailPanel(
   }
   if (state.activeView === 'stash') {
     return renderStashPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+
+  if (state.activeView === 'submodules') {
+    return renderSubmodulePreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
   }
 
   return renderHistoryInspector(
