@@ -187,6 +187,13 @@ export type LogInkInputContext = {
    * the headline answer is the value the user wants to copy.
    */
   bisectCompletionSha?: string
+  /**
+   * True when a bisect session is in progress (#879 item 4). Used to
+   * disambiguate the bisect view's `s` keystroke: with bisect active
+   * it means "skip current candidate"; without it means "start a new
+   * bisect via the in-TUI wizard".
+   */
+  bisectActive?: boolean
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {
@@ -1062,6 +1069,23 @@ export function getLogInkInputEvents(
     return [action({ type: 'toggleHelp' })]
   }
 
+  // #879 item 4 — Esc cancels an in-flight bisect-start wizard. Runs
+  // BEFORE the generic `popView` so we both clear the wizard state
+  // and walk back to the bisect view in one keystroke. Without this
+  // ordering Esc would pop history back to bisect but the wizard
+  // mode would stick around, and the next Enter on history would
+  // still try to capture a sha.
+  if (key.escape && state.bisectPickMode) {
+    const events: LogInkInputEvent[] = [
+      action({ type: 'clearBisectPickMode' }),
+      action({ type: 'setStatus', value: 'Bisect start cancelled' }),
+    ]
+    if (state.viewStack.length > 1) {
+      events.push(action({ type: 'popView' }))
+    }
+    return events
+  }
+
   if (key.escape && state.viewStack.length > 1) {
     return [action({ type: 'popView' })]
   }
@@ -1237,7 +1261,23 @@ export function getLogInkInputEvents(
       return [{ type: 'runWorkflowAction', id: 'bisect-bad' }]
     }
     if (inputValue === 's') {
-      return [{ type: 'runWorkflowAction', id: 'bisect-skip' }]
+      // #879 item 4 — `s` is context-overloaded. When a bisect is
+      // active, the original #784 behavior applies: skip the current
+      // candidate. When no bisect is active, the empty-state view is
+      // showing and `s` enters the in-TUI start wizard: push history,
+      // mark the user as picking the BAD commit, surface a sticky
+      // banner explaining the next step.
+      if (context.bisectActive) {
+        return [{ type: 'runWorkflowAction', id: 'bisect-skip' }]
+      }
+      return [
+        action({ type: 'setBisectPickMode', mode: 'bad' }),
+        action({ type: 'pushView', value: 'history' }),
+        action({
+          type: 'setStatus',
+          value: 'Pick the BAD commit (where the bug is present). Enter to confirm · esc to cancel',
+        }),
+      ]
     }
     if (inputValue === 'x') {
       return [action({ type: 'setPendingConfirmation', value: 'bisect-reset' })]
@@ -1800,6 +1840,45 @@ export function getLogInkInputEvents(
       }),
       action({ type: 'setStatus', value: `Comparing ${state.compareBase.label} → ${head.label}` }),
     ]
+  }
+
+  // #879 item 4 — bisect-start wizard intercepts Enter on history
+  // BEFORE the regular "open diff" handler so the user's pick fires
+  // instead of drilling into the commit. Two steps:
+  //   - mode='bad' : capture the cursored hash, advance to mode='good'
+  //   - mode='good': fire `bisect-start-from-history` workflow with
+  //                  payload `<bad>\n<good>` and let the runtime
+  //                  validate + execute + clear the wizard
+  if (
+    key.return &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.bisectPickMode &&
+    state.filteredCommits.length > 0
+  ) {
+    const selected = state.filteredCommits[state.selectedIndex]
+    if (selected) {
+      if (state.bisectPickMode === 'bad') {
+        return [
+          action({ type: 'setBisectPickMode', mode: 'good', pendingBad: selected.hash }),
+          action({
+            type: 'setStatus',
+            value: `bad = ${selected.shortHash}. Now pick a known-GOOD commit (older). Enter to confirm · esc to cancel`,
+          }),
+        ]
+      }
+      // mode === 'good': both shas captured, fire the workflow. The
+      // payload uses a newline so the runtime can split cleanly
+      // without ambiguity vs. sha characters.
+      const badSha = state.bisectPickPendingBad
+      if (badSha) {
+        return [{
+          type: 'runWorkflowAction',
+          id: 'bisect-start-from-history',
+          payload: `${badSha}\n${selected.hash}`,
+        }]
+      }
+    }
   }
 
   if (

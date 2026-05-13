@@ -329,6 +329,21 @@ export type LogInkState = {
    * state, not on disk, and clears with the workstation session.
    */
   changelogCache: { [branch: string]: ChangelogCacheEntry }
+  /**
+   * In-TUI bisect start wizard (#879 item 4). Two-step pick:
+   *   - 'bad'  : empty-state entered → user is picking the BAD commit
+   *              from history. On Enter, capture the sha and advance.
+   *   - 'good' : bad captured (held in `bisectPickPendingBad`) → user
+   *              is picking the GOOD commit. On Enter, fire
+   *              `bisect-start-from-history` with both shas.
+   *
+   * Esc clears the mode + pending sha. The bisect view's `s` is
+   * context-overloaded: when bisect is active it skips; when inactive
+   * it enters the wizard. Cleared when bisect starts successfully so
+   * the next session begins from a clean slate.
+   */
+  bisectPickMode?: 'bad' | 'good'
+  bisectPickPendingBad?: string
 }
 
 export type ChangelogViewStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -532,6 +547,8 @@ export type LogInkAction =
   | { type: 'setSplitPlanError'; error: string }
   | { type: 'pageSplitPlan'; delta: number; lineCount: number }
   | { type: 'clearSplitPlan' }
+  | { type: 'setBisectPickMode'; mode: 'bad' | 'good'; pendingBad?: string }
+  | { type: 'clearBisectPickMode' }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -1734,6 +1751,20 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       }
     case 'clearSplitPlan':
       return { ...state, splitPlan: undefined, pendingKey: undefined }
+    case 'setBisectPickMode':
+      return {
+        ...state,
+        bisectPickMode: action.mode,
+        bisectPickPendingBad: action.pendingBad ?? state.bisectPickPendingBad,
+        pendingKey: undefined,
+      }
+    case 'clearBisectPickMode':
+      return {
+        ...state,
+        bisectPickMode: undefined,
+        bisectPickPendingBad: undefined,
+        pendingKey: undefined,
+      }
     default:
       return state
   }
