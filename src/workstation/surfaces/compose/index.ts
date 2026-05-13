@@ -11,6 +11,7 @@
 import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { pickSpinnerFrame } from '../../chrome/spinner'
 import { formatLogInkComposeEmpty } from '../../chrome/surfaceStates'
 import { truncateCells, wrapCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
@@ -26,7 +27,8 @@ export function renderComposeSurface(
   contextStatus: LogInkContextStatus,
   bodyRows: number,
   width: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  spinnerFrame: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const compose = state.commitCompose
@@ -110,8 +112,8 @@ export function renderComposeSurface(
         bold: true,
         color: theme.noColor ? undefined : theme.colors.accent,
       }, theme.ascii
-        ? '[...] Generating AI commit draft (this can take a moment)'
-        : '⏳ Generating AI commit draft… (this can take a moment)'),
+        ? `[${pickSpinnerFrame(spinnerFrame).replace(/[^a-zA-Z0-9 ]/g, '.')}] Generating AI commit draft (this can take a moment)`
+        : `${pickSpinnerFrame(spinnerFrame)}  Generating AI commit draft… (this can take a moment)`),
     ]
     : []),
   ...(compose.message ? [h(Text, undefined, ''), h(Text, { key: 'compose-msg' }, truncateCells(compose.message, 140))] : []),

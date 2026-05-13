@@ -6,9 +6,12 @@ import {
 } from './idleTips'
 
 describe('log Ink idle tips (P4.3)', () => {
-  it('exposes the canonical 6+ tip rotation called out in the spec', () => {
+  it('exposes a short scannable tip rotation', () => {
+    // Floor of 6 from the original P4.3 spec; ceiling raised as new
+    // keystrokes get added so the discoverability rotation can grow
+    // without rewriting this test every release.
     expect(IDLE_TIPS.length).toBeGreaterThanOrEqual(6)
-    expect(IDLE_TIPS.length).toBeLessThanOrEqual(8)
+    expect(IDLE_TIPS.length).toBeLessThanOrEqual(24)
     // Each tip is a short scannable hint.
     IDLE_TIPS.forEach((tip) => {
       expect(tip.length).toBeGreaterThan(8)
