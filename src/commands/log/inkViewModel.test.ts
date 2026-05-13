@@ -1336,4 +1336,58 @@ describe('log Ink view model', () => {
       expect(state.splitPlan).toBeUndefined()
     })
   })
+
+  describe('recent-commit markers', () => {
+    it('markRecentCommits records the hash list with a timestamp', () => {
+      const before = Date.now()
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'markRecentCommits',
+        hashes: ['abc123', 'def456'],
+      })
+
+      expect(state.recentCommitHashes?.hashes).toEqual(['abc123', 'def456'])
+      expect(state.recentCommitHashes?.markedAt).toBeGreaterThanOrEqual(before)
+    })
+
+    it('markRecentCommits with empty list closes the marker', () => {
+      // Allows callers to clear the marker early via the same action
+      // shape — useful when a follow-up op fires before the auto-
+      // clear timeout and we want to wipe old marks first.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'markRecentCommits',
+        hashes: ['abc123'],
+      })
+      state = applyLogInkAction(state, { type: 'markRecentCommits', hashes: [] })
+      expect(state.recentCommitHashes).toBeUndefined()
+    })
+
+    it('clearRecentCommits closes the marker', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'markRecentCommits',
+        hashes: ['abc123'],
+      })
+      state = applyLogInkAction(state, { type: 'clearRecentCommits' })
+      expect(state.recentCommitHashes).toBeUndefined()
+    })
+
+    it('overwriting markRecentCommits replaces the previous list', () => {
+      // If a second op fires before the first's auto-clear, the
+      // newer hash set should win — old marks shouldn't bleed into
+      // the new operation's set.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'markRecentCommits',
+        hashes: ['old1', 'old2'],
+      })
+      state = applyLogInkAction(state, {
+        type: 'markRecentCommits',
+        hashes: ['new1'],
+      })
+
+      expect(state.recentCommitHashes?.hashes).toEqual(['new1'])
+    })
+  })
 })

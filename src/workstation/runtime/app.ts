@@ -1819,6 +1819,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
+    // Capture HEAD before the apply so we can compute exactly which
+    // commits the operation created (rev-list headBefore..HEAD after
+    // success). Best-effort — if revparse fails we skip the
+    // newest-commits marker, no degradation of the apply itself.
+    const headBefore = await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
+
     dispatch({ type: 'setSplitPlanApplying' })
     dispatch({ type: 'setStatus', value: 'Applying split plan…', loading: true })
 
@@ -1869,6 +1875,26 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const unstaged = fresh?.unstagedCount || 0
     const untracked = fresh?.untrackedCount || 0
     const remaining = unstaged + untracked
+
+    // Compute the freshly-created commit hashes and mark them so the
+    // history surface renders them with a "new" indicator. Auto-
+    // clears after 5s so the marker doesn't linger across later
+    // operations. Best-effort — a rev-list failure (e.g. headBefore
+    // capture failed earlier) just skips the marker, no impact on
+    // the apply itself.
+    if (headBefore) {
+      try {
+        const range = `${headBefore}..HEAD`
+        const raw = await git.raw(['rev-list', range])
+        const hashes = raw.split('\n').map((line) => line.trim()).filter(Boolean)
+        if (hashes.length > 0) {
+          dispatch({ type: 'markRecentCommits', hashes })
+          // DevSkim: ignore DS172411 — function literal, fixed delay,
+          // no caller-supplied data flowing through.
+          setTimeout(() => dispatch({ type: 'clearRecentCommits' }), 5000)
+        }
+      } catch { /* ignore — marker is a nice-to-have, not load-bearing */ }
+    }
 
     const baseMessage = result.message || 'Applied split plan.'
     const successMessage = remaining > 0
