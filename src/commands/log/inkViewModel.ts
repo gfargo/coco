@@ -21,6 +21,50 @@ export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
 export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
+
+/**
+ * One level in the nested-repo navigation stack (#931). Pushing a
+ * frame is the mental equivalent of spawning another `coco ui`
+ * instance scoped to a submodule's working directory; popping
+ * restores the parent's prior state.
+ *
+ * v1 of the foundation (this type) ships with every state always
+ * carrying a single root frame. Push / pop semantics, the runtime
+ * parallel structure that holds the per-frame `SimpleGit` + loaded
+ * context, and the breadcrumb chrome land in subsequent PRs.
+ *
+ * Fields here are pure data (label, optional return-state snapshot,
+ * optional range filter the user entered with). Live runtime
+ * objects (the bound `SimpleGit`, the loaded `LogInkContext`) live
+ * alongside the view model in component state so the reducer can
+ * stay pure.
+ */
+export type LogInkRepoFrame = {
+  /** Display label — root repo name, or for nested frames the submodule's name from .gitmodules. */
+  label: string
+  /**
+   * Snapshot of the parent's view position at push time, so the
+   * pop can land the user back where they came from (same view,
+   * cursor, filter). Undefined on the root frame.
+   */
+  parentReturn?: LogInkRepoFrameReturn
+  /**
+   * For frames pushed from a commit-diff: the `(oldPin, newPin)`
+   * range the user was inspecting. Drives the default landing view
+   * (history scoped to that range) and the breadcrumb hint so the
+   * user remembers what they were looking at. Undefined when
+   * entered from the dedicated submodules view (`gM`).
+   */
+  entryRange?: { oldSha: string; newSha: string }
+}
+
+export type LogInkRepoFrameReturn = {
+  activeView: LogInkView
+  selectedIndex: number
+  selectedFileIndex: number
+  selectedSubmoduleIndex: number
+  filter: string
+}
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
  * came from history → Enter on a commit (read-only commit-diff explore
@@ -70,6 +114,14 @@ export type LogInkInspectorTab = 'inspector' | 'actions'
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
   bootLoading?: boolean
+  /**
+   * Display label for the root repo frame (#931). Surfaces in the
+   * breadcrumb chrome once it lands and is forwarded into the
+   * persistence layer when keys need to be repo-qualified. Defaults
+   * to 'root' when omitted; CLI callers pass the basename of the
+   * cwd or the package name.
+   */
+  repoLabel?: string
 }
 
 export type LogInkState = {
@@ -113,6 +165,16 @@ export type LogInkState = {
    * their place.
    */
   selectedSubmoduleIndex: number
+  /**
+   * Nested-repo navigation stack (#931). Always at least one entry
+   * — the root frame for the repo `coco ui` was launched against.
+   * Length > 1 means the user has drilled into a submodule (or
+   * deeper). The top of the stack is the active frame; readers
+   * route the `SimpleGit` instance and the `LogInkContext` from
+   * the runtime-side parallel structure keyed on this stack's
+   * depth.
+   */
+  repoStack: LogInkRepoFrame[]
   /**
    * Sort modes for the promoted views (P4.2). `s` cycles through the
    * available modes; the surface header shows a `▼ <mode>` indicator.
@@ -929,6 +991,7 @@ export function createLogInkState(
     selectedConflictFileIndex: 0,
     selectedReflogIndex: 0,
     selectedSubmoduleIndex: 0,
+    repoStack: [{ label: options.repoLabel || 'root' }],
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
     paletteFilter: '',
@@ -970,6 +1033,36 @@ export function getSelectedInkCommit(state: LogInkState): GitLogCommitRow | unde
     return undefined
   }
   return state.filteredCommits[state.selectedIndex]
+}
+
+/**
+ * Active (top-of-stack) repo frame (#931). Always defined — the
+ * stack is invariant ≥ 1. The runtime reads this when it needs the
+ * frame's metadata (label for chrome, return state on pop, the
+ * entry range that drove the default landing view); the parallel
+ * runtime structure for the live `SimpleGit` + loaded context is
+ * keyed on the stack's depth so the two never get out of sync.
+ */
+export function getActiveLogInkRepoFrame(state: LogInkState): LogInkRepoFrame {
+  return state.repoStack[state.repoStack.length - 1]
+}
+
+/**
+ * True when the user has drilled into a submodule (or deeper).
+ * Drives the chrome breadcrumb's display and any future
+ * frame-aware behavior that wants to know "are we in a nested
+ * frame?" without inspecting the stack directly.
+ */
+export function isLogInkNestedRepo(state: LogInkState): boolean {
+  return state.repoStack.length > 1
+}
+
+/**
+ * Ordered labels for every frame on the stack, root first. Drives
+ * the breadcrumb rendering: `coco-ui · vendor/lib · feat/widget`.
+ */
+export function getLogInkRepoStackLabels(state: LogInkState): string[] {
+  return state.repoStack.map((frame) => frame.label)
 }
 
 export function applyLogInkAction(state: LogInkState, action: LogInkAction): LogInkState {
