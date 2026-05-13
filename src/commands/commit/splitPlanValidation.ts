@@ -251,6 +251,73 @@ export function rescueMixedFiles(
   return { ...plan, groups: rescuedGroups }
 }
 
+/**
+ * Salvage a plan where one or more staged files aren't claimed by any
+ * group at all. The validator calls this `missingFiles` and rejects.
+ *
+ * Recovery: append a synthetic "misc" group containing every missing
+ * file. The user can re-roll (`r`) if the model's grouping forgot a
+ * critical file they wanted in a specific commit, but a salvageable
+ * plan that surfaces ALL staged work is strictly better than
+ * exhausting 3 retry attempts and ending in the failure modal.
+ *
+ * Why append (not distribute across existing groups): each existing
+ * group has a thematic identity (title + body + rationale). Quietly
+ * inserting a forgotten file into one of them would muddy that
+ * theme. A separate "misc" group is honest about what happened ("the
+ * model didn't have an obvious home for these — review before
+ * applying") and the user can always edit / reject the plan.
+ *
+ * Run AFTER `rescuePhantomHunks` and `rescueMixedFiles` so any
+ * partial recovery from those passes is reflected in the
+ * "what's already claimed" calculation.
+ *
+ * Returns a NEW plan object — original is not mutated. No-op when
+ * every staged file is already claimed somewhere.
+ */
+export function rescueMissingFiles(
+  plan: CommitSplitPlan,
+  staged: FileChange[],
+  hunkInventory?: HunkInventoryLike
+): CommitSplitPlan {
+  const stagedFiles = new Set(staged.map((change) => change.filePath))
+  const claimed = new Set<string>()
+
+  // A file is claimed if it appears in any group's files[] OR if any
+  // of its hunks appear in any group's hunks[] (mirrors the validator's
+  // missingFiles check).
+  plan.groups.forEach((group) => {
+    (group.files || []).forEach((file) => claimed.add(file))
+    ;(group.hunks || []).forEach((hunkId) => {
+      const hunk = hunkInventory?.byId.get(hunkId)
+      if (hunk) claimed.add(hunk.filePath)
+    })
+  })
+
+  const missing = [...stagedFiles].filter((file) => !claimed.has(file))
+  if (missing.length === 0) {
+    return plan
+  }
+
+  // Sort missing files for deterministic output — the LLM's group
+  // ordering isn't stable, but our recovery should be.
+  missing.sort()
+
+  return {
+    ...plan,
+    groups: [
+      ...plan.groups,
+      {
+        title: 'chore: misc unclaimed changes',
+        body: 'Files the split plan did not assign to any other commit. Review and re-roll (`r`) if these belong in a specific commit.',
+        rationale: 'Recovered by validator rescue — model omitted these from every group.',
+        files: missing,
+        hunks: [],
+      },
+    ],
+  }
+}
+
 export function formatPlanValidationFeedback(issues: PlanValidationIssues): string {
   const sections: string[] = []
 

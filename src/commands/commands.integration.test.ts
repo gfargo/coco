@@ -511,14 +511,19 @@ describe('command integration with temp git repos', () => {
       mode: 'stdout',
     }))
 
-    // First attempt drops src/feature.ts entirely; retry covers both files.
+    // First attempt references a file that's NOT in the staged set
+    // (unknownFiles validator error — no rescue available). Retry
+    // covers both real files. Previously this test used "first
+    // attempt drops a file" but rescueMissingFiles now auto-recovers
+    // that case in a single attempt — to actually exercise the retry
+    // loop we need a non-rescuable invalidation.
     mockExecuteChainWithSchema
       .mockResolvedValueOnce({
         groups: [
           {
             title: 'docs: update readme',
             body: 'Document the temp repo.',
-            files: ['README.md'],
+            files: ['README.md', 'ghost.ts'],
             hunks: [],
           },
         ],
@@ -572,8 +577,8 @@ describe('command integration with temp git repos', () => {
     const secondCallVars = mockExecuteChainWithSchema.mock.calls[1][3] as Record<string, string>
 
     expect(firstCallVars.previous_attempt_feedback).toContain('first attempt')
-    expect(secondCallVars.previous_attempt_feedback).toContain('Staged files missing')
-    expect(secondCallVars.previous_attempt_feedback).toContain('src/feature.ts')
+    expect(secondCallVars.previous_attempt_feedback).toContain('NOT in the staged file inventory')
+    expect(secondCallVars.previous_attempt_feedback).toContain('ghost.ts')
     expect(stdout).toContain('docs: update readme')
     expect(stdout).toContain('test: add feature fixture')
   })
@@ -583,12 +588,15 @@ describe('command integration with temp git repos', () => {
       mode: 'stdout',
     }))
 
+    // unknownFiles invalidation (no rescue available) — guarantees
+    // retries actually exhaust. A missing-file invalidation would be
+    // auto-rescued on attempt 1.
     mockExecuteChainWithSchema.mockResolvedValue({
       groups: [
         {
           title: 'docs: update readme',
           body: 'Document the temp repo.',
-          files: ['README.md'],
+          files: ['README.md', 'ghost.ts'],
           hunks: [],
         },
       ],
@@ -620,7 +628,7 @@ describe('command integration with temp git repos', () => {
         version: false,
         help: false,
       } as Arguments<CommitOptions>, createLogger())
-    ).rejects.toThrow(/after 3 attempts.*missing files: src\/feature\.ts/i)
+    ).rejects.toThrow(/after 3 attempts.*unknown files: ghost\.ts/i)
 
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(3)
   })

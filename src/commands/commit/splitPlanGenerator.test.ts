@@ -57,8 +57,15 @@ describe('generateValidatedCommitSplitPlan', () => {
   })
 
   it('feeds validator complaints back into a retry attempt and succeeds', async () => {
+    // Uses an `unknownFiles` invalidation — that error has no rescue
+    // function, so the retry loop is the only path to a valid plan.
+    // (Missing-files was the original invalidation but rescueMissingFiles
+    // now auto-recovers that case in a single attempt.)
     const invalidPlan: CommitSplitPlan = {
-      groups: [{ title: 'a', files: ['a.ts'], hunks: [] }],
+      groups: [
+        { title: 'a', files: ['a.ts'], hunks: [] },
+        { title: 'b', files: ['ghost.ts'], hunks: [] },
+      ],
     }
     const validPlan: CommitSplitPlan = {
       groups: [
@@ -75,9 +82,9 @@ describe('generateValidatedCommitSplitPlan', () => {
 
     expect(result.attempts).toBe(2)
     // toStrictEqual rather than toBe — the generator now passes the
-    // raw plan through rescuePhantomHunks which returns a new object,
-    // so reference equality no longer holds. The semantic content is
-    // identical when the plan has no phantom hunks to rescue.
+    // raw plan through rescue passes which return new objects, so
+    // reference equality no longer holds. Semantic content is
+    // identical when there's nothing to rescue.
     expect(result.plan).toStrictEqual(validPlan)
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(2)
 
@@ -85,8 +92,8 @@ describe('generateValidatedCommitSplitPlan', () => {
     const secondCallVars = mockExecuteChainWithSchema.mock.calls[1][3] as Record<string, unknown>
 
     expect(firstCallVars.previous_attempt_feedback).toBe(NO_PREVIOUS_FEEDBACK_PLACEHOLDER)
-    expect(String(secondCallVars.previous_attempt_feedback)).toContain('Staged files missing')
-    expect(String(secondCallVars.previous_attempt_feedback)).toContain('b.ts')
+    expect(String(secondCallVars.previous_attempt_feedback)).toContain('NOT in the staged file inventory')
+    expect(String(secondCallVars.previous_attempt_feedback)).toContain('ghost.ts')
   })
 
   it('rescues phantom hunks before validation when the inventory is empty', async () => {
@@ -151,22 +158,55 @@ describe('generateValidatedCommitSplitPlan', () => {
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
   })
 
+  it('rescues missing files by appending a misc group (#921 regression)', async () => {
+    // Exact pattern from #921 manual testing: LLM omits a staged file
+    // from every group (the post-apply screenshot showed scratch.md
+    // missing). Validator's missingFiles rejected for 3 attempts.
+    // With rescueMissingFiles, the same output validates on attempt 1.
+    const incompletePlan: CommitSplitPlan = {
+      groups: [
+        { title: 'feat: a', files: ['a.ts'], hunks: [] },
+        // b.ts omitted entirely.
+      ],
+    }
+    mockExecuteChainWithSchema.mockResolvedValueOnce(incompletePlan)
+
+    const result = await generateValidatedCommitSplitPlan(baseArgs())
+
+    expect(result.attempts).toBe(1)
+    expect(result.plan.groups).toHaveLength(2)
+    expect(result.plan.groups[1].files).toEqual(['b.ts'])
+    expect(result.plan.groups[1].title).toContain('misc')
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
+  })
+
   it('throws after exhausting retries with the final validator complaints in the message', async () => {
+    // Uses unknownFiles (no rescue available) so retries actually
+    // exhaust. A missing-files invalidation would be auto-rescued.
     const invalidPlan: CommitSplitPlan = {
-      groups: [{ title: 'a', files: ['a.ts'], hunks: [] }],
+      groups: [
+        { title: 'a', files: ['a.ts'], hunks: [] },
+        { title: 'b', files: ['ghost.ts'], hunks: [] },
+      ],
     }
     mockExecuteChainWithSchema.mockResolvedValue(invalidPlan)
 
     await expect(
       generateValidatedCommitSplitPlan({ ...baseArgs(), maxAttempts: 2 })
-    ).rejects.toThrow(/after 2 attempts.*missing files: b\.ts/i)
+    ).rejects.toThrow(/after 2 attempts.*unknown files: ghost\.ts/i)
 
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(2)
   })
 
   it('tags each LLM call with an incrementing planAttempt in metadata', async () => {
+    // Uses unknownFiles (no rescue available) to ensure the retry
+    // actually fires — missing-files invalidation would be auto-rescued
+    // on attempt 1 and the second call would never happen.
     const invalidPlan: CommitSplitPlan = {
-      groups: [{ title: 'a', files: ['a.ts'], hunks: [] }],
+      groups: [
+        { title: 'a', files: ['a.ts'], hunks: [] },
+        { title: 'b', files: ['ghost.ts'], hunks: [] },
+      ],
     }
     const validPlan: CommitSplitPlan = {
       groups: [
