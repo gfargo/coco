@@ -19,7 +19,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog' | 'bisect' | 'changelog'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
@@ -106,6 +106,13 @@ export type LogInkState = {
    * and back should keep the user's place in the list.
    */
   selectedReflogIndex: number
+  /**
+   * Cursor for the dedicated submodules view (#932). Same lifecycle as
+   * the other promoted-view indices — preserved across navigations so
+   * the user can drill out and back into a submodule without losing
+   * their place.
+   */
+  selectedSubmoduleIndex: number
   /**
    * Sort modes for the promoted views (P4.2). `s` cycles through the
    * available modes; the surface header shows a `▼ <mode>` indicator.
@@ -505,6 +512,7 @@ export type LogInkAction =
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveReflog'; delta: number; count: number }
+  | { type: 'moveSubmodule'; delta: number; count: number }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
   | { type: 'moveConflictFile'; delta: number; count: number }
   | { type: 'moveToBottom' }
@@ -920,6 +928,7 @@ export function createLogInkState(
     selectedWorktreeListIndex: 0,
     selectedConflictFileIndex: 0,
     selectedReflogIndex: 0,
+    selectedSubmoduleIndex: 0,
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
     paletteFilter: '',
@@ -1183,6 +1192,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedReflogIndex: clampIndex(state.selectedReflogIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'moveSubmodule':
+      return {
+        ...state,
+        selectedSubmoduleIndex: clampIndex(state.selectedSubmoduleIndex + action.delta, action.count),
         pendingKey: undefined,
       }
     case 'moveWorktreeListEntry':

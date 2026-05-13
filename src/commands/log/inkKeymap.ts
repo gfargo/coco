@@ -30,6 +30,7 @@ export type LogInkCommandId =
   | 'navigatePullRequest'
   | 'navigateReflog'
   | 'navigateStash'
+  | 'navigateSubmodules'
   | 'navigateWorktrees'
   | 'navigateStatus'
   | 'navigateTags'
@@ -281,6 +282,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['gB'],
     label: 'bisect',
     description: 'Push the bisect workflow view (#784). Capital B disambiguates from gb (branches). Available whenever a bisect is in progress; surfaces the current candidate and the good / bad / skip / reset action keys.',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigateSubmodules',
+    keys: ['gM'],
+    label: 'submodules',
+    description: 'Push the submodules view (#932). Lists every registered submodule with status / pinned commit / tracking branch / remote. Capital M disambiguates from the single-letter `m` (mark compare base).',
     contexts: ['normal'],
   },
   {
@@ -754,6 +762,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'reflog') {
     return {
       contextual: ['↑/↓ entries', 'enter inspect', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'submodules') {
+    return {
+      contextual: ['↑/↓ entries', 'y yank path', 'Y yank sha', '/ filter', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

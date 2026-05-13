@@ -639,6 +639,23 @@ describe('log Ink input interactions', () => {
     expect(state.selectedReflogIndex).toBe(0)
   })
 
+  it('moves the selected submodule with arrow keys when in submodules view (#932)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'submodules' })
+
+    state = applyInput(state, 'j', {}, { submoduleCount: 3 })
+    state = applyInput(state, 'j', {}, { submoduleCount: 3 })
+    expect(state.selectedSubmoduleIndex).toBe(2)
+
+    state = applyInput(state, 'k', {}, { submoduleCount: 3 })
+    expect(state.selectedSubmoduleIndex).toBe(1)
+
+    // Clamped at zero going up past the boundary.
+    state = applyInput(state, 'k', {}, { submoduleCount: 3 })
+    state = applyInput(state, 'k', {}, { submoduleCount: 3 })
+    expect(state.selectedSubmoduleIndex).toBe(0)
+  })
+
   it('Enter on a reflog row drills into the diff for that hash (#781)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'reflog' })
@@ -826,6 +843,50 @@ describe('log Ink input interactions', () => {
     expect(state.viewStack).toEqual(['history', 'bisect'])
     expect(state.activeView).toBe('bisect')
     expect(state.statusMessage).toBe('jumped to bisect')
+  })
+
+  it('pushes submodules with the gM chord (#932)', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'M')
+
+    expect(state.viewStack).toEqual(['history', 'submodules'])
+    expect(state.activeView).toBe('submodules')
+    expect(state.statusMessage).toBe('jumped to submodules')
+  })
+
+  it('j/k on the submodules view dispatches moveSubmodule (#932)', () => {
+    let state = createLogInkState(rows, { activeView: 'submodules' })
+    state = applyLogInkAction(state, { type: 'setBootLoading', value: false })
+
+    const downEvents = getLogInkInputEvents(state, 'j', {}, { submoduleCount: 3 })
+    expect(downEvents).toContainEqual({
+      type: 'action',
+      action: { type: 'moveSubmodule', delta: 1, count: 3 },
+    })
+
+    const upEvents = getLogInkInputEvents(state, 'k', {}, { submoduleCount: 3 })
+    expect(upEvents).toContainEqual({
+      type: 'action',
+      action: { type: 'moveSubmodule', delta: -1, count: 3 },
+    })
+
+    // Zero submodules → no move action (falls through to the default).
+    const emptyEvents = getLogInkInputEvents(state, 'j', {}, { submoduleCount: 0 })
+    expect(emptyEvents.find((e) =>
+      e.type === 'action' && (e.action as { type: string }).type === 'moveSubmodule'
+    )).toBeUndefined()
+  })
+
+  it('y / Y on the submodules view yank path / sha (#932)', () => {
+    const state = createLogInkState(rows, { activeView: 'submodules' })
+
+    const yEvents = getLogInkInputEvents(state, 'y', {}, { submoduleCount: 2 })
+    expect(yEvents).toContainEqual({ type: 'yankFromActiveView', short: false })
+
+    const yShiftEvents = getLogInkInputEvents(state, 'Y', {}, { submoduleCount: 2 })
+    expect(yShiftEvents).toContainEqual({ type: 'yankFromActiveView', short: true })
   })
 
   it('lower-case g on the bisect view marks good (no chord trigger) (#784)', () => {

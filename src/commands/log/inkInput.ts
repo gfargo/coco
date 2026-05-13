@@ -92,6 +92,10 @@ export type LogInkInputContext = {
   reflogCount?: number
   /** Hash of the cursored reflog entry (#781). Used by Enter to drill into the diff. */
   reflogSelectedHash?: string
+  /** Number of registered submodules (#932). Drives j/k navigation on the submodules view. */
+  submoduleCount?: number
+  /** Repo-relative path of the cursored submodule (#932). Reserved for future per-entry actions. */
+  submoduleSelectedPath?: string
   worktreeListCount?: number
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
@@ -360,6 +364,14 @@ function isReflogActionTarget(state: LogInkState): boolean {
   return state.activeView === 'reflog' && state.focus === 'commits'
 }
 
+/**
+ * Submodules has no sidebar tab either — only the dedicated promoted
+ * view (#932). Same shape as `isReflogActionTarget`.
+ */
+function isSubmodulesActionTarget(state: LogInkState): boolean {
+  return state.activeView === 'submodules' && state.focus === 'commits'
+}
+
 function isWorktreeActionTarget(state: LogInkState): boolean {
   return (state.activeView === 'worktrees' && state.focus === 'commits') ||
     (state.focus === 'sidebar' && state.sidebarTab === 'worktrees')
@@ -528,6 +540,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'reflog' })]
     case 'navigateBisect':
       return [action({ type: 'pushView', value: 'bisect' })]
+    case 'navigateSubmodules':
+      return [action({ type: 'pushView', value: 'submodules' })]
     case 'markForCompare':
       // Palette context can't reach the cursored ref (filtered branch /
       // tag lists live in runtime state, not the reducer). Surface a
@@ -1211,6 +1225,18 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // `gM` chord: jump to the dedicated submodules view (#932). Capital
+  // M disambiguates from `gm` (not currently a chord, but the
+  // single-letter `m` already means "mark compare base"). Always
+  // navigates — even when no submodules are registered — so the
+  // empty-state copy can tell the user how to add one.
+  if (state.pendingKey === 'g' && inputValue === 'M') {
+    return [
+      action({ type: 'pushView', value: 'submodules' }),
+      action({ type: 'setStatus', value: 'jumped to submodules' }),
+    ]
+  }
+
   // `gH` chord: apply the cursored hunk to the index (`git apply
   // --cached`). Sibling of bare `H` which targets the worktree.
   // Discoverable via the footer hint on diff views and the help
@@ -1652,6 +1678,10 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveReflog', delta: -1, count: context.reflogCount })]
     }
 
+    if (isSubmodulesActionTarget(state) && context.submoduleCount) {
+      return [action({ type: 'moveSubmodule', delta: -1, count: context.submoduleCount })]
+    }
+
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {
       return [action({ type: 'moveWorktreeListEntry', delta: -1, count: context.worktreeListCount })]
     }
@@ -1751,6 +1781,10 @@ export function getLogInkInputEvents(
 
     if (isReflogActionTarget(state) && context.reflogCount) {
       return [action({ type: 'moveReflog', delta: 1, count: context.reflogCount })]
+    }
+
+    if (isSubmodulesActionTarget(state) && context.submoduleCount) {
+      return [action({ type: 'moveSubmodule', delta: 1, count: context.submoduleCount })]
     }
 
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {
@@ -2492,6 +2526,13 @@ export function getLogInkInputEvents(
     // here to copy; surfacing it via the same y/Y idiom (Y = short)
     // is faster than dropping to shell.
     if (state.activeView === 'bisect' && context.bisectCompletionSha) {
+      return [{ type: 'yankFromActiveView', short }]
+    }
+    // #932 — submodules view: y yanks the cursored submodule's path
+    // (most useful for `git submodule update <path>` etc.); Y yanks
+    // the pinned commit sha (in either full or short form, like the
+    // history view's Y).
+    if (isSubmodulesActionTarget(state) && context.submoduleCount) {
       return [{ type: 'yankFromActiveView', short }]
     }
   }

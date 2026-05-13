@@ -260,7 +260,7 @@ function renderSubmoduleInspectorBlock(
   return renderSubmoduleEntryLines(h, Text, width, entry)
 }
 
-function renderSubmoduleEntryLines(
+export function renderSubmoduleEntryLines(
   h: typeof ReactTypes.createElement,
   Text: LogInkComponents['Text'],
   width: number,
@@ -690,6 +690,57 @@ export function renderStashPreviewPanel(
   const stash = visible[index]
   return renderPreviewPanel(h, { Box, Text }, 'Stash preview',
     formatStashPreview(stash), width, theme, focused)
+}
+
+export function renderSubmodulePreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean,
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'submodules')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Submodule preview',
+      [{ text: formatLogInkLoading({ resource: 'submodules' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.submodules?.entries || []
+  const visible = state.filter
+    ? all.filter((entry) => matchesPromotedFilter(
+      [entry.name, entry.path, entry.trackingBranch || '', entry.url || ''],
+      state.filter,
+    ))
+    : all
+  const index = Math.max(0, Math.min(state.selectedSubmoduleIndex, Math.max(0, visible.length - 1)))
+  const entry = visible[index]
+  if (!entry) {
+    return renderPreviewPanel(h, { Box, Text }, 'Submodule preview',
+      [{ text: 'No submodule under cursor.', emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const flagLabel = entry.flag === 'clean' ? 'clean'
+    : entry.flag === 'modified' ? 'modified'
+      : entry.flag === 'uninitialized' ? 'uninitialized'
+        : 'conflicted'
+  const sha = entry.pinnedSha ? entry.pinnedSha.slice(0, 8) : '<unknown>'
+  const lines: PreviewLine[] = [
+    { text: entry.name, emphasis: 'heading' },
+    { text: `path:      ${entry.path}` },
+    { text: `pinned:    ${sha}` },
+    { text: `status:    ${flagLabel}` },
+    ...(entry.trackingBranch
+      ? [{ text: `tracking:  ${entry.trackingBranch}` }]
+      : []),
+    ...(entry.url
+      ? [{ text: `remote:    ${entry.url}`, emphasis: 'dim' as const }]
+      : []),
+  ]
+  return renderPreviewPanel(h, { Box, Text }, 'Submodule preview',
+    lines, width, theme, focused)
 }
 
 export function renderCommitPanel(

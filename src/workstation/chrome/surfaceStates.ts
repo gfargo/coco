@@ -102,3 +102,14 @@ export function formatLogInkComposeEmpty({ hasStaged }: LogInkComposeEmptyArgs):
   }
   return 'No staged changes to commit. Press gs to stage files, then gc to come back here.'
 }
+
+export type LogInkSubmodulesEmptyArgs = {
+  filter: string
+}
+
+export function formatLogInkSubmodulesEmpty({ filter }: LogInkSubmodulesEmptyArgs): string {
+  if (filter.trim()) {
+    return `No submodules match filter '${filter}'. Press ctrl+u to clear.`
+  }
+  return 'No submodules registered. Add one with `git submodule add <url> <path>` from the shell.'
+}

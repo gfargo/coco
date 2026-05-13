@@ -30,6 +30,7 @@ import { renderPullRequestSurface } from '../surfaces/pullRequest'
 import { renderReflogSurface } from '../surfaces/reflog'
 import { renderStashSurface } from '../surfaces/stash'
 import { renderStatusSurface } from '../surfaces/status'
+import { renderSubmodulesSurface } from '../surfaces/submodules'
 import { renderTagsSurface } from '../surfaces/tags'
 import { renderWorktreesSurface } from '../surfaces/worktrees'
 import type { LogInkComponents, LogInkContext } from './types'
@@ -127,6 +128,10 @@ export function renderMainPanel(
 
   if (state.activeView === 'worktrees') {
     return renderWorktreesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
+  if (state.activeView === 'submodules') {
+    return renderSubmodulesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   if (state.activeView === 'pull-request') {
