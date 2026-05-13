@@ -10,6 +10,7 @@ import {
   writeDiffSummary,
 } from './diffSummaryCache'
 import { summarizeMarkdownDiff } from './markdownDiff'
+import { detectStructuralLanguage, summarizeTsStructuralDiff } from './tsStructuralDiff'
 import { summarizeTrivialDiff } from './trivialDiff'
 
 /**
@@ -48,6 +49,19 @@ export type SummarizeLargeFilesOptions = {
    */
   fastPath?: {
     markdown?: boolean
+    /**
+     * Language-aware structural extract (#883). When enabled for a
+     * given language, modification diffs to source files in that
+     * language render as a templated symbol-level summary
+     * ("added parseRequest(); removed legacyParse()") instead of
+     * going through the LLM. Off by default — lossy by design and
+     * quality is harder to validate than the markdown fast path,
+     * so we don't enable it without explicit opt-in.
+     */
+    languageAware?: {
+      enabled?: boolean
+      languages?: ('ts' | 'js')[]
+    }
   }
   tokenizer: TokenCounter
   logger: Logger
@@ -110,6 +124,33 @@ async function summarizeFileDiff(
         ...fileDiff,
         diff: markdownSummary,
         tokenCount: tokenizer(markdownSummary),
+      }
+    }
+  }
+
+  // Language-aware structural fast path (#883, phase 1). Same
+  // contract as the markdown skip: opt-in only, falls through to
+  // the LLM when the diff has no top-level structural signal, and
+  // emits a templated summary when it does. Currently covers TS/JS
+  // via regex extraction; richer (tree-sitter-backed) languages
+  // arrive in follow-up PRs.
+  if (fastPath?.languageAware?.enabled) {
+    const language = detectStructuralLanguage(fileDiff.file)
+    const allowed = fastPath.languageAware.languages
+    const languageEnabled = language !== undefined &&
+      (!allowed || allowed.length === 0 || allowed.includes(language))
+    if (languageEnabled) {
+      const structuralSummary = summarizeTsStructuralDiff(fileDiff)
+      if (structuralSummary !== undefined) {
+        logger.verbose(
+          ` - ${fileDiff.file}: language-aware fast-path skip (no LLM call)`,
+          { color: 'gray' }
+        )
+        return {
+          ...fileDiff,
+          diff: structuralSummary,
+          tokenCount: tokenizer(structuralSummary),
+        }
       }
     }
   }

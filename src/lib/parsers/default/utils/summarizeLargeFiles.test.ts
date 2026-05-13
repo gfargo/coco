@@ -299,6 +299,82 @@ describe('summarizeLargeFiles', () => {
     expect(result[0].diff).toContain('New section')
   })
 
+  it('routes TS modification diffs to the structural extract when fastPath.languageAware is enabled (#883)', async () => {
+    const tsDiff = [
+      'diff --git a/src/parser.ts b/src/parser.ts',
+      'index aaa..bbb 100644',
+      '--- a/src/parser.ts',
+      '+++ b/src/parser.ts',
+      '@@ -1,5 +1,8 @@',
+      ' import { Logger } from "./logger"',
+      '-export function legacyParse() {',
+      '-  return {}',
+      '-}',
+      '+export function parseRequest(input: string) {',
+      '+  return JSON.parse(input)',
+      '+}',
+      '+export const PARSE_VERSION = 2',
+    ].join('\n')
+
+    const diffs: FileDiff[] = [
+      {
+        file: 'src/parser.ts',
+        diff: tsDiff,
+        summary: 'src/parser.ts',
+        tokenCount: 600,
+      },
+    ]
+
+    const result = await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      fastPath: { languageAware: { enabled: true } },
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockSummarize).not.toHaveBeenCalled()
+    expect(result[0].diff).toContain('Updated TypeScript')
+    expect(result[0].diff).toContain('parseRequest()')
+    expect(result[0].diff).toContain('legacyParse()')
+  })
+
+  it('keeps the LLM path when languageAware is enabled but the file language is not opted in (#883)', async () => {
+    // Modification (not a pure addition) so the trivial-shape skip
+    // doesn't preempt the fast-path branch we're exercising.
+    const tsDiff = [
+      '@@ -1,2 +1,2 @@',
+      '-export function hello() {}',
+      '+export function hello(name: string) {}',
+    ].join('\n')
+
+    const diffs: FileDiff[] = [
+      {
+        file: 'src/foo.ts',
+        diff: tsDiff,
+        summary: 'src/foo.ts',
+        tokenCount: 600,
+      },
+    ]
+
+    await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      // Explicitly opt in to JS only — TS files should fall through.
+      fastPath: { languageAware: { enabled: true, languages: ['js'] } },
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockSummarize).toHaveBeenCalledTimes(1)
+  })
+
   it('should respect maxConcurrent limit', async () => {
     const diffs: FileDiff[] = Array.from({ length: 10 }, (_, i) => ({
       file: `file${i}.ts`,
