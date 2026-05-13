@@ -41,6 +41,8 @@ import {
   formatTagPreview,
 } from '../../chrome/previewPane'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
+import type { LfsAttributeStatus } from '../../../git/lfsAttributes'
+import { isPathLfsTracked } from '../../../git/lfsAttributes'
 import { truncateCells, wrapCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type {
@@ -167,7 +169,8 @@ function renderCommitFileList(
   focused: boolean,
   maxRows: number,
   width: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  lfsStatus?: LfsAttributeStatus
 ): ReactTypes.ReactElement[] {
   if (!files.length) {
     return [h(Text, { key: 'commit-file-list-empty', dimColor: true }, 'No changed files found.')]
@@ -184,7 +187,12 @@ function renderCommitFileList(
     const stats = formatChangedFileStats(file)
     const renamed = file.oldPath ? ` (was ${file.oldPath})` : ''
     const statusCode = file.status.padEnd(3)
-    const label = `${cursor} ${statusCode} ${file.path}${renamed}${stats ? `  ${stats}` : ''}`
+    // #884 — append an "LFS" badge when the file is LFS-tracked.
+    // Surface-level signal: complements the patch-content rewrite
+    // in `lfsPointer.ts` so even rename / mode-only rows are
+    // flagged.
+    const lfsBadge = lfsStatus && isPathLfsTracked(lfsStatus, file.path) ? ' [LFS]' : ''
+    const label = `${cursor} ${statusCode} ${file.path}${renamed}${lfsBadge}${stats ? `  ${stats}` : ''}`
 
     return h(Text, {
       key: `commit-file-${index}`,
@@ -314,7 +322,7 @@ export function renderHistoryInspector(
   const fileListFocused = focused && state.inspectorTab === 'inspector'
   const fileListMaxRows = Math.max(4, Math.min(detail.files.length, 10))
   const fileListNodes = renderCommitFileList(
-    h, Text, detail.files, state.selectedFileIndex, fileListFocused, fileListMaxRows, width, theme
+    h, Text, detail.files, state.selectedFileIndex, fileListFocused, fileListMaxRows, width, theme, context.lfs
   )
 
   // Tab indicator. Renders in BOTH tabbed (short-terminal) mode and

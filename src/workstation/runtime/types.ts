@@ -16,6 +16,7 @@ import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import type { BisectStatus } from '../../git/bisectData'
 import type { BranchOverview } from '../../git/branchData'
+import type { LfsAttributeStatus } from '../../git/lfsAttributes'
 import type { GitOperationOverview } from '../../git/operationData'
 import type { ProviderOverview } from '../../git/providerData'
 import type { PullRequestOverview } from '../../git/pullRequestData'
@@ -34,6 +35,13 @@ import type { LogInkTheme } from '../chrome/theme'
 export type LogInkContext = {
   bisect?: BisectStatus
   branches?: BranchOverview
+  /**
+   * Repository-wide LFS attribute status (#884). When present, the
+   * UI flags LFS-tracked rows with an "LFS" badge even before any
+   * change has been made to them; the per-patch pointer detection
+   * in `lfsPointer.ts` continues to handle modified rows.
+   */
+  lfs?: LfsAttributeStatus
   operation?: GitOperationOverview
   provider?: ProviderOverview
   pullRequest?: PullRequestOverview

@@ -25,6 +25,7 @@ import {
 } from '../../chrome/surfaceStates'
 import { cellWidth, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
+import { isPathLfsTracked } from '../../../git/lfsAttributes'
 import type { WorktreeFile, WorktreeFileGroup } from '../../../git/statusData'
 import { applyStatusFilterMask, groupWorktreeFiles } from '../../../git/statusData'
 import type {
@@ -142,7 +143,13 @@ export function renderStatusSurface(
       const dotColor = getStageStatusDotColor(row.file.state, theme)
       const useDot = dotColor !== undefined
       const dotCells = useDot ? cellWidth(STAGE_STATUS_DOT) + 1 : 0
-      const tail = `${row.file.indexStatus}${row.file.worktreeStatus} ${row.file.path}`
+      // #884 — append an "LFS" badge on rows tracked by a
+      // `.gitattributes` filter=lfs pattern, so the user can tell
+      // the on-disk file is a pointer (not the real binary) even
+      // when the row has no diff. Detection lives in the context
+      // slice we lazily-loaded on boot; missing context → no badge.
+      const lfsBadge = context.lfs && isPathLfsTracked(context.lfs, row.file.path) ? ' LFS' : ''
+      const tail = `${row.file.indexStatus}${row.file.worktreeStatus} ${row.file.path}${lfsBadge}`
       const tailTrunc = truncateCells(tail, Math.max(0, 140 - cellWidth(cursorPart) - dotCells - 2))
       return h(Text, {
         key: `status-file-${row.flatIndex}-${rowIndex}`,
