@@ -272,7 +272,7 @@ import {
     unstageHunk,
 } from '../../git/statusHunks'
 import { getBisectCompletion, getBisectStatus } from '../../git/bisectData'
-import { bisectBad, bisectGood, bisectReset, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../git/bisectActions'
+import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../git/bisectActions'
 import { getCompareDiff } from '../../git/compareData'
 import { getReflogOverview } from '../../git/reflogData'
 import { getTagOverview } from '../../git/tagData'
@@ -1978,6 +1978,27 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return { ok: true, message: 'Bisect reset' }
         } catch (error) {
           return { ok: false, message: `Bisect reset failed: ${(error as Error).message}` }
+        }
+      },
+      'bisect-run': async () => {
+        // #879 item 5 — drive an automated bisect via `git bisect run
+        // sh -c '<command>'`. Synchronous from our perspective: git
+        // runs the loop, blocks until termination, then we surface
+        // the last meaningful line of stdout (typically "<sha> is
+        // the first bad commit") via the status line. Live streaming
+        // + cancel mid-run is a follow-up.
+        if (!context.bisect?.active) return { ok: false, message: 'No bisect in progress' }
+        const command = payload?.trim()
+        if (!command) return { ok: false, message: 'Bisect run needs a command' }
+        try {
+          const stdout = await bisectRun(git, command)
+          await refreshContext({ silent: true })
+          return {
+            ok: true,
+            message: extractBisectRemainingHint(stdout) || `Bisect run finished (${command})`,
+          }
+        } catch (error) {
+          return { ok: false, message: `Bisect run failed: ${(error as Error).message}` }
         }
       },
       'bisect-start-from-history': async () => {

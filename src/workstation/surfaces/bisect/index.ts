@@ -213,7 +213,7 @@ export function renderBisectSurface(
 
     lines.push(h(Text, { key: 'bisect-action-spacer' }, ''))
     lines.push(h(Text, { key: 'bisect-action-hint', dimColor: true },
-      truncateCells('Actions: g good · b bad · s skip · x reset', width - 4)))
+      truncateCells('Actions: g good · b bad · s skip · R run · x reset', width - 4)))
   }
 
   return h(Box, {

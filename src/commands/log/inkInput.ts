@@ -702,6 +702,16 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       action({ type: 'closeInputPrompt' }),
     ]
   }
+  if (state.inputPrompt.kind === 'bisect-run-command') {
+    // #879 item 5 — the typed command is the workflow payload. The
+    // runtime hands it to `git bisect run sh -c '<command>'` so shell
+    // features (pipes, env vars, flag-laden invocations) work as the
+    // user expects.
+    return [
+      { type: 'runWorkflowAction', id: 'bisect-run', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
   if (state.inputPrompt.kind === 'create-pr') {
     // Multi-line content: line 1 is the PR title, lines 2+ are the body
     // (leading blank line tolerated). The generic empty-value guard
@@ -1281,6 +1291,17 @@ export function getLogInkInputEvents(
     }
     if (inputValue === 'x') {
       return [action({ type: 'setPendingConfirmation', value: 'bisect-reset' })]
+    }
+    // #879 item 5 — `R` (capital) on an active bisect view opens an
+    // input prompt for a test command. Only fires when a session is
+    // active because `git bisect run` is meaningless otherwise. Lower-
+    // case `r` stays free for future view-local bindings.
+    if (inputValue === 'R' && context.bisectActive) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'bisect-run-command',
+        label: 'Bisect run command (e.g. npm test, pytest -k regression)',
+      })]
     }
   }
 

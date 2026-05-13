@@ -45,6 +45,26 @@ export async function bisectReset(git: SimpleGit): Promise<string> {
 }
 
 /**
+ * Drive an automated bisect run via `git bisect run sh -c '<command>'`
+ * (#879 item 5). Git handles the per-candidate loop itself, running
+ * the command for each commit and interpreting the exit code:
+ *
+ *   0       → mark good
+ *   125     → skip (untestable, e.g. doesn't build)
+ *   1..127  → mark bad (any non-zero except 125)
+ *   128+    → abort (SIGSEGV, killed, etc.)
+ *
+ * The `sh -c` form lets the user pass shell snippets (pipes, env
+ * vars, flag-laden test invocations) without escaping into git's
+ * argv. Runs synchronously from the runtime's perspective — git
+ * blocks until the run terminates and we surface the final result
+ * (typically "<sha> is the first bad commit") via the status line.
+ */
+export async function bisectRun(git: SimpleGit, command: string): Promise<string> {
+  return git.raw(['bisect', 'run', 'sh', '-c', command])
+}
+
+/**
  * Pull the user-facing remaining-revisions hint out of `git bisect`
  * stdout. Looks for the canonical line:
  *

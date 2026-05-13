@@ -520,6 +520,20 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #879 item 5 — `git bisect run <cmd>` integration. Empty `key`
+      // because the supported entry is the input prompt fired by `R`
+      // on the active bisect view; palette execution wouldn't have a
+      // command payload to pass. `kind: 'normal'` because the loop is
+      // recoverable via `git bisect reset`. The prompt itself serves
+      // as the implicit confirmation.
+      id: 'bisect-run',
+      key: '',
+      label: 'Bisect: run command',
+      description: 'Drive the bisect via `git bisect run sh -c <command>` — exit code marks good/bad/skip.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // #879 item 4 — in-TUI bisect start wizard. Empty `key` keeps
       // the keybinding out of the global map; the supported entry
       // point is `s` on the bisect empty state, which fires the

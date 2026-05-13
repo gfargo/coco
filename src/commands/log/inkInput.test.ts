@@ -927,6 +927,34 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  it('R on an active bisect view opens the bisect-run-command prompt (#879 item 5)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 'R', {}, { bisectActive: true })
+
+    const open = events.find(
+      (event) =>
+        event.type === 'action' &&
+        event.action.type === 'openInputPrompt' &&
+        event.action.kind === 'bisect-run-command'
+    )
+    expect(open).toBeDefined()
+  })
+
+  it('R on the empty bisect view (no active session) does nothing (#879 item 5)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 'R', {}, { bisectActive: false })
+
+    expect(events.find((event) =>
+      event.type === 'action' &&
+      event.action.type === 'openInputPrompt' &&
+      event.action.kind === 'bisect-run-command'
+    )).toBeUndefined()
+  })
+
   it('x on the bisect view opens the y-confirm for reset (#784)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
