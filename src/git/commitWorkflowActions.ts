@@ -328,12 +328,12 @@ export async function runCommitSplitApplyWorkflow(input: {
   planContext: CommitSplitPlanContext
   git?: SimpleGit
   noVerify?: boolean
-}): Promise<CommitWorkflowResult> {
+}): Promise<CommitWorkflowResult & { commitHashes?: string[] }> {
   const git = input.git || getRepo()
   const logger = new Logger({ silent: true })
 
   try {
-    const message = await applyCommitSplitPlan({
+    const applied = await applyCommitSplitPlan({
       plan: input.plan,
       changes: input.planContext.changes,
       hunkInventory: input.planContext.hunkInventory,
@@ -343,7 +343,13 @@ export async function runCommitSplitApplyWorkflow(input: {
     })
     return {
       ok: true,
-      message: message || 'Applied commit split plan.',
+      message: applied.message || 'Applied commit split plan.',
+      // Pass the actually-created commit hashes through. The runtime
+      // uses them for the just-landed marker; previously it had to do
+      // a post-apply `git rev-list` round-trip which was both extra
+      // I/O AND inaccurate when partial-apply landed fewer commits
+      // than the plan had groups.
+      commitHashes: applied.commitHashes,
     }
   } catch (error) {
     if (isCommandExitError(error)) {

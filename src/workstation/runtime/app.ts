@@ -1829,12 +1829,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
-    // Capture HEAD before the apply so we can compute exactly which
-    // commits the operation created (rev-list headBefore..HEAD after
-    // success). Best-effort — if revparse fails we skip the
-    // newest-commits marker, no degradation of the apply itself.
-    const headBefore = await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
-
     dispatch({ type: 'setSplitPlanApplying' })
     dispatch({ type: 'setStatus', value: 'Applying split plan…', loading: true })
 
@@ -1885,44 +1879,35 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const unstaged = fresh?.unstagedCount || 0
     const untracked = fresh?.untrackedCount || 0
 
-    // Compute the freshly-created commit hashes and mark them so the
-    // history surface renders them with a "new" indicator. Auto-
-    // clears after 5s so the marker doesn't linger across later
-    // operations. Best-effort — a rev-list failure (e.g. headBefore
-    // capture failed earlier) just skips the marker, no impact on
-    // the apply itself. The count from this rev-list also drives
-    // the success message — counting hashes is more accurate than
-    // parsing the workflow's string result.
-    let commitCount = 0
-    if (headBefore) {
-      try {
-        const range = `${headBefore}..HEAD`
-        const raw = await git.raw(['rev-list', range])
-        const hashes = raw.split('\n').map((line) => line.trim()).filter(Boolean)
-        commitCount = hashes.length
-        if (hashes.length > 0) {
-          dispatch({ type: 'markRecentCommits', hashes })
-          // DevSkim: ignore DS172411 — function literal, fixed delay,
-          // no caller-supplied data flowing through.
-          setTimeout(() => dispatch({ type: 'clearRecentCommits' }), 5000)
-        }
-      } catch { /* ignore — marker is a nice-to-have, not load-bearing */ }
+    // The workflow now returns the actually-created commit hashes
+    // directly (verified against HEAD inside applyCommitSplitPlan —
+    // each commit confirmed to have advanced the tip). Drive the
+    // just-landed marker AND the success-message commit count from
+    // that exact data instead of doing a second rev-list round-trip
+    // that could disagree with reality on partial-apply.
+    const commitHashes = result.commitHashes || []
+    if (commitHashes.length > 0) {
+      dispatch({ type: 'markRecentCommits', hashes: commitHashes })
+      // DevSkim: ignore DS172411 — function literal, fixed delay,
+      // no caller-supplied data flowing through.
+      setTimeout(() => dispatch({ type: 'clearRecentCommits' }), 5000)
     }
 
-    // Fall back to parsing the workflow result message ("Created N
-    // split commit(s).") if the rev-list path didn't yield a count.
-    if (commitCount === 0 && result.message) {
-      const match = result.message.match(/^Created (\d+)/)
-      if (match) commitCount = parseInt(match[1], 10) || 0
+    // If the workflow reported success but zero commits actually
+    // landed, surface that as an error — the spinner-then-silence
+    // failure mode from #940 manual testing where the apply appeared
+    // to succeed but the worktree got wiped with no commits made.
+    if (commitHashes.length === 0) {
+      const detail = result.message || 'No commits were created.'
+      dispatch({
+        type: 'setStatus',
+        value: `Split apply produced zero commits: ${detail}`,
+        kind: 'error',
+      })
+      return
     }
 
-    // Compose the success message with explicit nav cue (where to
-    // see the commits) + remaining-work hint. Closes the loop on the
-    // "what should I expect to see?" confusion from manual testing.
-    const successMessage = commitCount > 0
-      ? formatSplitApplySuccess(commitCount, unstaged, untracked)
-      : (result.message || 'Applied split plan.')
-
+    const successMessage = formatSplitApplySuccess(commitHashes.length, unstaged, untracked)
     dispatch({ type: 'setStatus', value: successMessage, kind: 'success' })
   }, [dispatch, git, refreshContext, refreshWorktreeContext, state.activeView, state.splitPlan, state.viewStack.length])
 
