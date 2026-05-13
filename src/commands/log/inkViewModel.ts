@@ -341,6 +341,18 @@ export type LogInkState = {
    */
   changelogCache: { [branch: string]: ChangelogCacheEntry }
   /**
+   * Hashes of commits the workstation just created (via split-apply
+   * or regular commit). The history surface renders these with a
+   * visible "new" marker so the user can see at a glance which rows
+   * landed from the operation they just confirmed. Auto-cleared by
+   * the runtime ~5s after marking — long enough to land the message,
+   * short enough not to litter the surface across later operations.
+   *
+   * Stored as a flat string set for fast membership checks inside
+   * the row renderer (called once per visible commit row).
+   */
+  recentCommitHashes?: { hashes: string[]; markedAt: number }
+  /**
    * In-TUI bisect start wizard (#879 item 4). Two-step pick:
    *   - 'bad'  : empty-state entered → user is picking the BAD commit
    *              from history. On Enter, capture the sha and advance.
@@ -553,6 +565,8 @@ export type LogInkAction =
   | { type: 'setChangelogText'; text: string }
   | { type: 'pageChangelog'; delta: number; lineCount: number }
   | { type: 'clearChangelogCache'; branch?: string }
+  | { type: 'markRecentCommits'; hashes: string[] }
+  | { type: 'clearRecentCommits' }
   | { type: 'startSplitPlanLoad' }
   | { type: 'setSplitPlanReady'; plan: CommitSplitPlan; planContext: CommitSplitPlanContext }
   | { type: 'setSplitPlanApplying' }
@@ -1697,6 +1711,20 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       delete next[action.branch]
       return { ...state, changelogCache: next, pendingKey: undefined }
     }
+    case 'markRecentCommits':
+      // Empty hash list closes out the marker — caller may use this
+      // to clear early when a follow-up op fires (so old "new"
+      // markers don't bleed into the next operation's surface).
+      if (action.hashes.length === 0) {
+        return { ...state, recentCommitHashes: undefined, pendingKey: undefined }
+      }
+      return {
+        ...state,
+        recentCommitHashes: { hashes: action.hashes, markedAt: Date.now() },
+        pendingKey: undefined,
+      }
+    case 'clearRecentCommits':
+      return { ...state, recentCommitHashes: undefined, pendingKey: undefined }
     case 'startSplitPlanLoad':
       // Overlay opens immediately so the user sees the loading state
       // (rather than the compose view sitting frozen while the LLM

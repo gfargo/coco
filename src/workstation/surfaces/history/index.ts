@@ -111,7 +111,8 @@ function renderCommitHistoryRow(
   theme: LogInkTheme,
   index: number,
   panelWidth: number,
-  laneSegments?: LaneSegment[]
+  laneSegments?: LaneSegment[],
+  isRecent: boolean = false
 ): ReactTypes.ReactElement {
   const refs = formatInkRefLabels(commit.refs)
   // Total cells available to the row content. Earlier revisions used a
@@ -149,7 +150,24 @@ function renderCommitHistoryRow(
   },
   ...graphChildren,
   ' ',
-  h(Text, { color: accent, bold: selected }, commit.shortHash),
+  // "Just landed" marker — a single thick vertical bar in the
+  // accent color before the short hash. Fades when the runtime
+  // clears state.recentCommitHashes (~5s after the operation).
+  // ASCII fallback uses `*` since terminals without unicode can't
+  // render `▎`.
+  isRecent
+    ? h(Text, {
+        color: theme.noColor ? undefined : theme.colors.accent,
+        bold: true,
+      }, theme.ascii ? '* ' : '▎ ')
+    : null,
+  h(Text, {
+    color: accent,
+    // Bold both selected AND just-landed commits — the marker is
+    // the primary cue but boldness makes the row read as "this is
+    // worth looking at" even without color.
+    bold: selected || isRecent,
+  }, commit.shortHash),
   ' ',
   h(Text, { dimColor: true }, commit.date),
   ' ',
@@ -206,6 +224,10 @@ export function renderHistoryPanel(
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree
+  // Set of just-landed commit hashes for the "new commit" marker.
+  // Populated for ~5s after a split-apply or other commit-creating
+  // operation; auto-cleared by the runtime so it doesn't linger.
+  const recentCommitsSet = new Set(state.recentCommitHashes?.hashes || [])
   const worktreeDirty = Boolean(
     worktree && (worktree.stagedCount + worktree.unstagedCount + worktree.untrackedCount) > 0
   )
@@ -289,7 +311,8 @@ export function renderHistoryPanel(
       return renderCommitHistoryRow(
         h, Text, item.commit, item.graph, visible.graphWidth,
         Boolean(item.selected) && !realSelectionSuppressed, theme, index,
-        width, item.laneSegments
+        width, item.laneSegments,
+        recentCommitsSet.has(item.commit.hash)
       )
     }))
 }
