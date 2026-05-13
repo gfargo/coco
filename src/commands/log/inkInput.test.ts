@@ -851,13 +851,80 @@ describe('log Ink input interactions', () => {
     expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-bad' })
   })
 
-  it('s on the bisect view skips the candidate (#784)', () => {
+  it('s on the bisect view skips the candidate when bisect is active (#784)', () => {
+    // With `bisectActive` true, `s` keeps the original #784 behavior
+    // (skip current candidate). The context flag arrives from the
+    // runtime — without it the dispatcher treats `s` as "start the
+    // wizard" per #879 item 4.
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
 
-    const events = getLogInkInputEvents(state, 's', {}, {})
+    const events = getLogInkInputEvents(state, 's', {}, { bisectActive: true })
 
     expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-skip' })
+  })
+
+  it('s on the bisect empty state enters the in-TUI start wizard (#879 item 4)', () => {
+    // No bisect active → `s` pushes history, sets pick-bad mode, and
+    // surfaces a sticky status banner. The next Enter on history is
+    // intercepted to capture the bad sha (see Enter test below).
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 's', {}, { bisectActive: false })
+
+    expect(events).toContainEqual({
+      type: 'action',
+      action: { type: 'setBisectPickMode', mode: 'bad' },
+    })
+    expect(events).toContainEqual({
+      type: 'action',
+      action: { type: 'pushView', value: 'history' },
+    })
+  })
+
+  it('Enter on history during bisectPickMode=bad captures the sha and advances (#879 item 4)', () => {
+    let state = createLogInkState(rows, { activeView: 'history' })
+    state = applyLogInkAction(state, { type: 'setBisectPickMode', mode: 'bad' })
+
+    const events = getLogInkInputEvents(state, '', { return: true })
+
+    const advance = events.find((event) =>
+      event.type === 'action' &&
+      event.action.type === 'setBisectPickMode' &&
+      event.action.mode === 'good'
+    )
+    expect(advance).toBeDefined()
+    if (advance && advance.type === 'action' && advance.action.type === 'setBisectPickMode') {
+      expect(advance.action.pendingBad).toBeDefined()
+    }
+  })
+
+  it('Enter on history during bisectPickMode=good fires bisect-start-from-history (#879 item 4)', () => {
+    let state = createLogInkState(rows, { activeView: 'history' })
+    state = applyLogInkAction(state, { type: 'setBisectPickMode', mode: 'good', pendingBad: 'badsha123' })
+
+    const events = getLogInkInputEvents(state, '', { return: true })
+
+    const workflow = events.find((event) => event.type === 'runWorkflowAction')
+    expect(workflow).toBeDefined()
+    if (workflow && workflow.type === 'runWorkflowAction') {
+      expect(workflow.id).toBe('bisect-start-from-history')
+      expect(workflow.payload).toMatch(/^badsha123\n/)
+    }
+  })
+
+  it('Esc during bisectPickMode clears the wizard (#879 item 4)', () => {
+    let state = createLogInkState(rows, { activeView: 'history' })
+    state = applyLogInkAction(state, { type: 'pushView', value: 'history' })
+    state = applyLogInkAction(state, { type: 'setBisectPickMode', mode: 'good', pendingBad: 'badsha123' })
+
+    const events = getLogInkInputEvents(state, '', { escape: true })
+
+    expect(events).toContainEqual({
+      type: 'action',
+      action: { type: 'clearBisectPickMode' },
+    })
   })
 
   it('x on the bisect view opens the y-confirm for reset (#784)', () => {

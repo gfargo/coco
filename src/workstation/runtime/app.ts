@@ -272,7 +272,7 @@ import {
     unstageHunk,
 } from '../../git/statusHunks'
 import { getBisectCompletion, getBisectStatus } from '../../git/bisectData'
-import { bisectBad, bisectGood, bisectReset, bisectSkip, extractBisectRemainingHint } from '../../git/bisectActions'
+import { bisectBad, bisectGood, bisectReset, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../git/bisectActions'
 import { getCompareDiff } from '../../git/compareData'
 import { getReflogOverview } from '../../git/reflogData'
 import { getTagOverview } from '../../git/tagData'
@@ -1980,6 +1980,43 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return { ok: false, message: `Bisect reset failed: ${(error as Error).message}` }
         }
       },
+      'bisect-start-from-history': async () => {
+        // #879 item 4 — in-TUI wizard payload: `<bad>\n<good>`. The
+        // input handler captures both shas off cursor selections and
+        // routes through this workflow so the validation +
+        // side-effects live in the runtime rather than the input
+        // dispatcher. On success we clear the wizard mode and push
+        // the bisect view so the user lands on the new candidate
+        // (the candidate-detail loader from item 2 takes over from
+        // there).
+        const parts = payload?.split('\n') ?? []
+        const badRef = parts[0]?.trim()
+        const goodRef = parts[1]?.trim()
+        if (!badRef || !goodRef) {
+          return { ok: false, message: 'Bisect start needs a BAD and a GOOD commit' }
+        }
+        if (badRef === goodRef) {
+          return { ok: false, message: 'Bad and good must be different commits' }
+        }
+        if (context.bisect?.active) {
+          return { ok: false, message: 'A bisect is already in progress — reset it first' }
+        }
+        if (worktreeDirty) {
+          return { ok: false, message: 'Worktree has changes — stash them before starting a bisect' }
+        }
+        try {
+          const stdout = await bisectStart(git, badRef, goodRef)
+          dispatch({ type: 'clearBisectPickMode' })
+          dispatch({ type: 'pushView', value: 'bisect' })
+          await refreshContext({ silent: true })
+          return {
+            ok: true,
+            message: extractBisectRemainingHint(stdout) || `Bisect started: bad ${badRef.slice(0, 8)} / good ${goodRef.slice(0, 8)}`,
+          }
+        } catch (error) {
+          return { ok: false, message: `Bisect start failed: ${(error as Error).message}` }
+        }
+      },
       'checkout-file-from-stash': async () => {
         const path = payload?.trim()
         const ref = state.stashDiffRef
@@ -2807,6 +2844,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       bisectCompletionSha: context.bisect?.active
         ? getBisectCompletion(context.bisect.log)?.sha
         : undefined,
+      // #879 item 4 — disambiguates the bisect view's `s` keystroke
+      // (skip current candidate vs. start the wizard).
+      bisectActive: Boolean(context.bisect?.active),
       splitPlanLineCount: state.splitPlan?.plan
         ? state.splitPlan.plan.groups.reduce((sum, group) => {
           let lines = 2 // title + separator

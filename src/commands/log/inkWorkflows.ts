@@ -520,6 +520,20 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #879 item 4 — in-TUI bisect start wizard. Empty `key` keeps
+      // the keybinding out of the global map; the supported entry
+      // point is `s` on the bisect empty state, which fires the
+      // wizard inline (two Enter taps on history). Marked as 'normal'
+      // (not destructive) because `git bisect start` is recoverable
+      // via `git bisect reset` and doesn't modify worktree content.
+      id: 'bisect-start-from-history',
+      key: '',
+      label: 'Bisect: start from history selections',
+      description: 'Run git bisect start with the bad/good commits picked from history (newline-separated payload).',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       id: 'ai-commit-summary',
       key: 'I',
       label: 'AI commit summary',
