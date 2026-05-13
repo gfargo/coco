@@ -89,6 +89,7 @@ import {
     getLogInkInputEvents,
 } from '../../commands/log/inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
+import { formatRemainingWorktreeHint } from '../chrome/postApplyHints'
 import { SPINNER_TICK_MS } from '../chrome/spinner'
 
 
@@ -1843,11 +1844,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // Success — close the overlay, reset compose (the staged set is
     // now empty since the plan committed everything), and pop the
     // compose view so the user lands on whatever was beneath (usually
-    // status, sometimes history). An empty compose pane after the
-    // commits land is a dead end; the surface beneath shows real
-    // state — remaining unstaged/untracked files, or the freshly
-    // landed commits in history. Either is more useful than staring
-    // at an empty draft.
+    // status, sometimes history).
     dispatch({ type: 'clearSplitPlan' })
     dispatch({ type: 'commitCompose', action: { type: 'reset' } })
     // Only pop if compose is on top — the apply could have been
@@ -1855,10 +1852,30 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     if (state.activeView === 'compose' && state.viewStack.length > 1) {
       dispatch({ type: 'popView' })
     }
-    dispatch({ type: 'setStatus', value: result.message, kind: 'success' })
+
+    // Refresh BEFORE setting the final status so we can peek at the
+    // post-apply worktree state and craft a directive next-step hint
+    // ("X unstaged + Y untracked remaining — press gs to stage / I
+    // to draft / …"). An empty success message reads as a dead end;
+    // a next-step hint keeps momentum.
     await refreshWorktreeContext()
-    // Re-fetch the commit log so the new commits show up in history.
     await refreshContext()
+
+    // Best-effort peek at the fresh worktree counts. If the second
+    // load fails we just fall back to the bare success message — no
+    // reason to noisily surface a status-line lookup error after a
+    // genuine success.
+    const fresh = await getWorktreeOverview(git).catch(() => undefined)
+    const unstaged = fresh?.unstagedCount || 0
+    const untracked = fresh?.untrackedCount || 0
+    const remaining = unstaged + untracked
+
+    const baseMessage = result.message || 'Applied split plan.'
+    const successMessage = remaining > 0
+      ? `${baseMessage} ${formatRemainingWorktreeHint(unstaged, untracked)}`
+      : `${baseMessage} Worktree is clean.`
+
+    dispatch({ type: 'setStatus', value: successMessage, kind: 'success' })
   }, [dispatch, git, refreshContext, refreshWorktreeContext, state.activeView, state.splitPlan, state.viewStack.length])
 
   // Esc inside the overlay — close without applying. Status line gets
