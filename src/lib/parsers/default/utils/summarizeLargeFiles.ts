@@ -10,21 +10,24 @@ import {
   writeDiffSummary,
 } from './diffSummaryCache'
 import { summarizeMarkdownDiff } from './markdownDiff'
-import { summarizeGoStructuralDiff, isGoFile } from './goStructuralDiff'
-import { summarizePythonStructuralDiff, isPythonFile } from './pythonStructuralDiff'
-import { summarizeRustStructuralDiff, isRustFile } from './rustStructuralDiff'
-import { detectTsLanguage, summarizeTsStructuralDiff } from './tsStructuralDiff'
+import { isGoFile } from './goStructuralDiff'
+import { isPythonFile } from './pythonStructuralDiff'
+import { isRustFile } from './rustStructuralDiff'
+import {
+  dispatchStructuralParser,
+  type StructuralLanguageId,
+} from './structuralParserRegistry'
+import { detectTsLanguage } from './tsStructuralDiff'
 import { summarizeTrivialDiff } from './trivialDiff'
 
 /**
- * Language identifier shared by the `service.fastPath.languageAware`
- * config knob and the dispatcher below. Adding a new language is two
- * lines: append the identifier to this union (mirrored in
- * `lib/langchain/types.ts` for schema generation), and add a case to
- * `dispatchStructuralSummary`.
+ * Map a file path to the language identifier used by the
+ * `service.fastPath.languageAware` config knob and the parser
+ * registry. Adding a new language: append the identifier to the
+ * union (mirrored in `lib/langchain/types.ts` for schema
+ * generation) and register a parser chain entry in
+ * `structuralParserRegistry.ts`.
  */
-type StructuralLanguageId = 'ts' | 'js' | 'py' | 'rs' | 'go'
-
 function detectStructuralLanguageId(path: string): StructuralLanguageId | undefined {
   const ts = detectTsLanguage(path)
   if (ts) return ts
@@ -32,23 +35,6 @@ function detectStructuralLanguageId(path: string): StructuralLanguageId | undefi
   if (isRustFile(path)) return 'rs'
   if (isGoFile(path)) return 'go'
   return undefined
-}
-
-function dispatchStructuralSummary(
-  language: StructuralLanguageId,
-  fileDiff: import('../../../types').FileDiff,
-): string | undefined {
-  switch (language) {
-    case 'ts':
-    case 'js':
-      return summarizeTsStructuralDiff(fileDiff)
-    case 'py':
-      return summarizePythonStructuralDiff(fileDiff)
-    case 'rs':
-      return summarizeRustStructuralDiff(fileDiff)
-    case 'go':
-      return summarizeGoStructuralDiff(fileDiff)
-  }
 }
 
 /**
@@ -178,7 +164,7 @@ async function summarizeFileDiff(
     const languageEnabled = language !== undefined &&
       (!allowed || allowed.length === 0 || allowed.includes(language))
     if (languageEnabled) {
-      const structuralSummary = dispatchStructuralSummary(language, fileDiff)
+      const structuralSummary = await dispatchStructuralParser(language, fileDiff)
       if (structuralSummary !== undefined) {
         logger.verbose(
           ` - ${fileDiff.file}: language-aware fast-path skip (no LLM call)`,
