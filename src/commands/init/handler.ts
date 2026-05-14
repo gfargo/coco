@@ -15,10 +15,21 @@ import { CommandHandler } from '../../lib/types'
 import { Logger } from '../../lib/utils/logger'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
 import { getProjectConfigFilePath } from '../../lib/utils/getProjectConfigFilePath'
+import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { InitArgv, InitOptions } from './config'
 import { questions } from './questions'
 
 export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
+  // Honor the global --repo flag so `coco init --repo <X> --scope project`
+  // writes the project config to X, not the launcher's cwd. The
+  // chdir has to happen before getProjectConfigFilePath resolves
+  // its target path (it reads process.cwd).
+  //
+  // `InitArgv` is `Argv<InitOptions>['argv']` which yargs types as a
+  // union including Promise — pass just the `repo` field as a plain
+  // object so the helper's narrow signature stays clean.
+  applyRepoCwd({ repo: (argv as { repo?: string }).repo })
+
   const options = loadConfig<InitOptions, InitArgv>(argv)
 
   logger.log(LOGO)

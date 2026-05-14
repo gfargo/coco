@@ -3,24 +3,38 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { BaseArgvOptions } from '../types'
 
 /**
- * Apply the global `--repo <dir>` (alias `--cwd`) flag for any
- * command handler. Returns the bound simple-git instance.
+ * Apply the global `--repo <dir>` (alias `--cwd`) flag — the part
+ * that doesn't need git. Performs the chdir if the flag is set and
+ * returns the resolved absolute path (or `process.cwd()` when
+ * omitted).
  *
- * Behavior:
- *   - When `argv.repo` is set, resolves the path to absolute,
- *     `process.chdir`s up-front, and returns `getRepo(repoPath)`.
- *   - When omitted, returns `getRepo()` (defaults to cwd) — original
- *     behavior, no surprise for users on the `cd && coco ...` path.
+ * Use this from non-git commands (cache, doctor, init) where the
+ * full `applyRepoFlag` would allocate a SimpleGit instance the
+ * handler never touches.
  *
  * Why chdir up-front:
  *   Many config / discovery paths (loadConfig's findUp for
  *   `.coco.config.json`, commitlint config detection, etc.) read
- *   `process.cwd()` directly. If we only changed simple-git's
- *   baseDir without chdir-ing, those would resolve against the
- *   original cwd — leading to "coco is reading this repo but
- *   loading config from somewhere else" surprises.
+ *   `process.cwd()` directly. If we don't chdir, those would
+ *   resolve against the original cwd — leading to "coco is
+ *   reading config from somewhere else" surprises.
+ */
+export function applyRepoCwd(argv: Pick<BaseArgvOptions, 'repo'>): string {
+  if (!argv.repo) {
+    return process.cwd()
+  }
+  const repoPath = path.resolve(argv.repo)
+  process.chdir(repoPath)
+  return repoPath
+}
+
+/**
+ * Apply the global `--repo <dir>` flag for git-using commands.
+ * Performs the chdir AND returns a SimpleGit instance bound to the
+ * targeted path.
  *
- * Returns the SimpleGit instance so callers can use it directly:
+ * Composes `applyRepoCwd` so the chdir semantics are identical
+ * across git / non-git handlers.
  *
  * ```ts
  * export const handler: CommandHandler<CommitArgv> = async (argv) => {
@@ -31,10 +45,6 @@ import { BaseArgvOptions } from '../types'
  * ```
  */
 export function applyRepoFlag(argv: Pick<BaseArgvOptions, 'repo'>): ReturnType<typeof getRepo> {
-  if (!argv.repo) {
-    return getRepo()
-  }
-  const repoPath = path.resolve(argv.repo)
-  process.chdir(repoPath)
-  return getRepo(repoPath)
+  const repoPath = applyRepoCwd(argv)
+  return argv.repo ? getRepo(repoPath) : getRepo()
 }
