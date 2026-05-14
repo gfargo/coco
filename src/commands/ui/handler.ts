@@ -1,3 +1,4 @@
+import * as path from 'node:path'
 import { Arguments } from 'yargs'
 import { SimpleGit } from 'simple-git'
 import { CommandHandler } from '../../lib/types'
@@ -21,6 +22,9 @@ export function createLogArgvFromUiArgv(argv: UiArgv): LogArgv {
     interactive: true,
     limit: argv.limit,
     path: argv.path,
+    // Carry the --repo flag through so the runtime keeps the same
+    // repo target across the ui → log argv handoff.
+    repo: argv.repo,
     verbose: argv.verbose,
     version: argv.version,
     help: argv.help,
@@ -96,10 +100,30 @@ export async function startCocoUiFromLogArgv(
 }
 
 export async function startCocoUi(argv: UiArgv): Promise<void> {
+  // `--repo <dir>` (alias `--cwd`) lets users target an arbitrary
+  // repository without `cd`-ing first. Resolve to absolute up-front
+  // so:
+  //   1. process.chdir gets a stable path (relative paths against
+  //      the original cwd would surprise the user if any later code
+  //      reads cwd after the chdir).
+  //   2. The disk cache key (rooted at repoPath) is canonical.
+  //   3. simple-git's baseDir is unambiguous.
+  // When the flag is omitted, fall back to process.cwd() — original
+  // behavior, no surprise for users who launch via `cd && coco ui`.
+  const repoPath = argv.repo ? path.resolve(argv.repo) : process.cwd()
+
+  // chdir BEFORE loadConfig so .coco.config.json lookup walks up
+  // from the targeted repo, not from wherever the user ran coco
+  // from. Many config-resolution paths (lib/utils/findUp, etc.)
+  // read process.cwd() — keeping them honest means doing the chdir
+  // up-front rather than passing a path everywhere.
+  if (argv.repo) {
+    process.chdir(repoPath)
+  }
+
   const config = loadConfig<Config, UiArgv>(argv)
-  const git = getRepo()
+  const git = getRepo(repoPath)
   const logArgv = createLogArgvFromUiArgv(argv)
-  const repoPath = process.cwd()
 
   // Same three-stage boot as startCocoUiFromLogArgv — mount with
   // cached rows for an instant-paint shell, refresh in background.
