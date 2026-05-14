@@ -19,6 +19,7 @@ import {
   clearDiffSummaryCache,
   getDiffSummaryCachePath,
 } from '../../lib/parsers/default/utils/diffSummaryCache'
+import { clearGitHubListCache } from '../../git/githubListCache'
 import { checkboxPrompt } from '../../lib/ui/inquirerPrompts'
 import { CommandHandler } from '../../lib/types'
 import { applyRepoCwd } from '../utils/applyRepoFlag'
@@ -245,6 +246,17 @@ export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
     return
   }
 
+  if (subcommand === 'clear-github') {
+    const result = clearGitHubListCache()
+    if (result.removed === 0) {
+      logger.log(chalk.dim('No GitHub triage cache to clear.'))
+      return
+    }
+    logger.log(chalk.green(`✓ cleared ${result.removed} cached GitHub triage list${result.removed === 1 ? '' : 's'}`))
+    logger.log(chalk.dim('Cleared from ~/.cache/coco/github/'))
+    return
+  }
+
   if (subcommand === 'clear-parsers') {
     const languages = listManifestLanguages()
     let cleared = 0
@@ -264,6 +276,6 @@ export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
   }
 
   logger.log(chalk.red(`Unknown cache subcommand: ${subcommand}`))
-  logger.log(chalk.dim('Use one of: clear, info, parsers, prefetch, clear-parsers'))
+  logger.log(chalk.dim('Use one of: clear, info, parsers, prefetch, clear-parsers, clear-github'))
   process.exitCode = 1
 }
