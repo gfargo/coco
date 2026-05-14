@@ -45,7 +45,7 @@ export type TreeSitterManifestEntry = {
 /**
  * Per-language manifest. Every `LazyTreeSitterLanguageId` MUST
  * have an entry here — that's enforced by the `Record` typing.
- * Phase 3 ships Python; Rust + Go follow in phases 5 / 6.
+ * Phase 3 shipped Python; phases 5 + 6 add Rust + Go.
  */
 export const TREE_SITTER_MANIFEST: Record<LazyTreeSitterLanguageId, TreeSitterManifestEntry> = {
   python: {
@@ -55,6 +55,22 @@ export const TREE_SITTER_MANIFEST: Record<LazyTreeSitterLanguageId, TreeSitterMa
     wasmUrl: 'https://cdn.jsdelivr.net/npm/tree-sitter-python@0.23.6/tree-sitter-python.wasm',
     sha256: '8c93692fb368e288a5824cee55773c9b3602804f513bda48c97661e52e9c2da2',
     approxBytes: 458_752,
+  },
+  rust: {
+    language: 'rust',
+    displayName: 'Rust',
+    version: '0.24.0',
+    wasmUrl: 'https://cdn.jsdelivr.net/npm/tree-sitter-rust@0.24.0/tree-sitter-rust.wasm',
+    sha256: 'f65f354215611fd94ad34134b3427eb3d58cbb745df7b6509ba722184db73d57',
+    approxBytes: 1_102_547,
+  },
+  go: {
+    language: 'go',
+    displayName: 'Go',
+    version: '0.25.0',
+    wasmUrl: 'https://cdn.jsdelivr.net/npm/tree-sitter-go@0.25.0/tree-sitter-go.wasm',
+    sha256: '9504573f352b20be7f2f1911754d710622aedc15afff16d5ed8fb5645681aee7',
+    approxBytes: 217_182,
   },
 }
 

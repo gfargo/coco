@@ -49,6 +49,10 @@ import {
 const ALIASES: Record<string, LazyTreeSitterLanguageId> = {
   py: 'python',
   python: 'python',
+  rs: 'rust',
+  rust: 'rust',
+  go: 'go',
+  golang: 'go',
 }
 
 export type PrefetchResult = {
