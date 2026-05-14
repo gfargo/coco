@@ -16,7 +16,7 @@
  */
 
 import type * as ReactTypes from 'react'
-import { getBranchTipChip } from '../../chrome/branchTip'
+import { filterChippedRefs, getBranchTipChip } from '../../chrome/branchTip'
 import { formatCompactRelativeDate } from '../../chrome/dateFormat'
 import { substituteGraphChars } from '../../chrome/graphChars'
 import type { LaneSegment } from '../../chrome/graphLanes'
@@ -65,14 +65,25 @@ function pickDateText(
 }
 
 /**
+ * Maximum cells the chip body (between the brackets) is allowed to
+ * occupy. Anything longer is truncated with an ellipsis so a
+ * `[origin/claude/issues-prs-cache]` chip — 32 cells of chrome —
+ * doesn't eat the whole subject column on a narrow terminal. Picked
+ * empirically: 20 cells fits common branch shapes (`feat/foo`,
+ * `claude/graph-fidelity`, `main`) without truncation.
+ */
+const BRANCH_CHIP_MAX_NAME_WIDTH = 20
+
+/**
  * Render a colored bracket chip for a branch tip. Current branch
  * (HEAD -> X) gets the success color + bold; other branch tips get
  * info color. Tags are never chipped — they stay in the trailing ref
  * list. The chip emits its own trailing space so callers concatenate
  * it directly into the row without a separator.
  *
- * Returns `[chip, width]` so the row's truncation math knows how many
- * cells the chip will consume up front.
+ * Returns the rendered node alongside its cell width AND the chip
+ * descriptor so the caller can pass it to `filterChippedRefs` and
+ * avoid emitting the same branch a second time in the trailing list.
  */
 function renderBranchTipChip(
   h: typeof ReactTypes.createElement,
@@ -80,11 +91,16 @@ function renderBranchTipChip(
   commit: GitLogCommitRow,
   theme: LogInkTheme,
   key: string
-): { node: ReactTypes.ReactElement | null; width: number } {
+): {
+  node: ReactTypes.ReactElement | null
+  width: number
+  chip: ReturnType<typeof getBranchTipChip>
+} {
   const chip = getBranchTipChip(commit.refs)
-  if (!chip) return { node: null, width: 0 }
+  if (!chip) return { node: null, width: 0, chip }
 
-  const label = `[${chip.name}] `
+  const truncated = truncateCells(chip.name, BRANCH_CHIP_MAX_NAME_WIDTH)
+  const label = `[${truncated}] `
   const color = theme.noColor
     ? undefined
     : chip.isHead
@@ -92,7 +108,8 @@ function renderBranchTipChip(
       : theme.colors.info
   return {
     node: h(Text, { key, color, bold: chip.isHead }, label),
-    width: label.length,
+    width: cellWidth(label),
+    chip,
   }
 }
 
@@ -176,7 +193,6 @@ function renderCommitHistoryRow(
   laneSegments?: LaneSegment[],
   isRecent: boolean = false
 ): ReactTypes.ReactElement {
-  const refs = formatInkRefLabels(commit.refs)
   // Total cells available to the row content. Earlier revisions used a
   // hardcoded 140 here, which let row content overflow whenever the
   // panel was narrower than that — Ink would wrap onto a second visual
@@ -189,10 +205,13 @@ function renderCommitHistoryRow(
   // Branch chip prefix — only renders in full-graph mode so compact
   // (scan) mode stays minimal. Chip occupies cells immediately after
   // the shortHash and before the message; truncation math reserves
-  // its width before sizing the message column.
+  // its width before sizing the message column. Trailing refs filter
+  // out whatever the chip already shows so the row doesn't print
+  // `[main] feat: x [HEAD -> main]` with the same info on both ends.
   const chip = fullGraph
     ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-chip`)
-    : { node: null, width: 0 }
+    : { node: null, width: 0, chip: undefined }
+  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip))
   const fixedWidth =
     graphWidth + 1 + commit.shortHash.length + 1 + dateSegmentWidth + chip.width
   // Refs trail the message and shrink first when the row is narrow:
@@ -292,7 +311,7 @@ function renderStackedCommitHistoryRow(
   const recentMarkerWidth = isRecent ? 2 : 0
   const chip = fullGraph
     ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-stk-chip`)
-    : { node: null, width: 0 }
+    : { node: null, width: 0, chip: undefined }
   const lineOneFixed =
     graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth + chip.width
   const subject = truncateCells(commit.message, Math.max(8, totalWidth - lineOneFixed))
@@ -320,10 +339,12 @@ function renderStackedCommitHistoryRow(
   // Line 2 — metadata row, padded to align with the start of the
   // shortHash on line 1 so the eye still groups them as one commit.
   // Selection background does not extend here so we don't get a thick
-  // double-row highlight on a tight terminal.
+  // double-row highlight on a tight terminal. Trailing refs are
+  // filtered against the chip so we don't repeat the branch tip both
+  // as a leading chip and a trailing label.
   const indent = ' '.repeat(graphWidth + 1)
   const dateText = formatCompactRelativeDate(commit.date, now)
-  const refs = formatInkRefLabels(commit.refs)
+  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip))
   const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
   const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
   // If both pieces are empty (date unparseable + no refs), show a

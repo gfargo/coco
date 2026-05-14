@@ -26,6 +26,32 @@ export type BranchTipChip = {
   isHead: boolean
 }
 
+/**
+ * Strip refs that are already represented by a branch tip chip so the
+ * trailing `[ref] [ref]` list doesn't repeat what the chip is already
+ * showing. The chip carries the primary branch name; the trailing
+ * list keeps everything else — including remote-tracking variants
+ * (`origin/X`) and `origin/HEAD` — because those convey "remote is
+ * also at this commit" info the chip alone doesn't.
+ *
+ * Removes:
+ *   - exact match of the chipped name (`main`, `feat/foo`)
+ *   - `HEAD -> <name>` for the chipped name
+ *   - bare `HEAD` when the chip is the HEAD branch (only paranoia;
+ *     git typically emits `HEAD -> name` not both, but a detached
+ *     fixup commit may have produced both)
+ */
+export function filterChippedRefs(refs: string[], chip: BranchTipChip | undefined): string[] {
+  if (!chip) return refs
+  const headDecoration = `HEAD -> ${chip.name}`
+  return refs.filter((ref) => {
+    if (ref === chip.name) return false
+    if (ref === headDecoration) return false
+    if (chip.isHead && ref === 'HEAD') return false
+    return true
+  })
+}
+
 export function getBranchTipChip(refs: string[]): BranchTipChip | undefined {
   for (const ref of refs) {
     if (ref.startsWith('HEAD -> ')) {
