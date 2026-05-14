@@ -10,6 +10,7 @@
 
 import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../chrome/context'
+import type { LogInkLayoutDensity } from '../chrome/layout'
 import type { LogInkTheme } from '../chrome/theme'
 import type {
   GitCommitDetail,
@@ -60,7 +61,9 @@ export function renderMainPanel(
   theme: LogInkTheme,
   hasMoreCommits: boolean,
   loadingMoreCommits: boolean,
-  spinnerFrame: number
+  spinnerFrame: number,
+  density: LogInkLayoutDensity,
+  rowMode: 'single' | 'stacked'
 ): ReactTypes.ReactElement {
   // Split-plan overlay (#907 polish): renders in the MAIN panel (not
   // detail) when active, because the content — multiple commit groups
@@ -155,6 +158,8 @@ export function renderMainPanel(
     width,
     theme,
     hasMoreCommits,
-    loadingMoreCommits
+    loadingMoreCommits,
+    density,
+    rowMode
   )
 }

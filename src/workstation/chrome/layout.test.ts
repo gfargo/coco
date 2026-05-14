@@ -1,4 +1,5 @@
 import {
+  LAYOUT_RAIL_PANEL_WIDTH,
   LOG_INK_MIN_COLUMNS,
   LOG_INK_MIN_ROWS,
   getLogInkLayout,
@@ -13,9 +14,12 @@ describe('log Ink layout', () => {
 
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(19)
-    expect(layout.sidebarWidth).toBe(22)
-    // 80 * 0.22 = 17.6 → floor 17 → clamped up to the 20-cell minimum
-    expect(layout.detailWidth).toBe(20)
+    // 80 columns falls into the rail tier (< 100), so both side
+    // panels collapse to the fixed rail width and the history panel
+    // takes everything they gave up.
+    expect(layout.density).toBe('rail')
+    expect(layout.sidebarWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
+    expect(layout.detailWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
   })
 
   it('uses a balanced layout at the default terminal size', () => {
@@ -38,11 +42,15 @@ describe('log Ink layout', () => {
     expect(layout.detailWidth).toBe(32)
   })
 
-  it('clamps the inspector at rest to its 20-32 cell range', () => {
-    const tiny = getLogInkLayout({ columns: 80, rows: 24 })
+  it('clamps the inspector at rest to its 20-32 cell range above the rail tier', () => {
+    // 100 columns is the lower bound of the tight tier — rail
+    // collapse no longer applies, so the at-rest clamp wins.
+    // 100 * 0.22 = 22 → in the 20-32 range, no clamp needed.
+    const tight = getLogInkLayout({ columns: 100, rows: 24 })
     const huge = getLogInkLayout({ columns: 400, rows: 80 })
 
-    expect(tiny.detailWidth).toBe(20)
+    expect(tight.density).toBe('tight')
+    expect(tight.detailWidth).toBe(22)
     expect(huge.detailWidth).toBe(32)
   })
 
@@ -135,6 +143,78 @@ describe('log Ink layout', () => {
       })
       const helpOnly = getLogInkLayout({ columns: 160, rows: 40, helpOverlayActive: true })
       expect(both.detailWidth).toBe(helpOnly.detailWidth)
+    })
+  })
+
+  // Responsive density tiers — drive history-row column dropping,
+  // relative-date formatting, row stacking, and side-panel rail
+  // collapse. Breakpoints live in `LAYOUT_*_BELOW` constants so the
+  // layout function + tests + downstream renderers share the same
+  // numbers.
+  describe('density tiers', () => {
+    it('classifies wide / normal / tight / rail by column count', () => {
+      expect(getLogInkLayout({ columns: 200, rows: 40 }).density).toBe('wide')
+      expect(getLogInkLayout({ columns: 160, rows: 40 }).density).toBe('wide')
+      expect(getLogInkLayout({ columns: 159, rows: 40 }).density).toBe('normal')
+      expect(getLogInkLayout({ columns: 120, rows: 40 }).density).toBe('normal')
+      expect(getLogInkLayout({ columns: 119, rows: 40 }).density).toBe('tight')
+      expect(getLogInkLayout({ columns: 100, rows: 40 }).density).toBe('tight')
+      expect(getLogInkLayout({ columns: 99, rows: 40 }).density).toBe('rail')
+      expect(getLogInkLayout({ columns: 80, rows: 24 }).density).toBe('rail')
+    })
+
+    it('stacks history rows only at the rail tier', () => {
+      expect(getLogInkLayout({ columns: 200, rows: 40 }).historyRowMode).toBe('single')
+      expect(getLogInkLayout({ columns: 120, rows: 40 }).historyRowMode).toBe('single')
+      expect(getLogInkLayout({ columns: 100, rows: 40 }).historyRowMode).toBe('single')
+      expect(getLogInkLayout({ columns: 90, rows: 40 }).historyRowMode).toBe('stacked')
+    })
+
+    it('rails the sidebar and inspector at rail tier when unfocused', () => {
+      const layout = getLogInkLayout({ columns: 90, rows: 40 })
+
+      expect(layout.sidebarRailed).toBe(true)
+      expect(layout.inspectorRailed).toBe(true)
+      expect(layout.sidebarWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
+      expect(layout.detailWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
+      // History gets everything the side panels gave up.
+      expect(layout.mainPanelWidth).toBe(90 - LAYOUT_RAIL_PANEL_WIDTH * 2)
+    })
+
+    it('un-rails a panel when it takes focus, even on a narrow terminal', () => {
+      const sidebarFocused = getLogInkLayout({ columns: 90, rows: 40, sidebarFocused: true })
+      expect(sidebarFocused.sidebarRailed).toBe(false)
+      // 90 * 0.36 = 32.4 → floor 32; clamps stay 32-50 so this lands at 32.
+      expect(sidebarFocused.sidebarWidth).toBe(32)
+      // Inspector stays railed since the user isn't reading it.
+      expect(sidebarFocused.inspectorRailed).toBe(true)
+      expect(sidebarFocused.detailWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
+
+      const inspectorFocused = getLogInkLayout({ columns: 90, rows: 40, inspectorFocused: true })
+      expect(inspectorFocused.inspectorRailed).toBe(false)
+      // 90 * 0.40 = 36 → clamps to 36-60 lower bound.
+      expect(inspectorFocused.detailWidth).toBe(36)
+      expect(inspectorFocused.sidebarRailed).toBe(true)
+    })
+
+    it('keeps panels at normal widths above the rail breakpoint', () => {
+      const tight = getLogInkLayout({ columns: 110, rows: 40 })
+      expect(tight.sidebarRailed).toBe(false)
+      expect(tight.inspectorRailed).toBe(false)
+      // 110 * 0.24 = 26.4 → floor 26 (in the 22-34 unfocused range)
+      expect(tight.sidebarWidth).toBe(26)
+    })
+
+    it('lets the help overlay override inspector rail', () => {
+      const railedHelp = getLogInkLayout({
+        columns: 90,
+        rows: 40,
+        helpOverlayActive: true,
+      })
+      // Help wants room for hotkey descriptions; rail collapse would
+      // defeat that purpose. 60-cell minimum kicks in here.
+      expect(railedHelp.detailWidth).toBe(60)
+      expect(railedHelp.inspectorRailed).toBe(false)
     })
   })
 })

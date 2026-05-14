@@ -1,0 +1,61 @@
+/**
+ * Date formatting helpers for the Ink TUI surfaces.
+ *
+ * The branch list already ships its own "X ago" formatter
+ * (`formatBranchLastTouched` in iconography.ts) sized for a sidebar
+ * row with room to breathe. The history surface needs a tighter
+ * variant: the date column is fixed-width and competes with the
+ * commit message for cells, so a 2-3 character form is the budget.
+ *
+ * Inputs match what `git log --date=short` produces:
+ * `YYYY-MM-DD`. Caller passes `now` so tests can pin the reference
+ * instant.
+ *
+ * Outputs (rounded toward the nearest unit, no `ago` suffix):
+ *   - `today` for same UTC day
+ *   - `1d` … `13d` for 1-13 days
+ *   - `2w` … `8w` for 2-8 weeks
+ *   - `2mo` … `11mo` for 2-11 months
+ *   - `2y`+ for older
+ *   - `''` for malformed inputs (caller renders nothing)
+ *
+ * Day comparison is in UTC so a commit dated "yesterday" never reads
+ * "today" depending on the operator's timezone.
+ */
+export function formatCompactRelativeDate(iso: string | undefined, now: Date): string {
+  if (!iso) return ''
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!match) return ''
+
+  const year = Number.parseInt(match[1], 10)
+  const month = Number.parseInt(match[2], 10)
+  const day = Number.parseInt(match[3], 10)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return ''
+
+  const commitUtc = Date.UTC(year, month - 1, day)
+  const nowUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const oneDay = 24 * 60 * 60 * 1000
+  const days = Math.floor((nowUtc - commitUtc) / oneDay)
+
+  if (days <= 0) return 'today'
+  if (days < 14) return `${days}d`
+
+  const weeks = Math.floor(days / 7)
+  if (weeks < 9) return `${weeks}w`
+
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo`
+
+  const years = Math.floor(days / 365)
+  return `${years}y`
+}
+
+/**
+ * Maximum cell width any output from `formatCompactRelativeDate` will
+ * occupy. Used by row-layout math that needs to reserve a fixed
+ * column width up front rather than measuring each formatted string.
+ *
+ * `today` (5) is the longest single output; `99mo` would be 4. We pin
+ * to 5 to leave headroom for the `today` case without re-measuring.
+ */
+export const COMPACT_RELATIVE_DATE_MAX_WIDTH = 5

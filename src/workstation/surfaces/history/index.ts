@@ -16,6 +16,7 @@
  */
 
 import type * as ReactTypes from 'react'
+import { formatCompactRelativeDate } from '../../chrome/dateFormat'
 import { substituteGraphChars } from '../../chrome/graphChars'
 import type { LaneSegment } from '../../chrome/graphLanes'
 import { getLaneColor } from '../../chrome/graphLanes'
@@ -23,6 +24,7 @@ import {
   formatInkRefLabels,
   getVisibleLogInkHistory,
 } from '../../chrome/historyRows'
+import type { LogInkLayoutDensity } from '../../chrome/layout'
 import {
   formatLogInkHistoryEmpty,
   formatLogInkLoading,
@@ -36,6 +38,19 @@ import type {
 } from '../../../commands/log/inkViewModel'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+
+/**
+ * How the date column should render for a given density tier:
+ *   - wide   → absolute `YYYY-MM-DD` (current behavior)
+ *   - normal → compact relative form (`2d`, `3w`, `2mo`)
+ *   - tight  → hidden entirely (column dropped)
+ *   - rail   → caller picks `rowMode='stacked'`; this fn isn't consulted
+ */
+function pickDateText(commit: GitLogCommitRow, density: LogInkLayoutDensity, now: Date): string {
+  if (density === 'wide') return commit.date
+  if (density === 'normal') return formatCompactRelativeDate(commit.date, now)
+  return ''
+}
 
 function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
   const parts: string[] = []
@@ -111,6 +126,8 @@ function renderCommitHistoryRow(
   theme: LogInkTheme,
   index: number,
   panelWidth: number,
+  density: LogInkLayoutDensity,
+  now: Date,
   laneSegments?: LaneSegment[],
   isRecent: boolean = false
 ): ReactTypes.ReactElement {
@@ -122,7 +139,9 @@ function renderCommitHistoryRow(
   // continuation rather than its own commit (#830). Subtracting 4
   // accounts for the panel's left + right border + 1-cell padding.
   const totalWidth = Math.max(20, panelWidth - 4)
-  const fixedWidth = graphWidth + 1 + commit.shortHash.length + 1 + commit.date.length + 1
+  const dateText = pickDateText(commit, density, now)
+  const dateSegmentWidth = dateText ? dateText.length + 1 : 0
+  const fixedWidth = graphWidth + 1 + commit.shortHash.length + 1 + dateSegmentWidth
   // Refs trail the message and shrink first when the row is narrow:
   // the user can always see the full ref list in the inspector, so
   // the headline subject keeps priority over decoration.
@@ -169,10 +188,101 @@ function renderCommitHistoryRow(
     bold: selected || isRecent,
   }, commit.shortHash),
   ' ',
-  h(Text, { dimColor: true }, commit.date),
-  ' ',
+  // Date column drops out entirely at `tight` density — no spacer
+  // either, so the message column slides left into the freed cells.
+  dateText
+    ? h(Text, { key: `${commit.hash}-${index}-date`, dimColor: true }, dateText, ' ')
+    : null,
   h(Text, undefined, message),
   refsTrunc ? h(Text, { color: accent }, refsTrunc) : null)
+}
+
+/**
+ * Stacked variant used at `rowMode='stacked'` (rail tier). Each
+ * commit takes two lines so the message never has to share its row
+ * with the date / refs / hash on a sub-90-cell terminal:
+ *   line 1: graph · shortHash · subject
+ *   line 2: dim padding · date · refs
+ *
+ * Selection styling lives on the line-1 outer span; the secondary
+ * line stays dim regardless of selection so it doesn't pull the eye
+ * away from the subject.
+ */
+function renderStackedCommitHistoryRow(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  Box: LogInkComponents['Box'],
+  commit: GitLogCommitRow,
+  graph: string,
+  graphWidth: number,
+  selected: boolean,
+  theme: LogInkTheme,
+  index: number,
+  panelWidth: number,
+  now: Date,
+  laneSegments?: LaneSegment[],
+  isRecent: boolean = false
+): ReactTypes.ReactElement {
+  const totalWidth = Math.max(20, panelWidth - 4)
+  const accent = theme.noColor ? undefined : theme.colors.accent
+  const muted = theme.noColor ? undefined : theme.colors.muted
+  const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
+
+  // Line 1 — subject row. Mostly mirrors the single-line layout but
+  // skips the date and refs so the message has the whole tail to
+  // itself.
+  const recentMarkerWidth = isRecent ? 2 : 0
+  const lineOneFixed = graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth
+  const subject = truncateCells(commit.message, Math.max(8, totalWidth - lineOneFixed))
+
+  const graphChildren = laneSegments && !theme.ascii
+    ? renderLaneSegmentSpans(h, Text, laneSegments, theme, graphWidth, `cs${index}`)
+    : [h(Text, { color: muted, dimColor: theme.noColor },
+        substituteGraphChars(graph.padEnd(graphWidth), { ascii: theme.ascii }))]
+
+  const lineOne = h(Text, {
+    key: `${commit.hash}-${index}-l1`,
+    backgroundColor: selectedBg,
+    inverse: selected,
+  },
+  ...graphChildren,
+  ' ',
+  isRecent
+    ? h(Text, { color: accent, bold: true }, theme.ascii ? '* ' : '▎ ')
+    : null,
+  h(Text, { color: accent, bold: selected || isRecent }, commit.shortHash),
+  ' ',
+  h(Text, undefined, subject))
+
+  // Line 2 — metadata row, padded to align with the start of the
+  // shortHash on line 1 so the eye still groups them as one commit.
+  // Selection background does not extend here so we don't get a thick
+  // double-row highlight on a tight terminal.
+  const indent = ' '.repeat(graphWidth + 1)
+  const dateText = formatCompactRelativeDate(commit.date, now)
+  const refs = formatInkRefLabels(commit.refs)
+  const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
+  const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
+  // If both pieces are empty (date unparseable + no refs), show a
+  // bullet so the row's structure still reads as two-line and the
+  // user doesn't think they hit a render bug.
+  const metaContent = dateText || refsTrunc
+    ? [
+        dateText ? h(Text, { key: `${commit.hash}-${index}-l2-date` }, dateText) : null,
+        dateText && refsTrunc ? h(Text, { key: `${commit.hash}-${index}-l2-sep` }, ' ') : null,
+        refsTrunc ? h(Text, { key: `${commit.hash}-${index}-l2-refs` }, refsTrunc) : null,
+      ].filter(Boolean)
+    : [h(Text, { key: `${commit.hash}-${index}-l2-empty` }, '·')]
+
+  const lineTwo = h(Text, {
+    key: `${commit.hash}-${index}-l2`,
+    dimColor: true,
+  }, indent, ...metaContent)
+
+  return h(Box, {
+    key: `${commit.hash}-${index}-stack`,
+    flexDirection: 'column',
+  }, lineOne, lineTwo)
 }
 
 /**
@@ -219,7 +329,10 @@ export function renderHistoryPanel(
   width: number,
   theme: LogInkTheme,
   hasMoreCommits: boolean,
-  loadingMoreCommits: boolean
+  loadingMoreCommits: boolean,
+  density: LogInkLayoutDensity,
+  rowMode: 'single' | 'stacked',
+  now: Date = new Date()
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'commits'
@@ -238,7 +351,12 @@ export function renderHistoryPanel(
   const showPendingRow = worktreeDirty &&
     !state.filter &&
     state.selectedIndex === 0
-  const listRows = Math.max(3, bodyRows - (showPendingRow ? 5 : 4))
+  // Stacked rows take two terminal lines each, so the visible item
+  // budget is halved before the pending-row / chrome subtraction.
+  const chromeRows = showPendingRow ? 5 : 4
+  const listRows = rowMode === 'stacked'
+    ? Math.max(2, Math.floor((bodyRows - chromeRows) / 2))
+    : Math.max(3, bodyRows - chromeRows)
   const visible = getVisibleLogInkHistory(state, listRows)
   const loadState = loadingMoreCommits
     ? 'loading older commits'
@@ -308,10 +426,18 @@ export function renderHistoryPanel(
         ), Math.max(8, width - 4)))
       }
 
+      if (rowMode === 'stacked') {
+        return renderStackedCommitHistoryRow(
+          h, Text, Box, item.commit, item.graph, visible.graphWidth,
+          Boolean(item.selected) && !realSelectionSuppressed, theme, index,
+          width, now, item.laneSegments,
+          recentCommitsSet.has(item.commit.hash)
+        )
+      }
       return renderCommitHistoryRow(
         h, Text, item.commit, item.graph, visible.graphWidth,
         Boolean(item.selected) && !realSelectionSuppressed, theme, index,
-        width, item.laneSegments,
+        width, density, now, item.laneSegments,
         recentCommitsSet.has(item.commit.hash)
       )
     }))

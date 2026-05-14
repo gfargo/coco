@@ -3213,7 +3213,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   return h(Box, { flexDirection: 'column', height: layout.rows },
     renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme, appLabel),
     h(Box, { flexDirection: 'row', height: layout.bodyRows },
-      renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme),
+      renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme, layout.sidebarRailed),
       renderMainPanel(
         h,
         { Box, Text },
@@ -3239,7 +3239,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         theme,
         hasMoreCommits,
         loadingMoreCommits,
-        spinnerFrame
+        spinnerFrame,
+        layout.density,
+        layout.historyRowMode
       ),
       renderDetailPanel(
         h,
@@ -3253,7 +3255,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         filePreviewLoading,
         layout.detailWidth,
         layout.inspectorTabbed,
-        theme
+        theme,
+        layout.inspectorRailed
       )
     ),
     renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame)
