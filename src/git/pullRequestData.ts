@@ -1,15 +1,21 @@
-import { execFile } from 'child_process'
-import { promisify } from 'util'
 import { SimpleGit } from 'simple-git'
+import {
+  defaultGhRunner,
+  getGitHubRepository,
+  isGhAuthenticated,
+  parseGitHubRemoteUrl as parseGitHubRemoteUrlShared,
+  type GhRunner,
+  type GitHubRepository,
+} from './githubCli'
 
-const execFileAsync = promisify(execFile)
-
-export type GhRunner = (args: string[]) => Promise<string>
-
-export type GitHubRepository = {
-  owner: string
-  name: string
+// Re-export for backwards compatibility — callers that imported from
+// pullRequestData before the shared module existed keep working.
+export {
+  defaultGhRunner,
+  type GhRunner,
+  type GitHubRepository,
 }
+export const parseGitHubRemoteUrl = parseGitHubRemoteUrlShared
 
 export type PullRequestStatusCheck = {
   /** Display name from `gh pr view --json statusCheckRollup`. */
@@ -68,36 +74,6 @@ export type PullRequestOverview = {
   currentBranch?: string
   currentPullRequest?: PullRequestInfo
   message?: string
-}
-
-export function parseGitHubRemoteUrl(url: string): GitHubRepository | undefined {
-  const trimmed = url.trim().replace(/\.git$/, '')
-  const sshMatch = trimmed.match(/^git@github\.com:([^/]+)\/(.+)$/)
-  const httpsMatch = trimmed.match(/^https:\/\/github\.com\/([^/]+)\/(.+)$/)
-  const match = sshMatch || httpsMatch
-
-  if (!match) {
-    return undefined
-  }
-
-  return {
-    owner: match[1],
-    name: match[2],
-  }
-}
-
-export async function defaultGhRunner(args: string[]): Promise<string> {
-  const result = await execFileAsync('gh', args)
-
-  return result.stdout
-}
-
-async function getGitHubRepository(git: SimpleGit): Promise<GitHubRepository | undefined> {
-  const remotes = await git.getRemotes(true)
-  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
-  const url = remote?.refs.push || remote?.refs.fetch
-
-  return url ? parseGitHubRemoteUrl(url) : undefined
 }
 
 function parsePullRequestInfo(output: string): PullRequestInfo | undefined {
@@ -188,9 +164,7 @@ export async function getPullRequestOverview(
     }
   }
 
-  try {
-    await runner(['auth', 'status', '--hostname', 'github.com'])
-  } catch {
+  if (!(await isGhAuthenticated(runner))) {
     return {
       available: true,
       authenticated: false,
