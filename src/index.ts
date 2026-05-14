@@ -102,6 +102,24 @@ y.command<CacheOptions>(
   cache.handler
 )
 
-y.help().parse(process.argv.slice(2))
+// `COCO_PREFETCH` hook (#933 phase 3). When set, downloads any
+// requested lazy-load tree-sitter parsers into the user's cache
+// dir before yargs hands control to a subcommand. No-op when
+// unset, so the typical CLI path pays zero overhead.
+//
+// Errors here are non-fatal: a failed download prints a warning
+// to stderr; the subcommand still runs (just with the regex
+// fallback for that language).
+import { runPrefetchFromEnv } from './lib/parsers/default/__tree_sitter__/prefetch'
+
+async function main(): Promise<void> {
+  await runPrefetchFromEnv()
+  y.help().parse(process.argv.slice(2))
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
 
 export { cache, changelog, commit, Config, doctor, init, log, recap, types, ui }

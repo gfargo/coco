@@ -25,6 +25,7 @@
  */
 
 import type { FileDiff } from '../../../types'
+import { treeSitterPythonParser } from '../__tree_sitter__/pythonTreeSitterParser'
 import { treeSitterTsParser } from '../__tree_sitter__/tsTreeSitterParser'
 import { summarizeGoStructuralDiff } from './goStructuralDiff'
 import { summarizePythonStructuralDiff } from './pythonStructuralDiff'
@@ -96,7 +97,7 @@ const regexGo = regexParser(summarizeGoStructuralDiff)
 const REGISTRY: Record<StructuralLanguageId, StructuralParser[]> = {
   ts: [treeSitterTsParser, regexTs],
   js: [treeSitterTsParser, regexJs],
-  py: [regexPy],
+  py: [treeSitterPythonParser, regexPy],
   rs: [regexRs],
   go: [regexGo],
 }

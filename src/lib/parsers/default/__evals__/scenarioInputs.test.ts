@@ -6,6 +6,13 @@ describe('buildScenarioFixtures', () => {
   })
 
   it('produces a fixture per commit with per-file diffs', async () => {
+    // Heavier than the default 5s timeout: this spins up a real
+    // temp git repo, runs `git init` + multiple `git commit`s for
+    // the feature-pr-ready scenario, then walks the log calling
+    // `git show --numstat` + per-file `git show` for each commit.
+    // Under load (parallel jest workers) the shell-out cost adds
+    // up. The 15s budget is comfortably under any reasonable CI
+    // run-time and avoids the periodic flake we saw under default.
     const { repo, fixtures } = await buildScenarioFixtures('feature-pr-ready')
     try {
       expect(fixtures.scenario).toBe('feature-pr-ready')
@@ -28,7 +35,7 @@ describe('buildScenarioFixtures', () => {
     } finally {
       await repo.cleanup()
     }
-  })
+  }, 15_000)
 
   it('extracts the same byte-identical fixture set across runs (determinism)', async () => {
     const a = await buildScenarioFixtures('single-staged-file')

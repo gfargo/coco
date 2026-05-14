@@ -28,6 +28,7 @@
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { getCachedWasmPath } from './cache'
 
 /**
  * Dynamic-import shim. `web-tree-sitter` is `"type": "module"` (pure
@@ -46,13 +47,23 @@ type DynamicImport = <T>(specifier: string) => Promise<T>
 const dynamicImport = new Function('specifier', 'return import(specifier)') as DynamicImport
 
 /**
- * Language identifiers this runtime knows how to load. Mirrors the
- * .wasm files copied into `dist/tree-sitter/` by the postbuild
- * script. Adding a language: drop the .wasm into the postbuild
- * file list, add an entry here, then build a `<Lang>StructuralParser`
- * against the runtime.
+ * Language identifiers this runtime knows how to load.
+ *
+ * Two source flavors per language:
+ *   - **Bundled**: .wasm shipped in `dist/tree-sitter/` by the
+ *     postbuild copy step. `typescript` + `tsx` today. Always
+ *     available; no opt-in required.
+ *   - **Lazy-loaded** (#933 phase 3): .wasm downloaded from a
+ *     manifest-pinned CDN URL into the user's cache dir on
+ *     demand. `python` today; `rust` + `go` in phases 5 / 6.
+ *     Surrenders to the regex parser when the cache is empty
+ *     (no surprise network calls).
+ *
+ * The runtime treats both identically once a .wasm is on disk —
+ * the only difference is where it's resolved from. `resolveWasmLocations`
+ * below handles the lookup priority.
  */
-export type TreeSitterLanguageId = 'typescript' | 'tsx'
+export type TreeSitterLanguageId = 'typescript' | 'tsx' | 'python'
 
 type ResolvedWasmLocations = {
   enginePath: string
@@ -100,8 +111,15 @@ function resolveWasmLocations(): ResolvedWasmLocations | undefined {
     return {
       enginePath,
       languagePaths: {
+        // Bundled (always shipped under dist/tree-sitter/).
         typescript: join(dir, 'tree-sitter-typescript.wasm'),
         tsx: join(dir, 'tree-sitter-tsx.wasm'),
+        // Lazy-loaded (#933 phase 3). Lives in the user's cache
+        // dir, not the bundled dir. Path is always set so the
+        // resolver doesn't have to branch on language flavor —
+        // the existence check in `getTreeSitterParser` decides
+        // whether to actually load.
+        python: getCachedWasmPath('python'),
       },
     }
   }
