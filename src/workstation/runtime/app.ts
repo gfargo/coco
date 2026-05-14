@@ -2172,6 +2172,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!command) return { ok: false, message: 'Bisect run needs a command' }
         try {
           const stdout = await bisectRun(git, command)
+          // Bisect run can advance HEAD across many commits when
+          // testing — refresh both the metadata context AND the
+          // history rows so the user sees what `git log` actually
+          // shows now.
+          await refreshHistoryRows()
           await refreshContext({ silent: true })
           return {
             ok: true,
@@ -2209,6 +2214,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           const stdout = await bisectStart(git, badRef, goodRef)
           dispatch({ type: 'clearBisectPickMode' })
           dispatch({ type: 'pushView', value: 'bisect' })
+          // Bisect start checks out the midpoint commit — HEAD moves,
+          // history view needs the fresh row set.
+          await refreshHistoryRows()
           await refreshContext({ silent: true })
           return {
             ok: true,
@@ -2549,6 +2557,32 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
     const result = await handler()
     dispatch({ type: 'setStatus', value: result?.message || 'Workflow action complete' })
+    // Refresh history rows AS WELL when the workflow could have
+    // changed the commits the user sees (#945 follow-up). The
+    // workflow IDs below all either create/rewrite local commits or
+    // change which branch's history is being viewed — without this
+    // the history pane shows stale data even after the operation
+    // succeeds. Cheap one-off `git log` call; doesn't fire on
+    // metadata-only mutations (delete-tag, set-upstream, etc.).
+    const historyMutatingIds = new Set([
+      'checkout-branch',
+      'continue-operation',
+      'pull-current-branch',
+      'cherry-pick-commit',
+      'revert-commit',
+      'reset-hard-to-commit',
+      'reset-soft-to-commit',
+      'reset-mixed-to-commit',
+      'interactive-rebase-to-commit',
+      'bisect-good',
+      'bisect-bad',
+      'bisect-skip',
+      'bisect-reset',
+    ])
+    if (result?.ok && historyMutatingIds.has(id)) {
+      await refreshHistoryRows()
+    }
+
     // Checkout-branch is the one workflow where we want a *visible*
     // refresh so the user sees the branches sidebar repaint with the
     // new current branch (per #806 follow-up). Snap the cursor to
@@ -2563,7 +2597,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // without flickering the surfaces through a 'loading' phase.
       await refreshContext({ silent: true })
     }
-  }, [context, dispatch, git, refreshContext, state.branchSort, state.filter, state.selectedBranchIndex,
+  }, [context, dispatch, git, refreshContext, refreshHistoryRows, state.branchSort, state.filter, state.selectedBranchIndex,
     state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
     state.statusFilterMask, state.tagSort])
 
