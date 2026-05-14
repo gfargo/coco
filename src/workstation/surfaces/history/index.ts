@@ -17,6 +17,10 @@
 
 import type * as ReactTypes from 'react'
 import { filterChippedRefs, getBranchTipChip } from '../../chrome/branchTip'
+import {
+  getConventionalCommitColor,
+  parseConventionalCommitPrefix,
+} from '../../chrome/conventionalCommit'
 import { formatCompactRelativeDate } from '../../chrome/dateFormat'
 import { substituteGraphChars } from '../../chrome/graphChars'
 import type { LaneSegment } from '../../chrome/graphLanes'
@@ -118,6 +122,43 @@ function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
   if (args.author) parts.push(`--author=${args.author}`)
   if (args.path) parts.push(`-- ${args.path}`)
   return parts.join(' ') || 'none'
+}
+
+/**
+ * Render a commit subject with the conventional-commit prefix
+ * (`feat:`, `fix(scope)!:`, …) painted in a type-specific color so
+ * the eye can bucket commits by type while scanning.
+ *
+ * Truncation lives at the message level above this helper — the
+ * caller has already shortened `text` to the available room. We just
+ * split on the parsed prefix length and emit two spans. If the
+ * shortened text is too narrow to include the full prefix (e.g. a
+ * tight panel that cut into `feat`), we fall back to a single plain
+ * span so the partial prefix doesn't read as a malformed colored
+ * fragment.
+ *
+ * Returns the spans flat so the caller can splat them into the row's
+ * outer Text alongside other segments without an extra wrapper.
+ */
+function renderTypedSubject(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  text: string,
+  theme: LogInkTheme,
+  key: string
+): ReactTypes.ReactElement[] {
+  const parsed = parseConventionalCommitPrefix(text)
+  if (!parsed) {
+    return [h(Text, { key: `${key}-msg` }, text)]
+  }
+  if (text.length < parsed.prefix.length) {
+    return [h(Text, { key: `${key}-msg` }, text)]
+  }
+  const color = getConventionalCommitColor(parsed, theme)
+  return [
+    h(Text, { key: `${key}-type`, color, bold: parsed.breaking }, parsed.prefix),
+    h(Text, { key: `${key}-rest` }, text.slice(parsed.prefix.length)),
+  ]
 }
 
 /**
@@ -268,7 +309,7 @@ function renderCommitHistoryRow(
   // Branch chip prefix (full-graph mode only) lands right before the
   // message so the eye reads "branch · subject" as a unit.
   chip.node,
-  h(Text, undefined, message),
+  ...renderTypedSubject(h, Text, message, theme, `${commit.hash}-${index}-subj`),
   refsTrunc ? h(Text, { color: accent }, refsTrunc) : null)
 }
 
@@ -334,7 +375,7 @@ function renderStackedCommitHistoryRow(
   h(Text, { color: accent, bold: selected || isRecent }, commit.shortHash),
   ' ',
   chip.node,
-  h(Text, undefined, subject))
+  ...renderTypedSubject(h, Text, subject, theme, `${commit.hash}-${index}-stk-subj`))
 
   // Line 2 — metadata row, padded to align with the start of the
   // shortHash on line 1 so the eye still groups them as one commit.
