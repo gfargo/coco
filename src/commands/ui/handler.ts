@@ -1,4 +1,3 @@
-import * as path from 'node:path'
 import { Arguments } from 'yargs'
 import { SimpleGit } from 'simple-git'
 import { CommandHandler } from '../../lib/types'
@@ -8,6 +7,7 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { LogArgv, LogOptions } from '../log/config'
 import { GitLogRow, getLogRows } from '../log/data'
 import { startInkInteractiveLog } from '../log/inkRuntime'
+import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { readCachedCommits, writeCachedCommits } from '../../workstation/chrome/overviewCache'
 import { LogInkThemeConfig } from '../../workstation/chrome/theme'
 import { UiArgv } from './config'
@@ -100,29 +100,14 @@ export async function startCocoUiFromLogArgv(
 }
 
 export async function startCocoUi(argv: UiArgv): Promise<void> {
-  // `--repo <dir>` (alias `--cwd`) lets users target an arbitrary
-  // repository without `cd`-ing first. Resolve to absolute up-front
-  // so:
-  //   1. process.chdir gets a stable path (relative paths against
-  //      the original cwd would surprise the user if any later code
-  //      reads cwd after the chdir).
-  //   2. The disk cache key (rooted at repoPath) is canonical.
-  //   3. simple-git's baseDir is unambiguous.
-  // When the flag is omitted, fall back to process.cwd() — original
-  // behavior, no surprise for users who launch via `cd && coco ui`.
-  const repoPath = argv.repo ? path.resolve(argv.repo) : process.cwd()
-
-  // chdir BEFORE loadConfig so .coco.config.json lookup walks up
-  // from the targeted repo, not from wherever the user ran coco
-  // from. Many config-resolution paths (lib/utils/findUp, etc.)
-  // read process.cwd() — keeping them honest means doing the chdir
-  // up-front rather than passing a path everywhere.
-  if (argv.repo) {
-    process.chdir(repoPath)
-  }
+  // `--repo <dir>` (alias `--cwd`) — apply the global flag via the
+  // shared helper. After this returns, `process.cwd()` and the git
+  // instance are both bound to the targeted repo, so loadConfig
+  // walks the right tree and downstream reads stay consistent.
+  const git = applyRepoFlag(argv)
+  const repoPath = process.cwd()
 
   const config = loadConfig<Config, UiArgv>(argv)
-  const git = getRepo(repoPath)
   const logArgv = createLogArgvFromUiArgv(argv)
 
   // Same three-stage boot as startCocoUiFromLogArgv — mount with

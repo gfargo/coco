@@ -14,9 +14,9 @@ import { fileChangeParser } from '../../lib/parsers/default/index'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
-import { getRepo } from '../../lib/simple-git/getRepo'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { CommandHandler } from '../../lib/types'
+import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
@@ -35,7 +35,7 @@ const ReviewFeedbackResponseSchema = z.preprocess(
 )
 
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
-  const git = getRepo()
+  const git = applyRepoFlag(argv)
   const config = loadConfig<ReviewOptions, ReviewArgv>(argv)
   const key = getApiKeyForModel(config)
   const { provider } = getModelAndProviderFromConfig(config)

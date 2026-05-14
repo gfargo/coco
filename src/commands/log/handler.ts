@@ -1,26 +1,19 @@
-import * as path from 'node:path'
 import { CommandHandler } from '../../lib/types'
 import { Config } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
-import { getRepo } from '../../lib/simple-git/getRepo'
 import { handleResult } from '../../lib/ui/handleResult'
 import { getCommitDetail, getLogRows } from './data'
 import { startCocoUiFromLogArgv } from '../ui/handler'
+import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { formatCommitDetail, formatLogJson, formatLogTable } from './render'
 import { LogArgv } from './config'
 
 export const handler: CommandHandler<LogArgv> = async (argv) => {
-  // `--repo <dir>` (alias `--cwd`) lets users target an arbitrary
-  // repository without `cd`-ing first. Mirrors the same flag on
-  // `coco ui`. chdir up-front so config + git both resolve against
-  // the same canonical path. Resolve to absolute to avoid the
-  // confusion of relative paths interacting with the chdir.
-  if (argv.repo) {
-    process.chdir(path.resolve(argv.repo))
-  }
-
+  // `--repo <dir>` (alias `--cwd`) — apply the global flag via the
+  // shared helper. After this returns, `process.cwd()` and the git
+  // instance are both bound to the targeted repo.
+  const git = applyRepoFlag(argv)
   const config = loadConfig<Config, LogArgv>(argv)
-  const git = getRepo(argv.repo ? path.resolve(argv.repo) : undefined)
   const format = argv.format === 'json' ? 'json' : 'table'
 
   if (argv.commit) {

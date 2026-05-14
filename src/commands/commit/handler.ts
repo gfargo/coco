@@ -16,8 +16,8 @@ import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicke
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
-import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler, FileChange } from '../../lib/types'
+import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, SEPERATOR, isInteractive } from '../../lib/ui/helpers'
@@ -37,7 +37,7 @@ import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
 import { handleCommitSplit, isCommitSplitCommand } from './split'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
-  const git = getRepo()
+  const git = applyRepoFlag(argv)
   const config = loadConfig<CommitOptions, CommitArgv>(argv)
   const key = getApiKeyForModel(config)
   const { provider } = getModelAndProviderFromConfig(config)

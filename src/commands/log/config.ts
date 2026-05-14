@@ -15,17 +15,11 @@ export interface LogOptions extends BaseCommandOptions {
   merges?: boolean
   noMerges?: boolean
   path?: string | string[]
-  /**
-   * Repository directory to operate against. When set, log reads
-   * commit data from this path instead of `process.cwd()`. Mirrors
-   * the `--repo` flag on `coco ui` so scripts / shell wrappers /
-   * test scenarios can target arbitrary repos without `cd`-ing.
-   * `--cwd` is an alias.
-   */
-  repo?: string
   since?: string
   until?: string
   view?: LogView
+  // `repo` (alias `cwd`) is inherited from BaseCommandOptions — declared
+  // globally at the yargs root so every subcommand sees it.
 }
 
 export type LogArgv = Arguments<LogOptions>
@@ -80,11 +74,6 @@ export const options = {
   path: {
     description: 'Filter commits by changed path',
     type: 'array',
-  },
-  repo: {
-    description: 'Target a specific repository directory instead of the current working directory.',
-    type: 'string',
-    alias: 'cwd',
   },
   since: {
     description: 'Show commits more recent than a date',
