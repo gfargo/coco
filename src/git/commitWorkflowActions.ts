@@ -255,6 +255,7 @@ export async function runCommitSplitPlanWorkflow(
   const key = getApiKeyForModel(config)
   const { provider } = getModelAndProviderFromConfig(config)
   const commitService = resolveDynamicService(config, 'commit')
+  const splitService = resolveDynamicService(config, 'commitSplit')
   const model = commitService.model
 
   if (config.service.authentication.type !== 'None' && !key) {
@@ -269,6 +270,10 @@ export async function runCommitSplitPlanWorkflow(
       provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
     )
     const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
+    const planLlm = getLlm(provider, splitService.model as LLMModel, {
+      ...config,
+      service: splitService,
+    })
 
     const result = await prepareCommitSplitPlan({
       argv,
@@ -277,6 +282,8 @@ export async function runCommitSplitPlanWorkflow(
       logger,
       tokenizer,
       llm,
+      planLlm,
+      planService: splitService,
     })
 
     if ('empty' in result) {

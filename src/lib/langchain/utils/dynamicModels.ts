@@ -14,6 +14,12 @@ const OPENAI_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   cost: {
     summarize: 'gpt-4.1-nano',
     commit: 'gpt-4.1-mini',
+    // `commitSplit` floors at mini even in cost mode. The split
+    // planner emits structured JSON with strict cross-group
+    // constraints (files appear exactly once, hunks fully cover or
+    // not at all). Nano-class models fail those constraints often
+    // enough that the cost win is eaten by the 3-retry budget.
+    commitSplit: 'gpt-4.1-mini',
     changelog: 'gpt-4.1-mini',
     review: 'gpt-4.1-mini',
     recap: 'gpt-4.1-nano',
@@ -23,6 +29,7 @@ const OPENAI_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   balanced: {
     summarize: 'gpt-4.1-mini',
     commit: 'gpt-4.1-mini',
+    commitSplit: 'gpt-4.1',
     changelog: 'gpt-4.1',
     review: 'gpt-4.1',
     recap: 'gpt-4.1-mini',
@@ -32,6 +39,7 @@ const OPENAI_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   quality: {
     summarize: 'gpt-4.1-mini',
     commit: 'gpt-4.1',
+    commitSplit: 'gpt-4.1',
     changelog: 'gpt-4.1',
     review: 'gpt-4.1',
     recap: 'gpt-4.1',
@@ -44,6 +52,8 @@ const ANTHROPIC_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   cost: {
     summarize: 'claude-3-5-haiku-latest',
     commit: 'claude-3-5-haiku-latest',
+    // Floor at sonnet — see note on OpenAI commitSplit above.
+    commitSplit: 'claude-3-5-sonnet-latest',
     changelog: 'claude-3-5-sonnet-latest',
     review: 'claude-3-5-sonnet-latest',
     recap: 'claude-3-5-haiku-latest',
@@ -53,6 +63,7 @@ const ANTHROPIC_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   balanced: {
     summarize: 'claude-3-5-haiku-latest',
     commit: 'claude-3-5-sonnet-latest',
+    commitSplit: 'claude-3-7-sonnet-latest',
     changelog: 'claude-3-5-sonnet-latest',
     review: 'claude-3-7-sonnet-latest',
     recap: 'claude-3-5-sonnet-latest',
@@ -62,6 +73,7 @@ const ANTHROPIC_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   quality: {
     summarize: 'claude-3-5-sonnet-latest',
     commit: 'claude-3-7-sonnet-latest',
+    commitSplit: 'claude-sonnet-4-0',
     changelog: 'claude-3-7-sonnet-latest',
     review: 'claude-sonnet-4-0',
     recap: 'claude-3-7-sonnet-latest',
@@ -74,6 +86,8 @@ const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   cost: {
     summarize: 'llama3.2:3b',
     commit: 'llama3.1:8b',
+    // Floor at the coder-tuned 14b — see note on OpenAI commitSplit above.
+    commitSplit: 'qwen2.5-coder:14b',
     changelog: 'llama3.1:8b',
     review: 'qwen2.5-coder:7b',
     recap: 'llama3.2:3b',
@@ -83,6 +97,7 @@ const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   balanced: {
     summarize: 'llama3.1:8b',
     commit: 'qwen2.5-coder:14b',
+    commitSplit: 'qwen2.5-coder:32b',
     changelog: 'qwen2.5-coder:14b',
     review: 'qwen2.5-coder:32b',
     recap: 'llama3.1:8b',
@@ -92,6 +107,7 @@ const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   quality: {
     summarize: 'qwen2.5-coder:14b',
     commit: 'qwen2.5-coder:32b',
+    commitSplit: 'qwen2.5-coder:32b',
     changelog: 'qwen2.5-coder:32b',
     review: 'qwen2.5-coder:32b',
     recap: 'qwen2.5-coder:14b',
@@ -109,6 +125,7 @@ const DYNAMIC_DEFAULTS: Record<LLMProvider, ProviderDynamicDefaults> = {
 export const DYNAMIC_MODEL_TASKS: DynamicModelTask[] = [
   'summarize',
   'commit',
+  'commitSplit',
   'changelog',
   'review',
   'recap',

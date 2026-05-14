@@ -128,6 +128,77 @@ export function formatPlanValidationIssuesError(issues: PlanValidationIssues): s
 }
 
 /**
+ * Salvage a plan that lists the same file in `files[]` of more than
+ * one group. Weaker models (e.g. `gpt-4.1-nano`) hit this often when
+ * the staged set has many files — they re-assert files across groups
+ * even though the prompt forbids it.
+ *
+ * Recovery: walk groups in plan order, keep the FIRST occurrence of
+ * each file path, drop subsequent occurrences. Plan-order is used
+ * because the LLM tends to put the most thematically-correct
+ * assignment in the first group it considered the file for; later
+ * appearances are usually accidental re-emissions.
+ *
+ * If dropping a duplicate leaves a group with empty `files[]` AND
+ * empty `hunks[]`, `dropEmptyGroups` (run last) filters it out so
+ * the apply path never sees a group with nothing to commit.
+ *
+ * Returns a NEW plan object — original is not mutated.
+ */
+export function rescueDuplicateFiles(plan: CommitSplitPlan): CommitSplitPlan {
+  const seen = new Set<string>()
+  let mutated = false
+
+  const rescuedGroups = plan.groups.map((group) => {
+    const keptFiles: string[] = []
+    for (const file of group.files || []) {
+      if (seen.has(file)) {
+        mutated = true
+        continue
+      }
+      seen.add(file)
+      keptFiles.push(file)
+    }
+    return { ...group, files: keptFiles }
+  })
+
+  if (!mutated) return plan
+  return { ...plan, groups: rescuedGroups }
+}
+
+/**
+ * Salvage a plan that lists the same hunk ID in `hunks[]` of more
+ * than one group. Same failure mode as duplicate files but for the
+ * hunk-level assignments.
+ *
+ * Recovery: keep the FIRST occurrence of each hunk ID across groups
+ * (plan order), drop subsequent ones. `dropEmptyGroups` handles any
+ * group left fully empty.
+ *
+ * Returns a NEW plan object — original is not mutated.
+ */
+export function rescueDuplicateHunks(plan: CommitSplitPlan): CommitSplitPlan {
+  const seen = new Set<string>()
+  let mutated = false
+
+  const rescuedGroups = plan.groups.map((group) => {
+    const keptHunks: string[] = []
+    for (const hunkId of group.hunks || []) {
+      if (seen.has(hunkId)) {
+        mutated = true
+        continue
+      }
+      seen.add(hunkId)
+      keptHunks.push(hunkId)
+    }
+    return { ...group, hunks: keptHunks }
+  })
+
+  if (!mutated) return plan
+  return { ...plan, groups: rescuedGroups }
+}
+
+/**
  * Salvage a plan that references hunk IDs not in the inventory by
  * promoting those hunks to file-level assignments. The LLM commonly
  * does this when the staged set is all new/added files (no

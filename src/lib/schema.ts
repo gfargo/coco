@@ -584,6 +584,9 @@ export const schema = {
         "commit": {
           "$ref": "#/definitions/LLMModel"
         },
+        "commitSplit": {
+          "$ref": "#/definitions/LLMModel"
+        },
         "changelog": {
           "$ref": "#/definitions/LLMModel"
         },

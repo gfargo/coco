@@ -6,6 +6,8 @@ import {
   getPlanValidationIssues,
   hasPlanValidationIssues,
   HunkInventoryLike,
+  rescueDuplicateFiles,
+  rescueDuplicateHunks,
   rescueMissingFiles,
   rescueMixedFiles,
   rescuePhantomHunks,
@@ -530,6 +532,110 @@ describe('splitPlanValidation', () => {
 
       expect(rescued.groups).toHaveLength(2)
       expect(rescued.groups[1].files).toEqual(['b.ts', 'c.ts', 'd.ts'])
+    })
+  })
+
+  describe('rescueDuplicateFiles', () => {
+    it('keeps the first occurrence of a duplicated file across groups', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: docs', files: ['docs/page.tsx', 'docs/layout.tsx'], hunks: [] },
+          { title: 'chore: misc', files: ['docs/page.tsx', 'package.json'], hunks: [] },
+        ],
+      }
+
+      const rescued = rescueDuplicateFiles(plan)
+
+      expect(rescued.groups[0].files).toEqual(['docs/page.tsx', 'docs/layout.tsx'])
+      expect(rescued.groups[1].files).toEqual(['package.json'])
+    })
+
+    it('drops repeated entries within a single group', () => {
+      const plan: CommitSplitPlan = {
+        groups: [{ title: 'a', files: ['a.ts', 'a.ts', 'b.ts'], hunks: [] }],
+      }
+
+      const rescued = rescueDuplicateFiles(plan)
+
+      expect(rescued.groups[0].files).toEqual(['a.ts', 'b.ts'])
+    })
+
+    it('returns the same reference when no duplicates exist', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: ['a.ts'], hunks: [] },
+          { title: 'b', files: ['b.ts'], hunks: [] },
+        ],
+      }
+      expect(rescueDuplicateFiles(plan)).toBe(plan)
+    })
+
+    it('does not mutate the original plan when rescuing', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: ['a.ts'], hunks: [] },
+          { title: 'b', files: ['a.ts', 'b.ts'], hunks: [] },
+        ],
+      }
+
+      rescueDuplicateFiles(plan)
+
+      expect(plan.groups[1].files).toEqual(['a.ts', 'b.ts'])
+    })
+
+    it('leaves hunks[] untouched', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: ['a.ts'], hunks: ['c.ts::hunk-1'] },
+          { title: 'b', files: ['a.ts'], hunks: ['c.ts::hunk-2'] },
+        ],
+      }
+
+      const rescued = rescueDuplicateFiles(plan)
+
+      expect(rescued.groups[0].hunks).toEqual(['c.ts::hunk-1'])
+      expect(rescued.groups[1].hunks).toEqual(['c.ts::hunk-2'])
+    })
+  })
+
+  describe('rescueDuplicateHunks', () => {
+    it('keeps the first occurrence of a duplicated hunk across groups', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: [], hunks: ['a.ts::hunk-1', 'a.ts::hunk-2'] },
+          { title: 'b', files: [], hunks: ['a.ts::hunk-1', 'b.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescueDuplicateHunks(plan)
+
+      expect(rescued.groups[0].hunks).toEqual(['a.ts::hunk-1', 'a.ts::hunk-2'])
+      expect(rescued.groups[1].hunks).toEqual(['b.ts::hunk-1'])
+    })
+
+    it('returns the same reference when no duplicates exist', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: [], hunks: ['a.ts::hunk-1'] },
+          { title: 'b', files: [], hunks: ['b.ts::hunk-1'] },
+        ],
+      }
+      expect(rescueDuplicateHunks(plan)).toBe(plan)
+    })
+
+    it('leaves files[] untouched', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: ['a.ts'], hunks: ['c.ts::hunk-1'] },
+          { title: 'b', files: ['b.ts'], hunks: ['c.ts::hunk-1'] },
+        ],
+      }
+
+      const rescued = rescueDuplicateHunks(plan)
+
+      expect(rescued.groups[0].files).toEqual(['a.ts'])
+      expect(rescued.groups[1].files).toEqual(['b.ts'])
+      expect(rescued.groups[1].hunks).toEqual([])
     })
   })
 

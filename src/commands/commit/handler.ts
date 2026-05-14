@@ -43,6 +43,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const { provider } = getModelAndProviderFromConfig(config)
   const commitService = resolveDynamicService(config, 'commit')
   const summaryService = resolveDynamicService(config, 'summarize')
+  const splitService = resolveDynamicService(config, 'commitSplit')
   const model = commitService.model
 
   if (config.service.authentication.type !== 'None' && !key) {
@@ -56,6 +57,12 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
+  // The split planner uses a dedicated LLM because its output schema
+  // is far stricter than the regular commit-message path (every staged
+  // file claimed exactly once, no cross-group duplication, hunk-vs-
+  // file mode exclusivity). Weak models fail those constraints often
+  // enough that the `cost` preference floors `commitSplit` at mini.
+  const splitLlm = getLlm(provider, splitService.model as LLMModel, { ...config, service: splitService })
 
   const INTERACTIVE = argv.interactive || isInteractive(config)
   if (INTERACTIVE) {
@@ -77,6 +84,10 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   })
 
   if (isCommitSplitCommand(argv)) {
+    logger.verbose(
+      `→ split planner: ${provider} (${splitService.model})`,
+      { color: 'green' }
+    )
     const splitResult = await handleCommitSplit({
       argv,
       config,
@@ -84,6 +95,8 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       logger,
       tokenizer,
       llm,
+      planLlm: splitLlm,
+      planService: splitService,
     })
 
     const splitMode = INTERACTIVE ? 'interactive' : (config.mode || 'stdout')

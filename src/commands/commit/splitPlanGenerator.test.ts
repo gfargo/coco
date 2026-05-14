@@ -158,6 +158,28 @@ describe('generateValidatedCommitSplitPlan', () => {
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
   })
 
+  it('rescues duplicate files by keeping the first occurrence across groups', async () => {
+    // Failure pattern from running `coco commit split` against a
+    // many-file staged set with gpt-4.1-nano: the model assigned
+    // the same files to multiple groups, validator's duplicateFiles
+    // check rejected for 3 attempts. With rescueDuplicateFiles, the
+    // same output validates on the first attempt.
+    const duplicatedPlan: CommitSplitPlan = {
+      groups: [
+        { title: 'feat: shared', files: ['a.ts', 'b.ts'], hunks: [] },
+        { title: 'chore: misc', files: ['a.ts'], hunks: [] },
+      ],
+    }
+    mockExecuteChainWithSchema.mockResolvedValueOnce(duplicatedPlan)
+
+    const result = await generateValidatedCommitSplitPlan(baseArgs())
+
+    expect(result.attempts).toBe(1)
+    expect(result.plan.groups).toHaveLength(1)
+    expect(result.plan.groups[0].files).toEqual(['a.ts', 'b.ts'])
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
+  })
+
   it('rescues missing files by appending a misc group (#921 regression)', async () => {
     // Exact pattern from #921 manual testing: LLM omits a staged file
     // from every group (the post-apply screenshot showed scratch.md

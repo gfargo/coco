@@ -4,6 +4,7 @@ export type LLMProvider = 'openai' | 'ollama' | 'anthropic'
 export type DynamicModelTask =
   | 'summarize'
   | 'commit'
+  | 'commitSplit'
   | 'changelog'
   | 'review'
   | 'recap'
