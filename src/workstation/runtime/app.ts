@@ -1873,6 +1873,34 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
+    // Diagnostic dump for the silent-failure bug surfaced in #944
+    // manual testing. Writes a per-step record to a file in /tmp so
+    // we have ground truth when the workstation's view of the world
+    // disagrees with the underlying git state. Path is printed in
+    // the post-apply status so the user can paste it back in an
+    // issue / PR comment.
+    const dumpPath = nodePath.join(
+      tmpdir(),
+      `coco-split-apply-${Date.now()}.log`
+    )
+    const dump: string[] = [
+      `[${new Date().toISOString()}] split apply diagnostic dump`,
+      `plan: ${splitPlan.plan.groups.length} group(s)`,
+      ...splitPlan.plan.groups.map((g, i) =>
+        `  group ${i + 1}: ${g.title} — files=[${(g.files || []).join(', ')}] hunks=[${(g.hunks || []).join(', ')}]`
+      ),
+    ]
+    try {
+      const headBefore = (await git.revparse(['HEAD'])).trim()
+      dump.push(`HEAD before apply: ${headBefore}`)
+      const statusBefore = await git.status()
+      dump.push(`staged before apply: ${[...statusBefore.staged, ...statusBefore.created, ...statusBefore.renamed].length}`)
+      dump.push(`unstaged before apply: ${statusBefore.modified.length + statusBefore.deleted.length}`)
+      dump.push(`untracked before apply: ${statusBefore.not_added.length}`)
+    } catch (error) {
+      dump.push(`pre-apply git probe failed: ${(error as Error).message}`)
+    }
+
     dispatch({ type: 'setSplitPlanApplying' })
     dispatch({ type: 'setStatus', value: 'Applying split plan…', loading: true })
 
@@ -1882,6 +1910,26 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       git,
     })
 
+    dump.push(`workflow returned: ok=${result.ok} message="${result.message}" commitHashes=[${(result.commitHashes || []).join(', ')}]`)
+
+    try {
+      const headAfter = (await git.revparse(['HEAD'])).trim()
+      dump.push(`HEAD after apply: ${headAfter}`)
+      const statusAfter = await git.status()
+      dump.push(`staged after apply: ${[...statusAfter.staged, ...statusAfter.created, ...statusAfter.renamed].length}`)
+      dump.push(`unstaged after apply: ${statusAfter.modified.length + statusAfter.deleted.length}`)
+      dump.push(`untracked after apply: ${statusAfter.not_added.length}`)
+      const recentLog = await git.raw(['log', '--oneline', '-n', '10'])
+      dump.push(`git log -n 10:`)
+      dump.push(...recentLog.split('\n').map((line) => `  ${line}`))
+    } catch (error) {
+      dump.push(`post-apply git probe failed: ${(error as Error).message}`)
+    }
+
+    try {
+      writeFileSync(dumpPath, dump.join('\n'), 'utf8')
+    } catch { /* ignore — diagnostic is best-effort */ }
+
     if (!result.ok) {
       // Keep the overlay open so the user can see what happened and
       // try again. setSplitPlanError preserves the existing plan in
@@ -1889,7 +1937,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({ type: 'setSplitPlanError', error: result.message })
       dispatch({
         type: 'setStatus',
-        value: `Split apply failed: ${result.message}`,
+        value: `Split apply failed: ${result.message} · diagnostic log: ${dumpPath}`,
         kind: 'error',
       })
       return
@@ -1952,7 +2000,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       const detail = result.message || 'No commits were created.'
       dispatch({
         type: 'setStatus',
-        value: `Split apply produced zero commits: ${detail}`,
+        value: `Split apply produced zero commits: ${detail} · diagnostic log: ${dumpPath}`,
         kind: 'error',
       })
       return
