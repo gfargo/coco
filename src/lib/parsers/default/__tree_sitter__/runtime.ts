@@ -123,7 +123,17 @@ export type TreeSitterRuntime = {
 }
 
 async function ensureRuntime(): Promise<TreeSitterRuntime | undefined> {
-  if (initPromise) return initPromise
+  // If an init is already in flight OR completed successfully, reuse it.
+  // We deliberately do NOT cache `undefined` results: a transient failure
+  // (e.g. jest tearing down its environment mid-dynamic-import in a
+  // sibling test file) shouldn't poison the cache for the whole process.
+  // Each call that finds no successful cached runtime tries again,
+  // paying the init cost at most one extra time per failure.
+  if (initPromise) {
+    const cached = await initPromise
+    if (cached) return cached
+    // Fall through and retry — the previous attempt surrendered.
+  }
   initPromise = (async () => {
     const locations = resolveWasmLocations()
     if (!locations) return undefined
