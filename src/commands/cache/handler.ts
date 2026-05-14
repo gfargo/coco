@@ -7,6 +7,7 @@ import {
   getDiffSummaryCachePath,
 } from '../../lib/parsers/default/utils/diffSummaryCache'
 import { CommandHandler } from '../../lib/types'
+import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { CacheArgv } from './config'
 
 type CacheEntry = {
@@ -40,7 +41,10 @@ function formatBytes(bytes: number): string {
 
 export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
   const subcommand = (argv as { subcommand?: string }).subcommand
-  const repoPath = process.cwd()
+  // Honor the global --repo flag so `coco cache info --repo <X>`
+  // inspects X's cache, not the launcher's cwd. applyRepoCwd
+  // performs the chdir when needed and returns the canonical path.
+  const repoPath = applyRepoCwd(argv)
   const cachePath = getDiffSummaryCachePath(repoPath)
 
   if (subcommand === 'clear') {

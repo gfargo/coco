@@ -5,6 +5,7 @@ import { getConfigSources, ConfigSourceInfo } from '../../lib/config/utils/loadC
 import { SCHEMA_PUBLIC_URL } from '../../lib/schema'
 import { CommandHandler } from '../../lib/types'
 import { LOGO } from '../../lib/ui/helpers'
+import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { DoctorArgv, DoctorOptions } from './config'
 import { DiagnosticSeverity, runDiagnostics } from './checks'
 
@@ -42,6 +43,12 @@ function formatSourceInfo(sources: ConfigSourceInfo[]): string[] {
 }
 
 export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
+  // Honor the global --repo flag so `coco doctor --repo <X>`
+  // inspects X's config sources, not the launcher's cwd. The chdir
+  // has to happen before loadConfig so `findUp` walks the targeted
+  // repo's tree.
+  applyRepoCwd(argv)
+
   const config = loadConfig<DoctorOptions, DoctorArgv>(argv)
   const sources = getConfigSources()
 
