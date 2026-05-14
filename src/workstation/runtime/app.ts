@@ -250,7 +250,9 @@ import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } f
 import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
+import { getIssueList } from '../../git/issuesListData'
 import { getPullRequestOverview } from '../../git/pullRequestData'
+import { getPullRequestList } from '../../git/pullRequestListData'
 import {
     approvePullRequest,
     closePullRequest,
@@ -649,6 +651,43 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       )
     )
   }, [context.submodules?.entries, state.filter])
+  // Issues + PR triage filtered lists (#882 phase 3). Same memo
+  // pattern as the other promoted views — collapses per-keystroke
+  // filter work to one pass per (data, filter) change.
+  const filteredIssueList = React.useMemo(() => {
+    const all = context.issueList?.issues || []
+    if (!state.filter) return all
+    return all.filter((issue) =>
+      matchesPromotedFilter(
+        [
+          `#${issue.number}`,
+          issue.title,
+          issue.author || '',
+          ...(issue.labels || []),
+          ...(issue.assignees || []),
+        ],
+        state.filter,
+      )
+    )
+  }, [context.issueList?.issues, state.filter])
+  const filteredPullRequestTriageList = React.useMemo(() => {
+    const all = context.pullRequestList?.pullRequests || []
+    if (!state.filter) return all
+    return all.filter((pr) =>
+      matchesPromotedFilter(
+        [
+          `#${pr.number}`,
+          pr.title,
+          pr.author || '',
+          pr.headRefName,
+          pr.baseRefName,
+          ...(pr.labels || []),
+          ...(pr.assignees || []),
+        ],
+        state.filter,
+      )
+    )
+  }, [context.pullRequestList?.pullRequests, state.filter])
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
@@ -1048,6 +1087,51 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       active = false
     }
   }, [git, state.activeView, context.pullRequest])
+
+  // Lazy-load the issue triage list (#882 phase 3). Mirrors the
+  // single-PR effect above: only fires on entry to the dedicated
+  // view, and only when we don't already have data. The default
+  // filter (`state: 'open'`) matches the CLI's default so the
+  // workstation and `coco issues` show the same set on first entry.
+  React.useEffect(() => {
+    if (state.activeView !== 'issues') return
+    if (context.issueList) return
+    let active = true
+    setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'loading'))
+    void safe(getIssueList(git, { state: 'open' })).then((value) => {
+      if (!active) return
+      setContext((current) => ({
+        ...current,
+        issueList: value,
+      }))
+      setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'ready'))
+    })
+    return () => {
+      active = false
+    }
+  }, [git, state.activeView, context.issueList])
+
+  // Lazy-load the PR triage list (#882 phase 3). Distinct from the
+  // single-PR `pullRequest` effect above — that fetches the current
+  // branch's PR via `gh pr view`; this fetches the full repo PR list
+  // via `gh pr list`.
+  React.useEffect(() => {
+    if (state.activeView !== 'pull-request-triage') return
+    if (context.pullRequestList) return
+    let active = true
+    setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'loading'))
+    void safe(getPullRequestList(git, { state: 'open' })).then((value) => {
+      if (!active) return
+      setContext((current) => ({
+        ...current,
+        pullRequestList: value,
+      }))
+      setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'ready'))
+    })
+    return () => {
+      active = false
+    }
+  }, [git, state.activeView, context.pullRequestList])
 
   React.useEffect(() => {
     let active = true
@@ -3025,6 +3109,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const submoduleSelectedPath = filteredSubmoduleList[
       Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
     ]?.path
+    const issueVisibleCount = filteredIssueList.length
+    const issueSelectedUrl = filteredIssueList[
+      Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+    ]?.url
+    const pullRequestTriageVisibleCount = filteredPullRequestTriageList.length
+    const pullRequestTriageSelectedUrl = filteredPullRequestTriageList[
+      Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+    ]?.url
     const worktreeVisibleCount = filteredWorktreeList.length
 
     // When the diff view is showing a stash patch, swap the previewLineCount
@@ -3060,6 +3152,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       reflogSelectedHash,
       submoduleCount: submoduleVisibleCount,
       submoduleSelectedPath,
+      issueCount: issueVisibleCount,
+      issueSelectedUrl,
+      pullRequestTriageCount: pullRequestTriageVisibleCount,
+      pullRequestTriageSelectedUrl,
       stashSelectedRef,
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,

@@ -96,6 +96,14 @@ export type LogInkInputContext = {
   submoduleCount?: number
   /** Repo-relative path of the cursored submodule (#932). Reserved for future per-entry actions. */
   submoduleSelectedPath?: string
+  /** Number of issues in the triage list view (#882 phase 3). Drives j/k navigation. */
+  issueCount?: number
+  /** URL of the cursored issue (#882 phase 3). Used by `O` to open in the browser. */
+  issueSelectedUrl?: string
+  /** Number of PRs in the triage list view (#882 phase 3). Drives j/k navigation. */
+  pullRequestTriageCount?: number
+  /** URL of the cursored PR in the triage list view (#882 phase 3). */
+  pullRequestTriageSelectedUrl?: string
   worktreeListCount?: number
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
@@ -372,6 +380,24 @@ function isSubmodulesActionTarget(state: LogInkState): boolean {
   return state.activeView === 'submodules' && state.focus === 'commits'
 }
 
+/**
+ * Issue triage list (#882 phase 3). Same shape as the other promoted
+ * read-only views — j/k move the cursor when the commits pane is
+ * focused on the dedicated view.
+ */
+function isIssueActionTarget(state: LogInkState): boolean {
+  return state.activeView === 'issues' && state.focus === 'commits'
+}
+
+/**
+ * Pull-request triage list (#882 phase 3). Distinct from the existing
+ * `pull-request` single-PR action panel — this is the multi-PR list
+ * surface and its cursor lives in `selectedPullRequestTriageIndex`.
+ */
+function isPullRequestTriageActionTarget(state: LogInkState): boolean {
+  return state.activeView === 'pull-request-triage' && state.focus === 'commits'
+}
+
 function isWorktreeActionTarget(state: LogInkState): boolean {
   return (state.activeView === 'worktrees' && state.focus === 'commits') ||
     (state.focus === 'sidebar' && state.sidebarTab === 'worktrees')
@@ -534,6 +560,10 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'worktrees' })]
     case 'navigatePullRequest':
       return [action({ type: 'pushView', value: 'pull-request' })]
+    case 'navigatePullRequestTriage':
+      return [action({ type: 'pushView', value: 'pull-request-triage' })]
+    case 'navigateIssues':
+      return [action({ type: 'pushView', value: 'issues' })]
     case 'navigateConflicts':
       return [action({ type: 'pushView', value: 'conflicts' })]
     case 'navigateReflog':
@@ -1197,6 +1227,25 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // `gP` chord (#882 phase 3): jump to the multi-PR triage list.
+  // Capital P disambiguates from `gp` (current-branch PR panel).
+  // Pleasingly symmetric with `gi` for issues — both lead to the
+  // read-only list views shipped in #882.
+  if (state.pendingKey === 'g' && inputValue === 'P') {
+    return [
+      action({ type: 'pushView', value: 'pull-request-triage' }),
+      action({ type: 'setStatus', value: 'jumped to PR triage' }),
+    ]
+  }
+
+  // `gi` chord (#882 phase 3): jump to the issue triage list.
+  if (state.pendingKey === 'g' && inputValue === 'i') {
+    return [
+      action({ type: 'pushView', value: 'issues' }),
+      action({ type: 'setStatus', value: 'jumped to issues' }),
+    ]
+  }
+
   if (state.pendingKey === 'g' && inputValue === 'x') {
     return [
       action({ type: 'pushView', value: 'conflicts' }),
@@ -1682,6 +1731,18 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveSubmodule', delta: -1, count: context.submoduleCount })]
     }
 
+    if (isIssueActionTarget(state) && context.issueCount) {
+      return [action({ type: 'moveIssue', delta: -1, count: context.issueCount })]
+    }
+
+    if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
+      return [action({
+        type: 'movePullRequestTriage',
+        delta: -1,
+        count: context.pullRequestTriageCount,
+      })]
+    }
+
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {
       return [action({ type: 'moveWorktreeListEntry', delta: -1, count: context.worktreeListCount })]
     }
@@ -1785,6 +1846,18 @@ export function getLogInkInputEvents(
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
       return [action({ type: 'moveSubmodule', delta: 1, count: context.submoduleCount })]
+    }
+
+    if (isIssueActionTarget(state) && context.issueCount) {
+      return [action({ type: 'moveIssue', delta: 1, count: context.issueCount })]
+    }
+
+    if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
+      return [action({
+        type: 'movePullRequestTriage',
+        delta: 1,
+        count: context.pullRequestTriageCount,
+      })]
     }
 
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {

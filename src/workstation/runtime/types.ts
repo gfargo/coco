@@ -20,7 +20,9 @@ import type { LfsAttributeStatus } from '../../git/lfsAttributes'
 import type { SubmoduleOverview } from '../../git/submoduleData'
 import type { GitOperationOverview } from '../../git/operationData'
 import type { ProviderOverview } from '../../git/providerData'
+import type { IssueListOverview } from '../../git/issuesListData'
 import type { PullRequestOverview } from '../../git/pullRequestData'
+import type { PullRequestListOverview } from '../../git/pullRequestListData'
 import type { ReflogOverview } from '../../git/reflogData'
 import type { StashOverview } from '../../git/stashData'
 import type { TagOverview } from '../../git/tagData'
@@ -46,6 +48,18 @@ export type LogInkContext = {
   operation?: GitOperationOverview
   provider?: ProviderOverview
   pullRequest?: PullRequestOverview
+  /**
+   * Multi-PR triage list (#882). Hydrated on entry to the
+   * `pull-request-triage` view. Distinct from `pullRequest` (single,
+   * current-branch) so the two surfaces don't clobber each other and
+   * the disk cache (`coco prs`) can stay separate from the
+   * `gh pr view` cache the single-PR panel uses.
+   */
+  pullRequestList?: PullRequestListOverview
+  /**
+   * Issues triage list (#882). Hydrated on entry to the `issues` view.
+   */
+  issueList?: IssueListOverview
   reflog?: ReflogOverview
   stashes?: StashOverview
   /**

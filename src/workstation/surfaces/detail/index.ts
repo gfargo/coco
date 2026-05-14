@@ -37,6 +37,8 @@ import { getInspectorActions } from '../../chrome/inspectorActions'
 import type { PreviewLine } from '../../chrome/previewPane'
 import {
   formatBranchPreview,
+  formatIssueTriagePreview,
+  formatPullRequestTriagePreview,
   formatStashPreview,
   formatTagPreview,
 } from '../../chrome/previewPane'
@@ -826,4 +828,88 @@ export function renderCommitPanel(
   loading
     ? null
     : h(Text, { key: 'commit-state', dimColor: true }, truncateCells(stateLine, width - 4)))
+}
+
+/**
+ * Issue triage preview pane (#882 phase 3). Mirrors the branch / tag /
+ * stash preview pattern — `renderPreviewPanel` chrome, formatter pulls
+ * the cursored item via `state.selectedIssueIndex`. Shown when
+ * `state.activeView === 'issues'`.
+ */
+export function renderIssueTriagePreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'issueList')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Issue preview',
+      [{ text: formatLogInkLoading({ resource: 'issues' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.issueList?.issues || []
+  const visible = state.filter
+    ? all.filter((issue) => matchesPromotedFilter(
+      [
+        `#${issue.number}`,
+        issue.title,
+        issue.author || '',
+        ...(issue.labels || []),
+        ...(issue.assignees || []),
+      ],
+      state.filter,
+    ))
+    : all
+  const index = Math.max(0, Math.min(state.selectedIssueIndex, Math.max(0, visible.length - 1)))
+  const issue = visible[index]
+  return renderPreviewPanel(h, { Box, Text }, 'Issue preview',
+    formatIssueTriagePreview(issue), width, theme, focused)
+}
+
+/**
+ * Pull-request triage preview pane (#882 phase 3). Shown when
+ * `state.activeView === 'pull-request-triage'`. Distinct from the
+ * single-PR action panel's right pane (which renders the full
+ * inspector with status checks, reviews, and action keys).
+ */
+export function renderPullRequestTriagePreviewPanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  context: LogInkContext,
+  contextStatus: LogInkContextStatus,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  if (isLogInkContextKeyLoading(contextStatus, 'pullRequestList')) {
+    return renderPreviewPanel(h, { Box, Text }, 'Pull request preview',
+      [{ text: formatLogInkLoading({ resource: 'pull requests' }), emphasis: 'dim' }],
+      width, theme, focused)
+  }
+  const all = context.pullRequestList?.pullRequests || []
+  const visible = state.filter
+    ? all.filter((pr) => matchesPromotedFilter(
+      [
+        `#${pr.number}`,
+        pr.title,
+        pr.author || '',
+        pr.headRefName,
+        pr.baseRefName,
+        ...(pr.labels || []),
+        ...(pr.assignees || []),
+      ],
+      state.filter,
+    ))
+    : all
+  const index = Math.max(0, Math.min(state.selectedPullRequestTriageIndex, Math.max(0, visible.length - 1)))
+  const pr = visible[index]
+  return renderPreviewPanel(h, { Box, Text }, 'Pull request preview',
+    formatPullRequestTriagePreview(pr), width, theme, focused)
 }

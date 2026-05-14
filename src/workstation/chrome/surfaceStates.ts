@@ -113,3 +113,54 @@ export function formatLogInkSubmodulesEmpty({ filter }: LogInkSubmodulesEmptyArg
   }
   return 'No submodules registered. Add one with `git submodule add <url> <path>` from the shell.'
 }
+
+export type LogInkIssuesEmptyArgs = {
+  filter: string
+}
+
+export function formatLogInkIssuesEmpty({ filter }: LogInkIssuesEmptyArgs): string {
+  if (filter.trim()) {
+    return `No issues match filter '${filter}'. Press ctrl+u to clear.`
+  }
+  return 'No issues match the current GitHub filter (default: open issues).'
+}
+
+export type LogInkPullRequestTriageEmptyArgs = {
+  filter: string
+}
+
+export function formatLogInkPullRequestTriageEmpty({
+  filter,
+}: LogInkPullRequestTriageEmptyArgs): string {
+  if (filter.trim()) {
+    return `No pull requests match filter '${filter}'. Press ctrl+u to clear.`
+  }
+  return 'No pull requests match the current GitHub filter (default: open PRs).'
+}
+
+export type LogInkGitHubUnauthenticatedArgs = {
+  /** Short noun for the resource: "issues", "pull requests". */
+  resource: string
+}
+
+/**
+ * Surface-level fallback when the GitHub CLI is missing or not
+ * authenticated. The triage views (#882) all share this empty-state
+ * copy — the underlying problem is the same regardless of which
+ * surface the user is on, and the recovery is identical.
+ */
+export function formatLogInkGitHubUnauthenticated({
+  resource,
+}: LogInkGitHubUnauthenticatedArgs): string {
+  return `${resource} require the GitHub CLI. Install \`gh\` and run \`gh auth login\` to enable triage.`
+}
+
+/**
+ * Surface-level fallback when the repo has no GitHub remote. Same
+ * shared message across the triage surfaces.
+ */
+export function formatLogInkGitHubNoRemote({
+  resource,
+}: LogInkGitHubUnauthenticatedArgs): string {
+  return `${resource} require a GitHub remote (origin or fallback). None detected for this repo.`
+}

@@ -19,7 +19,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 
 /**
@@ -165,6 +165,19 @@ export type LogInkState = {
    * their place.
    */
   selectedSubmoduleIndex: number
+  /**
+   * Cursor for the issues triage view (#882). Same lifecycle as the
+   * other promoted-view indices — preserved across navigations so
+   * the user can drill into an issue's preview and back without
+   * losing their place in the list.
+   */
+  selectedIssueIndex: number
+  /**
+   * Cursor for the pull-request triage view (#882). Distinct from
+   * the existing single-PR action panel (`pull-request`); this index
+   * drives the multi-PR list view (`pull-request-triage`).
+   */
+  selectedPullRequestTriageIndex: number
   /**
    * Nested-repo navigation stack (#931). Always at least one entry
    * — the root frame for the repo `coco ui` was launched against.
@@ -575,6 +588,8 @@ export type LogInkAction =
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveReflog'; delta: number; count: number }
   | { type: 'moveSubmodule'; delta: number; count: number }
+  | { type: 'moveIssue'; delta: number; count: number }
+  | { type: 'movePullRequestTriage'; delta: number; count: number }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
   | { type: 'moveConflictFile'; delta: number; count: number }
   | { type: 'moveToBottom' }
@@ -991,6 +1006,8 @@ export function createLogInkState(
     selectedConflictFileIndex: 0,
     selectedReflogIndex: 0,
     selectedSubmoduleIndex: 0,
+    selectedIssueIndex: 0,
+    selectedPullRequestTriageIndex: 0,
     repoStack: [{ label: options.repoLabel || 'root' }],
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
@@ -1291,6 +1308,21 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedSubmoduleIndex: clampIndex(state.selectedSubmoduleIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'moveIssue':
+      return {
+        ...state,
+        selectedIssueIndex: clampIndex(state.selectedIssueIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'movePullRequestTriage':
+      return {
+        ...state,
+        selectedPullRequestTriageIndex: clampIndex(
+          state.selectedPullRequestTriageIndex + action.delta,
+          action.count
+        ),
         pendingKey: undefined,
       }
     case 'moveWorktreeListEntry':
