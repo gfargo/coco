@@ -13,6 +13,8 @@ import {
   hasPlanValidationIssues,
   HunkInventoryLike,
   PlanValidationIssues,
+  rescueDuplicateFiles,
+  rescueDuplicateHunks,
   rescueMissingFiles,
   rescueMixedFiles,
   rescuePhantomHunks,
@@ -90,31 +92,39 @@ export async function generateValidatedCommitSplitPlan({
 
     // Rescue passes. Run in order — order matters:
     //
-    //   1. rescuePhantomHunks (#918): LLM commonly emits "file::hunk-1"
+    //   1. rescueDuplicateFiles / rescueDuplicateHunks: weak models
+    //      (e.g. gpt-4.1-nano) repeatedly re-assert the same file or
+    //      hunk across multiple groups. Keep the first occurrence,
+    //      drop the rest. Run FIRST so downstream rescues see a
+    //      deduplicated plan and don't re-process redundant entries.
+    //
+    //   2. rescuePhantomHunks (#918): LLM commonly emits "file::hunk-1"
     //      against an empty inventory (all staged files are new).
     //      Promote those to file-level assignments.
     //
-    //   2. rescueMixedFiles (#919): LLM commonly puts a file in
+    //   3. rescueMixedFiles (#919): LLM commonly puts a file in
     //      `files[]` of group A AND uses its hunks in `hunks[]` of
     //      group B. Drop the hunks (the file-level claim is more
     //      specific). Must run AFTER phantom-hunk rescue because the
     //      rescue itself can create mixed-files situations.
     //
-    //   3. rescueMissingFiles (#921): LLM occasionally forgets a
+    //   4. rescueMissingFiles (#921): LLM occasionally forgets a
     //      staged file across every group. Append a synthetic "misc"
     //      group so the plan covers every staged file.
     //
-    //   4. dropEmptyGroups: rescueMixedFiles can leave a group with
-    //      empty files[] AND empty hunks[] when it had only hunks
-    //      that got dropped. Apply-time, an empty group means
-    //      `git commit` with nothing staged, which throws and
-    //      aborts mid-loop after the up-front `git reset` has
-    //      already wiped the index. Filter the empty groups out
-    //      LAST so the apply path can't hit them.
+    //   5. dropEmptyGroups: earlier rescues can leave a group with
+    //      empty files[] AND empty hunks[] when their only contents
+    //      got dropped. Apply-time, an empty group means `git commit`
+    //      with nothing staged, which throws and aborts mid-loop
+    //      after the up-front `git reset` has already wiped the
+    //      index. Filter the empty groups out LAST so the apply path
+    //      can't hit them.
     //
     // All rescues are no-ops when there's nothing to rescue, so
     // running them unconditionally costs nothing on healthy plans.
-    const phantomRescued = rescuePhantomHunks(rawPlan, staged, hunkInventory)
+    const dedupedFiles = rescueDuplicateFiles(rawPlan)
+    const dedupedHunks = rescueDuplicateHunks(dedupedFiles)
+    const phantomRescued = rescuePhantomHunks(dedupedHunks, staged, hunkInventory)
     const mixedRescued = rescueMixedFiles(phantomRescued, hunkInventory)
     const missingRescued = rescueMissingFiles(mixedRescued, staged, hunkInventory)
     const plan = dropEmptyGroups(missingRescued)

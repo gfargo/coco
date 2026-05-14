@@ -3,6 +3,7 @@ import { spawn } from 'child_process'
 import { formatPatch, parsePatch, StructuredPatch, StructuredPatchHunk } from 'diff'
 import { Arguments } from 'yargs'
 import { Config } from '../../lib/config/types'
+import { LLMService } from '../../lib/langchain/types'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
@@ -488,13 +489,28 @@ export async function prepareCommitSplitPlan({
   logger,
   tokenizer,
   llm,
+  planLlm,
+  planService,
 }: {
   argv: Arguments<CommitOptions>
   config: Config & CommitOptions
   git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>
   logger: Logger
   tokenizer: TokenCounter
+  /**
+   * LLM for the diff-summary pre-pass. Typically the regular commit
+   * or summarize model.
+   */
   llm: ReturnType<typeof getLlm>
+  /**
+   * Optional dedicated LLM for the structured plan-generation step.
+   * Defaults to `llm` when omitted. Wired by `handleCommitSplit` so
+   * the `commitSplit` dynamic-model task can floor the planner at a
+   * stronger model than the diff summarizer.
+   */
+  planLlm?: ReturnType<typeof getLlm>
+  /** Service descriptor matching `planLlm` (for telemetry metadata). */
+  planService?: LLMService
 }): Promise<{ plan: CommitSplitPlan; context: CommitSplitPlanContext } | { empty: true }> {
   const changes = await getChanges({
     git,
@@ -576,8 +592,11 @@ export async function prepareCommitSplitPlan({
     }
   }
 
+  const resolvedPlanLlm = planLlm ?? llm
+  const resolvedPlanModel = planService?.model ?? config.service.model
+
   const { plan } = await generateValidatedCommitSplitPlan({
-    llm,
+    llm: resolvedPlanLlm,
     prompt: COMMIT_SPLIT_PROMPT,
     variables: {
       file_inventory: fileInventory,
@@ -595,7 +614,7 @@ export async function prepareCommitSplitPlan({
     metadata: {
       command: 'commit',
       provider: config.service.provider,
-      model: String(config.service.model),
+      model: String(resolvedPlanModel),
       conventional: useConventional,
     },
     maxAttempts: DEFAULT_MAX_PLAN_ATTEMPTS,
@@ -611,6 +630,8 @@ export async function handleCommitSplit({
   logger,
   tokenizer,
   llm,
+  planLlm,
+  planService,
 }: {
   argv: Arguments<CommitOptions>
   config: Config & CommitOptions
@@ -618,8 +639,19 @@ export async function handleCommitSplit({
   logger: Logger
   tokenizer: TokenCounter
   llm: ReturnType<typeof getLlm>
+  planLlm?: ReturnType<typeof getLlm>
+  planService?: LLMService
 }): Promise<string> {
-  const result = await prepareCommitSplitPlan({ argv, config, git, logger, tokenizer, llm })
+  const result = await prepareCommitSplitPlan({
+    argv,
+    config,
+    git,
+    logger,
+    tokenizer,
+    llm,
+    planLlm,
+    planService,
+  })
 
   if ('empty' in result) {
     return 'No staged changes found.'

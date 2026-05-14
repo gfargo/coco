@@ -139,6 +139,24 @@ describe('dynamic model routing', () => {
     }
   )
 
+  it.each([
+    ['openai', 'cost', 'gpt-4.1-mini'] as const,
+    ['openai', 'balanced', 'gpt-4.1'] as const,
+    ['openai', 'quality', 'gpt-4.1'] as const,
+    ['anthropic', 'cost', 'claude-3-5-sonnet-latest'] as const,
+    ['anthropic', 'balanced', 'claude-3-7-sonnet-latest'] as const,
+    ['anthropic', 'quality', 'claude-sonnet-4-0'] as const,
+    ['ollama', 'cost', 'qwen2.5-coder:14b'] as const,
+    ['ollama', 'balanced', 'qwen2.5-coder:32b'] as const,
+    ['ollama', 'quality', 'qwen2.5-coder:32b'] as const,
+  ])(
+    'floors %s %s commitSplit above the base commit model',
+    (provider, preference, expected) => {
+      const config = createDynamicConfig(provider, preference)
+      expect(resolveDynamicModel(config, 'commitSplit')).toBe(expected)
+    }
+  )
+
   it('supports preference-specific defaults', () => {
     const config = {
       ...baseConfig,
