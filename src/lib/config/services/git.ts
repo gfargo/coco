@@ -40,43 +40,87 @@ export function loadGitConfig<ConfigType = Config>(
     if (gitConfigParsed.coco) {
       foundPath = gitConfigPath
 
-      service = {
-        provider: gitConfigParsed.coco?.serviceProvider,
-        model: gitConfigParsed.coco?.serviceModel,
-        tokenLimit: gitConfigParsed.coco?.serviceTokenLimit
-          ? Number(gitConfigParsed.coco.serviceTokenLimit)
-          : undefined,
-        temperature: gitConfigParsed.coco?.serviceTemperature
-          ? Number(gitConfigParsed.coco.serviceTemperature)
-          : undefined,
-        maxConcurrent: gitConfigParsed.coco?.serviceMaxConcurrent
-          ? Number(gitConfigParsed.coco.serviceMaxConcurrent)
-          : undefined,
-        minTokensForSummary: gitConfigParsed.coco?.serviceMinTokensForSummary
-          ? Number(gitConfigParsed.coco.serviceMinTokensForSummary)
-          : undefined,
-        maxFileTokens: gitConfigParsed.coco?.serviceMaxFileTokens
-          ? Number(gitConfigParsed.coco.serviceMaxFileTokens)
-          : undefined,
-        maxParsingAttempts: gitConfigParsed.coco?.serviceMaxParsingAttempts
-          ? Number(gitConfigParsed.coco.serviceMaxParsingAttempts)
-          : undefined,
-        baseURL: gitConfigParsed.coco?.serviceBaseURL,
-        authentication: {
+      // Build OVERRIDES from gitconfig — only include keys the user
+      // actually set. Then merge on top of the existing service
+      // (default or earlier layer) so unset fields keep their
+      // defaults instead of getting wiped.
+      //
+      // The previous behavior had three latent bugs:
+      //   1. Replaced the whole service object — wiped default
+      //      tokenLimit / temperature / maxConcurrent / etc.
+      //   2. Constructed `requestOptions` unconditionally with
+      //      `Number(undefined) === NaN` for unset sub-fields →
+      //      JSON-serializes to `null` → schema rejects.
+      //   3. Attached `endpoint` and `baseURL` unconditionally → the
+      //      per-provider schema variants (`additionalProperties:
+      //      false` on each anyOf branch) reject the irrelevant one.
+      const coco = gitConfigParsed.coco
+      const numberOrUndefined = (raw: unknown): number | undefined => {
+        if (raw === undefined || raw === null || raw === '') return undefined
+        const n = Number(raw)
+        return Number.isFinite(n) ? n : undefined
+      }
+      const requestOptionsOverrides: { timeout?: number; maxRetries?: number } = {}
+      const timeout = numberOrUndefined(coco.serviceRequestOptionsTimeout)
+      const maxRetries = numberOrUndefined(coco.serviceRequestOptionsMaxRetries)
+      if (timeout !== undefined) requestOptionsOverrides.timeout = timeout
+      if (maxRetries !== undefined) requestOptionsOverrides.maxRetries = maxRetries
+
+      const overrides: Record<string, unknown> = {}
+      if (coco.serviceProvider) overrides.provider = coco.serviceProvider
+      if (coco.serviceModel) overrides.model = coco.serviceModel
+      const tokenLimit = numberOrUndefined(coco.serviceTokenLimit)
+      if (tokenLimit !== undefined) overrides.tokenLimit = tokenLimit
+      const temperature = numberOrUndefined(coco.serviceTemperature)
+      if (temperature !== undefined) overrides.temperature = temperature
+      const maxConcurrent = numberOrUndefined(coco.serviceMaxConcurrent)
+      if (maxConcurrent !== undefined) overrides.maxConcurrent = maxConcurrent
+      const minTokensForSummary = numberOrUndefined(coco.serviceMinTokensForSummary)
+      if (minTokensForSummary !== undefined) overrides.minTokensForSummary = minTokensForSummary
+      const maxFileTokens = numberOrUndefined(coco.serviceMaxFileTokens)
+      if (maxFileTokens !== undefined) overrides.maxFileTokens = maxFileTokens
+      const maxParsingAttempts = numberOrUndefined(coco.serviceMaxParsingAttempts)
+      if (maxParsingAttempts !== undefined) overrides.maxParsingAttempts = maxParsingAttempts
+
+      // Provider-specific keys only attach when relevant to the
+      // chosen (or pre-existing) provider — keeps the merged service
+      // shape consistent with whichever schema variant should match.
+      const effectiveProvider = (coco.serviceProvider || service?.provider) as
+        | 'openai' | 'ollama' | 'anthropic' | undefined
+      if (effectiveProvider === 'openai' && coco.serviceBaseURL) {
+        overrides.baseURL = coco.serviceBaseURL
+      }
+      if (effectiveProvider === 'ollama' && coco.serviceEndpoint) {
+        overrides.endpoint = coco.serviceEndpoint
+      }
+      if (coco.serviceFields) {
+        try {
+          overrides.fields = JSON.parse(coco.serviceFields)
+        } catch {
+          // Malformed JSON in serviceFields — skip rather than throw.
+          // The loader's job isn't to validate user input here, just
+          // to surface what's parseable. The schema validator runs
+          // later and will catch a missing required field if any.
+        }
+      }
+      // requestOptions only gets attached when at least one sub-field
+      // was actually set. Empty `{}` would still serialize cleanly
+      // but stays out of the merged shape for readability.
+      if (Object.keys(requestOptionsOverrides).length > 0) {
+        overrides.requestOptions = requestOptionsOverrides
+      }
+      // Authentication: only when an apiKey was provided. Default
+      // service ships with an empty-credential placeholder for users
+      // who'll set the key via env var; gitconfig's apiKey should
+      // override that path, not the structure itself.
+      if (coco.serviceApiKey) {
+        overrides.authentication = {
           type: 'APIKey',
-          credentials: {
-            apiKey: gitConfigParsed.coco?.serviceApiKey,
-          },
-        },
-        requestOptions: {
-          timeout: Number(gitConfigParsed.coco?.serviceRequestOptionsTimeout),
-          maxRetries: Number(gitConfigParsed.coco?.serviceRequestOptionsMaxRetries),
-        },
-        endpoint: gitConfigParsed.coco?.serviceEndpoint,
-        fields: gitConfigParsed.coco?.serviceFields
-          ? JSON.parse(gitConfigParsed.coco?.serviceFields)
-          : undefined,
-      } as LLMService
+          credentials: { apiKey: coco.serviceApiKey },
+        }
+      }
+
+      service = { ...(service || {}), ...overrides } as LLMService
     }
 
     config = {
