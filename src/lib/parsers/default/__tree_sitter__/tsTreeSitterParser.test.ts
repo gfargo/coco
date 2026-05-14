@@ -2,45 +2,40 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FileDiff } from '../../../types'
 import { treeSitterTsParser } from './tsTreeSitterParser'
-import { _resetTreeSitterRuntimeForTesting } from './runtime'
 
 function fileDiff(file: string, diff: string): FileDiff {
   return { file, diff, summary: '', tokenCount: Math.ceil(diff.length / 4) }
 }
 
-// Tree-sitter integration tests require TWO things to actually exercise
-// the .wasm code path:
-//   1. The .wasm files copied into `dist/tree-sitter/` by the postbuild
-//      script (only present after `npm run build`).
-//   2. Jest running with `NODE_OPTIONS=--experimental-vm-modules` so the
-//      `web-tree-sitter` package (`"type": "module"`) can be loaded via
-//      the dynamic-import shim in `runtime.ts`. Without the flag, Jest
-//      throws "A dynamic import callback was invoked without
-//      --experimental-vm-modules" and the runtime surrenders.
+// Tree-sitter integration tests need the .wasm files copied to
+// `dist/tree-sitter/` to actually exercise the code path. The
+// `pretest:jest` npm script handles that automatically by running the
+// postbuild copy step. ESM dynamic import (required to load
+// `web-tree-sitter`, which is `"type": "module"`) works out of the box
+// because `test:jest` runs with `NODE_OPTIONS=--experimental-vm-modules`
+// (#933 phase 2).
 //
-// When either is missing, the suite skips itself — the production code
-// path (regex fallback) is still tested via the registry-level tests in
-// `structuralParserRegistry.test.ts`, and end-to-end tree-sitter
-// validation runs via the eval harness CLI (#934), which executes under
-// vanilla Node with full ESM support and is the right tool for
-// integration verification anyway.
-//
-// Opt in locally with:
-//   NODE_OPTIONS=--experimental-vm-modules COCO_TEST_TREE_SITTER=1 npx jest ...
+// The wasm-available check stays as a defensive guard: if someone
+// invokes `npx jest` directly without running `pretest:jest` first, the
+// wasms won't be there. Skipping in that case keeps the runner honest
+// about what was actually exercised, and the production code path
+// (regex fallback) is still tested via the registry-level tests in
+// `structuralParserRegistry.test.ts`.
 const wasmDir = join(__dirname, '..', '..', '..', '..', '..', 'dist', 'tree-sitter')
 const wasmAvailable = existsSync(join(wasmDir, 'web-tree-sitter.wasm')) &&
   existsSync(join(wasmDir, 'tree-sitter-typescript.wasm')) &&
   existsSync(join(wasmDir, 'tree-sitter-tsx.wasm'))
-const esmEnabled = process.env.COCO_TEST_TREE_SITTER === '1'
 
-const describeWithWasm = (wasmAvailable && esmEnabled) ? describe : describe.skip
+const describeWithWasm = wasmAvailable ? describe : describe.skip
 
 describeWithWasm('treeSitterTsParser (.wasm-backed)', () => {
-  beforeEach(() => {
-    // Each test gets a fresh runtime so we exercise the init path
-    // at least once and don't rely on inter-test cache state.
-    _resetTreeSitterRuntimeForTesting()
-  })
+  // Note: deliberately NO `beforeEach` reset of the runtime. The runtime
+  // is designed as process-lifetime (one init + one parser cache for the
+  // whole run), and resetting between tests has caused flakes under
+  // jest + ESM dynamic imports — a previous test file's teardown could
+  // race the init promise. The init failure path is now retry-friendly
+  // (see `ensureRuntime` in runtime.ts), and we trust the first test in
+  // this suite to exercise the init path cleanly.
 
   it('returns undefined for non-TS / non-JS file paths', async () => {
     expect(await treeSitterTsParser.summarize(fileDiff('README.md', '+x'))).toBeUndefined()

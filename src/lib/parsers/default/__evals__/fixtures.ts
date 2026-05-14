@@ -76,6 +76,33 @@ export const evalFixtures: readonly EvalFixture[] = [
     ],
   },
   {
+    name: 'ts-arrow-fn-export',
+    // Marquee tree-sitter advantage case (#933 phase 1.1 + 2).
+    //
+    // The regex parser sees `export const handler = (...)` and
+    // classifies it as a `const` declaration, surfacing the symbol
+    // as `const handler` in the summary. Tree-sitter inspects the
+    // declarator's value, recognizes the `arrow_function` node,
+    // and classifies the binding as a function — so the same diff
+    // surfaces as `handler()` instead.
+    //
+    // Both parsers fire the fast path (so the LLM-call-saved metric
+    // is identical in mock-mode), but the qualitative output
+    // differs. Run the eval with the tree-sitter wasms present vs.
+    // absent (e.g. delete `dist/tree-sitter/` and re-run) to see the
+    // diff in the per-fixture JSON.
+    description: 'TS module replaces a function declaration with an arrow-function const — regex outputs `const handler`, tree-sitter outputs `handler()`.',
+    diffs: [
+      buildDiff('src/api.ts', [
+        '@@ -1,5 +1,5 @@',
+        ' import { Request, Response } from "./types"',
+        ' ',
+        '-export function handler(req: Request): Response { return process(req) }',
+        '+export const handler = (req: Request): Response => process(req)',
+      ].join('\n')),
+    ],
+  },
+  {
     name: 'python-class-method-add',
     description: 'Python module replaces a legacy helper with a class + factory.',
     diffs: [
