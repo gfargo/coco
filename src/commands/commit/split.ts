@@ -8,7 +8,9 @@ import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { getChanges } from '../../lib/simple-git/getChanges'
+import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { FileChange } from '../../lib/types'
+import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import { Logger } from '../../lib/utils/logger'
 import { TokenCounter } from '../../lib/utils/tokenizer'
 import { CommitOptions } from './config'
@@ -30,22 +32,41 @@ import {
 export { CommitSplitPlanSchema }
 export type { CommitSplitPlan, CommitSplitGroup }
 
+/**
+ * Inline conventional-commits ruleset that gets spliced into the
+ * split prompt's `commit_message_rules` slot when the user has
+ * conventional commits enabled in config or via `--conventional`.
+ *
+ * This is the same ruleset used by the regular `coco commit`
+ * conventional path (`CONVENTIONAL_TEMPLATE` in `./prompt.ts`),
+ * adapted to apply per-group inside the split JSON output: every
+ * `title` field in the plan must follow the spec, not just the
+ * overall commit message.
+ */
+const CONVENTIONAL_COMMITS_RULES = `Each group's "title" MUST follow the Conventional Commits 1.0.0 spec:
+- Format: <type>(<scope>)<!>: <subject>
+- type is one of: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+- scope is optional but encouraged when it adds clarity (file/module name)
+- "!" before ":" marks a breaking change
+- subject is imperative mood, no trailing period, <72 chars
+- For breaking changes, the body must include a "BREAKING CHANGE:" footer explaining the break.`
+
 const COMMIT_SPLIT_PROMPT = PromptTemplate.fromTemplate(`You are helping split staged git changes into a small sequence of coherent commits.
 
 Return ONLY valid JSON matching this schema:
 {{
   "groups": [
     {{
-      "title": "conventional commit style title",
-      "body": "commit body",
-      "rationale": "why these files belong together",
+      "title": "commit subject line",
+      "body": "commit body (optional)",
+      "rationale": "why these files belong together (internal; not the commit message)",
       "files": ["relative/path.ts"],
       "hunks": ["relative/path.ts::hunk-1"]
     }}
   ]
 }}
 
-Rules:
+Structural rules:
 - Every staged file MUST be assigned exactly once across all groups, either via "files" OR via every one of its hunk IDs (never both).
 - A SINGLE file is EITHER fully claimed via "files" (its name appears in one group's "files" array) OR fully claimed via "hunks" (every one of its hunk IDs is split across one or more groups). NEVER mix the two modes for the same file. If a file appears in any group's "files" array, that file's hunk IDs MUST NOT appear in any group's "hunks" array.
 - If you assign any hunk for a file, you MUST assign EVERY hunk for that file across the groups — partial coverage is invalid.
@@ -54,7 +75,16 @@ Rules:
 - Only use hunk IDs LITERALLY copied from the "Staged hunk inventory" section below. Do not invent or guess hunk IDs.
 - If the hunk inventory says "No hunk-level inventory available" then EVERY group's "hunks" array MUST be empty (use only "files"). Do not write hunk IDs like "path::hunk-1" when no hunk inventory exists — those are not valid.
 - Prefer 2-5 commits unless the changes are truly all one topic.
-- Keep commit titles concise and understandable.
+
+Commit message style:
+- Write each "title" in the imperative mood ("add", not "added"), under 72 chars.
+- Avoid phrases like "this commit" / "this change" — refer to functions, variables, or classes by name in backticks.
+- "body" is optional; when present, wrap at 72 chars and describe WHY the change exists, not what (the diff shows what).
+{commit_message_rules}
+
+{branch_name_context}
+
+{commitlint_rules_context}
 
 Staged file inventory:
 {file_inventory}
@@ -499,6 +529,53 @@ export async function prepareCommitSplitPlan({
     .join('\n')
   const hunkInventoryText = formatHunkInventory(hunkInventory)
 
+  // Pull in the same prompt-context bits the regular `coco commit`
+  // path honors so split commits match the user's project conventions:
+  //
+  //   - Conventional Commits ruleset (when configured) — applied per
+  //     group's title field, not just the overall message
+  //   - Current branch name (when includeBranchName isn't disabled)
+  //     so the model can reference branch-scoped context
+  //   - Commitlint rules — when the project has commitlint configured
+  //     OR conventional mode is on, the rules get formatted into the
+  //     prompt so the model produces titles that pass commitlint
+  //     up-front (saves a retry cycle)
+  //
+  // Temperature / model selection are already inherited because
+  // `llm` is `getLlm(provider, model, { service: commitService })`
+  // — same instance regular `coco commit` uses.
+  const useConventional = Boolean(config.conventionalCommits || argv.conventional)
+  const commitMessageRules = useConventional
+    ? `\n${CONVENTIONAL_COMMITS_RULES}`
+    : ''
+
+  const branchName = await getCurrentBranchName({ git })
+  const includeBranchName = argv.includeBranchName !== undefined
+    ? argv.includeBranchName
+    : config.includeBranchName !== false
+  const branchNameContext = includeBranchName && branchName
+    ? `Current git branch name: ${branchName}`
+    : ''
+
+  let commitlintRulesContext = ''
+  const hasCommitLintConfig = await hasCommitlintConfig()
+  if (useConventional || hasCommitLintConfig) {
+    try {
+      const { getCommitlintRulesContext, checkCommitlintAvailability } = await import(
+        '../../lib/utils/commitlintValidator'
+      )
+      const availability = checkCommitlintAvailability()
+      if (availability.available) {
+        commitlintRulesContext = await getCommitlintRulesContext()
+      }
+    } catch {
+      // Commitlint integration is best-effort — a missing dep or a
+      // bad config file shouldn't block the split. The model gets
+      // the rules when we can pass them; otherwise it falls back to
+      // the conventional-commits ruleset (or generic style).
+    }
+  }
+
   const { plan } = await generateValidatedCommitSplitPlan({
     llm,
     prompt: COMMIT_SPLIT_PROMPT,
@@ -507,6 +584,9 @@ export async function prepareCommitSplitPlan({
       hunk_inventory: hunkInventoryText,
       summary,
       additional_context: argv.additional || '',
+      commit_message_rules: commitMessageRules,
+      branch_name_context: branchNameContext,
+      commitlint_rules_context: commitlintRulesContext,
     },
     staged: changes.staged,
     hunkInventory,
@@ -516,6 +596,7 @@ export async function prepareCommitSplitPlan({
       command: 'commit',
       provider: config.service.provider,
       model: String(config.service.model),
+      conventional: useConventional,
     },
     maxAttempts: DEFAULT_MAX_PLAN_ATTEMPTS,
   })
