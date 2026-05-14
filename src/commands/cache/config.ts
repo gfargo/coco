@@ -33,6 +33,7 @@ export const CACHE_SUBCOMMANDS = [
   'parsers',
   'prefetch',
   'clear-parsers',
+  'clear-github',
 ] as const
 
 export type CacheSubcommand = typeof CACHE_SUBCOMMANDS[number]
