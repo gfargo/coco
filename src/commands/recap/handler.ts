@@ -12,7 +12,7 @@ import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getChangesByTimestamp } from '../../lib/simple-git/getChangesByTimestamp'
 import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLastTag'
-import { getRepo } from '../../lib/simple-git/getRepo'
+import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { CommandHandler } from '../../lib/types'
@@ -29,7 +29,7 @@ import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 
 export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
-  const git = getRepo()
+  const git = applyRepoFlag(argv)
   const config = loadConfig<RecapOptions, RecapArgv>(argv)
   const key = getApiKeyForModel(config)
   const { provider } = getModelAndProviderFromConfig(config)

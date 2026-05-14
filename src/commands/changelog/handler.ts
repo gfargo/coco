@@ -17,8 +17,8 @@ import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurr
 import { getCommitLogRangeDetails, CommitDetails } from '../../lib/simple-git/getCommitLogRangeDetails'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getChangesByCommit } from '../../lib/simple-git/getChangesByCommit'
-import { getRepo } from '../../lib/simple-git/getRepo'
 import { CommandHandler, FileChange } from '../../lib/types'
+import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
@@ -63,8 +63,8 @@ async function processInWaves<T, R>(
 }
 
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
+  const git = applyRepoFlag(argv)
   const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
-  const git = getRepo()
   const key = getApiKeyForModel(config)
   const { provider } = getModelAndProviderFromConfig(config)
   const changelogService = resolveDynamicService(config, 'changelog')

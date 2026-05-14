@@ -26,6 +26,19 @@ const y = yargs()
 
 y.scriptName('coco')
 
+// Global `--repo <dir>` (alias `--cwd`) — every subcommand inherits
+// it. The shared `applyRepoFlag` helper handlers call up-front
+// chdir's to this directory + binds the simple-git instance so every
+// downstream read (config lookup, simple-git baseDir, commitlint
+// discovery) sees the same root. Lets users / scripts / editor
+// integrations target arbitrary repos without `cd`-ing first.
+y.option('repo', {
+  type: 'string',
+  alias: 'cwd',
+  description: 'Target a specific repository directory instead of the current working directory.',
+  global: true,
+})
+
 y.command<CommitOptions>(
   [commit.command, '$0'],
   commit.desc,
