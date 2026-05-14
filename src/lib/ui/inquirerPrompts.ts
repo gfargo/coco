@@ -1,4 +1,5 @@
 import type {
+  checkbox as inquirerCheckbox,
   confirm as inquirerConfirm,
   editor as inquirerEditor,
   input as inquirerInput,
@@ -7,6 +8,7 @@ import type {
 } from '@inquirer/prompts'
 
 type InquirerPromptsModule = {
+  checkbox: typeof inquirerCheckbox
   confirm: typeof inquirerConfirm
   editor: typeof inquirerEditor
   input: typeof inquirerInput
@@ -66,4 +68,12 @@ export async function selectPrompt<Value>(
   const { select } = await loadInquirerPrompts()
 
   return (select as (config: unknown, context?: unknown) => Promise<Value>)(...args)
+}
+
+export async function checkboxPrompt<Value>(
+  ...args: [config: unknown, context?: unknown]
+): Promise<Value[]> {
+  const { checkbox } = await loadInquirerPrompts()
+
+  return (checkbox as (config: unknown, context?: unknown) => Promise<Value[]>)(...args)
 }

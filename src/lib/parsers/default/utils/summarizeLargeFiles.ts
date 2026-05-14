@@ -15,6 +15,7 @@ import { isPythonFile } from './pythonStructuralDiff'
 import { isRustFile } from './rustStructuralDiff'
 import {
   dispatchStructuralParser,
+  hasTreeSitterParser,
   type StructuralLanguageId,
 } from './structuralParserRegistry'
 import { detectTsLanguage } from './tsStructuralDiff'
@@ -175,6 +176,21 @@ async function summarizeFileDiff(
           diff: structuralSummary,
           tokenCount: tokenizer(structuralSummary),
         }
+      }
+      // Surrender telemetry (#933 phase 7). When the chain INCLUDES
+      // a tree-sitter parser but it surrendered (cache empty, AST
+      // unrecognized, dynamic import failed), emit a discoverability
+      // hint. Lazy-loaded languages benefit most from this — users
+      // who haven't run `coco cache prefetch <lang>` see the nudge
+      // and know how to enable the better extractor. Bundled
+      // languages (ts/tsx) hit this branch too when the AST didn't
+      // recognize the diff shape; the hint is harmless there.
+      if (hasTreeSitterParser(language)) {
+        logger.verbose(
+          ` - ${fileDiff.file}: tree-sitter parser surrendered for '${language}'; using regex fallback. ` +
+          `Hint: \`coco cache parsers\` to inspect, \`coco cache prefetch ${language === 'ts' || language === 'js' ? 'all' : language}\` to enable.`,
+          { color: 'gray' }
+        )
       }
     }
   }

@@ -144,3 +144,20 @@ export function _registrySnapshotForTesting(): Record<StructuralLanguageId, Stru
     Object.entries(REGISTRY).map(([lang, chain]) => [lang, chain.map((p) => p.id)])
   ) as Record<StructuralLanguageId, StructuralParserKind[]>
 }
+
+/**
+ * True when a given language's chain INCLUDES a tree-sitter parser.
+ * Used by the LLM fallthrough path in `summarizeLargeFiles.ts` to
+ * surface a discoverability hint ("run `coco cache prefetch py` to
+ * enable tree-sitter") when the chain falls through entirely.
+ *
+ * Doesn't tell us WHY the tree-sitter parser surrendered — that's
+ * still an internal concern of the parser itself (cache miss vs.
+ * dynamic-import failure vs. AST shape unrecognized). The hint the
+ * surface emits is generic enough to cover all of those cases.
+ */
+export function hasTreeSitterParser(language: StructuralLanguageId): boolean {
+  const chain = REGISTRY[language]
+  if (!chain) return false
+  return chain.some((parser) => parser.id === 'tree-sitter')
+}

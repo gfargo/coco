@@ -25,7 +25,7 @@
  * polish-phase concern; today, users `rm -rf` the dir manually.
  */
 
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync, unlinkSync } from 'node:fs'
 import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 
@@ -112,4 +112,53 @@ export function ensureTreeSitterCacheDir(): string {
  */
 export function isLanguageCached(language: LazyTreeSitterLanguageId): boolean {
   return existsSync(getCachedWasmPath(language))
+}
+
+export type CachedParserStatus = {
+  language: LazyTreeSitterLanguageId
+  /** True when the .wasm exists on disk in the cache. */
+  cached: boolean
+  /** Filesystem path the cache lookup checks. */
+  path: string
+  /** On-disk size in bytes when cached; undefined otherwise. */
+  bytes?: number
+  /** Last-modified timestamp when cached; undefined otherwise. */
+  mtime?: Date
+}
+
+/**
+ * Inspect the on-disk state of a single lazy-loaded parser. Used by
+ * `coco cache parsers` to render the status table and by the
+ * interactive prefetch picker to mark already-cached entries.
+ */
+export function getCachedParserStatus(
+  language: LazyTreeSitterLanguageId,
+): CachedParserStatus {
+  const path = getCachedWasmPath(language)
+  const cached = existsSync(path)
+  if (!cached) return { language, cached: false, path }
+  try {
+    const stat = statSync(path)
+    return { language, cached: true, path, bytes: stat.size, mtime: stat.mtime }
+  } catch {
+    // Race window: file disappeared between existsSync and statSync.
+    // Report uncached rather than crash.
+    return { language, cached: false, path }
+  }
+}
+
+/**
+ * Remove a single language's cached .wasm. Idempotent — no-op when
+ * the file isn't present. Returns true when a file was actually
+ * deleted, false otherwise.
+ */
+export function clearCachedParser(language: LazyTreeSitterLanguageId): boolean {
+  const path = getCachedWasmPath(language)
+  if (!existsSync(path)) return false
+  try {
+    unlinkSync(path)
+    return true
+  } catch {
+    return false
+  }
 }
