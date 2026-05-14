@@ -5,7 +5,9 @@ import changelog from './commands/changelog'
 import commit from './commands/commit'
 import doctor from './commands/doctor'
 import init from './commands/init'
+import issues from './commands/issues'
 import log from './commands/log'
+import prs from './commands/prs'
 import recap from './commands/recap'
 import review from './commands/review'
 import ui from './commands/ui'
@@ -15,7 +17,9 @@ import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
 import { DoctorOptions } from './commands/doctor/config'
 import { InitOptions } from './commands/init/config'
+import { IssuesOptions } from './commands/issues/config'
 import { LogOptions } from './commands/log/config'
+import { PrsOptions } from './commands/prs/config'
 import { RecapOptions } from './commands/recap/config'
 import { ReviewOptions } from './commands/review/config'
 import { UiOptions } from './commands/ui/config'
@@ -102,6 +106,20 @@ y.command<CacheOptions>(
   cache.handler
 )
 
+y.command<IssuesOptions>(
+  issues.command,
+  issues.desc,
+  issues.builder,
+  issues.handler
+)
+
+y.command<PrsOptions>(
+  prs.command,
+  prs.desc,
+  prs.builder,
+  prs.handler
+)
+
 // `COCO_PREFETCH` hook (#933 phase 3). When set, downloads any
 // requested lazy-load tree-sitter parsers into the user's cache
 // dir before yargs hands control to a subcommand. No-op when
@@ -122,4 +140,17 @@ main().catch((error) => {
   process.exit(1)
 })
 
-export { cache, changelog, commit, Config, doctor, init, log, recap, types, ui }
+export {
+  cache,
+  changelog,
+  commit,
+  Config,
+  doctor,
+  init,
+  issues,
+  log,
+  prs,
+  recap,
+  types,
+  ui,
+}
