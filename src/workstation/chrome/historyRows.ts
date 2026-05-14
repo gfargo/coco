@@ -91,24 +91,89 @@ function isSelectedCommit(row: GitLogRow, selected: GitLogCommitRow | undefined)
   return row.type === 'commit' && selected ? commitKey(row) === commitKey(selected) : false
 }
 
-function toFullGraphItems(state: LogInkState, visibleCount: number): LogInkHistoryItem[] {
+/**
+ * Build the vertical-only graph string that follows a commit row when
+ * `withSpacers` is enabled. Every commit-cell glyph (`*`) is rewritten
+ * to a lane bar (`|`) so the synthetic row continues every open lane
+ * without re-rendering the commit dot. All other graph chars pass
+ * through unchanged, so a commit graph like `* | |` becomes `| | |`.
+ */
+function buildSpacerGraph(commitGraph: string): string {
+  return commitGraph.replace(/\*/g, '|')
+}
+
+type ExpandedRow =
+  | { kind: 'source'; row: GitLogRow }
+  | { kind: 'spacer'; sourceCommit: GitLogCommitRow }
+
+/**
+ * Walk `state.rows` and inject a synthetic spacer entry after every
+ * commit row when `withSpacers` is true. The spacer is a graph-only
+ * row that renders as `|` per active lane so consecutive commits have
+ * a clear vertical rhythm without losing topology continuity.
+ *
+ * When `withSpacers` is false the list is identity-mapped from
+ * source rows, preserving the legacy zero-padding behavior for any
+ * caller that wants raw git topology (filters, tests, etc.).
+ */
+function expandRowsWithSpacers(rows: GitLogRow[], withSpacers: boolean): ExpandedRow[] {
+  const out: ExpandedRow[] = []
+  for (const row of rows) {
+    out.push({ kind: 'source', row })
+    if (withSpacers && row.type === 'commit') {
+      out.push({ kind: 'spacer', sourceCommit: row })
+    }
+  }
+  return out
+}
+
+function toFullGraphItems(
+  state: LogInkState,
+  visibleCount: number,
+  options: { withSpacers: boolean } = { withSpacers: false }
+): LogInkHistoryItem[] {
   const selected = state.filteredCommits[state.selectedIndex]
-  const selectedRowIndex = state.rows.findIndex((row) => isSelectedCommit(row, selected))
+  const expanded = expandRowsWithSpacers(state.rows, options.withSpacers)
+  const selectedExpandedIndex = expanded.findIndex(
+    (entry) => entry.kind === 'source' && isSelectedCommit(entry.row, selected)
+  )
   const start = clampWindowStart(
-    selectedRowIndex >= 0 ? selectedRowIndex : 0,
-    state.rows.length,
+    selectedExpandedIndex >= 0 ? selectedExpandedIndex : 0,
+    expanded.length,
     visibleCount
   )
 
   // Lane tracking is order-dependent — fast-forward the tracker through
   // every row above the visible window so lane ids stay stable as the
   // user scrolls. Without this, scrolling would re-color lanes from a
-  // fresh tracker each time.
+  // fresh tracker each time. Spacers contribute their vertical-only
+  // graph to the prefix so the tracker sees a no-op advance and lane
+  // state stays consistent at the window boundary.
   const tracker = createLaneTrackerState()
-  const allGraphs = state.rows.map((row) => (row.type === 'commit' ? row.graph || '*' : row.graph))
-  advanceTrackerThrough(allGraphs, tracker, start)
+  const prefixGraphs: string[] = []
+  for (let k = 0; k < start; k += 1) {
+    const entry = expanded[k]
+    if (entry.kind === 'spacer') {
+      prefixGraphs.push(buildSpacerGraph(entry.sourceCommit.graph || '*'))
+      continue
+    }
+    prefixGraphs.push(
+      entry.row.type === 'commit' ? entry.row.graph || '*' : entry.row.graph
+    )
+  }
+  advanceTrackerThrough(prefixGraphs, tracker, prefixGraphs.length)
 
-  return state.rows.slice(start, start + visibleCount).map((row) => {
+  return expanded.slice(start, start + visibleCount).map((entry) => {
+    if (entry.kind === 'spacer') {
+      const graph = buildSpacerGraph(entry.sourceCommit.graph || '*')
+      return {
+        type: 'graph',
+        graph,
+        laneSegments: renderGraphRowSegments(graph, tracker, { ascii: false }),
+      }
+    }
+
+    const { row } = entry
     if (row.type === 'graph') {
       return {
         type: 'graph',
@@ -129,12 +194,24 @@ function toFullGraphItems(state: LogInkState, visibleCount: number): LogInkHisto
   })
 }
 
+export type GetVisibleLogInkHistoryOptions = {
+  /**
+   * When true and we're in full-graph mode, inject a vertical-only
+   * graph row after every commit row so consecutive commits have a
+   * comfortable vertical rhythm. Off by default to keep tests and
+   * non-rendering callers (filters, snapshots) on the legacy zero
+   * padding.
+   */
+  fullGraphSpacing?: boolean
+}
+
 export function getVisibleLogInkHistory(
   state: LogInkState,
-  visibleCount: number
+  visibleCount: number,
+  options: GetVisibleLogInkHistoryOptions = {}
 ): VisibleLogInkHistory {
   const items = state.fullGraph && !state.filter
-    ? toFullGraphItems(state, visibleCount)
+    ? toFullGraphItems(state, visibleCount, { withSpacers: Boolean(options.fullGraphSpacing) })
     : toCompactItems(state, visibleCount)
 
   return {

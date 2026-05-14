@@ -16,6 +16,7 @@
  */
 
 import type * as ReactTypes from 'react'
+import { getBranchTipChip } from '../../chrome/branchTip'
 import { formatCompactRelativeDate } from '../../chrome/dateFormat'
 import { substituteGraphChars } from '../../chrome/graphChars'
 import type { LaneSegment } from '../../chrome/graphLanes'
@@ -41,15 +42,58 @@ import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 /**
  * How the date column should render for a given density tier:
- *   - wide   → absolute `YYYY-MM-DD` (current behavior)
+ *   - wide   → absolute `YYYY-MM-DD`
  *   - normal → compact relative form (`2d`, `3w`, `2mo`)
  *   - tight  → hidden entirely (column dropped)
  *   - rail   → caller picks `rowMode='stacked'`; this fn isn't consulted
+ *
+ * Compact mode (the user toggling away from the full graph) forces
+ * the tight behavior regardless of density. Compact is the "scan
+ * mode" — the date is the first thing the user is willing to drop in
+ * exchange for more visible commits per screen.
  */
-function pickDateText(commit: GitLogCommitRow, density: LogInkLayoutDensity, now: Date): string {
+function pickDateText(
+  commit: GitLogCommitRow,
+  density: LogInkLayoutDensity,
+  fullGraph: boolean,
+  now: Date
+): string {
+  if (!fullGraph) return ''
   if (density === 'wide') return commit.date
   if (density === 'normal') return formatCompactRelativeDate(commit.date, now)
   return ''
+}
+
+/**
+ * Render a colored bracket chip for a branch tip. Current branch
+ * (HEAD -> X) gets the success color + bold; other branch tips get
+ * info color. Tags are never chipped — they stay in the trailing ref
+ * list. The chip emits its own trailing space so callers concatenate
+ * it directly into the row without a separator.
+ *
+ * Returns `[chip, width]` so the row's truncation math knows how many
+ * cells the chip will consume up front.
+ */
+function renderBranchTipChip(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  commit: GitLogCommitRow,
+  theme: LogInkTheme,
+  key: string
+): { node: ReactTypes.ReactElement | null; width: number } {
+  const chip = getBranchTipChip(commit.refs)
+  if (!chip) return { node: null, width: 0 }
+
+  const label = `[${chip.name}] `
+  const color = theme.noColor
+    ? undefined
+    : chip.isHead
+      ? theme.colors.success
+      : theme.colors.info
+  return {
+    node: h(Text, { key, color, bold: chip.isHead }, label),
+    width: label.length,
+  }
 }
 
 function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
@@ -127,6 +171,7 @@ function renderCommitHistoryRow(
   index: number,
   panelWidth: number,
   density: LogInkLayoutDensity,
+  fullGraph: boolean,
   now: Date,
   laneSegments?: LaneSegment[],
   isRecent: boolean = false
@@ -139,9 +184,17 @@ function renderCommitHistoryRow(
   // continuation rather than its own commit (#830). Subtracting 4
   // accounts for the panel's left + right border + 1-cell padding.
   const totalWidth = Math.max(20, panelWidth - 4)
-  const dateText = pickDateText(commit, density, now)
+  const dateText = pickDateText(commit, density, fullGraph, now)
   const dateSegmentWidth = dateText ? dateText.length + 1 : 0
-  const fixedWidth = graphWidth + 1 + commit.shortHash.length + 1 + dateSegmentWidth
+  // Branch chip prefix — only renders in full-graph mode so compact
+  // (scan) mode stays minimal. Chip occupies cells immediately after
+  // the shortHash and before the message; truncation math reserves
+  // its width before sizing the message column.
+  const chip = fullGraph
+    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-chip`)
+    : { node: null, width: 0 }
+  const fixedWidth =
+    graphWidth + 1 + commit.shortHash.length + 1 + dateSegmentWidth + chip.width
   // Refs trail the message and shrink first when the row is narrow:
   // the user can always see the full ref list in the inspector, so
   // the headline subject keeps priority over decoration.
@@ -193,6 +246,9 @@ function renderCommitHistoryRow(
   dateText
     ? h(Text, { key: `${commit.hash}-${index}-date`, dimColor: true }, dateText, ' ')
     : null,
+  // Branch chip prefix (full-graph mode only) lands right before the
+  // message so the eye reads "branch · subject" as a unit.
+  chip.node,
   h(Text, undefined, message),
   refsTrunc ? h(Text, { color: accent }, refsTrunc) : null)
 }
@@ -219,6 +275,7 @@ function renderStackedCommitHistoryRow(
   theme: LogInkTheme,
   index: number,
   panelWidth: number,
+  fullGraph: boolean,
   now: Date,
   laneSegments?: LaneSegment[],
   isRecent: boolean = false
@@ -230,9 +287,14 @@ function renderStackedCommitHistoryRow(
 
   // Line 1 — subject row. Mostly mirrors the single-line layout but
   // skips the date and refs so the message has the whole tail to
-  // itself.
+  // itself. Branch chip rides between the hash and the subject the
+  // same way as the single-line variant, but only in full-graph mode.
   const recentMarkerWidth = isRecent ? 2 : 0
-  const lineOneFixed = graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth
+  const chip = fullGraph
+    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-stk-chip`)
+    : { node: null, width: 0 }
+  const lineOneFixed =
+    graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth + chip.width
   const subject = truncateCells(commit.message, Math.max(8, totalWidth - lineOneFixed))
 
   const graphChildren = laneSegments && !theme.ascii
@@ -252,6 +314,7 @@ function renderStackedCommitHistoryRow(
     : null,
   h(Text, { color: accent, bold: selected || isRecent }, commit.shortHash),
   ' ',
+  chip.node,
   h(Text, undefined, subject))
 
   // Line 2 — metadata row, padded to align with the start of the
@@ -353,11 +416,16 @@ export function renderHistoryPanel(
     state.selectedIndex === 0
   // Stacked rows take two terminal lines each, so the visible item
   // budget is halved before the pending-row / chrome subtraction.
+  // Full-graph mode injects a spacer row after every commit for
+  // comfortable rhythm — the data-layer items still count 1 per row,
+  // so the listRows budget passes straight through; the spacer rows
+  // just consume some of that budget instead of additional commits.
+  const fullGraphSpacing = state.fullGraph && !state.filter
   const chromeRows = showPendingRow ? 5 : 4
   const listRows = rowMode === 'stacked'
     ? Math.max(2, Math.floor((bodyRows - chromeRows) / 2))
     : Math.max(3, bodyRows - chromeRows)
-  const visible = getVisibleLogInkHistory(state, listRows)
+  const visible = getVisibleLogInkHistory(state, listRows, { fullGraphSpacing })
   const loadState = loadingMoreCommits
     ? 'loading older commits'
     : hasMoreCommits
@@ -430,14 +498,14 @@ export function renderHistoryPanel(
         return renderStackedCommitHistoryRow(
           h, Text, Box, item.commit, item.graph, visible.graphWidth,
           Boolean(item.selected) && !realSelectionSuppressed, theme, index,
-          width, now, item.laneSegments,
+          width, state.fullGraph, now, item.laneSegments,
           recentCommitsSet.has(item.commit.hash)
         )
       }
       return renderCommitHistoryRow(
         h, Text, item.commit, item.graph, visible.graphWidth,
         Boolean(item.selected) && !realSelectionSuppressed, theme, index,
-        width, density, now, item.laneSegments,
+        width, density, state.fullGraph, now, item.laneSegments,
         recentCommitsSet.has(item.commit.hash)
       )
     }))

@@ -250,4 +250,65 @@ describe('Ink history rows', () => {
       expect(visible.items[2].laneSegments).toEqual([{ text: '●', laneId: undefined }])
     })
   })
+
+  // Full-graph spacing — visual fidelity follow-up. With
+  // `fullGraphSpacing: true` the row builder injects a synthetic
+  // vertical-only graph row after every commit so the eye reads
+  // consecutive commits with comfortable rhythm rather than a stack.
+  describe('fullGraphSpacing', () => {
+    const linearRows: GitLogRow[] = Array.from({ length: 4 }, (_, i) => ({
+      type: 'commit',
+      graph: '* ',
+      shortHash: `hash${i}`,
+      hash: `hash${i}`.padEnd(40, '0'),
+      parents: [],
+      date: '2026-04-30',
+      author: 'Coco',
+      refs: [],
+      message: `commit ${i}`,
+    }))
+
+    it('injects a vertical-only graph row after every commit in full mode', () => {
+      const state = applyLogInkAction(createLogInkState(linearRows), { type: 'toggleGraph' })
+      const visible = getVisibleLogInkHistory(state, 8, { fullGraphSpacing: true })
+
+      expect(visible.items.map((item) => item.type)).toEqual([
+        'commit', 'graph', 'commit', 'graph', 'commit', 'graph', 'commit', 'graph',
+      ])
+      // The spacers carry vertical lane markers (rendered as the
+      // box-drawing `│`), not the commit dot.
+      expect(visible.items[1].graph).toBe('| ')
+      expect(visible.items[1].laneSegments?.find((s) => s.text === '│')).toBeDefined()
+    })
+
+    it('does not inject spacers when fullGraphSpacing is off', () => {
+      const state = applyLogInkAction(createLogInkState(linearRows), { type: 'toggleGraph' })
+      const visible = getVisibleLogInkHistory(state, 8)
+
+      expect(visible.items.every((item) => item.type === 'commit')).toBe(true)
+    })
+
+    it('does not inject spacers in compact mode regardless of option', () => {
+      const state = createLogInkState(linearRows)
+      const visible = getVisibleLogInkHistory(state, 8, { fullGraphSpacing: true })
+
+      expect(visible.items.every((item) => item.type === 'commit')).toBe(true)
+    })
+
+    it('preserves trunk lane id 0 across spacers when scrolling', () => {
+      const state = applyLogInkAction(createLogInkState(linearRows), { type: 'toggleGraph' })
+      const scrolled = applyLogInkAction(state, { type: 'move', delta: 2 })
+      const visible = getVisibleLogInkHistory(scrolled, 4, { fullGraphSpacing: true })
+
+      // Every commit and every spacer should still place the trunk
+      // glyph / lane bar on lane 0 — the fast-forward prefix has to
+      // include the synthetic spacers so the tracker stays in sync.
+      visible.items.forEach((item) => {
+        const trunkSegment = item.laneSegments?.find(
+          (seg) => seg.text === '●' || seg.text === '◉' || seg.text === '◆' || seg.text === '│'
+        )
+        expect(trunkSegment?.laneId).toBe(0)
+      })
+    })
+  })
 })
