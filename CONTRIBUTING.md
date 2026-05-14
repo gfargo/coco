@@ -81,6 +81,20 @@ const repo = await spinUpScenario('two-commit-feature')
 
 See `src/lib/testUtils/README.md` for the full list of scenarios, the programmatic API, and the discipline for adding new scenarios.
 
+### Targeting an arbitrary repo without `cd`
+
+Every coco command (including `ui` / `log`) accepts a global `--repo <dir>` flag (alias `--cwd`). Useful when you want to drive coco against a checkout in another directory without changing your shell's working directory:
+
+```bash
+# Run the workstation against any project from your current shell
+node_modules/.bin/tsx src/index.ts ui --repo ~/work/some-other-project
+
+# Smoke-test commit message generation against an arbitrary repo
+node_modules/.bin/tsx src/index.ts commit --repo ~/work/some-other-project --dry-run
+```
+
+The handlers chdir to the targeted path up-front so config lookup, simple-git baseDir, commitlint discovery, and downstream path resolution all see the same root. Lives in `src/commands/utils/applyRepoFlag.ts` if you need to wire it into a new command.
+
 ## Documentation
 
 The GitHub wiki is the canonical source for user-facing documentation. The local wiki checkout lives at `.wiki/` and can be managed with:
