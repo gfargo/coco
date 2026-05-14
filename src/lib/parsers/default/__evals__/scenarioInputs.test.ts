@@ -38,6 +38,10 @@ describe('buildScenarioFixtures', () => {
   }, 15_000)
 
   it('extracts the same byte-identical fixture set across runs (determinism)', async () => {
+    // Same 15s budget as the sibling test — this one spins up
+    // TWO temp git repos serially (to verify determinism), so the
+    // cost is roughly double. Same rationale as the other test:
+    // shell-out cost under parallel jest load can exceed 5s.
     const a = await buildScenarioFixtures('single-staged-file')
     const b = await buildScenarioFixtures('single-staged-file')
     try {
@@ -54,5 +58,5 @@ describe('buildScenarioFixtures', () => {
       await a.repo.cleanup()
       await b.repo.cleanup()
     }
-  })
+  }, 15_000)
 })

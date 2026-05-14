@@ -25,7 +25,9 @@
  */
 
 import type { FileDiff } from '../../../types'
+import { treeSitterGoParser } from '../__tree_sitter__/goTreeSitterParser'
 import { treeSitterPythonParser } from '../__tree_sitter__/pythonTreeSitterParser'
+import { treeSitterRustParser } from '../__tree_sitter__/rustTreeSitterParser'
 import { treeSitterTsParser } from '../__tree_sitter__/tsTreeSitterParser'
 import { summarizeGoStructuralDiff } from './goStructuralDiff'
 import { summarizePythonStructuralDiff } from './pythonStructuralDiff'
@@ -98,8 +100,8 @@ const REGISTRY: Record<StructuralLanguageId, StructuralParser[]> = {
   ts: [treeSitterTsParser, regexTs],
   js: [treeSitterTsParser, regexJs],
   py: [treeSitterPythonParser, regexPy],
-  rs: [regexRs],
-  go: [regexGo],
+  rs: [treeSitterRustParser, regexRs],
+  go: [treeSitterGoParser, regexGo],
 }
 
 /**

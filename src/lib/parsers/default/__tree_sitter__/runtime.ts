@@ -53,17 +53,17 @@ const dynamicImport = new Function('specifier', 'return import(specifier)') as D
  *   - **Bundled**: .wasm shipped in `dist/tree-sitter/` by the
  *     postbuild copy step. `typescript` + `tsx` today. Always
  *     available; no opt-in required.
- *   - **Lazy-loaded** (#933 phase 3): .wasm downloaded from a
+ *   - **Lazy-loaded** (#933 phase 3+): .wasm downloaded from a
  *     manifest-pinned CDN URL into the user's cache dir on
- *     demand. `python` today; `rust` + `go` in phases 5 / 6.
- *     Surrenders to the regex parser when the cache is empty
- *     (no surprise network calls).
+ *     demand. `python`, `rust`, `go` today. Surrenders to the
+ *     regex parser when the cache is empty (no surprise network
+ *     calls).
  *
  * The runtime treats both identically once a .wasm is on disk —
  * the only difference is where it's resolved from. `resolveWasmLocations`
  * below handles the lookup priority.
  */
-export type TreeSitterLanguageId = 'typescript' | 'tsx' | 'python'
+export type TreeSitterLanguageId = 'typescript' | 'tsx' | 'python' | 'rust' | 'go'
 
 type ResolvedWasmLocations = {
   enginePath: string
@@ -114,12 +114,14 @@ function resolveWasmLocations(): ResolvedWasmLocations | undefined {
         // Bundled (always shipped under dist/tree-sitter/).
         typescript: join(dir, 'tree-sitter-typescript.wasm'),
         tsx: join(dir, 'tree-sitter-tsx.wasm'),
-        // Lazy-loaded (#933 phase 3). Lives in the user's cache
+        // Lazy-loaded (#933 phases 3+). Lives in the user's cache
         // dir, not the bundled dir. Path is always set so the
         // resolver doesn't have to branch on language flavor —
         // the existence check in `getTreeSitterParser` decides
         // whether to actually load.
         python: getCachedWasmPath('python'),
+        rust: getCachedWasmPath('rust'),
+        go: getCachedWasmPath('go'),
       },
     }
   }
