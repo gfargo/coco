@@ -30,6 +30,7 @@
     "dev": "tsx watch src/index.ts",
     "prebuild": "npm run build:schema && npm run build:info",
     "build": "rollup -c",
+    "postbuild": "node bin/copyTreeSitterWasm.mjs",
     "build:schema": "tsx bin/generateSchema.ts",
     "build:info": "tsx bin/generateBuildInfo.ts",
     "build:watch": "rollup -c -w",
@@ -83,6 +84,7 @@
     "rollup-plugin-preserve-shebangs": "^0.2.0",
     "rollup-plugin-typescript2": "^0.37.0",
     "rollup-plugin-visualizer": "^7.0.1",
+    "tree-sitter-typescript": "^0.23.2",
     "ts-jest": "^29.1.0",
     "ts-json-schema-generator": "^2.9.0",
     "ts-node": "^10.9.1",
@@ -111,6 +113,7 @@
     "react-devtools-core": "7.0.1",
     "simple-git": "3.36.0",
     "tiktoken": "^1.0.21",
+    "web-tree-sitter": "^0.26.8",
     "yargs": "17.7.2"
   },
   "resolutions": {

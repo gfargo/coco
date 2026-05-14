@@ -21,6 +21,21 @@ const config = [
         sourcemap: enableBenchmarking,
         inlineDynamicImports: true,
         format: 'esm',
+        // ESM has no built-in `__dirname` — it's a CJS construct.
+        // The tree-sitter runtime (and any future filesystem-relative
+        // code) reads `__dirname` to locate bundled assets like
+        // `dist/tree-sitter/*.wasm`. This intro derives the equivalent
+        // from `import.meta.url` so source code can stay format-
+        // agnostic. The CJS output below gets `__dirname` for free
+        // and needs no shim. ts-jest tests compile to CJS so they
+        // also get `__dirname` natively. tsx (dev mode) provides
+        // its own `__dirname` shim. (#933 phase 1.1)
+        intro: [
+          "import { fileURLToPath as __cocoFileURLToPath } from 'node:url'",
+          "import { dirname as __cocoDirname } from 'node:path'",
+          "const __filename = __cocoFileURLToPath(import.meta.url)",
+          "const __dirname = __cocoDirname(__filename)",
+        ].join('\n'),
       },
       {
         file: 'dist/index.js',

@@ -25,6 +25,7 @@
  */
 
 import type { FileDiff } from '../../../types'
+import { treeSitterTsParser } from '../__tree_sitter__/tsTreeSitterParser'
 import { summarizeGoStructuralDiff } from './goStructuralDiff'
 import { summarizePythonStructuralDiff } from './pythonStructuralDiff'
 import { summarizeRustStructuralDiff } from './rustStructuralDiff'
@@ -85,14 +86,16 @@ const regexRs = regexParser(summarizeRustStructuralDiff)
 const regexGo = regexParser(summarizeGoStructuralDiff)
 
 /**
- * Per-language parser chains, in priority order. Phase 1.0 has
- * only regex parsers; phase 1.1 will prepend tree-sitter parsers
- * for `ts` and `js`. Later phases add tree-sitter for the lazy-
- * loaded languages.
+ * Per-language parser chains, in priority order. Tree-sitter is
+ * preferred for `ts` and `js` (phase 1.1); when the .wasm files
+ * aren't loaded the tree-sitter parser surrenders to the regex
+ * parser without any caller-visible change. Lazy-loaded languages
+ * (Python / Rust / Go) get their tree-sitter parsers prepended in
+ * phase 4–6 as their lazy-load infrastructure lands.
  */
 const REGISTRY: Record<StructuralLanguageId, StructuralParser[]> = {
-  ts: [regexTs],
-  js: [regexJs],
+  ts: [treeSitterTsParser, regexTs],
+  js: [treeSitterTsParser, regexJs],
   py: [regexPy],
   rs: [regexRs],
   go: [regexGo],
