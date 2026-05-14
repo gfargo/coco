@@ -10,6 +10,16 @@ export interface UiOptions extends BaseCommandOptions {
   branch?: string
   limit?: number
   path?: string | string[]
+  /**
+   * Repository directory to operate against. When set, the workstation
+   * binds its git instance + cwd reads to this path instead of
+   * `process.cwd()`. Lets users / scripts / scenarios launch coco
+   * against arbitrary repos without a leading `cd`.
+   *
+   * `--cwd` is exposed as an alias since users reaching for this
+   * flag often think "change directory" before "target this repo."
+   */
+  repo?: string
   theme?: LogInkThemePreset
   view?: UiView
 }
@@ -42,6 +52,11 @@ export const options = {
   path: {
     description: 'Filter history by changed path',
     type: 'array',
+  },
+  repo: {
+    description: 'Target a specific repository directory instead of the current working directory.',
+    type: 'string',
+    alias: 'cwd',
   },
   theme: {
     description: 'TUI theme preset',
