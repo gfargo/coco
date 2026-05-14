@@ -119,6 +119,120 @@ describe('loadGitConfig', () => {
     expect(config.mode).toBe('stdout')
     expect(config.defaultBranch).toBe('test')
   })
+
+  it('preserves default service fields when gitconfig only sets a few keys', () => {
+    // Regression: previously the loader REPLACED the service object
+    // entirely, so a gitconfig that only specified serviceProvider +
+    // serviceApiKey would wipe the default tokenLimit, temperature,
+    // maxConcurrent, etc. — leaving a hollow service shape that
+    // failed downstream because all the LLM-call defaults were gone.
+    const sparseGitConfig = `
+[coco]
+  serviceProvider = openai
+  serviceModel = gpt-4o
+  serviceApiKey = test-api-key
+`
+    const defaultsOpenai: Partial<Config> = {
+      service: getDefaultServiceConfigFromAlias('openai'),
+      mode: 'stdout',
+      defaultBranch: 'test',
+    }
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(sparseGitConfig)
+
+    const config = loadGitConfig(defaultsOpenai as Config)
+    const service = config.service as OpenAILLMService
+
+    // gitconfig override applied
+    expect(service.model).toBe('gpt-4o')
+    if (service.authentication.type === 'APIKey') {
+      expect(service.authentication.credentials.apiKey).toBe('test-api-key')
+    }
+    // Defaults preserved — the previous bug wiped these
+    expect(service.tokenLimit).toBeDefined()
+    expect(service.temperature).toBeDefined()
+    expect(service.maxConcurrent).toBeDefined()
+  })
+
+  it('does not attach requestOptions when neither sub-field is set', () => {
+    // Regression: previously the loader built `requestOptions: {
+    // timeout: Number(undefined), maxRetries: Number(undefined) }` →
+    // `{ timeout: NaN, maxRetries: NaN }` → JSON-serializes to
+    // `{ timeout: null, maxRetries: null }` → schema validation
+    // rejected since timeout/maxRetries must be number.
+    const noRequestOptions = `
+[coco]
+  serviceProvider = openai
+  serviceModel = gpt-4.1-nano
+  serviceApiKey = sk-test
+`
+    const defaultsOpenai: Partial<Config> = {
+      service: getDefaultServiceConfigFromAlias('openai'),
+      mode: 'stdout',
+      defaultBranch: 'test',
+    }
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(noRequestOptions)
+
+    const config = loadGitConfig(defaultsOpenai as Config)
+    const service = config.service as OpenAILLMService
+
+    // No spurious requestOptions object created from undefined keys.
+    expect(service.requestOptions).toBeUndefined()
+  })
+
+  it('attaches only the requestOptions sub-fields that gitconfig actually sets', () => {
+    // Partial set: only timeout, no maxRetries. Result should have
+    // timeout populated and maxRetries unset (not NaN).
+    const partialRequestOptions = `
+[coco]
+  serviceProvider = openai
+  serviceModel = gpt-4o
+  serviceApiKey = sk-test
+  serviceRequestOptionsTimeout = 15000
+`
+    const defaultsOpenai: Partial<Config> = {
+      service: getDefaultServiceConfigFromAlias('openai'),
+      mode: 'stdout',
+      defaultBranch: 'test',
+    }
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(partialRequestOptions)
+
+    const config = loadGitConfig(defaultsOpenai as Config)
+    const service = config.service as OpenAILLMService
+
+    expect(service.requestOptions?.timeout).toBe(15000)
+    expect(service.requestOptions?.maxRetries).toBeUndefined()
+  })
+
+  it('does not attach provider-irrelevant fields (endpoint on openai, baseURL on ollama)', () => {
+    // Regression: the loader unconditionally attached both endpoint
+    // AND baseURL regardless of provider. Each provider's schema
+    // variant has additionalProperties:false, so the irrelevant one
+    // (endpoint for openai, baseURL for ollama) would fail
+    // validation in its non-applicable anyOf branch.
+    const openaiGitConfig = `
+[coco]
+  serviceProvider = openai
+  serviceModel = gpt-4o
+  serviceApiKey = sk-test
+`
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(openaiGitConfig)
+
+    const defaultsOpenai: Partial<Config> = {
+      service: getDefaultServiceConfigFromAlias('openai'),
+      mode: 'stdout',
+      defaultBranch: 'test',
+    }
+    const config = loadGitConfig(defaultsOpenai as Config)
+    const service = config.service as OpenAILLMService
+
+    // 'endpoint' belongs to OllamaLLMService — must not appear on an
+    // openai service.
+    expect((service as unknown as { endpoint?: string }).endpoint).toBeUndefined()
+  })
 })
 
 describe('appendToGitConfig', () => {
