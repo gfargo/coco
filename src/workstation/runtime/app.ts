@@ -712,6 +712,43 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.statusMessage,
   ])
 
+  /**
+   * Re-fetch the head of the commit log and replace `state.rows`.
+   *
+   * The boot loader fires `replaceRows` once on app mount. After
+   * that, NOTHING in the workstation refreshes `state.rows` —
+   * `refreshContext` updates the metadata context (branches, tags,
+   * worktree) but not the commits themselves. The result is that
+   * workstation-side operations that create commits (split-apply,
+   * regular commit, future amend / rebase flows) leave the history
+   * view showing a stale log. The user navigates to `gh`, sees the
+   * pre-operation commits, and concludes the operation didn't run.
+   *
+   * Call this after any operation that creates or rewrites history
+   * locally so the history view reflects reality.
+   *
+   * Best-effort — a failed re-fetch keeps the existing rows on
+   * screen (stale but better than blank). Silent: doesn't surface
+   * a "refreshing…" status message since the caller already owns
+   * the user-facing status copy for whatever just happened.
+   */
+  const refreshHistoryRows = React.useCallback(async () => {
+    try {
+      const fetchArgs = state.historyFetchArgs
+      const mergedArgv: LogArgv = {
+        ...logArgv,
+        ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
+        ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
+      } as LogArgv
+      const fresh = await getLogRows(git, mergedArgv, {
+        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+      })
+      if (mountedRef.current && fresh) {
+        dispatch({ type: 'replaceRows', rows: fresh })
+      }
+    } catch { /* ignore — stale rows beat blank rows */ }
+  }, [dispatch, git, logArgv, state.historyFetchArgs])
+
   const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
     // Loud refresh (manual `r`): flip everything to 'loading' so the user
     // sees the surfaces clear, then settle to 'ready' on completion.
@@ -1283,12 +1320,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
     if (result.ok) {
       dispatch({ type: 'commitCompose', action: { type: 'reset' } })
+      // Refresh BOTH worktree AND history rows — the new commit
+      // needs to show up in the history view, not just the staged
+      // counts. Without refreshHistoryRows the user would press `gh`
+      // and see the pre-commit log (same silent-failure shape as
+      // the split-apply case caught in this PR).
+      await refreshHistoryRows()
       await refreshWorktreeContext()
     }
   }, [
     context.worktree?.stagedCount,
     dispatch,
     git,
+    refreshHistoryRows,
     refreshWorktreeContext,
     state.commitCompose.body,
     state.commitCompose.summary,
@@ -1868,6 +1912,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // ("X unstaged + Y untracked remaining — press gs to stage / I
     // to draft / …"). An empty success message reads as a dead end;
     // a next-step hint keeps momentum.
+    //
+    // Critical: refreshHistoryRows is the one that re-fetches the
+    // commit log. Without this, `gh` would show the pre-apply log —
+    // exactly the "spinner runs, no commits visible" silent-failure
+    // report from #942 manual testing. The actual commits DO land;
+    // `state.rows` just never gets re-fetched after boot.
+    await refreshHistoryRows()
     await refreshWorktreeContext()
     await refreshContext()
 
@@ -1909,7 +1960,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
     const successMessage = formatSplitApplySuccess(commitHashes.length, unstaged, untracked)
     dispatch({ type: 'setStatus', value: successMessage, kind: 'success' })
-  }, [dispatch, git, refreshContext, refreshWorktreeContext, state.activeView, state.splitPlan, state.viewStack.length])
+  }, [dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext, state.activeView, state.splitPlan, state.viewStack.length])
 
   // Esc inside the overlay — close without applying. Status line gets
   // a confirmation so the user knows the operation was abandoned.
