@@ -55,13 +55,19 @@ import { focusBorderColor, panelTitle } from '../../runtime/utils'
  * the tight behavior regardless of density. Compact is the "scan
  * mode" — the date is the first thing the user is willing to drop in
  * exchange for more visible commits per screen.
+ *
+ * When `bucketed` is true the surface is rendering section dividers
+ * (`── Today ──`) above commits, so the per-row date column would be
+ * redundant. We drop it entirely and let the message column expand.
  */
 function pickDateText(
   commit: GitLogCommitRow,
   density: LogInkLayoutDensity,
   fullGraph: boolean,
+  bucketed: boolean,
   now: Date
 ): string {
+  if (bucketed) return ''
   if (!fullGraph) return ''
   if (density === 'wide') return commit.date
   if (density === 'normal') return formatCompactRelativeDate(commit.date, now)
@@ -262,6 +268,7 @@ function renderCommitHistoryRow(
   panelWidth: number,
   density: LogInkLayoutDensity,
   fullGraph: boolean,
+  bucketed: boolean,
   now: Date,
   laneSegments?: LaneSegment[],
   isRecent: boolean = false
@@ -273,7 +280,7 @@ function renderCommitHistoryRow(
   // continuation rather than its own commit (#830). Subtracting 4
   // accounts for the panel's left + right border + 1-cell padding.
   const totalWidth = Math.max(20, panelWidth - 4)
-  const dateText = pickDateText(commit, density, fullGraph, now)
+  const dateText = pickDateText(commit, density, fullGraph, bucketed, now)
   const dateSegmentWidth = dateText ? dateText.length + 1 : 0
   // Branch chip prefix — only renders in full-graph mode so compact
   // (scan) mode stays minimal. Chip occupies cells immediately after
@@ -514,12 +521,16 @@ export function renderHistoryPanel(
   // comfortable rhythm — the data-layer items still count 1 per row,
   // so the listRows budget passes straight through; the spacer rows
   // just consume some of that budget instead of additional commits.
+  // Date bucketing is the new way the surface communicates "when" —
+  // headers replace the per-row date column whenever the result set
+  // is chronological (no active filter).
   const fullGraphSpacing = state.fullGraph && !state.filter
+  const dateBucketingNow = state.filter ? undefined : now
   const chromeRows = showPendingRow ? 5 : 4
   const listRows = rowMode === 'stacked'
     ? Math.max(2, Math.floor((bodyRows - chromeRows) / 2))
     : Math.max(3, bodyRows - chromeRows)
-  const visible = getVisibleLogInkHistory(state, listRows, { fullGraphSpacing })
+  const visible = getVisibleLogInkHistory(state, listRows, { fullGraphSpacing, dateBucketingNow })
   const loadState = loadingMoreCommits
     ? 'loading older commits'
     : hasMoreCommits
@@ -564,6 +575,26 @@ export function renderHistoryPanel(
           totalCommits: state.commits.length,
         }))
     : visible.items.map((item, index) => {
+      if (item.type === 'bucket-header') {
+        // Section divider — `── Today ────────────`. The label is
+        // bold to anchor the eye, the surrounding rule is dim so
+        // the divider reads as chrome rather than competing with
+        // commit content. Rule fills the panel's interior width
+        // (minus border + padding); the label rides inside it.
+        const contentWidth = Math.max(10, width - 4)
+        const labelCells = cellWidth(item.label) + 2 // pad the label with surrounding spaces
+        const ruleAfter = Math.max(0, contentWidth - 3 - labelCells)
+        return h(Text, {
+          key: `bucket-${index}-${item.label}`,
+          dimColor: true,
+        },
+          h(Text, undefined, '── '),
+          h(Text, { bold: true }, item.label),
+          h(Text, undefined, ' '),
+          h(Text, undefined, '─'.repeat(ruleAfter)),
+        )
+      }
+
       if (item.type === 'graph') {
         // Graph-only rows split into two visual categories:
         //
@@ -610,7 +641,8 @@ export function renderHistoryPanel(
       return renderCommitHistoryRow(
         h, Text, item.commit, item.graph, visible.graphWidth,
         Boolean(item.selected) && !realSelectionSuppressed, theme, index,
-        width, density, state.fullGraph, now, item.laneSegments,
+        width, density, state.fullGraph, Boolean(dateBucketingNow), now,
+        item.laneSegments,
         recentCommitsSet.has(item.commit.hash)
       )
     }))
