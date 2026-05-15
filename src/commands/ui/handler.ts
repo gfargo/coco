@@ -92,6 +92,7 @@ export async function startCocoUiFromLogArgv(
   await startInkInteractiveLog(git, initialRows, {}, {
     appLabel: 'coco',
     idleTips: config.logTui?.idleTips,
+    dateBucketing: config.logTui?.dateBucketing,
     initialView: 'history',
     loadRows,
     logArgv,
@@ -117,6 +118,7 @@ export async function startCocoUi(argv: UiArgv): Promise<void> {
   await startInkInteractiveLog(git, cachedRows || [], {}, {
     appLabel: 'coco',
     idleTips: config.logTui?.idleTips,
+    dateBucketing: config.logTui?.dateBucketing,
     initialView: argv.view || 'history',
     loadRows: withCacheWrite(repoPath, () => getLogRows(git, logArgv)),
     logArgv,

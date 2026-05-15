@@ -65,7 +65,8 @@ export function renderMainPanel(
   loadingMoreCommits: boolean,
   spinnerFrame: number,
   density: LogInkLayoutDensity,
-  rowMode: 'single' | 'stacked'
+  rowMode: 'single' | 'stacked',
+  dateBucketingEnabled: boolean
 ): ReactTypes.ReactElement {
   // Split-plan overlay (#907 polish): renders in the MAIN panel (not
   // detail) when active, because the content — multiple commit groups
@@ -170,6 +171,7 @@ export function renderMainPanel(
     hasMoreCommits,
     loadingMoreCommits,
     density,
-    rowMode
+    rowMode,
+    dateBucketingEnabled
   )
 }

@@ -347,6 +347,7 @@ describe('Ink history rows', () => {
       // glyph / lane bar on lane 0 — the fast-forward prefix has to
       // include the synthetic spacers so the tracker stays in sync.
       visible.items.forEach((item) => {
+        if (item.type === 'bucket-header') return
         const trunkSegment = item.laneSegments?.find(
           (seg) => seg.text === '●' || seg.text === '◉' || seg.text === '◆' || seg.text === '│'
         )
@@ -426,6 +427,114 @@ describe('Ink history rows', () => {
         'commit', // side
         'graph',  // spacer for side
       ])
+    })
+  })
+
+  // Date bucketing — replaces the per-row date column with section
+  // dividers so adjacent commits within the same bucket share one
+  // visible label and the eye gets temporal orientation without per-
+  // row repetition. Triggered by passing `dateBucketingNow`.
+  describe('dateBucketingNow', () => {
+    const NOW = new Date(Date.UTC(2026, 4, 14)) // 2026-05-14
+
+    const fixtureRows: GitLogRow[] = [
+      {
+        type: 'commit', graph: '* ', shortHash: 'a1', hash: 'a1'.padEnd(40, '0'),
+        parents: [], date: '2026-05-14', author: 'Coco', refs: [], message: 'today commit',
+      },
+      {
+        type: 'commit', graph: '* ', shortHash: 'b2', hash: 'b2'.padEnd(40, '0'),
+        parents: [], date: '2026-05-13', author: 'Coco', refs: [], message: 'yesterday commit',
+      },
+      {
+        type: 'commit', graph: '* ', shortHash: 'c3', hash: 'c3'.padEnd(40, '0'),
+        parents: [], date: '2026-04-30', author: 'Coco', refs: [], message: 'april commit',
+      },
+    ]
+
+    it('injects a bucket-header before the first commit and on each transition (compact mode)', () => {
+      const state = createLogInkState(fixtureRows)
+      const visible = getVisibleLogInkHistory(state, 10, { dateBucketingNow: NOW })
+
+      expect(visible.items.map((item) => item.type)).toEqual([
+        'bucket-header', 'commit',
+        'bucket-header', 'commit',
+        'bucket-header', 'commit',
+      ])
+      const headers = visible.items.filter((i) => i.type === 'bucket-header')
+      expect(headers.map((h) => (h as { label: string }).label)).toEqual([
+        'Today', 'Yesterday', 'April 2026',
+      ])
+    })
+
+    it('reuses one header for consecutive commits in the same bucket', () => {
+      const sameDayRows: GitLogRow[] = Array.from({ length: 3 }, (_, i) => ({
+        type: 'commit', graph: '* ', shortHash: `h${i}`, hash: `h${i}`.padEnd(40, '0'),
+        parents: [], date: '2026-05-14', author: 'Coco', refs: [], message: `today ${i}`,
+      }))
+      const state = createLogInkState(sameDayRows)
+      const visible = getVisibleLogInkHistory(state, 10, { dateBucketingNow: NOW })
+
+      expect(visible.items.map((item) => item.type)).toEqual([
+        'bucket-header', 'commit', 'commit', 'commit',
+      ])
+    })
+
+    it('does not bucket when no bucketingNow is passed', () => {
+      const state = createLogInkState(fixtureRows)
+      const visible = getVisibleLogInkHistory(state, 10)
+
+      expect(visible.items.every((item) => item.type === 'commit')).toBe(true)
+    })
+
+    it('suppresses bucketing when a filter is active', () => {
+      // Filter shuffles commits by relevance — adjacent-bucket
+      // invariant breaks, so bucketing should not render.
+      let state = createLogInkState(fixtureRows)
+      state = applyLogInkAction(state, { type: 'setFilter', value: 'today' })
+      const visible = getVisibleLogInkHistory(state, 10, { dateBucketingNow: NOW })
+
+      expect(visible.items.every((item) => item.type === 'commit')).toBe(true)
+    })
+
+    it('injects headers in full graph mode without disturbing lane tracking', () => {
+      const state = applyLogInkAction(createLogInkState(fixtureRows), { type: 'toggleGraph' })
+      const visible = getVisibleLogInkHistory(state, 10, { dateBucketingNow: NOW })
+
+      // Headers appear; commits still carry lane segments.
+      const headers = visible.items.filter((i) => i.type === 'bucket-header')
+      expect(headers.length).toBe(3)
+      const commits = visible.items.filter((i) => i.type === 'commit')
+      commits.forEach((c) => {
+        const cc = c as { laneSegments?: unknown[] }
+        expect(cc.laneSegments).toBeDefined()
+      })
+    })
+
+    it('prepends a sticky header when the window scrolls past the natural label', () => {
+      // 5 same-day commits + 5 yesterday — scroll deep into the yesterday
+      // bucket so the natural "Yesterday" header is above the visible
+      // window. The sticky prepend keeps the user oriented.
+      const longRows: GitLogRow[] = [
+        ...Array.from({ length: 5 }, (_, i) => ({
+          type: 'commit' as const, graph: '* ', shortHash: `t${i}`, hash: `t${i}`.padEnd(40, '0'),
+          parents: [], date: '2026-05-14', author: 'Coco', refs: [], message: `today ${i}`,
+        })),
+        ...Array.from({ length: 5 }, (_, i) => ({
+          type: 'commit' as const, graph: '* ', shortHash: `y${i}`, hash: `y${i}`.padEnd(40, '0'),
+          parents: [], date: '2026-05-13', author: 'Coco', refs: [], message: `yesterday ${i}`,
+        })),
+      ]
+      const state = applyLogInkAction(createLogInkState(longRows), { type: 'toggleGraph' })
+      // Move the cursor to the 8th commit (deep in yesterday)
+      const scrolled = applyLogInkAction(state, { type: 'move', delta: 7 })
+      const visible = getVisibleLogInkHistory(scrolled, 4, { dateBucketingNow: NOW })
+
+      // The first item should be a header even though the natural
+      // "Yesterday" header sits above the visible slice.
+      expect(visible.items[0].type).toBe('bucket-header')
+      const firstHeader = visible.items[0] as { label: string }
+      expect(firstHeader.label).toBe('Yesterday')
     })
   })
 })

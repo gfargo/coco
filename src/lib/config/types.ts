@@ -106,6 +106,21 @@ type BaseConfig = {
      * idle for >10s. Off by default so power users aren't distracted.
      */
     idleTips?: boolean
+
+    /**
+     * Group adjacent commits in the history surface under shared section
+     * headers (`── Today ──`, `── Yesterday ──`, `── April 2026 ──`) and
+     * drop the per-row date column in favor of the headers. On by default
+     * because the bucketed view gives stronger temporal orientation at
+     * a glance and the freed cells go to the commit subject. Flip off if
+     * you prefer a date column on every row.
+     *
+     * Bucketing automatically suppresses itself while a search filter is
+     * active (results aren't chronological), regardless of this setting.
+     *
+     * @default true
+     */
+    dateBucketing?: boolean
   }
 }
 

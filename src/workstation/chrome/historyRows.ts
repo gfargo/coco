@@ -1,4 +1,5 @@
 import { GitLogCommitRow, GitLogGraphRow, GitLogRow } from '../../commands/log/data'
+import { getDateBucket } from './dateBucket'
 import {
   DEFAULT_COMMIT_GLYPH,
   HEAD_COMMIT_GLYPH,
@@ -62,7 +63,35 @@ export type LogInkHistoryGraphItem = {
   spacer?: boolean
 }
 
-export type LogInkHistoryItem = LogInkHistoryCommitItem | LogInkHistoryGraphItem
+/**
+ * Section divider injected between commits when their date bucket
+ * changes. Renderer paints this as a dim horizontal rule with the
+ * label inline (`── Today ───────`) so the user gets temporal
+ * orientation without a per-row date column.
+ *
+ * Does not participate in lane tracking, selection, or scroll
+ * anchoring — it's a pure presentation row. `graph` is empty so the
+ * existing `graphWidth` calc doesn't widen the lane column.
+ */
+export type LogInkHistoryBucketHeaderItem = {
+  type: 'bucket-header'
+  graph: '' // satisfies the LogInkHistoryItem.graph contract
+  /** Human label rendered into the divider (`Today`, `April 2026`). */
+  label: string
+  /**
+   * Always undefined — bucket headers have no graph topology to
+   * track. Declared so callers can read `item.laneSegments` across
+   * the union without TypeScript needing a discriminator narrow on
+   * every access; the runtime check `item.type === 'bucket-header'`
+   * still works when callers want to branch on it.
+   */
+  laneSegments?: undefined
+}
+
+export type LogInkHistoryItem =
+  | LogInkHistoryCommitItem
+  | LogInkHistoryGraphItem
+  | LogInkHistoryBucketHeaderItem
 
 export type VisibleLogInkHistory = {
   graphWidth: number
@@ -81,10 +110,11 @@ function graphWidth(items: LogInkHistoryItem[]): number {
   return Math.max(1, ...items.map((item) => item.graph.length))
 }
 
-function toCompactItems(state: LogInkState, visibleCount: number): LogInkHistoryItem[] {
-  const start = clampWindowStart(state.selectedIndex, state.filteredCommits.length, visibleCount)
-
-  return state.filteredCommits.slice(start, start + visibleCount).map((commit, offset) => ({
+function makeCompactCommitItem(
+  commit: GitLogCommitRow,
+  selected: boolean
+): LogInkHistoryCommitItem {
+  return {
     type: 'commit',
     commit,
     graph: '*',
@@ -93,8 +123,48 @@ function toCompactItems(state: LogInkState, visibleCount: number): LogInkHistory
     // glance. Lane id stays undefined so the segment renders muted —
     // matching the legacy compact appearance, just with a richer glyph.
     laneSegments: [{ text: commitGlyphFor(commit), laneId: undefined }],
-    selected: start + offset === state.selectedIndex,
-  }))
+    selected,
+  }
+}
+
+function bucketHeaderItem(label: string): LogInkHistoryBucketHeaderItem {
+  return { type: 'bucket-header', graph: '', label }
+}
+
+function toCompactItems(
+  state: LogInkState,
+  visibleCount: number,
+  bucketingNow: Date | undefined
+): LogInkHistoryItem[] {
+  const start = clampWindowStart(state.selectedIndex, state.filteredCommits.length, visibleCount)
+  const slice = state.filteredCommits.slice(start, start + visibleCount)
+
+  if (!bucketingNow) {
+    return slice.map((commit, offset) =>
+      makeCompactCommitItem(commit, start + offset === state.selectedIndex)
+    )
+  }
+
+  // With bucketing on: emit a sticky header above the first visible
+  // commit and an additional header each time the bucket changes. The
+  // header occupies one row from the visibleCount budget every time
+  // it fires, so the visible commit count drops slightly in exchange
+  // for always-on temporal orientation.
+  const items: LogInkHistoryItem[] = []
+  let prevBucket: string | undefined = undefined
+  for (let offset = 0; offset < slice.length && items.length < visibleCount; offset += 1) {
+    const commit = slice[offset]
+    const bucket = getDateBucket(commit.date, bucketingNow)
+    if (bucket.key !== prevBucket) {
+      items.push(bucketHeaderItem(bucket.label))
+      prevBucket = bucket.key
+      if (items.length >= visibleCount) break
+    }
+    items.push(
+      makeCompactCommitItem(commit, start + offset === state.selectedIndex)
+    )
+  }
+  return items
 }
 
 function isSelectedCommit(row: GitLogRow, selected: GitLogCommitRow | undefined): boolean {
@@ -115,6 +185,7 @@ function buildSpacerGraph(commitGraph: string): string {
 type ExpandedRow =
   | { kind: 'source'; row: GitLogRow }
   | { kind: 'spacer'; sourceCommit: GitLogCommitRow }
+  | { kind: 'bucket-header'; label: string }
 
 /**
  * Walk `state.rows` and inject a synthetic spacer entry after every
@@ -161,13 +232,62 @@ function expandRowsWithSpacers(rows: GitLogRow[], withSpacers: boolean): Expande
   return out
 }
 
+/**
+ * Walk an already-expanded row list and inject `bucket-header`
+ * entries immediately before each commit whose date bucket differs
+ * from the previous commit's. The very first commit always gets a
+ * header so the user lands inside a labeled section regardless of
+ * where the scroll window starts. Non-commit entries (spacers, git
+ * topology rows) pass through unchanged.
+ */
+function injectBucketHeaders(rows: ExpandedRow[], now: Date): ExpandedRow[] {
+  const out: ExpandedRow[] = []
+  let prevBucket: string | undefined = undefined
+  for (const entry of rows) {
+    if (entry.kind === 'source' && entry.row.type === 'commit') {
+      const bucket = getDateBucket(entry.row.date, now)
+      if (bucket.key !== prevBucket) {
+        out.push({ kind: 'bucket-header', label: bucket.label })
+        prevBucket = bucket.key
+      }
+    }
+    out.push(entry)
+  }
+  return out
+}
+
+/**
+ * Find the most recent bucket header at or above `start` so a slice
+ * that begins mid-bucket can still surface its section label. Used
+ * for the "sticky header" behavior — when the window scrolls past
+ * the natural header position, prepend the header to the slice so
+ * the user always sees which bucket they're in. Returns the label
+ * to prepend, or `undefined` when no prepend is needed (either
+ * `expanded[start]` is already a header, or there is no earlier
+ * header in the list).
+ */
+function findStickyBucketLabel(expanded: ExpandedRow[], start: number): string | undefined {
+  if (start < expanded.length && expanded[start].kind === 'bucket-header') return undefined
+  for (let i = start - 1; i >= 0; i -= 1) {
+    const entry = expanded[i]
+    if (entry.kind === 'bucket-header') return entry.label
+  }
+  return undefined
+}
+
 function toFullGraphItems(
   state: LogInkState,
   visibleCount: number,
-  options: { withSpacers: boolean } = { withSpacers: false }
+  options: { withSpacers: boolean; bucketingNow: Date | undefined } = {
+    withSpacers: false,
+    bucketingNow: undefined,
+  }
 ): LogInkHistoryItem[] {
   const selected = state.filteredCommits[state.selectedIndex]
-  const expanded = expandRowsWithSpacers(state.rows, options.withSpacers)
+  const withSpacers = expandRowsWithSpacers(state.rows, options.withSpacers)
+  const expanded = options.bucketingNow
+    ? injectBucketHeaders(withSpacers, options.bucketingNow)
+    : withSpacers
   const selectedExpandedIndex = expanded.findIndex(
     (entry) => entry.kind === 'source' && isSelectedCommit(entry.row, selected)
   )
@@ -182,11 +302,13 @@ function toFullGraphItems(
   // user scrolls. Without this, scrolling would re-color lanes from a
   // fresh tracker each time. Spacers contribute their vertical-only
   // graph to the prefix so the tracker sees a no-op advance and lane
-  // state stays consistent at the window boundary.
+  // state stays consistent at the window boundary. Bucket headers
+  // skip the tracker entirely since they have no graph string.
   const tracker = createLaneTrackerState()
   const prefixGraphs: string[] = []
   for (let k = 0; k < start; k += 1) {
     const entry = expanded[k]
+    if (entry.kind === 'bucket-header') continue
     if (entry.kind === 'spacer') {
       prefixGraphs.push(buildSpacerGraph(entry.sourceCommit.graph || '*'))
       continue
@@ -197,7 +319,23 @@ function toFullGraphItems(
   }
   advanceTrackerThrough(prefixGraphs, tracker, prefixGraphs.length)
 
-  return expanded.slice(start, start + visibleCount).map((entry) => {
+  // Sticky header — if the slice would start partway into a bucket
+  // (most commonly when scrolling), prepend the bucket label so the
+  // user keeps temporal context. The prepend costs one row from the
+  // visible budget, so the slice itself shrinks by 1.
+  const stickyLabel = options.bucketingNow
+    ? findStickyBucketLabel(expanded, start)
+    : undefined
+  const sliceCount = stickyLabel ? visibleCount - 1 : visibleCount
+  const sliced = expanded.slice(start, start + sliceCount)
+  const finalEntries: ExpandedRow[] = stickyLabel
+    ? [{ kind: 'bucket-header', label: stickyLabel }, ...sliced]
+    : sliced
+
+  return finalEntries.map((entry) => {
+    if (entry.kind === 'bucket-header') {
+      return bucketHeaderItem(entry.label)
+    }
     if (entry.kind === 'spacer') {
       const graph = buildSpacerGraph(entry.sourceCommit.graph || '*')
       return {
@@ -238,6 +376,16 @@ export type GetVisibleLogInkHistoryOptions = {
    * padding.
    */
   fullGraphSpacing?: boolean
+  /**
+   * When set, insert `bucket-header` items between commits whose
+   * date buckets differ, so the surface can render section dividers
+   * (`── Today ──`, `── April 2026 ──`) in place of a per-row date
+   * column. The reference `Date` is the "now" used to bucket each
+   * commit — callers pin it for deterministic tests; the runtime
+   * passes `new Date()`. Bucketing is suppressed when a search
+   * filter is active since the result set is no longer chronological.
+   */
+  dateBucketingNow?: Date
 }
 
 export function getVisibleLogInkHistory(
@@ -245,9 +393,17 @@ export function getVisibleLogInkHistory(
   visibleCount: number,
   options: GetVisibleLogInkHistoryOptions = {}
 ): VisibleLogInkHistory {
+  // Bucketing only makes sense for chronologically ordered output —
+  // an active search filter shuffles commits by relevance, so the
+  // adjacent-bucket invariant breaks down and the divider would
+  // read as noise.
+  const bucketingNow = state.filter ? undefined : options.dateBucketingNow
   const items = state.fullGraph && !state.filter
-    ? toFullGraphItems(state, visibleCount, { withSpacers: Boolean(options.fullGraphSpacing) })
-    : toCompactItems(state, visibleCount)
+    ? toFullGraphItems(state, visibleCount, {
+        withSpacers: Boolean(options.fullGraphSpacing),
+        bucketingNow,
+      })
+    : toCompactItems(state, visibleCount, bucketingNow)
 
   return {
     graphWidth: graphWidth(items),

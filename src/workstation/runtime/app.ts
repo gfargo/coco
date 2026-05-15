@@ -441,7 +441,7 @@ function enrichFilterActionWithRectification(
 }
 
 export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, clipboardRunner, git, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, theme } = deps
+  const { appLabel, clipboardRunner, dateBucketingEnabled, git, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -3713,7 +3713,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         loadingMoreCommits,
         spinnerFrame,
         layout.density,
-        layout.historyRowMode
+        layout.historyRowMode,
+        Boolean(dateBucketingEnabled)
       ),
       renderDetailPanel(
         h,

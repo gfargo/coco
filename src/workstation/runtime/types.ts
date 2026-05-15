@@ -130,6 +130,14 @@ export type LogInkComponentDeps = LogInkRuntime & {
   git: SimpleGit
   /** Drives P4.3 idle status-line tip rotation when truthy. */
   idleTipsEnabled?: boolean
+  /**
+   * Toggle the history surface's date bucket headers. Defaults to
+   * `true` upstream in `inkRuntime.ts`; the property remains optional
+   * so test seams and other callers can omit it (the surface then
+   * sees `undefined` which it treats as "off" — caller-friendly
+   * default since tests rarely care about bucket rendering).
+   */
+  dateBucketingEnabled?: boolean
   initialView: LogInkView
   logArgv?: LogArgv
   rows: GitLogRow[]
