@@ -31,20 +31,36 @@ import { join } from 'node:path'
 import { getCachedWasmPath } from './cache'
 
 /**
- * Dynamic-import shim. `web-tree-sitter` is `"type": "module"` (pure
- * ESM); a bare `await import('web-tree-sitter')` gets rewritten by
- * ts-jest's CJS transform into `await require('web-tree-sitter')`,
- * which fails because `require()` can't load ESM-only packages.
- * The `Function` constructor wraps the dynamic import in a string
- * body that survives TS compilation untouched, so the actual
- * `import()` call runs at runtime as native ESM dynamic import.
+ * Lazy loader for `web-tree-sitter`. Earlier revisions used a
+ * `new Function('specifier', 'return import(specifier)')` shim to
+ * bypass ts-jest's CJS transform — back then web-tree-sitter shipped
+ * only ESM, so the test environment couldn't reach it via
+ * `require()`. The shim then created the worker-teardown race
+ * tracked in gfargo/coco#979: when a test's VM context was torn
+ * down while a Function-constructed dynamic import was still in
+ * flight, the rejection surfaced as an unhandled rejection at the
+ * process level.
  *
- * Mirrors the pattern in `src/commands/log/inkRuntime.ts` and
- * `src/lib/ui/inquirerPrompts.ts` — the codebase's standard escape
- * hatch for ESM-only deps.
+ * As of `web-tree-sitter@0.26`, the package ships dual exports
+ * (`.cjs` for `require`, `.js` for `import`). The transform now
+ * resolves cleanly:
+ *   - ts-jest tests              → `require('web-tree-sitter.cjs')`
+ *   - rollup CJS dist (index.js) → `require('web-tree-sitter.cjs')`
+ *   - rollup ESM dist (.esm.mjs) → native dynamic `import()`
+ *
+ * `web-tree-sitter` is marked `external` in rollup via
+ * `peer-deps-external`, so neither the build nor the test runner
+ * embeds the module — both go through Node's resolver and pick up
+ * the right conditional export for their context.
  */
-type DynamicImport = <T>(specifier: string) => Promise<T>
-const dynamicImport = new Function('specifier', 'return import(specifier)') as DynamicImport
+type TreeSitterModule = {
+  Parser: { init(opts?: unknown): Promise<void> }
+  Language: unknown
+}
+
+async function loadTreeSitterModule(): Promise<TreeSitterModule> {
+  return import('web-tree-sitter') as Promise<TreeSitterModule>
+}
 
 /**
  * Language identifiers this runtime knows how to load.
@@ -158,12 +174,9 @@ async function ensureRuntime(): Promise<TreeSitterRuntime | undefined> {
     const locations = resolveWasmLocations()
     if (!locations) return undefined
 
-    let mod: { Parser: { init(opts?: unknown): Promise<void> }; Language: unknown }
+    let mod: TreeSitterModule
     try {
-      mod = await dynamicImport<{
-        Parser: { init(opts?: unknown): Promise<void> }
-        Language: unknown
-      }>('web-tree-sitter')
+      mod = await loadTreeSitterModule()
     } catch {
       return undefined
     }

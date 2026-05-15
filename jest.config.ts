@@ -14,22 +14,4 @@ export default {
   // independently scans its own `src/` + `bin/` and the main checkout
   // does the same. No cross-contamination.
   roots: ['<rootDir>/src', '<rootDir>/bin'],
-  // Silence the post-teardown ESM-dynamic-import rejection from
-  // `web-tree-sitter` that surfaces as an unhandled rejection at the
-  // process level after all tests have passed. See `bin/jestSetup.cjs`
-  // for the narrow matcher and gfargo/coco#979 for the proper fix
-  // (wrap the runtime in `jest.isolateModules` or move engine init
-  // into a global setup hook outside worker boundaries).
-  setupFiles: ['<rootDir>/bin/jestSetup.cjs'],
 }
-
-// Note: serial test execution (--runInBand) is enforced via the
-// `test:jest` npm script, not here. Jest reads `maxWorkers: 1` from
-// this config but in practice still spins up a worker thread alongside
-// the main thread, leaving the worker-teardown race that breaks the
-// `web-tree-sitter` ESM dynamic-import in `tsTreeSitterParser.test.ts`.
-// `--runInBand` actually keeps everything in-process and side-steps
-// the race entirely. Verified locally: `--runInBand` produces
-// 1933/1933 pass; default parallelism produces 4 failures every time.
-// `--forceExit` plus the setupFiles hook above closes the exit-code
-// gap (the late-rejection swallow lets Jest finish cleanly).
