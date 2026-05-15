@@ -9,6 +9,9 @@
  *   npm run scenario create <name>                 # create in /tmp
  *   npm run scenario create <name> --path <dir>    # create at <dir>
  *   npm run scenario create <name> --run-ui        # create AND launch `coco ui`
+ *   npm run scenario create <name> --remote <url>  # add an `origin` remote
+ *                                                  # (lets the triage views detect
+ *                                                  #  a GitHub remote on launch)
  *
  * By default, `create` PERSISTS the scenario (doesn't auto-clean) —
  * that's what manual testing wants. Use `--ephemeral` to clean up on
@@ -80,6 +83,12 @@ function printHelp(): void {
     '  Create options:',
     '    --path <dir>     Materialize the scenario at <dir> instead of /tmp',
     '    --run-ui         Launch `coco ui` against the scenario after creation',
+    '    --remote <url>   Add `origin` pointing at <url> so the GitHub triage',
+    '                     views (gi / gP) detect a remote on launch. Pass any',
+    '                     gh-shaped URL — `git@github.com:gfargo/coco.git` for',
+    '                     real data, or a fake like `git@github.com:coco-test/',
+    '                     sample.git` to render the views without risking',
+    '                     destructive actions against a real repo.',
     '    --ephemeral      Remove the scenario directory when the CLI exits',
     '                     (default: persist, print the cleanup hint)',
     '',
@@ -135,7 +144,12 @@ function commandDescribe(name: string): number {
 
 async function commandCreate(
   name: string,
-  options: { targetPath?: string; runUi?: boolean; ephemeral?: boolean }
+  options: {
+    targetPath?: string
+    runUi?: boolean
+    ephemeral?: boolean
+    remote?: string
+  }
 ): Promise<number> {
   const scenario = findScenario(name)
   if (!scenario) {
@@ -155,6 +169,21 @@ async function commandCreate(
   } catch (error) {
     console.error(`Scenario setup failed: ${(error as Error).message}`)
     return 1
+  }
+
+  // Optional origin remote (#882 follow-up). Scenarios default to no
+  // remote so the test isolation story stays simple, but `--remote`
+  // lets `--run-ui` testers exercise the GitHub triage views (`gi`,
+  // `gP`) against a real-shaped URL — without it, those views render
+  // "No GitHub remote detected" because `getGitHubRepository` returns
+  // undefined for the bare `git init` repo.
+  if (options.remote) {
+    try {
+      await repo.git.addRemote('origin', options.remote)
+    } catch (error) {
+      console.error(`Failed to add origin remote: ${(error as Error).message}`)
+      return 1
+    }
   }
 
   let finalPath = repo.path
@@ -262,6 +291,7 @@ async function main(): Promise<void> {
       targetPath: typeof flags.path === 'string' ? flags.path : undefined,
       runUi: Boolean(flags['run-ui']),
       ephemeral: Boolean(flags.ephemeral),
+      remote: typeof flags.remote === 'string' ? flags.remote : undefined,
     })
     process.exit(code)
   }

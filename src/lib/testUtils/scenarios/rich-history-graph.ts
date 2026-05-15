@@ -25,6 +25,20 @@
  * Manual driver:
  *   npm run scenario create rich-history-graph -- --run-ui
  *
+ * To also exercise the GitHub triage views (`gi` / `gP`), tack on a
+ * `--remote <url>` so the scratch repo has an `origin` for
+ * `getGitHubRepository` to find:
+ *
+ *   # Render the views against a real repo's data (be careful with
+ *   # destructive actions — `x` / `m` etc. would hit the real PRs!):
+ *   npm run scenario create rich-history-graph -- --run-ui \
+ *     --remote git@github.com:gfargo/coco.git
+ *
+ *   # Or use a fake URL to render the views safely against an empty /
+ *   # gh-unauthenticated remote:
+ *   npm run scenario create rich-history-graph -- --run-ui \
+ *     --remote git@github.com:coco-test/sample.git
+ *
  * EXTRACTION DISCIPLINE: no coco-specific imports. Date overrides
  * are plumbed through `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE` so
  * the scenario stays as a pure git-state factory.
