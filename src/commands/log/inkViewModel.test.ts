@@ -1448,3 +1448,56 @@ describe('log Ink view model', () => {
     })
   })
 })
+
+describe('issue / pull-request triage navigation (#882 phase 3)', () => {
+  it('createLogInkState seeds selectedIssueIndex / selectedPullRequestTriageIndex to 0', () => {
+    const state = createLogInkState(rows)
+    expect(state.selectedIssueIndex).toBe(0)
+    expect(state.selectedPullRequestTriageIndex).toBe(0)
+  })
+
+  it('moveIssue advances the cursor and clamps to count - 1', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'moveIssue', delta: 3, count: 5 })
+    expect(state.selectedIssueIndex).toBe(3)
+
+    // Clamps at count - 1 — no wrap.
+    state = applyLogInkAction(state, { type: 'moveIssue', delta: 10, count: 5 })
+    expect(state.selectedIssueIndex).toBe(4)
+
+    // Negative delta clamps at 0.
+    state = applyLogInkAction(state, { type: 'moveIssue', delta: -99, count: 5 })
+    expect(state.selectedIssueIndex).toBe(0)
+  })
+
+  it('movePullRequestTriage advances independently from selectedIssueIndex', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'moveIssue', delta: 2, count: 5 })
+    state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 3 })
+
+    expect(state.selectedIssueIndex).toBe(2)
+    expect(state.selectedPullRequestTriageIndex).toBe(1)
+  })
+
+  it('move actions clear any pending chord prefix', () => {
+    let state = createLogInkState(rows)
+    state = { ...state, pendingKey: 'g' }
+
+    state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 5 })
+    expect(state.pendingKey).toBeUndefined()
+  })
+
+  it('pushView accepts the new triage view ids', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'pushView', value: 'issues' })
+    expect(state.activeView).toBe('issues')
+    expect(state.viewStack).toContain('issues')
+
+    state = applyLogInkAction(state, { type: 'pushView', value: 'pull-request-triage' })
+    expect(state.activeView).toBe('pull-request-triage')
+    expect(state.viewStack).toContain('pull-request-triage')
+  })
+})

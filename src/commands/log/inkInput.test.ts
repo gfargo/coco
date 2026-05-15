@@ -3412,3 +3412,79 @@ describe('log Ink input interactions', () => {
     })
   })
 })
+
+describe('issue / pull-request triage chords (#882 phase 3)', () => {
+  it('pushes the issues view with the gi chord', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
+
+    state = applyInput(state, 'i')
+    expect(state.activeView).toBe('issues')
+    expect(state.viewStack).toContain('issues')
+    expect(state.pendingKey).toBeUndefined()
+  })
+
+  it('pushes the pull-request-triage view with the gP chord', () => {
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'P')
+
+    expect(state.activeView).toBe('pull-request-triage')
+    expect(state.viewStack).toContain('pull-request-triage')
+  })
+
+  it('preserves the existing gp chord for the single-PR action panel', () => {
+    // Regression guard: capital-P must not steal the lowercase-p
+    // binding. The single-PR panel and the multi-PR triage list are
+    // separate surfaces, both reachable from the root.
+    let state = createLogInkState(rows)
+
+    state = applyInput(state, 'g')
+    state = applyInput(state, 'p')
+
+    expect(state.activeView).toBe('pull-request')
+  })
+
+  it('j on the issues view increments selectedIssueIndex when there are items', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'issues' })
+
+    state = applyInput(state, 'j', {}, { issueCount: 5 })
+    expect(state.selectedIssueIndex).toBe(1)
+
+    state = applyInput(state, 'j', {}, { issueCount: 5 })
+    expect(state.selectedIssueIndex).toBe(2)
+  })
+
+  it('k on the issues view decrements selectedIssueIndex', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'issues' })
+    state = { ...state, selectedIssueIndex: 3 }
+
+    state = applyInput(state, 'k', {}, { issueCount: 5 })
+    expect(state.selectedIssueIndex).toBe(2)
+  })
+
+  it('j on the pull-request-triage view increments selectedPullRequestTriageIndex', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'pull-request-triage' })
+
+    state = applyInput(state, 'j', {}, { pullRequestTriageCount: 4 })
+    expect(state.selectedPullRequestTriageIndex).toBe(1)
+  })
+
+  it('j on the issues view falls through to the commit-move fallback when issueCount is 0', () => {
+    // Mirrors the existing pattern for the other promoted views — the
+    // j/k branch only claims the keystroke when there are items to
+    // navigate. Empty list → keystroke falls through to the default
+    // sidebar / move handler.
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'issues' })
+
+    state = applyInput(state, 'j', {}, {})
+    expect(state.selectedIssueIndex).toBe(0)
+  })
+})

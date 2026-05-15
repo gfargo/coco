@@ -27,7 +27,9 @@ import { renderConflictsSurface } from '../surfaces/conflicts'
 import { renderDiffSurface } from '../surfaces/diff'
 import { renderHistoryPanel } from '../surfaces/history'
 import { renderSplitPlanOverlay } from './overlays'
+import { renderIssuesTriageSurface } from '../surfaces/issuesTriage'
 import { renderPullRequestSurface } from '../surfaces/pullRequest'
+import { renderPullRequestTriageSurface } from '../surfaces/pullRequestTriage'
 import { renderReflogSurface } from '../surfaces/reflog'
 import { renderStashSurface } from '../surfaces/stash'
 import { renderStatusSurface } from '../surfaces/status'
@@ -139,6 +141,14 @@ export function renderMainPanel(
 
   if (state.activeView === 'pull-request') {
     return renderPullRequestSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
+  if (state.activeView === 'pull-request-triage') {
+    return renderPullRequestTriageSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+  }
+
+  if (state.activeView === 'issues') {
+    return renderIssuesTriageSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
   }
 
   if (state.activeView === 'conflicts') {

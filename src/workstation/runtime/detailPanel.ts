@@ -29,6 +29,8 @@ import {
   renderCommitPanel,
   renderComposeContextPanel,
   renderHistoryInspector,
+  renderIssueTriagePreviewPanel,
+  renderPullRequestTriagePreviewPanel,
   renderStashPreviewPanel,
   renderSubmodulePreviewPanel,
   renderTagPreviewPanel,
@@ -189,6 +191,14 @@ export function renderDetailPanel(
 
   if (state.activeView === 'submodules') {
     return renderSubmodulePreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+
+  if (state.activeView === 'issues') {
+    return renderIssueTriagePreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+  }
+
+  if (state.activeView === 'pull-request-triage') {
+    return renderPullRequestTriagePreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
   }
 
   return renderHistoryInspector(

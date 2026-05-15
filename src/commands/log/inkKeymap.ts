@@ -27,7 +27,9 @@ export type LogInkCommandId =
   | 'navigateDiff'
   | 'navigateHome'
   | 'navigateBisect'
+  | 'navigateIssues'
   | 'navigatePullRequest'
+  | 'navigatePullRequestTriage'
   | 'navigateReflog'
   | 'navigateStash'
   | 'navigateSubmodules'
@@ -261,6 +263,20 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['gp'],
     label: 'pull request',
     description: 'Push the dedicated pull-request action panel for the current branch.',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigatePullRequestTriage',
+    keys: ['gP'],
+    label: 'PR triage',
+    description: 'Push the multi-PR triage list view (#882). Capital P disambiguates from `gp` which targets the single-PR panel for the current branch.',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigateIssues',
+    keys: ['gi'],
+    label: 'issues',
+    description: 'Push the issue triage list view (#882).',
     contexts: ['normal'],
   },
   {
@@ -506,6 +522,8 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateStash',
   'navigateWorktrees',
   'navigatePullRequest',
+  'navigatePullRequestTriage',
+  'navigateIssues',
   'navigateConflicts',
   'navigateReflog',
   'navigateBisect',
@@ -762,6 +780,25 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   if (options.activeView === 'reflog') {
     return {
       contextual: ['↑/↓ entries', 'enter inspect', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'issues') {
+    return {
+      // #882 phase 3 — read-only triage list. Per-row actions
+      // (label, assign, comment, close) land in phase 4-5.
+      contextual: ['↑/↓ issues', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'pull-request-triage') {
+    return {
+      // #882 phase 3 — read-only triage list. Per-row actions
+      // (merge, approve, request-changes, close, comment) land
+      // in phase 4-5.
+      contextual: ['↑/↓ PRs', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

@@ -1,10 +1,12 @@
 export const LOG_INK_CONTEXT_KEYS = [
   'bisect',
   'branches',
+  'issueList',
   'lfs',
   'operation',
   'provider',
   'pullRequest',
+  'pullRequestList',
   'reflog',
   'stashes',
   'submodules',
