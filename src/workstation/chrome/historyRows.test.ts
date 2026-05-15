@@ -278,7 +278,50 @@ describe('Ink history rows', () => {
       // The spacers carry vertical lane markers (rendered as the
       // box-drawing `│`), not the commit dot.
       expect(visible.items[1].graph).toBe('| ')
-      expect(visible.items[1].laneSegments?.find((s) => s.text === '│')).toBeDefined()
+      const spacer = visible.items[1] as {
+        laneSegments?: Array<{ text: string }>
+        spacer?: boolean
+      }
+      expect(spacer.laneSegments?.find((s) => s.text === '│')).toBeDefined()
+      // The `spacer: true` flag distinguishes our injected lane
+      // continuation from git's own topology rows so the renderer
+      // can keep spacers at full lane brightness while topology
+      // rows stay dim as scaffolding.
+      expect(spacer.spacer).toBe(true)
+    })
+
+    it('only marks synthetic spacers, not git\'s own topology rows', () => {
+      // Build a row list with an explicit topology row inside so we
+      // can verify that injected spacers carry `spacer: true` while
+      // git's natural graph rows do not.
+      const mergeShapedRows: GitLogRow[] = [
+        {
+          type: 'commit', graph: '*   ', shortHash: 'main1', hash: 'main1'.padEnd(40, '0'),
+          parents: [], date: '2026-05-15', author: 'Coco', refs: [], message: 'feat: main commit',
+        },
+        {
+          type: 'commit', graph: '*   ', shortHash: 'main0', hash: 'main0'.padEnd(40, '0'),
+          parents: ['p1'.padEnd(40, '0'), 'p2'.padEnd(40, '0')],
+          date: '2026-04-23', author: 'Coco', refs: [], message: "Merge branch 'feat/x'",
+        },
+        { type: 'graph', graph: '|\\  ' },
+        {
+          type: 'commit', graph: '| * ', shortHash: 'side1', hash: 'side1'.padEnd(40, '0'),
+          parents: [], date: '2026-04-22', author: 'Coco', refs: [], message: 'feat: side',
+        },
+      ]
+      const state = applyLogInkAction(createLogInkState(mergeShapedRows), { type: 'toggleGraph' })
+      const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
+
+      const items = visible.items as Array<{ type: string; spacer?: boolean }>
+      // Find graph rows and partition by `spacer` flag.
+      const graphRows = items.filter((i) => i.type === 'graph')
+      const synthetic = graphRows.filter((i) => i.spacer === true)
+      const natural = graphRows.filter((i) => i.spacer !== true)
+
+      // At least one of each kind should be present in this shape.
+      expect(synthetic.length).toBeGreaterThan(0)
+      expect(natural.length).toBeGreaterThan(0)
     })
 
     it('does not inject spacers when fullGraphSpacing is off', () => {

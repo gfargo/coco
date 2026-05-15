@@ -79,6 +79,17 @@ import {
  * minimum from `getLogInkLayout`) so an overflowing label never wraps and
  * collides with the next row.
  */
+
+/**
+ * Format the file-count portion of the inspector stats line. Pluralize
+ * "files" only when the count is not 1 so `1 file +12/-22` reads
+ * naturally instead of `1 files`.
+ */
+function formatCommitStatLine(stats: { filesChanged: number; insertions: number; deletions: number }): string {
+  const label = stats.filesChanged === 1 ? 'file' : 'files'
+  return `${stats.filesChanged} ${label}  +${stats.insertions}/-${stats.deletions}`
+}
+
 function renderInspectorActionsSection(
   h: typeof ReactTypes.createElement,
   Text: LogInkComponents['Text'],
@@ -332,7 +343,7 @@ export function renderHistoryInspector(
     }))
   }
 
-  const statLine = `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
+  const statLine = formatCommitStatLine(detail.stats)
   // P5.1 — link the commit hash and each ref out to GitHub when we know
   // the remote. OSC 8 escapes embed inline; supportsHyperlinks() decides
   // whether to wrap or fall through to plain text.
@@ -496,7 +507,7 @@ export function renderCommitDiffDetail(
     }, truncateCells(line, width - 4))))
   }
 
-  const statLine = `${detail.stats.filesChanged} files  +${detail.stats.insertions}/-${detail.stats.deletions}`
+  const statLine = formatCommitStatLine(detail.stats)
   const headerLines = [
     detail.message,
     '',

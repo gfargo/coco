@@ -50,6 +50,16 @@ export type LogInkHistoryGraphItem = {
   type: 'graph'
   graph: string
   laneSegments?: LaneSegment[]
+  /**
+   * True for the synthetic vertical-only rows we inject between two
+   * commits to give linear-history stretches a comfortable rhythm,
+   * false (or undefined) for git's own topology rows (`|/` close,
+   * `|\` fork). The renderer uses this to keep spacers at full lane
+   * brightness — they read as "this is the same lane, continuing" —
+   * while topology rows stay dimmed as scaffolding that should
+   * recede behind the commits they connect.
+   */
+  spacer?: boolean
 }
 
 export type LogInkHistoryItem = LogInkHistoryCommitItem | LogInkHistoryGraphItem
@@ -194,6 +204,7 @@ function toFullGraphItems(
         type: 'graph',
         graph,
         laneSegments: renderGraphRowSegments(graph, tracker, { ascii: false }),
+        spacer: true,
       }
     }
 

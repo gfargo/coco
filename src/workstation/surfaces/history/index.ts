@@ -79,11 +79,25 @@ function pickDateText(
 const BRANCH_CHIP_MAX_NAME_WIDTH = 20
 
 /**
- * Render a colored bracket chip for a branch tip. Current branch
- * (HEAD -> X) gets the success color + bold; other branch tips get
- * info color. Tags are never chipped — they stay in the trailing ref
- * list. The chip emits its own trailing space so callers concatenate
- * it directly into the row without a separator.
+ * Render a pill-style chip for a branch tip — colored background
+ * with the branch name reverse-printed inside, so the chip reads as
+ * a distinct visual category (block) rather than colored text (which
+ * collides with `docs:`/`refactor:`/`perf:` conventional-commit
+ * prefixes that also use `info`). Current branch (HEAD -> X) uses
+ * success-green; other branch tips use info-blue.
+ *
+ * Implementation: `inverse: true` + `color: <accent>` is the
+ * portable way to render "colored background with terminal-default
+ * foreground" — it adapts to dark vs light terminals without
+ * hardcoding a black/white fg. Tags are never chipped; they stay in
+ * the trailing ref list. The chip emits its own trailing space so
+ * callers concatenate it directly into the row without a separator.
+ *
+ * Selection styling is opt-out: when the row is selected, the outer
+ * `inverse: true` + selection background already covers everything,
+ * and a second `inverse` on the chip would flip it back to plain. We
+ * drop the pill styling for selected rows and let the row's own
+ * inverse highlight carry through cleanly.
  *
  * Returns the rendered node alongside its cell width AND the chip
  * descriptor so the caller can pass it to `filterChippedRefs` and
@@ -94,7 +108,8 @@ function renderBranchTipChip(
   Text: LogInkComponents['Text'],
   commit: GitLogCommitRow,
   theme: LogInkTheme,
-  key: string
+  key: string,
+  selected: boolean
 ): {
   node: ReactTypes.ReactElement | null
   width: number
@@ -104,15 +119,32 @@ function renderBranchTipChip(
   if (!chip) return { node: null, width: 0, chip }
 
   const truncated = truncateCells(chip.name, BRANCH_CHIP_MAX_NAME_WIDTH)
-  const label = `[${truncated}] `
-  const color = theme.noColor
-    ? undefined
-    : chip.isHead
-      ? theme.colors.success
-      : theme.colors.info
+  // Inner pill body is `name`; the trailing space sits OUTSIDE the
+  // colored block so the bg doesn't bleed into the message column.
+  // The brackets are gone — the colored block is its own visual
+  // affordance and the brackets would add 2 cells of chrome that
+  // duplicate the affordance.
+  const body = ` ${truncated} `
+
+  // Selected row OR noColor mode → drop pill styling. Selected rows
+  // get the row-level inverse highlight; noColor terminals fall
+  // back to bracketed text so the chip still parses visually.
+  if (selected || theme.noColor) {
+    const fallbackLabel = `[${truncated}] `
+    return {
+      node: h(Text, { key, bold: chip.isHead }, fallbackLabel),
+      width: cellWidth(fallbackLabel),
+      chip,
+    }
+  }
+
+  const accent = chip.isHead ? theme.colors.success : theme.colors.info
   return {
-    node: h(Text, { key, color, bold: chip.isHead }, label),
-    width: cellWidth(label),
+    node: h(Text, {},
+      h(Text, { key, inverse: true, color: accent, bold: chip.isHead }, body),
+      h(Text, { key: `${key}-pad` }, ' '),
+    ),
+    width: cellWidth(body) + 1,
     chip,
   }
 }
@@ -250,7 +282,7 @@ function renderCommitHistoryRow(
   // out whatever the chip already shows so the row doesn't print
   // `[main] feat: x [HEAD -> main]` with the same info on both ends.
   const chip = fullGraph
-    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-chip`)
+    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-chip`, selected)
     : { node: null, width: 0, chip: undefined }
   const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip))
   const fixedWidth =
@@ -351,7 +383,7 @@ function renderStackedCommitHistoryRow(
   // same way as the single-line variant, but only in full-graph mode.
   const recentMarkerWidth = isRecent ? 2 : 0
   const chip = fullGraph
-    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-stk-chip`)
+    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-stk-chip`, selected)
     : { node: null, width: 0, chip: undefined }
   const lineOneFixed =
     graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth + chip.width
@@ -533,23 +565,34 @@ export function renderHistoryPanel(
         }))
     : visible.items.map((item, index) => {
       if (item.type === 'graph') {
-        // Graph-only rows are git's lane-closure scaffolding (`|/`,
-        // `|\`, etc.) — they're real topology but visually they look
-        // like blank rows that the user might wonder if they
-        // accidentally skipped a commit on (#831). Render dim-on-dim
-        // so they retreat as connectors rather than competing with
-        // commit rows for the eye's attention.
+        // Graph-only rows split into two visual categories:
+        //
+        //   - git's own lane-closure scaffolding (`|/`, `|\`, etc.)
+        //     stays dim-on-dim so it reads as connector chrome that
+        //     recedes behind the commits it joins (#831). The eye
+        //     should never confuse a fork/close row for a commit
+        //     somebody accidentally skipped.
+        //
+        //   - synthetic spacers we inject between linear commits
+        //     (`spacer: true`) render at FULL lane brightness so the
+        //     trunk lane bar visibly connects consecutive commits.
+        //     They are explicitly NOT scaffolding — they exist to
+        //     make linear-history rhythm read as one continuous lane.
+        const isSpacer = item.spacer === true
         if (item.laneSegments && !theme.ascii) {
-          return h(Text, { key: `graph-${index}-${item.graph}`, dimColor: true },
+          return h(Text, {
+            key: `graph-${index}-${item.graph}`,
+            dimColor: !isSpacer,
+          },
             ...renderLaneSegmentSpans(
               h, Text, item.laneSegments, theme, visible.graphWidth, `g${index}`,
-              { forceDim: true }
+              { forceDim: !isSpacer }
             ))
         }
         return h(Text, {
           key: `graph-${index}-${item.graph}`,
           color: theme.noColor ? undefined : theme.colors.muted,
-          dimColor: true,
+          dimColor: !isSpacer,
         }, truncateCells(substituteGraphChars(
           item.graph.padEnd(visible.graphWidth),
           { ascii: theme.ascii }
