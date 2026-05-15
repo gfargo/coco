@@ -42,6 +42,16 @@ type LogInkOptions = {
    * next user action sets a real message.
    */
   idleTips?: boolean
+  /**
+   * Toggle the history surface's date bucket headers (`── Today ──`,
+   * `── April 2026 ──`). Forwarded from `logTui.dateBucketing` in the
+   * user's config. `undefined` means "use the default" — the runtime
+   * resolves undefined to `true` so users get bucketing without opting
+   * in. Pass an explicit `false` to fall back to the per-row date
+   * column. Bucketing always suppresses itself while a search filter
+   * is active regardless of this flag.
+   */
+  dateBucketing?: boolean
   initialView?: LogInkView
   logArgv?: LogArgv
   /**
@@ -106,6 +116,9 @@ export async function startInkInteractiveLog(
     appLabel: options.appLabel || 'coco log',
     git,
     idleTipsEnabled: Boolean(options.idleTips),
+    // Resolve undefined → true so the default flips on automatically.
+    // An explicit `false` from config opts out.
+    dateBucketingEnabled: options.dateBucketing !== false,
     ink,
     initialView: options.initialView || 'history',
     logArgv: options.logArgv,

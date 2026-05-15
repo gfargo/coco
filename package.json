@@ -44,7 +44,7 @@
     "scenario": "tsx bin/scenario.ts",
     "eval:structural-extract": "tsx bin/structuralExtractEval.ts",
     "pretest:jest": "npm run build:info && node bin/copyTreeSitterWasm.mjs",
-    "test:jest": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:jest": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
     "test:jest:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "release": "release-it",
     "release:dry-run": "release-it --ci --dry-run --no-git --no-github.release --no-github.publish --no-npm.publish",

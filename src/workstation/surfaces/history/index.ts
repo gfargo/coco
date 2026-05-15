@@ -496,6 +496,7 @@ export function renderHistoryPanel(
   loadingMoreCommits: boolean,
   density: LogInkLayoutDensity,
   rowMode: 'single' | 'stacked',
+  dateBucketingEnabled: boolean = false,
   now: Date = new Date()
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
@@ -523,9 +524,13 @@ export function renderHistoryPanel(
   // just consume some of that budget instead of additional commits.
   // Date bucketing is the new way the surface communicates "when" —
   // headers replace the per-row date column whenever the result set
-  // is chronological (no active filter).
+  // is chronological (no active filter) AND the user has bucketing
+  // enabled in `logTui.dateBucketing`. The filter check is the second
+  // guardrail: even with bucketing enabled, an active search filter
+  // shuffles commits by relevance so the adjacent-bucket invariant
+  // breaks down and the dividers would read as noise.
   const fullGraphSpacing = state.fullGraph && !state.filter
-  const dateBucketingNow = state.filter ? undefined : now
+  const dateBucketingNow = !dateBucketingEnabled || state.filter ? undefined : now
   const chromeRows = showPendingRow ? 5 : 4
   const listRows = rowMode === 'stacked'
     ? Math.max(2, Math.floor((bodyRows - chromeRows) / 2))
