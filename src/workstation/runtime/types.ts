@@ -20,7 +20,9 @@ import type { LfsAttributeStatus } from '../../git/lfsAttributes'
 import type { SubmoduleOverview } from '../../git/submoduleData'
 import type { GitOperationOverview } from '../../git/operationData'
 import type { ProviderOverview } from '../../git/providerData'
+import type { IssueDetail } from '../../git/issueDetailData'
 import type { IssueListOverview } from '../../git/issuesListData'
+import type { PullRequestDetail } from '../../git/pullRequestDetailData'
 import type { PullRequestOverview } from '../../git/pullRequestData'
 import type { PullRequestListOverview } from '../../git/pullRequestListData'
 import type { ReflogOverview } from '../../git/reflogData'
@@ -60,6 +62,22 @@ export type LogInkContext = {
    * Issues triage list (#882). Hydrated on entry to the `issues` view.
    */
   issueList?: IssueListOverview
+  /**
+   * Per-issue detail cache keyed by issue number (#882 inspector
+   * hydration). Filled on demand when the user rests the cursor on
+   * an issue row in the triage list. Cursoring back to a
+   * previously-fetched issue shows the cached entry immediately.
+   * The list fetcher deliberately omits bodies / comments — they're
+   * expensive to fetch + render, so the lazy hydration keeps the
+   * list snappy.
+   */
+  issueDetailByNumber?: Map<number, IssueDetail>
+  /**
+   * Per-PR detail cache keyed by pull-request number (#882
+   * inspector hydration). Mirrors `issueDetailByNumber` — fetched
+   * via `gh pr view <#>` and cached per session.
+   */
+  pullRequestDetailByNumber?: Map<number, PullRequestDetail>
   reflog?: ReflogOverview
   stashes?: StashOverview
   /**
