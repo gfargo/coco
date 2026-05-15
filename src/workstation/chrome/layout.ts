@@ -128,6 +128,44 @@ export const LAYOUT_RAIL_BELOW = 100
  */
 export const LAYOUT_RAIL_PANEL_WIDTH = 8
 
+/**
+ * Sidebar at-rest size targets, tier-aware. The sidebar's purpose at
+ * rest is to surface enough room for the most common tab content
+ * (status / branches / tags / stashes / worktrees) without dominating
+ * the layout — the history graph + diff are usually the focal point.
+ *
+ * The tier split lets narrow terminals stay compact (the user has
+ * little room to spare) while wide terminals scale the sidebar in
+ * proportion to the rest of the chrome instead of pinning it at an
+ * arbitrary cap.
+ *
+ *   tight  (100-119) → `clamp(22, 28, 24% × cols)`  e.g. 100→24, 119→28
+ *   normal (120-159) → `clamp(22, 30, 22% × cols)`  e.g. 120→26, 140→30
+ *   wide   (≥ 160)   → `clamp(28, 48, 24% × cols)`  e.g. 160→38, 200→48
+ *
+ * The `tight` and `normal` tiers honor a hard floor of 22 cells —
+ * narrower than that and the tab labels stop fitting on a single
+ * line. The `wide` tier raises the floor to 28 so the sidebar
+ * doesn't visually shrink when crossing the 159→160 boundary on a
+ * resize.
+ *
+ * Focused state (Tab → sidebar) uses a different formula entirely
+ * (`clamp(32, 50, 36% × cols)`) — deliberate user intent to read the
+ * sidebar deserves the extra width regardless of tier.
+ */
+type SidebarAtRestConfig = { min: number; max: number; fraction: number }
+const SIDEBAR_AT_REST_BY_TIER: Record<LogInkLayoutDensity, SidebarAtRestConfig> = {
+  rail: { min: 22, max: 28, fraction: 0.24 }, // unused — rail collapses to LAYOUT_RAIL_PANEL_WIDTH
+  tight: { min: 22, max: 28, fraction: 0.24 },
+  normal: { min: 22, max: 30, fraction: 0.22 },
+  wide: { min: 28, max: 48, fraction: 0.24 },
+}
+
+function calcSidebarAtRestWidth(columns: number, density: LogInkLayoutDensity): number {
+  const config = SIDEBAR_AT_REST_BY_TIER[density]
+  return Math.max(config.min, Math.min(config.max, Math.floor(columns * config.fraction)))
+}
+
 export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const columns = input.columns || LOG_INK_DEFAULT_COLUMNS
   const rows = input.rows || LOG_INK_DEFAULT_ROWS
@@ -171,15 +209,19 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
       : inspectorRailed
         ? LAYOUT_RAIL_PANEL_WIDTH
         : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
-  // Sidebar at rest: 22-34 cells (~24% of width). Focused: 32-50 cells
-  // (~36% of width). The transition is instant per render — focus tab to
-  // expand, focus away to collapse. Rail mode (narrow terminal,
-  // unfocused) shrinks to a fixed 8-cell strip with tab glyphs only.
+  // Sidebar at rest is tier-aware (see `SIDEBAR_AT_REST_BY_TIER`):
+  // tight stays compact (22-28), normal shrinks slightly (22-30),
+  // wide grows naturally (28-48) so the side panel doesn't get pinned
+  // at an arbitrary cap on big terminals while the main panel hogs
+  // 80% of the width. Focused: 32-50 cells (~36% of width),
+  // regardless of tier — deliberate user intent to read the sidebar
+  // deserves the extra width. Rail mode (narrow terminal, unfocused)
+  // collapses to a fixed 8-cell strip with tab glyphs only.
   const sidebarWidth = input.sidebarFocused
     ? Math.max(32, Math.min(50, Math.floor(columns * 0.36)))
     : sidebarRailed
       ? LAYOUT_RAIL_PANEL_WIDTH
-      : Math.max(22, Math.min(34, Math.floor(columns * 0.24)))
+      : calcSidebarAtRestWidth(columns, density)
 
   return {
     bodyRows: Math.max(8, rows - 5),
