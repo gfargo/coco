@@ -112,17 +112,41 @@ type ExpandedRow =
  * row that renders as `|` per active lane so consecutive commits have
  * a clear vertical rhythm without losing topology continuity.
  *
+ * The spacer is suppressed in two cases where it would create visible
+ * "tearing" on the graph column:
+ *
+ *   1. The next row is git's own graph-only topology row (`|\` /
+ *      `|/` / `| |`). That row already provides vertical breathing
+ *      AND draws the lane transition; sandwiching our spacer between
+ *      the commit and the transition produces an extra all-pipes row
+ *      that reads as misalignment.
+ *
+ *   2. The current commit's graph contains a backslash or forward
+ *      slash (the compressed forms git uses for `*\` / `*` followed
+ *      by slash, when it draws the fork on the same row as the
+ *      commit). The spacer's commit-glyph → lane-bar rewrite would
+ *      leave the diagonal intact, rendering a second corner glyph
+ *      immediately below the merge — a duplicate that looks like a
+ *      glyph stutter.
+ *
  * When `withSpacers` is false the list is identity-mapped from
  * source rows, preserving the legacy zero-padding behavior for any
  * caller that wants raw git topology (filters, tests, etc.).
  */
+function commitGraphIsSimple(graph: string): boolean {
+  return !/[\\/]/.test(graph)
+}
+
 function expandRowsWithSpacers(rows: GitLogRow[], withSpacers: boolean): ExpandedRow[] {
   const out: ExpandedRow[] = []
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]
     out.push({ kind: 'source', row })
-    if (withSpacers && row.type === 'commit') {
-      out.push({ kind: 'spacer', sourceCommit: row })
-    }
+    if (!withSpacers || row.type !== 'commit') continue
+    if (!commitGraphIsSimple(row.graph || '*')) continue
+    const next = rows[i + 1]
+    if (next && next.type === 'graph') continue
+    out.push({ kind: 'spacer', sourceCommit: row })
   }
   return out
 }

@@ -310,5 +310,79 @@ describe('Ink history rows', () => {
         expect(trunkSegment?.laneId).toBe(0)
       })
     })
+
+    // Tearing-fix follow-up: spacers must NOT sandwich themselves
+    // between a commit and a git-emitted topology row (`|\` / `|/`),
+    // and must NOT fire on commits whose own graph already carries
+    // the lane-fork glyph (`*\` / `*/`). Both cases produced a
+    // duplicate corner glyph the user saw as misalignment.
+    it('skips the spacer when git\'s next row is a topology graph row', () => {
+      const mergeShapedRows: GitLogRow[] = [
+        {
+          type: 'commit', graph: '*   ', shortHash: 'merge1', hash: 'merge1'.padEnd(40, '0'),
+          parents: ['p1'.padEnd(40, '0'), 'p2'.padEnd(40, '0')],
+          date: '2026-04-23', author: 'Coco', refs: [], message: "Merge branch 'feat/x'",
+        },
+        { type: 'graph', graph: '|\\  ' },
+        {
+          type: 'commit', graph: '| * ', shortHash: 'side1', hash: 'side1'.padEnd(40, '0'),
+          parents: [], date: '2026-04-22', author: 'Coco', refs: [], message: 'feat: side commit',
+        },
+        { type: 'graph', graph: '|/  ' },
+        {
+          type: 'commit', graph: '*   ', shortHash: 'main1', hash: 'main1'.padEnd(40, '0'),
+          parents: [], date: '2026-04-15', author: 'Coco', refs: [], message: 'feat: main below merge',
+        },
+      ]
+      const state = applyLogInkAction(createLogInkState(mergeShapedRows), { type: 'toggleGraph' })
+      const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
+
+      // Expected sequence — no synthetic spacers between the merge
+      // commit and `|\`, between the side commit and `|/`, or
+      // between the last source-graph row and the final commit on
+      // main (graph rows aren't commits so the loop doesn't even
+      // consider them). Only `main1` at the tail gets a spacer
+      // because nothing follows it.
+      expect(visible.items.map((item) => item.type)).toEqual([
+        'commit', // merge
+        'graph',  // |\
+        'commit', // side
+        'graph',  // |/
+        'commit', // main
+        'graph',  // spacer for main (no row after it, but the rule
+                  // only checks `next.type === 'graph'`; an absent
+                  // next still gets a spacer so the trailing commit
+                  // has its breathing row).
+      ])
+    })
+
+    it('skips the spacer when the commit\'s graph carries the compressed fork (`*\\`)', () => {
+      // Compressed-fork form some git versions emit for `--no-ff`
+      // merges: the `\` rides on the commit row itself. The spacer
+      // rewrite would leave the `\` intact, producing a duplicate
+      // `╮` corner directly under the merge glyph.
+      const compressedMergeRows: GitLogRow[] = [
+        {
+          type: 'commit', graph: '*\\  ', shortHash: 'merge1', hash: 'merge1'.padEnd(40, '0'),
+          parents: ['p1'.padEnd(40, '0'), 'p2'.padEnd(40, '0')],
+          date: '2026-04-23', author: 'Coco', refs: [], message: "Merge branch 'feat/x'",
+        },
+        {
+          type: 'commit', graph: '| * ', shortHash: 'side1', hash: 'side1'.padEnd(40, '0'),
+          parents: [], date: '2026-04-22', author: 'Coco', refs: [], message: 'feat: side commit',
+        },
+      ]
+      const state = applyLogInkAction(createLogInkState(compressedMergeRows), { type: 'toggleGraph' })
+      const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
+
+      // No spacer between merge and side: merge's graph has `\` so
+      // `commitGraphIsSimple` returns false. Side gets its trailing
+      // spacer because nothing prevents it.
+      expect(visible.items.map((item) => item.type)).toEqual([
+        'commit', // merge (no trailing spacer — compressed fork)
+        'commit', // side
+        'graph',  // spacer for side
+      ])
+    })
   })
 })
