@@ -11,7 +11,9 @@
  */
 
 import { BranchRef } from '../../git/branchData'
+import type { IssueDetail } from '../../git/issueDetailData'
 import type { IssueListItem } from '../../git/issuesListData'
+import type { PullRequestDetail } from '../../git/pullRequestDetailData'
 import type { PullRequestListItem } from '../../git/pullRequestListData'
 import { StashEntry } from '../../git/stashData'
 import { GitTagRef } from '../../git/tagData'
@@ -131,22 +133,113 @@ export function formatStashPreview(
   return out
 }
 
+/* ------------------------- detail-section helpers ----------------------- */
+
+/**
+ * Render the first `maxLines` non-empty lines of an issue / PR body
+ * as preview lines. Returns an empty array when the body itself is
+ * empty (or whitespace only) so callers can `out.push(...body(...))`
+ * without an extra guard. Trailer appears only when content was
+ * actually truncated.
+ */
+function bodyExcerptLines(body: string, maxLines: number): PreviewLine[] {
+  if (!body.trim()) return []
+  const lines = body.replace(/\r\n/g, '\n').split('\n')
+  // Drop leading blanks so the excerpt opens on the first real line
+  // rather than rendering an awkward "blank line, then body".
+  while (lines.length > 0 && !lines[0].trim()) lines.shift()
+  const shown = lines.slice(0, maxLines)
+  const truncated = lines.length > maxLines
+  const out: PreviewLine[] = [
+    heading('Body'),
+    ...shown.map((l) => line(l)),
+  ]
+  if (truncated) {
+    out.push(dim(`… ${lines.length - maxLines} more line(s)`))
+  }
+  return out
+}
+
+function shortenLine(value: string, maxLength: number): string {
+  const flattened = value.replace(/\s+/g, ' ').trim()
+  if (flattened.length <= maxLength) return flattened
+  return `${flattened.slice(0, Math.max(0, maxLength - 1))}…`
+}
+
+function commentsSection(
+  comments: ReadonlyArray<{ author?: string; body: string }>,
+  maxShown: number
+): PreviewLine[] {
+  if (comments.length === 0) return []
+  const recent = comments.slice(-maxShown)
+  const out: PreviewLine[] = [heading(`Comments (${comments.length})`)]
+  for (const comment of recent) {
+    const who = comment.author || 'anonymous'
+    out.push(line(`@${who}: ${shortenLine(comment.body, 80)}`))
+  }
+  if (comments.length > recent.length) {
+    out.push(dim(`… ${comments.length - recent.length} earlier comment(s)`))
+  }
+  return out
+}
+
+function reviewsSection(
+  reviews: ReadonlyArray<{ author?: string; state: string; body: string }>
+): PreviewLine[] {
+  if (reviews.length === 0) return []
+  const out: PreviewLine[] = [heading(`Reviews (${reviews.length})`)]
+  for (const review of reviews) {
+    const who = review.author || 'anonymous'
+    const stateLabel = (review.state || 'commented').toLowerCase().replace(/_/g, ' ')
+    const inlineBody = review.body ? ` — ${shortenLine(review.body, 60)}` : ''
+    out.push(line(`@${who} (${stateLabel})${inlineBody}`))
+  }
+  return out
+}
+
+function statusChecksSection(
+  checks: ReadonlyArray<{ name: string; status?: string; conclusion?: string }>
+): PreviewLine[] {
+  if (checks.length === 0) return []
+  const grouped = {
+    success: 0,
+    failure: 0,
+    pending: 0,
+    other: 0,
+  }
+  for (const check of checks) {
+    const result = check.conclusion?.toLowerCase() ?? check.status?.toLowerCase() ?? ''
+    if (result === 'success') grouped.success++
+    else if (result === 'failure' || result === 'cancelled' || result === 'timed_out')
+      grouped.failure++
+    else if (result === 'pending' || result === 'queued' || result === 'in_progress')
+      grouped.pending++
+    else grouped.other++
+  }
+  const parts: string[] = []
+  if (grouped.success) parts.push(`${grouped.success} pass`)
+  if (grouped.failure) parts.push(`${grouped.failure} fail`)
+  if (grouped.pending) parts.push(`${grouped.pending} pending`)
+  if (grouped.other) parts.push(`${grouped.other} other`)
+  return [
+    heading(`Checks (${checks.length})`),
+    line(parts.join(' · ')),
+  ]
+}
+
 /* -------------------------------- issue -------------------------------- */
 
 /**
- * Format an issue triage entry into preview lines (#882 phase 3).
- * Returns a uniform "select to preview" message when nothing is
- * cursored; otherwise renders #/state/author/labels/assignees, a
- * timestamp pair, and a short body excerpt clipped at 6 lines.
- *
- * The list payload from `gh issue list --json` doesn't include body
- * text — that's a deliberate scope cut in phase 1 to keep the list
- * fetch cheap. The preview pane therefore omits the body section
- * entirely; phase 4 will introduce a per-issue fetch that hydrates
- * the body on demand when the cursor rests.
+ * Format an issue triage entry into preview lines (#882 phase 3,
+ * body + comments added in the inspector-hydration follow-up).
+ * The list payload from `gh issue list --json` carries metadata
+ * only; the optional `detail` argument is filled by the runtime's
+ * debounced hydration effect when the cursor rests on a row, and
+ * unlocks the body / comments sections.
  */
 export function formatIssueTriagePreview(
-  issue: IssueListItem | undefined
+  issue: IssueListItem | undefined,
+  detail?: IssueDetail
 ): PreviewLine[] {
   if (!issue) {
     return [dim('Select an issue to preview.')]
@@ -173,20 +266,41 @@ export function formatIssueTriagePreview(
   out.push(blank())
   out.push(dim(issue.url))
 
+  // Hydrated sections (body + recent comments). Inserted only when
+  // the runtime has finished the per-cursor-rest detail fetch and
+  // populated the cache.
+  if (detail) {
+    const body = bodyExcerptLines(detail.body, 6)
+    if (body.length > 0) {
+      out.push(blank())
+      out.push(...body)
+    }
+    const comments = commentsSection(detail.comments, 3)
+    if (comments.length > 0) {
+      out.push(blank())
+      out.push(...comments)
+    }
+  } else if (typeof issue.comments === 'number' && issue.comments > 0) {
+    // Pre-hydration affordance — tell the user the body / comments
+    // section is coming, so a 250ms wait doesn't look like a bug.
+    out.push(blank())
+    out.push(dim('Loading body + comments…'))
+  }
+
   return out
 }
 
 /* ----------------------------- pull request ---------------------------- */
 
 /**
- * Format a pull-request triage entry into preview lines (#882 phase 3).
- * Renders #/state/author/branches/labels/mergeable/review-decision and
- * a timestamp pair. Like the issue preview, the body is not included
- * — list payloads from `gh pr list --json` don't carry bodies; phase 4
- * will hydrate one per cursor rest.
+ * Format a pull-request triage entry into preview lines (#882 phase 3,
+ * body / comments / reviews / checks added in the inspector-hydration
+ * follow-up). Optional `detail` argument is filled by the runtime's
+ * debounced hydration effect when the cursor rests on a row.
  */
 export function formatPullRequestTriagePreview(
-  pr: PullRequestListItem | undefined
+  pr: PullRequestListItem | undefined,
+  detail?: PullRequestDetail
 ): PreviewLine[] {
   if (!pr) {
     return [dim('Select a pull request to preview.')]
@@ -217,6 +331,37 @@ export function formatPullRequestTriagePreview(
   if (pr.updatedAt) out.push(line(`Updated:   ${pr.updatedAt}`))
   out.push(blank())
   out.push(dim(pr.url))
+
+  // Hydrated sections — body, status checks, reviews, comments.
+  // Status checks come BEFORE reviews because failing CI is usually
+  // what a triager wants to see first; reviews come second because
+  // they're the human-judgment layer on top.
+  if (detail) {
+    const body = bodyExcerptLines(detail.body, 6)
+    if (body.length > 0) {
+      out.push(blank())
+      out.push(...body)
+    }
+    const checks = statusChecksSection(detail.statusCheckRollup)
+    if (checks.length > 0) {
+      out.push(blank())
+      out.push(...checks)
+    }
+    const reviews = reviewsSection(detail.reviews)
+    if (reviews.length > 0) {
+      out.push(blank())
+      out.push(...reviews)
+    }
+    const comments = commentsSection(detail.comments, 3)
+    if (comments.length > 0) {
+      out.push(blank())
+      out.push(...comments)
+    }
+  } else {
+    // Pre-hydration affordance — same as the issue preview.
+    out.push(blank())
+    out.push(dim('Loading body + reviews + comments…'))
+  }
 
   return out
 }

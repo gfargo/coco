@@ -139,3 +139,146 @@ describe('formatPullRequestTriagePreview', () => {
     expect(lines.some((l) => l.includes('CHANGES_REQUESTED'))).toBe(false)
   })
 })
+
+describe('hydrated triage preview sections (inspector hydration follow-up)', () => {
+  const issue = {
+    number: 882,
+    title: 't',
+    url: 'u',
+    state: 'OPEN',
+    createdAt: '',
+    updatedAt: '',
+    comments: 2,
+  }
+
+  it('issue preview shows "Loading…" hint when no detail is cached AND comments > 0', () => {
+    const lines = formatIssueTriagePreview(issue).map(stripLine)
+    expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(true)
+  })
+
+  it('issue preview omits the loading hint when there are zero comments', () => {
+    const lines = formatIssueTriagePreview({ ...issue, comments: 0 }).map(stripLine)
+    expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(false)
+  })
+
+  it('issue preview renders body excerpt + comments when detail is provided', () => {
+    const detail = {
+      number: 882,
+      body: 'First line.\n\nSecond paragraph.\nThird line.',
+      comments: [
+        { author: 'reviewer-a', body: 'taking a look', createdAt: '2026-05-15T00:00:00Z' },
+        { author: 'reviewer-b', body: 'lgtm', createdAt: '2026-05-15T01:00:00Z' },
+      ],
+    }
+    const lines = formatIssueTriagePreview(issue, detail).map(stripLine)
+
+    expect(lines).toContain('Body')
+    expect(lines).toContain('First line.')
+    expect(lines.some((l) => l.startsWith('Comments ('))).toBe(true)
+    expect(lines.some((l) => l.includes('@reviewer-a'))).toBe(true)
+    expect(lines.some((l) => l.includes('@reviewer-b'))).toBe(true)
+    // Loading hint disappears once detail lands.
+    expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(false)
+  })
+
+  it('issue preview shows a truncation trailer when the body exceeds the maxLines cap', () => {
+    const bigBody = Array.from({ length: 12 }, (_, i) => `line ${i}`).join('\n')
+    const detail = { number: 1, body: bigBody, comments: [] }
+    const lines = formatIssueTriagePreview(
+      { ...issue, comments: 0 },
+      detail
+    ).map(stripLine)
+
+    expect(lines.some((l) => l.includes('more line'))).toBe(true)
+  })
+
+  const pr = {
+    number: 962,
+    title: 't',
+    url: 'u',
+    state: 'OPEN',
+    isDraft: false,
+    headRefName: 'h',
+    baseRefName: 'm',
+    createdAt: '',
+    updatedAt: '',
+  }
+
+  it('PR preview shows a loading hint pre-hydration', () => {
+    const lines = formatPullRequestTriagePreview(pr).map(stripLine)
+    expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(true)
+  })
+
+  it('PR preview renders body + checks + reviews + comments when detail is provided', () => {
+    const detail = {
+      number: 962,
+      body: 'Fixes the dedupe rescue gap.',
+      comments: [
+        { author: 'commenter', body: 'thanks', createdAt: '2026-05-15T00:00:00Z' },
+      ],
+      reviews: [
+        { author: 'reviewer-a', state: 'APPROVED', body: 'lgtm', submittedAt: '2026-05-15T00:00:00Z' },
+        { author: 'reviewer-b', state: 'CHANGES_REQUESTED', body: 'fix x', submittedAt: '2026-05-15T00:00:00Z' },
+      ],
+      statusCheckRollup: [
+        { name: 'lint', status: 'COMPLETED', conclusion: 'SUCCESS' },
+        { name: 'test', status: 'COMPLETED', conclusion: 'FAILURE' },
+      ],
+    }
+    const lines = formatPullRequestTriagePreview(pr, detail).map(stripLine)
+
+    expect(lines).toContain('Body')
+    expect(lines).toContain('Fixes the dedupe rescue gap.')
+
+    expect(lines.some((l) => l.startsWith('Checks ('))).toBe(true)
+    expect(lines.some((l) => l.includes('1 pass'))).toBe(true)
+    expect(lines.some((l) => l.includes('1 fail'))).toBe(true)
+
+    expect(lines.some((l) => l.startsWith('Reviews ('))).toBe(true)
+    expect(lines.some((l) => l.includes('@reviewer-a (approved)'))).toBe(true)
+    expect(lines.some((l) => l.includes('@reviewer-b (changes requested)'))).toBe(true)
+
+    expect(lines.some((l) => l.startsWith('Comments ('))).toBe(true)
+    expect(lines.some((l) => l.includes('@commenter'))).toBe(true)
+  })
+
+  it('PR preview omits empty hydrated sections', () => {
+    const detail = {
+      number: 962,
+      body: '',
+      comments: [],
+      reviews: [],
+      statusCheckRollup: [],
+    }
+    const lines = formatPullRequestTriagePreview(pr, detail).map(stripLine)
+
+    expect(lines).not.toContain('Body')
+    expect(lines.some((l) => l.startsWith('Comments ('))).toBe(false)
+    expect(lines.some((l) => l.startsWith('Reviews ('))).toBe(false)
+    expect(lines.some((l) => l.startsWith('Checks ('))).toBe(false)
+  })
+
+  it('comments section truncates to the most recent N + summarizes the rest', () => {
+    const detail = {
+      number: 1,
+      body: '',
+      comments: Array.from({ length: 7 }, (_, i) => ({
+        author: `reviewer-${i}`,
+        body: `comment ${i}`,
+        createdAt: '',
+      })),
+    }
+    const lines = formatIssueTriagePreview(
+      { ...issue, comments: 7 },
+      detail
+    ).map(stripLine)
+
+    // Last 3 visible.
+    expect(lines.some((l) => l.includes('@reviewer-6'))).toBe(true)
+    expect(lines.some((l) => l.includes('@reviewer-5'))).toBe(true)
+    expect(lines.some((l) => l.includes('@reviewer-4'))).toBe(true)
+    // Older ones summarized.
+    expect(lines.some((l) => l.includes('earlier comment'))).toBe(true)
+    expect(lines.some((l) => l.includes('@reviewer-0'))).toBe(false)
+  })
+})

@@ -867,8 +867,11 @@ export function renderIssueTriagePreviewPanel(
     : all
   const index = Math.max(0, Math.min(state.selectedIssueIndex, Math.max(0, visible.length - 1)))
   const issue = visible[index]
+  const detail = issue
+    ? context.issueDetailByNumber?.get(issue.number)
+    : undefined
   return renderPreviewPanel(h, { Box, Text }, 'Issue preview',
-    formatIssueTriagePreview(issue), width, theme, focused)
+    formatIssueTriagePreview(issue, detail), width, theme, focused)
 }
 
 /**
@@ -910,6 +913,9 @@ export function renderPullRequestTriagePreviewPanel(
     : all
   const index = Math.max(0, Math.min(state.selectedPullRequestTriageIndex, Math.max(0, visible.length - 1)))
   const pr = visible[index]
+  const detail = pr
+    ? context.pullRequestDetailByNumber?.get(pr.number)
+    : undefined
   return renderPreviewPanel(h, { Box, Text }, 'Pull request preview',
-    formatPullRequestTriagePreview(pr), width, theme, focused)
+    formatPullRequestTriagePreview(pr, detail), width, theme, focused)
 }

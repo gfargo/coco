@@ -251,6 +251,7 @@ import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } f
 import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
+import { getIssueDetail } from '../../git/issueDetailData'
 import { getIssueList } from '../../git/issuesListData'
 import {
   addIssueAssignee,
@@ -259,6 +260,7 @@ import {
   commentIssue,
   reopenIssue,
 } from '../../git/issueActions'
+import { getPullRequestDetail } from '../../git/pullRequestDetailData'
 import { getPullRequestOverview } from '../../git/pullRequestData'
 import { getPullRequestList } from '../../git/pullRequestListData'
 import { clearGitHubListCache } from '../../git/githubListCache'
@@ -1177,6 +1179,89 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     )
     setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'))
   }, [state.selectedPullRequestFilter])
+
+  // Per-item inspector hydration (#882 follow-up to phase 6). When
+  // the user rests the cursor on an issue / PR row for ~250ms, fetch
+  // the body + comments (+ reviews + status checks for PRs) and
+  // cache the result keyed by number. Cursoring back to a previously-
+  // fetched item shows the cached entry instantly; rapid j/k
+  // navigation never fires a `gh` call because the debounce timer
+  // resets on every cursor move.
+  //
+  // The cache lives on `context.{issueDetailByNumber,
+  // pullRequestDetailByNumber}` so it survives the per-keystroke
+  // re-renders. It's intentionally Maps — `new Map(prev).set(k, v)`
+  // keeps the immutable update story simple, and entries persist
+  // until either the list is invalidated (post-mutation) or the
+  // process exits.
+  const DETAIL_HYDRATION_DELAY_MS = 250
+
+  React.useEffect(() => {
+    if (state.activeView !== 'issues') return
+    const cursored = filteredIssueList[
+      Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+    ]
+    if (!cursored) return
+    if (context.issueDetailByNumber?.has(cursored.number)) return
+
+    let active = true
+    const timer = setTimeout(async () => {
+      const result = await getIssueDetail(cursored.number)
+      if (!active || !result.ok) return
+      setContext((current) => ({
+        ...current,
+        issueDetailByNumber: new Map(current.issueDetailByNumber || []).set(
+          result.detail.number,
+          result.detail
+        ),
+      }))
+    }, DETAIL_HYDRATION_DELAY_MS)
+
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [
+    state.activeView,
+    state.selectedIssueIndex,
+    filteredIssueList,
+    context.issueDetailByNumber,
+  ])
+
+  React.useEffect(() => {
+    if (state.activeView !== 'pull-request-triage') return
+    const cursored = filteredPullRequestTriageList[
+      Math.min(
+        state.selectedPullRequestTriageIndex,
+        Math.max(0, filteredPullRequestTriageList.length - 1)
+      )
+    ]
+    if (!cursored) return
+    if (context.pullRequestDetailByNumber?.has(cursored.number)) return
+
+    let active = true
+    const timer = setTimeout(async () => {
+      const result = await getPullRequestDetail(cursored.number)
+      if (!active || !result.ok) return
+      setContext((current) => ({
+        ...current,
+        pullRequestDetailByNumber: new Map(current.pullRequestDetailByNumber || []).set(
+          result.detail.number,
+          result.detail
+        ),
+      }))
+    }, DETAIL_HYDRATION_DELAY_MS)
+
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [
+    state.activeView,
+    state.selectedPullRequestTriageIndex,
+    filteredPullRequestTriageList,
+    context.pullRequestDetailByNumber,
+  ])
 
   React.useEffect(() => {
     let active = true
@@ -2188,13 +2273,40 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     //      5-minute TTL window. Sledgehammer rather than scalpel —
     //      clearing per (repo, filter) tuple would require more
     //      bookkeeping than the cache is worth.
-    const invalidateIssueListCaches = (): void => {
-      setContext((current) => ({ ...current, issueList: undefined }))
+    const invalidateIssueListCaches = (issueNumber?: number): void => {
+      setContext((current) => {
+        const next = { ...current, issueList: undefined }
+        // Drop only the mutated issue's detail entry so other
+        // hydrated entries survive — they're still accurate. When
+        // no number is given (rare), wipe the whole detail map.
+        if (current.issueDetailByNumber) {
+          if (typeof issueNumber === 'number') {
+            const trimmed = new Map(current.issueDetailByNumber)
+            trimmed.delete(issueNumber)
+            next.issueDetailByNumber = trimmed
+          } else {
+            next.issueDetailByNumber = undefined
+          }
+        }
+        return next
+      })
       setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'idle'))
       clearGitHubListCache()
     }
-    const invalidatePullRequestListCaches = (): void => {
-      setContext((current) => ({ ...current, pullRequestList: undefined }))
+    const invalidatePullRequestListCaches = (pullRequestNumber?: number): void => {
+      setContext((current) => {
+        const next = { ...current, pullRequestList: undefined }
+        if (current.pullRequestDetailByNumber) {
+          if (typeof pullRequestNumber === 'number') {
+            const trimmed = new Map(current.pullRequestDetailByNumber)
+            trimmed.delete(pullRequestNumber)
+            next.pullRequestDetailByNumber = trimmed
+          } else {
+            next.pullRequestDetailByNumber = undefined
+          }
+        }
+        return next
+      })
       setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'))
       clearGitHubListCache()
     }
@@ -2700,7 +2812,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await commentIssue(issue.number, body)
-        if (result.ok) invalidateIssueListCaches()
+        if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
       'triage-issue-label': async () => {
@@ -2711,7 +2823,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await addIssueLabel(issue.number, label)
-        if (result.ok) invalidateIssueListCaches()
+        if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
       'triage-issue-assign': async () => {
@@ -2722,7 +2834,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await addIssueAssignee(issue.number, assignee)
-        if (result.ok) invalidateIssueListCaches()
+        if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
       'triage-pr-open': async () => {
@@ -2745,7 +2857,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await commentPullRequestByNumber(pr.number, body)
-        if (result.ok) invalidatePullRequestListCaches()
+        if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       'triage-pr-label': async () => {
@@ -2756,7 +2868,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await addPullRequestLabel(pr.number, label)
-        if (result.ok) invalidatePullRequestListCaches()
+        if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       'triage-pr-assign': async () => {
@@ -2767,7 +2879,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await addPullRequestAssignee(pr.number, assignee)
-        if (result.ok) invalidatePullRequestListCaches()
+        if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       // #882 phase 5 — destructive triage mutations. Each is gated
@@ -2782,7 +2894,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await closeIssue(issue.number)
-        if (result.ok) invalidateIssueListCaches()
+        if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
       'triage-issue-reopen': async () => {
@@ -2791,7 +2903,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await reopenIssue(issue.number)
-        if (result.ok) invalidateIssueListCaches()
+        if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
       'triage-pr-merge': async () => {
@@ -2807,7 +2919,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await mergePullRequestByNumber(pr.number, strategy)
-        if (result.ok) invalidatePullRequestListCaches()
+        if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       'triage-pr-close': async () => {
@@ -2816,7 +2928,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await closePullRequestByNumber(pr.number)
-        if (result.ok) invalidatePullRequestListCaches()
+        if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       'triage-pr-approve': async () => {
@@ -2825,7 +2937,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await approvePullRequestByNumber(pr.number)
-        if (result.ok) invalidatePullRequestListCaches()
+        if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       'triage-pr-request-changes': async () => {
@@ -2836,7 +2948,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await requestChangesPullRequestByNumber(pr.number, body)
-        if (result.ok) invalidatePullRequestListCaches()
+        if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       // Status surface group-level batch ops (#791 follow-up). The
