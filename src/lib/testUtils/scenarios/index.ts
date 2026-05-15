@@ -18,6 +18,7 @@ import { featurePrReadyScenario } from './feature-pr-ready'
 import { midBisectScenario } from './mid-bisect'
 import { midMergeConflictScenario } from './mid-merge-conflict'
 import { multiCommitBranchScenario } from './multi-commit-branch'
+import { richHistoryGraphScenario } from './rich-history-graph'
 import { singleStagedFileScenario } from './single-staged-file'
 import { stashedChangesScenario } from './stashed-changes'
 import { twoCommitFeatureScenario } from './two-commit-feature'
@@ -39,6 +40,8 @@ export const allScenarios: readonly Scenario[] = [
   // in-progress operations
   midBisectScenario,
   midMergeConflictScenario,
+  // history shapes
+  richHistoryGraphScenario,
   // stash shapes
   stashedChangesScenario,
 ]
@@ -59,6 +62,7 @@ export { featurePrReadyScenario } from './feature-pr-ready'
 export { midBisectScenario } from './mid-bisect'
 export { midMergeConflictScenario } from './mid-merge-conflict'
 export { multiCommitBranchScenario } from './multi-commit-branch'
+export { richHistoryGraphScenario } from './rich-history-graph'
 export { singleStagedFileScenario } from './single-staged-file'
 export { stashedChangesScenario } from './stashed-changes'
 export { twoCommitFeatureScenario } from './two-commit-feature'

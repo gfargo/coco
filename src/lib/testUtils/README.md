@@ -79,7 +79,7 @@ The CLI driver lives at `bin/scenario.ts` and is wired via the
 
 ## Available scenarios
 
-Run `npm run scenario list` for the live list. Current set (9 scenarios across 4 kinds):
+Run `npm run scenario list` for the live list. Current set (10 scenarios across 5 kinds):
 
 | Name | Kind | What you get |
 |---|---|---|
@@ -91,6 +91,7 @@ Run `npm run scenario list` for the live list. Current set (9 scenarios across 4
 | `dirty-many-files` | worktree | 12 staged + 6 unstaged + 3 untracked files across `src/`, `tests/`, `docs/` — for the future split flow |
 | `mid-bisect` | operation | 20 commits + active `git bisect`, HEAD at midpoint — for the bisect view |
 | `mid-merge-conflict` | operation | in-progress merge with 1 unresolved conflict on `src/widget.ts` — for the conflicts view |
+| `rich-history-graph` | history | 20+ commits across 6 date buckets, 2 `--no-ff` merges, 1 live unmerged `feat/wip` — for compact + full-graph rendering (bucket dividers, type coloring, branch chips, lane topology) |
 | `stashed-changes` | stash | clean `main` + 3 stashes (LIFO ordered, each touching a distinct file) — for the stash view |
 
 `npm run scenario describe <name>` prints the full description and
