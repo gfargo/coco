@@ -252,7 +252,13 @@ import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
 import { getIssueList } from '../../git/issuesListData'
-import { addIssueAssignee, addIssueLabel, commentIssue } from '../../git/issueActions'
+import {
+  addIssueAssignee,
+  addIssueLabel,
+  closeIssue,
+  commentIssue,
+  reopenIssue,
+} from '../../git/issueActions'
 import { getPullRequestOverview } from '../../git/pullRequestData'
 import { getPullRequestList } from '../../git/pullRequestListData'
 import { clearGitHubListCache } from '../../git/githubListCache'
@@ -260,13 +266,17 @@ import {
     addPullRequestAssignee,
     addPullRequestLabel,
     approvePullRequest,
+    approvePullRequestByNumber,
     closePullRequest,
+    closePullRequestByNumber,
     commentPullRequest,
     commentPullRequestByNumber,
     createPullRequest,
     isPullRequestMergeStrategy,
     mergePullRequest,
+    mergePullRequestByNumber,
     requestChangesPullRequest,
+    requestChangesPullRequestByNumber,
 } from '../../git/pullRequestActions'
 import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import {
@@ -2728,6 +2738,75 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await addPullRequestAssignee(pr.number, assignee)
+        if (result.ok) invalidatePullRequestListCaches()
+        return result
+      },
+      // #882 phase 5 — destructive triage mutations. Each is gated
+      // through the y-confirm path so the user sees a prompt before
+      // anything ships. The runner reads the cursored item from the
+      // filtered list at confirm-time; the cursor can't move while
+      // the confirmation overlay is up so there's no stale-target
+      // window. Cache invalidation matches the phase-4 pattern.
+      'triage-issue-close': async () => {
+        const issue = filteredIssueList[
+          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+        ]
+        if (!issue) return { ok: false, message: 'No issue under cursor' }
+        const result = await closeIssue(issue.number)
+        if (result.ok) invalidateIssueListCaches()
+        return result
+      },
+      'triage-issue-reopen': async () => {
+        const issue = filteredIssueList[
+          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+        ]
+        if (!issue) return { ok: false, message: 'No issue under cursor' }
+        const result = await reopenIssue(issue.number)
+        if (result.ok) invalidateIssueListCaches()
+        return result
+      },
+      'triage-pr-merge': async () => {
+        const strategy = payload?.trim()
+        if (!strategy || !isPullRequestMergeStrategy(strategy)) {
+          return {
+            ok: false,
+            message: `Unknown merge strategy: ${strategy}. Use merge, squash, or rebase.`,
+          }
+        }
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        const result = await mergePullRequestByNumber(pr.number, strategy)
+        if (result.ok) invalidatePullRequestListCaches()
+        return result
+      },
+      'triage-pr-close': async () => {
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        const result = await closePullRequestByNumber(pr.number)
+        if (result.ok) invalidatePullRequestListCaches()
+        return result
+      },
+      'triage-pr-approve': async () => {
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        const result = await approvePullRequestByNumber(pr.number)
+        if (result.ok) invalidatePullRequestListCaches()
+        return result
+      },
+      'triage-pr-request-changes': async () => {
+        const body = payload?.trim()
+        if (!body) return { ok: false, message: 'Review body required for change-request' }
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        const result = await requestChangesPullRequestByNumber(pr.number, body)
         if (result.ok) invalidatePullRequestListCaches()
         return result
       },

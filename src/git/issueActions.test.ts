@@ -1,4 +1,10 @@
-import { addIssueAssignee, addIssueLabel, commentIssue } from './issueActions'
+import {
+  addIssueAssignee,
+  addIssueLabel,
+  closeIssue,
+  commentIssue,
+  reopenIssue,
+} from './issueActions'
 
 describe('issueActions', () => {
   describe('commentIssue', () => {
@@ -75,6 +81,46 @@ describe('issueActions', () => {
         message: 'Assigned @me to issue #882',
       })
       expect(runner).toHaveBeenCalledWith(['issue', 'edit', '882', '--add-assignee', '@me'])
+    })
+  })
+})
+
+describe('destructive issue actions (#882 phase 5)', () => {
+  describe('closeIssue', () => {
+    it('invokes `gh issue close <#>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(closeIssue(882, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Closed issue #882',
+      })
+      expect(runner).toHaveBeenCalledWith(['issue', 'close', '882'])
+    })
+
+    it('preserves trimmed gh stdout as the success message', async () => {
+      const runner = jest.fn().mockResolvedValue('Closed via TUI\n')
+      await expect(closeIssue(1, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Closed via TUI',
+      })
+    })
+
+    it('surfaces gh errors as ok: false', async () => {
+      const runner = jest.fn().mockRejectedValue(new Error('already closed'))
+      await expect(closeIssue(1, runner)).resolves.toEqual({
+        ok: false,
+        message: 'already closed',
+      })
+    })
+  })
+
+  describe('reopenIssue', () => {
+    it('invokes `gh issue reopen <#>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(reopenIssue(882, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Reopened issue #882',
+      })
+      expect(runner).toHaveBeenCalledWith(['issue', 'reopen', '882'])
     })
   })
 })

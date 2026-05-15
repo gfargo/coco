@@ -86,3 +86,37 @@ export function addIssueAssignee(
     })
   )
 }
+
+/**
+ * Destructive issue verbs (#882 phase 5). Both routed through the
+ * y-confirm path in the workstation; the action functions themselves
+ * make no extra guarantee — every gh-side error surfaces via the
+ * standard `runGhAction` error wrapper.
+ */
+export function closeIssue(
+  issueNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<IssueActionResult> {
+  return runGhAction(
+    runner,
+    ['issue', 'close', String(issueNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Closed issue #${issueNumber}`,
+    })
+  )
+}
+
+export function reopenIssue(
+  issueNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<IssueActionResult> {
+  return runGhAction(
+    runner,
+    ['issue', 'reopen', String(issueNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Reopened issue #${issueNumber}`,
+    })
+  )
+}

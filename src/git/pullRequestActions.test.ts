@@ -2,16 +2,20 @@ import {
   addPullRequestAssignee,
   addPullRequestLabel,
   approvePullRequest,
+  approvePullRequestByNumber,
   buildCreatePullRequestArgs,
   buildMergePullRequestArgs,
   closePullRequest,
+  closePullRequestByNumber,
   commentPullRequest,
   commentPullRequestByNumber,
   createPullRequest,
   isPullRequestMergeStrategy,
   mergePullRequest,
+  mergePullRequestByNumber,
   openPullRequest,
   requestChangesPullRequest,
+  requestChangesPullRequestByNumber,
 } from './pullRequestActions'
 
 describe('log pull request actions', () => {
@@ -224,6 +228,79 @@ describe('triage-by-number PR actions (#882 phase 4)', () => {
         ok: false,
         message: 'no such user',
       })
+    })
+  })
+})
+
+describe('destructive PR by-number actions (#882 phase 5)', () => {
+  describe('mergePullRequestByNumber', () => {
+    it('builds `gh pr merge <#> --<strategy>` for each strategy', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+
+      await expect(mergePullRequestByNumber(962, 'merge', runner)).resolves.toEqual({
+        ok: true,
+        message: 'Merged pull request #962 with merge',
+      })
+      expect(runner).toHaveBeenLastCalledWith(['pr', 'merge', '962', '--merge'])
+
+      await mergePullRequestByNumber(962, 'squash', runner)
+      expect(runner).toHaveBeenLastCalledWith(['pr', 'merge', '962', '--squash'])
+
+      await mergePullRequestByNumber(962, 'rebase', runner)
+      expect(runner).toHaveBeenLastCalledWith(['pr', 'merge', '962', '--rebase'])
+    })
+
+    it('preserves trimmed gh stdout as the success message', async () => {
+      const runner = jest.fn().mockResolvedValue('Merged pull request #962 (squash)\n')
+      await expect(mergePullRequestByNumber(962, 'squash', runner)).resolves.toEqual({
+        ok: true,
+        message: 'Merged pull request #962 (squash)',
+      })
+    })
+  })
+
+  describe('closePullRequestByNumber', () => {
+    it('invokes `gh pr close <#>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(closePullRequestByNumber(962, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Closed pull request #962',
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'close', '962'])
+    })
+  })
+
+  describe('approvePullRequestByNumber', () => {
+    it('invokes `gh pr review <#> --approve`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(approvePullRequestByNumber(962, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Approved pull request #962',
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'review', '962', '--approve'])
+    })
+  })
+
+  describe('requestChangesPullRequestByNumber', () => {
+    it('rejects empty bodies without invoking gh', async () => {
+      const runner = jest.fn()
+      await expect(requestChangesPullRequestByNumber(962, '   ', runner)).resolves.toEqual({
+        ok: false,
+        message: 'Review body required for change-request',
+      })
+      expect(runner).not.toHaveBeenCalled()
+    })
+
+    it('invokes `gh pr review <#> --request-changes --body <body>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      const result = await requestChangesPullRequestByNumber(962, 'please address X', runner)
+      expect(result).toEqual({
+        ok: true,
+        message: 'Requested changes on pull request #962',
+      })
+      expect(runner).toHaveBeenCalledWith([
+        'pr', 'review', '962', '--request-changes', '--body', 'please address X',
+      ])
     })
   })
 })

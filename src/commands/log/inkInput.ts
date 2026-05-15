@@ -779,6 +779,30 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       action({ type: 'closeInputPrompt' }),
     ]
   }
+  // #882 phase 5 — destructive prompt submissions route through the
+  // y-confirm path (not directly to runWorkflowAction) so the user
+  // gets a final "are you sure?" before anything ships. The
+  // collected value (strategy / body) rides along as the
+  // confirmation payload.
+  if (state.inputPrompt.kind === 'triage-pr-merge-strategy') {
+    const strategy = value.toLowerCase()
+    if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
+      return [action({
+        type: 'setStatus',
+        value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
+      })]
+    }
+    return [
+      action({ type: 'setPendingConfirmation', value: 'triage-pr-merge', payload: strategy }),
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'triage-pr-request-changes') {
+    return [
+      action({ type: 'setPendingConfirmation', value: 'triage-pr-request-changes', payload: value }),
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
   if (state.inputPrompt.kind === 'pr-request-changes') {
     return [
       action({ type: 'setPendingConfirmation', value: 'request-changes-pr', payload: value }),
@@ -2397,6 +2421,15 @@ export function getLogInkInputEvents(
         initial: '@me',
       })]
     }
+    // #882 phase 5 — destructive issue mutations. Both gated through
+    // the y-confirm path. `x` closes (matches `pull-request` view's
+    // close binding); `X` reopens, useful to undo a stray close.
+    if (inputValue === 'x' && context.issueCount) {
+      return [action({ type: 'setPendingConfirmation', value: 'triage-issue-close' })]
+    }
+    if (inputValue === 'X' && context.issueCount) {
+      return [action({ type: 'setPendingConfirmation', value: 'triage-issue-reopen' })]
+    }
   }
 
   // #882 phase 4 — PR triage per-row actions. Same shape as the
@@ -2427,6 +2460,32 @@ export function getLogInkInputEvents(
         kind: 'triage-pr-assign',
         label: 'Assignee login (or @me)',
         initial: '@me',
+      })]
+    }
+    // #882 phase 5 — destructive PR mutations on the triage view.
+    // Mirror the single-PR action panel's keys (m / x / a / R) but
+    // route to the by-number workflows. `m` and `R` open input
+    // prompts first; submit lands the strategy / body as the
+    // confirmation payload, which the runner picks up after y.
+    if (inputValue === 'm' && context.pullRequestTriageCount) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'triage-pr-merge-strategy',
+        label: 'Merge strategy (merge / squash / rebase)',
+      })]
+    }
+    if (inputValue === 'x' && context.pullRequestTriageCount) {
+      return [action({ type: 'setPendingConfirmation', value: 'triage-pr-close' })]
+    }
+    if (inputValue === 'a' && context.pullRequestTriageCount) {
+      return [action({ type: 'setPendingConfirmation', value: 'triage-pr-approve' })]
+    }
+    if (inputValue === 'R' && context.pullRequestTriageCount) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'triage-pr-request-changes',
+        label: 'Request changes — review body (Enter newline · Ctrl+D submit)',
+        multiline: true,
       })]
     }
   }
