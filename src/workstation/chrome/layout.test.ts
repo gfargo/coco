@@ -27,7 +27,9 @@ describe('log Ink layout', () => {
 
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(35)
-    expect(layout.sidebarWidth).toBe(28)
+    // 120 cols sits in the `normal` tier, where the sidebar uses
+    // 22% × cols clamped to 22-30: 0.22 × 120 = 26.4 → floor 26.
+    expect(layout.sidebarWidth).toBe(26)
     // 120 * 0.22 = 26.4 → floor 26
     expect(layout.detailWidth).toBe(26)
   })
@@ -37,7 +39,11 @@ describe('log Ink layout', () => {
 
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(55)
-    expect(layout.sidebarWidth).toBe(34)
+    // 200 cols is `wide`, where the sidebar uses 24% × cols clamped
+    // to 28-48: 0.24 × 200 = 48 — exactly the cap, so the sidebar
+    // grows naturally with the terminal rather than getting pinned
+    // at a 34-cell ceiling like before.
+    expect(layout.sidebarWidth).toBe(48)
     // 200 * 0.22 = 44 → clamped down to the 32-cell maximum
     expect(layout.detailWidth).toBe(32)
   })
@@ -215,6 +221,118 @@ describe('log Ink layout', () => {
       // defeat that purpose. 60-cell minimum kicks in here.
       expect(railedHelp.detailWidth).toBe(60)
       expect(railedHelp.inspectorRailed).toBe(false)
+    })
+  })
+
+  // The at-rest sidebar width is tier-aware: tight stays compact,
+  // normal shrinks slightly (was clamping at 34 across the whole
+  // ~24% formula), and wide grows naturally up to 48 instead of
+  // pinning at 34. Locks in the exact widths each tier produces at
+  // its representative breakpoints so a future tweak to the
+  // SIDEBAR_AT_REST_BY_TIER table doesn't quietly regress the spread.
+  describe('tier-aware sidebar at-rest width', () => {
+    // [columns, expectedSidebar, expectedDensity]. Formula reference,
+    // kept here as a comment rather than per-row to satisfy lint:
+    //
+    //   tight  → `clamp(22, 28, 0.24 × cols)`
+    //     100 → 24       (0.24 × 100 = 24)
+    //     110 → 26       (0.24 × 110 = 26.4 → 26)
+    //     119 → 28       (0.24 × 119 = 28.56 → 28 cap)
+    //
+    //   normal → `clamp(22, 30, 0.22 × cols)`
+    //     120 → 26       (0.22 × 120 = 26.4 → 26)
+    //     130 → 28       (0.22 × 130 = 28.6 → 28)
+    //     140 → 30       (0.22 × 140 = 30.8 → 30 cap)
+    //     150 → 30       (0.22 × 150 = 33 → 30 cap)
+    //     159 → 30       (0.22 × 159 = 34.98 → 30 cap)
+    //
+    //   wide   → `clamp(28, 48, 0.24 × cols)`
+    //     160 → 38       (0.24 × 160 = 38.4 → 38)
+    //     180 → 43       (0.24 × 180 = 43.2 → 43)
+    //     200 → 48       (0.24 × 200 = 48 — exactly the cap)
+    //     250 → 48       (0.24 × 250 = 60 → 48 cap)
+    //     400 → 48       (0.24 × 400 = 96 → 48 cap)
+    it.each([
+      [100, 24, 'tight'],
+      [110, 26, 'tight'],
+      [119, 28, 'tight'],
+    ] as const)(
+      'tight tier %i cols → sidebar %i',
+      (columns, expected, density) => {
+        const layout = getLogInkLayout({ columns, rows: 40 })
+        expect(layout.density).toBe(density)
+        expect(layout.sidebarWidth).toBe(expected)
+      }
+    )
+
+    it.each([
+      [120, 26, 'normal'],
+      [130, 28, 'normal'],
+      [140, 30, 'normal'],
+      [150, 30, 'normal'],
+      [159, 30, 'normal'],
+    ] as const)(
+      'normal tier %i cols → sidebar %i',
+      (columns, expected, density) => {
+        const layout = getLogInkLayout({ columns, rows: 40 })
+        expect(layout.density).toBe(density)
+        expect(layout.sidebarWidth).toBe(expected)
+      }
+    )
+
+    it.each([
+      [160, 38, 'wide'],
+      [180, 43, 'wide'],
+      [200, 48, 'wide'],
+      [250, 48, 'wide'],
+      [400, 48, 'wide'],
+    ] as const)(
+      'wide tier %i cols → sidebar %i',
+      (columns, expected, density) => {
+        const layout = getLogInkLayout({ columns, rows: 40 })
+        expect(layout.density).toBe(density)
+        expect(layout.sidebarWidth).toBe(expected)
+      }
+    )
+
+    it('crosses the 159 → 160 boundary without the sidebar visibly shrinking', () => {
+      // The wide tier raises the floor to 28 (vs normal's 22) so a
+      // user dragging a window from 159 → 160 cols doesn't see the
+      // sidebar lurch downward. Normal ends at 30 (cap), wide starts
+      // at 38 (formula); the boundary feels like growth, not a
+      // discontinuity.
+      const normalEdge = getLogInkLayout({ columns: 159, rows: 40 })
+      const wideEdge = getLogInkLayout({ columns: 160, rows: 40 })
+      expect(normalEdge.sidebarWidth).toBe(30)
+      expect(wideEdge.sidebarWidth).toBe(38)
+      expect(wideEdge.sidebarWidth).toBeGreaterThan(normalEdge.sidebarWidth)
+    })
+
+    it('focused-sidebar width is unaffected by tier — keeps its 32-50 clamp', () => {
+      // Regression guard for the design choice: focus = "user wants
+      // to read the sidebar," which deserves consistent width across
+      // tiers. Don't have the tier-aware at-rest formula bleed into
+      // the focused path.
+      const normalFocused = getLogInkLayout({ columns: 140, rows: 40, sidebarFocused: true })
+      const wideFocused = getLogInkLayout({ columns: 200, rows: 40, sidebarFocused: true })
+
+      // 140 × 0.36 = 50.4 → clamped to 50 (the focused cap)
+      expect(normalFocused.sidebarWidth).toBe(50)
+      // 200 × 0.36 = 72 → clamped to 50
+      expect(wideFocused.sidebarWidth).toBe(50)
+    })
+
+    it('main panel still tiles flush across all tiers', () => {
+      // Belt-and-suspenders: changing sidebar widths must NOT break
+      // the `columns = sidebar + main + detail` invariant. Easy to
+      // get wrong when widening one side; locking it here means a
+      // future bump to the wide-tier cap can't silently push the
+      // main panel below 0.
+      for (const cols of [100, 119, 120, 159, 160, 200, 250]) {
+        const layout = getLogInkLayout({ columns: cols, rows: 40 })
+        expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(cols)
+        expect(layout.mainPanelWidth).toBeGreaterThan(0)
+      }
     })
   })
 })
