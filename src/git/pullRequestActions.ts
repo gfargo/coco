@@ -164,3 +164,66 @@ export function commentPullRequest(
     message: output.trim() || 'Comment added',
   }))
 }
+
+/**
+ * Triage-view variants (#882 phase 4). Same shape as
+ * `commentPullRequest` above but target a specific PR by number,
+ * which is what the multi-PR triage list needs (the cursor isn't
+ * necessarily on the current branch's PR). Kept as siblings rather
+ * than overloads so the single-PR call sites stay untouched and
+ * the API stays readable at the call site (no need to pass
+ * `undefined` to skip the number arg).
+ */
+export function commentPullRequestByNumber(
+  pullRequestNumber: number,
+  body: string,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  if (!body.trim()) {
+    return Promise.resolve({ ok: false, message: 'Comment body required' })
+  }
+  return runGhAction(
+    runner,
+    ['pr', 'comment', String(pullRequestNumber), '--body', body],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Commented on pull request #${pullRequestNumber}`,
+    })
+  )
+}
+
+export function addPullRequestLabel(
+  pullRequestNumber: number,
+  label: string,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  if (!label.trim()) {
+    return Promise.resolve({ ok: false, message: 'Label name required' })
+  }
+  return runGhAction(
+    runner,
+    ['pr', 'edit', String(pullRequestNumber), '--add-label', label],
+    () => ({
+      ok: true,
+      message: `Added label '${label}' to pull request #${pullRequestNumber}`,
+    })
+  )
+}
+
+export function addPullRequestAssignee(
+  pullRequestNumber: number,
+  assignee: string,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  if (!assignee.trim()) {
+    return Promise.resolve({ ok: false, message: 'Assignee login required' })
+  }
+  return runGhAction(
+    runner,
+    ['pr', 'edit', String(pullRequestNumber), '--add-assignee', assignee],
+    () => ({
+      ok: true,
+      message: `Assigned ${assignee} to pull request #${pullRequestNumber}`,
+    })
+  )
+}

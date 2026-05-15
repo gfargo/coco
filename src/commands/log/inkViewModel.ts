@@ -541,6 +541,16 @@ export type LogInkInputPromptKind =
   | 'pr-request-changes'
   | 'create-pr'
   | 'bisect-run-command'
+  // #882 phase 4 — triage-view mutations. Distinct from the
+  // single-PR `pr-comment` / `pr-request-changes` kinds above so
+  // the submit handler routes to the by-number workflows (the
+  // single-PR equivalents target the current branch's PR).
+  | 'triage-issue-comment'
+  | 'triage-issue-label'
+  | 'triage-issue-assign'
+  | 'triage-pr-comment'
+  | 'triage-pr-label'
+  | 'triage-pr-assign'
 
 export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind

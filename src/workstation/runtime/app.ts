@@ -241,6 +241,7 @@ import {
     createBranchFromCommit,
     createTagAtCommit,
     defaultClipboardRunner,
+    defaultOpenUrlRunner,
     isResetMode,
     resetToCommit,
     revertCommit,
@@ -251,12 +252,17 @@ import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
 import { getIssueList } from '../../git/issuesListData'
+import { addIssueAssignee, addIssueLabel, commentIssue } from '../../git/issueActions'
 import { getPullRequestOverview } from '../../git/pullRequestData'
 import { getPullRequestList } from '../../git/pullRequestListData'
+import { clearGitHubListCache } from '../../git/githubListCache'
 import {
+    addPullRequestAssignee,
+    addPullRequestLabel,
     approvePullRequest,
     closePullRequest,
     commentPullRequest,
+    commentPullRequestByNumber,
     createPullRequest,
     isPullRequestMergeStrategy,
     mergePullRequest,
@@ -2132,6 +2138,28 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return applyHunkPatch(git, patchText, { target: effectiveTarget })
     }
 
+    // #882 phase 4 — post-mutation cache invalidation for the
+    // issue / PR triage views. Each helper does two things:
+    //   1. Clears the in-memory `context.issueList` /
+    //      `context.pullRequestList` entry so the view's `useEffect`
+    //      retriggers on the next render and the user sees their
+    //      change reflected immediately.
+    //   2. Wipes the disk cache so a follow-up `coco issues` /
+    //      `coco prs` CLI call doesn't serve stale data from the
+    //      5-minute TTL window. Sledgehammer rather than scalpel —
+    //      clearing per (repo, filter) tuple would require more
+    //      bookkeeping than the cache is worth.
+    const invalidateIssueListCaches = (): void => {
+      setContext((current) => ({ ...current, issueList: undefined }))
+      setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'idle'))
+      clearGitHubListCache()
+    }
+    const invalidatePullRequestListCaches = (): void => {
+      setContext((current) => ({ ...current, pullRequestList: undefined }))
+      setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'))
+      clearGitHubListCache()
+    }
+
     const handlers: Record<string, () => Promise<{ ok: boolean; message: string } | undefined>> = {
       'create-branch': async () => {
         const name = payload?.trim()
@@ -2604,6 +2632,105 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!body) return { ok: false, message: 'Comment body required' }
         return commentPullRequest(body)
       },
+      // #882 phase 4 — triage-view low-risk mutations. Each picks
+      // the cursored item from the *filtered* list (matching what
+      // the user sees on screen), runs the corresponding `gh` action,
+      // and on success clears both the in-memory context entry and
+      // the disk cache so the next view entry refetches. Comment
+      // is additive; label / assign are toggleable via re-invocation
+      // with --remove-* (deferred to phase 5 as part of the y-confirm
+      // suite). Open / yank don't mutate so they skip the
+      // invalidation step entirely.
+      'triage-issue-open': async () => {
+        const issue = filteredIssueList[
+          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+        ]
+        if (!issue) return { ok: false, message: 'No issue under cursor' }
+        try {
+          await defaultOpenUrlRunner(issue.url)
+          return { ok: true, message: `Opened ${issue.url}` }
+        } catch (error) {
+          return { ok: false, message: (error as Error).message }
+        }
+      },
+      'triage-issue-comment': async () => {
+        const body = payload?.trim()
+        if (!body) return { ok: false, message: 'Comment body required' }
+        const issue = filteredIssueList[
+          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+        ]
+        if (!issue) return { ok: false, message: 'No issue under cursor' }
+        const result = await commentIssue(issue.number, body)
+        if (result.ok) invalidateIssueListCaches()
+        return result
+      },
+      'triage-issue-label': async () => {
+        const label = payload?.trim()
+        if (!label) return { ok: false, message: 'Label name required' }
+        const issue = filteredIssueList[
+          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+        ]
+        if (!issue) return { ok: false, message: 'No issue under cursor' }
+        const result = await addIssueLabel(issue.number, label)
+        if (result.ok) invalidateIssueListCaches()
+        return result
+      },
+      'triage-issue-assign': async () => {
+        const assignee = payload?.trim()
+        if (!assignee) return { ok: false, message: 'Assignee login required' }
+        const issue = filteredIssueList[
+          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+        ]
+        if (!issue) return { ok: false, message: 'No issue under cursor' }
+        const result = await addIssueAssignee(issue.number, assignee)
+        if (result.ok) invalidateIssueListCaches()
+        return result
+      },
+      'triage-pr-open': async () => {
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        try {
+          await defaultOpenUrlRunner(pr.url)
+          return { ok: true, message: `Opened ${pr.url}` }
+        } catch (error) {
+          return { ok: false, message: (error as Error).message }
+        }
+      },
+      'triage-pr-comment': async () => {
+        const body = payload?.trim()
+        if (!body) return { ok: false, message: 'Comment body required' }
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        const result = await commentPullRequestByNumber(pr.number, body)
+        if (result.ok) invalidatePullRequestListCaches()
+        return result
+      },
+      'triage-pr-label': async () => {
+        const label = payload?.trim()
+        if (!label) return { ok: false, message: 'Label name required' }
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        const result = await addPullRequestLabel(pr.number, label)
+        if (result.ok) invalidatePullRequestListCaches()
+        return result
+      },
+      'triage-pr-assign': async () => {
+        const assignee = payload?.trim()
+        if (!assignee) return { ok: false, message: 'Assignee login required' }
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        const result = await addPullRequestAssignee(pr.number, assignee)
+        if (result.ok) invalidatePullRequestListCaches()
+        return result
+      },
       // Status surface group-level batch ops (#791 follow-up). The
       // input handler dispatches these when the user presses Enter on a
       // group header. We re-derive the file list from the live
@@ -2766,6 +2893,31 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           label = `submodule path ${entry.path}`
         }
       }
+    } else if (view === 'issues') {
+      // #882 phase 4 — y yanks the cursored issue's URL so the user
+      // can paste it into Slack / a PR description / etc. without
+      // dropping back to the browser. Short form (`Y`) is a no-op
+      // here — there's no compact identifier worth a second key.
+      const issue = filteredIssueList[
+        Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
+      ]
+      if (issue) {
+        value = issue.url
+        label = `issue #${issue.number} URL`
+      }
+    } else if (view === 'pull-request-triage') {
+      // #882 phase 4 — same URL-yank pattern for the multi-PR list.
+      // Distinct from `pull-request` (single, current-branch); that
+      // view falls through to the generic "Nothing to yank" path
+      // below since the action panel already exposes O for browser
+      // open.
+      const pr = filteredPullRequestTriageList[
+        Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+      ]
+      if (pr) {
+        value = pr.url
+        label = `pull request #${pr.number} URL`
+      }
     } else if (view === 'bisect') {
       // #879 item 3 — yank the first-bad commit sha from the
       // completion panel. The headline answer is what the user
@@ -2832,6 +2984,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context.submodules,
     context.tags,
     dispatch,
+    filteredIssueList,
+    filteredPullRequestTriageList,
     selected,
     selectedDetailFile,
     stashDiffLines,
@@ -2844,6 +2998,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.filteredCommits,
     state.selectedBranchIndex,
     state.selectedIndex,
+    state.selectedIssueIndex,
+    state.selectedPullRequestTriageIndex,
     state.selectedStashIndex,
     state.selectedSubmoduleIndex,
     state.selectedTagIndex,

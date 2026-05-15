@@ -3488,3 +3488,138 @@ describe('issue / pull-request triage chords (#882 phase 3)', () => {
     expect(state.selectedIssueIndex).toBe(0)
   })
 })
+
+describe('triage-view per-row actions (#882 phase 4)', () => {
+  describe('issues view', () => {
+    const baseState = (): LogInkState =>
+      applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'issues' })
+
+    it('O dispatches the triage-issue-open workflow when an URL is in scope', () => {
+      const state = baseState()
+      const events = getLogInkInputEvents(state, 'O', {}, {
+        issueCount: 1,
+        issueSelectedUrl: 'https://github.com/gfargo/coco/issues/882',
+      })
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'triage-issue-open' }])
+    })
+
+    it('O falls through to the global open-pr workflow when no issue URL is in scope', () => {
+      // Without an issue URL in context, the triage-O handler doesn't
+      // claim the keystroke — it falls through to the global O
+      // binding (which targets the current branch's PR / commit /
+      // repo). Documenting this so the next maintainer doesn't
+      // confuse "no issue cursored" with "no-op".
+      const state = baseState()
+      const events = getLogInkInputEvents(state, 'O', {}, {})
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'open-pr' }])
+    })
+
+    it('c opens a multi-line input prompt for triage-issue-comment', () => {
+      const state = applyInput(baseState(), 'c', {}, { issueCount: 5 })
+      expect(state.inputPrompt?.kind).toBe('triage-issue-comment')
+      expect(state.inputPrompt?.multiline).toBe(true)
+    })
+
+    it('L opens an input prompt for triage-issue-label', () => {
+      const state = applyInput(baseState(), 'L', {}, { issueCount: 5 })
+      expect(state.inputPrompt?.kind).toBe('triage-issue-label')
+      expect(state.inputPrompt?.multiline).toBeFalsy()
+    })
+
+    it('A pre-seeds the assignee prompt with @me for ergonomics', () => {
+      const state = applyInput(baseState(), 'A', {}, { issueCount: 5 })
+      expect(state.inputPrompt?.kind).toBe('triage-issue-assign')
+      expect(state.inputPrompt?.value).toBe('@me')
+    })
+
+    it('y dispatches yankFromActiveView when an issue URL is in scope', () => {
+      const state = baseState()
+      const events = getLogInkInputEvents(state, 'y', {}, {
+        issueCount: 1,
+        issueSelectedUrl: 'https://github.com/gfargo/coco/issues/882',
+      })
+      expect(events).toEqual([{ type: 'yankFromActiveView' }])
+    })
+
+    it('submitting the triage-issue-comment prompt (Ctrl+D) fires runWorkflowAction with the body', () => {
+      // The comment prompt is multi-line, so Enter inserts a newline
+      // and Ctrl+D is the submit affordance — mirrors the
+      // pr-comment / pr-request-changes prompts. The single-line
+      // triage-issue-label / triage-issue-assign prompts submit on
+      // Enter (no Ctrl+D needed).
+      let state = baseState()
+      state = applyInput(state, 'c', {}, { issueCount: 5 })
+      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'lgtm' })
+
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      const workflow = events.find((e) => e.type === 'runWorkflowAction')
+      expect(workflow).toEqual({
+        type: 'runWorkflowAction',
+        id: 'triage-issue-comment',
+        payload: 'lgtm',
+      })
+    })
+
+    it('submitting the triage-issue-label prompt (Enter) fires runWorkflowAction', () => {
+      let state = baseState()
+      state = applyInput(state, 'L', {}, { issueCount: 5 })
+      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'enhancement' })
+
+      const events = getLogInkInputEvents(state, '', { return: true })
+      const workflow = events.find((e) => e.type === 'runWorkflowAction')
+      expect(workflow).toEqual({
+        type: 'runWorkflowAction',
+        id: 'triage-issue-label',
+        payload: 'enhancement',
+      })
+    })
+
+    it('Enter on a multi-line triage prompt inserts a newline instead of submitting', () => {
+      let state = baseState()
+      state = applyInput(state, 'c', {}, { issueCount: 5 })
+      state = applyInput(state, 'a')
+      state = applyInput(state, '', { return: true })
+      expect(state.inputPrompt?.value).toBe('a\n')
+    })
+  })
+
+  describe('pull-request-triage view', () => {
+    const baseState = (): LogInkState =>
+      applyLogInkAction(createLogInkState(rows), {
+        type: 'pushView',
+        value: 'pull-request-triage',
+      })
+
+    it('O dispatches the triage-pr-open workflow when a PR URL is in scope', () => {
+      const state = baseState()
+      const events = getLogInkInputEvents(state, 'O', {}, {
+        pullRequestTriageCount: 1,
+        pullRequestTriageSelectedUrl: 'https://github.com/gfargo/coco/pull/962',
+      })
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'triage-pr-open' }])
+    })
+
+    it('c / L / A open the matching triage-pr-* prompt kinds', () => {
+      let state = applyInput(baseState(), 'c', {}, { pullRequestTriageCount: 3 })
+      expect(state.inputPrompt?.kind).toBe('triage-pr-comment')
+
+      state = applyInput(baseState(), 'L', {}, { pullRequestTriageCount: 3 })
+      expect(state.inputPrompt?.kind).toBe('triage-pr-label')
+
+      state = applyInput(baseState(), 'A', {}, { pullRequestTriageCount: 3 })
+      expect(state.inputPrompt?.kind).toBe('triage-pr-assign')
+    })
+
+    it('does NOT collide with the single-PR action panel keys', () => {
+      // Regression guard: from the `pull-request` view (single, current
+      // branch), `c` still routes to the existing `pr-comment` prompt,
+      // not the triage variant.
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'pushView',
+        value: 'pull-request',
+      })
+      const result = applyInput(state, 'c')
+      expect(result.inputPrompt?.kind).toBe('pr-comment')
+    })
+  })
+})
