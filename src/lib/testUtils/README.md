@@ -106,6 +106,8 @@ npm run scenario create feature-pr-ready           # materialize in /tmp/coco-gi
 npm run scenario create feature-pr-ready -- --path ~/sandbox/widget   # custom location
 npm run scenario create feature-pr-ready -- --run-ui                  # materialize + launch coco ui
 npm run scenario create feature-pr-ready -- --ephemeral               # auto-clean on exit
+npm run scenario create rich-history-graph -- --run-ui \
+  --remote git@github.com:gfargo/coco.git           # add an origin so gi / gP have data
 ```
 
 ### Flags
@@ -114,6 +116,7 @@ npm run scenario create feature-pr-ready -- --ephemeral               # auto-cle
 |---|---|
 | `--path <dir>` | Materialize at `<dir>` instead of `/tmp`. Useful when you want to `cd` into it later and poke around. |
 | `--run-ui` | After materializing, spawn `coco ui` against the scenario dir (cwd = scenario dir, not the coco repo). Tightest dev loop for trying workstation changes. |
+| `--remote <url>` | Add `origin` pointing at `<url>` so the GitHub triage views (`gi` / `gP`) detect a remote on launch. Pass any gh-shaped URL. Use a real one (`git@github.com:gfargo/coco.git`) to render the views with live data; use a fake one (`git@github.com:coco-test/sample.git`) to render the views safely against an empty / gh-unauthenticated remote. Without this flag the triage views show "No GitHub remote detected" — the scenario repo is a bare `git init` by default. |
 | `--ephemeral` | Auto-clean the temp dir on CLI exit. Skip for normal use — without `--ephemeral`, the dir persists so you can re-inspect after `coco ui` quits. |
 
 ### Cleanup
