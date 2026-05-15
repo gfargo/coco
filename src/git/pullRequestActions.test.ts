@@ -1,9 +1,12 @@
 import {
+  addPullRequestAssignee,
+  addPullRequestLabel,
   approvePullRequest,
   buildCreatePullRequestArgs,
   buildMergePullRequestArgs,
   closePullRequest,
   commentPullRequest,
+  commentPullRequestByNumber,
   createPullRequest,
   isPullRequestMergeStrategy,
   mergePullRequest,
@@ -151,6 +154,75 @@ describe('log pull request actions', () => {
       await expect(mergePullRequest('squash', runner)).resolves.toEqual({
         ok: true,
         message: 'Merged pull request #42 (squash)',
+      })
+    })
+  })
+})
+
+describe('triage-by-number PR actions (#882 phase 4)', () => {
+  describe('commentPullRequestByNumber', () => {
+    it('rejects empty bodies without invoking gh', async () => {
+      const runner = jest.fn()
+      await expect(commentPullRequestByNumber(962, '   ', runner)).resolves.toEqual({
+        ok: false,
+        message: 'Comment body required',
+      })
+      expect(runner).not.toHaveBeenCalled()
+    })
+
+    it('targets a specific PR number, distinct from the current-branch variant', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(commentPullRequestByNumber(962, 'lgtm', runner)).resolves.toEqual({
+        ok: true,
+        message: 'Commented on pull request #962',
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'comment', '962', '--body', 'lgtm'])
+    })
+  })
+
+  describe('addPullRequestLabel', () => {
+    it('rejects empty labels', async () => {
+      const runner = jest.fn()
+      await expect(addPullRequestLabel(1, '', runner)).resolves.toEqual({
+        ok: false,
+        message: 'Label name required',
+      })
+    })
+
+    it('invokes `gh pr edit <#> --add-label <label>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      const result = await addPullRequestLabel(962, 'enhancement', runner)
+      expect(result).toEqual({
+        ok: true,
+        message: "Added label 'enhancement' to pull request #962",
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'edit', '962', '--add-label', 'enhancement'])
+    })
+  })
+
+  describe('addPullRequestAssignee', () => {
+    it('rejects empty assignees', async () => {
+      const runner = jest.fn()
+      await expect(addPullRequestAssignee(1, '   ', runner)).resolves.toEqual({
+        ok: false,
+        message: 'Assignee login required',
+      })
+    })
+
+    it('invokes `gh pr edit <#> --add-assignee <login>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(addPullRequestAssignee(962, '@me', runner)).resolves.toEqual({
+        ok: true,
+        message: 'Assigned @me to pull request #962',
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'edit', '962', '--add-assignee', '@me'])
+    })
+
+    it('surfaces gh errors as ok: false', async () => {
+      const runner = jest.fn().mockRejectedValue(new Error('no such user'))
+      await expect(addPullRequestAssignee(1, 'ghost', runner)).resolves.toEqual({
+        ok: false,
+        message: 'no such user',
       })
     })
   })

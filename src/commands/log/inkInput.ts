@@ -740,6 +740,45 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       action({ type: 'closeInputPrompt' }),
     ]
   }
+  // #882 phase 4 — triage-view mutation prompts. Each kind routes to
+  // its by-number workflow id; the runner reads the cursored item
+  // from state + filtered list and runs the matching `gh` action.
+  if (state.inputPrompt.kind === 'triage-issue-comment') {
+    return [
+      { type: 'runWorkflowAction', id: 'triage-issue-comment', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'triage-issue-label') {
+    return [
+      { type: 'runWorkflowAction', id: 'triage-issue-label', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'triage-issue-assign') {
+    return [
+      { type: 'runWorkflowAction', id: 'triage-issue-assign', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'triage-pr-comment') {
+    return [
+      { type: 'runWorkflowAction', id: 'triage-pr-comment', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'triage-pr-label') {
+    return [
+      { type: 'runWorkflowAction', id: 'triage-pr-label', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'triage-pr-assign') {
+    return [
+      { type: 'runWorkflowAction', id: 'triage-pr-assign', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
   if (state.inputPrompt.kind === 'pr-request-changes') {
     return [
       action({ type: 'setPendingConfirmation', value: 'request-changes-pr', payload: value }),
@@ -2326,6 +2365,72 @@ export function getLogInkInputEvents(
     })]
   }
 
+  // #882 phase 4 — issue triage per-row actions. Scoped to the
+  // `'issues'` view + commits focus so the single-letter keys stay
+  // free elsewhere. Each prompts; submit dispatches the matching
+  // `triage-issue-*` workflow which routes through `gh issue` and
+  // invalidates both the in-memory + disk caches on success.
+  if (state.activeView === 'issues' && state.focus === 'commits') {
+    if (inputValue === 'O' && context.issueSelectedUrl) {
+      return [{ type: 'runWorkflowAction', id: 'triage-issue-open' }]
+    }
+    if (inputValue === 'c' && context.issueCount) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'triage-issue-comment',
+        label: 'Comment body (Enter newline · Ctrl+D submit)',
+        multiline: true,
+      })]
+    }
+    if (inputValue === 'L' && context.issueCount) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'triage-issue-label',
+        label: 'Label name to add',
+      })]
+    }
+    if (inputValue === 'A' && context.issueCount) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'triage-issue-assign',
+        label: 'Assignee login (or @me)',
+        initial: '@me',
+      })]
+    }
+  }
+
+  // #882 phase 4 — PR triage per-row actions. Same shape as the
+  // issue handlers above; distinct view id so the keys don't
+  // collide with the single-PR action panel (`pull-request`).
+  if (state.activeView === 'pull-request-triage' && state.focus === 'commits') {
+    if (inputValue === 'O' && context.pullRequestTriageSelectedUrl) {
+      return [{ type: 'runWorkflowAction', id: 'triage-pr-open' }]
+    }
+    if (inputValue === 'c' && context.pullRequestTriageCount) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'triage-pr-comment',
+        label: 'Comment body (Enter newline · Ctrl+D submit)',
+        multiline: true,
+      })]
+    }
+    if (inputValue === 'L' && context.pullRequestTriageCount) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'triage-pr-label',
+        label: 'Label name to add',
+      })]
+    }
+    if (inputValue === 'A' && context.pullRequestTriageCount) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'triage-pr-assign',
+        label: 'Assignee login (or @me)',
+        initial: '@me',
+      })]
+    }
+  }
+
   // Global stash hotkey: `S` opens a stash-message prompt and
   // `createStash` runs once submitted. Available everywhere there's
   // not a more modal handler in front of it.
@@ -2607,6 +2712,17 @@ export function getLogInkInputEvents(
     // history view's Y).
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
       return [{ type: 'yankFromActiveView', short }]
+    }
+    // #882 phase 4 — triage views: y yanks the cursored issue / PR
+    // URL so the user can paste it into a chat / PR description
+    // without dropping back to the browser. Y is a no-op on these
+    // views — there's no compact alternate identifier worth a
+    // second key.
+    if (isIssueActionTarget(state) && context.issueSelectedUrl) {
+      return [{ type: 'yankFromActiveView' }]
+    }
+    if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageSelectedUrl) {
+      return [{ type: 'yankFromActiveView' }]
     }
   }
 
