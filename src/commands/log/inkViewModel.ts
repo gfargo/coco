@@ -6,6 +6,12 @@ import {
     createCommitComposeState,
 } from './commitCompose'
 import type { CommitSplitPlan, CommitSplitPlanContext } from '../commit/split'
+import {
+  cycleIssueFilterPreset,
+  cyclePullRequestFilterPreset,
+  type IssueFilterPreset,
+  type PullRequestFilterPreset,
+} from '../../git/triageFilterPresets'
 import { PromotedSelectionsSnapshot } from '../../workstation/chrome/selectionRectify'
 import {
     BranchSortMode,
@@ -178,6 +184,16 @@ export type LogInkState = {
    * drives the multi-PR list view (`pull-request-triage`).
    */
   selectedPullRequestTriageIndex: number
+  /**
+   * Canned filter presets for the triage views (#882 phase 6).
+   * `f` on each view cycles through the matching preset list (see
+   * `triageFilterPresets.ts`); the active preset drives both the
+   * data fetcher's filter object and the surface header's label.
+   * Persisted on root state so navigating away and back keeps the
+   * user's chosen lens.
+   */
+  selectedIssueFilter: IssueFilterPreset
+  selectedPullRequestFilter: PullRequestFilterPreset
   /**
    * Nested-repo navigation stack (#931). Always at least one entry
    * — the root frame for the repo `coco ui` was launched against.
@@ -608,6 +624,8 @@ export type LogInkAction =
   | { type: 'moveSubmodule'; delta: number; count: number }
   | { type: 'moveIssue'; delta: number; count: number }
   | { type: 'movePullRequestTriage'; delta: number; count: number }
+  | { type: 'cycleIssueFilter' }
+  | { type: 'cyclePullRequestTriageFilter' }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number }
   | { type: 'moveConflictFile'; delta: number; count: number }
   | { type: 'moveToBottom' }
@@ -1026,6 +1044,8 @@ export function createLogInkState(
     selectedSubmoduleIndex: 0,
     selectedIssueIndex: 0,
     selectedPullRequestTriageIndex: 0,
+    selectedIssueFilter: 'open',
+    selectedPullRequestFilter: 'open',
     repoStack: [{ label: options.repoLabel || 'root' }],
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
@@ -1341,6 +1361,24 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           state.selectedPullRequestTriageIndex + action.delta,
           action.count
         ),
+        pendingKey: undefined,
+      }
+    case 'cycleIssueFilter':
+      // Advance the preset, snap the cursor to the top of the
+      // (newly filtered) list — same UX rule as `cycleBranchSort`.
+      // The list refetches on preset change via the effect in
+      // app.ts, so the cursor at 0 lands on whatever was promoted.
+      return {
+        ...state,
+        selectedIssueFilter: cycleIssueFilterPreset(state.selectedIssueFilter),
+        selectedIssueIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'cyclePullRequestTriageFilter':
+      return {
+        ...state,
+        selectedPullRequestFilter: cyclePullRequestFilterPreset(state.selectedPullRequestFilter),
+        selectedPullRequestTriageIndex: 0,
         pendingKey: undefined,
       }
     case 'moveWorktreeListEntry':

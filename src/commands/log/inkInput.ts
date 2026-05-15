@@ -2430,6 +2430,14 @@ export function getLogInkInputEvents(
     if (inputValue === 'X' && context.issueCount) {
       return [action({ type: 'setPendingConfirmation', value: 'triage-issue-reopen' })]
     }
+    // #882 phase 6 — cycle the canned filter preset (open → closed
+    // → mine → assigned → open). The effect in app.ts watches
+    // `state.selectedIssueFilter` and refetches with the matching
+    // filter object, so the list updates without an explicit
+    // refresh keystroke.
+    if (inputValue === 'f') {
+      return [action({ type: 'cycleIssueFilter' })]
+    }
   }
 
   // #882 phase 4 — PR triage per-row actions. Same shape as the
@@ -2487,6 +2495,13 @@ export function getLogInkInputEvents(
         label: 'Request changes — review body (Enter newline · Ctrl+D submit)',
         multiline: true,
       })]
+    }
+    // #882 phase 6 — cycle the canned filter preset (open → draft
+    // → mine → assigned → closed → merged → open). The effect in
+    // app.ts watches `state.selectedPullRequestFilter` and refetches
+    // with the matching filter object.
+    if (inputValue === 'f') {
+      return [action({ type: 'cyclePullRequestTriageFilter' })]
     }
   }
 

@@ -1501,3 +1501,54 @@ describe('issue / pull-request triage navigation (#882 phase 3)', () => {
     expect(state.viewStack).toContain('pull-request-triage')
   })
 })
+
+describe('triage filter preset cycling (#882 phase 6)', () => {
+  it('seeds selectedIssueFilter / selectedPullRequestFilter to "open"', () => {
+    const state = createLogInkState(rows)
+    expect(state.selectedIssueFilter).toBe('open')
+    expect(state.selectedPullRequestFilter).toBe('open')
+  })
+
+  it('cycleIssueFilter advances through the preset list and wraps', () => {
+    let state = createLogInkState(rows)
+    expect(state.selectedIssueFilter).toBe('open')
+
+    state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
+    expect(state.selectedIssueFilter).toBe('closed')
+
+    state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
+    expect(state.selectedIssueFilter).toBe('mine')
+
+    state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
+    expect(state.selectedIssueFilter).toBe('assigned')
+
+    state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
+    expect(state.selectedIssueFilter).toBe('open')
+  })
+
+  it('cycleIssueFilter snaps the cursor to the top of the (newly filtered) list', () => {
+    let state = createLogInkState(rows)
+    state = { ...state, selectedIssueIndex: 5 }
+
+    state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
+    expect(state.selectedIssueIndex).toBe(0)
+  })
+
+  it('cyclePullRequestTriageFilter advances and wraps independently', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'cyclePullRequestTriageFilter' })
+    expect(state.selectedPullRequestFilter).toBe('draft')
+
+    // Cycling PRs leaves the issue preset alone.
+    expect(state.selectedIssueFilter).toBe('open')
+  })
+
+  it('cycle actions clear any pending chord prefix', () => {
+    let state = createLogInkState(rows)
+    state = { ...state, pendingKey: 'g' }
+
+    state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
+    expect(state.pendingKey).toBeUndefined()
+  })
+})
