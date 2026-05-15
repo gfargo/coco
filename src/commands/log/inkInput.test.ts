@@ -3748,3 +3748,42 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
     })
   })
 })
+
+describe('triage filter cycling (#882 phase 6)', () => {
+  it('f on the issues view cycles the issue filter preset', () => {
+    let state = applyLogInkAction(createLogInkState(rows), {
+      type: 'pushView',
+      value: 'issues',
+    })
+    expect(state.selectedIssueFilter).toBe('open')
+
+    state = applyInput(state, 'f')
+    expect(state.selectedIssueFilter).toBe('closed')
+
+    state = applyInput(state, 'f')
+    expect(state.selectedIssueFilter).toBe('mine')
+  })
+
+  it('f on the pull-request-triage view cycles the PR filter preset', () => {
+    let state = applyLogInkAction(createLogInkState(rows), {
+      type: 'pushView',
+      value: 'pull-request-triage',
+    })
+    expect(state.selectedPullRequestFilter).toBe('open')
+
+    state = applyInput(state, 'f')
+    expect(state.selectedPullRequestFilter).toBe('draft')
+  })
+
+  it('f on the history view does not touch either triage preset', () => {
+    // Regression guard: `f` is a single-letter key with no global
+    // binding currently. Adding it as a triage-scoped chord must
+    // not accidentally claim it elsewhere.
+    let state = createLogInkState(rows)
+    expect(state.activeView).toBe('history')
+
+    state = applyInput(state, 'f')
+    expect(state.selectedIssueFilter).toBe('open')
+    expect(state.selectedPullRequestFilter).toBe('open')
+  })
+})

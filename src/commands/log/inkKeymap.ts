@@ -786,21 +786,20 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'issues') {
     return {
-      // #882 phase 4-5 — read + additive mutations + destructive
-      // (gated through y-confirm). Filter cycling / AI summarize
-      // land in phase 6.
-      contextual: ['↑/↓ issues', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'x close*', 'X reopen', 'esc back'],
+      // #882 phase 4-6 — read + additive mutations + destructive
+      // (gated through y-confirm) + filter cycling. AI summarize
+      // (`I`) deferred to a follow-up.
+      contextual: ['↑/↓ issues', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'x close*', 'X reopen', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'pull-request-triage') {
     return {
-      // #882 phase 4-5 — full PR action panel scoped to the triage
-      // list. m / x / a / R all route through y-confirm and target
-      // the cursored PR by number (distinct from the `pull-request`
-      // single-PR view which targets the current branch).
-      contextual: ['↑/↓ PRs', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'esc back'],
+      // #882 phase 4-6 — full PR action panel scoped to the triage
+      // list + filter cycling. AI summarize (`I`) deferred to a
+      // follow-up.
+      contextual: ['↑/↓ PRs', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

@@ -23,6 +23,7 @@ import {
 import { truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { LogInkState } from '../../../commands/log/inkViewModel'
+import { PULL_REQUEST_FILTER_LABELS } from '../../../git/triageFilterPresets'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -160,10 +161,11 @@ export function renderPullRequestTriageSurface(
     const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
     const windowed = visible.slice(startIndex, startIndex + listRows)
     const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
+    const presetLabel = `▼ ${PULL_REQUEST_FILTER_LABELS[state.selectedPullRequestFilter]}`
     const repoLabel = overview.repository
       ? `${overview.repository.owner}/${overview.repository.name}`
       : ''
-    headerRight = `${repoLabel ? `${repoLabel} · ` : ''}${visible.length}/${all.length}${filterLabel}`
+    headerRight = `${repoLabel ? `${repoLabel} · ` : ''}${visible.length}/${all.length} | ${presetLabel}${filterLabel}`
 
     if (visible.length === 0) {
       bodyLines = [

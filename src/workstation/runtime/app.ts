@@ -263,6 +263,10 @@ import { getPullRequestOverview } from '../../git/pullRequestData'
 import { getPullRequestList } from '../../git/pullRequestListData'
 import { clearGitHubListCache } from '../../git/githubListCache'
 import {
+  issueFilterForPreset,
+  pullRequestFilterForPreset,
+} from '../../git/triageFilterPresets'
+import {
     addPullRequestAssignee,
     addPullRequestLabel,
     approvePullRequest,
@@ -1104,17 +1108,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [git, state.activeView, context.pullRequest])
 
-  // Lazy-load the issue triage list (#882 phase 3). Mirrors the
-  // single-PR effect above: only fires on entry to the dedicated
-  // view, and only when we don't already have data. The default
-  // filter (`state: 'open'`) matches the CLI's default so the
-  // workstation and `coco issues` show the same set on first entry.
+  // Lazy-load the issue triage list (#882 phase 3, filter-aware
+  // since phase 6). Fires on entry to the view AND on filter
+  // preset changes (`f` cycles the preset; the dep on
+  // `state.selectedIssueFilter` triggers the refetch). The
+  // existing `context.issueList` guard collapses to a no-op when
+  // the preset hasn't changed and data is already loaded.
   React.useEffect(() => {
     if (state.activeView !== 'issues') return
     if (context.issueList) return
     let active = true
     setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'loading'))
-    void safe(getIssueList(git, { state: 'open' })).then((value) => {
+    const filter = issueFilterForPreset(state.selectedIssueFilter)
+    void safe(getIssueList(git, filter)).then((value) => {
       if (!active) return
       setContext((current) => ({
         ...current,
@@ -1125,18 +1131,33 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     return () => {
       active = false
     }
-  }, [git, state.activeView, context.issueList])
+  }, [git, state.activeView, context.issueList, state.selectedIssueFilter])
 
-  // Lazy-load the PR triage list (#882 phase 3). Distinct from the
-  // single-PR `pullRequest` effect above — that fetches the current
-  // branch's PR via `gh pr view`; this fetches the full repo PR list
-  // via `gh pr list`.
+  // Filter cycling: when the preset changes, drop the cached list
+  // so the effect above re-fires with the new filter. Done as a
+  // separate effect (rather than folded into the cycle reducer)
+  // because the reducer is pure — fs / network side-effects live
+  // in `useEffect`.
+  React.useEffect(() => {
+    if (state.activeView !== 'issues') return
+    setContext((current) => (current.issueList ? { ...current, issueList: undefined } : current))
+    setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'idle'))
+    // We deliberately depend ONLY on the preset — not on
+    // activeView — so re-entering the view doesn't re-fire and
+    // discard the just-loaded data. The activeView guard above
+    // keeps us from clearing data while the user is on a
+    // different surface.
+  }, [state.selectedIssueFilter])
+
+  // Lazy-load the PR triage list (#882 phase 3, filter-aware
+  // since phase 6). Same pattern as the issue effect above.
   React.useEffect(() => {
     if (state.activeView !== 'pull-request-triage') return
     if (context.pullRequestList) return
     let active = true
     setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'loading'))
-    void safe(getPullRequestList(git, { state: 'open' })).then((value) => {
+    const filter = pullRequestFilterForPreset(state.selectedPullRequestFilter)
+    void safe(getPullRequestList(git, filter)).then((value) => {
       if (!active) return
       setContext((current) => ({
         ...current,
@@ -1147,7 +1168,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     return () => {
       active = false
     }
-  }, [git, state.activeView, context.pullRequestList])
+  }, [git, state.activeView, context.pullRequestList, state.selectedPullRequestFilter])
+
+  React.useEffect(() => {
+    if (state.activeView !== 'pull-request-triage') return
+    setContext((current) =>
+      current.pullRequestList ? { ...current, pullRequestList: undefined } : current
+    )
+    setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'))
+  }, [state.selectedPullRequestFilter])
 
   React.useEffect(() => {
     let active = true
