@@ -3623,3 +3623,128 @@ describe('triage-view per-row actions (#882 phase 4)', () => {
     })
   })
 })
+
+describe('triage-view destructive actions (#882 phase 5)', () => {
+  describe('issues view', () => {
+    const baseState = (): LogInkState =>
+      applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'issues' })
+
+    it('x sets pendingConfirmation to triage-issue-close', () => {
+      const state = applyInput(baseState(), 'x', {}, { issueCount: 5 })
+      expect(state.pendingConfirmationId).toBe('triage-issue-close')
+    })
+
+    it('X sets pendingConfirmation to triage-issue-reopen', () => {
+      const state = applyInput(baseState(), 'X', {}, { issueCount: 5 })
+      expect(state.pendingConfirmationId).toBe('triage-issue-reopen')
+    })
+
+    it('x is a no-op when no issues are in scope', () => {
+      const state = applyInput(baseState(), 'x', {}, {})
+      // Falls through to whatever-else binds `x` globally (currently
+      // nothing on this view), so no confirmation fires.
+      expect(state.pendingConfirmationId).toBeUndefined()
+    })
+
+    it('confirming triage-issue-close fires runWorkflowAction', () => {
+      const state = applyInput(baseState(), 'x', {}, { issueCount: 5 })
+      const events = getLogInkInputEvents(state, 'y')
+      const workflow = events.find((e) => e.type === 'runWorkflowAction')
+      expect(workflow).toEqual({
+        type: 'runWorkflowAction',
+        id: 'triage-issue-close',
+        payload: undefined,
+      })
+    })
+
+    it('n cancels the confirmation without firing the workflow', () => {
+      let state = applyInput(baseState(), 'x', {}, { issueCount: 5 })
+      state = applyInput(state, 'n')
+      expect(state.pendingConfirmationId).toBeUndefined()
+    })
+  })
+
+  describe('pull-request-triage view', () => {
+    const baseState = (): LogInkState =>
+      applyLogInkAction(createLogInkState(rows), {
+        type: 'pushView',
+        value: 'pull-request-triage',
+      })
+
+    it('x sets pendingConfirmation to triage-pr-close', () => {
+      const state = applyInput(baseState(), 'x', {}, { pullRequestTriageCount: 3 })
+      expect(state.pendingConfirmationId).toBe('triage-pr-close')
+    })
+
+    it('a sets pendingConfirmation to triage-pr-approve', () => {
+      const state = applyInput(baseState(), 'a', {}, { pullRequestTriageCount: 3 })
+      expect(state.pendingConfirmationId).toBe('triage-pr-approve')
+    })
+
+    it('m opens the merge-strategy prompt', () => {
+      const state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
+      expect(state.inputPrompt?.kind).toBe('triage-pr-merge-strategy')
+      expect(state.pendingConfirmationId).toBeUndefined()
+    })
+
+    it('submitting the merge-strategy prompt validates the strategy + routes through y-confirm', () => {
+      let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
+      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'squash' })
+      state = applyInput(state, '', { return: true })
+      expect(state.pendingConfirmationId).toBe('triage-pr-merge')
+      expect(state.pendingConfirmationPayload).toBe('squash')
+      expect(state.inputPrompt).toBeUndefined()
+    })
+
+    it('rejects unknown merge strategies with a status message', () => {
+      let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
+      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'fastforward' })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      const status = events.find(
+        (e): e is Extract<typeof e, { type: 'action' }> =>
+          e.type === 'action' && (e.action as { type: string }).type === 'setStatus'
+      )
+      expect(status).toBeDefined()
+      expect(JSON.stringify(status)).toContain('Unknown merge strategy')
+    })
+
+    it('R opens the request-changes multi-line prompt', () => {
+      const state = applyInput(baseState(), 'R', {}, { pullRequestTriageCount: 3 })
+      expect(state.inputPrompt?.kind).toBe('triage-pr-request-changes')
+      expect(state.inputPrompt?.multiline).toBe(true)
+    })
+
+    it('submitting the request-changes prompt routes through y-confirm with the body as payload', () => {
+      let state = applyInput(baseState(), 'R', {}, { pullRequestTriageCount: 3 })
+      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'please address X' })
+      state = applyInput(state, 'd', { ctrl: true })
+      expect(state.pendingConfirmationId).toBe('triage-pr-request-changes')
+      expect(state.pendingConfirmationPayload).toBe('please address X')
+    })
+
+    it('confirming triage-pr-merge forwards the strategy payload to the workflow', () => {
+      let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
+      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'rebase' })
+      state = applyInput(state, '', { return: true })
+      const events = getLogInkInputEvents(state, 'y')
+      const workflow = events.find((e) => e.type === 'runWorkflowAction')
+      expect(workflow).toEqual({
+        type: 'runWorkflowAction',
+        id: 'triage-pr-merge',
+        payload: 'rebase',
+      })
+    })
+
+    it('does NOT collide with the single-PR action panel keys', () => {
+      // Regression guard: from the `pull-request` view, `x` still
+      // routes to the existing `close-pr` confirmation (not the
+      // triage variant).
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'pushView',
+        value: 'pull-request',
+      })
+      const result = applyInput(state, 'x')
+      expect(result.pendingConfirmationId).toBe('close-pr')
+    })
+  })
+})

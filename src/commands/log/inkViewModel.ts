@@ -551,6 +551,14 @@ export type LogInkInputPromptKind =
   | 'triage-pr-comment'
   | 'triage-pr-label'
   | 'triage-pr-assign'
+  // #882 phase 5 — destructive PR mutations on the triage view.
+  // Each prompts for input then forwards through the y-confirm
+  // path. Same pattern as the single-PR `pr-merge-strategy` /
+  // `pr-request-changes` prompts, but routed to the by-number
+  // workflows so the cursored PR (not the current branch's) gets
+  // the action.
+  | 'triage-pr-merge-strategy'
+  | 'triage-pr-request-changes'
 
 export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind

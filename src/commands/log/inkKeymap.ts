@@ -786,20 +786,21 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'issues') {
     return {
-      // #882 phase 4 — read + low-risk mutations: comment, label,
-      // assign. Destructive mutations (close, reopen) land in phase 5.
-      contextual: ['↑/↓ issues', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'esc back'],
+      // #882 phase 4-5 — read + additive mutations + destructive
+      // (gated through y-confirm). Filter cycling / AI summarize
+      // land in phase 6.
+      contextual: ['↑/↓ issues', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'x close*', 'X reopen', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'pull-request-triage') {
     return {
-      // #882 phase 4 — read + low-risk mutations on PRs. Merge /
-      // approve / request-changes / close stay scoped to the
-      // single-PR action panel (`gp`) for now; they land here in
-      // phase 5 alongside the y-confirm path.
-      contextual: ['↑/↓ PRs', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'esc back'],
+      // #882 phase 4-5 — full PR action panel scoped to the triage
+      // list. m / x / a / R all route through y-confirm and target
+      // the cursored PR by number (distinct from the `pull-request`
+      // single-PR view which targets the current branch).
+      contextual: ['↑/↓ PRs', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

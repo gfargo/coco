@@ -381,6 +381,60 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'normal',
       requiresConfirmation: false,
     },
+    // #882 phase 5 — triage-view destructive verbs. Each routed
+    // through the y-confirm path so single-keystroke `x` / `a` /
+    // `R` / `m` never silently rewrites publicly-visible state.
+    // The runner reads the cursored item from the filtered list
+    // at confirm-time — the cursor can't move while the
+    // confirmation overlay is up, so no stale-target risk.
+    {
+      id: 'triage-issue-close',
+      key: '',
+      label: 'Close issue',
+      description: 'Close the cursored issue on the triage list view.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'triage-issue-reopen',
+      key: '',
+      label: 'Reopen issue',
+      description: 'Reopen the cursored issue on the triage list view.',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'triage-pr-merge',
+      key: '',
+      label: 'Merge pull request',
+      description: 'Merge the cursored pull request on the triage list view (prompts for merge / squash / rebase, then confirms).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'triage-pr-close',
+      key: '',
+      label: 'Close pull request',
+      description: 'Close the cursored pull request on the triage list view without merging.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'triage-pr-approve',
+      key: '',
+      label: 'Approve pull request',
+      description: 'Submit an approving review on the cursored pull request.',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'triage-pr-request-changes',
+      key: '',
+      label: 'Request changes on pull request',
+      description: 'Submit a change-request review on the cursored pull request (prompts for body, then confirms).',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
     {
       // Per-view-only: scoped to the history view in inkInput so `R`
       // doesn't fire elsewhere (it's also `R` for rename in branches

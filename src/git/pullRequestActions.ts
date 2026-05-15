@@ -227,3 +227,74 @@ export function addPullRequestAssignee(
     })
   )
 }
+
+/**
+ * Destructive PR verbs targeting a specific number (#882 phase 5).
+ * Siblings of the existing current-branch functions above; both
+ * variants delegate to the same `runGhAction` wrapper so error
+ * shaping stays uniform.
+ */
+export function mergePullRequestByNumber(
+  pullRequestNumber: number,
+  strategy: PullRequestMergeStrategy,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  return runGhAction(
+    runner,
+    ['pr', 'merge', String(pullRequestNumber), `--${strategy}`],
+    (output) => ({
+      ok: true,
+      message:
+        output.trim() ||
+        `Merged pull request #${pullRequestNumber} with ${strategy}`,
+    })
+  )
+}
+
+export function closePullRequestByNumber(
+  pullRequestNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  return runGhAction(
+    runner,
+    ['pr', 'close', String(pullRequestNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Closed pull request #${pullRequestNumber}`,
+    })
+  )
+}
+
+export function approvePullRequestByNumber(
+  pullRequestNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  return runGhAction(
+    runner,
+    ['pr', 'review', String(pullRequestNumber), '--approve'],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Approved pull request #${pullRequestNumber}`,
+    })
+  )
+}
+
+export function requestChangesPullRequestByNumber(
+  pullRequestNumber: number,
+  body: string,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  if (!body.trim()) {
+    return Promise.resolve({ ok: false, message: 'Review body required for change-request' })
+  }
+  return runGhAction(
+    runner,
+    ['pr', 'review', String(pullRequestNumber), '--request-changes', '--body', body],
+    (output) => ({
+      ok: true,
+      message:
+        output.trim() ||
+        `Requested changes on pull request #${pullRequestNumber}`,
+    })
+  )
+}
