@@ -561,6 +561,58 @@ export function formatLogInkBreadcrumb(viewStack: LogInkView[]): string {
   return `${viewStack.join(' › ')}   ← <`
 }
 
+/**
+ * Render the nested-repo navigation stack (#931) as a breadcrumb suitable
+ * for the chrome header. Returns an empty string for a root-only stack
+ * so the header stays compact when nothing has been pushed.
+ *
+ * The trailing `← esc` reminds the user that Esc is the way out — same
+ * shape as the view breadcrumb's `← <` so the two read consistently.
+ * The repo breadcrumb shows in addition to the view breadcrumb when
+ * both stacks are non-trivial; the chrome layer is responsible for
+ * laying them out side by side.
+ *
+ * Examples:
+ *   `[root]`                     → ''
+ *   `[coco, vendor/lib]`         → 'coco › vendor/lib   ← esc'
+ *   `[coco, vendor/lib, deep]`   → 'coco › vendor/lib › deep   ← esc'
+ */
+export function formatLogInkRepoBreadcrumb(repoStack: ReadonlyArray<{ label: string }>): string {
+  if (repoStack.length <= 1) {
+    return ''
+  }
+  return `${repoStack.map((frame) => frame.label).join(' › ')}   ← esc`
+}
+
+/**
+ * Combine the repo-stack and view-stack breadcrumb segments for the
+ * header chrome (#931). Each segment is independently rendered by its
+ * formatter and may be empty; this helper interleaves the leading
+ * spacing so the header builder doesn't have to branch on four cases.
+ *
+ *   repoCrumb=''       viewCrumb=''       → ''
+ *   repoCrumb='X'      viewCrumb=''       → '  X'
+ *   repoCrumb=''       viewCrumb='Y'      → '  Y'
+ *   repoCrumb='X'      viewCrumb='Y'      → '  X    Y'
+ *
+ * Two leading spaces match the existing chrome — they separate the
+ * breadcrumb from the trailing repo/branch segment in the title row.
+ * Four spaces between segments give the repo crumb visual breathing
+ * room before the view crumb begins.
+ */
+export function combineLogInkBreadcrumbSegments(repoCrumb: string, viewCrumb: string): string {
+  if (repoCrumb && viewCrumb) {
+    return `  ${repoCrumb}    ${viewCrumb}`
+  }
+  if (repoCrumb) {
+    return `  ${repoCrumb}`
+  }
+  if (viewCrumb) {
+    return `  ${viewCrumb}`
+  }
+  return ''
+}
+
 export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   if (options.pendingKey) {
     const continuations = getLogInkChordContinuations(options.pendingKey)

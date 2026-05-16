@@ -1,5 +1,6 @@
 import { GitLogRow } from './data'
 import { getLogInkInputEvents, getLogInkPaletteExecuteEvents } from './inkInput'
+import { getLogInkPaletteCommands } from './inkKeymap'
 import { LogInkState, applyLogInkAction, createLogInkState } from './inkViewModel'
 
 const rows: GitLogRow[] = [
@@ -1095,6 +1096,174 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, '', { escape: true })
     expect(state.viewStack).toEqual(['history'])
     expect(state.activeView).toBe('history')
+  })
+
+  describe('Esc / < auto-pop for nested repo frames (#931)', () => {
+    function pushSubmoduleFrame(s: LogInkState): LogInkState {
+      return applyLogInkAction(s, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+        workdir: '/abs/coco/vendor/lib',
+      })
+    }
+
+    it('Esc at the root view of a nested frame pops the frame', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = pushSubmoduleFrame(state)
+      expect(state.repoStack).toHaveLength(2)
+      expect(state.viewStack).toEqual(['history'])
+
+      state = applyInput(state, '', { escape: true })
+
+      expect(state.repoStack).toHaveLength(1)
+      expect(state.repoStack[0].label).toBe('coco')
+    })
+
+    it('Esc inside a nested frame drains the view stack before popping the frame', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = pushSubmoduleFrame(state)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'diff' })
+      expect(state.viewStack).toEqual(['history', 'diff'])
+      expect(state.repoStack).toHaveLength(2)
+
+      // First Esc: pops the diff view inside the nested frame.
+      state = applyInput(state, '', { escape: true })
+      expect(state.viewStack).toEqual(['history'])
+      expect(state.repoStack).toHaveLength(2)
+
+      // Second Esc: now at the root view of the frame, pops the frame.
+      state = applyInput(state, '', { escape: true })
+      expect(state.viewStack).toEqual(['history'])
+      expect(state.repoStack).toHaveLength(1)
+    })
+
+    it('Esc at the root of the root frame is a no-op (no popRepoFrame underflow)', () => {
+      const state = createLogInkState(rows, { repoLabel: 'coco' })
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      // Either no events or events that don't include popRepoFrame /
+      // popView. The two-stage filter-mode escape is also gated by
+      // filterMode being true; here we never entered filter mode.
+      const types = events
+        .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+        .map((event) => event.action.type)
+      expect(types).not.toContain('popRepoFrame')
+      expect(types).not.toContain('popView')
+    })
+
+    it('Esc through a 3-deep nest unwinds one frame at a time', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = pushSubmoduleFrame(state)
+      state = applyLogInkAction(state, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib/inner',
+      })
+      expect(state.repoStack.map((f) => f.label)).toEqual([
+        'coco',
+        'vendor/lib',
+        'vendor/lib/inner',
+      ])
+
+      state = applyInput(state, '', { escape: true })
+      expect(state.repoStack.map((f) => f.label)).toEqual(['coco', 'vendor/lib'])
+
+      state = applyInput(state, '', { escape: true })
+      expect(state.repoStack.map((f) => f.label)).toEqual(['coco'])
+
+      state = applyInput(state, '', { escape: true })
+      expect(state.repoStack.map((f) => f.label)).toEqual(['coco'])
+    })
+
+    it('`<` keystroke pops the frame at the root of a nested frame', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = pushSubmoduleFrame(state)
+      state = applyInput(state, '<')
+      expect(state.repoStack).toHaveLength(1)
+    })
+
+    it('`<` drains the view stack before popping the frame', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = pushSubmoduleFrame(state)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'diff' })
+
+      state = applyInput(state, '<')
+      expect(state.viewStack).toEqual(['history'])
+      expect(state.repoStack).toHaveLength(2)
+
+      state = applyInput(state, '<')
+      expect(state.repoStack).toHaveLength(1)
+    })
+
+    it('palette navigateBack mirrors the same logic', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = pushSubmoduleFrame(state)
+      const navigateBackCommand = getLogInkPaletteCommands().find((c) => c.id === 'navigateBack')
+      if (!navigateBackCommand) throw new Error('navigateBack palette command missing')
+      const events = getLogInkPaletteExecuteEvents(navigateBackCommand, state)
+      const types = events
+        .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+        .map((event) => event.action.type)
+      expect(types).toContain('popRepoFrame')
+      expect(types).not.toContain('popView')
+    })
+
+    it('filter-mode escape wins over auto-pop while filterMode is active', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = pushSubmoduleFrame(state)
+      // Enter filter mode and type a couple chars inside the nested frame.
+      state = applyInput(state, '/')
+      state = applyInput(state, 'f')
+      expect(state.filterMode).toBe(true)
+      expect(state.filter).toBe('f')
+      expect(state.repoStack).toHaveLength(2)
+
+      // First Esc: clears the filter text but stays in filter mode.
+      state = applyInput(state, '', { escape: true })
+      expect(state.filter).toBe('')
+      expect(state.filterMode).toBe(true)
+      expect(state.repoStack).toHaveLength(2)
+
+      // Second Esc: exits filter mode. Should NOT pop the frame.
+      state = applyInput(state, '', { escape: true })
+      expect(state.filterMode).toBe(false)
+      expect(state.repoStack).toHaveLength(2)
+
+      // Third Esc: now at root view of nested frame with no filter
+      // mode, the frame pops.
+      state = applyInput(state, '', { escape: true })
+      expect(state.repoStack).toHaveLength(1)
+    })
+
+    it('help overlay escape wins over auto-pop while help is open', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = pushSubmoduleFrame(state)
+      state = applyLogInkAction(state, { type: 'toggleHelp' })
+      expect(state.showHelp).toBe(true)
+      expect(state.repoStack).toHaveLength(2)
+
+      // Esc closes the help overlay — does NOT pop the frame.
+      state = applyInput(state, '', { escape: true })
+      expect(state.showHelp).toBe(false)
+      expect(state.repoStack).toHaveLength(2)
+    })
+
+    it('popping the frame restores the parent view position', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      // Move the parent off defaults so we can verify the pop restored.
+      state = applyLogInkAction(state, { type: 'setActiveView', value: 'branches' })
+      state = applyLogInkAction(state, { type: 'move', delta: 1 })
+      const parentSelected = state.selectedIndex
+
+      state = pushSubmoduleFrame(state)
+      // Inside the nested frame we land on history with cursor 0.
+      expect(state.activeView).toBe('history')
+      expect(state.selectedIndex).toBe(0)
+
+      state = applyInput(state, '', { escape: true })
+
+      expect(state.repoStack).toHaveLength(1)
+      expect(state.activeView).toBe('branches')
+      expect(state.selectedIndex).toBe(parentSelected)
+    })
   })
 
   it('opens diff for the selected commit with enter from history view', () => {

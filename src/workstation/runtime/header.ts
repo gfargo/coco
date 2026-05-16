@@ -24,7 +24,11 @@ import { isLogInkContextLoading } from '../chrome/context'
 import { getPullRequestStateGlyph } from '../chrome/iconography'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
-import { formatLogInkBreadcrumb } from '../../commands/log/inkKeymap'
+import {
+  combineLogInkBreadcrumbSegments,
+  formatLogInkBreadcrumb,
+  formatLogInkRepoBreadcrumb,
+} from '../../commands/log/inkKeymap'
 import type { LogInkState } from '../../commands/log/inkViewModel'
 import type { LogInkComponents, LogInkContext } from './types'
 
@@ -61,7 +65,13 @@ export function renderHeader(
     ? '  loading commits'
     : isLogInkContextLoading(contextStatus) ? '  loading context' : ''
   const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
-  const view = breadcrumb ? `  ${breadcrumb}` : ''
+  const repoCrumb = formatLogInkRepoBreadcrumb(state.repoStack)
+  // Repo breadcrumb (when nested) comes first so the user sees which
+  // submodule they're in at a glance, then the view breadcrumb (when
+  // pushed deeper than the root view). The truncate fallback in the
+  // title row still applies — when both fight for space, the ellipsis
+  // lands at the end of whichever segment overflows.
+  const view = combineLogInkBreadcrumbSegments(repoCrumb, breadcrumb)
   // Mode indicator (P2.2) — surfaces the current input mode so users
   // never wonder why `q` doesn't quit while they're editing or filtering.
   const mode = state.commitCompose.editing

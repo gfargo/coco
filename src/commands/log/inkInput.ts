@@ -14,6 +14,7 @@ import {
     LogInkCompareRef,
     LogInkSidebarTab,
     LogInkState,
+    isLogInkNestedRepo,
     parseLogInkHistoryFetchPrefix,
 } from './inkViewModel'
 import {
@@ -583,6 +584,14 @@ export function getLogInkPaletteExecuteEvents(
         value: 'open branches / tags / history and press m on the cursored ref',
       })]
     case 'navigateBack':
+      // Mirror the Esc / `<` semantics (#931): drain the frame's view
+      // stack first, then pop the frame itself when nested.
+      if (state.viewStack.length > 1) {
+        return [action({ type: 'popView' })]
+      }
+      if (isLogInkNestedRepo(state)) {
+        return [action({ type: 'popRepoFrame' })]
+      }
       return [action({ type: 'popView' })]
     case 'openSelected': {
       // From history → diff for selected commit; from status → diff for
@@ -1207,6 +1216,16 @@ export function getLogInkInputEvents(
     return [action({ type: 'popView' })]
   }
 
+  // #931 — Esc auto-pop. When the user has drilled into a submodule
+  // (nested repo frame) AND they're at the root of that frame's own
+  // view stack, Esc walks back out to the parent repo. Ordered after
+  // the view-stack pop above so Esc still drains a frame's view stack
+  // before popping the frame itself — the user sees a predictable
+  // "back, back, back" path out.
+  if (key.escape && isLogInkNestedRepo(state)) {
+    return [action({ type: 'popRepoFrame' })]
+  }
+
   if (inputValue === 'q') {
     if (hasUnsavedComposeDraft(state)) {
       return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
@@ -1517,6 +1536,17 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === '<') {
+    // #931 — `<` is the keymap-driven mirror of Esc auto-pop. When the
+    // view stack has somewhere to go, pop a view; otherwise, if we're
+    // in a nested submodule frame, walk back out to the parent. The
+    // `popView` action is itself a no-op at the root of a frame's
+    // view stack, so this ordering can't double-pop.
+    if (state.viewStack.length > 1) {
+      return [action({ type: 'popView' })]
+    }
+    if (isLogInkNestedRepo(state)) {
+      return [action({ type: 'popRepoFrame' })]
+    }
     return [action({ type: 'popView' })]
   }
 
