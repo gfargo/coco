@@ -154,6 +154,19 @@ export type LogInkInputContext = {
    */
   commitDiffSelectedSha?: string
   /**
+   * Resolved drill-in target for the file currently under the diff-view
+   * cursor (#931 PR 3b). Set by the runtime when the cursored file is a
+   * registered submodule AND the active frame's repo root has been
+   * resolved; undefined otherwise. The Enter handler in the diff view
+   * dispatches `pushRepoFrame` with this payload, opening the nested
+   * frame against the submodule's working directory.
+   */
+  commitDiffSubmoduleDrillIn?: {
+    label: string
+    workdir: string
+    entryRange?: { oldSha: string; newSha: string }
+  }
+  /**
    * True when the worktree has any staged, unstaged, or untracked changes.
    * Drives the synthetic "(+) new commit" row at the top of the history
    * list — pressing up at `selectedIndex === 0` transitions onto it; the
@@ -2100,6 +2113,32 @@ export function getLogInkInputEvents(
         }]
       }
     }
+  }
+
+  // #931 PR 3b — Enter on a submodule file in a commit diff drills into
+  // the submodule's history (the "spawn a coco ui scoped to the
+  // submodule" mental model from the design doc). The runtime decides
+  // whether the cursored file is a drill-in candidate and resolves the
+  // workdir + entryRange ahead of time; the handler here only fires
+  // when that target is populated. Ordered before the generic file-
+  // list Enter handler so the drill-in takes precedence over the
+  // detail-panel diff-refocus path.
+  if (
+    key.return &&
+    state.activeView === 'diff' &&
+    state.diffSource === 'commit' &&
+    context.commitDiffSubmoduleDrillIn
+  ) {
+    const target = context.commitDiffSubmoduleDrillIn
+    return [
+      action({
+        type: 'pushRepoFrame',
+        label: target.label,
+        workdir: target.workdir,
+        entryRange: target.entryRange,
+      }),
+      action({ type: 'setStatus', value: `entering submodule ${target.label}` }),
+    ]
   }
 
   if (

@@ -92,6 +92,7 @@ import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
 import { formatSplitApplySuccess } from '../chrome/postApplyHints'
 import { SPINNER_TICK_MS } from '../chrome/spinner'
 import { createInitialContextStatus, createRepoFrameRuntime } from './repoFrameFactory'
+import { resolveCommitDiffDrillInTarget } from './repoFrameDrillIn'
 import {
   getActiveRepoFrameRuntime,
   syncRepoStackRuntimes,
@@ -556,6 +557,31 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     },
     [],
   )
+  // #931 PR 3b — Absolute repo root for the active frame's `git`.
+  // Resolved asynchronously after every `git` swap (push / pop /
+  // boot) so the commit-diff drill-in helper can construct absolute
+  // workdirs for submodule paths recorded in `.gitmodules` (which
+  // are repo-relative). Undefined during the brief moment between
+  // git swap and the revparse callback resolving.
+  const [activeRepoRoot, setActiveRepoRoot] = React.useState<string | undefined>(undefined)
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const root = (await git.revparse(['--show-toplevel'])).trim()
+        if (!cancelled && root) {
+          setActiveRepoRoot(root)
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveRepoRoot(undefined)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [git])
   const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
@@ -3616,6 +3642,23 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         : undefined,
       commitDiffSelectedSha: state.diffSource === 'commit'
         ? selected?.hash
+        : undefined,
+      // #931 PR 3b — Submodule drill-in target for the cursored file
+      // in a commit diff. Resolved per-render so the Enter handler in
+      // `inkInput.ts` doesn't have to re-walk the submodule overview;
+      // undefined whenever the cursored file isn't a registered
+      // submodule (or the overview / repo root haven't loaded yet).
+      commitDiffSubmoduleDrillIn: state.diffSource === 'commit' && selectedDetailFile
+        ? resolveCommitDiffDrillInTarget({
+            selectedFile: {
+              path: selectedDetailFile.path,
+              submoduleChange: filePreview?.path === selectedDetailFile.path
+                ? filePreview.submoduleChange
+                : undefined,
+            },
+            submodules: context.submodules,
+            activeRepoRoot,
+          })
         : undefined,
       worktreeDirty,
       conflictFileCount: context.operation?.conflictedFiles.length,
