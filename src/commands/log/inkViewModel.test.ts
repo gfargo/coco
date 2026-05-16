@@ -1408,6 +1408,16 @@ describe('log Ink view model', () => {
       expect(state.repoStack[0].label).toBe('coco')
     })
 
+    it('records the supplied repoWorkdir on the root frame', () => {
+      const state = createLogInkState(rows, { repoLabel: 'coco', repoWorkdir: '/abs/coco' })
+      expect(state.repoStack[0].workdir).toBe('/abs/coco')
+    })
+
+    it('leaves workdir undefined on the root frame when repoWorkdir is omitted', () => {
+      const state = createLogInkState(rows)
+      expect(state.repoStack[0].workdir).toBeUndefined()
+    })
+
     it('getActiveLogInkRepoFrame returns the top of the stack', () => {
       const state = createLogInkState(rows, { repoLabel: 'coco' })
       expect(getActiveLogInkRepoFrame(state).label).toBe('coco')
@@ -1497,6 +1507,18 @@ describe('log Ink view model', () => {
         entryRange: { oldSha: 'aaa', newSha: 'bbb' },
       })
       expect(after.repoStack[1].entryRange).toEqual({ oldSha: 'aaa', newSha: 'bbb' })
+    })
+
+    it('pushRepoFrame records the optional workdir on the new frame', () => {
+      const before = createLogInkState(rows, { repoLabel: 'coco', repoWorkdir: '/abs/coco' })
+      const after = applyLogInkAction(before, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+        workdir: '/abs/coco/vendor/lib',
+      })
+      expect(after.repoStack[1].workdir).toBe('/abs/coco/vendor/lib')
+      // Root frame's workdir is preserved on push.
+      expect(after.repoStack[0].workdir).toBe('/abs/coco')
     })
 
     it('pushRepoFrame resets per-frame navigation state', () => {
