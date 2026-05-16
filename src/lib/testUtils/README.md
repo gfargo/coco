@@ -71,7 +71,8 @@ testUtils/
     ├── dirty-many-files.ts
     ├── mid-bisect.ts
     ├── mid-merge-conflict.ts
-    └── stashed-changes.ts
+    ├── stashed-changes.ts
+    └── submodule-with-history.ts
 ```
 
 The CLI driver lives at `bin/scenario.ts` and is wired via the
@@ -79,7 +80,7 @@ The CLI driver lives at `bin/scenario.ts` and is wired via the
 
 ## Available scenarios
 
-Run `npm run scenario list` for the live list. Current set (10 scenarios across 5 kinds):
+Run `npm run scenario list` for the live list. Current set (11 scenarios across 6 kinds):
 
 | Name | Kind | What you get |
 |---|---|---|
@@ -93,6 +94,7 @@ Run `npm run scenario list` for the live list. Current set (10 scenarios across 
 | `mid-merge-conflict` | operation | in-progress merge with 1 unresolved conflict on `src/widget.ts` — for the conflicts view |
 | `rich-history-graph` | history | 20+ commits across 6 date buckets, 2 `--no-ff` merges, 1 live unmerged `feat/wip` — for compact + full-graph rendering (bucket dividers, type coloring, branch chips, lane topology) |
 | `stashed-changes` | stash | clean `main` + 3 stashes (LIFO ordered, each touching a distinct file) — for the stash view |
+| `submodule-with-history` | submodule | parent with 4 commits + `vendor/lib` submodule (clean pin, 4 commits, `branch = main`) — for recursive submodule navigation (#931) |
 
 `npm run scenario describe <name>` prints the full description and
 the contract assertions for a single scenario.
@@ -262,7 +264,7 @@ export type Scenario = {
   /** Multi-line description shown in `npm run scenario describe <name>`. */
   description: string
   /** Filtering category for the list view. */
-  kind: 'branch' | 'worktree' | 'operation' | 'history' | 'stash'
+  kind: 'branch' | 'worktree' | 'operation' | 'history' | 'stash' | 'submodule'
   /** The actual state factory. Mutates the given repo. */
   setup: (repo: TempGitRepo) => Promise<void>
   /**

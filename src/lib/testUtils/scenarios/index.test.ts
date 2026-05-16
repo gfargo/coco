@@ -25,7 +25,7 @@ describe('scenarios registry', () => {
   })
 
   it('every scenario declares a valid kind', () => {
-    const validKinds = new Set(['branch', 'worktree', 'operation', 'history', 'stash'])
+    const validKinds = new Set(['branch', 'worktree', 'operation', 'history', 'stash', 'submodule'])
     for (const scenario of allScenarios) {
       expect(validKinds.has(scenario.kind)).toBe(true)
     }

@@ -21,6 +21,7 @@ import { multiCommitBranchScenario } from './multi-commit-branch'
 import { richHistoryGraphScenario } from './rich-history-graph'
 import { singleStagedFileScenario } from './single-staged-file'
 import { stashedChangesScenario } from './stashed-changes'
+import { submoduleWithHistoryScenario } from './submodule-with-history'
 import { twoCommitFeatureScenario } from './two-commit-feature'
 
 /**
@@ -44,6 +45,8 @@ export const allScenarios: readonly Scenario[] = [
   richHistoryGraphScenario,
   // stash shapes
   stashedChangesScenario,
+  // submodule shapes
+  submoduleWithHistoryScenario,
 ]
 
 /**
@@ -65,4 +68,5 @@ export { multiCommitBranchScenario } from './multi-commit-branch'
 export { richHistoryGraphScenario } from './rich-history-graph'
 export { singleStagedFileScenario } from './single-staged-file'
 export { stashedChangesScenario } from './stashed-changes'
+export { submoduleWithHistoryScenario } from './submodule-with-history'
 export { twoCommitFeatureScenario } from './two-commit-feature'

@@ -23,8 +23,9 @@ import type { TempGitRepo } from '../tempGitRepo'
  *   - `operation`  — in-progress git operations (bisect, merge, rebase)
  *   - `history`    — history-shape scenarios (large logs, many tags)
  *   - `stash`      — stashed changes
+ *   - `submodule`  — repos with one or more registered submodules
  */
-export type ScenarioKind = 'branch' | 'worktree' | 'operation' | 'history' | 'stash'
+export type ScenarioKind = 'branch' | 'worktree' | 'operation' | 'history' | 'stash' | 'submodule'
 
 /**
  * A named, deterministic git-state factory. Given a fresh `TempGitRepo`
