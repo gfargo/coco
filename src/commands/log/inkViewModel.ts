@@ -61,7 +61,18 @@ export type LogInkRepoFrame = {
    * user remembers what they were looking at. Undefined when
    * entered from the dedicated submodules view (`gM`).
    */
-  entryRange?: { oldSha: string; newSha: string }
+  entryRange?: LogInkRepoFrameEntryRange
+}
+
+/**
+ * `(oldPin, newPin)` sha pair captured at push time from a commit
+ * diff. Extracted as its own type so action payloads, the runtime's
+ * parallel structure, and any future helpers can refer to one shape
+ * instead of re-declaring the inline record.
+ */
+export type LogInkRepoFrameEntryRange = {
+  oldSha: string
+  newSha: string
 }
 
 export type LogInkRepoFrameReturn = {
@@ -640,6 +651,8 @@ export type LogInkAction =
   | { type: 'pushView'; value: LogInkView }
   | { type: 'popView' }
   | { type: 'replaceView'; value: LogInkView }
+  | { type: 'pushRepoFrame'; label: string; entryRange?: LogInkRepoFrameEntryRange }
+  | { type: 'popRepoFrame' }
   | { type: 'navigateHome' }
   | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
@@ -877,6 +890,97 @@ function withPoppedView(state: LogInkState): LogInkState {
     pendingCommitFocused: next === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: next === 'status' ? state.statusGroupHeaderFocused : false,
     pendingKey: undefined,
+  }
+}
+
+/**
+ * Push a nested-repo frame onto `state.repoStack` (#931). Snapshots
+ * the active view position into the new frame's `parentReturn` so a
+ * subsequent pop lands the user back where they came from, then
+ * resets the per-frame navigation state (active view, view stack,
+ * row / file / submodule cursors, filter) so the nested frame opens
+ * in a clean slate — the mental equivalent of a fresh `coco ui`
+ * launched against the submodule's working dir.
+ *
+ * Carry-over preferences (sidebar tab, branch / tag sort, palette
+ * recents, inspector tab, diff view mode) are intentionally left
+ * untouched. They're user-level choices that should persist across
+ * frames, the same way they persist across view pushes today.
+ *
+ * Live runtime objects (`SimpleGit`, loaded `LogInkContext`) live
+ * outside the reducer in `app.ts`'s parallel ref structure — this
+ * helper only manages the pure view-model side of the push.
+ */
+function withPushedRepoFrame(
+  state: LogInkState,
+  payload: { label: string; entryRange?: LogInkRepoFrameEntryRange }
+): LogInkState {
+  const newFrame: LogInkRepoFrame = {
+    label: payload.label,
+    entryRange: payload.entryRange,
+    parentReturn: {
+      activeView: state.activeView,
+      selectedIndex: state.selectedIndex,
+      selectedFileIndex: state.selectedFileIndex,
+      selectedSubmoduleIndex: state.selectedSubmoduleIndex,
+      filter: state.filter,
+    },
+  }
+  return {
+    ...state,
+    repoStack: [...state.repoStack, newFrame],
+    activeView: 'history',
+    viewStack: ['history'],
+    selectedIndex: 0,
+    selectedFileIndex: 0,
+    selectedSubmoduleIndex: 0,
+    filter: '',
+    filterMode: false,
+    pendingCommitFocused: false,
+    pendingKey: undefined,
+    pendingConfirmationId: undefined,
+    pendingConfirmationPayload: undefined,
+    pendingMutationConfirmation: undefined,
+  }
+}
+
+/**
+ * Pop the top repo frame off `state.repoStack` (#931) and restore
+ * the parent's view position from the captured `parentReturn`. A
+ * no-op when the stack is already at its single root frame so this
+ * action is safe to dispatch from generic input handlers (e.g. the
+ * Esc auto-pop wiring that lands in a follow-up PR).
+ *
+ * The defensive `parentReturn` fallback handles the never-supposed-
+ * to-happen case where a non-root frame somehow has no return state
+ * recorded — drop the frame but leave the user's view position
+ * alone rather than crash mid-session.
+ */
+function withPoppedRepoFrame(state: LogInkState): LogInkState {
+  if (state.repoStack.length <= 1) {
+    return { ...state, pendingKey: undefined }
+  }
+  const topFrame = state.repoStack[state.repoStack.length - 1]
+  const ret = topFrame.parentReturn
+  const repoStack = state.repoStack.slice(0, -1)
+  if (!ret) {
+    return { ...state, repoStack, pendingKey: undefined }
+  }
+  return {
+    ...state,
+    repoStack,
+    activeView: ret.activeView,
+    viewStack: [ret.activeView],
+    selectedIndex: ret.selectedIndex,
+    selectedFileIndex: ret.selectedFileIndex,
+    selectedSubmoduleIndex: ret.selectedSubmoduleIndex,
+    filter: ret.filter,
+    filterMode: false,
+    pendingCommitFocused: false,
+    pendingKey: undefined,
+    pendingConfirmationId: undefined,
+    pendingConfirmationPayload: undefined,
+    pendingMutationConfirmation: undefined,
   }
 }
 
@@ -1568,6 +1672,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return withPoppedView(state)
     case 'replaceView':
       return withReplacedView(state, action.value)
+    case 'pushRepoFrame':
+      return withPushedRepoFrame(state, { label: action.label, entryRange: action.entryRange })
+    case 'popRepoFrame':
+      return withPoppedRepoFrame(state)
     case 'navigateHome': {
       if (state.viewStack.length === 1 && topOfStack(state.viewStack) === HOME_VIEW) {
         return { ...state, pendingKey: undefined }

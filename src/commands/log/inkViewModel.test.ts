@@ -1447,6 +1447,132 @@ describe('log Ink view model', () => {
       ])
     })
   })
+
+  describe('pushRepoFrame / popRepoFrame (#931 PR 2)', () => {
+    function nudgeParentState(s: ReturnType<typeof createLogInkState>) {
+      // Move the parent off defaults so we can verify snapshot + restore.
+      // Filter first so the move's clamping is computed against the
+      // filtered list, not retroactively shrunken by the filter.
+      let next = applyLogInkAction(s, { type: 'setFilter', value: 'feat:' })
+      next = applyLogInkAction(next, { type: 'move', delta: 1 })
+      next = applyLogInkAction(next, { type: 'setActiveView', value: 'branches' })
+      return next
+    }
+
+    it('pushRepoFrame appends a new frame with the supplied label', () => {
+      const before = createLogInkState(rows, { repoLabel: 'coco' })
+      const after = applyLogInkAction(before, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+      })
+      expect(after.repoStack).toHaveLength(2)
+      expect(after.repoStack[0].label).toBe('coco')
+      expect(after.repoStack[1].label).toBe('vendor/lib')
+      expect(isLogInkNestedRepo(after)).toBe(true)
+      expect(getActiveLogInkRepoFrame(after).label).toBe('vendor/lib')
+    })
+
+    it('pushRepoFrame snapshots the parent view position into parentReturn', () => {
+      const before = nudgeParentState(createLogInkState(rows, { repoLabel: 'coco' }))
+      const after = applyLogInkAction(before, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+      })
+      const ret = after.repoStack[1].parentReturn
+      expect(ret).toEqual({
+        activeView: 'branches',
+        selectedIndex: before.selectedIndex,
+        selectedFileIndex: 0,
+        selectedSubmoduleIndex: 0,
+        filter: 'feat:',
+      })
+      expect(before.selectedIndex).toBeGreaterThan(0)
+    })
+
+    it('pushRepoFrame records the optional entryRange', () => {
+      const before = createLogInkState(rows, { repoLabel: 'coco' })
+      const after = applyLogInkAction(before, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+        entryRange: { oldSha: 'aaa', newSha: 'bbb' },
+      })
+      expect(after.repoStack[1].entryRange).toEqual({ oldSha: 'aaa', newSha: 'bbb' })
+    })
+
+    it('pushRepoFrame resets per-frame navigation state', () => {
+      const before = nudgeParentState(createLogInkState(rows, { repoLabel: 'coco' }))
+      const after = applyLogInkAction(before, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+      })
+      expect(after.activeView).toBe('history')
+      expect(after.viewStack).toEqual(['history'])
+      expect(after.selectedIndex).toBe(0)
+      expect(after.selectedFileIndex).toBe(0)
+      expect(after.selectedSubmoduleIndex).toBe(0)
+      expect(after.filter).toBe('')
+      expect(after.filterMode).toBe(false)
+    })
+
+    it('pushRepoFrame preserves carry-over preferences (sort modes, palette, sidebar)', () => {
+      let before = createLogInkState(rows, { repoLabel: 'coco' })
+      before = applyLogInkAction(before, { type: 'setSidebarTab', value: 'tags' })
+      before = applyLogInkAction(before, { type: 'cycleBranchSort' })
+      before = applyLogInkAction(before, { type: 'recordPaletteRecent', value: 'history.goHome' })
+
+      const after = applyLogInkAction(before, { type: 'pushRepoFrame', label: 'vendor/lib' })
+      expect(after.sidebarTab).toBe(before.sidebarTab)
+      expect(after.userSidebarTab).toBe(before.userSidebarTab)
+      expect(after.branchSort).toBe(before.branchSort)
+      expect(after.paletteRecent).toEqual(before.paletteRecent)
+    })
+
+    it('popRepoFrame is a no-op at the root frame', () => {
+      const before = createLogInkState(rows, { repoLabel: 'coco' })
+      const after = applyLogInkAction(before, { type: 'popRepoFrame' })
+      expect(after.repoStack).toHaveLength(1)
+      expect(isLogInkNestedRepo(after)).toBe(false)
+    })
+
+    it('pushRepoFrame followed by popRepoFrame restores the parent position', () => {
+      const before = nudgeParentState(createLogInkState(rows, { repoLabel: 'coco' }))
+      const pushed = applyLogInkAction(before, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+      })
+      const popped = applyLogInkAction(pushed, { type: 'popRepoFrame' })
+
+      expect(popped.repoStack).toHaveLength(1)
+      expect(popped.activeView).toBe('branches')
+      expect(popped.viewStack).toEqual(['branches'])
+      expect(popped.selectedIndex).toBe(before.selectedIndex)
+      expect(popped.filter).toBe('feat:')
+      expect(isLogInkNestedRepo(popped)).toBe(false)
+    })
+
+    it('popRepoFrame on a 3-deep stack drops only the top frame', () => {
+      let state = createLogInkState(rows, { repoLabel: 'coco' })
+      state = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
+      state = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib/deep' })
+      expect(getLogInkRepoStackLabels(state)).toEqual(['coco', 'vendor/lib', 'vendor/lib/deep'])
+
+      state = applyLogInkAction(state, { type: 'popRepoFrame' })
+      expect(getLogInkRepoStackLabels(state)).toEqual(['coco', 'vendor/lib'])
+      expect(isLogInkNestedRepo(state)).toBe(true)
+    })
+
+    it('pushRepoFrame clears in-flight confirmation state', () => {
+      let before = createLogInkState(rows, { repoLabel: 'coco' })
+      before = applyLogInkAction(before, {
+        type: 'setPendingConfirmation',
+        value: 'revert-file',
+        payload: 'src/foo.ts',
+      })
+      const after = applyLogInkAction(before, { type: 'pushRepoFrame', label: 'vendor/lib' })
+      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.pendingConfirmationPayload).toBeUndefined()
+    })
+  })
 })
 
 describe('issue / pull-request triage navigation (#882 phase 3)', () => {
