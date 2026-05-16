@@ -91,6 +91,14 @@ import {
 import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
 import { formatSplitApplySuccess } from '../chrome/postApplyHints'
 import { SPINNER_TICK_MS } from '../chrome/spinner'
+import { createInitialContextStatus, createRepoFrameRuntime } from './repoFrameFactory'
+import {
+  getActiveRepoFrameRuntime,
+  syncRepoStackRuntimes,
+  updateRepoFrameRuntime,
+  type RepoFrameRuntime,
+  type RepoStackRuntimes,
+} from './repoStackRuntime'
 
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -441,7 +449,7 @@ function enrichFilterActionWithRectification(
 }
 
 export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, clipboardRunner, dateBucketingEnabled, git, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, theme } = deps
+  const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, theme } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
   const { exit } = useApp()
@@ -474,20 +482,80 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       bootLoading: Boolean(loadRows),
     })
   )
-  const [context, setContext] = React.useState<LogInkContext>({})
-  const [contextStatus, setContextStatus] = React.useState<LogInkContextStatus>(() => {
-    // Boot starts every fetched key in 'loading' so the surfaces show
-    // their loading hints immediately. `pullRequest` is the exception
-    // (#808) — it isn't part of the boot fetch entries; it lazy-loads
-    // when the user enters the PR view. Marking it 'idle' avoids a
-    // permanent "loading" flag in the chrome and lets the dedicated
-    // PR view's own load effect drive its loading state.
-    return updateLogInkContextStatus(
-      createLogInkContextStatus('loading'),
-      'pullRequest',
-      'idle'
-    )
-  })
+  // Nested-repo runtime stack (#931). Each frame holds the live
+  // `SimpleGit`, the loaded `LogInkContext`, and the per-key load
+  // status the chrome reads. The active (top-of-stack) entry drives
+  // every loader and surface; popping a frame restores the parent's
+  // cached entry so a drill-in / drill-out round trip doesn't re-pay
+  // the context load cost. Seeded with a single root runtime against
+  // the cwd `coco ui` was launched in.
+  const [runtimes, setRuntimes] = React.useState<RepoStackRuntimes>(() => [{
+    git: rootGit,
+    context: {},
+    contextStatus: createInitialContextStatus(),
+  }])
+  // Sync `runtimes` against the view-model stack on every push / pop.
+  // The sync is monotone — push appends a new runtime via the factory,
+  // pop slices off the top runtime; the parent's cached state survives.
+  // The factory is wrapped to capture `rootGit` so a defensively-pushed
+  // frame without a workdir still has a working `SimpleGit` bound.
+  React.useEffect(() => {
+    setRuntimes((prev) => {
+      const { runtimes: next } = syncRepoStackRuntimes(
+        prev,
+        state.repoStack,
+        (frame) => createRepoFrameRuntime(frame, rootGit),
+      )
+      return next
+    })
+  }, [state.repoStack, rootGit])
+  // Active-frame projection (#931). `git`, `context`, `contextStatus`
+  // — every existing closure / effect / surface reads these names; the
+  // only thing this PR changes is where they come from. When the user
+  // drills into a submodule, the top-of-stack runtime swaps, every
+  // dep array that lists `git` re-fires, and the loaders refetch
+  // against the submodule's working tree.
+  const activeRuntime: RepoFrameRuntime = getActiveRepoFrameRuntime(runtimes) ?? {
+    git: rootGit,
+    context: {},
+    contextStatus: createInitialContextStatus(),
+  }
+  const git = activeRuntime.git
+  const context = activeRuntime.context
+  const contextStatus = activeRuntime.contextStatus
+  // Wrappers that delegate to the active frame's runtime entry so the
+  // existing call sites stay byte-identical. Support both function-
+  // updater and value-updater forms (the codebase uses both).
+  const setContext = React.useCallback(
+    (arg: LogInkContext | ((prev: LogInkContext) => LogInkContext)) => {
+      setRuntimes((prev) => {
+        const depth = prev.length - 1
+        if (depth < 0) return prev
+        return updateRepoFrameRuntime(prev, depth, (frame) => ({
+          ...frame,
+          context: typeof arg === 'function'
+            ? (arg as (p: LogInkContext) => LogInkContext)(frame.context)
+            : arg,
+        }))
+      })
+    },
+    [],
+  )
+  const setContextStatus = React.useCallback(
+    (arg: LogInkContextStatus | ((prev: LogInkContextStatus) => LogInkContextStatus)) => {
+      setRuntimes((prev) => {
+        const depth = prev.length - 1
+        if (depth < 0) return prev
+        return updateRepoFrameRuntime(prev, depth, (frame) => ({
+          ...frame,
+          contextStatus: typeof arg === 'function'
+            ? (arg as (p: LogInkContextStatus) => LogInkContextStatus)(frame.contextStatus)
+            : arg,
+        }))
+      })
+    },
+    [],
+  )
   const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
