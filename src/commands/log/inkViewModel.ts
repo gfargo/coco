@@ -62,6 +62,15 @@ export type LogInkRepoFrame = {
    * entered from the dedicated submodules view (`gM`).
    */
   entryRange?: LogInkRepoFrameEntryRange
+  /**
+   * Absolute working-directory path the frame binds against. Drives
+   * the runtime's `SimpleGit` factory (PR 2c) — nested frames bind a
+   * fresh `simpleGit(workdir)`; the root frame's workdir is the cwd
+   * `coco ui` was launched from. Optional only for back-compat with
+   * states created before this field landed (notably tests that
+   * direct-construct frames); production code paths always set it.
+   */
+  workdir?: string
 }
 
 /**
@@ -139,6 +148,13 @@ export type CreateLogInkStateOptions = {
    * cwd or the package name.
    */
   repoLabel?: string
+  /**
+   * Absolute working-directory path for the root frame (#931). The
+   * runtime layer reads it to know which `SimpleGit` instance backs
+   * the root frame. Optional only so back-compat callers (tests
+   * direct-constructing state) don't have to thread it through.
+   */
+  repoWorkdir?: string
 }
 
 export type LogInkState = {
@@ -651,7 +667,7 @@ export type LogInkAction =
   | { type: 'pushView'; value: LogInkView }
   | { type: 'popView' }
   | { type: 'replaceView'; value: LogInkView }
-  | { type: 'pushRepoFrame'; label: string; entryRange?: LogInkRepoFrameEntryRange }
+  | { type: 'pushRepoFrame'; label: string; workdir?: string; entryRange?: LogInkRepoFrameEntryRange }
   | { type: 'popRepoFrame' }
   | { type: 'navigateHome' }
   | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
@@ -913,10 +929,11 @@ function withPoppedView(state: LogInkState): LogInkState {
  */
 function withPushedRepoFrame(
   state: LogInkState,
-  payload: { label: string; entryRange?: LogInkRepoFrameEntryRange }
+  payload: { label: string; workdir?: string; entryRange?: LogInkRepoFrameEntryRange }
 ): LogInkState {
   const newFrame: LogInkRepoFrame = {
     label: payload.label,
+    workdir: payload.workdir,
     entryRange: payload.entryRange,
     parentReturn: {
       activeView: state.activeView,
@@ -1150,7 +1167,7 @@ export function createLogInkState(
     selectedPullRequestTriageIndex: 0,
     selectedIssueFilter: 'open',
     selectedPullRequestFilter: 'open',
-    repoStack: [{ label: options.repoLabel || 'root' }],
+    repoStack: [{ label: options.repoLabel || 'root', workdir: options.repoWorkdir }],
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
     paletteFilter: '',
@@ -1673,7 +1690,11 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     case 'replaceView':
       return withReplacedView(state, action.value)
     case 'pushRepoFrame':
-      return withPushedRepoFrame(state, { label: action.label, entryRange: action.entryRange })
+      return withPushedRepoFrame(state, {
+        label: action.label,
+        workdir: action.workdir,
+        entryRange: action.entryRange,
+      })
     case 'popRepoFrame':
       return withPoppedRepoFrame(state)
     case 'navigateHome': {
