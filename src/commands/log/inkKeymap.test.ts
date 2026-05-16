@@ -1,7 +1,9 @@
 import {
     LOG_INK_KEY_BINDINGS,
+    combineLogInkBreadcrumbSegments,
     filterLogInkPaletteCommands,
     formatLogInkBreadcrumb,
+    formatLogInkRepoBreadcrumb,
     getLogInkChordContinuations,
     getLogInkCommandPaletteItems,
     getLogInkFooterHints,
@@ -367,6 +369,73 @@ describe('log Ink keymap', () => {
     expect(formatLogInkBreadcrumb(['history', 'status', 'diff']))
       .toBe('history › status › diff   ← <')
     expect(formatLogInkBreadcrumb(['history', 'compose'])).toBe('history › compose   ← <')
+  })
+
+  describe('formatLogInkRepoBreadcrumb (#931)', () => {
+    it('returns empty for an empty stack', () => {
+      expect(formatLogInkRepoBreadcrumb([])).toBe('')
+    })
+
+    it('returns empty for a single-frame (root-only) stack', () => {
+      expect(formatLogInkRepoBreadcrumb([{ label: 'root' }])).toBe('')
+      expect(formatLogInkRepoBreadcrumb([{ label: 'coco' }])).toBe('')
+    })
+
+    it('renders a two-frame stack with the back-hint cue', () => {
+      expect(formatLogInkRepoBreadcrumb([
+        { label: 'coco' },
+        { label: 'vendor/lib' },
+      ])).toBe('coco › vendor/lib   ← esc')
+    })
+
+    it('renders a deeper stack with frames joined by the same separator', () => {
+      expect(formatLogInkRepoBreadcrumb([
+        { label: 'coco' },
+        { label: 'vendor/lib' },
+        { label: 'vendor/lib/inner' },
+      ])).toBe('coco › vendor/lib › vendor/lib/inner   ← esc')
+    })
+
+    it('reads only the label off each frame and ignores other fields', () => {
+      // Frames will carry `parentReturn`, `entryRange`, `workdir`, etc.
+      // The formatter must not surface any of that in the chrome line.
+      expect(formatLogInkRepoBreadcrumb([
+        { label: 'coco', workdir: '/abs/coco' } as { label: string },
+        { label: 'vendor/lib', workdir: '/abs/coco/vendor/lib' } as { label: string },
+      ])).toBe('coco › vendor/lib   ← esc')
+    })
+  })
+
+  describe('combineLogInkBreadcrumbSegments (#931)', () => {
+    it('returns empty when both segments are empty', () => {
+      expect(combineLogInkBreadcrumbSegments('', '')).toBe('')
+    })
+
+    it('renders only the repo crumb when the view crumb is empty', () => {
+      expect(combineLogInkBreadcrumbSegments('coco › vendor/lib   ← esc', ''))
+        .toBe('  coco › vendor/lib   ← esc')
+    })
+
+    it('renders only the view crumb when the repo crumb is empty', () => {
+      expect(combineLogInkBreadcrumbSegments('', 'history › diff   ← <'))
+        .toBe('  history › diff   ← <')
+    })
+
+    it('joins repo + view with extra spacing when both are present', () => {
+      expect(combineLogInkBreadcrumbSegments(
+        'coco › vendor/lib   ← esc',
+        'history › diff   ← <',
+      )).toBe('  coco › vendor/lib   ← esc    history › diff   ← <')
+    })
+
+    it('matches the leading-spaces convention the existing view-only path used', () => {
+      // Before #931 the chrome did `  ${breadcrumb}` when only the view
+      // stack was nested. This contract assertion locks in the legacy
+      // behavior so the visible header doesn't shift for non-nested
+      // sessions.
+      const viewOnly = combineLogInkBreadcrumbSegments('', 'status   ← <')
+      expect(viewOnly).toBe('  status   ← <')
+    })
   })
 
   it('exposes the gc compose chord as a global navigation binding', () => {
