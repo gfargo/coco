@@ -10,17 +10,22 @@
  *     needs to test gh-CLI integrations; the scenario keeps remote
  *     setup out of scope so it works in fully-offline contexts)
  *
- * Used to validate the create-pr flow (#905) and changelog view (#906).
+ * Used to validate the create-pr flow and changelog view.
  *
  * EXTRACTION DISCIPLINE: no coco-specific imports.
+ *
+ * IMPLEMENTATION NOTE: this is the first scenario migrated to the atom
+ * layer (#996 follow-up). Compare against the old imperative form to
+ * see how `chain` + atoms compress the per-commit boilerplate. Other
+ * scenarios continue to use the imperative `(repo) => …` form until
+ * they're individually migrated.
  */
 
-import type { Scenario } from './types'
-import { writeSeededFiles } from './shared/seededFiles'
+import { addCommit, chain, defineScenario, seededFiles, switchToBranch } from '../atoms'
 
 const SEED = 0xfeedc0de
 
-export const featurePrReadyScenario: Scenario = {
+export const featurePrReadyScenario = defineScenario({
   name: 'feature-pr-ready',
   summary: 'feature branch with 4 commits, clean worktree, ready to open a PR',
   description: [
@@ -41,73 +46,92 @@ export const featurePrReadyScenario: Scenario = {
     'feat/widget-v2 is 4 commits ahead of main',
     'worktree is clean',
   ],
-  setup: async (repo) => {
+  setup: chain(
     // === main: 3-commit scaffold ===
-    await repo.writeFile('README.md', '# Widget\n\nA hypothetical widget library.\n')
-    await repo.writeFile('package.json', JSON.stringify({
-      name: 'widget',
-      version: '0.1.0',
-      main: 'src/index.ts',
-    }, null, 2) + '\n')
-    await repo.commitAll('chore: initial commit')
-
-    await writeSeededFiles(repo, [
-      { path: 'src/index.ts', tokens: 60 },
-      { path: 'src/widget.ts', tokens: 120 },
-    ], SEED)
-    await repo.commitAll('feat: scaffold widget module')
-
-    await writeSeededFiles(repo, [
-      { path: 'src/utils.ts', tokens: 80 },
-      { path: 'tests/widget.test.ts', tokens: 100 },
-    ], SEED)
-    await repo.commitAll('test: add baseline widget tests')
+    addCommit({
+      message: 'chore: initial commit',
+      files: {
+        'README.md': '# Widget\n\nA hypothetical widget library.\n',
+        'package.json':
+          JSON.stringify(
+            { name: 'widget', version: '0.1.0', main: 'src/index.ts' },
+            null,
+            2,
+          ) + '\n',
+      },
+    }),
+    seededFiles({
+      files: [
+        { path: 'src/index.ts', tokens: 60 },
+        { path: 'src/widget.ts', tokens: 120 },
+      ],
+      seed: SEED,
+    }),
+    addCommit({ message: 'feat: scaffold widget module' }),
+    seededFiles({
+      files: [
+        { path: 'src/utils.ts', tokens: 80 },
+        { path: 'tests/widget.test.ts', tokens: 100 },
+      ],
+      seed: SEED,
+    }),
+    addCommit({ message: 'test: add baseline widget tests' }),
 
     // === feat/widget-v2: 4 commits ahead ===
-    await repo.git.checkoutLocalBranch('feat/widget-v2')
+    switchToBranch('feat/widget-v2'),
 
-    // Per-commit seed shifts so files re-touched across commits
-    // (e.g. src/index.ts) actually differ between commits — same path
-    // + same SEED would produce identical content and the commit would
+    // Per-commit seed shifts so files re-touched across commits (e.g.
+    // `src/index.ts`) actually differ between commits — same path +
+    // same SEED would produce identical content and the commit would
     // be a no-op.
+
     // Commit 1 — feature: add v2 entry point + types
-    await writeSeededFiles(repo, [
-      { path: 'src/widget-v2.ts', tokens: 180 },
-      { path: 'src/types.ts', tokens: 70 },
-    ], SEED + 1)
-    await repo.commitAll('feat: add widget-v2 entry point and types')
+    seededFiles({
+      files: [
+        { path: 'src/widget-v2.ts', tokens: 180 },
+        { path: 'src/types.ts', tokens: 70 },
+      ],
+      seed: SEED + 1,
+    }),
+    addCommit({ message: 'feat: add widget-v2 entry point and types' }),
 
     // Commit 2 — feature: wire v2 into the index
-    await writeSeededFiles(repo, [
-      { path: 'src/index.ts', tokens: 90 },
-    ], SEED + 2)
-    await repo.commitAll('feat: expose widget-v2 from public index')
+    seededFiles({
+      files: [{ path: 'src/index.ts', tokens: 90 }],
+      seed: SEED + 2,
+    }),
+    addCommit({ message: 'feat: expose widget-v2 from public index' }),
 
     // Commit 3 — tests: cover v2
-    await writeSeededFiles(repo, [
-      { path: 'tests/widget-v2.test.ts', tokens: 140 },
-    ], SEED + 3)
-    await repo.commitAll('test: cover widget-v2 happy path and edge cases')
+    seededFiles({
+      files: [{ path: 'tests/widget-v2.test.ts', tokens: 140 }],
+      seed: SEED + 3,
+    }),
+    addCommit({ message: 'test: cover widget-v2 happy path and edge cases' }),
 
     // Commit 4 — docs: update readme + add migration guide
-    await repo.writeFile('README.md', [
-      '# Widget',
-      '',
-      'A hypothetical widget library.',
-      '',
-      '## v2 (new!)',
-      '',
-      'The v2 API is a drop-in upgrade with structured option objects',
-      'and async lifecycle hooks. See `MIGRATING.md` for details.',
-      '',
-    ].join('\n'))
-    await repo.writeFile('MIGRATING.md', [
-      '# Migrating from v1 to v2',
-      '',
-      'The v1 positional-args API is replaced by an options object.',
-      'Lifecycle hooks are async-by-default — wrap calls in `await`.',
-      '',
-    ].join('\n'))
-    await repo.commitAll('docs: document widget-v2 API and migration path')
-  },
-}
+    addCommit({
+      message: 'docs: document widget-v2 API and migration path',
+      files: {
+        'README.md': [
+          '# Widget',
+          '',
+          'A hypothetical widget library.',
+          '',
+          '## v2 (new!)',
+          '',
+          'The v2 API is a drop-in upgrade with structured option objects',
+          'and async lifecycle hooks. See `MIGRATING.md` for details.',
+          '',
+        ].join('\n'),
+        'MIGRATING.md': [
+          '# Migrating from v1 to v2',
+          '',
+          'The v1 positional-args API is replaced by an options object.',
+          'Lifecycle hooks are async-by-default — wrap calls in `await`.',
+          '',
+        ].join('\n'),
+      },
+    }),
+  ),
+})

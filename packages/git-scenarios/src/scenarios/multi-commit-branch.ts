@@ -20,10 +20,14 @@
  *   - view switches between history / status / branches / tags
  *
  * EXTRACTION DISCIPLINE: no coco-specific imports.
+ *
+ * IMPLEMENTATION NOTE: this scenario uses the atom layer (#996), with
+ * `repeat()` driving the per-commit pattern — a much tighter
+ * expression of "do this N times with a monotonic seed shift" than the
+ * imperative loop it replaced.
  */
 
-import type { Scenario } from './types'
-import { writeSeededFiles } from './shared/seededFiles'
+import { addCommit, chain, defineScenario, repeat, seededFiles, switchToBranch } from '../atoms'
 
 const SEED = 0xdab0b00
 
@@ -38,7 +42,7 @@ const COMMIT_MESSAGES = [
   'feat: add dashboard export-to-csv action',
 ] as const
 
-export const multiCommitBranchScenario: Scenario = {
+export const multiCommitBranchScenario = defineScenario({
   name: 'multi-commit-branch',
   summary: 'feature branch with 8 varied commits (feat/fix/chore/docs/refactor/test)',
   description: [
@@ -61,27 +65,34 @@ export const multiCommitBranchScenario: Scenario = {
     'feat/dashboard has 8 commits on top of main',
     'worktree is clean',
   ],
-  setup: async (repo) => {
+  setup: chain(
     // main baseline
-    await repo.writeFile('README.md', '# Dashboard\n')
-    await repo.commitAll('chore: initial scaffold')
+    addCommit({ message: 'chore: initial scaffold', files: { 'README.md': '# Dashboard\n' } }),
+    seededFiles({
+      files: [
+        { path: 'src/app.ts', tokens: 80 },
+        { path: 'src/index.ts', tokens: 50 },
+      ],
+      seed: SEED,
+    }),
+    addCommit({ message: 'chore: baseline app shell' }),
 
-    await writeSeededFiles(repo, [
-      { path: 'src/app.ts', tokens: 80 },
-      { path: 'src/index.ts', tokens: 50 },
-    ], SEED)
-    await repo.commitAll('chore: baseline app shell')
-
-    // feature branch — 8 commits, each on its own file with a
-    // distinct seed so the commit subjects actually correspond to
-    // distinct diffs.
-    await repo.git.checkoutLocalBranch('feat/dashboard')
-
-    for (let i = 0; i < COMMIT_MESSAGES.length; i += 1) {
-      await writeSeededFiles(repo, [
-        { path: `src/dashboard/feature-${String(i + 1).padStart(2, '0')}.ts`, tokens: 80 + i * 10 },
-      ], SEED + 100 + i)
-      await repo.commitAll(COMMIT_MESSAGES[i])
-    }
-  },
-}
+    // feature branch — 8 commits, each on its own file with a distinct
+    // seed so the commit subjects actually correspond to distinct diffs.
+    switchToBranch('feat/dashboard'),
+    repeat(COMMIT_MESSAGES.length, (i) =>
+      chain(
+        seededFiles({
+          files: [
+            {
+              path: `src/dashboard/feature-${String(i + 1).padStart(2, '0')}.ts`,
+              tokens: 80 + i * 10,
+            },
+          ],
+          seed: SEED + 100 + i,
+        }),
+        addCommit({ message: COMMIT_MESSAGES[i] }),
+      ),
+    ),
+  ),
+})

@@ -1,11 +1,11 @@
 /**
  * Public entry point for `@gfargo/git-scenarios`.
  *
- * Three concentric layers:
+ * Four concentric layers:
  *
  *   1. `spinUpScenario(name)` — the one-shot API for tests. Creates a
  *      temp repo, runs the named scenario, and returns the result.
- *      99% of test consumers want this.
+ *      90% of test consumers want this.
  *   2. `createTempGitRepo()` — the raw primitive. A fresh git repo on
  *      disk with user identity + a `main` branch. Build whatever you
  *      need from there. For the rare case no named scenario fits.
@@ -13,6 +13,10 @@
  *      the registry surface. Tools that want to enumerate, describe,
  *      or filter scenarios (the CLI is one such consumer; the
  *      structural-extract eval harness is another) hit these.
+ *   4. **Atom layer** (`chain`, `addCommit`, `switchToBranch`,
+ *      `seededFiles`, `defineScenario`, …) — composable building
+ *      blocks for assembling custom scenarios inline or registering
+ *      new ones. See `./atoms` for the full set.
  *
  * Individual scenario exports are also re-exported from `./scenarios`
  * for fine-grained selection — e.g. running just `feature-pr-ready` in
@@ -21,6 +25,23 @@
 
 export { spinUpScenario } from './spinUpScenario'
 export { createTempGitRepo, type TempGitRepo } from './tempGitRepo'
+
+// Atom layer — see ./atoms/index.ts for the catalog.
+export {
+  chain,
+  repeat,
+  writeFiles,
+  stageFiles,
+  commit,
+  addCommit,
+  switchToBranch,
+  checkoutBranch,
+  seededFiles,
+  defineScenario,
+  type Step,
+  type FileMap,
+  type SeededFileSpec,
+} from './atoms'
 
 export {
   allScenarios,
