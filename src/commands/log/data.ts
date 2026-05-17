@@ -1,6 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { extractLfsPatchChange, renderLfsSummary } from '../../git/lfsPointer'
-import { extractSubmoduleChange, renderSubmoduleSummary } from '../../git/submoduleDiff'
+import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from '../../git/submoduleDiff'
 import { LogArgv, LogView } from './config'
 
 export const FIELD_SEPARATOR = '\x1f'
@@ -67,6 +67,16 @@ export type GitCommitFilePreview = {
     deletions?: number
   }
   hunks: string[]
+  /**
+   * When the file is a submodule (gitlink) change, the structured
+   * `Subproject commit <sha>` extraction (#884). The `hunks` array
+   * is already summarized to a single human-readable line; this
+   * field carries the raw before/after shas so consumers like the
+   * recursive submodule navigation drill-in (#931) can build a
+   * concrete `entryRange` without re-running the diff extraction.
+   * Undefined for non-submodule files.
+   */
+  submoduleChange?: SubmoduleChange
 }
 
 export function toArray(value: string | string[] | undefined): string[] {
@@ -407,5 +417,6 @@ export async function getCommitFilePreview(
       deletions: file.deletions,
     },
     hunks: finalHunks,
+    submoduleChange,
   }
 }

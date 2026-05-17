@@ -1246,6 +1246,125 @@ describe('log Ink input interactions', () => {
       expect(state.repoStack).toHaveLength(2)
     })
 
+    describe('commit-diff drill-in (PR 3b)', () => {
+      function commitDiffState() {
+        const state = createLogInkState(rows, { activeView: 'diff', repoLabel: 'coco', repoWorkdir: '/abs/coco' })
+        return {
+          ...state,
+          diffSource: 'commit' as const,
+        } as LogInkState
+      }
+
+      it('Enter on a submodule file dispatches pushRepoFrame with the drill-in payload', () => {
+        const state = commitDiffState()
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          commitDiffSubmoduleDrillIn: {
+            label: 'vendor/lib',
+            workdir: '/abs/coco/vendor/lib',
+            entryRange: {
+              oldSha: '11111111',
+              newSha: '22222222',
+            },
+          },
+        })
+        const actionEvents = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action)
+        const push = actionEvents.find((a) => a.type === 'pushRepoFrame')
+        expect(push).toEqual({
+          type: 'pushRepoFrame',
+          label: 'vendor/lib',
+          workdir: '/abs/coco/vendor/lib',
+          entryRange: {
+            oldSha: '11111111',
+            newSha: '22222222',
+          },
+        })
+        // Status hint accompanies the push so the user gets feedback.
+        const status = actionEvents.find((a) => a.type === 'setStatus')
+        expect(status).toEqual({ type: 'setStatus', value: 'entering submodule vendor/lib' })
+      })
+
+      it('Enter without a drill-in target on the diff view does NOT push a frame', () => {
+        const state = commitDiffState()
+        const events = getLogInkInputEvents(state, '', { return: true }, {})
+        const types = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action.type)
+        expect(types).not.toContain('pushRepoFrame')
+      })
+
+      it('Enter on a worktree-source diff is not a drill-in target even if drill-in payload is set', () => {
+        // Worktree diffs come from `coco ui` against the live tree, not
+        // a historical commit. The drill-in target is gated on
+        // `diffSource === 'commit'` so a stray drill-in payload from a
+        // race doesn't accidentally fire from the worktree diff view.
+        const baseState = createLogInkState(rows, { activeView: 'diff' })
+        const state = { ...baseState, diffSource: 'worktree' as const } as LogInkState
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          commitDiffSubmoduleDrillIn: {
+            label: 'vendor/lib',
+            workdir: '/abs/coco/vendor/lib',
+          },
+        })
+        const types = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action.type)
+        expect(types).not.toContain('pushRepoFrame')
+      })
+
+      it('Enter dispatch + reducer apply lands on history of the new frame with the cached parent return', () => {
+        let state = commitDiffState()
+        state = applyLogInkAction(state, { type: 'move', delta: 1 })
+        const parentSelected = state.selectedIndex
+
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          commitDiffSubmoduleDrillIn: {
+            label: 'vendor/lib',
+            workdir: '/abs/coco/vendor/lib',
+          },
+        })
+        state = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .reduce((curr, event) => applyLogInkAction(curr, event.action), state)
+
+        expect(state.repoStack).toHaveLength(2)
+        expect(state.repoStack[1].label).toBe('vendor/lib')
+        expect(state.repoStack[1].workdir).toBe('/abs/coco/vendor/lib')
+        // The new frame lands on history with a clean cursor.
+        expect(state.activeView).toBe('history')
+        expect(state.viewStack).toEqual(['history'])
+        expect(state.selectedIndex).toBe(0)
+        // Parent's view position is captured in parentReturn so Esc /
+        // < / popRepoFrame restores it.
+        expect(state.repoStack[1].parentReturn).toEqual(expect.objectContaining({
+          activeView: 'diff',
+          selectedIndex: parentSelected,
+        }))
+      })
+
+      it('Enter drill-in works without an entryRange (e.g. added submodule)', () => {
+        const state = commitDiffState()
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          commitDiffSubmoduleDrillIn: {
+            label: 'vendor/lib',
+            workdir: '/abs/coco/vendor/lib',
+            // No entryRange (added / removed case).
+          },
+        })
+        const push = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action)
+          .find((a) => a.type === 'pushRepoFrame')
+        expect(push).toEqual({
+          type: 'pushRepoFrame',
+          label: 'vendor/lib',
+          workdir: '/abs/coco/vendor/lib',
+          entryRange: undefined,
+        })
+      })
+    })
+
     it('popping the frame restores the parent view position', () => {
       let state = createLogInkState(rows, { repoLabel: 'coco' })
       // Move the parent off defaults so we can verify the pop restored.

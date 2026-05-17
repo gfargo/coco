@@ -259,6 +259,77 @@ describe('log data layer', () => {
         binary: false,
         deletions: 1,
       },
+      submoduleChange: undefined,
+    })
+  })
+
+  it('surfaces the structured submoduleChange for a modified-submodule file (#931)', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue([
+        '-Subproject commit 11111111',
+        '+Subproject commit 22222222',
+      ].join('\n')),
+    }
+
+    const preview = await getCommitFilePreview(git as never, 'abc1234', {
+      additions: 1,
+      binary: false,
+      deletions: 1,
+      path: 'vendor/lib',
+      status: 'M',
+    })
+
+    expect(preview.submoduleChange).toEqual({
+      kind: 'modified',
+      before: '11111111',
+      after: '22222222',
+    })
+    // The summarized hunks are unchanged from before — the structured
+    // field is purely additive.
+    expect(preview.hunks).toHaveLength(1)
+    expect(preview.hunks[0]).toMatch(/^submodule modified:/)
+  })
+
+  it('omits submoduleChange for non-submodule files', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue([
+        '@@ -1,1 +1,1 @@',
+        '-old',
+        '+new',
+      ].join('\n')),
+    }
+    const preview = await getCommitFilePreview(git as never, 'abc1234', {
+      additions: 1,
+      binary: false,
+      deletions: 1,
+      path: 'src/index.ts',
+      status: 'M',
+    })
+    expect(preview.submoduleChange).toBeUndefined()
+  })
+
+  it('surfaces submoduleChange for added (no -line) and removed (no +line) submodules', async () => {
+    const addedGit = {
+      raw: jest.fn().mockResolvedValue('+Subproject commit aaaaaaaa'),
+    }
+    const removedGit = {
+      raw: jest.fn().mockResolvedValue('-Subproject commit bbbbbbbb'),
+    }
+
+    const added = await getCommitFilePreview(addedGit as never, 'abc1234', {
+      additions: 1, binary: false, deletions: 0, path: 'vendor/new', status: 'A',
+    })
+    expect(added.submoduleChange).toEqual({
+      kind: 'added',
+      after: 'aaaaaaaa',
+    })
+
+    const removed = await getCommitFilePreview(removedGit as never, 'abc1234', {
+      additions: 0, binary: false, deletions: 1, path: 'vendor/gone', status: 'D',
+    })
+    expect(removed.submoduleChange).toEqual({
+      kind: 'removed',
+      before: 'bbbbbbbb',
     })
   })
 })
