@@ -19,11 +19,25 @@
  * observe a real in-progress operation).
  *
  * EXTRACTION DISCIPLINE: no coco-specific imports.
+ *
+ * IMPLEMENTATION NOTE: migrated to the atom layer — uses `startMerge`
+ * to attempt the merge and leave it in conflict (default
+ * `allowConflict: true`).
  */
 
-import type { Scenario } from './types'
+import {
+  addCommit,
+  chain,
+  checkoutBranch,
+  defineScenario,
+  startMerge,
+  switchToBranch,
+} from '../atoms'
 
-export const midMergeConflictScenario: Scenario = {
+const widgetSource = (name: string): string =>
+  [`export const widget = {`, `  name: "${name}",`, `  version: 1,`, `}`, ``].join('\n')
+
+export const midMergeConflictScenario = defineScenario({
   name: 'mid-merge-conflict',
   summary: 'in-progress merge with one unresolved conflict in src/widget.ts',
   description: [
@@ -37,7 +51,7 @@ export const midMergeConflictScenario: Scenario = {
     '  - conflicts view rendering + per-file resolve actions',
     '  - title-bar in-progress-operation indicator',
     '  - the `coco doctor` / `coco ui` flows when a merge is in flight',
-    '  - the C / Esc guard on the conflicts view (#905 included this)',
+    '  - the C / Esc guard on the conflicts view',
   ].join('\n'),
   kind: 'operation',
   contracts: [
@@ -46,54 +60,26 @@ export const midMergeConflictScenario: Scenario = {
     'src/widget.ts has unresolved conflict markers',
     'exactly 1 unresolved conflict',
   ],
-  setup: async (repo) => {
-    // === baseline ===
-    await repo.writeFile('README.md', '# Widget\n')
-    await repo.commitAll('chore: initial scaffold')
+  setup: chain(
+    // === baseline shared by both branches ===
+    addCommit({ message: 'chore: initial scaffold', files: { 'README.md': '# Widget\n' } }),
+    addCommit({ message: 'feat: baseline widget', files: { 'src/widget.ts': widgetSource('baseline') } }),
 
-    await repo.writeFile('src/widget.ts', [
-      'export const widget = {',
-      '  name: "baseline",',
-      '  version: 1,',
-      '}',
-      '',
-    ].join('\n'))
-    await repo.commitAll('feat: baseline widget')
+    // === feat/x — its own rename of the widget ===
+    switchToBranch('feat/x'),
+    addCommit({
+      message: 'feat: rename widget on feat/x',
+      files: { 'src/widget.ts': widgetSource('from-feat-x') },
+    }),
 
-    // === feat/x — different name for the widget ===
-    await repo.git.checkoutLocalBranch('feat/x')
-    await repo.writeFile('src/widget.ts', [
-      'export const widget = {',
-      '  name: "from-feat-x",',
-      '  version: 1,',
-      '}',
-      '',
-    ].join('\n'))
-    await repo.commitAll('feat: rename widget on feat/x')
-
-    // === main — different name for the widget (conflicts with feat/x's edit) ===
-    await repo.git.checkout('main')
-    await repo.writeFile('src/widget.ts', [
-      'export const widget = {',
-      '  name: "from-main",',
-      '  version: 1,',
-      '}',
-      '',
-    ].join('\n'))
-    await repo.commitAll('feat: rename widget on main')
+    // === main — conflicting rename of the same line ===
+    checkoutBranch('main'),
+    addCommit({
+      message: 'feat: rename widget on main',
+      files: { 'src/widget.ts': widgetSource('from-main') },
+    }),
 
     // === merge attempt — leaves conflict markers in the worktree ===
-    // Using `git merge --no-commit --no-ff` here so the merge state is
-    // preserved even if the merge could otherwise be fast-forwarded
-    // (it can't, but belt-and-suspenders). `--no-commit` ensures we
-    // stop with conflict markers in place; in this case the conflict
-    // would prevent the auto-commit anyway, but explicit > implicit.
-    try {
-      await repo.git.raw(['merge', '--no-commit', '--no-ff', 'feat/x'])
-    } catch {
-      // simple-git throws on non-zero exit (which is what `git merge`
-      // does when there are unresolved conflicts). That's exactly the
-      // state we want — swallow the error so the scenario completes.
-    }
-  },
-}
+    startMerge('feat/x'),
+  ),
+})

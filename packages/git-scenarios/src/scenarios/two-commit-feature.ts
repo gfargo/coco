@@ -15,9 +15,9 @@
  * EXTRACTION DISCIPLINE: no coco-specific imports.
  */
 
-import type { Scenario } from './types'
+import { addCommit, chain, defineScenario } from '../atoms'
 
-export const twoCommitFeatureScenario: Scenario = {
+export const twoCommitFeatureScenario = defineScenario({
   name: 'two-commit-feature',
   summary: 'baseline scaffold + a single feat commit, clean worktree',
   description: [
@@ -37,11 +37,11 @@ export const twoCommitFeatureScenario: Scenario = {
     'src/feature.ts exists',
     'worktree is clean',
   ],
-  setup: async (repo) => {
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.commitAll('chore: initial commit')
-
-    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
-    await repo.commitAll('feat: add feature module')
-  },
-}
+  setup: chain(
+    addCommit({ message: 'chore: initial commit', files: { 'README.md': '# Temp repo\n' } }),
+    addCommit({
+      message: 'feat: add feature module',
+      files: { 'src/feature.ts': 'export const feature = true\n' },
+    }),
+  ),
+})

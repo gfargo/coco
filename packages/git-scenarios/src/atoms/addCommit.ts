@@ -1,4 +1,3 @@
-import { chain } from './chain'
 import type { FileMap, Step } from './types'
 import { writeFiles } from './writeFiles'
 
@@ -36,14 +35,31 @@ import { writeFiles } from './writeFiles'
  *     stageFiles('a.ts'),
  *     commit('feat: add a'),
  *   )
+ *
+ * Pass `date` (any ISO-8601 string git accepts as `GIT_AUTHOR_DATE`)
+ * to pin both author and committer dates — both are pinned so
+ * `git log --date=short` and downstream bucketing reflect the same
+ * date. The `daysAgo(n)` helper produces a deterministic noon-UTC
+ * ISO string N days before now for relative date stamping:
+ *
+ *   addCommit({ message: 'feat: old commit', date: daysAgo(30) })
  */
-export function addCommit(opts: { message: string; files?: FileMap }): Step {
-  const steps: Step[] = []
-  if (opts.files && Object.keys(opts.files).length > 0) {
-    steps.push(writeFiles(opts.files))
+export function addCommit(opts: {
+  message: string
+  files?: FileMap
+  date?: string
+}): Step {
+  return async (repo) => {
+    if (opts.files && Object.keys(opts.files).length > 0) {
+      await writeFiles(opts.files)(repo)
+    }
+    if (opts.date) {
+      await repo.git.add('.')
+      await repo.git
+        .env({ GIT_AUTHOR_DATE: opts.date, GIT_COMMITTER_DATE: opts.date })
+        .raw(['commit', '-m', opts.message])
+    } else {
+      await repo.commitAll(opts.message)
+    }
   }
-  steps.push(async (repo) => {
-    await repo.commitAll(opts.message)
-  })
-  return chain(...steps)
 }

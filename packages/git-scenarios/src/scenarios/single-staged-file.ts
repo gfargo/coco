@@ -17,9 +17,9 @@
  * EXTRACTION DISCIPLINE: no coco-specific imports.
  */
 
-import type { Scenario } from './types'
+import { addCommit, chain, defineScenario, stageFiles, writeFiles } from '../atoms'
 
-export const singleStagedFileScenario: Scenario = {
+export const singleStagedFileScenario = defineScenario({
   name: 'single-staged-file',
   summary: 'one baseline commit + a single staged README',
   description: [
@@ -38,11 +38,9 @@ export const singleStagedFileScenario: Scenario = {
     'exactly 1 staged file (README.md)',
     'no unstaged or untracked files',
   ],
-  setup: async (repo) => {
-    await repo.writeFile('.gitkeep', '\n')
-    await repo.commitAll('chore: initial commit')
-
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.git.add('README.md')
-  },
-}
+  setup: chain(
+    addCommit({ message: 'chore: initial commit', files: { '.gitkeep': '\n' } }),
+    writeFiles({ 'README.md': '# Temp repo\n' }),
+    stageFiles('README.md'),
+  ),
+})

@@ -15,9 +15,9 @@
  * EXTRACTION DISCIPLINE: no coco-specific imports.
  */
 
-import type { Scenario } from './types'
+import { addCommit, chain, defineScenario, switchToBranch } from '../atoms'
 
-export const featureBranchOneCommitScenario: Scenario = {
+export const featureBranchOneCommitScenario = defineScenario({
   name: 'feature-branch-one-commit',
   summary: 'main + feat/x (1 commit ahead, src/feature.ts)',
   description: [
@@ -29,7 +29,7 @@ export const featureBranchOneCommitScenario: Scenario = {
     '  - `coco changelog --branch main`',
     '  - `coco review --branch main`',
     '  - any branch-vs-base diff flow',
-    '  - the changelog auto-body in the create-PR flow (#905)',
+    '  - the changelog auto-body in the create-PR flow',
   ].join('\n'),
   kind: 'branch',
   contracts: [
@@ -39,12 +39,12 @@ export const featureBranchOneCommitScenario: Scenario = {
     'src/feature.ts exists',
     'worktree is clean',
   ],
-  setup: async (repo) => {
-    await repo.writeFile('README.md', '# Temp repo\n')
-    await repo.commitAll('chore: initial commit')
-
-    await repo.git.checkoutLocalBranch('feat/x')
-    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
-    await repo.commitAll('feat: add feature module')
-  },
-}
+  setup: chain(
+    addCommit({ message: 'chore: initial commit', files: { 'README.md': '# Temp repo\n' } }),
+    switchToBranch('feat/x'),
+    addCommit({
+      message: 'feat: add feature module',
+      files: { 'src/feature.ts': 'export const feature = true\n' },
+    }),
+  ),
+})

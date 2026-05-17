@@ -1,8 +1,8 @@
 /**
  * `stashed-changes` — a clean worktree on `main` with 3 stash entries,
  * each carrying a distinct user-supplied message. Designed for testing
- * the stash view's list rendering, per-entry actions (apply / pop /
- * drop / checkout-file-from-stash), and the diff view's stash mode.
+ * stash view list rendering, per-entry actions (apply / pop / drop /
+ * checkout-file-from-stash), and the diff view's stash mode.
  *
  * State after setup:
  *   - `main` has 2 commits (initial + a small content baseline)
@@ -17,11 +17,21 @@
  * (useful for chained apply tests).
  *
  * EXTRACTION DISCIPLINE: no coco-specific imports.
+ *
+ * IMPLEMENTATION NOTE: migrated to the atom layer — uses
+ * `stashChanges` to push each stash entry without inlining
+ * `git stash push -u -m ...`.
  */
 
-import type { Scenario } from './types'
+import {
+  addCommit,
+  chain,
+  defineScenario,
+  stashChanges,
+  writeFiles,
+} from '../atoms'
 
-export const stashedChangesScenario: Scenario = {
+export const stashedChangesScenario = defineScenario({
   name: 'stashed-changes',
   summary: 'clean worktree on main + 3 stashes, each touching a different file',
   description: [
@@ -44,29 +54,28 @@ export const stashedChangesScenario: Scenario = {
     'git stash list reports 3 entries',
     'each stash touches a different file',
   ],
-  setup: async (repo) => {
+  setup: chain(
     // === baseline ===
-    await repo.writeFile('README.md', '# Stash playground\n')
-    await repo.commitAll('chore: initial scaffold')
+    addCommit({ message: 'chore: initial scaffold', files: { 'README.md': '# Stash playground\n' } }),
+    addCommit({
+      message: 'chore: baseline content for stashing',
+      files: {
+        'src/feature-a.ts': 'export const a = "baseline"\n',
+        'src/feature-b.ts': 'export const b = "baseline"\n',
+        'src/feature-c.ts': 'export const c = "baseline"\n',
+      },
+    }),
 
-    // Baseline files that each stash will edit a copy of.
-    await repo.writeFile('src/feature-a.ts', 'export const a = "baseline"\n')
-    await repo.writeFile('src/feature-b.ts', 'export const b = "baseline"\n')
-    await repo.writeFile('src/feature-c.ts', 'export const c = "baseline"\n')
-    await repo.commitAll('chore: baseline content for stashing')
-
-    // === stash 1 — edit feature-a, stash with message ===
-    await repo.writeFile('src/feature-a.ts', 'export const a = "experiment-a"\n')
-    await repo.git.raw(['stash', 'push', '-u', '-m', 'WIP: experiment-a'])
+    // === stash 1 — edit feature-a ===
+    writeFiles({ 'src/feature-a.ts': 'export const a = "experiment-a"\n' }),
+    stashChanges({ message: 'WIP: experiment-a', includeUntracked: true }),
 
     // === stash 2 — edit feature-b ===
-    await repo.writeFile('src/feature-b.ts', 'export const b = "experiment-b"\n')
-    await repo.git.raw(['stash', 'push', '-u', '-m', 'WIP: experiment-b'])
+    writeFiles({ 'src/feature-b.ts': 'export const b = "experiment-b"\n' }),
+    stashChanges({ message: 'WIP: experiment-b', includeUntracked: true }),
 
     // === stash 3 — edit feature-c ===
-    await repo.writeFile('src/feature-c.ts', 'export const c = "experiment-c"\n')
-    await repo.git.raw(['stash', 'push', '-u', '-m', 'WIP: experiment-c'])
-
-    // Worktree is now clean — every stash carried away its own edits.
-  },
-}
+    writeFiles({ 'src/feature-c.ts': 'export const c = "experiment-c"\n' }),
+    stashChanges({ message: 'WIP: experiment-c', includeUntracked: true }),
+  ),
+})

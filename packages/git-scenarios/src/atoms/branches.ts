@@ -34,3 +34,31 @@ export function checkoutBranch(name: string): Step {
     await repo.git.checkout(name)
   }
 }
+
+/**
+ * Create a branch without checking it out (`git branch <name>` or
+ * `git branch <name> <startPoint>`). Useful when a scenario needs a
+ * branch to exist for ref tooling — `branches` view, `gP` triage —
+ * but doesn't want to disturb the working tree.
+ */
+export function createBranch(name: string, options: { from?: string } = {}): Step {
+  return async (repo) => {
+    if (options.from) {
+      await repo.git.branch([name, options.from])
+    } else {
+      await repo.git.branch([name])
+    }
+  }
+}
+
+/**
+ * Delete a local branch (`git branch -d <name>`). Pass `force: true`
+ * to use `-D` instead (drops branches with unmerged commits without a
+ * safety check). The active branch can't be deleted — check out
+ * another branch first.
+ */
+export function deleteBranch(name: string, options: { force?: boolean } = {}): Step {
+  return async (repo) => {
+    await repo.git.deleteLocalBranch(name, options.force)
+  }
+}

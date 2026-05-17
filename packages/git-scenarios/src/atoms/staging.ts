@@ -35,9 +35,17 @@ export function stageFiles(...paths: string[]): Step {
  * was configured at repo init with `commit.gpgsign=false` and a
  * deterministic user identity, so commits are byte-stable across
  * runs.
+ *
+ * Pass `date` to pin author + committer dates (see `addCommit`).
  */
-export function commit(message: string): Step {
+export function commit(message: string, options: { date?: string } = {}): Step {
   return async (repo) => {
-    await repo.git.commit(message)
+    if (options.date) {
+      await repo.git
+        .env({ GIT_AUTHOR_DATE: options.date, GIT_COMMITTER_DATE: options.date })
+        .raw(['commit', '-m', message])
+    } else {
+      await repo.git.commit(message)
+    }
   }
 }

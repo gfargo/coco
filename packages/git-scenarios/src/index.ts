@@ -26,18 +26,55 @@
 export { spinUpScenario } from './spinUpScenario'
 export { createTempGitRepo, type TempGitRepo } from './tempGitRepo'
 
-// Atom layer — see ./atoms/index.ts for the catalog.
+// Atom layer — see ./atoms/index.ts for the full catalog.
 export {
+  // Control flow
   chain,
   repeat,
+  // Working tree
   writeFiles,
+  seededFiles,
+  // Staging + commits
   stageFiles,
   commit,
   addCommit,
+  emptyCommit,
+  amendCommit,
+  // Branches
   switchToBranch,
   checkoutBranch,
-  seededFiles,
+  createBranch,
+  deleteBranch,
+  // Tags
+  createTag,
+  deleteTag,
+  // Remotes
+  addRemote,
+  removeRemote,
+  renameRemote,
+  // Stash
+  stashChanges,
+  applyStash,
+  popStash,
+  dropStash,
+  // Operations
+  startMerge,
+  abortMerge,
+  startBisect,
+  bisectStep,
+  resetBisect,
+  resetTo,
+  // Submodules
+  addSubmodule,
+  pinSubmodule,
+  // Scoping
+  onBranch,
+  insideSubmodule,
+  // Scenarios
   defineScenario,
+  // Time helpers
+  daysAgo,
+  // Types
   type Step,
   type FileMap,
   type SeededFileSpec,
