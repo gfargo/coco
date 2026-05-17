@@ -16,8 +16,7 @@
 
 import type { SimpleGit } from 'simple-git'
 import type { FileDiff } from '../../../types'
-import { findScenario } from '../../../testUtils/scenarios'
-import { createTempGitRepo, type TempGitRepo } from '../../../testUtils/tempGitRepo'
+import { findScenario, createTempGitRepo, type TempGitRepo } from '@gfargo/git-scenarios'
 
 export type CommitFixture = {
   /** Short sha — for display in the eval report. */

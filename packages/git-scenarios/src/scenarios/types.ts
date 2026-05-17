@@ -1,9 +1,9 @@
 /**
- * Scenario type definitions for `src/lib/testUtils/scenarios/`.
+ * Scenario type definitions for `packages/git-scenarios/src/scenarios/`.
  *
  * EXTRACTION DISCIPLINE: this layer is intentionally git-tool-agnostic
  * and a candidate for extraction to a standalone `git-scenarios` package
- * once the abstractions stabilize. See `src/lib/testUtils/README.md`
+ * once the abstractions stabilize. See `packages/git-scenarios/README.md`
  * for the boundary rules and extraction criteria.
  *
  * In short: this file MUST NOT import anything from `src/commands/`,

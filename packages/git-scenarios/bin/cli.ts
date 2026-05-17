@@ -4,34 +4,34 @@
  * named state for manual testing.
  *
  * Usage:
- *   npm run scenario list                          # show all scenarios
- *   npm run scenario describe <name>               # describe one
- *   npm run scenario create <name>                 # create in /tmp
- *   npm run scenario create <name> --path <dir>    # create at <dir>
- *   npm run scenario create <name> --run-ui        # create AND launch `coco ui`
- *   npm run scenario create <name> --remote <url>  # add an `origin` remote
- *                                                  # (lets the triage views detect
- *                                                  #  a GitHub remote on launch)
+ *   git-scenarios list                              # show all scenarios
+ *   git-scenarios describe <name>                   # describe one
+ *   git-scenarios create <name>                     # create in /tmp
+ *   git-scenarios create <name> --path <dir>        # create at <dir>
+ *   git-scenarios create <name> --run <cmd>         # create AND launch <cmd>
+ *                                                   # against the scenario dir
+ *   git-scenarios create <name> --remote <url>      # add an `origin` remote
+ *                                                   # (lets gh-aware tools detect
+ *                                                   #  a GitHub remote on launch)
+ *
+ * Coco's `package.json` exposes `npm run scenario` as a shortcut.
+ * `npm run scenario create X -- --run-ui` is a back-compat alias for
+ * `--run "<tsx> <coco-root>/src/index.ts ui"` — it knows how to find
+ * coco from its monorepo location. When this package ships standalone,
+ * `--run-ui` goes away and external consumers use `--run "coco ui"` (or
+ * any other shell command) instead.
  *
  * By default, `create` PERSISTS the scenario (doesn't auto-clean) —
  * that's what manual testing wants. Use `--ephemeral` to clean up on
  * exit (handy for one-shot smoke tests). The cleanup hint is printed
  * at the end either way.
- *
- * EXTRACTION NOTE: this CLI uses `coco` only for the optional `--run-ui`
- * flag (it spawns `tsx <coco>/src/index.ts ui` with the scenario dir as
- * cwd). The core scenario logic is agnostic to which tool consumes it;
- * only the convenience launcher knows about coco. When extracted to a
- * standalone package, the `--run-ui` flag becomes `--run <command>`
- * taking an arbitrary shell command — `lazygit`, `gitui`, etc. would
- * all work.
  */
 
 import { spawnSync } from 'node:child_process'
 import * as path from 'node:path'
 
-import { allScenarios, findScenario, type Scenario } from '../src/lib/testUtils/scenarios'
-import { createTempGitRepo } from '../src/lib/testUtils/tempGitRepo'
+import { allScenarios, findScenario, type Scenario } from '../src/scenarios'
+import { createTempGitRepo } from '../src/tempGitRepo'
 
 type ParsedArgs = {
   command?: 'list' | 'describe' | 'create' | 'help'
@@ -73,22 +73,27 @@ function parseArgs(argv: string[]): ParsedArgs {
 function printHelp(): void {
   console.log([
     '',
-    '  npm run scenario — manage testing scenarios for the workstation',
+    '  git-scenarios — manage temp git repo states for testing',
     '',
     '  Usage:',
-    '    npm run scenario list',
-    '    npm run scenario describe <name>',
-    '    npm run scenario create <name> [options]',
+    '    git-scenarios list',
+    '    git-scenarios describe <name>',
+    '    git-scenarios create <name> [options]',
     '',
     '  Create options:',
     '    --path <dir>     Materialize the scenario at <dir> instead of /tmp',
-    '    --run-ui         Launch `coco ui` against the scenario after creation',
-    '    --remote <url>   Add `origin` pointing at <url> so the GitHub triage',
-    '                     views (gi / gP) detect a remote on launch. Pass any',
-    '                     gh-shaped URL — `git@github.com:gfargo/coco.git` for',
-    '                     real data, or a fake like `git@github.com:coco-test/',
-    '                     sample.git` to render the views without risking',
-    '                     destructive actions against a real repo.',
+    '    --run <cmd>      Launch <cmd> (shell string) against the scenario',
+    '                     directory after creation. Examples:',
+    '                       --run "lazygit"',
+    '                       --run "gitui"',
+    '                       --run "code -n"   (opens the dir in VS Code)',
+    '    --run-ui         Coco-monorepo shortcut: spawn `tsx <coco>/src/index.ts ui`',
+    '                     in the scenario dir. Equivalent to `--run "coco ui"` for',
+    '                     consumers outside the coco monorepo.',
+    '    --remote <url>   Add `origin` pointing at <url> so gh-aware tools detect',
+    '                     a remote on launch. Pass any gh-shaped URL — a real one',
+    '                     for live data, a fake one to render the views without',
+    '                     risking destructive actions against a real repo.',
     '    --ephemeral      Remove the scenario directory when the CLI exits',
     '                     (default: persist, print the cleanup hint)',
     '',
@@ -120,7 +125,7 @@ function commandList(): void {
 function commandDescribe(name: string): number {
   const scenario = findScenario(name)
   if (!scenario) {
-    console.error(`Unknown scenario "${name}". Try \`npm run scenario list\`.`)
+    console.error(`Unknown scenario "${name}". Try \`git-scenarios list\`.`)
     return 2
   }
   console.log('')
@@ -142,10 +147,26 @@ function commandDescribe(name: string): number {
   return 0
 }
 
+/**
+ * Resolve the coco monorepo root from this CLI's location. Only used
+ * by the `--run-ui` back-compat alias; the standalone `--run <cmd>`
+ * path never reaches here.
+ *
+ * This file lives at:
+ *   <coco-repo-root>/packages/git-scenarios/bin/cli.ts
+ *
+ * `__dirname` is `<coco-repo-root>/packages/git-scenarios/bin`. Two
+ * levels up lands on the coco repo root where `src/index.ts` lives.
+ */
+function resolveCocoMonorepoRoot(): string {
+  return path.resolve(__dirname, '..', '..', '..')
+}
+
 async function commandCreate(
   name: string,
   options: {
     targetPath?: string
+    runCommand?: string
     runUi?: boolean
     ephemeral?: boolean
     remote?: string
@@ -153,7 +174,7 @@ async function commandCreate(
 ): Promise<number> {
   const scenario = findScenario(name)
   if (!scenario) {
-    console.error(`Unknown scenario "${name}". Try \`npm run scenario list\`.`)
+    console.error(`Unknown scenario "${name}". Try \`git-scenarios list\`.`)
     return 2
   }
 
@@ -171,12 +192,11 @@ async function commandCreate(
     return 1
   }
 
-  // Optional origin remote (#882 follow-up). Scenarios default to no
-  // remote so the test isolation story stays simple, but `--remote`
-  // lets `--run-ui` testers exercise the GitHub triage views (`gi`,
-  // `gP`) against a real-shaped URL — without it, those views render
-  // "No GitHub remote detected" because `getGitHubRepository` returns
-  // undefined for the bare `git init` repo.
+  // Optional origin remote. Scenarios default to no remote so the test
+  // isolation story stays simple, but `--remote` lets manual testers
+  // exercise gh-aware features against a real-shaped URL — without it,
+  // those features render "No GitHub remote detected" because the bare
+  // `git init` repo has no origin.
   if (options.remote) {
     try {
       await repo.git.addRemote('origin', options.remote)
@@ -189,10 +209,8 @@ async function commandCreate(
   let finalPath = repo.path
   if (options.targetPath) {
     const target = path.resolve(options.targetPath)
-    // Use git's own porcelain to clone the bare result somewhere else
-    // would preserve history but lose worktree state. Plain rename
-    // keeps everything intact and is what manual testers expect when
-    // they say "put this scenario at ~/sandbox".
+    // Plain rename keeps the worktree state intact and is what manual
+    // testers expect when they say "put this scenario at ~/sandbox".
     const renameResult = spawnSync('mv', [repo.path, target])
     if (renameResult.status !== 0) {
       console.error(`Failed to move scenario to ${target}`)
@@ -213,23 +231,21 @@ async function commandCreate(
     console.log('')
   }
 
+  // Launcher resolution: --run-ui is a coco-monorepo back-compat alias
+  // for "spawn coco's source-tree CLI against the scenario dir"; --run
+  // is the generalized form that takes any shell command. The latter is
+  // what an external consumer of `@gfargo/git-scenarios` would always
+  // use; the former exists because npm scripts inside coco rely on the
+  // historical flag name.
   if (options.runUi) {
     console.log(`Launching \`coco ui\` against the scenario…`)
     console.log('')
-    // We need TWO different paths here:
-    //   - tsx + src/index.ts come from the coco repo (where bin/scenario.ts lives)
-    //   - process.cwd() inside `coco ui` must be the scenario dir
-    //     (the handler reads cwd to locate the repo; `--path` on `coco ui`
-    //     is the history filter, NOT a "use this directory" flag).
-    // So: resolve absolute paths to tsx + index.ts, then spawn with
-    // cwd: finalPath. That keeps tsx happy and points coco at the
-    // scenario repo.
-    const cocoRepoRoot = path.resolve(__dirname, '..')
+    const cocoRepoRoot = resolveCocoMonorepoRoot()
     const tsxBin = path.join(
       cocoRepoRoot,
       'node_modules',
       '.bin',
-      process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+      process.platform === 'win32' ? 'tsx.cmd' : 'tsx',
     )
     const cocoEntry = path.join(cocoRepoRoot, 'src', 'index.ts')
     const result = spawnSync(tsxBin, [cocoEntry, 'ui'], {
@@ -241,6 +257,21 @@ async function commandCreate(
       // warn if it's a setup-level failure.
       if (result.status > 1) {
         console.warn(`coco ui exited with status ${result.status}`)
+      }
+    }
+  } else if (options.runCommand) {
+    console.log(`Launching \`${options.runCommand}\` against the scenario…`)
+    console.log('')
+    // Pass through the shell so users can write `--run "code -n"` and
+    // get shell-style argument splitting. Same trade-off as `npm exec`.
+    const result = spawnSync(options.runCommand, {
+      shell: true,
+      stdio: 'inherit',
+      cwd: finalPath,
+    })
+    if (result.status !== 0 && result.status !== null) {
+      if (result.status > 1) {
+        console.warn(`${options.runCommand} exited with status ${result.status}`)
       }
     }
   }
@@ -275,7 +306,7 @@ async function main(): Promise<void> {
   if (command === 'describe') {
     const name = positional[0]
     if (!name) {
-      console.error('Missing scenario name. Try `npm run scenario list`.')
+      console.error('Missing scenario name. Try `git-scenarios list`.')
       process.exit(2)
     }
     process.exit(commandDescribe(name))
@@ -284,11 +315,12 @@ async function main(): Promise<void> {
   if (command === 'create') {
     const name = positional[0]
     if (!name) {
-      console.error('Missing scenario name. Try `npm run scenario list`.')
+      console.error('Missing scenario name. Try `git-scenarios list`.')
       process.exit(2)
     }
     const code = await commandCreate(name, {
       targetPath: typeof flags.path === 'string' ? flags.path : undefined,
+      runCommand: typeof flags.run === 'string' ? flags.run : undefined,
       runUi: Boolean(flags['run-ui']),
       ephemeral: Boolean(flags.ephemeral),
       remote: typeof flags.remote === 'string' ? flags.remote : undefined,

@@ -190,7 +190,7 @@ The recipe scales — any CLI command with a `handler(argv, logger)` signature c
 
 ## Testing changes
 
-The scenario library in `src/lib/testUtils/scenarios/` is the recommended way to validate workstation changes — both manually and in automated tests.
+The scenario library (in-monorepo package at `packages/git-scenarios/`, imported as `@gfargo/git-scenarios`) is the recommended way to validate workstation changes — both manually and in automated tests.
 
 ```bash
 # Manual testing — spin up a known state and launch the workstation
@@ -198,11 +198,11 @@ npm run scenario list
 npm run scenario create feature-pr-ready -- --run-ui
 
 # Automated testing — replace inline writeFile / commitAll setup
-import { spinUpScenario } from 'src/lib/testUtils/spinUpScenario'
+import { spinUpScenario } from '@gfargo/git-scenarios'
 const repo = await spinUpScenario('feature-pr-ready')
 ```
 
-Scenarios match common workstation states: feature branch ready to PR, dirty worktree with many files, in-progress bisect, in-progress merge conflict, stashed changes, etc. Adding a new view? Add a scenario alongside it that reproduces the state the view renders against. See `src/lib/testUtils/README.md` for the full list + the contract for adding new scenarios.
+Scenarios match common workstation states: feature branch ready to PR, dirty worktree with many files, in-progress bisect, in-progress merge conflict, stashed changes, etc. Adding a new view? Add a scenario alongside it that reproduces the state the view renders against. See `packages/git-scenarios/README.md` for the full list + the contract for adding new scenarios.
 
 ## Conventions
 

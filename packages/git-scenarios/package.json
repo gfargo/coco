@@ -1,0 +1,39 @@
+{
+  "name": "@gfargo/git-scenarios",
+  "version": "0.0.0",
+  "description": "Named, deterministic temp git repo states for tests, demos, and tool development",
+  "private": true,
+  "comment": "private:true while we shadow-extract inside the coco monorepo. Flip to false + bump 0.x.y when ready to publish.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scenarios": "./src/scenarios/index.ts",
+    "./tempGitRepo": "./src/tempGitRepo.ts"
+  },
+  "bin": {
+    "git-scenarios": "./bin/cli.ts"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "git",
+    "test",
+    "fixture",
+    "scenario",
+    "simple-git",
+    "temp-repo"
+  ],
+  "peerDependencies": {
+    "simple-git": "^3.0.0"
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  }
+}

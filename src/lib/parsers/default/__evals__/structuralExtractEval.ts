@@ -13,7 +13,7 @@
  * them?), which doesn't need real model output. A separate "live"
  * harness mode can be layered on top once it's worth the cost.
  *
- * Inputs come from the scenario library (`src/lib/testUtils/scenarios/`)
+ * Inputs come from the scenario library (`@gfargo/git-scenarios`)
  * via `scenarioInputs.ts` — each scenario's commits produce a
  * deterministic set of file diffs, so eval runs are byte-identical
  * across machines.

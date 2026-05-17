@@ -1,4 +1,4 @@
-# `testUtils/` — temp git repos + named scenarios
+# `@gfargo/git-scenarios` — temp git repos + named scenarios
 
 The test-infrastructure layer for spinning up git repositories in
 known states. Two audiences:
@@ -6,11 +6,19 @@ known states. Two audiences:
 1. **You're writing an integration test.** Use `spinUpScenario()` to
    start from a deterministic baseline instead of hand-building the
    same `tempGitRepo + writeFile + commitAll` setup every time.
-2. **You're hand-testing the workstation (or anything else).** Use
-   `npm run scenario create <name>` to materialize a scenario on disk
-   and (optionally) launch `coco ui` against it in one command.
+2. **You're hand-testing a git tool (workstation, lazygit, gitui, your
+   own thing).** Use the CLI to materialize a scenario on disk and
+   (optionally) launch a tool against it in one command.
 
-Both paths share the same nine scenarios.
+Both paths share the same eleven scenarios.
+
+> **Status (shadow-extracted).** This package lives inside the coco
+> monorepo at `packages/git-scenarios/` while we validate the
+> boundary. `private: true` in `package.json` keeps it off the npm
+> registry. Coco's tests / CLI consume it via the
+> `@gfargo/git-scenarios` alias (tsconfig + jest path mapping). When
+> a second consumer wants it or the package stops needing churn,
+> flip `private` off and publish.
 
 ## Quick start
 
@@ -30,7 +38,7 @@ npm run scenario create mid-merge-conflict -- --run-ui
 ### Integration tests — start from a baseline
 
 ```ts
-import { spinUpScenario } from 'src/lib/testUtils/spinUpScenario'
+import { spinUpScenario } from '@gfargo/git-scenarios'
 
 describe('changelog flow against a PR-ready branch', () => {
   let repo: TempGitRepo
@@ -53,30 +61,40 @@ describe('changelog flow against a PR-ready branch', () => {
 ## Layout
 
 ```
-testUtils/
-├── README.md             (this file)
-├── tempGitRepo.ts        (low-level: init + user config + main branch)
-├── spinUpScenario.ts     (programmatic API for tests)
-├── spinUpScenario.test.ts
-└── scenarios/
-    ├── types.ts          (Scenario type)
-    ├── index.ts          (registry + lookup)
-    ├── shared/
-    │   └── seededFiles.ts (wrapper around __fixtures__/generators)
-    ├── feature-pr-ready.ts
-    ├── feature-branch-one-commit.ts
-    ├── multi-commit-branch.ts
-    ├── two-commit-feature.ts
-    ├── single-staged-file.ts
-    ├── dirty-many-files.ts
-    ├── mid-bisect.ts
-    ├── mid-merge-conflict.ts
-    ├── stashed-changes.ts
-    └── submodule-with-history.ts
+packages/git-scenarios/
+├── README.md               (this file)
+├── package.json
+├── tsconfig.json
+├── src/
+│   ├── index.ts            (public API — `spinUpScenario`, `createTempGitRepo`, registry)
+│   ├── tempGitRepo.ts      (low-level: init + user config + main branch)
+│   ├── spinUpScenario.ts   (programmatic API for tests)
+│   ├── spinUpScenario.test.ts
+│   ├── __fixtures__/
+│   │   └── generators.ts   (vendored deterministic content generator)
+│   └── scenarios/
+│       ├── types.ts        (Scenario type)
+│       ├── index.ts        (registry + lookup)
+│       ├── shared/
+│       │   └── seededFiles.ts (wrapper around the generator)
+│       ├── feature-pr-ready.ts
+│       ├── feature-branch-one-commit.ts
+│       ├── multi-commit-branch.ts
+│       ├── two-commit-feature.ts
+│       ├── single-staged-file.ts
+│       ├── dirty-many-files.ts
+│       ├── mid-bisect.ts
+│       ├── mid-merge-conflict.ts
+│       ├── stashed-changes.ts
+│       ├── rich-history-graph.ts
+│       └── submodule-with-history.ts
+└── bin/
+    └── cli.ts              (the `git-scenarios` CLI, also reachable as `npm run scenario` inside coco)
 ```
 
-The CLI driver lives at `bin/scenario.ts` and is wired via the
-`scenario` npm script.
+The CLI driver lives at `bin/cli.ts` and is wired via the `scenario`
+npm script inside the coco monorepo. When extracted, it becomes the
+binary at `bin.git-scenarios` in `package.json`.
 
 ## Available scenarios
 
@@ -148,7 +166,7 @@ The single import point for tests. Returns a `TempGitRepo` already
 brought into the named state:
 
 ```ts
-import { spinUpScenario } from 'src/lib/testUtils/spinUpScenario'
+import { spinUpScenario } from '@gfargo/git-scenarios'
 
 const repo = await spinUpScenario('feature-pr-ready')
 // repo is on feat/widget-v2, 4 commits ahead of main, clean worktree
@@ -232,7 +250,7 @@ where none of the named scenarios fit and you really do want to
 build from `git init`:
 
 ```ts
-import { createTempGitRepo } from 'src/lib/testUtils/tempGitRepo'
+import { createTempGitRepo } from 'packages/git-scenarios/src/tempGitRepo'
 
 const repo = await createTempGitRepo()
 // fresh git repo with main branch + user config + commit.gpgsign=false
@@ -246,9 +264,9 @@ will thank present-you.
 
 ## Adding a new scenario
 
-1. Create `src/lib/testUtils/scenarios/<kebab-name>.ts` exporting a
+1. Create `src/scenarios/<kebab-name>.ts` exporting a
    `Scenario`.
-2. Register it in `src/lib/testUtils/scenarios/index.ts`.
+2. Register it in `src/scenarios/index.ts`.
 3. Add `<kebab-name>.test.ts` next to it — at minimum, assert each
    `contract` line holds after setup.
 4. The CLI picks it up automatically.
@@ -279,7 +297,7 @@ export type Scenario = {
 ### Worked example
 
 ```ts
-// src/lib/testUtils/scenarios/three-commit-feature.ts
+// src/scenarios/three-commit-feature.ts
 import type { Scenario } from './types'
 import { seededFiles } from './shared/seededFiles'
 
@@ -315,7 +333,7 @@ export const threeCommitFeatureScenario: Scenario = {
 ```
 
 ```ts
-// src/lib/testUtils/scenarios/three-commit-feature.test.ts
+// src/scenarios/three-commit-feature.test.ts
 import { createTempGitRepo } from '../tempGitRepo'
 import { threeCommitFeatureScenario } from './three-commit-feature'
 
@@ -342,7 +360,7 @@ describe('three-commit-feature scenario', () => {
 Then add to the registry:
 
 ```ts
-// src/lib/testUtils/scenarios/index.ts
+// src/scenarios/index.ts
 import { threeCommitFeatureScenario } from './three-commit-feature'
 
 export const allScenarios: Scenario[] = [
@@ -444,7 +462,7 @@ npm run eval:structural-extract -- --fixtures-only
 The adapter lives at
 `src/lib/parsers/default/__evals__/scenarioInputs.ts` and the
 extraction-boundary rule still holds: it imports from
-`src/lib/testUtils/scenarios` and the public `findScenario` helper,
+`src/scenarios` and the public `findScenario` helper,
 not from any individual scenario module. When the testUtils layer
 moves out to its own package, the eval depends on the published
 package the same way any other consumer would.
@@ -494,9 +512,9 @@ Mechanical:
 
 ```bash
 mkdir git-scenarios && cd git-scenarios
-cp -r ../coco/src/lib/testUtils/scenarios ./src
-cp ../coco/src/lib/testUtils/tempGitRepo.ts ./src/
-cp ../coco/src/lib/testUtils/spinUpScenario.ts ./src/
+cp -r ../coco/src/scenarios ./src
+cp ../coco/src/tempGitRepo.ts ./src/
+cp ../coco/src/spinUpScenario.ts ./src/
 cp ../coco/bin/scenario.ts ./bin/cli.ts
 # generators come with as a peer dep or co-moved
 # add package.json / README / LICENSE

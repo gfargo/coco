@@ -17,12 +17,13 @@ import { getLlm } from '../lib/langchain/utils/getLlm'
 import { getTokenCounter } from '../lib/utils/tokenizer'
 import { Logger } from '../lib/utils/logger'
 import { Config } from '../commands/types'
-import { createTempGitRepo, TempGitRepo } from '../lib/testUtils/tempGitRepo'
 import {
+  createTempGitRepo,
+  TempGitRepo,
   featureBranchOneCommitScenario,
   singleStagedFileScenario,
   twoCommitFeatureScenario,
-} from '../lib/testUtils/scenarios'
+} from '@gfargo/git-scenarios'
 
 jest.mock('@langchain/classic/chains', () => ({
   loadSummarizationChain: jest.fn(),

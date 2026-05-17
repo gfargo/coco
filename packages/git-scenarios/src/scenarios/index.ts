@@ -1,9 +1,9 @@
 /**
- * Scenario registry for `src/lib/testUtils/scenarios/`.
+ * Scenario registry for `packages/git-scenarios/src/scenarios/`.
  *
  * Each named scenario produces a deterministic git-repo state useful
  * for testing the workstation, integration tests, and manual demos.
- * See `src/lib/testUtils/README.md` for the boundary rules and the
+ * See `packages/git-scenarios/README.md` for the boundary rules and the
  * extraction plan to a standalone `git-scenarios` package.
  *
  * EXTRACTION DISCIPLINE: this file is the public surface. The registry

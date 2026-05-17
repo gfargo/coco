@@ -1,6 +1,6 @@
 /**
- * Thin wrapper around the deterministic content generators in
- * `src/lib/parsers/default/__fixtures__/generators.ts`. The generators
+ * Thin wrapper around the deterministic content generators vendored
+ * into this package at `__fixtures__/generators.ts`. The generators
  * themselves are git-agnostic (they produce file content from
  * `(filename, approxTokens, seed)`); this wrapper adds the small
  * conveniences scenarios actually need:
@@ -11,14 +11,13 @@
  *   - `writeSeededFiles(...)` — bulk-write a list of file specs to a
  *     `TempGitRepo`.
  *
- * Both helpers reach into the parsers/__fixtures__/generators module by
- * absolute path. That's the ONLY non-stdlib import in this directory
- * tree — see the boundary rules in `src/lib/testUtils/README.md`.
- * Extraction note: when this layer moves to a standalone package, the
- * import becomes a peer dependency or the generators come along too.
+ * Generators are co-located inside the package rather than peer-dep'd
+ * (see the README for the rationale). Scenarios depend on them in 9 of
+ * 11 cases; making them required-via-injection would add friction at
+ * every call site for a feature 90% of consumers want by default.
  */
 
-import { generateContentForFile } from '../../../parsers/default/__fixtures__/generators'
+import { generateContentForFile } from '../../__fixtures__/generators'
 import type { TempGitRepo } from '../../tempGitRepo'
 
 export type SeededFileSpec = {

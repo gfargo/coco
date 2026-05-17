@@ -13,5 +13,14 @@ export default {
   // `<rootDir>` resolves per-config-file location, so each worktree
   // independently scans its own `src/` + `bin/` and the main checkout
   // does the same. No cross-contamination.
-  roots: ['<rootDir>/src', '<rootDir>/bin'],
+  roots: ['<rootDir>/src', '<rootDir>/bin', '<rootDir>/packages/git-scenarios'],
+  // Path mapping for the in-monorepo `@gfargo/git-scenarios` package.
+  // Mirrors the `paths` block in `tsconfig.json` — both ts-jest's type
+  // checker and the runtime module resolver need to know the alias.
+  // Once the package ships standalone, these entries get replaced by
+  // the published `node_modules/@gfargo/git-scenarios` resolution.
+  moduleNameMapper: {
+    '^@gfargo/git-scenarios$': '<rootDir>/packages/git-scenarios/src/index.ts',
+    '^@gfargo/git-scenarios/(.*)$': '<rootDir>/packages/git-scenarios/src/$1',
+  },
 }

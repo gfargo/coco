@@ -19,8 +19,19 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    "paths": {
+      "@gfargo/git-scenarios": ["./packages/git-scenarios/src/index.ts"],
+      "@gfargo/git-scenarios/*": ["./packages/git-scenarios/src/*"]
+    }
   },
   "include": ["src/**/*.ts", "bin/validateSchema.test.ts"],
-  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts", "dist", "rollup.config.mjs"]
+  "exclude": [
+    "node_modules",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "dist",
+    "rollup.config.mjs",
+    "src/**/__evals__/**"
+  ]
 }
