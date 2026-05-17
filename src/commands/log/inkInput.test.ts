@@ -1246,6 +1246,113 @@ describe('log Ink input interactions', () => {
       expect(state.repoStack).toHaveLength(2)
     })
 
+    describe('submodules-view drill-in (PR 4 / #932)', () => {
+      function submodulesViewState() {
+        return createLogInkState(rows, {
+          activeView: 'submodules',
+          repoLabel: 'coco',
+          repoWorkdir: '/abs/coco',
+        })
+      }
+
+      it('Enter on a submodule row dispatches pushRepoFrame with label + workdir', () => {
+        const state = submodulesViewState()
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          submoduleCount: 1,
+          submoduleSelectedPath: 'vendor/lib',
+          submoduleViewDrillIn: {
+            label: 'vendor/lib',
+            workdir: '/abs/coco/vendor/lib',
+          },
+        })
+        const actionEvents = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action)
+        const push = actionEvents.find((a) => a.type === 'pushRepoFrame')
+        expect(push).toEqual({
+          type: 'pushRepoFrame',
+          label: 'vendor/lib',
+          workdir: '/abs/coco/vendor/lib',
+        })
+        // No entryRange — the submodules view doesn't carry diff context.
+        expect((push as { entryRange?: unknown })?.entryRange).toBeUndefined()
+        const status = actionEvents.find((a) => a.type === 'setStatus')
+        expect(status).toEqual({ type: 'setStatus', value: 'entering submodule vendor/lib' })
+      })
+
+      it('Enter without a drill-in target on the submodules view does NOT push a frame', () => {
+        const state = submodulesViewState()
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          submoduleCount: 1,
+          submoduleSelectedPath: 'vendor/lib',
+          // No submoduleViewDrillIn (e.g., repo root not loaded yet).
+        })
+        const types = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action.type)
+        expect(types).not.toContain('pushRepoFrame')
+      })
+
+      it('Enter on the submodules view when focus is on the sidebar does NOT drill in', () => {
+        // isSubmodulesActionTarget gates on focus === 'commits'; if the
+        // user is still in the sidebar, the drill-in handler shouldn't
+        // claim the keystroke — the sidebar's Enter handler does.
+        let state = submodulesViewState()
+        state = applyLogInkAction(state, { type: 'setFocus', value: 'sidebar' })
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          submoduleCount: 1,
+          submoduleViewDrillIn: {
+            label: 'vendor/lib',
+            workdir: '/abs/coco/vendor/lib',
+          },
+        })
+        const types = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action.type)
+        expect(types).not.toContain('pushRepoFrame')
+      })
+
+      it('Enter dispatch + reducer apply lands on history with parent return snapshot', () => {
+        let state = submodulesViewState()
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          submoduleCount: 2,
+          submoduleViewDrillIn: {
+            label: 'vendor/lib',
+            workdir: '/abs/coco/vendor/lib',
+          },
+        })
+        state = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .reduce((curr, event) => applyLogInkAction(curr, event.action), state)
+
+        expect(state.repoStack).toHaveLength(2)
+        expect(state.repoStack[1].label).toBe('vendor/lib')
+        expect(state.repoStack[1].workdir).toBe('/abs/coco/vendor/lib')
+        expect(state.repoStack[1].entryRange).toBeUndefined()
+        expect(state.activeView).toBe('history')
+        // parentReturn captures activeView=submodules so Esc walks back.
+        expect(state.repoStack[1].parentReturn?.activeView).toBe('submodules')
+      })
+
+      it('Enter on history view does NOT trigger submodule drill-in even if context payload is set', () => {
+        // Defensive: if a stale drill-in payload arrives while the user
+        // is on history, the activeView gate keeps the handler from
+        // firing — the history-Enter (open-diff) handler claims it.
+        const state = createLogInkState(rows, { activeView: 'history', repoLabel: 'coco' })
+        const events = getLogInkInputEvents(state, '', { return: true }, {
+          submoduleCount: 1,
+          submoduleViewDrillIn: {
+            label: 'vendor/lib',
+            workdir: '/abs/coco/vendor/lib',
+          },
+        })
+        const types = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action.type)
+        expect(types).not.toContain('pushRepoFrame')
+      })
+    })
+
     describe('commit-diff drill-in (PR 3b)', () => {
       function commitDiffState() {
         const state = createLogInkState(rows, { activeView: 'diff', repoLabel: 'coco', repoWorkdir: '/abs/coco' })

@@ -1,4 +1,7 @@
-import { resolveCommitDiffDrillInTarget } from './repoFrameDrillIn'
+import {
+  resolveCommitDiffDrillInTarget,
+  resolveSubmoduleViewDrillInTarget,
+} from './repoFrameDrillIn'
 
 const baseOverview = {
   hasSubmodules: true,
@@ -136,5 +139,87 @@ describe('resolveCommitDiffDrillInTarget', () => {
     })
     expect(target?.entryRange).toBeUndefined()
     expect(target?.label).toBe('vendor/lib')
+  })
+})
+
+describe('resolveSubmoduleViewDrillInTarget (#931 PR 4)', () => {
+  it('returns undefined when activeRepoRoot is unknown (boot in flight)', () => {
+    expect(resolveSubmoduleViewDrillInTarget({
+      selectedIndex: 0,
+      submodules: baseOverview,
+      activeRepoRoot: undefined,
+    })).toBeUndefined()
+  })
+
+  it('returns undefined when the submodule overview is unknown', () => {
+    expect(resolveSubmoduleViewDrillInTarget({
+      selectedIndex: 0,
+      submodules: undefined,
+      activeRepoRoot: '/abs/coco',
+    })).toBeUndefined()
+  })
+
+  it('returns undefined when no submodules are registered', () => {
+    expect(resolveSubmoduleViewDrillInTarget({
+      selectedIndex: 0,
+      submodules: { hasSubmodules: false, entries: [] },
+      activeRepoRoot: '/abs/coco',
+    })).toBeUndefined()
+  })
+
+  it('returns undefined when the cursor is past the end of the entries', () => {
+    expect(resolveSubmoduleViewDrillInTarget({
+      selectedIndex: 99,
+      submodules: baseOverview,
+      activeRepoRoot: '/abs/coco',
+    })).toBeUndefined()
+  })
+
+  it('returns undefined when the cursored entry has no path', () => {
+    const overview = {
+      hasSubmodules: true,
+      entries: [{
+        name: 'orphan',
+        path: '',
+        pinnedSha: 'cccccccc',
+        flag: 'clean' as const,
+      }],
+    }
+    expect(resolveSubmoduleViewDrillInTarget({
+      selectedIndex: 0,
+      submodules: overview,
+      activeRepoRoot: '/abs/coco',
+    })).toBeUndefined()
+  })
+
+  it('resolves the first entry with label + absolute workdir', () => {
+    expect(resolveSubmoduleViewDrillInTarget({
+      selectedIndex: 0,
+      submodules: baseOverview,
+      activeRepoRoot: '/abs/coco',
+    })).toEqual({
+      label: 'vendor/lib',
+      workdir: '/abs/coco/vendor/lib',
+    })
+  })
+
+  it('resolves a nested-path entry against the active repo root', () => {
+    expect(resolveSubmoduleViewDrillInTarget({
+      selectedIndex: 1,
+      submodules: baseOverview,
+      activeRepoRoot: '/abs/coco',
+    })).toEqual({
+      label: 'tools',
+      workdir: '/abs/coco/packages/tools',
+    })
+  })
+
+  it('never carries an entryRange — the submodules view has no diff context', () => {
+    const target = resolveSubmoduleViewDrillInTarget({
+      selectedIndex: 0,
+      submodules: baseOverview,
+      activeRepoRoot: '/abs/coco',
+    })
+    expect(target).not.toHaveProperty('entryRange')
   })
 })

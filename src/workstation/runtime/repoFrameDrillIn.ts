@@ -89,3 +89,56 @@ function deriveEntryRange(
   }
   return undefined
 }
+
+/**
+ * Drill-in target for the dedicated submodules view (#931 PR 4 / #932).
+ * Same shape as the commit-diff drill-in but without the `entryRange`
+ * field — the submodules view doesn't carry diff context, so the frame
+ * lands on the submodule's full history rather than a (oldPin, newPin)
+ * range.
+ */
+export type SubmoduleViewDrillInTarget = {
+  label: string
+  workdir: string
+}
+
+export type ResolveSubmoduleViewDrillInArgs = {
+  /** Index of the cursored row in the submodules view (`state.selectedSubmoduleIndex`). */
+  selectedIndex: number
+  /** Submodule overview loaded from `getSubmoduleOverview` for the active frame. */
+  submodules: SubmoduleOverview | undefined
+  /** Active frame's repo root (resolved from `git.revparse --show-toplevel`). */
+  activeRepoRoot: string | undefined
+}
+
+/**
+ * Pure resolver for the submodules-view drill-in (#931 PR 4 / #932).
+ * Given the cursored row index + the submodule overview + the active
+ * frame's repo root, build the `pushRepoFrame` payload Enter should
+ * dispatch. Returns undefined when:
+ *
+ *   - The active repo root hasn't loaded yet.
+ *   - The submodule overview hasn't loaded (or is empty).
+ *   - The cursor is past the end of the entries (race between a
+ *     refresh that removed a submodule and a key press still in
+ *     flight against the old length).
+ *   - The cursored entry has no `path` recorded. The `.gitmodules`
+ *     parser already filters these out upstream, but the resolver
+ *     defends against it so the cursor can't yank the user into a
+ *     workdir-less frame.
+ */
+export function resolveSubmoduleViewDrillInTarget(
+  args: ResolveSubmoduleViewDrillInArgs,
+): SubmoduleViewDrillInTarget | undefined {
+  const { selectedIndex, submodules, activeRepoRoot } = args
+  if (!activeRepoRoot) return undefined
+  if (!submodules || !submodules.hasSubmodules) return undefined
+
+  const entry = submodules.entries[selectedIndex]
+  if (!entry || !entry.path) return undefined
+
+  return {
+    label: entry.name,
+    workdir: join(activeRepoRoot, entry.path),
+  }
+}
