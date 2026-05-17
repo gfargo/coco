@@ -1,34 +1,67 @@
 {
   "name": "@gfargo/git-scenarios",
   "version": "0.0.0",
-  "description": "Named, deterministic temp git repo states for tests, demos, and tool development",
+  "description": "Named, deterministic temp git repo states for tests, demos, and tool development — composable atoms for any condition (merge conflicts, out-of-date submodules, multiple remotes, in-progress operations, …).",
   "private": true,
-  "comment": "private:true while we shadow-extract inside the coco monorepo. Flip to false + bump 0.x.y when ready to publish.",
+  "comment": "private:true while we shadow-extract inside the coco monorepo. Flip to false + bump to 0.1.0 when ready to publish; `prepublishOnly` runs the build so `npm publish` is one step.",
   "license": "MIT",
+  "author": {
+    "name": "Griffen Fargo",
+    "url": "https://github.com/gfargo"
+  },
+  "homepage": "https://github.com/gfargo/coco/tree/main/packages/git-scenarios",
+  "bugs": {
+    "url": "https://github.com/gfargo/coco/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gfargo/coco.git",
+    "directory": "packages/git-scenarios"
+  },
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./scenarios": "./src/scenarios/index.ts",
-    "./tempGitRepo": "./src/tempGitRepo.ts"
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./scenarios": {
+      "types": "./dist/src/scenarios/index.d.ts",
+      "default": "./dist/src/scenarios/index.js"
+    },
+    "./tempGitRepo": {
+      "types": "./dist/src/tempGitRepo.d.ts",
+      "default": "./dist/src/tempGitRepo.js"
+    },
+    "./atoms": {
+      "types": "./dist/src/atoms/index.d.ts",
+      "default": "./dist/src/atoms/index.js"
+    }
   },
   "bin": {
-    "git-scenarios": "./bin/cli.ts"
+    "git-scenarios": "./dist/bin/cli.js"
   },
   "files": [
-    "src",
-    "bin",
+    "dist",
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "build": "tsc -p .",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
   "keywords": [
     "git",
     "test",
     "fixture",
     "scenario",
     "simple-git",
-    "temp-repo"
+    "temp-repo",
+    "submodule",
+    "merge-conflict",
+    "bisect"
   ],
   "peerDependencies": {
     "simple-git": "^3.0.0"

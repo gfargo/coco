@@ -1,19 +1,32 @@
 /**
- * Per-file-type content generators for the diff-condensing
- * benchmark fixtures (#845). Templates are seeded so the same
- * (target tokens, seed) pair produces identical content across
- * runs — required for apples-to-apples bench comparisons.
+ * Per-file-type content generators for deterministic seeded file
+ * content. Used by the `seededFiles` atom.
  *
  * Generators are deliberately simple: they produce content that
  * *looks* like code/docs (proper syntax, plausible identifiers,
  * realistic structure) without trying to be syntactically valid in
- * every detail. The goal is to feed the diff-condensing pipeline
- * input that resembles real-world diffs in shape and token mix —
- * not to produce executable artifacts.
+ * every detail. The goal is to feed downstream pipelines input that
+ * resembles real-world diffs in shape and token mix — not to produce
+ * executable artifacts.
  *
- * Token sizing uses a chars/4 approximation. The bench runner's
- * real tokenizer re-counts at fixture-load time, so the generators
- * only need to be in the right neighborhood.
+ * Token sizing uses a chars/4 approximation; the consumer's actual
+ * tokenizer can recount at fixture-load time if the exact size
+ * matters. Templates are seeded so the same (target tokens, seed)
+ * pair produces identical content across runs.
+ *
+ * VENDORED COPY: this file is byte-identical with the original at
+ * `src/lib/parsers/default/__fixtures__/generators.ts` in the coco
+ * monorepo, which uses the same generators for its parser fixture
+ * library. The duplication is intentional — the package is
+ * shadow-extracted (private:true) and needs no external dep to
+ * function. When the package publishes:
+ *   - either coco's parser fixtures switch to importing from
+ *     `@gfargo/git-scenarios/__fixtures__/generators`, or
+ *   - the generators extract to a third peer package
+ *     (`@gfargo/seeded-content`) that both depend on
+ * Until then, keep the two files byte-identical. Edit one → edit
+ * both. Tests would catch a drift indirectly through scenario
+ * content changes, but a `diff` check at CI time is the safer guard.
  */
 
 /** Seeded pseudo-random — LCG. Identical output for identical seed. */

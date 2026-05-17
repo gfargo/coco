@@ -469,36 +469,37 @@ package the same way any other consumer would.
 
 ## Extraction discipline
 
-This layer is intentionally **git-tool-agnostic** and a candidate for
-extraction to a standalone `git-scenarios` package on npm once the
-abstractions stabilize. The boundary rules below are what keeps that
-extraction path open.
+This package is **shadow-extracted** — it lives at
+`packages/git-scenarios/` inside the coco monorepo with
+`private: true` until the extraction is validated by real use.
+Coco's tests / CLI consume it via the `@gfargo/git-scenarios` alias
+(tsconfig + jest path mapping). When ready, flip `private: false`
+and `npm publish` is one step (`prepublishOnly` runs the build).
 
 ### Rules
 
-- **No coco-specific imports inside `scenarios/`.** Imports are
+- **No coco-specific imports inside the package.** Imports are
   limited to:
   - `simple-git`
-  - Node stdlib (`fs`, `path`, `os`)
-  - `../tempGitRepo` (the base helper — also extractable)
-  - `../../parsers/default/__fixtures__/generators` (git-agnostic
-    content generators — extractable as peer dependency or co-moved)
+  - Node stdlib (`fs`, `path`, `os`, `child_process`, `util`)
+  - Sibling files inside the package (`./atoms`, `./scenarios`,
+    `./tempGitRepo`, `./__fixtures__/generators`)
 - **Scenario signatures are pure git-state factories.**
   `(repo: TempGitRepo) => Promise<void>`. No knowledge of which tool is
   testing them. A scenario named `mid-bisect` produces a mid-bisect
   repo — full stop.
-- **`spinUpScenario.ts` is the public programmatic surface.** Tests
-  import from it; nothing else in coco should reach into
-  `scenarios/*.ts` directly.
-- **The CLI (`bin/scenario.ts`) is the public command surface.** Its
-  `--run-ui` flag is the only piece that knows about coco; when
-  extracted, that becomes `--run <command>` for arbitrary downstream
-  tools.
+- **Public surface = `index.ts`.** Tests import named symbols from
+  the package root; nothing else should reach into individual files
+  directly.
+- **CLI (`bin/cli.ts`) is the public command surface.** The
+  generalized `--run <cmd>` flag launches any tool; `--run-ui` is a
+  coco-monorepo back-compat alias that resolves to launching coco's
+  source-tree CLI. When the package publishes, external consumers
+  use `--run` exclusively.
 
-### When to extract
+### When to publish
 
-Roughly: after 3–6 months of in-coco use, when at least one of these is
-true:
+Trigger conditions:
 
 - A second project we own wants to use it (e.g. `coco-vscode-extension`,
   `create-coco`).
@@ -506,21 +507,35 @@ true:
 - Keeping it in coco actively complicates something (e.g. scenario
   fixture data starts bloating the coco install).
 
-### How extraction looks
+### How publishing looks (when triggered)
 
-Mechanical:
+The build setup + package metadata are already in place. To publish:
 
 ```bash
-mkdir git-scenarios && cd git-scenarios
-cp -r ../coco/src/scenarios ./src
-cp ../coco/src/tempGitRepo.ts ./src/
-cp ../coco/src/spinUpScenario.ts ./src/
-cp ../coco/bin/scenario.ts ./bin/cli.ts
-# generators come with as a peer dep or co-moved
-# add package.json / README / LICENSE
-npm publish
+cd packages/git-scenarios
+# 1. Flip private:true → false in package.json
+# 2. Bump 0.0.0 → 0.1.0 (or higher)
+# 3. (one-time) ensure you have publish rights on @gfargo
+
+npm publish --access public
+# prepublishOnly runs: npm run clean && npm run build
 ```
 
-The boundary rules above are what make that `cp` work. Until then, keep
-the discipline strict — every coco-specific import added to this
-directory tree is an extraction tax we'll pay later.
+After publish, decide what to do with the vendored generators:
+
+- **Option A**: have coco's parser fixtures import from
+  `@gfargo/git-scenarios/__fixtures__/generators`. Removes the
+  duplication; introduces a coco → package dep on the parsers side.
+- **Option B**: extract generators to a third peer package
+  (`@gfargo/seeded-content`) that both consume. Cleanest separation;
+  one more package to maintain.
+
+A parity test (`src/lib/parsers/default/__fixtures__/generatorsParity.test.ts`)
+catches drift between the two copies in the meantime — if either
+copy's generator implementation changes, the test fails loudly.
+
+### Boundary discipline (kept strict)
+
+Every coco-specific import added to this package is an extraction tax
+we'll pay at publish time. The atoms / scenarios layer holds the line
+today; keep it that way.

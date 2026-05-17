@@ -1,5 +1,6 @@
-# Ignore all built files
+# Ignore all built files (root dist + nested packages/*/dist)
 dist/**/*
+packages/*/dist/**/*
 
 # ignore commit-copilot project config
 .coco.json

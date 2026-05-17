@@ -26,7 +26,6 @@ import {
   renameRemote,
   resetBisect,
   resetTo,
-  seededFiles,
   stashChanges,
   startBisect,
   startMerge,

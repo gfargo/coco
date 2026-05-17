@@ -14,6 +14,19 @@
  * Token sizing uses a chars/4 approximation. The bench runner's
  * real tokenizer re-counts at fixture-load time, so the generators
  * only need to be in the right neighborhood.
+ *
+ * VENDORED ELSEWHERE: a byte-identical copy lives at
+ * `packages/git-scenarios/src/__fixtures__/generators.ts`, where the
+ * shadow-extracted scenarios package uses the same generators via
+ * `seededFiles`. The duplication is intentional — the package is
+ * `private: true` and needs no external dep. When the package
+ * publishes:
+ *   - either this file switches to importing from
+ *     `@gfargo/git-scenarios/__fixtures__/generators`, or
+ *   - the generators extract to a third peer package
+ *     (`@gfargo/seeded-content`) that both consumers depend on
+ * Until then, keep the two files byte-identical. Edit one → edit
+ * both.
  */
 
 /** Seeded pseudo-random — LCG. Identical output for identical seed. */
