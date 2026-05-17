@@ -92,7 +92,10 @@ import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
 import { formatSplitApplySuccess } from '../chrome/postApplyHints'
 import { SPINNER_TICK_MS } from '../chrome/spinner'
 import { createInitialContextStatus, createRepoFrameRuntime } from './repoFrameFactory'
-import { resolveCommitDiffDrillInTarget } from './repoFrameDrillIn'
+import {
+  resolveCommitDiffDrillInTarget,
+  resolveSubmoduleViewDrillInTarget,
+} from './repoFrameDrillIn'
 import {
   getActiveRepoFrameRuntime,
   syncRepoStackRuntimes,
@@ -3656,6 +3659,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
                 ? filePreview.submoduleChange
                 : undefined,
             },
+            submodules: context.submodules,
+            activeRepoRoot,
+          })
+        : undefined,
+      // #931 PR 4 / #932 — Submodule drill-in target for the cursored
+      // row in the dedicated submodules view. Resolved per-render so
+      // the Enter handler in `inkInput.ts` doesn't have to re-walk the
+      // submodule overview. Gated on `activeView === 'submodules'` so
+      // a stale resolution from a different view can't accidentally
+      // fire — the runtime only ever populates it when the user is
+      // actually on the view.
+      submoduleViewDrillIn: state.activeView === 'submodules'
+        ? resolveSubmoduleViewDrillInTarget({
+            selectedIndex: state.selectedSubmoduleIndex,
             submodules: context.submodules,
             activeRepoRoot,
           })

@@ -167,6 +167,18 @@ export type LogInkInputContext = {
     entryRange?: { oldSha: string; newSha: string }
   }
   /**
+   * Resolved drill-in target for the row currently under the cursor in
+   * the dedicated submodules view (#931 PR 4 / #932). Set by the runtime
+   * when the cursored entry has a workdir AND the active frame's repo
+   * root has been resolved; undefined otherwise. The Enter handler in
+   * the submodules view dispatches `pushRepoFrame` with this payload —
+   * no entry range because there's no diff context in this view.
+   */
+  submoduleViewDrillIn?: {
+    label: string
+    workdir: string
+  }
+  /**
    * True when the worktree has any staged, unstaged, or untracked changes.
    * Drives the synthetic "(+) new commit" row at the top of the history
    * list — pressing up at `selectedIndex === 0` transitions onto it; the
@@ -2136,6 +2148,28 @@ export function getLogInkInputEvents(
         label: target.label,
         workdir: target.workdir,
         entryRange: target.entryRange,
+      }),
+      action({ type: 'setStatus', value: `entering submodule ${target.label}` }),
+    ]
+  }
+
+  // #931 PR 4 / #932 — Enter on a row in the dedicated submodules view
+  // drills into that submodule's history. Same mental model as the
+  // commit-diff drill-in (PR 3b) — pushing a frame is the equivalent
+  // of `cd vendor/lib && coco ui`. No entry range here; the submodules
+  // view doesn't carry diff context, so the frame lands on the
+  // submodule's full history.
+  if (
+    key.return &&
+    isSubmodulesActionTarget(state) &&
+    context.submoduleViewDrillIn
+  ) {
+    const target = context.submoduleViewDrillIn
+    return [
+      action({
+        type: 'pushRepoFrame',
+        label: target.label,
+        workdir: target.workdir,
       }),
       action({ type: 'setStatus', value: `entering submodule ${target.label}` }),
     ]
