@@ -1159,10 +1159,26 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.activeView,
   ])
 
+  // #931 PR 5 — Cache-aware boot load. The frame's `git` instance is
+  // the dep that drives this effect; on push, the new frame's runtime
+  // starts every key in `'loading'` and we fetch fresh. On pop, the
+  // parent's runtime carries cached context across the drill-out cycle
+  // (`'ready'` for already-loaded keys), and the per-key gate below
+  // skips the fetch so the user's drill-out is instant + flicker-free.
+  //
+  // `contextStatusRef` reads the latest status without putting
+  // `contextStatus` in the effect deps — including it would re-fire
+  // the effect on every per-key 'ready' write the effect itself
+  // produces, causing duplicate in-flight fetches for not-yet-completed
+  // keys. The ref pattern gives us "read latest" semantics with the
+  // effect still gated on git swaps only.
+  const contextStatusRef = React.useRef(contextStatus)
+  contextStatusRef.current = contextStatus
   React.useEffect(() => {
     let active = true
 
     loadLogInkContextEntries(git).forEach(({ key, load }) => {
+      if (contextStatusRef.current[key] === 'ready') return
       void load().then((value) => {
         if (!active) {
           return

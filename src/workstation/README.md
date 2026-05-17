@@ -116,6 +116,26 @@ A few invariants worth knowing before changing any of those modules:
 - **Confirmation gating is data, not control flow.** Workflows declare `requiresConfirmation: 'y' | 'enter'` in `inkWorkflows.ts`; the runtime intercepts and routes through the y-confirm overlay.
 - **Re-renders are cheap.** Ink reconciles the React tree on every state change; render helpers are pure functions of `(state, theme, layout)`.
 
+## Nested-repo navigation (#931)
+
+Drilling into a submodule is the mental equivalent of spawning another `coco ui` instance scoped to that submodule's working directory. The implementation reuses the existing reducer / surfaces / chrome — the only thing that changes when the user drills in is *which `SimpleGit` instance* the loaders run against.
+
+Two parallel structures keep it honest:
+
+- **View-model side** (`LogInkState.repoStack`) is pure data — an ordered list of `LogInkRepoFrame { label, workdir?, parentReturn?, entryRange? }`. The reducer's `pushRepoFrame` / `popRepoFrame` actions are the only things that mutate it.
+- **Runtime side** (`runtime/repoStackRuntime.ts`) lives in `LogInkApp` state — an ordered list of `RepoFrameRuntime { git, context, contextStatus }`. The sync effect reconciles it against `state.repoStack` every time the stack changes; push appends, pop slices, factory builds a fresh `simpleGit(workdir)` for new frames.
+
+The active frame (top of stack) projects `git` / `context` / `contextStatus` for every existing closure to read. Effects with `[git, ...]` deps re-fire automatically on push / pop. Cached context survives a drill-out cycle so popping back is instant.
+
+**Entry points:**
+
+- **Commit-diff** (`runtime/repoFrameDrillIn.ts::resolveCommitDiffDrillInTarget`) — Enter on a submodule file in the diff view. Captures `(oldPin, newPin)` from the file preview's `submoduleChange`.
+- **Submodules view** (`::resolveSubmoduleViewDrillInTarget`) — Enter on a row in the dedicated `gM` view. No range; lands on the submodule's full history.
+
+**Exit:** Esc / `<` / palette `navigateBack` — drains the frame's view stack first, then pops the frame. Breadcrumb in the header (`coco › vendor/lib   ← esc`) shows the user where they are.
+
+**Adding another entry point:** write a pure resolver next to the existing two, plumb its output through the input dispatch context (`LogInkInputContext`), and dispatch `pushRepoFrame` from the matching Enter handler. The runtime side handles the rest.
+
 ## Adding a new top-level view
 
 The bisect view (`g B`) is the most recent worked example — see PRs [#868, #885–#889]. Concrete touch list:
