@@ -5,6 +5,18 @@ import type { TempGitRepo } from '../tempGitRepo'
 import type { Step } from './types'
 
 /**
+ * Author identity for the `withAuthor` scope. All four fields land
+ * in the wrapped scope's env vars (`GIT_AUTHOR_*` /
+ * `GIT_COMMITTER_*`); `date` is optional and pins both author and
+ * committer dates the same way `addCommit({ date })` does.
+ */
+export type AuthorIdentity = {
+  name: string
+  email: string
+  date?: string
+}
+
+/**
  * Run a step on a named branch, then restore the previous branch.
  * Sugar over `checkoutBranch(name) → step → checkoutBranch(previous)`.
  *
@@ -62,6 +74,71 @@ export function onBranch(name: string, step: Step): Step {
  * is owned by the parent. Calling cleanup on the parent removes the
  * submodule clone too.
  */
+/**
+ * Run a step with a specific author identity. Any commit-producing
+ * atom inside the step (`addCommit`, `commit`, `emptyCommit`,
+ * `amendCommit`, `cherryPick`, `revert`, `startMerge`) attributes
+ * to the named author/email/(date) via the standard `GIT_AUTHOR_*`
+ * + `GIT_COMMITTER_*` env vars.
+ *
+ *   withAuthor({ name: 'Alice', email: 'alice@example.com' }, chain(
+ *     addCommit({ message: 'feat: alice work', files: { 'a.ts': '…' } }),
+ *   ))
+ *
+ *   // Multi-contributor history:
+ *   chain(
+ *     withAuthor({ name: 'Alice', email: 'alice@x' }, addCommit({ message: 'feat: a' })),
+ *     withAuthor({ name: 'Bob', email: 'bob@x' }, addCommit({ message: 'fix: b' })),
+ *   )
+ *
+ * **Footgun**: simple-git's `env()` replaces (doesn't merge) env
+ * vars. If an atom inside `withAuthor` also specifies its own
+ * `date`, that atom's env override will clobber the author env for
+ * that one command. To pin a date *and* author together, pass the
+ * date into `withAuthor`:
+ *
+ *   withAuthor(
+ *     { name: 'Alice', email: 'alice@x', date: daysAgo(30) },
+ *     addCommit({ message: 'feat: a' }),   // no `date` here
+ *   )
+ *
+ * The wrapped repo's `cleanup` is a no-op — the underlying repo is
+ * owned by the caller; this scope only swaps the git instance for
+ * the duration of `step`.
+ */
+export function withAuthor(identity: AuthorIdentity, step: Step): Step {
+  return async (repo) => {
+    const env: Record<string, string> = {
+      GIT_AUTHOR_NAME: identity.name,
+      GIT_AUTHOR_EMAIL: identity.email,
+      GIT_COMMITTER_NAME: identity.name,
+      GIT_COMMITTER_EMAIL: identity.email,
+    }
+    if (identity.date) {
+      env.GIT_AUTHOR_DATE = identity.date
+      env.GIT_COMMITTER_DATE = identity.date
+    }
+    // simple-git's `env()` MUTATES the receiver instance — chaining
+    // `repo.git.env(...)` would leak the override outside this scope.
+    // Build a fresh SimpleGit bound to the same workdir so the
+    // original `repo.git` stays untouched.
+    const scopedGit = simpleGit(repo.path).env(env)
+    const scopedRepo: TempGitRepo = {
+      path: repo.path,
+      git: scopedGit,
+      writeFile: repo.writeFile,
+      commitAll: async (message) => {
+        await scopedGit.add('.')
+        await scopedGit.commit(message)
+      },
+      cleanup: async () => {
+        // No-op: the parent's cleanup owns the actual repo.
+      },
+    }
+    await step(scopedRepo)
+  }
+}
+
 export function insideSubmodule(submodulePath: string, step: Step): Step {
   return async (parentRepo) => {
     const submoduleRoot = join(parentRepo.path, submodulePath)

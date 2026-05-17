@@ -53,6 +53,9 @@ export { stashChanges, applyStash, popStash, dropStash } from './stash'
 export {
   startMerge,
   abortMerge,
+  cherryPick,
+  abortCherryPick,
+  revert,
   startBisect,
   bisectStep,
   resetBisect,
@@ -61,7 +64,9 @@ export {
   amendCommit,
 } from './operations'
 export { addSubmodule, pinSubmodule } from './submodule'
-export { onBranch, insideSubmodule } from './scopes'
+export { addWorktree, removeWorktree } from './worktrees'
+export { setConfig } from './config'
+export { onBranch, insideSubmodule, withAuthor, type AuthorIdentity } from './scopes'
 export { seededFiles, type SeededFileSpec } from './seededFiles'
 export { defineScenario } from './defineScenario'
 export { daysAgo } from './time'

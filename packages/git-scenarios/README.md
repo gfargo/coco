@@ -259,8 +259,225 @@ const repo = await createTempGitRepo()
 
 If you find yourself reaching for `createTempGitRepo()` to build
 something a future test will also want, **add a scenario instead**
-(see "Adding a new scenario" below). Future-you (and future-others)
-will thank present-you.
+(see "Adding a new scenario" below), or compose one inline from the
+atom layer (see the next section).
+
+## Atoms — compose any repo state from building blocks
+
+Every registered scenario is built from small, single-purpose
+**atoms**: functions that take a `TempGitRepo` and apply one
+side-effect. Atoms are exported flat from the package, so you can
+compose your own setups inline in tests — no registration needed —
+or use them to write new registered scenarios.
+
+```ts
+import {
+  addCommit,
+  addRemote,
+  chain,
+  createTempGitRepo,
+  seededFiles,
+  startMerge,
+  switchToBranch,
+} from '@gfargo/git-scenarios'
+
+const repo = await createTempGitRepo()
+await chain(
+  addCommit({ message: 'init', files: { 'README.md': '# repo' } }),
+  addRemote('origin', 'git@example.com:org/repo.git'),
+  seededFiles({ files: [{ path: 'src/widget.ts', tokens: 120 }], seed: 0xabc }),
+  addCommit({ message: 'feat: widget' }),
+  switchToBranch('feat/conflict'),
+  addCommit({ message: 'theirs', files: { 'src/widget.ts': 'theirs\n' } }),
+  // … flip back to main with a conflicting change, then attempt merge
+)(repo)
+```
+
+The atom signature is uniform: every atom returns a `Step`,
+`(repo: TempGitRepo) => Promise<void>`. That's the same type
+`Scenario.setup` accepts, so `setup: chain(…)` works directly in
+`defineScenario({…})`.
+
+### Atom catalog
+
+#### Control flow
+
+| Atom | What it does |
+|---|---|
+| `chain(...steps)` | Sequence atoms; awaits each before the next. Short-circuits on rejection. |
+| `repeat(n, factory)` | `chain(...Array.from({ length: n }, factory))` — readable "do this N times." |
+
+#### Working tree
+
+| Atom | What it does |
+|---|---|
+| `writeFiles({ 'path': content })` | Write literal content. Parent dirs created. Does NOT stage. |
+| `seededFiles({ files, seed })` | Write procedurally-generated content (seeded, byte-stable across runs). |
+
+#### Staging + commits
+
+| Atom | What it does |
+|---|---|
+| `stageFiles(...paths)` | `git add .` (no args) or `git add <paths>`. |
+| `commit(message, { date? })` | Commit the staged set. Doesn't stage. |
+| `addCommit({ message, files?, date? })` | Workhorse: write + stage all + commit. |
+| `emptyCommit(message, { date? })` | `--allow-empty` commit. |
+| `amendCommit({ message? })` | `--amend` the last commit. |
+
+Every commit-producing atom accepts an optional `date` (any
+`GIT_AUTHOR_DATE`-compatible ISO string). Pair with `daysAgo(n)` for
+relative-time scenarios.
+
+#### Branches
+
+| Atom | What it does |
+|---|---|
+| `switchToBranch(name, { from? })` | `git checkout -b <name>` (optionally from a specific ref). |
+| `checkoutBranch(name)` | `git checkout <name>` (existing). |
+| `createBranch(name, { from? })` | `git branch <name>` (no checkout). |
+| `deleteBranch(name, { force? })` | `git branch -d` / `-D`. |
+
+#### Tags
+
+| Atom | What it does |
+|---|---|
+| `createTag(name, { message?, sha? })` | Annotated when `message` is set, otherwise lightweight. |
+| `deleteTag(name)` | `git tag -d`. |
+
+#### Remotes
+
+| Atom | What it does |
+|---|---|
+| `addRemote(name, url)` | Register a remote. URL stored as-is — no fetch. |
+| `removeRemote(name)` | Drop a remote. |
+| `renameRemote(from, to)` | Rename a remote (URL unchanged). |
+
+#### Stash
+
+| Atom | What it does |
+|---|---|
+| `stashChanges({ message?, includeUntracked?, keepIndex? })` | `git stash push` with the matching flags. |
+| `applyStash({ ref? })` | `git stash apply`. |
+| `popStash({ ref? })` | `git stash pop`. |
+| `dropStash({ ref? })` | `git stash drop`. |
+
+#### Operations (merge / cherry-pick / revert / bisect / reset)
+
+| Atom | What it does |
+|---|---|
+| `startMerge(branch, { allowConflict?, noFastForward?, message?, date? })` | Merge — conflicts leave the repo mid-merge by default. |
+| `abortMerge()` | `git merge --abort`. |
+| `cherryPick(ref, { allowConflict?, date? })` | Cherry-pick — conflicts leave mid-cherry-pick by default. |
+| `abortCherryPick()` | `git cherry-pick --abort`. |
+| `revert(ref, { mainline?, allowConflict?, date? })` | Revert a commit (use `mainline` for merge commits). |
+| `startBisect({ bad, good })` | Begin a bisect at HEAD's midpoint. |
+| `bisectStep(verdict)` | `'good'` / `'bad'` / `'skip'`. |
+| `resetBisect()` | `git bisect reset`. |
+| `resetTo({ target, mode? })` | `git reset --soft/mixed/hard <target>`. |
+
+#### Submodules
+
+| Atom | What it does |
+|---|---|
+| `addSubmodule({ path, branch?, setup })` | Builds a source repo from `setup` (a `Step` — any atom composes), clones it in as a submodule. |
+| `pinSubmodule(path, sha)` | Move the parent's recorded pin for the submodule. |
+
+#### Linked worktrees
+
+| Atom | What it does |
+|---|---|
+| `addWorktree(path, { branch? \| checkout?, detach?, from? })` | `git worktree add`. |
+| `removeWorktree(path, { force? })` | `git worktree remove`. |
+
+#### Config
+
+| Atom | What it does |
+|---|---|
+| `setConfig(key, value, { unset? })` | Local `git config <key> <value>`, or `--unset` when `unset: true`. |
+
+#### Scoping (apply atoms to a different context)
+
+| Atom | What it does |
+|---|---|
+| `onBranch(name, step)` | Switch to `name`, run `step`, restore the previous branch (even on throw). |
+| `insideSubmodule(path, step)` | Run `step` against the submodule's working tree. Any atom composes inside. |
+| `withAuthor({ name, email, date? }, step)` | Run `step` with `GIT_AUTHOR_*` / `GIT_COMMITTER_*` pinned. |
+
+#### Scenario definition
+
+| Atom | What it does |
+|---|---|
+| `defineScenario({…})` | Validating wrapper for `Scenario` (kebab-case name, kind enum, non-empty fields). |
+| `daysAgo(n)` | ISO timestamp at noon UTC N days before now. Pairs with the `date` option on commit atoms. |
+
+### Worked example: "out-of-date submodule"
+
+A scenario shape that's hard with the imperative API but reads
+declaratively with atoms — the parent's pinned commit is older than
+the submodule's HEAD:
+
+```ts
+import { addCommit, addSubmodule, chain, defineScenario, insideSubmodule } from '@gfargo/git-scenarios'
+
+export const outOfDateSubmoduleScenario = defineScenario({
+  name: 'out-of-date-submodule',
+  summary: 'parent pinned at submodule HEAD~2, three post-pin commits inside',
+  description: '…',
+  kind: 'submodule',
+  setup: chain(
+    addCommit({ message: 'init', files: { 'README.md': '# parent' } }),
+    addSubmodule({
+      path: 'vendor/lib',
+      branch: 'main',
+      setup: chain(
+        addCommit({ message: 'init lib', files: { 'README.md': '# lib' } }),
+      ),
+    }),
+    addCommit({ message: 'chore: pin submodule' }),
+
+    // Make commits INSIDE the submodule without updating the parent's pin.
+    insideSubmodule('vendor/lib', chain(
+      addCommit({ message: 'feat: post-pin A', files: { 'src/a.ts': 'a' } }),
+      addCommit({ message: 'feat: post-pin B', files: { 'src/b.ts': 'b' } }),
+      addCommit({ message: 'feat: post-pin C', files: { 'src/c.ts': 'c' } }),
+    )),
+    // Parent's `.gitmodules` pin is unchanged; `git submodule status`
+    // reports `+` modified.
+  ),
+})
+```
+
+### Worked example: multi-contributor history
+
+```ts
+import { addCommit, chain, daysAgo, withAuthor } from '@gfargo/git-scenarios'
+
+await chain(
+  addCommit({ message: 'init', files: { 'README.md': '# repo' } }),
+  withAuthor({ name: 'Alice', email: 'alice@example.com', date: daysAgo(10) },
+    addCommit({ message: 'feat: alice work', files: { 'a.ts': 'x' } }),
+  ),
+  withAuthor({ name: 'Bob', email: 'bob@example.com', date: daysAgo(5) },
+    addCommit({ message: 'fix: bob work', files: { 'b.ts': 'y' } }),
+  ),
+)(repo)
+```
+
+`git log` now shows commits by Alice (10 days ago) and Bob (5 days
+ago) — useful for testing blame, PR-triage-by-author, contributor
+stats.
+
+### Worked example: multi-remote fork topology
+
+```ts
+import { addCommit, addRemote, chain } from '@gfargo/git-scenarios'
+
+await chain(
+  addCommit({ message: 'init', files: { 'README.md': '# fork' } }),
+  addRemote('origin', 'git@github.com:fork/repo.git'),
+  addRemote('upstream', 'git@github.com:source/repo.git'),
+)(repo)
+```
 
 ## Adding a new scenario
 

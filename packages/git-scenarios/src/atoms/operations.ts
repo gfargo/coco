@@ -139,6 +139,124 @@ export function resetTo(options: { target: string; mode?: 'soft' | 'mixed' | 'ha
 }
 
 /**
+ * Cherry-pick a commit onto the current branch (`git cherry-pick
+ * <sha>`). With `allowConflict: true` (the **default**), conflicts
+ * leave the repo mid-cherry-pick with `CHERRY_PICK_HEAD` set and
+ * conflicted files in the worktree — exactly the shape conflicts-
+ * view scenarios want. With `allowConflict: false`, the atom rethrows
+ * on any failure.
+ *
+ *   chain(
+ *     addCommit({ message: 'base', files: { 'x.ts': BASE } }),
+ *     switchToBranch('feat/source'),
+ *     addCommit({ message: 'pickable', files: { 'y.ts': 'y' } }),
+ *     checkoutBranch('main'),
+ *     cherryPick('feat/source'),   // ref or sha; cherry-picks the pickable commit
+ *   )
+ *
+ * Pass `date` to pin the cherry-pick's author + committer dates
+ * (same env mechanism as `addCommit`).
+ */
+export function cherryPick(
+  ref: string,
+  options: { allowConflict?: boolean; date?: string } = {},
+): Step {
+  const allowConflict = options.allowConflict !== false
+  return async (repo) => {
+    const gitInstance = options.date
+      ? repo.git.env({
+          GIT_AUTHOR_DATE: options.date,
+          GIT_COMMITTER_DATE: options.date,
+        })
+      : repo.git
+
+    let cherryError: unknown
+    try {
+      await gitInstance.raw(['cherry-pick', ref])
+    } catch (error) {
+      cherryError = error
+    }
+    const status = await repo.git.status()
+    if (status.conflicted.length > 0) {
+      if (!allowConflict) {
+        throw cherryError ?? new Error(
+          `cherry-pick of '${ref}' produced conflicts: ${status.conflicted.join(', ')}`,
+        )
+      }
+      return // leave the repo mid-cherry-pick
+    }
+    if (cherryError) {
+      throw cherryError
+    }
+  }
+}
+
+/**
+ * Abort an in-progress cherry-pick (`git cherry-pick --abort`).
+ * Restores the working tree to pre-cherry-pick state.
+ */
+export function abortCherryPick(): Step {
+  return async (repo) => {
+    await repo.git.raw(['cherry-pick', '--abort'])
+  }
+}
+
+/**
+ * Revert a commit (`git revert --no-edit <sha>`). Produces a new
+ * commit that undoes the named commit's changes.
+ *
+ *   revert('abc1234')                          // revert a regular commit
+ *   revert('merge-sha', { mainline: 1 })       // revert a merge commit
+ *
+ * Reverting a merge commit requires the `mainline` option to tell
+ * git which parent is the "mainline" (the branch the merge stayed
+ * on). `mainline: 1` is the common case (the branch the merge was
+ * made INTO).
+ *
+ * With `allowConflict: true` (default), conflicts leave the repo
+ * mid-revert with `REVERT_HEAD` set. With `allowConflict: false`,
+ * any failure rethrows.
+ */
+export function revert(
+  ref: string,
+  options: { mainline?: number; allowConflict?: boolean; date?: string } = {},
+): Step {
+  const allowConflict = options.allowConflict !== false
+  return async (repo) => {
+    const args = ['revert', '--no-edit']
+    if (options.mainline) {
+      args.push('-m', String(options.mainline))
+    }
+    args.push(ref)
+    const gitInstance = options.date
+      ? repo.git.env({
+          GIT_AUTHOR_DATE: options.date,
+          GIT_COMMITTER_DATE: options.date,
+        })
+      : repo.git
+
+    let revertError: unknown
+    try {
+      await gitInstance.raw(args)
+    } catch (error) {
+      revertError = error
+    }
+    const status = await repo.git.status()
+    if (status.conflicted.length > 0) {
+      if (!allowConflict) {
+        throw revertError ?? new Error(
+          `revert of '${ref}' produced conflicts: ${status.conflicted.join(', ')}`,
+        )
+      }
+      return
+    }
+    if (revertError) {
+      throw revertError
+    }
+  }
+}
+
+/**
  * Commit with `--allow-empty` so an absent diff doesn't error
  * (`git commit --allow-empty -m <message>`). Useful for setting up
  * "history with N entries" scenarios where the diff content doesn't

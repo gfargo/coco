@@ -60,6 +60,9 @@ export {
   // Operations
   startMerge,
   abortMerge,
+  cherryPick,
+  abortCherryPick,
+  revert,
   startBisect,
   bisectStep,
   resetBisect,
@@ -67,9 +70,15 @@ export {
   // Submodules
   addSubmodule,
   pinSubmodule,
+  // Linked worktrees
+  addWorktree,
+  removeWorktree,
+  // Config
+  setConfig,
   // Scoping
   onBranch,
   insideSubmodule,
+  withAuthor,
   // Scenarios
   defineScenario,
   // Time helpers
@@ -78,6 +87,7 @@ export {
   type Step,
   type FileMap,
   type SeededFileSpec,
+  type AuthorIdentity,
 } from './atoms'
 
 export {
