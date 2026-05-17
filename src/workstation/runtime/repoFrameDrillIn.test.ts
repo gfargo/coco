@@ -6,7 +6,7 @@ const baseOverview = {
     {
       name: 'vendor/lib',
       path: 'vendor/lib',
-      pinnedSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      pinnedSha: 'aaaaaaaa',
       flag: 'clean' as const,
       trackingBranch: 'main',
       url: '/abs/source/vendor/lib',
@@ -14,7 +14,7 @@ const baseOverview = {
     {
       name: 'tools',
       path: 'packages/tools',
-      pinnedSha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      pinnedSha: 'bbbbbbbb',
       flag: 'clean' as const,
     },
   ],
@@ -59,8 +59,8 @@ describe('resolveCommitDiffDrillInTarget', () => {
         path: 'vendor/lib',
         submoduleChange: {
           kind: 'modified',
-          before: '1111111111111111111111111111111111111111',
-          after: '2222222222222222222222222222222222222222',
+          before: '11111111',
+          after: '22222222',
         },
       },
       submodules: baseOverview,
@@ -70,8 +70,8 @@ describe('resolveCommitDiffDrillInTarget', () => {
       label: 'vendor/lib',
       workdir: '/abs/coco/vendor/lib',
       entryRange: {
-        oldSha: '1111111111111111111111111111111111111111',
-        newSha: '2222222222222222222222222222222222222222',
+        oldSha: '11111111',
+        newSha: '22222222',
       },
     })
   })
@@ -82,8 +82,8 @@ describe('resolveCommitDiffDrillInTarget', () => {
         path: 'packages/tools',
         submoduleChange: {
           kind: 'modified',
-          before: 'cccccccccccccccccccccccccccccccccccccccc',
-          after: 'dddddddddddddddddddddddddddddddddddddddd',
+          before: 'cccccccc',
+          after: 'dddddddd',
         },
       },
       submodules: baseOverview,
@@ -99,7 +99,7 @@ describe('resolveCommitDiffDrillInTarget', () => {
         path: 'vendor/lib',
         submoduleChange: {
           kind: 'added',
-          after: '2222222222222222222222222222222222222222',
+          after: '22222222',
         },
       },
       submodules: baseOverview,
@@ -116,7 +116,7 @@ describe('resolveCommitDiffDrillInTarget', () => {
         path: 'vendor/lib',
         submoduleChange: {
           kind: 'removed',
-          before: '1111111111111111111111111111111111111111',
+          before: '11111111',
         },
       },
       submodules: baseOverview,

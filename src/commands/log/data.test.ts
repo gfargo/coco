@@ -266,8 +266,8 @@ describe('log data layer', () => {
   it('surfaces the structured submoduleChange for a modified-submodule file (#931)', async () => {
     const git = {
       raw: jest.fn().mockResolvedValue([
-        '-Subproject commit 1111111111111111111111111111111111111111',
-        '+Subproject commit 2222222222222222222222222222222222222222',
+        '-Subproject commit 11111111',
+        '+Subproject commit 22222222',
       ].join('\n')),
     }
 
@@ -281,8 +281,8 @@ describe('log data layer', () => {
 
     expect(preview.submoduleChange).toEqual({
       kind: 'modified',
-      before: '1111111111111111111111111111111111111111',
-      after: '2222222222222222222222222222222222222222',
+      before: '11111111',
+      after: '22222222',
     })
     // The summarized hunks are unchanged from before — the structured
     // field is purely additive.
@@ -310,10 +310,10 @@ describe('log data layer', () => {
 
   it('surfaces submoduleChange for added (no -line) and removed (no +line) submodules', async () => {
     const addedGit = {
-      raw: jest.fn().mockResolvedValue('+Subproject commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+      raw: jest.fn().mockResolvedValue('+Subproject commit aaaaaaaa'),
     }
     const removedGit = {
-      raw: jest.fn().mockResolvedValue('-Subproject commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'),
+      raw: jest.fn().mockResolvedValue('-Subproject commit bbbbbbbb'),
     }
 
     const added = await getCommitFilePreview(addedGit as never, 'abc1234', {
@@ -321,7 +321,7 @@ describe('log data layer', () => {
     })
     expect(added.submoduleChange).toEqual({
       kind: 'added',
-      after: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      after: 'aaaaaaaa',
     })
 
     const removed = await getCommitFilePreview(removedGit as never, 'abc1234', {
@@ -329,7 +329,7 @@ describe('log data layer', () => {
     })
     expect(removed.submoduleChange).toEqual({
       kind: 'removed',
-      before: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      before: 'bbbbbbbb',
     })
   })
 })

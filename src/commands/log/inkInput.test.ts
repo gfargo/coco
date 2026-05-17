@@ -1262,8 +1262,8 @@ describe('log Ink input interactions', () => {
             label: 'vendor/lib',
             workdir: '/abs/coco/vendor/lib',
             entryRange: {
-              oldSha: '1111111111111111111111111111111111111111',
-              newSha: '2222222222222222222222222222222222222222',
+              oldSha: '11111111',
+              newSha: '22222222',
             },
           },
         })
@@ -1276,8 +1276,8 @@ describe('log Ink input interactions', () => {
           label: 'vendor/lib',
           workdir: '/abs/coco/vendor/lib',
           entryRange: {
-            oldSha: '1111111111111111111111111111111111111111',
-            newSha: '2222222222222222222222222222222222222222',
+            oldSha: '11111111',
+            newSha: '22222222',
           },
         })
         // Status hint accompanies the push so the user gets feedback.
