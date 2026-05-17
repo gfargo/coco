@@ -1,44 +1,106 @@
-# `@gfargo/git-scenarios` — temp git repos + named scenarios
+# `@gfargo/git-scenarios`
 
-The test-infrastructure layer for spinning up git repositories in
-known states. Two audiences:
+> **Spin up real git repositories in any state, deterministically.**
+> Composable atoms for merge conflicts, out-of-date submodules,
+> multiple remotes, in-progress operations, multi-contributor
+> histories, linked worktrees, and more — for tests, demos, and tool
+> development.
+
+<!-- Badges will populate once published.
+[![npm](https://img.shields.io/npm/v/@gfargo/git-scenarios.svg)](https://www.npmjs.com/package/@gfargo/git-scenarios)
+[![license](https://img.shields.io/npm/l/@gfargo/git-scenarios.svg)](./LICENSE)
+[![types](https://img.shields.io/npm/types/@gfargo/git-scenarios.svg)](#)
+-->
+
+## What this is
+
+Real-world git tools — `coco`, `lazygit`, IDEs, custom dev tools —
+behave differently against a feature-branch-ready-to-PR than against
+a mid-merge-conflict than against an out-of-date submodule. Testing
+those behaviors usually means hand-writing `git init` + `writeFile` +
+`commitAll` setups in every test, or worse, checking real repos into
+the test tree.
+
+This package replaces both with:
+
+- **A registry of curated scenarios** (`feature-pr-ready`,
+  `mid-merge-conflict`, `submodule-with-history`, …) — call
+  `spinUpScenario('name')` and you get a real temp git repo in the
+  named state, ready to drive your tool against.
+- **A composable atom layer** (`chain`, `addCommit`, `startMerge`,
+  `addSubmodule`, `withAuthor`, …) — build your own scenarios inline
+  in tests, or register custom ones for your project.
+- **A tool-agnostic CLI** — `npx git-scenarios create
+  <name> --run <command>` materializes a scenario and launches any
+  tool against it. Tightest dev loop for "what does my tool do
+  against state X?"
+
+Every scenario is deterministic (same setup → byte-identical repo
+state every run), so the tests built on top are deterministic too.
+
+## Audiences
 
 1. **You're writing an integration test.** Use `spinUpScenario()` to
    start from a deterministic baseline instead of hand-building the
-   same `tempGitRepo + writeFile + commitAll` setup every time.
-2. **You're hand-testing a git tool (workstation, lazygit, gitui, your
-   own thing).** Use the CLI to materialize a scenario on disk and
-   (optionally) launch a tool against it in one command.
+   same `git init` + `writeFile` + `commitAll` setup every time.
+2. **You're hand-testing a git tool** (your own, or someone else's).
+   Use the CLI to materialize a scenario on disk and launch the tool
+   against it in one command.
+3. **You're building your own scenario library** for a tool that
+   doesn't fit the curated set. Use the atom layer to compose
+   anything from "single staged file" to "three-way nested submodule
+   mid-rebase."
 
-Both paths share the same eleven scenarios.
+> **Status (shadow-extracted).** This package lives inside the
+> [`gfargo/coco`](https://github.com/gfargo/coco) monorepo at
+> `packages/git-scenarios/` while we validate the boundary.
+> `private: true` keeps it off the npm registry. Coco's tests / CLI
+> consume it via the `@gfargo/git-scenarios` alias (tsconfig + jest
+> path mapping). When a second consumer wants it or the package
+> stops needing churn, flip `private` off and publish.
 
-> **Status (shadow-extracted).** This package lives inside the coco
-> monorepo at `packages/git-scenarios/` while we validate the
-> boundary. `private: true` in `package.json` keeps it off the npm
-> registry. Coco's tests / CLI consume it via the
-> `@gfargo/git-scenarios` alias (tsconfig + jest path mapping). When
-> a second consumer wants it or the package stops needing churn,
-> flip `private` off and publish.
+## Table of contents
 
-## Quick start
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Common patterns (cookbook)](#common-patterns-cookbook)
+- [Available scenarios](#available-scenarios)
+- [The CLI](#the-cli)
+- [Programmatic API](#programmatic-api)
+- [Atoms — compose any repo state](#atoms--compose-any-repo-state-from-building-blocks)
+- [Defining your own scenarios](#defining-your-own-scenarios)
+- [TypeScript support](#typescript-support)
+- [Debugging](#debugging)
+- [Consumers beyond tests](#consumers-outside-of-tests)
+- [Extraction discipline](#extraction-discipline)
 
-### Manual testing — drive `coco ui` against a known state
+## Installation
 
 ```bash
-# Spin up a feature branch ready to PR, launch coco ui against it
-npm run scenario create feature-pr-ready -- --run-ui
-
-# Spin up a dirty worktree with many files, launch coco ui
-npm run scenario create dirty-many-files -- --run-ui
-
-# Spin up an in-progress merge conflict
-npm run scenario create mid-merge-conflict -- --run-ui
+npm install --save-dev @gfargo/git-scenarios simple-git
+# or
+yarn add --dev @gfargo/git-scenarios simple-git
+# or
+pnpm add --save-dev @gfargo/git-scenarios simple-git
 ```
+
+`simple-git` is a `peerDependency` — installed alongside so your
+project picks the version compatible with both this package and any
+other simple-git consumer you have.
+
+**Node requirement**: `^22.22.2 || ^24.15.0 || >=26.0.0`. The
+package ships ESM; CommonJS consumers should use `await import(...)`.
+
+> Inside the coco monorepo today, no install is needed — the package
+> is consumed via path mapping. See [coco's `CONTRIBUTING.md`](https://github.com/gfargo/coco/blob/main/CONTRIBUTING.md)
+> for the in-monorepo workflow.
+
+## Quick start
 
 ### Integration tests — start from a baseline
 
 ```ts
-import { spinUpScenario } from '@gfargo/git-scenarios'
+import { spinUpScenario, type TempGitRepo } from '@gfargo/git-scenarios'
 
 describe('changelog flow against a PR-ready branch', () => {
   let repo: TempGitRepo
@@ -56,6 +118,153 @@ describe('changelog flow against a PR-ready branch', () => {
     // Run the thing under test from here.
   })
 })
+```
+
+### Manual testing — drive any tool against a known state
+
+```bash
+# Spin up a feature branch ready to PR, launch lazygit against it
+npx git-scenarios create feature-pr-ready --run "lazygit"
+
+# Spin up an in-progress merge conflict, drop into your IDE
+npx git-scenarios create mid-merge-conflict --run "code -n"
+
+# Spin up a dirty worktree without launching anything — get the path
+npx git-scenarios create dirty-many-files
+# → /var/folders/.../coco-git-test-xR2qwz
+# cd in and run whatever you want against it
+```
+
+Inside coco's monorepo, `npm run scenario` is wired as a shortcut:
+
+```bash
+npm run scenario list
+npm run scenario create feature-pr-ready -- --run-ui  # launches coco ui
+```
+
+### Inline composition — build a scenario right in a test
+
+```ts
+import {
+  addCommit,
+  addRemote,
+  chain,
+  createTempGitRepo,
+  startMerge,
+  switchToBranch,
+} from '@gfargo/git-scenarios'
+
+const repo = await createTempGitRepo()
+await chain(
+  addCommit({ message: 'base', files: { 'src/widget.ts': 'export const widget = () => null\n' } }),
+  switchToBranch('feat/theirs'),
+  addCommit({ message: 'theirs', files: { 'src/widget.ts': 'theirs\n' } }),
+  switchToBranch('main'),
+  addCommit({ message: 'ours', files: { 'src/widget.ts': 'ours\n' } }),
+  startMerge('feat/theirs'),
+  addRemote('origin', 'git@example.com:org/repo.git'),
+)(repo)
+// repo is now mid-merge with src/widget.ts conflicted, origin set
+```
+
+## Common patterns (cookbook)
+
+### "I just need a repo with a few commits"
+
+```ts
+const repo = await spinUpScenario('two-commit-feature')
+```
+
+### "I need a repo my tool can stage / commit against"
+
+```ts
+const repo = await spinUpScenario('single-staged-file')
+// repo has 1 staged README ready to commit
+```
+
+### "I need to test a merge-conflict flow"
+
+```ts
+const repo = await spinUpScenario('mid-merge-conflict')
+// repo is mid-merge with `src/widget.ts` conflicted, MERGE_HEAD set
+```
+
+Or inline:
+
+```ts
+await chain(
+  addCommit({ message: 'base', files: { 'x.ts': 'base\n' } }),
+  switchToBranch('feat/theirs'),
+  addCommit({ message: 'theirs', files: { 'x.ts': 'theirs\n' } }),
+  switchToBranch('main'),
+  addCommit({ message: 'ours', files: { 'x.ts': 'ours\n' } }),
+  startMerge('feat/theirs'),
+)(repo)
+```
+
+### "I need an out-of-date submodule"
+
+```ts
+await chain(
+  addCommit({ message: 'init', files: { 'README.md': '# parent' } }),
+  addSubmodule({
+    path: 'vendor/lib',
+    branch: 'main',
+    setup: chain(
+      addCommit({ message: 'init lib', files: { 'README.md': '# lib' } }),
+    ),
+  }),
+  addCommit({ message: 'chore: pin submodule' }),
+  // Commits inside the submodule that DON'T update the parent's pin
+  insideSubmodule('vendor/lib', chain(
+    addCommit({ message: 'feat: post-pin', files: { 'a.ts': 'a' } }),
+  )),
+)(repo)
+// `git submodule status` now reports `+` modified
+```
+
+### "I need multi-contributor history for blame / triage tests"
+
+```ts
+await chain(
+  addCommit({ message: 'init', files: { 'README.md': '# repo' } }),
+  withAuthor({ name: 'Alice', email: 'alice@org', date: daysAgo(10) },
+    addCommit({ message: 'feat: alice work', files: { 'a.ts': 'a' } }),
+  ),
+  withAuthor({ name: 'Bob', email: 'bob@org', date: daysAgo(5) },
+    addCommit({ message: 'fix: bob work', files: { 'b.ts': 'b' } }),
+  ),
+)(repo)
+```
+
+### "I need a fork topology with origin + upstream"
+
+```ts
+await chain(
+  addCommit({ message: 'init', files: { 'README.md': '# fork' } }),
+  addRemote('origin', 'git@github.com:fork/repo.git'),
+  addRemote('upstream', 'git@github.com:source/repo.git'),
+)(repo)
+```
+
+### "I need linked worktrees"
+
+```ts
+await chain(
+  addCommit({ message: 'init', files: { 'README.md': '# repo' } }),
+  addWorktree('/tmp/feat-x', { branch: 'feat/x' }),
+  // Second worktree on its own branch
+)(repo)
+```
+
+### "I need a specific git config for my tool to detect"
+
+```ts
+await chain(
+  addCommit({ message: 'init', files: { 'README.md': '# repo' } }),
+  setConfig('commit.template', '.gitmessage'),
+  setConfig('user.signingkey', 'ABC123'),
+)(repo)
 ```
 
 ## Layout
@@ -98,7 +307,8 @@ binary at `bin.git-scenarios` in `package.json`.
 
 ## Available scenarios
 
-Run `npm run scenario list` for the live list. Current set (11 scenarios across 6 kinds):
+Run `git-scenarios list` (or `npm run scenario list` inside coco) for
+the live list. Current set (**11 scenarios across 6 kinds**):
 
 | Name | Kind | What you get |
 |---|---|---|
@@ -112,22 +322,27 @@ Run `npm run scenario list` for the live list. Current set (11 scenarios across 
 | `mid-merge-conflict` | operation | in-progress merge with 1 unresolved conflict on `src/widget.ts` — for the conflicts view |
 | `rich-history-graph` | history | 20+ commits across 6 date buckets, 2 `--no-ff` merges, 1 live unmerged `feat/wip` — for compact + full-graph rendering (bucket dividers, type coloring, branch chips, lane topology) |
 | `stashed-changes` | stash | clean `main` + 3 stashes (LIFO ordered, each touching a distinct file) — for the stash view |
-| `submodule-with-history` | submodule | parent with 4 commits + `vendor/lib` submodule (clean pin, 4 commits, `branch = main`) — for recursive submodule navigation (#931) |
+| `submodule-with-history` | submodule | parent with 4 commits + `vendor/lib` submodule (clean pin, 4 commits, `branch = main`) — for recursive submodule navigation |
 
-`npm run scenario describe <name>` prints the full description and
-the contract assertions for a single scenario.
+`git-scenarios describe <name>` prints the full description and the
+contract assertions for a single scenario.
 
-## The CLI (manual testing)
+## The CLI
 
 ```bash
-npm run scenario list                              # show all scenarios grouped by kind
-npm run scenario describe feature-pr-ready         # one-scenario detail + contract list
-npm run scenario create feature-pr-ready           # materialize in /tmp/coco-git-test-<rand>
-npm run scenario create feature-pr-ready -- --path ~/sandbox/widget   # custom location
-npm run scenario create feature-pr-ready -- --run-ui                  # materialize + launch coco ui
-npm run scenario create feature-pr-ready -- --ephemeral               # auto-clean on exit
-npm run scenario create rich-history-graph -- --run-ui \
-  --remote git@github.com:gfargo/coco.git           # add an origin so gi / gP have data
+# Outside coco (after `npm install --save-dev @gfargo/git-scenarios`):
+npx git-scenarios list                                                  # show all scenarios grouped by kind
+npx git-scenarios describe feature-pr-ready                             # one-scenario detail
+npx git-scenarios create feature-pr-ready                               # materialize in /tmp
+npx git-scenarios create feature-pr-ready --path ~/sandbox/widget       # custom location
+npx git-scenarios create feature-pr-ready --run "lazygit"               # launch any tool against it
+npx git-scenarios create feature-pr-ready --ephemeral                   # auto-clean on exit
+npx git-scenarios create rich-history-graph \
+  --run "lazygit" --remote git@github.com:org/repo.git                  # add an origin first
+
+# Inside coco's monorepo, `npm run scenario` is wired as a shortcut:
+npm run scenario list
+npm run scenario create feature-pr-ready -- --run-ui                    # `--run-ui` launches coco ui
 ```
 
 ### Flags
@@ -135,9 +350,10 @@ npm run scenario create rich-history-graph -- --run-ui \
 | Flag | Behavior |
 |---|---|
 | `--path <dir>` | Materialize at `<dir>` instead of `/tmp`. Useful when you want to `cd` into it later and poke around. |
-| `--run-ui` | After materializing, spawn `coco ui` against the scenario dir (cwd = scenario dir, not the coco repo). Tightest dev loop for trying workstation changes. |
-| `--remote <url>` | Add `origin` pointing at `<url>` so the GitHub triage views (`gi` / `gP`) detect a remote on launch. Pass any gh-shaped URL. Use a real one (`git@github.com:gfargo/coco.git`) to render the views with live data; use a fake one (`git@github.com:coco-test/sample.git`) to render the views safely against an empty / gh-unauthenticated remote. Without this flag the triage views show "No GitHub remote detected" — the scenario repo is a bare `git init` by default. |
-| `--ephemeral` | Auto-clean the temp dir on CLI exit. Skip for normal use — without `--ephemeral`, the dir persists so you can re-inspect after `coco ui` quits. |
+| `--run <cmd>` | After materializing, spawn `<cmd>` against the scenario dir (cwd = scenario dir). Examples: `--run "lazygit"`, `--run "gitui"`, `--run "code -n"` (open in VS Code). |
+| `--run-ui` | Coco-monorepo back-compat alias — spawns coco's source-tree CLI (`tsx <coco>/src/index.ts ui`) against the scenario dir. External consumers use `--run "coco ui"` (or any other shell command) instead. |
+| `--remote <url>` | Add `origin` pointing at `<url>` so gh-aware tools detect a remote on launch. Pass any gh-shaped URL. Use a real one to render the tool's views with live data; use a fake one to render against an empty / unauthenticated remote (no risk of accidental destructive actions). Without this flag the scenario repo is a bare `git init` with no remote. |
+| `--ephemeral` | Auto-clean the temp dir on CLI exit. Skip for normal use — without `--ephemeral`, the dir persists so you can re-inspect after the launched tool quits. |
 
 ### Cleanup
 
@@ -479,121 +695,174 @@ await chain(
 )(repo)
 ```
 
-## Adding a new scenario
+## Defining your own scenarios
 
-1. Create `src/scenarios/<kebab-name>.ts` exporting a
-   `Scenario`.
-2. Register it in `src/scenarios/index.ts`.
-3. Add `<kebab-name>.test.ts` next to it — at minimum, assert each
-   `contract` line holds after setup.
-4. The CLI picks it up automatically.
-
-### The `Scenario` shape
+Most projects want a few custom scenarios alongside the built-in
+ones — repo shapes specific to your tool's domain (e.g. "monorepo
+with two workspaces, one dirty"). Define them with `defineScenario`
+and compose the setup from atoms:
 
 ```ts
-export type Scenario = {
-  /** Stable identifier — kebab-case. Used as the CLI argument. */
-  name: string
-  /** One-line summary shown in `npm run scenario list`. */
-  summary: string
-  /** Multi-line description shown in `npm run scenario describe <name>`. */
-  description: string
-  /** Filtering category for the list view. */
-  kind: 'branch' | 'worktree' | 'operation' | 'history' | 'stash' | 'submodule'
-  /** The actual state factory. Mutates the given repo. */
-  setup: (repo: TempGitRepo) => Promise<void>
-  /**
-   * Human-readable expectations the test layer verifies. Also
-   * documents the scenario's contract — surfaced in
-   * `npm run scenario describe`.
-   */
-  contracts?: string[]
-}
-```
+// my-test-utils/scenarios/two-workspace-dirty.ts
+import {
+  addCommit,
+  chain,
+  defineScenario,
+  stageFiles,
+  switchToBranch,
+  writeFiles,
+} from '@gfargo/git-scenarios'
 
-### Worked example
-
-```ts
-// src/scenarios/three-commit-feature.ts
-import type { Scenario } from './types'
-import { seededFiles } from './shared/seededFiles'
-
-export const threeCommitFeatureScenario: Scenario = {
-  name: 'three-commit-feature',
-  summary: 'feat/example with 3 commits, clean worktree',
-  description: `
-    Baseline scaffold on main, then \`feat/example\` branched off with
-    three commits. Use for any test that wants a short feature-branch
-    shape without the bigger \`multi-commit-branch\` setup.
-  `,
-  kind: 'branch',
+export const twoWorkspaceDirtyScenario = defineScenario({
+  name: 'two-workspace-dirty',
+  summary: 'monorepo w/ packages/app + packages/lib; lib is dirty',
+  description: 'Two workspace packages on `main`; uncommitted edits in `packages/lib/src/foo.ts`.',
+  kind: 'worktree',
   contracts: [
-    'main has 1 commit',
-    'feat/example is checked out',
-    'feat/example is 3 commits ahead of main',
-    'worktree is clean',
+    'main has 2 commits',
+    'packages/lib/src/foo.ts is unstaged',
   ],
-  async setup(repo) {
-    // Use seededFiles for deterministic content
-    await repo.writeFile('README.md', '# example\n')
-    await repo.commitAll('chore: initial commit')
-
-    await repo.git.raw(['checkout', '-b', 'feat/example'])
-
-    const files = seededFiles('three-commit-feature', 3)
-    for (let i = 0; i < files.length; i += 1) {
-      await repo.writeFile(`src/feature-${i}.ts`, files[i])
-      await repo.commitAll(`feat: add feature ${i}`)
-    }
-  },
-}
+  setup: chain(
+    addCommit({
+      message: 'chore: scaffold workspaces',
+      files: {
+        'package.json': JSON.stringify({ name: 'mono', workspaces: ['packages/*'] }, null, 2),
+        'packages/app/package.json': '{ "name": "app" }',
+        'packages/lib/package.json': '{ "name": "lib" }',
+      },
+    }),
+    addCommit({
+      message: 'feat: lib baseline',
+      files: { 'packages/lib/src/foo.ts': 'export const foo = 1\n' },
+    }),
+    // Now make a worktree change without staging.
+    writeFiles({ 'packages/lib/src/foo.ts': 'export const foo = 2\n' }),
+  ),
+})
 ```
 
+Use it in a test directly (no registration needed):
+
 ```ts
-// src/scenarios/three-commit-feature.test.ts
-import { createTempGitRepo } from '../tempGitRepo'
-import { threeCommitFeatureScenario } from './three-commit-feature'
+import { createTempGitRepo } from '@gfargo/git-scenarios'
+import { twoWorkspaceDirtyScenario } from './my-test-utils/scenarios/two-workspace-dirty'
 
-describe('three-commit-feature scenario', () => {
-  it('matches its contracts', async () => {
+describe('my-tool against dirty workspace', () => {
+  it('detects the unstaged lib change', async () => {
     const repo = await createTempGitRepo()
-    await threeCommitFeatureScenario.setup(repo)
-
-    const branches = await repo.git.branchLocal()
-    expect(branches.current).toBe('feat/example')
-    expect(branches.all).toContain('main')
-
-    const log = await repo.git.log(['feat/example', '--not', 'main'])
-    expect(log.total).toBe(3)
-
-    const status = await repo.git.status()
-    expect(status.isClean()).toBe(true)
-
-    await repo.cleanup()
+    try {
+      await twoWorkspaceDirtyScenario.setup(repo)
+      // … exercise your tool against repo …
+    } finally {
+      await repo.cleanup()
+    }
   })
 })
 ```
 
-Then add to the registry:
+Or build a local registry + helper that mirrors `spinUpScenario`:
 
 ```ts
-// src/scenarios/index.ts
-import { threeCommitFeatureScenario } from './three-commit-feature'
+// my-test-utils/scenarios/index.ts
+import { createTempGitRepo, type Scenario, type TempGitRepo } from '@gfargo/git-scenarios'
+import { twoWorkspaceDirtyScenario } from './two-workspace-dirty'
+import { releaseReadyScenario } from './release-ready'
 
-export const allScenarios: Scenario[] = [
-  // ...existing
-  threeCommitFeatureScenario,
-]
+const localScenarios: Scenario[] = [twoWorkspaceDirtyScenario, releaseReadyScenario]
+
+export async function spinUpLocalScenario(name: string): Promise<TempGitRepo> {
+  const scenario = localScenarios.find((s) => s.name === name)
+  if (!scenario) throw new Error(`Unknown local scenario "${name}"`)
+  const repo = await createTempGitRepo()
+  await scenario.setup(repo)
+  return repo
+}
 ```
 
-### Deterministic content via `seededFiles`
+### The `Scenario` shape
 
-Scenarios are intentionally small (30–80 LOC each) and focus on git
-state shape, not file content. When you need realistic-looking file
-content, use `seededFiles(seed, count)` — it wraps the deterministic
-generators in `src/lib/parsers/default/__fixtures__/generators.ts`.
-The same seed always produces identical content, so two test runs
-produce byte-identical scenario repos.
+```ts
+type Scenario = {
+  /** Stable identifier — kebab-case. */
+  name: string
+  /** One-line summary shown in CLI list output. */
+  summary: string
+  /** Multi-line description shown in CLI describe output. */
+  description: string
+  /** Filtering category. */
+  kind: 'branch' | 'worktree' | 'operation' | 'history' | 'stash' | 'submodule'
+  /** Git-state factory — typically `chain(...)` of atoms. */
+  setup: Step  // (repo: TempGitRepo) => Promise<void>
+  /** Optional human-readable contract assertions. */
+  contracts?: string[]
+}
+```
+
+`defineScenario` validates the shape at module load time (kebab-case
+name, kind enum, non-empty fields). Catches typos that would
+otherwise blow up mid-test.
+
+### Contributing a scenario to this package
+
+If your custom scenario is generally useful (e.g. "stashed-with-untracked",
+"rebase-mid-conflict"), open a PR against
+[`gfargo/coco`](https://github.com/gfargo/coco/issues) adding:
+
+1. `packages/git-scenarios/src/scenarios/<kebab-name>.ts` exporting
+   the scenario.
+2. `<kebab-name>.test.ts` next to it, asserting each contract line
+   holds after setup.
+3. Register in `packages/git-scenarios/src/scenarios/index.ts`.
+
+The CLI picks it up automatically.
+
+## TypeScript support
+
+The package is **TypeScript-first** — all public APIs ship with full
+type declarations and source maps. Types you'll commonly reach for:
+
+```ts
+import type {
+  AuthorIdentity,     // { name, email, date? } for withAuthor
+  FileMap,            // { 'path': content } for writeFiles
+  Scenario,           // the registered-scenario shape
+  ScenarioKind,       // 'branch' | 'worktree' | 'operation' | 'history' | 'stash' | 'submodule'
+  SeededFileSpec,     // { path, tokens, seedOffset? } for seededFiles
+  Step,               // (repo: TempGitRepo) => Promise<void> — the atom contract
+  TempGitRepo,        // { path, git, writeFile, commitAll, cleanup }
+} from '@gfargo/git-scenarios'
+```
+
+Every atom returns a `Step`, so writing your own helpers feels
+identical to using the built-in ones:
+
+```ts
+import { addCommit, chain, type Step } from '@gfargo/git-scenarios'
+
+// Custom helper composed from atoms — still a Step
+export function scaffoldMonorepo(workspaces: string[]): Step {
+  return chain(
+    addCommit({
+      message: 'chore: scaffold workspaces',
+      files: {
+        'package.json': JSON.stringify({ workspaces }, null, 2),
+        ...Object.fromEntries(
+          workspaces.map((w) => [`${w}/package.json`, `{ "name": "${w.split('/').pop()}" }`]),
+        ),
+      },
+    }),
+  )
+}
+
+// Use it like any built-in atom
+await chain(
+  scaffoldMonorepo(['packages/app', 'packages/lib']),
+  addCommit({ message: 'feat: first feature', files: { 'packages/app/src/index.ts': '…' } }),
+)(repo)
+```
+
+The atom factory pattern (returning a `Step`) means custom helpers
+compose cleanly into `chain(...)` alongside the built-ins.
 
 ## Debugging
 
@@ -633,6 +902,8 @@ accumulate dirs.
 
 ### "How do I run just one scenario's test?"
 
+Inside the coco monorepo:
+
 ```bash
 # All scenario tests
 npm run test:jest -- --testPathPatterns scenarios
@@ -641,34 +912,35 @@ npm run test:jest -- --testPathPatterns scenarios
 npm run test:jest -- --testPathPatterns feature-pr-ready
 ```
 
-### Mocking the LLM in scenario-based tests
+### Mocking external services (LLM / network / hooks) in scenario-based tests
 
-If your test exercises a workflow that hits the LLM (`runCommitDraftWorkflow`,
-`runChangelogTextWorkflow`, etc.), mock the handler the workflow calls
-into. The pattern is captured in `src/git/aiActions.test.ts`:
+Scenarios set up the **git state**; mocks set up everything else.
+The standard pattern is to use your test framework's mocking
+primitives to replace the network / LLM / hook layer your tool
+calls into:
 
 ```ts
+// jest example: mock a workflow handler the tool routes through
 jest.mock('../commands/changelog/handler')
-
-const mockedChangelogHandler = jest.mocked(changelogHandler)
-mockedChangelogHandler.mockImplementation(async () => {
+const mockedHandler = jest.mocked(changelogHandler)
+mockedHandler.mockImplementation(async () => {
   process.stdout.write('feat: my deterministic title\n\nbody here.')
 })
 
+const repo = await spinUpScenario('feature-pr-ready')
 const result = await runChangelogTextWorkflow({ branch: 'main' })
 expect(result.text).toContain('feat: my deterministic title')
 ```
 
-The scenario sets up the git state; the mock sets up the LLM output.
-Together they make the workflow test deterministic top to bottom.
+Together (scenario + mock) the test becomes deterministic top to
+bottom — same git state every run, same external response every run.
 
 ## Consumers outside of tests
 
-The scenario library is also the golden-set provider for the
-structural-extract eval harness (#934). Each scenario's commits are
-walked into per-file diffs and fed through the parser pipeline with
-the language-aware fast path toggled on vs. off; the harness reports
-LLM-calls-saved + fast-path hit rate per input.
+The scenario library doubles as a benchmark / eval input source
+inside the coco monorepo — each scenario's commits are walked into
+per-file diffs and fed through the parser pipeline as a deterministic
+golden set:
 
 ```bash
 npm run eval:structural-extract                 # all scenarios + fixtures
