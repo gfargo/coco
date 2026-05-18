@@ -371,6 +371,54 @@ describe('log Ink view model', () => {
     expect(state.showCommandPalette).toBe(true)
   })
 
+  it('defaults helpScrollOffset to 0 and resets it on toggleHelp', () => {
+    let state = createLogInkState(rows)
+    expect(state.helpScrollOffset).toBe(0)
+
+    // Simulate the user opening help, scrolling, then closing it.
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    state = applyLogInkAction(state, { type: 'scrollHelp', delta: 5 })
+    expect(state.helpScrollOffset).toBe(5)
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    // Closing clears the offset so the next open starts at the top.
+    expect(state.showHelp).toBe(false)
+    expect(state.helpScrollOffset).toBe(0)
+
+    // Reopening keeps offset at 0.
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    expect(state.helpScrollOffset).toBe(0)
+  })
+
+  it('scrollHelp floor-clamps at 0 (no negative offsets)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    state = applyLogInkAction(state, { type: 'scrollHelp', delta: -3 })
+    expect(state.helpScrollOffset).toBe(0)
+
+    state = applyLogInkAction(state, { type: 'scrollHelp', delta: 7 })
+    state = applyLogInkAction(state, { type: 'scrollHelp', delta: -100 })
+    expect(state.helpScrollOffset).toBe(0)
+  })
+
+  it('clears helpScrollOffset when opening filter mode or command palette', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    state = applyLogInkAction(state, { type: 'scrollHelp', delta: 3 })
+    expect(state.helpScrollOffset).toBe(3)
+
+    // Opening filter mode supersedes help.
+    state = applyLogInkAction(state, { type: 'toggleFilterMode' })
+    expect(state.showHelp).toBe(false)
+    expect(state.helpScrollOffset).toBe(0)
+
+    // And so does the command palette.
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    state = applyLogInkAction(state, { type: 'scrollHelp', delta: 4 })
+    state = applyLogInkAction(state, { type: 'toggleCommandPalette' })
+    expect(state.showHelp).toBe(false)
+    expect(state.helpScrollOffset).toBe(0)
+  })
+
   it('defaults the diff view mode to unified', () => {
     const state = createLogInkState(rows)
     expect(state.diffViewMode).toBe('unified')

@@ -235,24 +235,46 @@ export function renderHelpPanel(
   focused: boolean
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
-  const children: ReactTypes.ReactNode[] = [
-    h(Text, { bold: true, key: 'title' }, panelTitle('Help', focused)),
-  ]
 
+  // Build the full list of body rows (everything below the title).
+  // Splitting into title + body lets us window the body by
+  // `state.helpScrollOffset` while keeping the title pinned.
+  const body: ReactTypes.ReactNode[] = []
   const sections = getLogInkHelpSections({
     activeView: state.activeView,
     focus: state.focus,
   })
 
   for (const section of sections) {
-    children.push(h(Text, { key: `${section.title}-spacer` }, ''))
-    children.push(h(Text, { bold: true, key: section.title }, section.title))
+    body.push(h(Text, { key: `${section.title}-spacer` }, ''))
+    body.push(h(Text, { bold: true, key: section.title }, section.title))
     section.bindings.forEach((binding) => {
-      children.push(h(Text, { key: `${section.title}:${binding.id}` },
+      body.push(h(Text, { key: `${section.title}:${binding.id}` },
         truncateCells(`${formatBindingKeys(binding).padEnd(14)} ${binding.description}`, width - 4)
       ))
     })
   }
+
+  // Clamp the offset against actual content length. The reducer
+  // only floor-clamps at 0; here we ceiling-clamp so j past EOF
+  // sticks at the last row rather than scrolling into emptiness.
+  // Reserve one row at the bottom so the user can always see the
+  // tail of the last section.
+  const maxOffset = Math.max(0, body.length - 1)
+  const offset = Math.min(state.helpScrollOffset, maxOffset)
+
+  const children: ReactTypes.ReactNode[] = [
+    h(Text, { bold: true, key: 'title' }, panelTitle('Help', focused)),
+  ]
+
+  // Visual hint that there's content scrolled above. The dim style
+  // matches the rest of the chrome's "metadata" voice and avoids
+  // stealing attention from the bindings themselves.
+  if (offset > 0) {
+    children.push(h(Text, { key: 'more-above', dimColor: true }, '↑ more above'))
+  }
+
+  children.push(...body.slice(offset))
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),

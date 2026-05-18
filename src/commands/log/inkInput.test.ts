@@ -490,6 +490,78 @@ describe('log Ink input interactions', () => {
     expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'createManualCommit' }])
   })
 
+  describe('help overlay key handling', () => {
+    it('j/k scroll the help overlay without changing focus', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, '?')
+      expect(state.showHelp).toBe(true)
+      const focusBefore = state.focus
+
+      state = applyInput(state, 'j')
+      expect(state.helpScrollOffset).toBe(1)
+      expect(state.focus).toBe(focusBefore)
+
+      state = applyInput(state, 'j')
+      expect(state.helpScrollOffset).toBe(2)
+
+      state = applyInput(state, 'k')
+      expect(state.helpScrollOffset).toBe(1)
+      expect(state.focus).toBe(focusBefore)
+    })
+
+    it('arrow keys scroll the help overlay', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, '?')
+      state = applyInput(state, '', { downArrow: true })
+      expect(state.helpScrollOffset).toBe(1)
+      state = applyInput(state, '', { upArrow: true })
+      expect(state.helpScrollOffset).toBe(0)
+    })
+
+    it('Ctrl-d / Ctrl-u half-page scroll', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, '?')
+      state = applyInput(state, 'd', { ctrl: true })
+      expect(state.helpScrollOffset).toBe(10)
+      state = applyInput(state, 'u', { ctrl: true })
+      expect(state.helpScrollOffset).toBe(0)
+    })
+
+    it('swallows non-scroll keys instead of letting them fall through', () => {
+      let state = createLogInkState(rows)
+      const originalSelectedIndex = state.selectedIndex
+      state = applyInput(state, '?')
+      expect(state.showHelp).toBe(true)
+
+      // Bracket keys would normally switch sidebar tabs — must be a no-op
+      // here. The user can't accidentally walk into a different tab from
+      // help and end up confused when they close it.
+      const sidebarBefore = state.sidebarTab
+      state = applyInput(state, ']')
+      expect(state.sidebarTab).toBe(sidebarBefore)
+      state = applyInput(state, '[')
+      expect(state.sidebarTab).toBe(sidebarBefore)
+
+      // gg would normally jump to top. Help is open, so it's a no-op.
+      state = applyInput(state, 'g')
+      state = applyInput(state, 'g')
+      expect(state.selectedIndex).toBe(originalSelectedIndex)
+
+      // /? would normally start filter mode. Help is open, so it's a no-op.
+      state = applyInput(state, '/')
+      expect(state.filterMode).toBe(false)
+      expect(state.showHelp).toBe(true)
+    })
+
+    it('? toggles help closed from within help mode', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, '?')
+      state = applyInput(state, 'j')
+      state = applyInput(state, '?')
+      expect(state.showHelp).toBe(false)
+    })
+  })
+
   it('clears pending key chords after unrelated actions', () => {
     let state = createLogInkState(rows)
 

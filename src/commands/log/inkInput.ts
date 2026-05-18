@@ -1216,8 +1216,37 @@ export function getLogInkInputEvents(
     return []
   }
 
-  if (key.escape && state.showHelp) {
-    return [action({ type: 'toggleHelp' })]
+  // Help-overlay key handling. While help is open we intercept ALL
+  // keys here and return before they can fall through to scroll /
+  // focus / navigation logic below. Without this, j/k while help is
+  // open routes into `moveDetailFile`-style handlers, which mutates
+  // focus state (`focus: 'detail'` → `'commits'` or `'sidebar'`) —
+  // exactly the "scroll loses focus" bug.
+  //
+  // Allowed: Esc / ? (close), q (quit), j/k/arrows (scroll), Ctrl-d/u
+  // (half-page). Everything else is swallowed by the trailing
+  // `return []` so a stray keypress can't drop the user into the
+  // wrong surface.
+  if (state.showHelp) {
+    if (key.escape || inputValue === '?') {
+      return [action({ type: 'toggleHelp' })]
+    }
+    if (inputValue === 'q') {
+      return [{ type: 'exit' }]
+    }
+    if (key.downArrow || inputValue === 'j') {
+      return [action({ type: 'scrollHelp', delta: 1 })]
+    }
+    if (key.upArrow || inputValue === 'k') {
+      return [action({ type: 'scrollHelp', delta: -1 })]
+    }
+    if (key.ctrl && inputValue === 'd') {
+      return [action({ type: 'scrollHelp', delta: 10 })]
+    }
+    if (key.ctrl && inputValue === 'u') {
+      return [action({ type: 'scrollHelp', delta: -10 })]
+    }
+    return []
   }
 
   // #879 item 4 — Esc cancels an in-flight bisect-start wizard. Runs
