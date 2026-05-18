@@ -198,18 +198,20 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'k')
     expect(state.selectedIndex).toBe(0)
 
+    // Default sidebar tab is 'branches' — arrow / bracket navigation
+    // starts from there.
     state = applyLogInkAction(state, { type: 'setFocus', value: 'sidebar' })
     state = applyInput(state, '', { downArrow: true })
-    expect(state.sidebarTab).toBe('branches')
+    expect(state.sidebarTab).toBe('tags')
 
     state = applyInput(state, '', { upArrow: true })
-    expect(state.sidebarTab).toBe('status')
-
-    state = applyInput(state, ']')
     expect(state.sidebarTab).toBe('branches')
 
+    state = applyInput(state, ']')
+    expect(state.sidebarTab).toBe('tags')
+
     state = applyInput(state, '[')
-    expect(state.sidebarTab).toBe('status')
+    expect(state.sidebarTab).toBe('branches')
 
     state = applyInput(state, '5')
     expect(state.sidebarTab).toBe('worktrees')
