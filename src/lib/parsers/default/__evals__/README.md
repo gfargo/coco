@@ -45,7 +45,7 @@ via the `eval:structural-extract` npm script.
 The eval consumes two input sources:
 
 1. **Scenarios** (`scenarioInputs.ts`). Each scenario in the
-   `src/lib/testUtils/scenarios/` library is materialized into a temp
+   ``@gfargo/git-scenarios`` library is materialized into a temp
    repo, then its commits are walked and converted to `FileDiff[]`.
    Mostly trigger the lossless trivial-shape short-circuit (pure
    additions); useful for measuring the natural distribution.
