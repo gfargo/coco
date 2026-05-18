@@ -5,13 +5,17 @@
  * lost in the trailing `[ref] [ref]` list.
  *
  * Selection priority:
- *   1. `HEAD -> X` — current branch wins. Returned with `isHead: true`.
+ *   1. `HEAD -> X` — current branch wins. Returned with `kind: 'head'`.
  *   2. The first "plain" local branch (not a tag, not a HEAD marker,
- *      not a remote ref) — typical for commits that are tips of
- *      other local branches.
- *   3. The first remote-tracking branch (`origin/X`) — last-resort
- *      so a commit at the tip of a remote branch you don't have
- *      locally still gets a chip.
+ *      not a remote ref) — `kind: 'local'`.
+ *   3. The first remote-tracking branch (`origin/X`) — `kind: 'remote'`,
+ *      last-resort so a commit at the tip of a remote branch you don't
+ *      have locally still gets a chip with a distinct color.
+ *
+ * `isHead` is kept for backwards compatibility with consumers that
+ * only care about "is this the current branch"; `kind` is the richer
+ * source of truth for renderers that want to colour remote-tracking
+ * tips differently from local ones (the "where is upstream?" cue).
  *
  * Tags are deliberately excluded from chip selection — they belong in
  * the trailing ref list so the chip column stays branch-only and the
@@ -21,9 +25,12 @@
  * renderer then skips the prefix entirely so unmarked commits don't
  * pay any width budget.
  */
+export type BranchTipChipKind = 'head' | 'local' | 'remote'
+
 export type BranchTipChip = {
   name: string
   isHead: boolean
+  kind: BranchTipChipKind
 }
 
 /**
@@ -56,7 +63,7 @@ export function getBranchTipChip(refs: string[]): BranchTipChip | undefined {
   for (const ref of refs) {
     if (ref.startsWith('HEAD -> ')) {
       const name = ref.slice('HEAD -> '.length).trim()
-      if (name) return { name, isHead: true }
+      if (name) return { name, isHead: true, kind: 'head' }
     }
   }
 
@@ -69,7 +76,7 @@ export function getBranchTipChip(refs: string[]): BranchTipChip | undefined {
     ) {
       continue
     }
-    if (ref.trim()) return { name: ref.trim(), isHead: false }
+    if (ref.trim()) return { name: ref.trim(), isHead: false, kind: 'local' }
   }
 
   for (const ref of refs) {
@@ -77,7 +84,7 @@ export function getBranchTipChip(refs: string[]): BranchTipChip | undefined {
       continue
     }
     if (ref.includes('/') && ref.trim()) {
-      return { name: ref.trim(), isHead: false }
+      return { name: ref.trim(), isHead: false, kind: 'remote' }
     }
   }
 
