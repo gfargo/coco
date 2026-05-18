@@ -14,11 +14,10 @@ describe('getBranchTipChip', () => {
   })
 
   it('returns the first plain local branch when HEAD is not present', () => {
+    // Without a remoteNames list, `feat/foo` falls back to the legacy
+    // "slash = remote" heuristic and is labeled remote. The branch-aware
+    // overload below pins the corrected behavior.
     expect(getBranchTipChip(['feat/foo']))
-      // feat/foo contains a slash so it is treated as remote-like;
-      // falls through to the third loop and is labeled 'remote'. The
-      // chip system can't tell a local-branch-with-slash from an actual
-      // remote ref without a list of remote names to compare against.
       .toEqual({ name: 'feat/foo', isHead: false, kind: 'remote' })
     expect(getBranchTipChip(['main']))
       .toEqual({ name: 'main', isHead: false, kind: 'local' })
@@ -37,6 +36,40 @@ describe('getBranchTipChip', () => {
   it('marks remote-tracking refs with kind: "remote"', () => {
     expect(getBranchTipChip(['upstream/main']))
       .toEqual({ name: 'upstream/main', isHead: false, kind: 'remote' })
+  })
+
+  describe('with remoteNames provided', () => {
+    it('classifies a slashed local branch as kind: "local"', () => {
+      expect(getBranchTipChip(['feat/x'], ['origin']))
+        .toEqual({ name: 'feat/x', isHead: false, kind: 'local' })
+    })
+
+    it('classifies a refs that match a remote prefix as kind: "remote"', () => {
+      expect(getBranchTipChip(['origin/feat/x'], ['origin']))
+        .toEqual({ name: 'origin/feat/x', isHead: false, kind: 'remote' })
+    })
+
+    it('matches any remote in the list when there are multiple remotes', () => {
+      expect(getBranchTipChip(['upstream/main'], ['origin', 'upstream']))
+        .toEqual({ name: 'upstream/main', isHead: false, kind: 'remote' })
+    })
+
+    it('prefers a slashed local branch over a remote-tracking ref on the same commit', () => {
+      // `feat/x` and `origin/main` both contain slashes; only the
+      // latter starts with a known remote prefix. The slashed local
+      // branch wins the second loop and is chipped as local.
+      expect(getBranchTipChip(['feat/x', 'origin/main'], ['origin']))
+        .toEqual({ name: 'feat/x', isHead: false, kind: 'local' })
+    })
+
+    it('falls back to the legacy "slash = remote" heuristic when remoteNames is empty', () => {
+      // Back-compat: callers that pass an empty list (e.g. branch data
+      // not yet hydrated) should get the same behavior as if they had
+      // omitted the argument entirely, so chips still render sensibly
+      // on first paint.
+      expect(getBranchTipChip(['origin/main'], []))
+        .toEqual({ name: 'origin/main', isHead: false, kind: 'remote' })
+    })
   })
 
   it('ignores tags entirely', () => {
