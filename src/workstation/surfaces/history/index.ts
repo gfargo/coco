@@ -115,13 +115,14 @@ function renderBranchTipChip(
   commit: GitLogCommitRow,
   theme: LogInkTheme,
   key: string,
-  selected: boolean
+  selected: boolean,
+  remoteNames: string[] | undefined
 ): {
   node: ReactTypes.ReactElement | null
   width: number
   chip: ReturnType<typeof getBranchTipChip>
 } {
-  const chip = getBranchTipChip(commit.refs)
+  const chip = getBranchTipChip(commit.refs, remoteNames)
   if (!chip) return { node: null, width: 0, chip }
 
   const truncated = truncateCells(chip.name, BRANCH_CHIP_MAX_NAME_WIDTH)
@@ -288,7 +289,8 @@ function renderCommitHistoryRow(
   bucketed: boolean,
   now: Date,
   laneSegments?: LaneSegment[],
-  isRecent: boolean = false
+  isRecent: boolean = false,
+  remoteNames?: string[]
 ): ReactTypes.ReactElement {
   // Total cells available to the row content. Earlier revisions used a
   // hardcoded 140 here, which let row content overflow whenever the
@@ -306,7 +308,7 @@ function renderCommitHistoryRow(
   // out whatever the chip already shows so the row doesn't print
   // `[main] feat: x [HEAD -> main]` with the same info on both ends.
   const chip = fullGraph
-    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-chip`, selected)
+    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-chip`, selected, remoteNames)
     : { node: null, width: 0, chip: undefined }
   const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip))
   const fixedWidth =
@@ -394,7 +396,8 @@ function renderStackedCommitHistoryRow(
   fullGraph: boolean,
   now: Date,
   laneSegments?: LaneSegment[],
-  isRecent: boolean = false
+  isRecent: boolean = false,
+  remoteNames?: string[]
 ): ReactTypes.ReactElement {
   const totalWidth = Math.max(20, panelWidth - 4)
   const accent = theme.noColor ? undefined : theme.colors.accent
@@ -407,7 +410,7 @@ function renderStackedCommitHistoryRow(
   // same way as the single-line variant, but only in full-graph mode.
   const recentMarkerWidth = isRecent ? 2 : 0
   const chip = fullGraph
-    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-stk-chip`, selected)
+    ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-stk-chip`, selected, remoteNames)
     : { node: null, width: 0, chip: undefined }
   const lineOneFixed =
     graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth + chip.width
@@ -519,6 +522,21 @@ export function renderHistoryPanel(
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree
+  // Distinct remote names seen across the repo's remote-tracking
+  // branches — `['origin']` for a typical fork, `['origin', 'upstream']`
+  // when the user has both. Used to classify branch-tip chips so a
+  // slashed local branch like `feat/x` doesn't get mis-coloured as
+  // remote. When branch data hasn't loaded yet, `undefined` makes the
+  // chip helper fall back to the legacy slash-based heuristic.
+  const remoteNames = context.branches?.remoteBranches
+    ? Array.from(
+        new Set(
+          context.branches.remoteBranches
+            .map((branch) => branch.remote)
+            .filter((remote): remote is string => Boolean(remote))
+        )
+      )
+    : undefined
   // Set of just-landed commit hashes for the "new commit" marker.
   // Populated for ~5s after a split-apply or other commit-creating
   // operation; auto-cleared by the runtime so it doesn't linger.
@@ -657,7 +675,8 @@ export function renderHistoryPanel(
           h, Text, Box, item.commit, item.graph, visible.graphWidth,
           Boolean(item.selected) && !realSelectionSuppressed, theme, index,
           width, state.fullGraph, now, item.laneSegments,
-          recentCommitsSet.has(item.commit.hash)
+          recentCommitsSet.has(item.commit.hash),
+          remoteNames
         )
       }
       return renderCommitHistoryRow(
@@ -665,7 +684,8 @@ export function renderHistoryPanel(
         Boolean(item.selected) && !realSelectionSuppressed, theme, index,
         width, density, state.fullGraph, Boolean(dateBucketingNow), now,
         item.laneSegments,
-        recentCommitsSet.has(item.commit.hash)
+        recentCommitsSet.has(item.commit.hash),
+        remoteNames
       )
     }))
 }

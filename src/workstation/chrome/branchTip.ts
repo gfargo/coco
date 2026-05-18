@@ -59,7 +59,30 @@ export function filterChippedRefs(refs: string[], chip: BranchTipChip | undefine
   })
 }
 
-export function getBranchTipChip(refs: string[]): BranchTipChip | undefined {
+/**
+ * `remoteNames` lets the caller pass the repository's actual remote
+ * names (e.g. `['origin', 'upstream']`) so refs are classified by
+ * remote-prefix rather than by "contains a slash". Without it a local
+ * feature branch like `feat/x` looks identical to a remote-tracking
+ * `origin/x` and gets the wrong colour. When the list is omitted the
+ * function falls back to the legacy slash-as-remote heuristic — the
+ * sensible default before branch data has loaded and a back-compat
+ * affordance for callers that have no remote data to hand.
+ */
+export function getBranchTipChip(
+  refs: string[],
+  remoteNames?: string[]
+): BranchTipChip | undefined {
+  // Empty list is treated the same as omitted: branch data hasn't
+  // loaded yet, so we don't have ground truth and the legacy "slash =
+  // remote" heuristic is the best guess for first paint.
+  const hasRemoteList = Array.isArray(remoteNames) && remoteNames.length > 0
+  const isRemoteRef = (ref: string): boolean => {
+    if (!ref.includes('/')) return false
+    if (!hasRemoteList) return true
+    return remoteNames!.some((remote) => remote && ref.startsWith(`${remote}/`))
+  }
+
   for (const ref of refs) {
     if (ref.startsWith('HEAD -> ')) {
       const name = ref.slice('HEAD -> '.length).trim()
@@ -72,18 +95,20 @@ export function getBranchTipChip(refs: string[]): BranchTipChip | undefined {
       ref === 'HEAD' ||
       ref.startsWith('HEAD -> ') ||
       ref.startsWith('tag: ') ||
-      ref.includes('/')
+      isRemoteRef(ref)
     ) {
       continue
     }
-    if (ref.trim()) return { name: ref.trim(), isHead: false, kind: 'local' }
+    if (ref.trim()) {
+      return { name: ref.trim(), isHead: false, kind: 'local' }
+    }
   }
 
   for (const ref of refs) {
     if (ref.startsWith('tag: ') || ref === 'HEAD' || ref.startsWith('HEAD -> ')) {
       continue
     }
-    if (ref.includes('/') && ref.trim()) {
+    if (isRemoteRef(ref) && ref.trim()) {
       return { name: ref.trim(), isHead: false, kind: 'remote' }
     }
   }
