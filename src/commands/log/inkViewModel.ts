@@ -245,6 +245,14 @@ export type LogInkState = {
   filterMode: boolean
   fullGraph: boolean
   showHelp: boolean
+  /**
+   * Row offset into the help overlay's content. Driven by j/k/arrow
+   * keys while `showHelp` is true. Reset to 0 whenever the overlay is
+   * closed so reopening always starts at the top. Bound-checked at
+   * render time against the visible window; no `helpContentRows`
+   * field — the rendered panel does the clamp.
+   */
+  helpScrollOffset: number
   showCommandPalette: boolean
   /**
    * Command-palette interaction state. `paletteFilter` is the user-typed
@@ -697,6 +705,7 @@ export type LogInkAction =
   | { type: 'toggleFilterMode' }
   | { type: 'toggleGraph' }
   | { type: 'toggleHelp' }
+  | { type: 'scrollHelp'; delta: number }
   | { type: 'toggleCommandPalette' }
   | { type: 'cycleBranchSort' }
   | { type: 'cycleTagSort' }
@@ -1180,6 +1189,7 @@ export function createLogInkState(
     filterMode: false,
     fullGraph: false,
     showHelp: false,
+    helpScrollOffset: 0,
     showCommandPalette: false,
     workflowActionId: undefined,
     pendingConfirmationId: undefined,
@@ -1873,6 +1883,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         filterMode: !state.filterMode,
         showCommandPalette: false,
         showHelp: false,
+        helpScrollOffset: 0,
         pendingKey: undefined,
       }
     case 'toggleGraph':
@@ -1881,12 +1892,27 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         fullGraph: !state.fullGraph,
         pendingKey: undefined,
       }
-    case 'toggleHelp':
+    case 'toggleHelp': {
+      const opening = !state.showHelp
       return {
         ...state,
-        showHelp: !state.showHelp,
+        showHelp: opening,
+        // Reset scroll position when toggling either direction so the
+        // next open always starts at the top — feels more predictable
+        // than picking up where the user last scrolled.
+        helpScrollOffset: 0,
         showCommandPalette: false,
         pendingKey: undefined,
+      }
+    }
+    case 'scrollHelp':
+      // No upper-bound clamp here — the renderer caps the offset
+      // against the actual content height at render time. The
+      // reducer just prevents going below 0 so callers can safely
+      // pass negative deltas without us going past the top.
+      return {
+        ...state,
+        helpScrollOffset: Math.max(0, state.helpScrollOffset + action.delta),
       }
     case 'toggleCommandPalette': {
       const opening = !state.showCommandPalette
@@ -1894,6 +1920,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         showCommandPalette: opening,
         showHelp: false,
+        helpScrollOffset: 0,
         // Reset palette interaction state on every open/close so the next
         // session starts from a clean slate.
         paletteFilter: '',
