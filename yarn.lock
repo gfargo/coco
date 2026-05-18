@@ -653,10 +653,10 @@
   resolved "https://registry.npmjs.org/@eslint/js/-/js-8.57.1.tgz"
   integrity sha512-d9zaMRSTIKDLhctzH12MtXvJKSSUhaHcjV+2Z+GK+EEY7XKpP5yR4x+N3TAcHTcu963nIr+TMcCb4DBCYX1z6Q==
 
-"@gfargo/git-scenarios@^0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@gfargo/git-scenarios/-/git-scenarios-0.2.0.tgz#7036b31404c2a54a312b94038ce9b8efa6b7c87a"
-  integrity sha512-/XX66Z7TTV4vGMWVMrlg8kF3fgU9BMjgcJ9PHvxxQfEEiYFM6/UHxvfJApKezXX6OG/HizUDhjYr3kPytcwqCA==
+"@gfargo/git-scenarios@^0.3.0":
+  version "0.3.0"
+  resolved "https://registry.yarnpkg.com/@gfargo/git-scenarios/-/git-scenarios-0.3.0.tgz#03f92cf8723ae7a5aeccc967fa81089d79e27372"
+  integrity sha512-oLs42BThkNS0m2IJHDi/1SKOTQ0iaU9qMO2PDPk1acriS3z/p1IKijDNjJNxjbN9t7ycnPg0sPcPqntsa5Im5w==
 
 "@humanwhocodes/config-array@^0.13.0":
   version "0.13.0"
