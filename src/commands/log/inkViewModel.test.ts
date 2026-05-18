@@ -65,7 +65,7 @@ describe('log Ink view model', () => {
     expect(state.worktreeDiffOffset).toBe(0)
     expect(state.commitCompose.summary).toBe('')
     expect(state.focus).toBe('commits')
-    expect(state.sidebarTab).toBe('status')
+    expect(state.sidebarTab).toBe('branches')
     expect(state.showHelp).toBe(false)
     expect(state.showCommandPalette).toBe(false)
     expect(state.pendingMutationConfirmation).toBeUndefined()
@@ -149,11 +149,13 @@ describe('log Ink view model', () => {
 
     expect(getLogInkSidebarTabs()).toEqual(['status', 'branches', 'tags', 'stashes', 'worktrees'])
 
+    // Default sidebar tab is 'branches' — moving next from there lands
+    // on 'tags', moving previous returns to 'branches'.
     state = applyLogInkAction(state, { type: 'nextSidebarTab' })
-    expect(state.sidebarTab).toBe('branches')
+    expect(state.sidebarTab).toBe('tags')
 
     state = applyLogInkAction(state, { type: 'previousSidebarTab' })
-    expect(state.sidebarTab).toBe('status')
+    expect(state.sidebarTab).toBe('branches')
 
     state = applyLogInkAction(state, { type: 'setSidebarTab', value: 'worktrees' })
     expect(state.sidebarTab).toBe('worktrees')

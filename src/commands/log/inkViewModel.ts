@@ -1187,8 +1187,13 @@ export function createLogInkState(
     pendingMutationConfirmation: undefined,
     pendingKey: undefined,
     focus: 'commits',
-    sidebarTab: 'status',
-    userSidebarTab: 'status',
+    // Default first-time tab is 'branches' — it's the most useful
+    // landing surface in the workstation (current branch + recent
+    // branches with ahead/behind, switch target, etc.). Users who
+    // pick a different tab have their choice persisted per-repo via
+    // sidebarPersistence.ts and won't see this default again.
+    sidebarTab: 'branches',
+    userSidebarTab: 'branches',
     sidebarHeaderFocused: false,
     statusGroupHeaderFocused: false,
     statusFilterMask: { ...DEFAULT_LOG_INK_STATUS_FILTER_MASK },
