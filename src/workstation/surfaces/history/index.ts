@@ -144,7 +144,24 @@ function renderBranchTipChip(
     }
   }
 
-  const accent = chip.isHead ? theme.colors.success : theme.colors.info
+  // Three-way colour assignment matches `BranchTipChipKind`:
+  //
+  //   - HEAD  → success (the user's current branch — bright green)
+  //   - local → info    (other local branches — calm blue)
+  //   - remote → warning (remote-tracking refs like origin/main —
+  //                      distinct so "where is upstream?" reads at a glance)
+  //
+  // Without the remote/local split, a chip on `origin/main` looked
+  // identical to a local-branch chip, so users couldn't tell from the
+  // commit list where their upstream actually pointed. The warning hue
+  // (typically a muted yellow / orange) is purposeful: not alarming,
+  // but visibly different from the local blue.
+  const accent =
+    chip.kind === 'head'
+      ? theme.colors.success
+      : chip.kind === 'remote'
+        ? theme.colors.warning
+        : theme.colors.info
   return {
     node: h(Text, {},
       h(Text, { key, inverse: true, color: accent, bold: chip.isHead }, body),
