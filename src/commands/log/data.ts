@@ -1,6 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { extractLfsPatchChange, renderLfsSummary } from '../../git/lfsPointer'
 import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from '../../git/submoduleDiff'
+import { isEmptyRepo } from '../../lib/simple-git/isEmptyRepo'
 import { LogArgv, LogView } from './config'
 
 export const FIELD_SEPARATOR = '\x1f'
@@ -334,6 +335,19 @@ export async function getLogRows(
   argv: LogArgv,
   options: LogRowLoadOptions = {}
 ): Promise<GitLogRow[]> {
+  // Unborn HEAD short-circuit. Without this, `git log` on a freshly
+  // `git init`'d repo throws "fatal: your current branch 'main' does
+  // not have any commits yet" — fine when the caller can catch and
+  // translate, painful otherwise (the workstation runtime surfaces it
+  // as "Failed to load commits: fatal: ..." in the status line).
+  //
+  // Returning [] is the natural contract: callers that already render
+  // an empty-history surface (`formatLogInkHistoryEmpty`) get the
+  // right experience automatically; `coco log` retains its own
+  // friendlier message via the handler's isEmptyRepo check.
+  if (await isEmptyRepo(git)) {
+    return []
+  }
   return parseLogOutput(await git.raw(buildLogArgs(argv, options)))
 }
 
