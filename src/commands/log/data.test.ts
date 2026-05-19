@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from 'fs/promises'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { simpleGit } from 'simple-git'
 import { Arguments } from 'yargs'
 import {
   FIELD_SEPARATOR,
@@ -7,6 +11,7 @@ import {
   buildToggleGraphArgs,
   getCommitFilePreview,
   getCommitRows,
+  getLogRows,
   getLogView,
   parseCommitDetail,
   parseLogOutput,
@@ -330,6 +335,48 @@ describe('log data layer', () => {
     expect(removed.submoduleChange).toEqual({
       kind: 'removed',
       before: 'bbbbbbbb',
+    })
+  })
+
+  describe('getLogRows empty-repo handling', () => {
+    it('returns [] on a freshly-initialized repo with no commits', async () => {
+      const path = await mkdtemp(join(tmpdir(), 'coco-log-empty-test-'))
+      try {
+        const git = simpleGit(path)
+        await git.init()
+        await git.addConfig('user.name', 'Coco Test')
+        await git.addConfig('user.email', 'coco@example.com')
+        await git.raw(['checkout', '-b', 'main'])
+
+        // Without the isEmptyRepo short-circuit this would throw with
+        // "your current branch 'main' does not have any commits yet".
+        const rows = await getLogRows(git, argv())
+        expect(rows).toEqual([])
+      } finally {
+        await rm(path, { recursive: true, force: true })
+      }
+    })
+
+    it('returns commit rows on a repo with commits', async () => {
+      const path = await mkdtemp(join(tmpdir(), 'coco-log-onecommit-test-'))
+      try {
+        const git = simpleGit(path)
+        await git.init()
+        await git.addConfig('user.name', 'Coco Test')
+        await git.addConfig('user.email', 'coco@example.com')
+        await git.addConfig('commit.gpgsign', 'false')
+        await git.raw(['checkout', '-b', 'main'])
+        await writeFile(join(path, 'README.md'), '# repo\n')
+        await git.add('README.md')
+        await git.commit('chore: initial')
+
+        const rows = await getLogRows(git, argv())
+        expect(rows.length).toBeGreaterThan(0)
+        const commitRows = getCommitRows(rows)
+        expect(commitRows[0]?.message).toBe('chore: initial')
+      } finally {
+        await rm(path, { recursive: true, force: true })
+      }
     })
   })
 })
