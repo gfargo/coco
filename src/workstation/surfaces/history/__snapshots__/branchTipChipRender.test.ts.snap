@@ -1,0 +1,270 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderBranchTipChip — structural snapshots drops pill styling on selected rows (the row inverse carries it) 1`] = `
+{
+  "chip": {
+    "isHead": true,
+    "kind": "head",
+    "name": "main",
+  },
+  "node": {
+    "$$typeof": Symbol(react.transitional.element),
+    "_owner": null,
+    "_store": {},
+    "key": "test-key",
+    "props": {
+      "bold": true,
+      "children": "[main] ",
+    },
+    "type": [Function],
+  },
+  "width": 7,
+}
+`;
+
+exports[`renderBranchTipChip — structural snapshots falls back to the legacy "slash = remote" heuristic when remoteNames is absent 1`] = `
+{
+  "chip": {
+    "isHead": false,
+    "kind": "remote",
+    "name": "feat/widgets",
+  },
+  "node": {
+    "$$typeof": Symbol(react.transitional.element),
+    "_owner": null,
+    "_store": {},
+    "key": null,
+    "props": {
+      "children": [
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key",
+          "props": {
+            "bold": false,
+            "children": " feat/widgets ",
+            "color": "yellow",
+            "inverse": true,
+          },
+          "type": [Function],
+        },
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key-pad",
+          "props": {
+            "children": " ",
+          },
+          "type": [Function],
+        },
+      ],
+    },
+    "type": [Function],
+  },
+  "width": 15,
+}
+`;
+
+exports[`renderBranchTipChip — structural snapshots renders a plain local branch chip as a blue inverse pill 1`] = `
+{
+  "chip": {
+    "isHead": false,
+    "kind": "local",
+    "name": "develop",
+  },
+  "node": {
+    "$$typeof": Symbol(react.transitional.element),
+    "_owner": null,
+    "_store": {},
+    "key": null,
+    "props": {
+      "children": [
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key",
+          "props": {
+            "bold": false,
+            "children": " develop ",
+            "color": "blue",
+            "inverse": true,
+          },
+          "type": [Function],
+        },
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key-pad",
+          "props": {
+            "children": " ",
+          },
+          "type": [Function],
+        },
+      ],
+    },
+    "type": [Function],
+  },
+  "width": 10,
+}
+`;
+
+exports[`renderBranchTipChip — structural snapshots renders a remote-tracking ref as a yellow inverse pill 1`] = `
+{
+  "chip": {
+    "isHead": false,
+    "kind": "remote",
+    "name": "origin/main",
+  },
+  "node": {
+    "$$typeof": Symbol(react.transitional.element),
+    "_owner": null,
+    "_store": {},
+    "key": null,
+    "props": {
+      "children": [
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key",
+          "props": {
+            "bold": false,
+            "children": " origin/main ",
+            "color": "yellow",
+            "inverse": true,
+          },
+          "type": [Function],
+        },
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key-pad",
+          "props": {
+            "children": " ",
+          },
+          "type": [Function],
+        },
+      ],
+    },
+    "type": [Function],
+  },
+  "width": 14,
+}
+`;
+
+exports[`renderBranchTipChip — structural snapshots renders a slashy local branch as a blue pill when remoteNames distinguishes it 1`] = `
+{
+  "chip": {
+    "isHead": false,
+    "kind": "local",
+    "name": "feat/widgets",
+  },
+  "node": {
+    "$$typeof": Symbol(react.transitional.element),
+    "_owner": null,
+    "_store": {},
+    "key": null,
+    "props": {
+      "children": [
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key",
+          "props": {
+            "bold": false,
+            "children": " feat/widgets ",
+            "color": "blue",
+            "inverse": true,
+          },
+          "type": [Function],
+        },
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key-pad",
+          "props": {
+            "children": " ",
+          },
+          "type": [Function],
+        },
+      ],
+    },
+    "type": [Function],
+  },
+  "width": 15,
+}
+`;
+
+exports[`renderBranchTipChip — structural snapshots renders bracketed fallback in noColor mode 1`] = `
+{
+  "chip": {
+    "isHead": true,
+    "kind": "head",
+    "name": "main",
+  },
+  "node": {
+    "$$typeof": Symbol(react.transitional.element),
+    "_owner": null,
+    "_store": {},
+    "key": "test-key",
+    "props": {
+      "bold": true,
+      "children": "[main] ",
+    },
+    "type": [Function],
+  },
+  "width": 7,
+}
+`;
+
+exports[`renderBranchTipChip — structural snapshots renders the HEAD chip as a green inverse pill 1`] = `
+{
+  "chip": {
+    "isHead": true,
+    "kind": "head",
+    "name": "main",
+  },
+  "node": {
+    "$$typeof": Symbol(react.transitional.element),
+    "_owner": null,
+    "_store": {},
+    "key": null,
+    "props": {
+      "children": [
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key",
+          "props": {
+            "bold": true,
+            "children": " main ",
+            "color": "green",
+            "inverse": true,
+          },
+          "type": [Function],
+        },
+        {
+          "$$typeof": Symbol(react.transitional.element),
+          "_owner": null,
+          "_store": {},
+          "key": "test-key-pad",
+          "props": {
+            "children": " ",
+          },
+          "type": [Function],
+        },
+      ],
+    },
+    "type": [Function],
+  },
+  "width": 7,
+}
+`;

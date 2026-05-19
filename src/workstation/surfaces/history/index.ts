@@ -109,7 +109,11 @@ const BRANCH_CHIP_MAX_NAME_WIDTH = 20
  * descriptor so the caller can pass it to `filterChippedRefs` and
  * avoid emitting the same branch a second time in the trailing list.
  */
-function renderBranchTipChip(
+// Exported for unit / snapshot testing in branchTipChipRender.test.ts.
+// The function isn't part of the public surface of this module — the
+// rest of the file is internal — but the chip-rendering logic is
+// dense enough that structural snapshot tests pay for themselves.
+export function renderBranchTipChip(
   h: typeof ReactTypes.createElement,
   Text: LogInkComponents['Text'],
   commit: GitLogCommitRow,
