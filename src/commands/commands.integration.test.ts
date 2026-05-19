@@ -20,10 +20,12 @@ import { Config } from '../commands/types'
 import {
   createTempGitRepo,
   TempGitRepo,
+  detachedHeadScenario,
   featureBranchOneCommitScenario,
   singleStagedFileScenario,
   twoCommitFeatureScenario,
 } from '@gfargo/git-scenarios'
+import { isCommandExitError } from '../lib/utils/commandExit'
 
 jest.mock('@langchain/classic/chains', () => ({
   loadSummarizationChain: jest.fn(),
@@ -663,6 +665,52 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('- Summarized feature work')
     expect(variables.summary).toContain('feat: add feature module')
     expect(variables.summary).toContain('feat/x')
+  })
+
+  // Regression — on a detached HEAD the helper used to emit a yellow
+  // "Unable to determine first and last commit" line and the handler
+  // still walked the LLM through a "No commits found." summarization.
+  // Now the helper emits a clean status line, the parser short-circuits
+  // to noResult, and the changelog handler exits 0 without an LLM call.
+  it('changelog on detached HEAD exits cleanly without an LLM call', async () => {
+    mockLoadConfig.mockImplementation((argv) => createConfig({
+      ...(argv as Record<string, unknown>),
+      mode: 'stdout',
+    }))
+
+    await detachedHeadScenario.setup(repo)
+
+    const logger = createLogger()
+    try {
+      await changelogHandler({
+        $0: 'coco',
+        _: ['changelog'],
+        branch: '',
+        range: '',
+        tag: '',
+        sinceLastTag: false,
+        withDiff: false,
+        onlyDiff: false,
+        interactive: false,
+        verbose: false,
+        version: false,
+        help: false,
+      } as Arguments<ChangelogOptions>, logger)
+    } catch (error) {
+      // commandExit(0) throws CommandExitError — that's the success
+      // signal here. Rethrow anything else.
+      if (!isCommandExitError(error)) {
+        throw error
+      }
+      expect((error as { code: number }).code).toBe(0)
+    }
+
+    const lines = (logger.log as jest.Mock).mock.calls.map(([msg]) => String(msg))
+    const joined = lines.join('\n')
+    expect(joined).toMatch(/HEAD is detached/i)
+    expect(joined).not.toMatch(/Encountered an error/i)
+    expect(joined).not.toMatch(/Unable to determine/i)
+    expect(mockExecuteChain).not.toHaveBeenCalled()
   })
 
   it('reviews real working tree changes from a temp git repo', async () => {

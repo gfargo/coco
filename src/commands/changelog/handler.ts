@@ -213,7 +213,13 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     }
 
     if (!data.commits || data.commits.length === 0) {
-      return `## ${data.branch}\n\nNo commits found.`
+      // Short-circuit with an empty context so the review loop drops
+      // into `noResult` instead of spending an LLM call summarising
+      // "No commits found." into a fake changelog entry. The
+      // upstream helper (getCommitLogCurrentBranch) already logged
+      // the reason (detached HEAD, missing comparison ref, branch at
+      // baseline, etc.) in a friendly status line.
+      return ''
     }
 
     let result = `## ${data.branch}\n\n`
@@ -307,11 +313,16 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     },
     noResult: async () => {
       if (config.range) {
-        logger.log(`No commits found in the provided range.`, { color: 'red' })
+        logger.log(`No commits found in the provided range.`, { color: 'yellow' })
         commandExit(0)
       }
 
-      logger.log(`No commits found in the current branch.`, { color: 'red' })
+      // Yellow rather than red — for the no-commits-on-current-branch
+      // case the upstream helper has already explained the reason in
+      // a friendly status line (detached HEAD, no comparison ref,
+      // branch at baseline). This is the trailing summary, not an
+      // error.
+      logger.log(`No commits found in the current branch.`, { color: 'yellow' })
       commandExit(0)
     },
   })
