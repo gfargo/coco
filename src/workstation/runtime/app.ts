@@ -2271,16 +2271,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
 
     // Success — close the overlay, reset compose (the staged set is
-    // now empty since the plan committed everything), and pop the
-    // compose view so the user lands on whatever was beneath (usually
-    // status, sometimes history).
+    // now empty since the plan committed everything), and route the
+    // user to the history view so they see the just-landed commits
+    // with the recent-commit marker firing on each row that was
+    // created. Previous behavior popped compose to whatever was
+    // beneath (often status — which now reads "clean worktree" and
+    // gives the user no signal that anything just happened);
+    // history is the natural follow-on surface.
+    //
+    // navigateHome nukes the rest of the stack so `<` after apply
+    // doesn't walk back into the now-empty compose / status state
+    // the user just left behind.
     dispatch({ type: 'clearSplitPlan' })
     dispatch({ type: 'commitCompose', action: { type: 'reset' } })
-    // Only pop if compose is on top — the apply could have been
-    // invoked from a deeper stack and we don't want to over-pop.
-    if (state.activeView === 'compose' && state.viewStack.length > 1) {
-      dispatch({ type: 'popView' })
-    }
+    dispatch({ type: 'navigateHome' })
 
     // Refresh BEFORE setting the final status so we can peek at the
     // post-apply worktree state and craft a directive next-step hint
@@ -2335,7 +2339,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
     const successMessage = formatSplitApplySuccess(commitHashes.length, unstaged, untracked)
     dispatch({ type: 'setStatus', value: successMessage, kind: 'success' })
-  }, [dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext, state.activeView, state.splitPlan, state.viewStack.length])
+  }, [dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext, state.splitPlan])
 
   // Esc inside the overlay — close without applying. Status line gets
   // a confirmation so the user knows the operation was abandoned.
