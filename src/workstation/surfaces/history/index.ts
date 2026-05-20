@@ -17,6 +17,7 @@
 
 import type * as ReactTypes from 'react'
 import { filterChippedRefs, getBranchTipChip } from '../../chrome/branchTip'
+import { formatUpstreamAheadBanner } from '../../chrome/iconography'
 import {
   getConventionalCommitColor,
   parseConventionalCommitPrefix,
@@ -604,6 +605,24 @@ export function renderHistoryPanel(
     h(Text, { bold: true }, panelTitle('Commits', focused)),
     h(Text, { dimColor: true }, `${title} | ${graphMode} | ${loadState}`)
   ),
+  // Upstream-ahead banner. Surfaces "the remote has work you don't"
+  // for the current branch — distinct from the chip work in 0.52.0
+  // which colours remote refs IN the row set. On a behind branch the
+  // upstream commits aren't reachable from local HEAD, so the chips
+  // alone can't signal "fetch / pull needed." This single line does.
+  //
+  // Two wording variants (behind-only vs diverged) live in the
+  // helper; render is identical aside from the formatted string.
+  // Warning yellow = same semantic as the remote-tracking chip kind.
+  ...((() => {
+    const currentBranchRef = context.branches?.localBranches.find((branch) => branch.current)
+    const banner = formatUpstreamAheadBanner(currentBranchRef, { ascii: theme.ascii })
+    if (!banner) return []
+    return [h(Text, {
+      key: 'upstream-ahead-banner',
+      color: theme.noColor ? undefined : theme.colors.warning,
+    }, banner)]
+  })()),
   // Server-side filter indicator (#776). Only rendered when the user
   // has an active path:/author: prefix; clears when they Ctrl+U.
   ...(state.historyFetchArgs
