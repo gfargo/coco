@@ -49,6 +49,68 @@ export function formatBranchDivergence(
   return `${parts.join(' ')} ${branch.upstream}`
 }
 
+/**
+ * Format a one-line banner for the history view announcing that the
+ * current branch is behind (or diverged from) its upstream — work
+ * the user can pull / fetch. Returns `undefined` when there's nothing
+ * to surface (no upstream, fully synced, or ahead-only).
+ *
+ * Two variants, chosen by ahead-count:
+ *
+ *   - **Behind-only** (behind > 0, ahead === 0):
+ *     `↓ N commits behind <upstream> · F fetch · U pull`
+ *     Matches `git status` wording, compressed.
+ *
+ *   - **Diverged** (behind > 0, ahead > 0):
+ *     `↑N ↓N diverged from <upstream> · F fetch · U pull --rebase`
+ *     Reuses the `↑N ↓N` symbols from `formatBranchDivergence`.
+ *     `--rebase` hint because fast-forward pull isn't possible with
+ *     local work present.
+ *
+ * Why no "ahead-only" banner: the question this surface answers is
+ * "what work do you have to PULL in?" — ahead-only means there's
+ * nothing to pull. Push affordances live on the branches sidebar
+ * where the cursor names a specific branch.
+ *
+ * Why no banner for synced / no-upstream / detached: same reason —
+ * nothing inbound. Detached HEAD also has no `currentBranch`, so
+ * callers passing `undefined` get `undefined` back automatically.
+ *
+ * ASCII fallback mirrors `formatBranchDivergence`: `v` for `↓`,
+ * `+N/-N` for `↑N ↓N`, `.` for `·`.
+ */
+export type BranchUpstreamAheadInput = {
+  upstream?: string
+  ahead: number
+  behind: number
+}
+
+export function formatUpstreamAheadBanner(
+  branch: BranchUpstreamAheadInput | undefined,
+  options: { ascii?: boolean } = {}
+): string | undefined {
+  if (!branch?.upstream || branch.behind <= 0) {
+    return undefined
+  }
+
+  const sep = options.ascii ? '.' : '·'
+
+  if (branch.ahead > 0) {
+    // Diverged — local has work too, fast-forward pull is impossible.
+    // Suggest pull --rebase as the cleaner-history default; users who
+    // prefer merge can do that themselves.
+    const symbols = options.ascii
+      ? `+${branch.ahead} -${branch.behind}`
+      : `↑${branch.ahead} ↓${branch.behind}`
+    return `${symbols} diverged from ${branch.upstream} ${sep} F fetch ${sep} U pull --rebase`
+  }
+
+  // Behind-only — fast-forward pull works.
+  const arrow = options.ascii ? 'v' : '↓'
+  const noun = branch.behind === 1 ? 'commit' : 'commits'
+  return `${arrow} ${branch.behind} ${noun} behind ${branch.upstream} ${sep} F fetch ${sep} U pull`
+}
+
 export type BranchRowMarkerInput = {
   current: boolean
   upstream?: string

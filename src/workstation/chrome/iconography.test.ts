@@ -3,6 +3,7 @@ import {
   branchRowMarker,
   formatBranchDivergence,
   formatBranchLastTouched,
+  formatUpstreamAheadBanner,
   getPullRequestStateGlyph,
   getStageStatusDotColor,
   sidebarTabCount,
@@ -43,6 +44,76 @@ describe('log Ink iconography', () => {
         { upstream: 'origin/main', ahead: 3, behind: 1 },
         { ascii: true }
       )).toBe('+3/-1 origin/main')
+    })
+  })
+
+  describe('formatUpstreamAheadBanner', () => {
+    it('returns undefined when the branch ref is missing (detached HEAD)', () => {
+      expect(formatUpstreamAheadBanner(undefined)).toBeUndefined()
+    })
+
+    it('returns undefined when there is no upstream configured', () => {
+      expect(formatUpstreamAheadBanner({ ahead: 0, behind: 0 })).toBeUndefined()
+      expect(formatUpstreamAheadBanner({ ahead: 3, behind: 0 })).toBeUndefined()
+    })
+
+    it('returns undefined when behind === 0 (synced or ahead-only)', () => {
+      expect(formatUpstreamAheadBanner(
+        { upstream: 'origin/main', ahead: 0, behind: 0 }
+      )).toBeUndefined()
+      expect(formatUpstreamAheadBanner(
+        { upstream: 'origin/main', ahead: 5, behind: 0 }
+      )).toBeUndefined()
+    })
+
+    describe('behind-only', () => {
+      it('formats N commits behind with fetch + pull hints', () => {
+        expect(formatUpstreamAheadBanner(
+          { upstream: 'origin/main', ahead: 0, behind: 2 }
+        )).toBe('↓ 2 commits behind origin/main · F fetch · U pull')
+      })
+
+      it('uses singular noun for behind === 1', () => {
+        expect(formatUpstreamAheadBanner(
+          { upstream: 'origin/main', ahead: 0, behind: 1 }
+        )).toBe('↓ 1 commit behind origin/main · F fetch · U pull')
+      })
+
+      it('handles arbitrary upstream ref names', () => {
+        expect(formatUpstreamAheadBanner(
+          { upstream: 'upstream/develop', ahead: 0, behind: 7 }
+        )).toBe('↓ 7 commits behind upstream/develop · F fetch · U pull')
+      })
+
+      it('falls back to v + . under ASCII', () => {
+        expect(formatUpstreamAheadBanner(
+          { upstream: 'origin/main', ahead: 0, behind: 2 },
+          { ascii: true }
+        )).toBe('v 2 commits behind origin/main . F fetch . U pull')
+      })
+    })
+
+    describe('diverged', () => {
+      it('formats diverged from <upstream> with both ahead/behind counts', () => {
+        expect(formatUpstreamAheadBanner(
+          { upstream: 'origin/main', ahead: 2, behind: 2 }
+        )).toBe('↑2 ↓2 diverged from origin/main · F fetch · U pull --rebase')
+      })
+
+      it('uses pull --rebase hint (fast-forward impossible when local has work)', () => {
+        const banner = formatUpstreamAheadBanner(
+          { upstream: 'origin/main', ahead: 1, behind: 5 }
+        )
+        expect(banner).toContain('pull --rebase')
+        expect(banner).not.toMatch(/U pull(?! --rebase)/)
+      })
+
+      it('falls back to +N -N under ASCII', () => {
+        expect(formatUpstreamAheadBanner(
+          { upstream: 'origin/main', ahead: 2, behind: 2 },
+          { ascii: true }
+        )).toBe('+2 -2 diverged from origin/main . F fetch . U pull --rebase')
+      })
     })
   })
 
