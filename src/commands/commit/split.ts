@@ -52,7 +52,7 @@ const CONVENTIONAL_COMMITS_RULES = `Each group's "title" MUST follow the Convent
 - subject is imperative mood, no trailing period, <72 chars
 - For breaking changes, the body must include a "BREAKING CHANGE:" footer explaining the break.`
 
-const COMMIT_SPLIT_PROMPT = PromptTemplate.fromTemplate(`You are helping split staged git changes into a small sequence of coherent commits.
+export const COMMIT_SPLIT_PROMPT = PromptTemplate.fromTemplate(`You are helping split staged git changes into a small sequence of coherent commits.
 
 Return ONLY valid JSON matching this schema:
 {{
@@ -76,6 +76,7 @@ Structural rules:
 - Only use hunk IDs LITERALLY copied from the "Staged hunk inventory" section below. Do not invent or guess hunk IDs.
 - If the hunk inventory says "No hunk-level inventory available" then EVERY group's "hunks" array MUST be empty (use only "files"). Do not write hunk IDs like "path::hunk-1" when no hunk inventory exists — those are not valid.
 - Prefer 2-5 commits unless the changes are truly all one topic.
+- Order the groups in the sequence they would logically be built — foundational changes first, consumers after. If group B uses a symbol, function, type, or file introduced in group A, A MUST appear before B in the array. The applier commits in array order, so this order becomes the git history. Example: a "feat: add helpers" group that introduces \`formatX()\` must come before a "feat: wire helpers into renderer" group that calls \`formatX()\`, even if the staged diff is presented in the opposite order. When two groups have no dependency relationship, prefer the one closer to a "scaffold" (types, config, new files) before the one closer to a "use site" (existing files modified to consume the new code).
 
 Commit message style:
 - Write each "title" in the imperative mood ("add", not "added"), under 72 chars.
