@@ -106,7 +106,7 @@
     "diff": "9.0.0",
     "ini": "7.0.0",
     "ink": "7.0.3",
-    "minimatch": "^10.2.4",
+    "minimatch": "^10.2.5",
     "ora": "5.4.1",
     "p-queue": "5.0.0",
     "performance-now": "2.1.0",
