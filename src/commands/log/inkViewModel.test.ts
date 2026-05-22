@@ -1539,14 +1539,58 @@ describe('log Ink view model', () => {
         label: 'vendor/lib',
       })
       const ret = after.repoStack[1].parentReturn
+      // The snapshot now also captures sidebar tab + sort preferences
+      // so pop can restore them (#995). Use defaults from createLogInkState
+      // since `nudgeParentState` doesn't touch those fields.
       expect(ret).toEqual({
         activeView: 'branches',
         selectedIndex: before.selectedIndex,
         selectedFileIndex: 0,
         selectedSubmoduleIndex: 0,
         filter: 'feat:',
+        sidebarTab: before.sidebarTab,
+        userSidebarTab: before.userSidebarTab,
+        branchSort: before.branchSort,
+        tagSort: before.tagSort,
       })
       expect(before.selectedIndex).toBeGreaterThan(0)
+    })
+
+    it('popRepoFrame restores the parent\'s sidebar tab and sort modes (#995)', () => {
+      // Simulate the user-reported bleed: user changes sidebar tab +
+      // branch sort inside a submodule frame, then pops back to the
+      // parent. The parent should snap back to whatever it had pre-push,
+      // not inherit the submodule's choices.
+      const root = applyLogInkAction(createLogInkState(rows, { repoLabel: 'coco' }), {
+        type: 'setSidebarTab',
+        value: 'tags',
+      })
+      // Cycle branch sort once so the parent's value diverges from the
+      // default for the assertion.
+      const parent = applyLogInkAction(root, { type: 'cycleBranchSort' })
+      const parentBranchSort = parent.branchSort
+      const parentSidebarTab = parent.userSidebarTab
+      expect(parentSidebarTab).toBe('tags')
+
+      // Push into a submodule, change sidebar tab + cycle sort again,
+      // then pop. The pop should restore the parent's pre-push values.
+      const pushed = applyLogInkAction(parent, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+      })
+      const insideSubmodule = applyLogInkAction(
+        applyLogInkAction(pushed, { type: 'setSidebarTab', value: 'stashes' }),
+        { type: 'cycleBranchSort' }
+      )
+      expect(insideSubmodule.userSidebarTab).toBe('stashes')
+      expect(insideSubmodule.branchSort).not.toBe(parentBranchSort)
+
+      const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
+      expect(popped.userSidebarTab).toBe(parentSidebarTab)
+      expect(popped.sidebarTab).toBe(parentSidebarTab)
+      expect(popped.branchSort).toBe(parentBranchSort)
+      // Submodule's state is gone; only the root frame remains.
+      expect(popped.repoStack).toHaveLength(1)
     })
 
     it('pushRepoFrame records the optional entryRange', () => {

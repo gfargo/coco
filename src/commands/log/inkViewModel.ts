@@ -90,6 +90,21 @@ export type LogInkRepoFrameReturn = {
   selectedFileIndex: number
   selectedSubmoduleIndex: number
   filter: string
+  /**
+   * Sidebar tab + sort preferences captured at push time (#995). Today
+   * these live as global fields on `LogInkState`; per-issue, they should
+   * snap back to the parent's values on pop instead of bleeding the
+   * submodule's choice across the boundary. The corresponding fields on
+   * `LogInkState` continue to carry the *active* frame's values — push
+   * just records the parent's so pop can restore them. Persistence
+   * (sidebar tab to disk; sort modes in-memory only) is unchanged: the
+   * existing per-frame `git`-keyed load effect already restores any
+   * submodule-specific saved tab when the frame becomes active.
+   */
+  sidebarTab: LogInkSidebarTab
+  userSidebarTab: LogInkSidebarTab
+  branchSort: BranchSortMode
+  tagSort: TagSortMode
 }
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
@@ -940,10 +955,17 @@ function withPoppedView(state: LogInkState): LogInkState {
  * in a clean slate — the mental equivalent of a fresh `coco ui`
  * launched against the submodule's working dir.
  *
- * Carry-over preferences (sidebar tab, branch / tag sort, palette
- * recents, inspector tab, diff view mode) are intentionally left
- * untouched. They're user-level choices that should persist across
- * frames, the same way they persist across view pushes today.
+ * Sidebar tab + branch / tag sort are also captured into the return
+ * snapshot (#995) so popping back restores the parent's choices
+ * instead of letting the submodule's tab/sort bleed across the
+ * boundary. The values on the *new* frame are left as-is (carried
+ * over from the parent) — the load effect in app.ts re-reads
+ * persistence keyed on the submodule's workdir and dispatches a
+ * restore if the user has a submodule-specific saved preference.
+ *
+ * Other preferences (palette recents, inspector tab, diff view mode)
+ * stay global by design — the user's preference shouldn't reset when
+ * they cross a submodule boundary.
  *
  * Live runtime objects (`SimpleGit`, loaded `LogInkContext`) live
  * outside the reducer in `app.ts`'s parallel ref structure — this
@@ -963,6 +985,10 @@ function withPushedRepoFrame(
       selectedFileIndex: state.selectedFileIndex,
       selectedSubmoduleIndex: state.selectedSubmoduleIndex,
       filter: state.filter,
+      sidebarTab: state.sidebarTab,
+      userSidebarTab: state.userSidebarTab,
+      branchSort: state.branchSort,
+      tagSort: state.tagSort,
     },
   }
   return {
@@ -1016,6 +1042,15 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     filter: ret.filter,
     filterMode: false,
     pendingCommitFocused: false,
+    // #995 — restore sidebar tab + sort preferences from the captured
+    // parentReturn. Without this, the submodule's tab / sort choice
+    // bleeds back into the parent after pop: the user picks 'tags' in
+    // a vendored submodule, pops back to the parent, and finds the
+    // parent's previously-selected 'branches' tab quietly replaced.
+    sidebarTab: ret.sidebarTab,
+    userSidebarTab: ret.userSidebarTab,
+    branchSort: ret.branchSort,
+    tagSort: ret.tagSort,
     pendingKey: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
