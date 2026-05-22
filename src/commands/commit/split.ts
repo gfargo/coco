@@ -323,6 +323,13 @@ export type CommitSplitApplyResult = {
   commitHashes: string[]
   /** Human-readable summary, suitable for the CLI handler / status line. */
   message: string
+  /**
+   * Set when the applied plan was the single-group fallback returned
+   * by the planner after exhausting its retry budget. Workstation
+   * surfaces should prefix the success message with a fallback note
+   * so the user knows the plan wasn't a real LLM split.
+   */
+  fallback?: import('./splitPlanGenerator').SplitPlanFallbackInfo
 }
 
 export async function applyCommitSplitPlan({
@@ -332,6 +339,7 @@ export async function applyCommitSplitPlan({
   git,
   logger,
   noVerify,
+  fallback,
 }: {
   plan: CommitSplitPlan
   changes: Awaited<ReturnType<typeof getChanges>>
@@ -339,6 +347,13 @@ export async function applyCommitSplitPlan({
   git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>
   logger: Logger
   noVerify: boolean
+  /**
+   * Optional fallback descriptor from the planner. When set, the
+   * returned `CommitSplitApplyResult.fallback` echoes it so the
+   * runtime's apply-time success message can prefix a note about
+   * the degraded plan.
+   */
+  fallback?: import('./splitPlanGenerator').SplitPlanFallbackInfo
 }): Promise<CommitSplitApplyResult> {
   validatePlanForStagedFiles(plan, changes.staged, hunkInventory)
   assertNoUnstagedOverlap(plan, changes, hunkInventory)
@@ -454,12 +469,14 @@ export async function applyCommitSplitPlan({
     return {
       commitHashes,
       message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}`,
+      fallback,
     }
   }
 
   return {
     commitHashes,
     message: `Created ${commitHashes.length} split commit(s).`,
+    fallback,
   }
 }
 
@@ -512,7 +529,20 @@ export async function prepareCommitSplitPlan({
   planLlm?: ReturnType<typeof getLlm>
   /** Service descriptor matching `planLlm` (for telemetry metadata). */
   planService?: LLMService
-}): Promise<{ plan: CommitSplitPlan; context: CommitSplitPlanContext } | { empty: true }> {
+}): Promise<
+  | {
+      plan: CommitSplitPlan
+      context: CommitSplitPlanContext
+      /**
+       * Set when the planner returned the single-group fallback
+       * instead of LLM output. Surfaces in apply / preview UIs so
+       * users know to verify the combined commit message (or
+       * re-roll the planner for another try).
+       */
+      fallback?: import('./splitPlanGenerator').SplitPlanFallbackInfo
+    }
+  | { empty: true }
+> {
   const changes = await getChanges({
     git,
     options: {
@@ -596,7 +626,7 @@ export async function prepareCommitSplitPlan({
   const resolvedPlanLlm = planLlm ?? llm
   const resolvedPlanModel = planService?.model ?? config.service.model
 
-  const { plan } = await generateValidatedCommitSplitPlan({
+  const { plan, fallback } = await generateValidatedCommitSplitPlan({
     llm: resolvedPlanLlm,
     prompt: COMMIT_SPLIT_PROMPT,
     variables: {
@@ -619,9 +649,13 @@ export async function prepareCommitSplitPlan({
       conventional: useConventional,
     },
     maxAttempts: DEFAULT_MAX_PLAN_ATTEMPTS,
+    // Honour `--strict-split` (CLI) or `strictSplit` (config). When set,
+    // the planner reverts to the pre-#1005 behaviour of throwing on
+    // exhaustion instead of returning the single-group fallback.
+    strict: Boolean(argv.strictSplit ?? config.strictSplit),
   })
 
-  return { plan, context: { changes, hunkInventory } }
+  return { plan, context: { changes, hunkInventory }, fallback }
 }
 
 export async function handleCommitSplit({
@@ -658,7 +692,7 @@ export async function handleCommitSplit({
     return 'No staged changes found.'
   }
 
-  const { plan, context } = result
+  const { plan, context, fallback } = result
 
   if (argv.apply) {
     const applied = await applyCommitSplitPlan({
@@ -668,8 +702,24 @@ export async function handleCommitSplit({
       git,
       logger,
       noVerify: argv.noVerify || config.noVerify || false,
+      fallback,
     })
+    if (applied.fallback) {
+      return [
+        `Note: applied the single-commit fallback (${applied.fallback.reason}).`,
+        applied.message,
+      ].join('\n')
+    }
     return applied.message
+  }
+
+  if (fallback) {
+    return [
+      `Note: showing the single-commit fallback plan (${fallback.reason}).`,
+      'Re-run with a stronger model or use --strict-split to surface the planner error.',
+      '',
+      formatCommitSplitPlan(plan),
+    ].join('\n')
   }
 
   return formatCommitSplitPlan(plan)

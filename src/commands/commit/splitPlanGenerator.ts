@@ -6,6 +6,7 @@ import { TokenCounter } from '../../lib/utils/tokenizer'
 import { FileChange } from '../../lib/types'
 import { CommitSplitPlan, CommitSplitPlanSchema } from './splitPlanTypes'
 import {
+  buildSplitPlanFallback,
   dropEmptyGroups,
   formatPlanValidationFeedback,
   formatPlanValidationIssuesError,
@@ -35,11 +36,42 @@ export interface GenerateSplitPlanArgs {
   metadata?: Record<string, unknown>
   /** Total attempts including the initial call. Defaults to 3. */
   maxAttempts?: number
+  /**
+   * When true, throw on exhaustion of `maxAttempts` instead of
+   * returning the single-group fallback plan. Restores the
+   * pre-#1005 behaviour for callers (or CLI users via
+   * `--strict-split`) who'd rather see an explicit failure than a
+   * degraded plan.
+   */
+  strict?: boolean
+}
+
+/**
+ * Metadata describing a degraded plan that was synthesised after the
+ * LLM exhausted its attempt budget without producing a valid plan.
+ * Absent on the happy path.
+ */
+export interface SplitPlanFallbackInfo {
+  /**
+   * Human-readable explanation suitable for status-line surfaces.
+   * Includes the count of attempts and the most-recent validator
+   * complaints so the user can see WHY they got a fallback.
+   */
+  reason: string
+  /** The validator issues from the final failed attempt, kept verbatim. */
+  lastIssues: PlanValidationIssues
 }
 
 export interface GenerateSplitPlanResult {
   plan: CommitSplitPlan
   attempts: number
+  /**
+   * When set, the returned `plan` is a synthesized single-group
+   * fallback rather than LLM output. Callers should surface this
+   * in their apply / preview UI so the user knows to verify the
+   * combined commit message (or re-roll the planner).
+   */
+  fallback?: SplitPlanFallbackInfo
 }
 
 /**
@@ -60,6 +92,7 @@ export async function generateValidatedCommitSplitPlan({
   tokenizer,
   metadata = {},
   maxAttempts = DEFAULT_MAX_PLAN_ATTEMPTS,
+  strict = false,
 }: GenerateSplitPlanArgs): Promise<GenerateSplitPlanResult> {
   let lastIssues: PlanValidationIssues | null = null
   let attempt = 0
@@ -149,11 +182,48 @@ export async function generateValidatedCommitSplitPlan({
     }
   }
 
-  throw new Error(
-    lastIssues
-      ? `Failed to produce a valid commit-split plan after ${maxAttempts} attempts. Final validator issues: ${formatPlanValidationIssuesError(
-          lastIssues
-        )}`
-      : `Failed to produce a valid commit-split plan after ${maxAttempts} attempts.`
-  )
+  const issuesSummary = lastIssues
+    ? formatPlanValidationIssuesError(lastIssues)
+    : 'no captured validator issues'
+
+  // Strict mode: restore the pre-#1005 behaviour. Callers that pass
+  // `strict: true` (and CLI users via `--strict-split`) want explicit
+  // failure rather than the degraded fallback.
+  if (strict) {
+    throw new Error(
+      lastIssues
+        ? `Failed to produce a valid commit-split plan after ${maxAttempts} attempts. Final validator issues: ${issuesSummary}`
+        : `Failed to produce a valid commit-split plan after ${maxAttempts} attempts.`
+    )
+  }
+
+  // Default: hand back a trivially-valid single-group fallback. The
+  // caller's apply / preview surface should treat the `fallback` flag
+  // as a signal to nudge the user (it's strictly better than a hard
+  // failure with the staged set still on disk, but it's still a
+  // degraded outcome compared to a real multi-group split).
+  const reason = `LLM exhausted ${maxAttempts} planning attempts; final validator issues: ${issuesSummary}`
+  if (logger) {
+    logger.verbose(
+      `Plan attempts exhausted — falling back to a single-group plan. ${reason}`,
+      { color: 'yellow' }
+    )
+  }
+
+  return {
+    plan: buildSplitPlanFallback(staged, { reason: issuesSummary }),
+    attempts: maxAttempts,
+    fallback: {
+      reason,
+      lastIssues: lastIssues ?? {
+        unknownFiles: [],
+        duplicateFiles: [],
+        unknownHunks: [],
+        duplicateHunks: [],
+        mixedFiles: [],
+        partiallyCoveredFiles: [],
+        missingFiles: [],
+      },
+    },
+  }
 }

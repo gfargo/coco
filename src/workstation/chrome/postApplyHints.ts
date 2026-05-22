@@ -52,6 +52,16 @@ export function formatRemainingWorktreeHint(unstaged: number, untracked: number)
 }
 
 /**
+ * Lightweight descriptor matching `SplitPlanFallbackInfo` from
+ * `splitPlanGenerator`. Duplicated here as a structural type so
+ * `postApplyHints` doesn't take a dependency on the commit-split
+ * module just to format a status line.
+ */
+export interface SplitApplyFallbackHint {
+  reason: string
+}
+
+/**
  * Format the full post-apply success message: count of commits
  * created + where to see them + what's left + how to act on it.
  *
@@ -69,19 +79,27 @@ export function formatRemainingWorktreeHint(unstaged: number, untracked: number)
  *
  * When the worktree is clean post-apply:
  *   "Created N commits — press gh to view them in history. Worktree is clean."
+ *
+ * When `fallback` is set, the planner exhausted its retry budget and
+ * the apply landed the single-group fallback plan instead of a real
+ * multi-group split. Prefix the message so the user knows the result
+ * isn't a true LLM split — they may want to re-roll with a different
+ * model, or accept the combined commit as-is.
  */
 export function formatSplitApplySuccess(
   commitCount: number,
   unstaged: number,
-  untracked: number
+  untracked: number,
+  fallback?: SplitApplyFallbackHint
 ): string {
   const created = commitCount === 1
     ? 'Created 1 commit'
     : `Created ${commitCount} commits`
   const navCue = `${created} — press gh to view them in history.`
   const remainingHint = formatRemainingWorktreeHint(unstaged, untracked)
-  if (!remainingHint) {
-    return `${navCue} Worktree is clean.`
+  const tail = remainingHint ? ` ${remainingHint}` : ' Worktree is clean.'
+  if (fallback) {
+    return `Split planner fallback applied (combined commit) — ${fallback.reason}. ${navCue}${tail}`
   }
-  return `${navCue} ${remainingHint}`
+  return `${navCue}${tail}`
 }

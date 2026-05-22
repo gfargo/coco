@@ -15,6 +15,13 @@ export interface CommitOptions extends BaseCommandOptions {
   split?: boolean
   plan?: boolean
   apply?: boolean
+  /**
+   * When true, throw if the split planner exhausts its retry budget
+   * with an invalid plan (pre-#1005 behaviour) instead of falling
+   * back to a single-group plan that combines every staged file into
+   * one commit. Default: false (fallback is enabled).
+   */
+  strictSplit?: boolean
 }
 
 export type CommitArgv = Arguments<CommitOptions>
@@ -114,6 +121,12 @@ export const options = {
   },
   apply: {
     description: 'Apply a generated file-level or hunk-level commit split plan and create commits',
+    type: 'boolean',
+    default: false,
+  },
+  strictSplit: {
+    description:
+      'Fail loudly if the split planner exhausts its retry budget with an invalid plan (otherwise falls back to a single combined commit).',
     type: 'boolean',
     default: false,
   },

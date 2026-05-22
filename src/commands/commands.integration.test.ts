@@ -586,7 +586,13 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('test: add feature fixture')
   })
 
-  it('surfaces a clear error after retries are exhausted', async () => {
+  it('falls back to a single-commit plan after retries are exhausted', async () => {
+    // Issue #1005: when the LLM can't produce a valid multi-group
+    // plan even with retry feedback, the default behaviour is to fall
+    // back to a single-group plan that puts every staged file into
+    // one commit — strictly better than throwing and leaving the user
+    // with a staged worktree and no commit. Strict-mode coverage is
+    // in the sibling test below.
     mockLoadConfig.mockReturnValue(createConfig({
       mode: 'stdout',
     }))
@@ -594,6 +600,57 @@ describe('command integration with temp git repos', () => {
     // unknownFiles invalidation (no rescue available) — guarantees
     // retries actually exhaust. A missing-file invalidation would be
     // auto-rescued on attempt 1.
+    mockExecuteChainWithSchema.mockResolvedValue({
+      groups: [
+        {
+          title: 'docs: update readme',
+          body: 'Document the temp repo.',
+          files: ['README.md', 'ghost.ts'],
+          hunks: [],
+        },
+      ],
+    })
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.git.add(['README.md', 'src/feature.ts'])
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit', 'split'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      split: true,
+      plan: true,
+      apply: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(3)
+    // Fallback plan: one group, both staged files in it, chore: title.
+    expect(stdout).toContain('chore: combined commit')
+    expect(stdout).toContain('README.md')
+    expect(stdout).toContain('src/feature.ts')
+  })
+
+  it('throws after exhausting retries when --strict-split is set', async () => {
+    // Opt-in strict mode restores the pre-#1005 behaviour: fail
+    // loudly instead of degrading to the single-commit fallback.
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
     mockExecuteChainWithSchema.mockResolvedValue({
       groups: [
         {
@@ -627,6 +684,7 @@ describe('command integration with temp git repos', () => {
         split: true,
         plan: true,
         apply: false,
+        strictSplit: true,
         verbose: false,
         version: false,
         help: false,

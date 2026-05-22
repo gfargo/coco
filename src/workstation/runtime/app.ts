@@ -2184,11 +2184,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       type: 'setSplitPlanReady',
       plan: result.plan,
       planContext: result.planContext,
+      fallback: result.fallback,
     })
+    const readyMessage = result.fallback
+      ? `Split planner exhausted retries — showing single-commit fallback. y/Enter to apply as one commit, r to re-roll, Esc to cancel.`
+      : `Split plan ready: ${result.plan.groups.length} commit(s). y/Enter to apply, Esc to cancel.`
+    // Use 'info' kind for the fallback path (still actionable, just
+    // not a clean win). The reducer's "warning" is the absence of
+    // `success` framing — the message text itself carries the cue.
     dispatch({
       type: 'setStatus',
-      value: `Split plan ready: ${result.plan.groups.length} commit(s). y/Enter to apply, Esc to cancel.`,
-      kind: 'success',
+      value: readyMessage,
+      kind: result.fallback ? 'info' : 'success',
     })
   }, [context.operation, context.worktree?.stagedCount, dispatch, git])
 
@@ -2238,6 +2245,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       plan: splitPlan.plan,
       planContext: splitPlan.planContext,
       git,
+      fallback: splitPlan.fallback,
     })
 
     dump.push(`workflow returned: ok=${result.ok} message="${result.message}" commitHashes=[${(result.commitHashes || []).join(', ')}]`)
@@ -2340,8 +2348,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
-    const successMessage = formatSplitApplySuccess(commitHashes.length, unstaged, untracked)
-    dispatch({ type: 'setStatus', value: successMessage, kind: 'success' })
+    const successMessage = formatSplitApplySuccess(
+      commitHashes.length,
+      unstaged,
+      untracked,
+      result.fallback ? { reason: result.fallback.reason } : undefined
+    )
+    // Fallback path uses 'info' kind — apply technically succeeded
+    // but the user should know it landed as a single combined commit
+    // rather than a real LLM-driven multi-group split.
+    dispatch({
+      type: 'setStatus',
+      value: successMessage,
+      kind: result.fallback ? 'info' : 'success',
+    })
   }, [dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext, state.splitPlan])
 
   // Esc inside the overlay — close without applying. Status line gets

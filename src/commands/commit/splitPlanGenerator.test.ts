@@ -202,9 +202,43 @@ describe('generateValidatedCommitSplitPlan', () => {
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
   })
 
-  it('throws after exhausting retries with the final validator complaints in the message', async () => {
+  it('returns a single-group fallback plan after exhausting retries by default', async () => {
+    // Issue #1005: pre-fallback behaviour was to throw after exhausting
+    // the retry budget, which left the user with staged files and no
+    // commit. The default now is to hand back a trivially-valid
+    // single-group fallback so the user can still land *something*.
     // Uses unknownFiles (no rescue available) so retries actually
-    // exhaust. A missing-files invalidation would be auto-rescued.
+    // exhaust — a missing-files invalidation would be auto-rescued.
+    const invalidPlan: CommitSplitPlan = {
+      groups: [
+        { title: 'a', files: ['a.ts'], hunks: [] },
+        { title: 'b', files: ['ghost.ts'], hunks: [] },
+      ],
+    }
+    mockExecuteChainWithSchema.mockResolvedValue(invalidPlan)
+
+    const result = await generateValidatedCommitSplitPlan({
+      ...baseArgs(),
+      maxAttempts: 2,
+    })
+
+    // Fallback plan: one group, every staged file in it, no hunks.
+    expect(result.plan.groups).toHaveLength(1)
+    expect(result.plan.groups[0].files).toEqual(['a.ts', 'b.ts'])
+    expect(result.plan.groups[0].hunks).toEqual([])
+    // `fallback` is set so the caller can surface a nudge to the user.
+    expect(result.fallback).toBeDefined()
+    expect(result.fallback?.reason).toMatch(/exhausted 2 planning attempts/i)
+    expect(result.fallback?.reason).toMatch(/unknown files: ghost\.ts/i)
+    // `attempts` reflects the full retry budget that was burned.
+    expect(result.attempts).toBe(2)
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws on exhaustion when strict mode is requested', async () => {
+    // The CLI `--strict-split` flag (and any caller passing
+    // `strict: true`) opts back into pre-fallback behaviour: fail
+    // loudly rather than degrade silently to a single-commit plan.
     const invalidPlan: CommitSplitPlan = {
       groups: [
         { title: 'a', files: ['a.ts'], hunks: [] },
@@ -214,7 +248,11 @@ describe('generateValidatedCommitSplitPlan', () => {
     mockExecuteChainWithSchema.mockResolvedValue(invalidPlan)
 
     await expect(
-      generateValidatedCommitSplitPlan({ ...baseArgs(), maxAttempts: 2 })
+      generateValidatedCommitSplitPlan({
+        ...baseArgs(),
+        maxAttempts: 2,
+        strict: true,
+      })
     ).rejects.toThrow(/after 2 attempts.*unknown files: ghost\.ts/i)
 
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(2)

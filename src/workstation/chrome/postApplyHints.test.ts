@@ -76,4 +76,27 @@ describe('formatSplitApplySuccess', () => {
     expect(formatSplitApplySuccess(5, 6, 3)).toContain('gh')
     expect(formatSplitApplySuccess(1, 0, 3)).toContain('gh')
   })
+
+  it('prefixes a fallback note when the planner exhausted retries', () => {
+    // When the split planner falls back to a single-group plan, the
+    // apply still succeeds — but the user needs to know the result
+    // isn't a real LLM-driven multi-group split. The success message
+    // should be unmistakable: prefixed with "Split planner fallback
+    // applied" and include the reason so the user can decide whether
+    // to re-roll or accept the combined commit.
+    const msg = formatSplitApplySuccess(1, 0, 0, {
+      reason: 'plan included duplicate hunks after retries',
+    })
+    expect(msg).toContain('Split planner fallback applied')
+    expect(msg).toContain('combined commit')
+    expect(msg).toContain('duplicate hunks after retries')
+    // Nav cue + clean-worktree tail still present.
+    expect(msg).toContain('press gh to view them in history')
+    expect(msg).toContain('Worktree is clean')
+  })
+
+  it('omits the fallback prefix when no fallback descriptor is passed', () => {
+    const msg = formatSplitApplySuccess(3, 0, 0)
+    expect(msg).not.toContain('fallback')
+  })
 })
