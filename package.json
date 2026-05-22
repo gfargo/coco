@@ -61,7 +61,7 @@
   },
   "devDependencies": {
     "@commitlint/types": "^20.5.0",
-    "@gfargo/git-scenarios": "^0.3.3",
+    "@gfargo/git-scenarios": "^0.4.0",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-eslint": "^9.0.5",
     "@rollup/plugin-json": "^6.0.0",
