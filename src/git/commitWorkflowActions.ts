@@ -229,7 +229,18 @@ export async function runCommitDraftWorkflow(
  * state between plan generation and apply.
  */
 export type CommitSplitPlanResult =
-  | { ok: true; plan: CommitSplitPlan; planContext: CommitSplitPlanContext }
+  | {
+      ok: true
+      plan: CommitSplitPlan
+      planContext: CommitSplitPlanContext
+      /**
+       * Set when the planner returned the single-group fallback after
+       * exhausting its retry budget. Workstation surfaces should
+       * prefix the apply / preview message with a note so the user
+       * knows the plan isn't a real LLM split.
+       */
+      fallback?: import('../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
+    }
   | { ok: false; message: string; details?: string[] }
 
 /**
@@ -297,6 +308,7 @@ export async function runCommitSplitPlanWorkflow(
       ok: true,
       plan: result.plan,
       planContext: result.context,
+      fallback: result.fallback,
     }
   } catch (error) {
     if (isCommandExitError(error)) {
@@ -335,7 +347,17 @@ export async function runCommitSplitApplyWorkflow(input: {
   planContext: CommitSplitPlanContext
   git?: SimpleGit
   noVerify?: boolean
-}): Promise<CommitWorkflowResult & { commitHashes?: string[] }> {
+  /**
+   * Optional fallback descriptor carried over from
+   * `runCommitSplitPlanWorkflow`. When present, the apply-time
+   * success message gets prefixed with a note so the user knows
+   * the single-commit fallback is what landed.
+   */
+  fallback?: import('../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
+}): Promise<CommitWorkflowResult & {
+  commitHashes?: string[]
+  fallback?: import('../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
+}> {
   const git = input.git || getRepo()
   const logger = new Logger({ silent: true })
 
@@ -347,6 +369,7 @@ export async function runCommitSplitApplyWorkflow(input: {
       git,
       logger,
       noVerify: input.noVerify || false,
+      fallback: input.fallback,
     })
     return {
       ok: true,
@@ -357,6 +380,7 @@ export async function runCommitSplitApplyWorkflow(input: {
       // I/O AND inaccurate when partial-apply landed fewer commits
       // than the plan had groups.
       commitHashes: applied.commitHashes,
+      fallback: applied.fallback,
     }
   } catch (error) {
     if (isCommandExitError(error)) {

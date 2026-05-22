@@ -427,6 +427,57 @@ export function dropEmptyGroups(plan: CommitSplitPlan): CommitSplitPlan {
   return { ...plan, groups: surviving }
 }
 
+/**
+ * Construct a trivially-valid single-group plan covering every staged
+ * file. Used as the fallback when the LLM exhausts its retry budget
+ * with an invalid plan — turning a hard failure into a usable
+ * (if degraded) outcome.
+ *
+ * Properties of the returned plan:
+ *
+ *   - Exactly one group.
+ *   - Every staged file appears in that group's `files[]`. No hunks
+ *     are claimed, so any hunk inventory is irrelevant to the plan's
+ *     validity.
+ *   - By construction: no duplicates, no missing files, no mixed
+ *     mode, no phantom hunks. `getPlanValidationIssues` returns an
+ *     empty issue set.
+ *
+ * The group's `rationale` carries the reason text the caller wants
+ * to expose to the UI (typically "model exhausted N attempts; last
+ * issues were …"). The `body` carries a short note that survives
+ * into the commit message body so a user who applies without editing
+ * has the context recorded in git history.
+ *
+ * `title` defaults to a generic conventional-commits-compatible
+ * `chore: combined commit` — bland on purpose. Real commit messaging
+ * is the user's job at the compose / apply step.
+ *
+ * The plan is NOT linked to the LLM by construction. If the model
+ * can't produce a valid split, the user still gets one apply-able
+ * commit instead of a thrown error and a still-staged worktree.
+ */
+export function buildSplitPlanFallback(
+  staged: FileChange[],
+  options: { reason?: string } = {}
+): CommitSplitPlan {
+  const files = staged.map((change) => change.filePath)
+  const reasonLine = options.reason
+    ? ` Reason: ${options.reason}`
+    : ''
+  return {
+    groups: [
+      {
+        title: 'chore: combined commit',
+        body: 'Auto-generated single-commit fallback after the split planner could not produce a valid multi-group plan. Edit before applying if you want a more specific message; press `r` to re-roll the planner if a different model might do better.',
+        rationale: `Fallback plan — every staged file in one commit because the LLM could not produce a valid multi-group split.${reasonLine}`,
+        files,
+        hunks: [],
+      },
+    ],
+  }
+}
+
 export function formatPlanValidationFeedback(issues: PlanValidationIssues): string {
   const sections: string[] = []
 

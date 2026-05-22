@@ -538,6 +538,14 @@ export type SplitPlanState = {
   planContext?: CommitSplitPlanContext
   scrollOffset: number
   error?: string
+  /**
+   * Set when the planner exhausted its retry budget and returned the
+   * single-group fallback. Surfaces in the overlay header so the user
+   * knows the plan they're previewing isn't a real LLM split, and in
+   * the apply-time success message. Cleared when the user re-rolls
+   * the planner.
+   */
+  fallback?: import('../../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
 }
 
 export type LogInkStatusFilterMask = {
@@ -727,7 +735,12 @@ export type LogInkAction =
   | { type: 'markRecentCommits'; hashes: string[] }
   | { type: 'clearRecentCommits' }
   | { type: 'startSplitPlanLoad' }
-  | { type: 'setSplitPlanReady'; plan: CommitSplitPlan; planContext: CommitSplitPlanContext }
+  | {
+      type: 'setSplitPlanReady'
+      plan: CommitSplitPlan
+      planContext: CommitSplitPlanContext
+      fallback?: import('../../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
+    }
   | { type: 'setSplitPlanApplying' }
   | { type: 'setSplitPlanError'; error: string }
   | { type: 'pageSplitPlan'; delta: number; lineCount: number }
@@ -2099,6 +2112,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           plan: action.plan,
           planContext: action.planContext,
           scrollOffset: 0,
+          fallback: action.fallback,
         },
         pendingKey: undefined,
       }

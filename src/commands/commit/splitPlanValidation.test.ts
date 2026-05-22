@@ -1,5 +1,6 @@
 import { FileChange } from '../../lib/types'
 import {
+  buildSplitPlanFallback,
   dropEmptyGroups,
   formatPlanValidationFeedback,
   formatPlanValidationIssuesError,
@@ -683,6 +684,65 @@ describe('splitPlanValidation', () => {
         ],
       }
       expect(dropEmptyGroups(plan)).toBe(plan)
+    })
+  })
+
+  describe('buildSplitPlanFallback', () => {
+    it('puts every staged file into a single group with no hunks', () => {
+      // The fallback's whole point: produce something that's
+      // trivially valid regardless of what the LLM was returning.
+      // One group, every staged file in `files[]`, no hunks.
+      const plan = buildSplitPlanFallback([
+        stagedFile('a.ts'),
+        stagedFile('b.ts'),
+        stagedFile('c.ts'),
+      ])
+
+      expect(plan.groups).toHaveLength(1)
+      expect(plan.groups[0].files).toEqual(['a.ts', 'b.ts', 'c.ts'])
+      expect(plan.groups[0].hunks).toEqual([])
+    })
+
+    it('includes the validator reason in the rationale so the user can see what went wrong', () => {
+      const plan = buildSplitPlanFallback([stagedFile('a.ts')], {
+        reason: 'duplicate hunks across groups',
+      })
+
+      // Rationale should mention the fallback context AND the
+      // underlying reason — the user needs both to decide whether to
+      // re-roll or accept the combined commit.
+      expect(plan.groups[0].rationale).toContain('Fallback plan')
+      expect(plan.groups[0].rationale).toContain('duplicate hunks across groups')
+    })
+
+    it('still produces a valid plan when no reason is provided', () => {
+      const plan = buildSplitPlanFallback([stagedFile('a.ts')])
+
+      expect(plan.groups).toHaveLength(1)
+      expect(plan.groups[0].files).toEqual(['a.ts'])
+      // No reason → no "Reason:" suffix bleeding into the rationale.
+      expect(plan.groups[0].rationale).not.toContain('Reason:')
+    })
+
+    it('uses a conventional-commits-compatible default title', () => {
+      const plan = buildSplitPlanFallback([stagedFile('a.ts')])
+      // `chore:` is intentionally bland — real messaging is the
+      // user's job at the compose / apply step.
+      expect(plan.groups[0].title).toMatch(/^chore:/)
+    })
+
+    it('produces a plan that passes validation against the staged set', () => {
+      // The whole point of the fallback is that it can't fail
+      // validation. Guard against future regressions where someone
+      // accidentally introduces hunks or unknown files into the
+      // fallback shape.
+      const staged: FileChange[] = [stagedFile('a.ts'), stagedFile('b.ts')]
+      const inventory = buildHunkInventory({})
+      const plan = buildSplitPlanFallback(staged, { reason: 'some reason' })
+
+      const issues = getPlanValidationIssues(plan, staged, inventory)
+
+      expect(hasPlanValidationIssues(issues)).toBe(false)
     })
   })
 })
