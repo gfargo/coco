@@ -232,6 +232,37 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'normal',
       requiresConfirmation: false,
     },
+    // Per-view variants of fetch / pull / push that act on the
+    // cursored branch instead of the current one. Empty `key` keeps
+    // them palette-discoverable without registering a global hotkey —
+    // inkInput.ts dispatches them contextually when the user presses
+    // F / U / P while the branches sidebar is focused. Outside that
+    // context, the F / U / P keys still fire the global *-current-*
+    // / fetch-remotes variants above.
+    {
+      id: 'fetch-selected-branch',
+      key: '',
+      label: 'Fetch selected branch',
+      description: 'Run `git fetch <remote> <branch>` for the cursored branch in the branches view / sidebar.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'pull-selected-branch',
+      key: '',
+      label: 'Pull selected branch',
+      description: 'Pull the cursored branch in the branches view / sidebar. Falls back to a fast-forward-only refspec fetch when the branch is not currently checked out; refuses non-FF.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'push-selected-branch',
+      key: '',
+      label: 'Push selected branch',
+      description: 'Run `git push <remote> <branch>` for the cursored branch in the branches view / sidebar.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
     {
       // Per-view-only — the inkInput handler scopes this to the tags
       // surface so we don't expose `R` as a remote-delete from elsewhere.

@@ -492,6 +492,78 @@ describe('log Ink input interactions', () => {
     expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'createManualCommit' }])
   })
 
+  describe('per-branch F / U / P when branches sidebar is focused', () => {
+    // When the cursor is on the branches sidebar with at least one branch,
+    // F / U / P should fire the *-selected-branch workflows instead of
+    // the global *-current-branch / fetch-remotes variants. The user's
+    // attention is on the cursored row, so the keys should follow.
+
+    function branchSidebarState(): ReturnType<typeof createLogInkState> {
+      const state = createLogInkState(rows)
+      return {
+        ...state,
+        focus: 'sidebar',
+        sidebarTab: 'branches',
+      }
+    }
+
+    it('routes F to fetch-selected-branch when branches sidebar focused with items', () => {
+      const events = getLogInkInputEvents(
+        branchSidebarState(), 'F', {}, { branchCount: 3 }
+      )
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'fetch-selected-branch' },
+      ])
+    })
+
+    it('routes U to pull-selected-branch when branches sidebar focused with items', () => {
+      const events = getLogInkInputEvents(
+        branchSidebarState(), 'U', {}, { branchCount: 3 }
+      )
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'pull-selected-branch' },
+      ])
+    })
+
+    it('routes P to push-selected-branch when branches sidebar focused with items', () => {
+      const events = getLogInkInputEvents(
+        branchSidebarState(), 'P', {}, { branchCount: 3 }
+      )
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'push-selected-branch' },
+      ])
+    })
+
+    it('falls through to global fetch-remotes when branches sidebar has no items', () => {
+      const events = getLogInkInputEvents(
+        branchSidebarState(), 'F', {}, { branchCount: 0 }
+      )
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'fetch-remotes' },
+      ])
+    })
+
+    it('falls through to global pull-current-branch when not on the branches sidebar', () => {
+      // Focus on commits (history view), sidebar tab on branches but
+      // not focused — global ops should run.
+      const state = createLogInkState(rows)
+      const events = getLogInkInputEvents(state, 'U', {}, { branchCount: 3 })
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'pull-current-branch' },
+      ])
+    })
+
+    it('also routes per-branch ops when the user is on the dedicated branches view', () => {
+      // The branches view (`gb`) is the other target where the cursor
+      // is on a branch row — `isBranchActionTarget` matches both.
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'P', {}, { branchCount: 3 })
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'push-selected-branch' },
+      ])
+    })
+  })
+
   describe('help overlay key handling', () => {
     it('j/k scroll the help overlay without changing focus', () => {
       let state = createLogInkState(rows)
