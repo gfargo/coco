@@ -4,6 +4,7 @@ import {
   formatBranchDivergence,
   formatBranchLastTouched,
   formatUpstreamAheadBanner,
+  getBranchRowMarkerColor,
   getPullRequestStateGlyph,
   getStageStatusDotColor,
   sidebarTabCount,
@@ -119,43 +120,102 @@ describe('log Ink iconography', () => {
 
   describe('branchRowMarker (P3.1)', () => {
     it('marks the current branch with * regardless of upstream state', () => {
-      expect(branchRowMarker({ current: true, upstream: 'origin/main' })).toBe('*')
-      expect(branchRowMarker({ current: true })).toBe('*')
-      expect(branchRowMarker({ current: true, upstream: 'origin/main', ahead: 3 })).toBe('*')
+      expect(branchRowMarker({ current: true, upstream: 'origin/main' }))
+        .toEqual({ glyph: '*', kind: 'head' })
+      expect(branchRowMarker({ current: true }))
+        .toEqual({ glyph: '*', kind: 'head' })
+      expect(branchRowMarker({ current: true, upstream: 'origin/main', ahead: 3 }))
+        .toEqual({ glyph: '*', kind: 'head' })
     })
 
-    it('uses ◌ for non-current branches without upstream', () => {
-      expect(branchRowMarker({ current: false })).toBe('◌')
+    it('uses ◌ + kind no-upstream for non-current branches without upstream', () => {
+      expect(branchRowMarker({ current: false }))
+        .toEqual({ glyph: '◌', kind: 'no-upstream' })
     })
 
     it('uses ? as ASCII fallback for non-current branches without upstream', () => {
-      expect(branchRowMarker({ current: false }, { ascii: true })).toBe('?')
+      expect(branchRowMarker({ current: false }, { ascii: true }))
+        .toEqual({ glyph: '?', kind: 'no-upstream' })
     })
 
-    it('uses ≡ for non-current branches synced with their upstream', () => {
-      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 0, behind: 0 })).toBe('≡')
+    it('uses ≡ + kind synced for non-current branches synced with their upstream', () => {
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 0, behind: 0 }))
+        .toEqual({ glyph: '≡', kind: 'synced' })
       // Default ahead/behind to 0 when not provided.
-      expect(branchRowMarker({ current: false, upstream: 'origin/feat' })).toBe('≡')
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat' }))
+        .toEqual({ glyph: '≡', kind: 'synced' })
     })
 
     it('uses = as ASCII fallback for synced branches', () => {
       expect(branchRowMarker(
         { current: false, upstream: 'origin/feat', ahead: 0, behind: 0 },
         { ascii: true }
-      )).toBe('=')
+      )).toEqual({ glyph: '=', kind: 'synced' })
     })
 
-    it('uses ↕ for non-current branches that have diverged from their upstream', () => {
-      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 2, behind: 0 })).toBe('↕')
-      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 0, behind: 1 })).toBe('↕')
-      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 3, behind: 4 })).toBe('↕')
+    it('uses ↓ + kind behind for branches that are behind only', () => {
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 0, behind: 3 }))
+        .toEqual({ glyph: '↓', kind: 'behind' })
+    })
+
+    it('uses v as ASCII fallback for behind branches', () => {
+      expect(branchRowMarker(
+        { current: false, upstream: 'origin/feat', ahead: 0, behind: 2 },
+        { ascii: true }
+      )).toEqual({ glyph: 'v', kind: 'behind' })
+    })
+
+    it('uses ↑ + kind ahead for branches that are ahead only', () => {
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 4, behind: 0 }))
+        .toEqual({ glyph: '↑', kind: 'ahead' })
+    })
+
+    it('uses ^ as ASCII fallback for ahead branches', () => {
+      expect(branchRowMarker(
+        { current: false, upstream: 'origin/feat', ahead: 5, behind: 0 },
+        { ascii: true }
+      )).toEqual({ glyph: '^', kind: 'ahead' })
+    })
+
+    it('uses ⇅ + kind diverged for branches that are both ahead and behind', () => {
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 2, behind: 2 }))
+        .toEqual({ glyph: '⇅', kind: 'diverged' })
+      expect(branchRowMarker({ current: false, upstream: 'origin/feat', ahead: 1, behind: 5 }))
+        .toEqual({ glyph: '⇅', kind: 'diverged' })
     })
 
     it('uses ~ as ASCII fallback for diverged branches', () => {
       expect(branchRowMarker(
         { current: false, upstream: 'origin/feat', ahead: 1, behind: 1 },
         { ascii: true }
-      )).toBe('~')
+      )).toEqual({ glyph: '~', kind: 'diverged' })
+    })
+  })
+
+  describe('getBranchRowMarkerColor', () => {
+    it('returns success for head', () => {
+      expect(getBranchRowMarkerColor('head', colorTheme)).toBe(colorTheme.colors.success)
+    })
+
+    it('returns warning for behind and diverged', () => {
+      expect(getBranchRowMarkerColor('behind', colorTheme)).toBe(colorTheme.colors.warning)
+      expect(getBranchRowMarkerColor('diverged', colorTheme)).toBe(colorTheme.colors.warning)
+    })
+
+    it('returns info for ahead', () => {
+      expect(getBranchRowMarkerColor('ahead', colorTheme)).toBe(colorTheme.colors.info)
+    })
+
+    it('returns undefined for synced and no-upstream (the neutral cases)', () => {
+      expect(getBranchRowMarkerColor('synced', colorTheme)).toBeUndefined()
+      expect(getBranchRowMarkerColor('no-upstream', colorTheme)).toBeUndefined()
+    })
+
+    it('returns undefined under noColor / monochrome regardless of kind', () => {
+      expect(getBranchRowMarkerColor('head', monoTheme)).toBeUndefined()
+      expect(getBranchRowMarkerColor('behind', monoTheme)).toBeUndefined()
+      expect(getBranchRowMarkerColor('ahead', monoTheme)).toBeUndefined()
+      expect(getBranchRowMarkerColor('diverged', monoTheme)).toBeUndefined()
     })
   })
 

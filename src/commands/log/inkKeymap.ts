@@ -685,8 +685,22 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     // "enter open" hint that drills into the dedicated view.
     const itemsPresent = (options.sidebarItemCount ?? 0) > 0
     if (itemsPresent && options.sidebarTab === 'branches') {
+      // P / U / F fire the global pull-current-branch, push-current-branch,
+      // fetch-remotes workflows — already implemented, just not visible in
+      // the footer before. Surfacing them here matters because the user's
+      // attention is on a branch when the branches sidebar is focused;
+      // pull / push / fetch are the next obvious actions.
+      //
+      // Note: `U` and `P` currently operate on the CURRENT branch, not the
+      // cursored one. Task #5 will extend them to act on the cursored row;
+      // until then the labels read as "current-branch ops" by virtue of
+      // matching the workflow descriptions.
       return {
-        contextual: ['↑/↓ branches', '←/→ tab', 'enter checkout', 'D delete', 'R rename', 'u upstream'],
+        contextual: [
+          '↑/↓ branches', '←/→ tab', 'enter checkout',
+          'F fetch', 'U pull', 'P push',
+          'D delete', 'R rename', 'u upstream',
+        ],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
