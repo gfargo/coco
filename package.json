@@ -41,7 +41,7 @@
     "test:publish": "npm run lint && npm run build && npm run test:cli && npm pack --dry-run",
     "test:cli": "tsx bin/smokeCli.ts",
     "bench": "tsx bin/benchmark.ts",
-    "scenario": "git-scenarios",
+    "scenario": "tsx bin/scenarioRunner.ts",
     "eval:structural-extract": "tsx bin/structuralExtractEval.ts",
     "pretest:jest": "npm run build:info && node bin/copyTreeSitterWasm.mjs",
     "test:jest": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
