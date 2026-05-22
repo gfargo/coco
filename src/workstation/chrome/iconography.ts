@@ -124,25 +124,108 @@ export type BranchRowMarkerInput = {
  * - `*` — current branch (regardless of remote state)
  * - `◌` — no upstream
  * - `≡` — has upstream + synced (ahead === 0 && behind === 0)
- * - `↕` — has upstream + diverged (any non-zero ahead/behind)
+ * - `↓` — has upstream + behind only (needs pull)
+ * - `↑` — has upstream + ahead only (needs push)
+ * - `⇅` — has upstream + diverged (both ahead and behind; needs pull --rebase)
  * - ` ` — fallback / no info
  *
- * ASCII fallbacks (legible without box-drawing/arrow glyphs):
- * - `?` for "no upstream", `=` for synced, `~` for diverged.
+ * Behind / ahead / diverged were collapsed into a single `↕` glyph
+ * in earlier versions — but the user can't tell at a glance whether a
+ * branch needs a pull, a push, or a fetch+rebase. Splitting the three
+ * cases gives the sidebar real visual differentiation. Color (applied
+ * by the consumer via the returned `kind` field) reinforces it:
+ * warning yellow for "needs pull" (behind / diverged), info blue for
+ * "needs push" (ahead), muted for "nothing to do" (synced / no-upstream),
+ * success green + bold for "here" (head).
+ *
+ * Returns `{ glyph, kind }`. Consumers use `glyph` for layout and
+ * `kind` to pick a colour from their theme.
+ *
+ * ASCII fallbacks (legible without box-drawing / arrow glyphs):
+ *   `?` no-upstream, `=` synced, `v` behind, `^` ahead, `~` diverged.
  */
+export type BranchRowMarkerKind =
+  | 'head'
+  | 'no-upstream'
+  | 'synced'
+  | 'behind'
+  | 'ahead'
+  | 'diverged'
+
+export type BranchRowMarker = {
+  glyph: string
+  kind: BranchRowMarkerKind
+}
+
 export function branchRowMarker(
   branch: BranchRowMarkerInput,
   options: { ascii?: boolean } = {}
-): string {
-  if (branch.current) return '*'
-  if (!branch.upstream) return options.ascii ? '?' : '◌'
+): BranchRowMarker {
+  if (branch.current) {
+    return { glyph: '*', kind: 'head' }
+  }
+
+  if (!branch.upstream) {
+    return { glyph: options.ascii ? '?' : '◌', kind: 'no-upstream' }
+  }
 
   const ahead = branch.ahead ?? 0
   const behind = branch.behind ?? 0
+
   if (ahead === 0 && behind === 0) {
-    return options.ascii ? '=' : '≡'
+    return { glyph: options.ascii ? '=' : '≡', kind: 'synced' }
   }
-  return options.ascii ? '~' : '↕'
+
+  if (ahead > 0 && behind > 0) {
+    return { glyph: options.ascii ? '~' : '⇅', kind: 'diverged' }
+  }
+
+  if (behind > 0) {
+    return { glyph: options.ascii ? 'v' : '↓', kind: 'behind' }
+  }
+
+  // ahead > 0 (the only remaining case after the guards above)
+  return { glyph: options.ascii ? '^' : '↑', kind: 'ahead' }
+}
+
+/**
+ * Theme-aware colour picker for a `BranchRowMarker.kind`.
+ *
+ * Reuses the existing chip / banner colour semantic so the workstation
+ * speaks one visual language across history (chips, "behind upstream"
+ * banner) and the branches list:
+ *
+ *   - `head`        → success green (matches HEAD chip)
+ *   - `behind`      → warning yellow (matches "behind upstream" banner)
+ *   - `diverged`    → warning yellow (same: action needed inbound)
+ *   - `ahead`       → info blue (you have work to push)
+ *   - `synced`      → undefined (neutral; inherit row's existing dim)
+ *   - `no-upstream` → undefined (neutral; same)
+ *
+ * Returns `undefined` under `noColor` / `ascii` for the muted cases so
+ * the row renderer skips the colour wrap entirely; the glyph alone
+ * carries the meaning.
+ */
+export function getBranchRowMarkerColor(
+  kind: BranchRowMarkerKind,
+  theme: LogInkTheme
+): string | undefined {
+  if (theme.noColor) return undefined
+
+  switch (kind) {
+    case 'head':
+      return theme.colors.success
+    case 'behind':
+    case 'diverged':
+      return theme.colors.warning
+    case 'ahead':
+      return theme.colors.info
+    case 'synced':
+    case 'no-upstream':
+      return undefined
+    default:
+      return undefined
+  }
 }
 
 /**

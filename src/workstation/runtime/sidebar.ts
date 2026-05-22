@@ -182,7 +182,7 @@ function renderActiveSidebarContent(
       ...headerRows,
       ...renderSelectableSidebarRows(
         h, Text, sortedBranches, state.selectedBranchIndex, focused, width, theme,
-        (branch) => `${branchRowMarker(branch, { ascii: theme.ascii })} ${branch.shortName}`,
+        (branch) => `${branchRowMarker(branch, { ascii: theme.ascii }).glyph} ${branch.shortName}`,
         'tab-branches', visibleListCount,
       ),
     ]

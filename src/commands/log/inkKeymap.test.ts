@@ -226,7 +226,9 @@ describe('log Ink keymap', () => {
       sidebarTab: 'branches',
       sidebarItemCount: 5,
     }).contextual).toEqual([
-      '↑/↓ branches', '←/→ tab', 'enter checkout', 'D delete', 'R rename', 'u upstream',
+      '↑/↓ branches', '←/→ tab', 'enter checkout',
+      'F fetch', 'U pull', 'P push',
+      'D delete', 'R rename', 'u upstream',
     ])
 
     expect(getLogInkFooterHints({

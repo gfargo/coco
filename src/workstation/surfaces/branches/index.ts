@@ -15,6 +15,7 @@ import {
   branchRowMarker,
   formatBranchDivergence,
   formatBranchLastTouched,
+  getBranchRowMarkerColor,
 } from '../../chrome/iconography'
 import { formatSortIndicator, sortBranches } from '../../chrome/sorting'
 import {
@@ -80,21 +81,22 @@ export function renderBranchesSurface(
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
         const marker = branchRowMarker(branch, { ascii: theme.ascii })
+        const markerColor = getBranchRowMarkerColor(marker.kind, theme)
         const divergence = formatBranchDivergence(branch, { ascii: theme.ascii })
         const lastTouched = formatBranchLastTouched(branch.date, new Date())
         // Split the row into spans so the timestamp stays dim even on the
-        // currently-selected (bold) row. The leading marker + name keep
-        // their per-window-derived column widths; the timestamp is
-        // right-padded so the divergence column stays aligned across rows.
+        // currently-selected (bold) row, and the sync-state marker keeps
+        // its own colour even when the surrounding row text is dimmed.
         const namePadded = truncateCells(branch.shortName, nameColWidth).padEnd(nameColWidth)
         const timestampPadded = lastTouched.padEnd(8)
         const lineDim = !isSelected && !branch.current
-        const head = `${cursor} ${marker} ${namePadded} `
+        const cursorAndPad = `${cursor} `
+        const trailingName = ` ${namePadded} `
         const trailingDivergence = divergence ? ` ${divergence}` : ''
         // Truncate the assembled line to the actual panel width so a
         // narrow inspector / sidebar focus doesn't push branch rows
         // onto a second visual line (#830).
-        const fullText = `${head}${timestampPadded}${trailingDivergence}`
+        const fullText = `${cursorAndPad}${marker.glyph}${trailingName}${timestampPadded}${trailingDivergence}`
         const truncated = truncateCells(fullText, Math.max(20, width - 4))
         // If truncation chopped into the timestamp/divergence portion,
         // fall back to a single Text to keep the visible width honest.
@@ -110,7 +112,17 @@ export function renderBranchesSurface(
           bold: isSelected,
           dimColor: lineDim,
         },
-        head,
+        cursorAndPad,
+        // The marker carries the sync-state colour; an explicit
+        // `dimColor: false` on this span keeps the colour bright even
+        // when the surrounding row is dim (other branches in the list
+        // dim out under the existing `lineDim` rule). The synced /
+        // no-upstream kinds return undefined from
+        // `getBranchRowMarkerColor`, so those markers inherit the
+        // row's dim and read as quiet chrome.
+        h(Text, { color: markerColor, dimColor: markerColor ? false : undefined },
+          marker.glyph),
+        trailingName,
         h(Text, { dimColor: true }, timestampPadded),
         trailingDivergence
         )
