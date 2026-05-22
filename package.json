@@ -60,7 +60,7 @@
     "coco:esm": "node dist/index.esm.mjs"
   },
   "devDependencies": {
-    "@commitlint/types": "^20.5.0",
+    "@commitlint/types": "^21.0.1",
     "@gfargo/git-scenarios": "^0.4.0",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-eslint": "^9.0.5",
