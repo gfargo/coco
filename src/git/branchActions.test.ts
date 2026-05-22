@@ -2,9 +2,12 @@ import {
   checkoutBranch,
   createBranch,
   deleteBranch,
+  fetchBranch,
   fetchRemotes,
   getBranchActionRefs,
+  pullBranch,
   pullCurrentBranch,
+  pushBranch,
   pushCurrentBranch,
   renameBranch,
   setUpstream,
@@ -119,5 +122,143 @@ describe('log branch actions', () => {
       'origin/feature/new',
       'feature/new',
     ])
+  })
+
+  describe('pushBranch', () => {
+    it('pushes the cursored branch to its upstream remote without checkout', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const branch = localBranch({
+        shortName: 'feat/widgets',
+        upstream: 'origin/feat/widgets',
+        remote: 'origin',
+      })
+
+      const result = await pushBranch(git as never, branch)
+
+      expect(result.ok).toBe(true)
+      expect(result.message).toContain('Pushed feat/widgets')
+      expect(git.raw).toHaveBeenCalledWith(['push', 'origin', 'feat/widgets'])
+    })
+
+    it('refuses when the branch has no upstream', async () => {
+      const git = { raw: jest.fn() }
+      const branch = localBranch({ shortName: 'local-only' })
+
+      const result = await pushBranch(git as never, branch)
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('no upstream')
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+
+    it('refuses for remote-type branch refs', async () => {
+      const git = { raw: jest.fn() }
+      const result = await pushBranch(git as never, remoteBranch())
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('Only local branches')
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('fetchBranch', () => {
+    it('fetches just the cursored branch\'s upstream ref', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const branch = localBranch({
+        shortName: 'feat/widgets',
+        upstream: 'origin/feat/widgets',
+        remote: 'origin',
+      })
+
+      const result = await fetchBranch(git as never, branch)
+
+      expect(result.ok).toBe(true)
+      expect(result.message).toContain('Fetched origin/feat/widgets')
+      // The upstream prefix `origin/` is stripped so fetch gets the
+      // bare ref name as its refspec source.
+      expect(git.raw).toHaveBeenCalledWith(['fetch', 'origin', 'feat/widgets'])
+    })
+
+    it('falls back to the bare upstream when the prefix is unusual', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      // An upstream that doesn't start with `<remote>/` (rare but
+      // theoretically possible via setUpstream targeting a weird ref).
+      const branch = localBranch({
+        shortName: 'feat/widgets',
+        upstream: 'odd-ref-name',
+        remote: 'origin',
+      })
+
+      await fetchBranch(git as never, branch)
+      expect(git.raw).toHaveBeenCalledWith(['fetch', 'origin', 'odd-ref-name'])
+    })
+
+    it('refuses when the branch has no upstream', async () => {
+      const git = { raw: jest.fn() }
+      const branch = localBranch({ shortName: 'local-only' })
+
+      const result = await fetchBranch(git as never, branch)
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('no upstream')
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('pullBranch', () => {
+    it('defers to pullCurrentBranch when the cursored branch IS the current branch', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const branch = localBranch({
+        shortName: 'main',
+        upstream: 'origin/main',
+        remote: 'origin',
+        current: true,
+      })
+
+      const result = await pullBranch(git as never, branch, 'main')
+
+      expect(result.ok).toBe(true)
+      // Should hit the standard pull --ff-only path.
+      expect(git.raw).toHaveBeenCalledWith(['pull', '--ff-only'])
+    })
+
+    it('uses fetch <remote> <ref>:<branch> refspec for non-current branches', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const branch = localBranch({
+        shortName: 'feat/widgets',
+        upstream: 'origin/feat/widgets',
+        remote: 'origin',
+        current: false,
+      })
+
+      const result = await pullBranch(git as never, branch, 'main')
+
+      expect(result.ok).toBe(true)
+      expect(result.message).toContain('Fast-forwarded feat/widgets')
+      // Refspec form: source ref colon dest ref. Git refuses non-FF
+      // updates with this form, which is what we want.
+      expect(git.raw).toHaveBeenCalledWith([
+        'fetch',
+        'origin',
+        'feat/widgets:feat/widgets',
+      ])
+    })
+
+    it('refuses when the branch has no upstream', async () => {
+      const git = { raw: jest.fn() }
+      const branch = localBranch({ shortName: 'local-only' })
+
+      const result = await pullBranch(git as never, branch, 'main')
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('no upstream')
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+
+    it('refuses for remote-type branch refs', async () => {
+      const git = { raw: jest.fn() }
+      const result = await pullBranch(git as never, remoteBranch(), 'main')
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('Only local branches')
+      expect(git.raw).not.toHaveBeenCalled()
+    })
   })
 })

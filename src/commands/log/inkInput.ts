@@ -3026,6 +3026,28 @@ export function getLogInkInputEvents(
     return events
   }
 
+  // Context-sensitive per-branch variants of F / U / P. When the
+  // user has the branches sidebar / view focused with at least one
+  // branch, F / U / P should act on the cursored row, not on the
+  // current branch. This intercept fires BEFORE the generic
+  // workflow-by-key lookup below so the global *-current-branch
+  // variants don't shadow the contextual ones.
+  //
+  // Outside the branches context, the generic lookup runs and the
+  // F / U / P keys hit the global `fetch-remotes` / `pull-current-branch`
+  // / `push-current-branch` workflows as before.
+  if (isBranchActionTarget(state) && context.branchCount) {
+    if (inputValue === 'F') {
+      return [{ type: 'runWorkflowAction', id: 'fetch-selected-branch' }]
+    }
+    if (inputValue === 'U') {
+      return [{ type: 'runWorkflowAction', id: 'pull-selected-branch' }]
+    }
+    if (inputValue === 'P') {
+      return [{ type: 'runWorkflowAction', id: 'push-selected-branch' }]
+    }
+  }
+
   const workflowAction = getLogInkWorkflowActionByKey(inputValue)
 
   if (workflowAction?.requiresConfirmation) {

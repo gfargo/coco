@@ -135,3 +135,135 @@ export function setUpstream(
     `Set ${localBranch} upstream to ${upstreamBranch}`
   )
 }
+
+/**
+ * Push an arbitrary local branch (need not be the current branch) to
+ * its remote. Refuses when the branch has no upstream and no remote
+ * defaulting is configured — that branch needs a `git push -u …` from
+ * the shell first.
+ *
+ * Pairs with `pushCurrentBranch` (no-arg variant); the workstation
+ * dispatcher picks one or the other based on where the cursor is.
+ */
+export function pushBranch(
+  git: SimpleGit,
+  branch: BranchRef
+): Promise<BranchActionResult> {
+  if (branch.type !== 'local') {
+    return Promise.resolve({
+      ok: false,
+      message: 'Only local branches can be pushed.',
+    })
+  }
+
+  if (!branch.upstream || !branch.remote) {
+    return Promise.resolve({
+      ok: false,
+      message: `${branch.shortName} has no upstream — checkout the branch and run \`git push -u <remote> ${branch.shortName}\` first.`,
+    })
+  }
+
+  return runAction(
+    () => git.raw(['push', branch.remote as string, branch.shortName]),
+    `Pushed ${branch.shortName} to ${branch.upstream}`
+  )
+}
+
+/**
+ * Fetch the cursored branch's upstream from its remote. Side-effect
+ * free on the working tree — just updates the remote-tracking ref.
+ * Works for any branch with an upstream regardless of checkout state.
+ *
+ * Falls back to a clean error when the branch has no upstream
+ * configured (`git fetch <remote> <name>` would assume an unrelated
+ * default refspec and surprise the user).
+ */
+export function fetchBranch(
+  git: SimpleGit,
+  branch: BranchRef
+): Promise<BranchActionResult> {
+  if (branch.type !== 'local') {
+    return Promise.resolve({
+      ok: false,
+      message: 'Only local branches can be fetched per-branch — use F to fetch all remotes.',
+    })
+  }
+
+  if (!branch.upstream || !branch.remote) {
+    return Promise.resolve({
+      ok: false,
+      message: `${branch.shortName} has no upstream — nothing to fetch.`,
+    })
+  }
+
+  // `branch.upstream` is the short form (e.g. `origin/main`); the
+  // ref name after the remote prefix is what fetch wants as the
+  // refspec source. For a remote `origin` and upstream `origin/main`
+  // we run `git fetch origin main`.
+  const upstreamRef = branch.upstream.startsWith(`${branch.remote}/`)
+    ? branch.upstream.slice(branch.remote.length + 1)
+    : branch.upstream
+
+  return runAction(
+    () => git.raw(['fetch', branch.remote as string, upstreamRef]),
+    `Fetched ${branch.upstream}`
+  )
+}
+
+/**
+ * Pull the cursored branch. Branches into two paths based on whether
+ * the branch is currently checked out:
+ *
+ *   - **Current branch**: defer to `pullCurrentBranch` (standard
+ *     `git pull --ff-only`).
+ *   - **Non-current branch**: use the refspec form
+ *     `git fetch <remote> <branch>:<branch>` which advances the local
+ *     ref to match the remote ref ONLY if the update is fast-forward.
+ *     Returns non-zero on non-FF without touching the working tree.
+ *     Diverged branches need a checkout + `pull --rebase` from the
+ *     user; we refuse rather than try to do that for them.
+ *
+ * `currentBranchName` lets the dispatcher compare without re-querying
+ * git — it already has the value in `context.branches.currentBranch`.
+ */
+export function pullBranch(
+  git: SimpleGit,
+  branch: BranchRef,
+  currentBranchName: string | undefined
+): Promise<BranchActionResult> {
+  if (branch.type !== 'local') {
+    return Promise.resolve({
+      ok: false,
+      message: 'Only local branches can be pulled.',
+    })
+  }
+
+  if (!branch.upstream || !branch.remote) {
+    return Promise.resolve({
+      ok: false,
+      message: `${branch.shortName} has no upstream — nothing to pull.`,
+    })
+  }
+
+  // Current branch — defer to the in-place workflow.
+  if (branch.shortName === currentBranchName) {
+    return pullCurrentBranch(git)
+  }
+
+  // Non-current branch — refspec-based fast-forward refusing non-FF.
+  // `branch.upstream` is `<remote>/<ref>`; strip the remote prefix to
+  // get the upstream ref name to fetch.
+  const upstreamRef = branch.upstream.startsWith(`${branch.remote}/`)
+    ? branch.upstream.slice(branch.remote.length + 1)
+    : branch.upstream
+
+  return runAction(
+    () =>
+      git.raw([
+        'fetch',
+        branch.remote as string,
+        `${upstreamRef}:${branch.shortName}`,
+      ]),
+    `Fast-forwarded ${branch.shortName} to ${branch.upstream}`
+  )
+}

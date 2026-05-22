@@ -238,8 +238,11 @@ import {
     checkoutBranch,
     createBranch,
     deleteBranch,
+    fetchBranch,
     fetchRemotes,
+    pullBranch,
     pullCurrentBranch,
+    pushBranch,
     pushCurrentBranch,
     renameBranch,
     setUpstream,
@@ -2814,6 +2817,38 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       'fetch-remotes': async () => fetchRemotes(git),
       'pull-current-branch': async () => pullCurrentBranch(git),
       'push-current-branch': async () => pushCurrentBranch(git),
+      // Per-branch fetch / pull / push that operate on the cursored
+      // row in the branches sidebar. inkInput.ts dispatches these
+      // when F / U / P fire from the sidebar; the *-current-branch
+      // / fetch-remotes variants above still handle the same keys
+      // from any other context.
+      'fetch-selected-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return fetchBranch(git, branch)
+      },
+      'pull-selected-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return pullBranch(git, branch, context.branches?.currentBranch)
+      },
+      'push-selected-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return pushBranch(git, branch)
+      },
       'rename-branch': async () => {
         const newName = payload?.trim()
         if (!newName) return { ok: false, message: 'New branch name required' }
