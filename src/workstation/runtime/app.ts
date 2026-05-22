@@ -533,10 +533,22 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // Wrappers that delegate to the active frame's runtime entry so the
   // existing call sites stay byte-identical. Support both function-
   // updater and value-updater forms (the codebase uses both).
+  //
+  // `targetDepth` (#994) routes the write to a specific frame instead
+  // of the currently-active one. Loaders that capture the depth at
+  // issue-time and pass it here are robust against frame-stack
+  // mutations (push / pop) that happen while the load is in flight —
+  // the write lands on the frame that issued it, or silently drops
+  // if that frame has been popped (`updateRepoFrameRuntime` no-ops on
+  // out-of-range indices). Without the tag, an in-flight refresh on
+  // the parent would clobber a freshly-pushed submodule frame.
   const setContext = React.useCallback(
-    (arg: LogInkContext | ((prev: LogInkContext) => LogInkContext)) => {
+    (
+      arg: LogInkContext | ((prev: LogInkContext) => LogInkContext),
+      targetDepth?: number,
+    ) => {
       setRuntimes((prev) => {
-        const depth = prev.length - 1
+        const depth = targetDepth ?? prev.length - 1
         if (depth < 0) return prev
         return updateRepoFrameRuntime(prev, depth, (frame) => ({
           ...frame,
@@ -549,9 +561,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     [],
   )
   const setContextStatus = React.useCallback(
-    (arg: LogInkContextStatus | ((prev: LogInkContextStatus) => LogInkContextStatus)) => {
+    (
+      arg: LogInkContextStatus | ((prev: LogInkContextStatus) => LogInkContextStatus),
+      targetDepth?: number,
+    ) => {
       setRuntimes((prev) => {
-        const depth = prev.length - 1
+        const depth = targetDepth ?? prev.length - 1
         if (depth < 0) return prev
         return updateRepoFrameRuntime(prev, depth, (frame) => ({
           ...frame,
@@ -917,30 +932,50 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // (stale-while-revalidate) and quietly swap it in once the new fetch
     // resolves — avoids the every-second flicker the watcher would
     // otherwise produce on busy repos.
+    //
+    // #994 — capture the depth this refresh was issued from BEFORE
+    // the await. The callback closure also captured `git` from the
+    // same render, so they're consistent: when the user drills into
+    // a submodule mid-await, the resolved data still lands on the
+    // parent frame (the one whose `git` was used for the fetch),
+    // not on the freshly-pushed submodule frame.
+    const issuedAtDepth = runtimes.length - 1
     if (!options.silent) {
       dispatch({ type: 'setStatus', value: 'refreshing repository context' })
-      setContextStatus(createLogInkContextStatus('loading'))
+      setContextStatus(createLogInkContextStatus('loading'), issuedAtDepth)
     }
     const next = await loadLogInkContext(git)
-    setContext(next)
-    setContextStatus(createLogInkContextStatus('ready'))
+    setContext(next, issuedAtDepth)
+    setContextStatus(createLogInkContextStatus('ready'), issuedAtDepth)
     if (!options.silent) {
       dispatch({ type: 'setStatus', value: 'repository context refreshed' })
     }
-  }, [dispatch, git])
+  }, [dispatch, git, runtimes.length, setContext, setContextStatus])
 
   const refreshWorktreeContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
+    // #994 — same frame-tagging as refreshContext above. Worktree
+    // loads are usually fast but still race-prone on slow disks.
+    const issuedAtDepth = runtimes.length - 1
     if (!options.silent) {
-      setContextStatus((current) => updateLogInkContextStatus(current, 'worktree', 'loading'))
+      setContextStatus(
+        (current) => updateLogInkContextStatus(current, 'worktree', 'loading'),
+        issuedAtDepth,
+      )
     }
     const worktree = await safe(getWorktreeOverview(git))
 
-    setContext((current) => ({
-      ...current,
-      worktree,
-    }))
-    setContextStatus((current) => updateLogInkContextStatus(current, 'worktree', 'ready'))
-  }, [git])
+    setContext(
+      (current) => ({
+        ...current,
+        worktree,
+      }),
+      issuedAtDepth,
+    )
+    setContextStatus(
+      (current) => updateLogInkContextStatus(current, 'worktree', 'ready'),
+      issuedAtDepth,
+    )
+  }, [git, runtimes.length, setContext, setContextStatus])
 
   // Live refresh: watch .git metadata + the working tree root and reload
   // context when something changes outside the TUI (editor save, external
@@ -1178,6 +1213,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const contextStatusRef = React.useRef(contextStatus)
   contextStatusRef.current = contextStatus
   React.useEffect(() => {
+    // #994 — capture the depth this boot load is being issued for.
+    // The git instance in the closure is bound to this frame; tagged
+    // writes ensure resolved values land on the correct runtime entry
+    // even if a subsequent push/pop changes the active frame mid-load.
+    const issuedAtDepth = runtimes.length - 1
     let active = true
 
     loadLogInkContextEntries(git).forEach(({ key, load }) => {
@@ -1187,18 +1227,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return
         }
 
-        setContext((current) => ({
-          ...current,
-          [key]: value,
-        }))
-        setContextStatus((current) => updateLogInkContextStatus(current, key, 'ready'))
+        setContext(
+          (current) => ({
+            ...current,
+            [key]: value,
+          }),
+          issuedAtDepth,
+        )
+        setContextStatus(
+          (current) => updateLogInkContextStatus(current, key, 'ready'),
+          issuedAtDepth,
+        )
       })
     })
 
     return () => {
       active = false
     }
-  }, [git])
+  }, [git, runtimes.length, setContext, setContextStatus])
 
   // Lazy-load the full pullRequest overview (#808). Only fires when
   // the user actually navigates to the PR view, and only when we
@@ -1211,20 +1257,30 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   React.useEffect(() => {
     if (state.activeView !== 'pull-request') return
     if (context.pullRequest) return
+    const issuedAtDepth = runtimes.length - 1
     let active = true
-    setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequest', 'loading'))
+    setContextStatus(
+      (current) => updateLogInkContextStatus(current, 'pullRequest', 'loading'),
+      issuedAtDepth,
+    )
     void safe(getPullRequestOverview(git)).then((value) => {
       if (!active) return
-      setContext((current) => ({
-        ...current,
-        pullRequest: value,
-      }))
-      setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequest', 'ready'))
+      setContext(
+        (current) => ({
+          ...current,
+          pullRequest: value,
+        }),
+        issuedAtDepth,
+      )
+      setContextStatus(
+        (current) => updateLogInkContextStatus(current, 'pullRequest', 'ready'),
+        issuedAtDepth,
+      )
     })
     return () => {
       active = false
     }
-  }, [git, state.activeView, context.pullRequest])
+  }, [git, runtimes.length, state.activeView, context.pullRequest, setContext, setContextStatus])
 
   // Lazy-load the issue triage list (#882 phase 3, filter-aware
   // since phase 6). Fires on entry to the view AND on filter
@@ -1235,21 +1291,39 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   React.useEffect(() => {
     if (state.activeView !== 'issues') return
     if (context.issueList) return
+    const issuedAtDepth = runtimes.length - 1
     let active = true
-    setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'loading'))
+    setContextStatus(
+      (current) => updateLogInkContextStatus(current, 'issueList', 'loading'),
+      issuedAtDepth,
+    )
     const filter = issueFilterForPreset(state.selectedIssueFilter)
     void safe(getIssueList(git, filter)).then((value) => {
       if (!active) return
-      setContext((current) => ({
-        ...current,
-        issueList: value,
-      }))
-      setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'ready'))
+      setContext(
+        (current) => ({
+          ...current,
+          issueList: value,
+        }),
+        issuedAtDepth,
+      )
+      setContextStatus(
+        (current) => updateLogInkContextStatus(current, 'issueList', 'ready'),
+        issuedAtDepth,
+      )
     })
     return () => {
       active = false
     }
-  }, [git, state.activeView, context.issueList, state.selectedIssueFilter])
+  }, [
+    git,
+    runtimes.length,
+    state.activeView,
+    context.issueList,
+    state.selectedIssueFilter,
+    setContext,
+    setContextStatus,
+  ])
 
   // Filter cycling: when the preset changes, drop the cached list
   // so the effect above re-fires with the new filter. Done as a
@@ -1272,21 +1346,39 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   React.useEffect(() => {
     if (state.activeView !== 'pull-request-triage') return
     if (context.pullRequestList) return
+    const issuedAtDepth = runtimes.length - 1
     let active = true
-    setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'loading'))
+    setContextStatus(
+      (current) => updateLogInkContextStatus(current, 'pullRequestList', 'loading'),
+      issuedAtDepth,
+    )
     const filter = pullRequestFilterForPreset(state.selectedPullRequestFilter)
     void safe(getPullRequestList(git, filter)).then((value) => {
       if (!active) return
-      setContext((current) => ({
-        ...current,
-        pullRequestList: value,
-      }))
-      setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'ready'))
+      setContext(
+        (current) => ({
+          ...current,
+          pullRequestList: value,
+        }),
+        issuedAtDepth,
+      )
+      setContextStatus(
+        (current) => updateLogInkContextStatus(current, 'pullRequestList', 'ready'),
+        issuedAtDepth,
+      )
     })
     return () => {
       active = false
     }
-  }, [git, state.activeView, context.pullRequestList, state.selectedPullRequestFilter])
+  }, [
+    git,
+    runtimes.length,
+    state.activeView,
+    context.pullRequestList,
+    state.selectedPullRequestFilter,
+    setContext,
+    setContextStatus,
+  ])
 
   React.useEffect(() => {
     if (state.activeView !== 'pull-request-triage') return
@@ -1320,17 +1412,21 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     if (!cursored) return
     if (context.issueDetailByNumber?.has(cursored.number)) return
 
+    const issuedAtDepth = runtimes.length - 1
     let active = true
     const timer = setTimeout(async () => {
       const result = await getIssueDetail(cursored.number)
       if (!active || !result.ok) return
-      setContext((current) => ({
-        ...current,
-        issueDetailByNumber: new Map(current.issueDetailByNumber || []).set(
-          result.detail.number,
-          result.detail
-        ),
-      }))
+      setContext(
+        (current) => ({
+          ...current,
+          issueDetailByNumber: new Map(current.issueDetailByNumber || []).set(
+            result.detail.number,
+            result.detail
+          ),
+        }),
+        issuedAtDepth,
+      )
     }, DETAIL_HYDRATION_DELAY_MS)
 
     return () => {
@@ -1338,10 +1434,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       clearTimeout(timer)
     }
   }, [
+    runtimes.length,
     state.activeView,
     state.selectedIssueIndex,
     filteredIssueList,
     context.issueDetailByNumber,
+    setContext,
   ])
 
   React.useEffect(() => {
@@ -1355,17 +1453,21 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     if (!cursored) return
     if (context.pullRequestDetailByNumber?.has(cursored.number)) return
 
+    const issuedAtDepth = runtimes.length - 1
     let active = true
     const timer = setTimeout(async () => {
       const result = await getPullRequestDetail(cursored.number)
       if (!active || !result.ok) return
-      setContext((current) => ({
-        ...current,
-        pullRequestDetailByNumber: new Map(current.pullRequestDetailByNumber || []).set(
-          result.detail.number,
-          result.detail
-        ),
-      }))
+      setContext(
+        (current) => ({
+          ...current,
+          pullRequestDetailByNumber: new Map(current.pullRequestDetailByNumber || []).set(
+            result.detail.number,
+            result.detail
+          ),
+        }),
+        issuedAtDepth,
+      )
     }, DETAIL_HYDRATION_DELAY_MS)
 
     return () => {
@@ -1373,10 +1475,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       clearTimeout(timer)
     }
   }, [
+    runtimes.length,
     state.activeView,
     state.selectedPullRequestTriageIndex,
     filteredPullRequestTriageList,
     context.pullRequestDetailByNumber,
+    setContext,
   ])
 
   React.useEffect(() => {
