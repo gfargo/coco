@@ -31,6 +31,14 @@ export type CommitWorkflowResult = {
   message: string
   details?: string[]
   draft?: string
+  /**
+   * Set when the underlying LLM call was cancelled via an
+   * `AbortSignal` (#881 phase 3). Callers should treat this as user
+   * intent, not failure: no error styling on the status line, no
+   * retry. The `message` field already reads as a cancel
+   * confirmation when this is set.
+   */
+  cancelled?: boolean
 }
 
 type CommitWorkflowInput = {
@@ -182,6 +190,13 @@ export async function runCommitDraftWorkflow(
      * `message` / `details`) is unchanged from the non-streaming path.
      */
     onStreamChunk?: (text: string, accumulated: string) => void
+    /**
+     * Optional `AbortSignal` for cancel (#881 phase 3). Forwarded
+     * through to `generateCommitDraft`. When the signal fires
+     * mid-stream the returned result has `cancelled: true` and the
+     * caller should clean up without surfacing an error.
+     */
+    signal?: AbortSignal
   } = {}
 ): Promise<CommitWorkflowResult> {
   const git = input.git || getRepo()
@@ -194,8 +209,22 @@ export async function runCommitDraftWorkflow(
       argv,
       logger,
       onStreamChunk: input.onStreamChunk,
+      signal: input.signal,
     })
     const draft = result.draft.trim()
+
+    // Cancel path (#881 phase 3). Reported separately from success
+    // / failure so the runtime can render a neutral "cancelled"
+    // status line instead of an error.
+    if (result.cancelled) {
+      return {
+        ok: false,
+        message: 'AI draft cancelled.',
+        details: [],
+        draft: '',
+        cancelled: true,
+      }
+    }
 
     if (result.ok && draft) {
       return {
