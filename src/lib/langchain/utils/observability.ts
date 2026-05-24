@@ -17,6 +17,15 @@ export type LlmCallMetadata = {
   elapsedMs?: number
   inputDocuments?: number
   inputChunks?: number
+  /**
+   * Streaming-path metadata (#881). `streamed` flags the call as a
+   * `.stream()` consumer (vs `.invoke()`); `streamChunks` records how
+   * many text fragments arrived before completion. Useful for spotting
+   * providers that don't actually stream (one chunk == one blob) or
+   * for debugging stream UX that feels janky.
+   */
+  streamed?: boolean
+  streamChunks?: number
 }
 
 /**
