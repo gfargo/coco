@@ -139,6 +139,50 @@ describe('log commit workflow actions', () => {
     })
   })
 
+  it('surfaces user-initiated cancellation as a neutral workflow result (#881 phase 3)', async () => {
+    // The streaming attempt aborted; `generateCommitDraft` returned
+    // `{ cancelled: true }`. The workflow must translate this into a
+    // neutral result — `ok: false`, `cancelled: true`, no error
+    // styling. Distinct from a validation failure so the runtime can
+    // render "AI draft cancelled." instead of treating cancel like an
+    // LLM error.
+    mockedGenerateCommitDraft.mockResolvedValue({
+      ok: false,
+      draft: '',
+      warnings: [],
+      validationErrors: [],
+      cancelled: true,
+    })
+
+    await expect(runCommitDraftWorkflow({ git })).resolves.toEqual({
+      ok: false,
+      message: 'AI draft cancelled.',
+      details: [],
+      draft: '',
+      cancelled: true,
+    })
+  })
+
+  it('forwards an AbortSignal into generateCommitDraft (#881 phase 3)', async () => {
+    // The signal threading is what makes cancel actually work — the
+    // runtime creates an AbortController, passes its signal, and the
+    // generator forwards it into executeChainStreaming. Verify the
+    // signal makes it across the workflow boundary.
+    mockedGenerateCommitDraft.mockResolvedValue({
+      ok: true,
+      draft: 'feat: ok',
+      warnings: [],
+      validationErrors: [],
+    })
+
+    const controller = new AbortController()
+    await runCommitDraftWorkflow({ git, signal: controller.signal })
+
+    expect(mockedGenerateCommitDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: controller.signal }),
+    )
+  })
+
   it('passes no-verify into TUI commit workflows', async () => {
     mockedCommitHandler.mockImplementation(async () => {
       process.stdout.write('fix: skip hooks\n')

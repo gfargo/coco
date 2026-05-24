@@ -1,7 +1,11 @@
 import { PromptTemplate } from '@langchain/core/prompts'
 import { Runnable } from '@langchain/core/runnables'
 import { handleLangChainError, isNetworkError } from '../errorHandler'
-import { LangChainExecutionError, LangChainNetworkError } from '../errors'
+import {
+  LangChainCancelledError,
+  LangChainExecutionError,
+  LangChainNetworkError,
+} from '../errors'
 import { validateRequired } from '../validation'
 import { getLlm } from './getLlm'
 import { Logger } from '../../utils/logger'
@@ -55,6 +59,22 @@ export interface ExecuteChainStreamingInput<T> {
    * spend mid-call.
    */
   onChunk: StreamChunkHandler
+  /**
+   * Optional `AbortSignal` for user-initiated cancellation (#881
+   * phase 3). Forwarded into `chain.stream(variables, { signal })` so
+   * LangChain tears down the underlying HTTP request as soon as the
+   * signal fires. When the signal aborts mid-stream, this helper
+   * throws a `LangChainCancelledError` carrying whatever text was
+   * accumulated up to the cancel point.
+   *
+   * Cancel is distinct from error: callers should `catch` the
+   * cancellation class explicitly and treat it as a user intent (no
+   * red status line, no retry, just clean up). A pre-aborted signal
+   * is checked once before the stream opens so callers don't even
+   * pay for the request setup when they've already changed their
+   * mind.
+   */
+  signal?: AbortSignal
   /** Optional provider name for better error messages. */
   provider?: string
   /** Optional endpoint URL for better error messages. */
@@ -151,6 +171,7 @@ export async function executeChainStreaming<T>({
   variables,
   parser,
   onChunk,
+  signal,
   provider,
   endpoint,
   logger,
@@ -170,19 +191,36 @@ export async function executeChainStreaming<T>({
     )
   }
 
+  // Pre-flight abort check (#881 phase 3). Callers that ran the cancel
+  // path before reaching here shouldn't pay for prompt rendering or
+  // request setup. Match the contract `chain.stream(..., { signal })`
+  // would have honoured — throw `LangChainCancelledError` rather than
+  // a bare `AbortError`.
+  if (signal?.aborted) {
+    throw new LangChainCancelledError(
+      'executeChainStreaming: Aborted before stream opened',
+      '',
+    )
+  }
+
   const llmInfo = extractLlmInfo(llm)
   const effectiveProvider = provider || llmInfo.provider
   const effectiveEndpoint = endpoint || llmInfo.endpoint
 
+  let accumulated = ''
   try {
     const renderedPrompt = await prompt.format(variables)
     const promptTokens = estimatePromptTokens(tokenizer, renderedPrompt)
 
     const chain = prompt.pipe(llm)
     const startedAt = Date.now()
-    const stream = await chain.stream(variables)
+    // Forward the signal into LangChain's RunnableConfig. The HTTP
+    // transport (openai / anthropic / ollama clients) honours it and
+    // tears down the connection rather than waiting for the model to
+    // finish. The async iterator throws an AbortError that we
+    // classify below.
+    const stream = await chain.stream(variables, signal ? { signal } : undefined)
 
-    let accumulated = ''
     let chunkCount = 0
     for await (const messageChunk of stream) {
       const text = coerceChunkText(messageChunk)
@@ -243,7 +281,32 @@ export async function executeChainStreaming<T>({
 
     return result
   } catch (error) {
-    if (error instanceof LangChainExecutionError || error instanceof LangChainNetworkError) {
+    // Cancellation classifier (#881 phase 3). Three signals: an
+    // explicitly aborted user signal (post-throw check), the
+    // standard DOM `AbortError`, or a Node `AbortSignal` with
+    // `signal.aborted === true` while a chain-internal error
+    // propagates. Any of these means "user wanted out," not "the
+    // call failed." Wrap the raw error so callers can pattern-match
+    // on `LangChainCancelledError` and carry the partial accumulated
+    // text in case the caller wants to salvage anything.
+    const aborted =
+      signal?.aborted ||
+      (error instanceof Error && (error.name === 'AbortError' || error.message?.includes('aborted')))
+    if (aborted) {
+      throw new LangChainCancelledError(
+        error instanceof Error ? error.message : 'Streaming aborted by user',
+        accumulated,
+        {
+          provider: effectiveProvider,
+          endpoint: effectiveEndpoint,
+        },
+      )
+    }
+    if (
+      error instanceof LangChainExecutionError ||
+      error instanceof LangChainNetworkError ||
+      error instanceof LangChainCancelledError
+    ) {
       throw error
     }
 

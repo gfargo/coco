@@ -50,6 +50,7 @@ export type LogInkInputEvent =
   | { type: 'revertSelectedHunk' }
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
+  | { type: 'cancelAiCommitDraft' }
   | { type: 'startCreatePullRequest' }
   | { type: 'startChangelogView' }
   | { type: 'regenerateChangelog' }
@@ -920,6 +921,20 @@ export function getLogInkInputEvents(
       return [action({ type: 'appendInputPrompt', value: inputValue })]
     }
     return []
+  }
+
+  // Cancel in-flight AI commit draft (#881 phase 3). When the compose
+  // surface is mid-stream (loading === true), Esc aborts the LLM call
+  // and the runtime handler cleans up (clear loading, clear preview,
+  // status line shows "AI draft cancelled."). Sits above the editing
+  // / view handlers so the cancel keystroke can't fall through to
+  // "leave compose" or anything else.
+  //
+  // Loading and editing are mutually exclusive in practice (the user
+  // can't type while the AI is generating), but the order here makes
+  // the precedence explicit if that ever changes.
+  if (state.activeView === 'compose' && state.commitCompose.loading && key.escape) {
+    return [{ type: 'cancelAiCommitDraft' }]
   }
 
   if (state.commitCompose.editing) {
