@@ -96,4 +96,108 @@ describe('log commit compose state', () => {
       details: ['src/file.ts:1:1 error'],
     })
   })
+
+  describe('streamingPreview (#881 phase 2)', () => {
+    it('starts undefined and only persists when a setStreamingPreview action fires', () => {
+      const state = createCommitComposeState()
+      expect(state.streamingPreview).toBeUndefined()
+
+      const withPreview = applyCommitComposeAction(state, {
+        type: 'setStreamingPreview',
+        value: 'partial commit message...',
+      })
+      expect(withPreview.streamingPreview).toBe('partial commit message...')
+    })
+
+    it('passes undefined through setStreamingPreview to explicitly clear the preview', () => {
+      // The streaming workflow dispatches `setStreamingPreview: undefined`
+      // on cancel / abort paths. Explicit clear is distinct from "not yet
+      // set" semantically — both render the same way but the workflow
+      // needs the explicit reset.
+      const seeded = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'setStreamingPreview',
+        value: 'in progress',
+      })
+      const cleared = applyCommitComposeAction(seeded, {
+        type: 'setStreamingPreview',
+        value: undefined,
+      })
+      expect(cleared.streamingPreview).toBeUndefined()
+    })
+
+    it('clears the preview when loading flips off via setLoading(false)', () => {
+      // Loading and the preview are tightly coupled: a preview without a
+      // loader running would render as stale fragments below an idle
+      // compose panel. The reducer enforces the coupling so callers
+      // don't need an extra clear dispatch on every code path that
+      // transitions out of loading.
+      const loading = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'setLoading',
+        value: true,
+      })
+      const withPreview = applyCommitComposeAction(loading, {
+        type: 'setStreamingPreview',
+        value: 'streamed text',
+      })
+      expect(withPreview.streamingPreview).toBe('streamed text')
+
+      const done = applyCommitComposeAction(withPreview, { type: 'setLoading', value: false })
+      expect(done.loading).toBe(false)
+      expect(done.streamingPreview).toBeUndefined()
+    })
+
+    it('preserves the preview when setLoading(true) is dispatched mid-stream', () => {
+      // Defensive: if the workflow re-dispatches setLoading(true) for any
+      // reason during a stream, we shouldn't lose the preview content
+      // that's already accumulated.
+      const seeded = applyCommitComposeAction(
+        applyCommitComposeAction(createCommitComposeState(), { type: 'setLoading', value: true }),
+        { type: 'setStreamingPreview', value: 'mid-stream' }
+      )
+      const reasserted = applyCommitComposeAction(seeded, { type: 'setLoading', value: true })
+      expect(reasserted.streamingPreview).toBe('mid-stream')
+    })
+
+    it('clears the preview when setDraft lands the final validated draft', () => {
+      // The final draft replacing the preview is the success-path
+      // confirmation — the loader vanishes and the editable fields fill
+      // in. Lingering preview text below an already-populated body would
+      // be confusing.
+      const seeded = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'setStreamingPreview',
+        value: '{ "title": "feat: ',
+      })
+      const final = applyCommitComposeAction(seeded, {
+        type: 'setDraft',
+        value: 'feat: add streaming preview\n\nLands the live preview below the loader.',
+      })
+      expect(final.summary).toBe('feat: add streaming preview')
+      expect(final.streamingPreview).toBeUndefined()
+    })
+
+    it('clears the preview when setResult lands a failure', () => {
+      // Failure path: the AI draft errored out, the loader hides, the
+      // message line surfaces the error. The half-streamed preview must
+      // go too — leaving it would suggest content is still incoming.
+      const seeded = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'setStreamingPreview',
+        value: 'partial output before failure',
+      })
+      const failed = applyCommitComposeAction(seeded, {
+        type: 'setResult',
+        message: 'AI draft failed: no API key configured',
+      })
+      expect(failed.message).toMatch(/no API key/)
+      expect(failed.streamingPreview).toBeUndefined()
+    })
+
+    it('clears the preview when reset is dispatched (post-commit teardown)', () => {
+      const seeded = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'setStreamingPreview',
+        value: 'lingering preview',
+      })
+      const reset = applyCommitComposeAction(seeded, { type: 'reset' })
+      expect(reset.streamingPreview).toBeUndefined()
+    })
+  })
 })

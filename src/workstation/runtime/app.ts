@@ -1775,7 +1775,28 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const runAiCommitDraft = React.useCallback(async () => {
     dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: true } })
     dispatch({ type: 'setStatus', value: 'generating AI commit draft', loading: true })
-    const result = await runCommitDraftWorkflow()
+    // Streaming preview (#881 phase 2). The workflow forwards this to
+    // `generateCommitDraft`, which only actually streams when the
+    // user opted in via `service.streaming.enabled`. The callback
+    // updates `commitCompose.streamingPreview` so the compose surface
+    // renders a live last-N-lines preview below the loader. The
+    // reducer clears `streamingPreview` whenever loading flips off
+    // (success or failure), so we don't need an explicit teardown
+    // dispatch here.
+    const result = await runCommitDraftWorkflow({
+      git,
+      onStreamChunk: (_text, accumulated) => {
+        // Dispatch the full accumulated text — the preview chrome
+        // helper does the last-N-lines slicing at render time, so
+        // re-doing the slice here would be wasted work. Per-chunk
+        // dispatches are cheap; React batches them and Ink redraws
+        // at its own frame cadence.
+        dispatch({
+          type: 'commitCompose',
+          action: { type: 'setStreamingPreview', value: accumulated },
+        })
+      },
+    })
 
     if (result.ok && result.draft) {
       dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: result.draft } })
@@ -1788,7 +1809,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       action: { type: 'setResult', message: result.message, details: result.details },
     })
     dispatch({ type: 'setStatus', value: result.message })
-  }, [dispatch])
+  }, [dispatch, git])
 
   // `C` keystroke handler — start the create-pull-request flow. Resolves
   // the head + base branches from the live context, runs

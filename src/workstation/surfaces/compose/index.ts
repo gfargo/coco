@@ -12,12 +12,49 @@ import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { pickSpinnerFrame } from '../../chrome/spinner'
+import {
+  formatStreamingPreview,
+  streamingPreviewTruncateMarker,
+} from '../../chrome/streamingPreview'
 import { formatLogInkComposeEmpty } from '../../chrome/surfaceStates'
 import { truncateCells, wrapCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { LogInkState } from '../../../commands/log/inkViewModel'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+
+/**
+ * Render the streaming-preview block — the trailing lines of the
+ * in-flight LLM stream that sit below the loading spinner. Pure
+ * formatting; the wrap math + truncation flag live in the
+ * `streamingPreview` chrome helper so other surfaces (PR body,
+ * review) can reuse them later.
+ *
+ * Returns an empty array when no preview text is present (the loader
+ * just shows the spinner) so the caller's spread doesn't insert blank
+ * rows that would shift the state-line.
+ */
+function renderStreamingPreviewLines(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  preview: string | undefined,
+  width: number,
+  theme: LogInkTheme,
+): ReactTypes.ReactElement[] {
+  const { Text } = components
+  const view = formatStreamingPreview(preview, width)
+  if (view.lines.length === 0) return []
+  const marker = view.truncated ? streamingPreviewTruncateMarker(theme.ascii) : ''
+  return view.lines.map((line, index) => {
+    // Prefix the first line with the truncation marker when earlier
+    // content was elided. Subsequent lines render unprefixed.
+    const prefix = index === 0 && marker ? `${marker} ` : '  '
+    return h(Text, {
+      key: `compose-stream-${index}`,
+      dimColor: true,
+    }, `${prefix}${line}`)
+  })
+}
 
 export function renderComposeSurface(
   h: typeof ReactTypes.createElement,
@@ -114,6 +151,13 @@ export function renderComposeSurface(
       }, theme.ascii
         ? `[${pickSpinnerFrame(spinnerFrame).replace(/[^a-zA-Z0-9 ]/g, '.')}] Generating AI commit draft (this can take a moment)`
         : `${pickSpinnerFrame(spinnerFrame)}  Generating AI commit draft… (this can take a moment)`),
+      // Streaming preview (#881 phase 2). Renders the trailing visual
+      // lines of the in-flight LLM stream below the loader so the user
+      // sees content building up instead of an opaque spinner. Empty
+      // before the first chunk arrives; the preview helper returns an
+      // empty `lines` array in that window so we skip the block
+      // entirely.
+      ...renderStreamingPreviewLines(h, components, compose.streamingPreview, bodyTextWidth, theme),
     ]
     : []),
   ...(compose.message ? [h(Text, undefined, ''), h(Text, { key: 'compose-msg' }, truncateCells(compose.message, 140))] : []),

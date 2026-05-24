@@ -307,6 +307,18 @@ export const schema = {
           "description": "Default dynamic routing preference when model is set to \"dynamic\".",
           "default": "balanced"
         },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
         "fastPath": {
           "type": "object",
           "properties": {
@@ -761,6 +773,18 @@ export const schema = {
           "description": "Default dynamic routing preference when model is set to \"dynamic\".",
           "default": "balanced"
         },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
         "fastPath": {
           "type": "object",
           "properties": {
@@ -954,6 +978,18 @@ export const schema = {
           "$ref": "#/definitions/DynamicModelPreference",
           "description": "Default dynamic routing preference when model is set to \"dynamic\".",
           "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
         },
         "fastPath": {
           "type": "object",
