@@ -170,14 +170,31 @@ export async function runCommitWorkflow({
 }
 
 export async function runCommitDraftWorkflow(
-  input: { git?: SimpleGit } = {}
+  input: {
+    git?: SimpleGit
+    /**
+     * Optional streaming callback (#881 phase 2). Forwarded straight
+     * through to `generateCommitDraft`; only fires when the user's
+     * `service.streaming.enabled` is also true. The TUI passes a
+     * dispatcher that updates `commitCompose.streamingPreview` so the
+     * compose surface can render a live preview while the LLM
+     * generates. Output contract (the returned `draft` /
+     * `message` / `details`) is unchanged from the non-streaming path.
+     */
+    onStreamChunk?: (text: string, accumulated: string) => void
+  } = {}
 ): Promise<CommitWorkflowResult> {
   const git = input.git || getRepo()
   const argv = createCommitWorkflowArgv('commit')
   const logger = new Logger({ silent: true })
 
   try {
-    const result = await generateCommitDraft({ git, argv, logger })
+    const result = await generateCommitDraft({
+      git,
+      argv,
+      logger,
+      onStreamChunk: input.onStreamChunk,
+    })
     const draft = result.draft.trim()
 
     if (result.ok && draft) {

@@ -166,6 +166,37 @@ export type BaseLLMService = {
    */
   dynamicModelPreference?: DynamicModelPreference
   /**
+   * Streaming output (#881). Wires `chain.stream()` instead of
+   * `chain.invoke()` into LLM-driven TUI surfaces so the user sees a
+   * live preview of the model's output as it generates, rather than
+   * staring at a spinner until the full response arrives.
+   *
+   * Output contract is unchanged when enabled: the final draft / plan
+   * still goes through the same parser, schema validator, and retry
+   * logic as the non-streaming path. The stream is a *preview only* —
+   * it relieves the "is this hanging?" anxiety without touching what
+   * gets committed.
+   *
+   * Off by default while we shake the UX out across providers; some
+   * models stream poorly (one-shot blob disguised as a stream) and the
+   * preview just blinks in those cases. Off-by-default also lets users
+   * who prefer the quieter spinner-only UX skip the visual chatter.
+   *
+   * Scope today: workstation compose surface's AI commit draft (the
+   * `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay
+   * non-streaming pending separate validation.
+   */
+  streaming?: {
+    /**
+     * Master switch. When `false` (default) every LLM call uses the
+     * existing non-streaming code path, regardless of which command
+     * or surface fires it.
+     *
+     * @default false
+     */
+    enabled?: boolean
+  }
+  /**
    * Opt-in fast paths that trade summary detail for speed. Each flag
    * here replaces an LLM summary call with a deterministic templated
    * extract for a specific file shape. Off by default — when enabled,

@@ -11,6 +11,19 @@ export type CommitComposeState = {
   loading: boolean
   message?: string
   details?: string[]
+  /**
+   * Live preview of the streamed LLM output while an AI draft is in
+   * flight (#881 phase 2). Set by `setStreamingPreview` actions fired
+   * from the streaming workflow's `onChunk` callback; cleared by
+   * `setDraft` / `setResult` / `reset` so the preview disappears once
+   * the final validated draft (or failure) lands.
+   *
+   * Undefined when no stream is active OR when streaming is disabled
+   * by config (`service.streaming.enabled !== true`). The renderer
+   * decides what to do with it — current behaviour is to fold the
+   * preview into the compose panel below the loading line.
+   */
+  streamingPreview?: string
 }
 
 export type CommitComposeAction =
@@ -23,6 +36,7 @@ export type CommitComposeAction =
   | { type: 'setLoading'; value: boolean }
   | { type: 'setDraft'; value: string }
   | { type: 'setResult'; message?: string; details?: string[] }
+  | { type: 'setStreamingPreview'; value: string | undefined }
   | { type: 'reset' }
 
 export type ManualCommitResult = {
@@ -90,9 +104,13 @@ export function applyCommitComposeAction(
         editing: action.value,
       }
     case 'setLoading':
+      // Clearing loading also clears any in-flight streaming preview;
+      // the preview's whole purpose is to fill the wait window. Once
+      // the wait ends (success OR failure), the preview is stale.
       return {
         ...state,
         loading: action.value,
+        streamingPreview: action.value ? state.streamingPreview : undefined,
       }
     case 'setDraft':
       // No `message` here — the loader → filled fields are the confirmation
@@ -108,6 +126,7 @@ export function applyCommitComposeAction(
         loading: false,
         message: undefined,
         details: undefined,
+        streamingPreview: undefined,
       }
     case 'setResult':
       return {
@@ -115,6 +134,17 @@ export function applyCommitComposeAction(
         loading: false,
         message: action.message,
         details: action.details,
+        streamingPreview: undefined,
+      }
+    case 'setStreamingPreview':
+      // Per-chunk live-preview update. Fires from the streaming
+      // workflow's onChunk callback; the renderer turns it into a
+      // last-N-lines panel below the loading line. Pass `undefined`
+      // to explicitly clear (the workflow does this on completion
+      // alongside the `setDraft` / `setResult` dispatch).
+      return {
+        ...state,
+        streamingPreview: action.value,
       }
     case 'reset':
       // Drop message/details too — the post-commit "Created commit ..."
