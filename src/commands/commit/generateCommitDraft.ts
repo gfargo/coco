@@ -8,6 +8,7 @@ import {
   getModelAndProviderFromConfig,
 } from '../../lib/langchain/utils'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
+import { LangChainCancelledError } from '../../lib/langchain/errors'
 import { executeChainStreaming } from '../../lib/langchain/utils/executeChainStreaming'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
@@ -55,6 +56,21 @@ export type CommitDraftInput = {
    * resilience of the schema-validated path.
    */
   onStreamChunk?: (text: string, accumulated: string) => void
+  /**
+   * Optional `AbortSignal` for user-initiated cancellation (#881
+   * phase 3). Forwarded into `executeChainStreaming` on the streaming
+   * attempt; when the signal aborts mid-stream the function returns
+   * a `CommitDraftResult` with `cancelled: true` instead of throwing,
+   * so callers can distinguish "user cancelled" from "the call
+   * failed."
+   *
+   * Note: only the streaming attempt honours the signal today. If
+   * streaming produces unparseable text and the non-streaming
+   * fallback fires, that call is NOT cancellable. Acceptable for now
+   * — interrupting the fallback would drop the user back to staging
+   * without a draft, same failure mode as a network error.
+   */
+  signal?: AbortSignal
 }
 
 export type CommitDraftResult = {
@@ -62,6 +78,14 @@ export type CommitDraftResult = {
   draft: string
   warnings: string[]
   validationErrors: string[]
+  /**
+   * Set when the call was aborted via an `AbortSignal` (#881 phase
+   * 3). Callers should treat this as user intent, not an error —
+   * the status line should reflect "cancelled" not "failed," and no
+   * retry should fire. `draft` may carry partial accumulated text
+   * from the streamed prefix; today the workstation discards it.
+   */
+  cancelled?: boolean
 }
 
 const FORMAT_INSTRUCTIONS_TEMPLATE = (schemaDescription: string): string => (
@@ -136,6 +160,7 @@ export async function generateCommitDraft({
   argv,
   logger = new Logger({ silent: true }),
   onStreamChunk,
+  signal,
 }: CommitDraftInput): Promise<CommitDraftResult> {
   const config = loadConfig<CommitOptions, CommitArgv>(argv as Arguments<CommitArgv>)
   const key = getApiKeyForModel(config)
@@ -341,6 +366,7 @@ export async function generateCommitDraft({
           onChunk: ({ text, accumulated }) => {
             onStreamChunk(text, accumulated)
           },
+          signal,
           logger,
           tokenizer,
           metadata: {
@@ -351,6 +377,21 @@ export async function generateCommitDraft({
           },
         })
       } catch (streamErr) {
+        // User-initiated cancel (#881 phase 3). Bail out of the
+        // entire attempt loop and let the caller distinguish
+        // "cancelled" from "failed" in the status line. We do NOT
+        // fall through to the non-streaming retry on cancel — the
+        // user explicitly asked to stop, kicking off a fresh
+        // unstreamable LLM call would defy that intent.
+        if (streamErr instanceof LangChainCancelledError) {
+          return {
+            ok: false,
+            draft: streamErr.accumulated || '',
+            warnings,
+            validationErrors: [],
+            cancelled: true,
+          }
+        }
         // Streamed accumulated text didn't parse cleanly. Try the
         // lossy salvager on whatever we have; if that produces a
         // non-placeholder title, accept it. Otherwise fall through

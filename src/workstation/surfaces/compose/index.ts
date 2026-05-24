@@ -91,9 +91,16 @@ export function renderComposeSurface(
     `${compose.summary || '<empty>'}${summaryCursor}`,
     Math.max(8, width - 11) // "Summary  " (9) + 2 chrome = 11
   )
+  // State-line cycles through three modes (#881 phase 3 added the
+  // loading variant): editing copy when the user is typing, cancel
+  // hint when an AI draft is generating, default guidance otherwise.
+  // The cancel hint also covers the streaming preview window — same
+  // keystroke (Esc) aborts whether or not the preview is visible.
   const stateLine = compose.editing
     ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
-    : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
+    : compose.loading
+      ? 'Generating AI draft — press Esc to cancel.'
+      : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
   const hasStagedFiles = (worktree?.files || [])
     .some((file) => file.indexStatus !== ' ' && file.indexStatus !== '?')
   // Staged file list is rendered in the right Worktree panel

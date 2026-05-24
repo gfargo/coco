@@ -1979,6 +1979,55 @@ describe('log Ink input interactions', () => {
     ])
   })
 
+  describe('Esc cancels in-flight AI commit draft (#881 phase 3)', () => {
+    it('dispatches cancelAiCommitDraft when Esc is pressed during compose loading', () => {
+      // Set up the scenario: user is on the compose surface with an AI
+      // draft generating (loading === true). Pressing Esc should
+      // dispatch the runtime-side cancel event rather than falling
+      // through to "exit editing" or "leave compose."
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setLoading', value: true },
+      })
+
+      expect(state.activeView).toBe('compose')
+      expect(state.commitCompose.loading).toBe(true)
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toEqual([{ type: 'cancelAiCommitDraft' }])
+    })
+
+    it('does not fire cancelAiCommitDraft when loading is false (normal Esc behaviour preserved)', () => {
+      // Sanity: the cancel binding is gated on loading. When the user
+      // is just sitting on the compose surface (no draft in flight),
+      // Esc must keep its existing semantics (leave the view).
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).not.toContainEqual({ type: 'cancelAiCommitDraft' })
+    })
+
+    it('does not fire cancelAiCommitDraft from views other than compose', () => {
+      // Defensive: even if `commitCompose.loading` is true (it
+      // shouldn't normally be while the user navigated away, but
+      // it's recoverable state), Esc on a different surface should
+      // do its surface-local thing, not steal the cancel keystroke.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setLoading', value: true },
+      })
+      // Stay on history view.
+      expect(state.activeView).toBe('history')
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).not.toContainEqual({ type: 'cancelAiCommitDraft' })
+    })
+  })
+
   describe('s cycles sort modes (P4.2)', () => {
     it('cycles branch sort when active view is branches', () => {
       let state = createLogInkState(rows)

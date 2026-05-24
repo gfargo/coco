@@ -4,6 +4,7 @@ import { FakeListChatModel } from '@langchain/core/utils/testing'
 import { Logger } from '../../utils/logger'
 import { getLlm } from './getLlm'
 import {
+  LangChainCancelledError,
   LangChainExecutionError,
   LangChainNetworkError,
 } from '../errors'
@@ -239,5 +240,102 @@ describe('executeChainStreaming', () => {
         logger: silentLogger(),
       }),
     ).rejects.toThrow(LangChainNetworkError)
+  })
+
+  describe('cancellation (#881 phase 3)', () => {
+    it('throws LangChainCancelledError when the signal is already aborted before the call', async () => {
+      // Pre-flight short-circuit: a caller that aborted before reaching
+      // the helper shouldn't pay for prompt rendering or request setup.
+      // The helper checks `signal.aborted` once at entry and bails out
+      // with an empty accumulated buffer.
+      const llm = new FakeListChatModel({ responses: ['hello'] })
+      const controller = new AbortController()
+      controller.abort()
+      const { chunks, onChunk } = chunkRecorder()
+
+      await expect(
+        executeChainStreaming<string>({
+          llm: asLlm(llm),
+          prompt,
+          variables,
+          parser: new StringOutputParser(),
+          onChunk,
+          signal: controller.signal,
+          logger: silentLogger(),
+        }),
+      ).rejects.toThrow(LangChainCancelledError)
+      // No chunks delivered when the pre-flight check fires.
+      expect(chunks).toHaveLength(0)
+    })
+
+    it('rejects with LangChainCancelledError when an in-flight stream is aborted', async () => {
+      // Mid-stream abort: the fake model emits character-by-character,
+      // we abort after the first chunk arrives, and the helper
+      // classifies the resulting throw as cancellation rather than
+      // network failure. The error carries the partial accumulated
+      // text so callers can salvage if they want.
+      const llm = new FakeListChatModel({ responses: ['hello world'], sleep: 5 })
+      const controller = new AbortController()
+      const { chunks, onChunk } = chunkRecorder()
+
+      const promise = executeChainStreaming<string>({
+        llm: asLlm(llm),
+        prompt,
+        variables,
+        parser: new StringOutputParser(),
+        onChunk: (chunk) => {
+          onChunk(chunk)
+          // Abort the moment the first chunk arrives so the next
+          // iteration of the for-await sees a cancelled signal.
+          if (chunks.length === 1) {
+            controller.abort()
+          }
+        },
+        signal: controller.signal,
+        logger: silentLogger(),
+      })
+
+      await expect(promise).rejects.toThrow(LangChainCancelledError)
+      // At least one chunk landed before we aborted, so the recorder
+      // proves the stream was genuinely in flight, not pre-aborted.
+      expect(chunks.length).toBeGreaterThan(0)
+    })
+
+    it('attaches the accumulated text to the LangChainCancelledError', async () => {
+      // Salvageability check: the error carries the partial buffer so
+      // a caller that wanted to preserve mid-cancel state could pull
+      // it off the error. Today the workstation discards, but the
+      // contract should survive that choice.
+      const llm = new FakeListChatModel({ responses: ['abcdef'], sleep: 5 })
+      const controller = new AbortController()
+      let captured: LangChainCancelledError | undefined
+
+      try {
+        await executeChainStreaming<string>({
+          llm: asLlm(llm),
+          prompt,
+          variables,
+          parser: new StringOutputParser(),
+          onChunk: ({ accumulated }) => {
+            if (accumulated.length >= 2) {
+              controller.abort()
+            }
+          },
+          signal: controller.signal,
+          logger: silentLogger(),
+        })
+      } catch (error) {
+        if (error instanceof LangChainCancelledError) {
+          captured = error
+        }
+      }
+
+      expect(captured).toBeInstanceOf(LangChainCancelledError)
+      // Accumulated text reflects what landed before the abort fired.
+      // Don't assert exact contents — provider chunking can vary —
+      // but the prefix should match the start of the response.
+      expect(captured?.accumulated).toBeDefined()
+      expect(captured?.accumulated?.length).toBeGreaterThan(0)
+    })
   })
 })

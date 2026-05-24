@@ -69,3 +69,26 @@ export class LangChainNetworkError extends LangChainError {
     super(message, { ...context, endpoint, provider })
   }
 }
+
+/**
+ * User-initiated cancellation (#881 phase 3). Thrown by streaming
+ * helpers when an `AbortSignal` they were given fires. Distinct from
+ * `LangChainNetworkError` / `LangChainTimeoutError` so callers can
+ * pattern-match: a cancelled LLM call is the user's intent, not a
+ * failure to surface in the status line as an error.
+ *
+ * Carries the accumulated text up to the cancel point (when
+ * available) so the caller can decide whether to salvage a partial
+ * result or discard it. Today the workstation discards — the
+ * preview pane was the only consumer of the accumulated text and it
+ * gets cleared on cancel anyway.
+ */
+export class LangChainCancelledError extends LangChainError {
+  constructor(
+    message: string,
+    public readonly accumulated?: string,
+    context?: Record<string, unknown>,
+  ) {
+    super(message, { ...context, accumulated })
+  }
+}

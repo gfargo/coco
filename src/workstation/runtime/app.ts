@@ -1772,7 +1772,23 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.commitCompose.summary,
   ])
 
+  // AbortController for the in-flight AI draft (#881 phase 3). Kept in
+  // a ref rather than state because cancel is a side-effect: the input
+  // handler reads `controllerRef.current?.abort()` synchronously when
+  // Esc fires during a loading draft. Storing it in state would force
+  // a re-render on every set, and React doesn't need to know — only
+  // the imperative cancel path does. Cleared after each call settles
+  // so a stale controller can't cancel a future draft.
+  const aiDraftAbortRef = React.useRef<AbortController | null>(null)
+
   const runAiCommitDraft = React.useCallback(async () => {
+    // Tear down any controller from a previous draft (defensive — a
+    // settled call should have cleared it in the finally block, but
+    // double-running would otherwise leave the first orphaned).
+    aiDraftAbortRef.current?.abort()
+    const controller = new AbortController()
+    aiDraftAbortRef.current = controller
+
     dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: true } })
     dispatch({ type: 'setStatus', value: 'generating AI commit draft', loading: true })
     // Streaming preview (#881 phase 2). The workflow forwards this to
@@ -1783,33 +1799,74 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // reducer clears `streamingPreview` whenever loading flips off
     // (success or failure), so we don't need an explicit teardown
     // dispatch here.
-    const result = await runCommitDraftWorkflow({
-      git,
-      onStreamChunk: (_text, accumulated) => {
-        // Dispatch the full accumulated text — the preview chrome
-        // helper does the last-N-lines slicing at render time, so
-        // re-doing the slice here would be wasted work. Per-chunk
-        // dispatches are cheap; React batches them and Ink redraws
-        // at its own frame cadence.
-        dispatch({
-          type: 'commitCompose',
-          action: { type: 'setStreamingPreview', value: accumulated },
-        })
-      },
-    })
+    try {
+      const result = await runCommitDraftWorkflow({
+        git,
+        signal: controller.signal,
+        onStreamChunk: (_text, accumulated) => {
+          // Dispatch the full accumulated text — the preview chrome
+          // helper does the last-N-lines slicing at render time, so
+          // re-doing the slice here would be wasted work. Per-chunk
+          // dispatches are cheap; React batches them and Ink redraws
+          // at its own frame cadence.
+          dispatch({
+            type: 'commitCompose',
+            action: { type: 'setStreamingPreview', value: accumulated },
+          })
+        },
+      })
 
-    if (result.ok && result.draft) {
-      dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: result.draft } })
-      dispatch({ type: 'setStatus', value: 'AI draft ready for editing' })
-      return
+      // Cancel path (#881 phase 3). User pressed Esc during the
+      // stream; reducer drops loading + preview, status line shows
+      // a neutral "cancelled" message. Skip the result / failure
+      // dispatches because the user already knows what happened.
+      if (result.cancelled) {
+        dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: false } })
+        dispatch({ type: 'setStatus', value: 'AI draft cancelled.' })
+        return
+      }
+
+      if (result.ok && result.draft) {
+        dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: result.draft } })
+        dispatch({ type: 'setStatus', value: 'AI draft ready for editing' })
+        return
+      }
+
+      dispatch({
+        type: 'commitCompose',
+        action: { type: 'setResult', message: result.message, details: result.details },
+      })
+      dispatch({ type: 'setStatus', value: result.message })
+    } finally {
+      // Clear the ref only if it still points at OUR controller — a
+      // rapid second invocation could have already replaced it, in
+      // which case the new controller is the one that owns cancel
+      // duty now.
+      if (aiDraftAbortRef.current === controller) {
+        aiDraftAbortRef.current = null
+      }
     }
-
-    dispatch({
-      type: 'commitCompose',
-      action: { type: 'setResult', message: result.message, details: result.details },
-    })
-    dispatch({ type: 'setStatus', value: result.message })
   }, [dispatch, git])
+
+  /**
+   * Cancel an in-flight AI draft (#881 phase 3). Called by the input
+   * handler when the user presses Esc while `commitCompose.loading`
+   * is true. Idempotent — calling without an active controller is a
+   * no-op rather than an error so the keystroke handler can fire
+   * unconditionally during the loading window.
+   *
+   * `controller.abort()` propagates through
+   * `executeChainStreaming`, which throws `LangChainCancelledError`,
+   * which becomes `cancelled: true` on the workflow result. The
+   * runAiCommitDraft promise's finally block clears the ref. The
+   * resulting cleanup dispatches (clearing loading + status) happen
+   * back in `runAiCommitDraft`, not here, so this function stays
+   * pure-imperative and the React state updates flow through a
+   * single code path.
+   */
+  const cancelAiCommitDraft = React.useCallback(() => {
+    aiDraftAbortRef.current?.abort()
+  }, [])
 
   // `C` keystroke handler — start the create-pull-request flow. Resolves
   // the head + base branches from the live context, runs
@@ -3942,6 +3999,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void createCommitFromCompose()
       } else if (event.type === 'runAiCommitDraft') {
         void runAiCommitDraft()
+      } else if (event.type === 'cancelAiCommitDraft') {
+        cancelAiCommitDraft()
       } else if (event.type === 'startCreatePullRequest') {
         void startCreatePullRequest()
       } else if (event.type === 'startChangelogView') {
