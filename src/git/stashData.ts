@@ -3,6 +3,24 @@ import { SimpleGit } from 'simple-git'
 export type StashEntry = {
   ref: string
   hash: string
+  /**
+   * First-parent commit hash — the BASE commit the stash was created
+   * on (i.e. HEAD at `git stash push` time). For stash merge commits
+   * `stash@{N}^1` is always the base; `^2` is the index snapshot,
+   * `^3` is the untracked-files snapshot when `-u` was used.
+   *
+   * Captured here so the cursor-syncs-history effect can jump to
+   * the stash's branch origin point rather than the stash commit
+   * itself. Older stashes' commits often fall outside the loaded
+   * `git log --max-count=300` window even when passed as graph
+   * roots; their parents almost never do because they're on
+   * regular branches with much more frequent commit activity.
+   *
+   * Empty string when git's output omitted the parent field (very
+   * old git versions or corrupted stash refs). Callers should treat
+   * empty as "no base available" rather than a valid commit.
+   */
+  baseHash: string
   date: string
   branch: string
   message: string
@@ -35,12 +53,19 @@ export function parseStashList(output: string): Omit<StashEntry, 'files'>[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [ref, hash, date, subject] = line.split('\x1f')
+      const [ref, hash, parents, date, subject] = line.split('\x1f')
       const parsedSubject = parseStashSubject(subject || '')
+      // `%P` returns space-separated parent hashes. Stash commits are
+      // merges with 2-3 parents; the FIRST is the base (HEAD at stash
+      // time). Empty parents string (legacy / corrupted entries) maps
+      // to an empty baseHash; the cursor-sync caller treats that as
+      // "no base available, fall back to stash hash."
+      const baseHash = parents ? (parents.split(' ')[0] || '') : ''
 
       return {
         ref,
         hash,
+        baseHash,
         date,
         branch: parsedSubject.branch,
         message: parsedSubject.message,
@@ -79,8 +104,14 @@ export async function getStashCommitHashes(git: SimpleGit): Promise<string[]> {
 }
 
 export async function getStashOverview(git: SimpleGit): Promise<StashOverview> {
+  // Format fields (separated by 0x1f / unit separator):
+  //   %gd  — stash reflog selector (stash@{N})
+  //   %H   — stash commit hash
+  //   %P   — space-separated parent hashes (first = base, see StashEntry.baseHash)
+  //   %ci  — committer date, ISO format
+  //   %gs  — reflog subject ("WIP on main: <subject>")
   const stashes = parseStashList(
-    await git.raw(['stash', 'list', '--date=iso', '--format=%gd%x1f%H%x1f%ci%x1f%gs'])
+    await git.raw(['stash', 'list', '--date=iso', '--format=%gd%x1f%H%x1f%P%x1f%ci%x1f%gs'])
   )
 
   return {

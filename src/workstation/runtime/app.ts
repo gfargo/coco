@@ -1621,7 +1621,23 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         : all
       const stash = visible[Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1))]
       if (stash) {
-        targetHash = stash.hash
+        // Target the stash's BASE commit (its first parent, the branch
+        // tip when `git stash push` ran) rather than the stash commit
+        // itself. This answers the user-visible question "where in
+        // larger git history was this stash created?" — that's the
+        // branch origin point, not the stash's own merge-commit row
+        // off in `refs/stash`. Practical benefit: base commits are on
+        // regular branches and are basically always in the loaded
+        // `git log --max-count=300` window, so the cursor actually
+        // moves on every stash; stash commits older than the 300th
+        // most recent often fall outside the window even when passed
+        // as graph roots.
+        //
+        // Fallback to stash.hash when baseHash is empty (legacy /
+        // corrupted stash refs that omitted %P from the format
+        // output). The cursor may still hit "tip not in loaded
+        // window" in that edge case but at least we tried.
+        targetHash = stash.baseHash || stash.hash
         // `stash@{N}` is the canonical name and what the user sees in
         // the sidebar row; using it verbatim makes the status copy
         // match the visible label.

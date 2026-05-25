@@ -4,6 +4,7 @@ import { StashEntry } from './stashData'
 const stash: StashEntry = {
   ref: 'stash@{0}',
   hash: 'abc123',
+  baseHash: 'base111',
   date: '2026-04-28',
   branch: 'main',
   message: 'save docs',

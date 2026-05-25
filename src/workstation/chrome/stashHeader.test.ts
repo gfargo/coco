@@ -5,6 +5,7 @@ const stashes: StashEntry[] = [
   {
     ref: 'stash@{2026-05-01 23:01:18 -0400}',
     hash: 'aaa1111',
+    baseHash: 'base111',
     date: '2026-05-01',
     branch: 'main',
     message: 'WIP polish stash header',
@@ -13,6 +14,7 @@ const stashes: StashEntry[] = [
   {
     ref: 'stash@{2026-05-01 23:00:01 -0400}',
     hash: 'bbb2222',
+    baseHash: 'base222',
     date: '2026-05-01',
     branch: 'feat/x',
     message: 'experiment with carousel',
@@ -21,6 +23,7 @@ const stashes: StashEntry[] = [
   {
     ref: 'stash@{2026-04-22 11:00:00 -0400}',
     hash: 'ccc3333',
+    baseHash: 'base333',
     date: '2026-04-22',
     branch: '<unknown>',
     message: '',

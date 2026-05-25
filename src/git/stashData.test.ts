@@ -9,16 +9,21 @@ import {
 } from './stashData'
 
 describe('log stash data', () => {
-  it('parses stash list lines with branch context and messages', () => {
+  it('parses stash list lines with branch context, parent hashes, and messages', () => {
+    // Format now includes %P (parent hashes, space-separated). First
+    // parent is the stash's BASE commit — the HEAD that was active
+    // when `git stash push` ran. Subsequent parents are the index
+    // snapshot and (with `-u`) the untracked-files snapshot.
     const output = [
-      'stash@{0}\x1fabc123\x1f2026-04-28 09:00:00 -0400\x1fOn main: save docs',
-      'stash@{1}\x1fdef456\x1f2026-04-27 18:00:00 -0400\x1fWIP on feature/log: 1234567 add tui',
+      'stash@{0}\x1fabc123\x1fbase111 idx111\x1f2026-04-28 09:00:00 -0400\x1fOn main: save docs',
+      'stash@{1}\x1fdef456\x1fbase222 idx222 untracked222\x1f2026-04-27 18:00:00 -0400\x1fWIP on feature/log: 1234567 add tui',
     ].join('\n')
 
     expect(parseStashList(output)).toEqual([
       {
         ref: 'stash@{0}',
         hash: 'abc123',
+        baseHash: 'base111',
         date: '2026-04-28 09:00:00 -0400',
         branch: 'main',
         message: 'save docs',
@@ -26,9 +31,28 @@ describe('log stash data', () => {
       {
         ref: 'stash@{1}',
         hash: 'def456',
+        baseHash: 'base222',
         date: '2026-04-27 18:00:00 -0400',
         branch: 'feature/log',
         message: '1234567 add tui',
+      },
+    ])
+  })
+
+  it('falls back to empty baseHash when the parents field is missing', () => {
+    // Defensive: very old git versions or corrupted stash refs may
+    // omit %P expansion. parseStashList shouldn't throw; baseHash
+    // becomes an empty string and the cursor-sync caller treats
+    // that as "fall back to stash.hash."
+    const output = 'stash@{0}\x1fabc123\x1f\x1f2026-04-28 09:00:00 -0400\x1fOn main: save docs'
+    expect(parseStashList(output)).toEqual([
+      {
+        ref: 'stash@{0}',
+        hash: 'abc123',
+        baseHash: '',
+        date: '2026-04-28 09:00:00 -0400',
+        branch: 'main',
+        message: 'save docs',
       },
     ])
   })
@@ -43,7 +67,7 @@ describe('log stash data', () => {
   it('parses stash files and loads overview details', async () => {
     const git = {
       raw: jest.fn()
-        .mockResolvedValueOnce('stash@{0}\x1fabc123\x1f2026-04-28 09:00:00 -0400\x1fOn main: save docs')
+        .mockResolvedValueOnce('stash@{0}\x1fabc123\x1fbase111 idx111\x1f2026-04-28 09:00:00 -0400\x1fOn main: save docs')
         .mockResolvedValueOnce('src/a.ts\nsrc/b.ts\n'),
     }
 
@@ -52,6 +76,7 @@ describe('log stash data', () => {
         {
           ref: 'stash@{0}',
           hash: 'abc123',
+          baseHash: 'base111',
           date: '2026-04-28 09:00:00 -0400',
           branch: 'main',
           message: 'save docs',
