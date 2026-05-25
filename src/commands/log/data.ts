@@ -343,6 +343,60 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
 }
 
 /**
+ * Default size of a targeted-context window. Sized to comfortably
+ * cover a year of activity on most repos so the cursor-sync's
+ * "jump to commit anchored on a ref I just selected" can succeed
+ * without paginating through the whole history.
+ */
+export const COMMIT_CONTEXT_DEFAULT_LIMIT = 5000
+
+/**
+ * Load a window of commits anchored on a specific hash. Used by the
+ * cursor-sync effect when the user selects a ref (branch / tag /
+ * stash) whose target commit isn't already in the loaded graph
+ * window. Passing the hash as an explicit positional ref makes git
+ * include it (and its ancestors) in the walk regardless of how far
+ * back it sits relative to HEAD.
+ *
+ * The result includes everything reachable from any of:
+ *   - `--all` (refs/heads, refs/remotes, refs/tags, refs/stash)
+ *   - The supplied `targetHash`
+ *   - Any `extraRefs` (stash commits, typically — same plumbing the
+ *     boot loader uses)
+ *
+ * Capped at `options.limit` (default 5000). Past that, git's
+ * `--max-count` truncates and the target may still fall outside the
+ * window IF its ancestors are extremely deep AND many other refs
+ * have newer commits. In practice that's rare; raising the limit
+ * is the escape valve.
+ *
+ * The caller is responsible for merging the result into existing
+ * state. Use the existing `appendRows` action which already
+ * deduplicates by hash.
+ */
+export async function getLogRowsAnchoredOn(
+  git: SimpleGit,
+  argv: LogArgv,
+  targetHash: string,
+  options: { extraRefs?: string[]; limit?: number } = {}
+): Promise<GitLogRow[]> {
+  const extraRefs = options.extraRefs || []
+  // Splice the target into extraRefs so `buildLogArgs` lays it out
+  // alongside any stash hashes after --all and before the --
+  // separator. Avoids hand-rolling a parallel arg builder.
+  const refs = [...extraRefs, targetHash]
+  // Force `all` on for this fetch — we want the union of every ref
+  // plus the explicit target, never a single-branch slice. Even if
+  // the caller's argv was `--no-all`, a targeted lookup should
+  // still walk from everywhere.
+  const merged: LogArgv = { ...argv, all: true }
+  return getLogRows(git, merged, {
+    limit: options.limit ?? COMMIT_CONTEXT_DEFAULT_LIMIT,
+    extraRefs: refs,
+  })
+}
+
+/**
  * Build merged `LogArgv` for the interactive TUI's `g` graph toggle.
  *
  * The TUI tracks a transient `fullGraph` boolean; toggling it must produce

@@ -107,6 +107,23 @@ describe('log data layer', () => {
     expect(sepIdx).toBeGreaterThan(refIdx)
   })
 
+  it('places the targetHash in the same positional slot as extraRefs when callers pass it directly', () => {
+    // The `getLogRowsAnchoredOn` helper splices the target into
+    // `extraRefs` and forwards to `buildLogArgs`; this test pins
+    // that the target lands as a positional ref alongside any
+    // other extra refs, after --all and before the path separator.
+    const args = buildLogArgs(argv({ all: true }), {
+      extraRefs: ['stashA', 'stashB', 'targetXYZ'],
+    })
+    expect(args).toContain('--all')
+    expect(args).toContain('stashA')
+    expect(args).toContain('stashB')
+    expect(args).toContain('targetXYZ')
+    const allIdx = args.indexOf('--all')
+    const targetIdx = args.indexOf('targetXYZ')
+    expect(targetIdx).toBeGreaterThan(allIdx)
+  })
+
   it('omits extraRefs when the array is empty', () => {
     // Repos with no stashes pass an empty array; we shouldn't emit
     // anything that would confuse git or change the argument shape.
