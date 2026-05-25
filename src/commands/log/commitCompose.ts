@@ -24,6 +24,25 @@ export type CommitComposeState = {
    * preview into the compose panel below the loading line.
    */
   streamingPreview?: string
+  /**
+   * AI draft awaiting user confirmation when the compose surface
+   * already has user-typed content (audit finding #7). Without this
+   * guard, `setDraft` silently overwrote whatever the user had been
+   * typing in summary / body, losing their work with no undo. The
+   * dispatcher checks for existing content and routes the AI result
+   * here instead of straight to `summary` / `body` when the user
+   * would be clobbered.
+   *
+   * The user accepts via `R` (replace) which swaps the draft into the
+   * editable fields and clears this state, or dismisses via `Esc`
+   * which drops the pending draft and keeps the original typing.
+   *
+   * Holds the full unparsed draft string (summary + body joined with
+   * `\n\n`); `splitCommitDraft` runs at acceptance time so the same
+   * helper produces the fields whether the user accepted immediately
+   * or after deliberation.
+   */
+  pendingAiDraft?: string
 }
 
 export type CommitComposeAction =
@@ -37,6 +56,9 @@ export type CommitComposeAction =
   | { type: 'setDraft'; value: string }
   | { type: 'setResult'; message?: string; details?: string[] }
   | { type: 'setStreamingPreview'; value: string | undefined }
+  | { type: 'setPendingAiDraft'; value: string }
+  | { type: 'acceptPendingAiDraft' }
+  | { type: 'dismissPendingAiDraft' }
   | { type: 'reset' }
 
 export type ManualCommitResult = {
@@ -99,9 +121,16 @@ export function applyCommitComposeAction(
         field: state.field === 'summary' ? 'body' : 'summary',
       }
     case 'setEditing':
+      // Audit finding #12: defensively clear `streamingPreview` when
+      // editing toggles off AND no draft is in flight. The current
+      // input pipeline never triggers this combination, but the
+      // reducer is the source of truth — if a future code path
+      // toggles editing off mid-stream, the preview shouldn't linger
+      // below an idle compose panel.
       return {
         ...state,
         editing: action.value,
+        streamingPreview: !action.value && !state.loading ? undefined : state.streamingPreview,
       }
     case 'setLoading':
       // Clearing loading also clears any in-flight streaming preview;
@@ -113,6 +142,23 @@ export function applyCommitComposeAction(
         streamingPreview: action.value ? state.streamingPreview : undefined,
       }
     case 'setDraft':
+      // Audit finding #7: if the user has typed content in summary or
+      // body, the AI draft would silently clobber their work with no
+      // undo. Route the result to `pendingAiDraft` instead and surface
+      // a confirmation message; the user accepts with `R` (replace)
+      // or dismisses with Esc. Empty fields = safe to replace as
+      // before, since there's nothing to lose.
+      if (state.summary.trim() || state.body.trim()) {
+        return {
+          ...state,
+          loading: false,
+          streamingPreview: undefined,
+          pendingAiDraft: action.value,
+          message:
+            'AI draft ready. Press R to replace your text, or Esc to keep what you have.',
+          details: undefined,
+        }
+      }
       // No `message` here — the loader → filled fields are the confirmation
       // that the AI generated something. A lingering "AI draft ready for
       // editing" line in the panel reads as stale state. The runtime still
@@ -127,6 +173,7 @@ export function applyCommitComposeAction(
         message: undefined,
         details: undefined,
         streamingPreview: undefined,
+        pendingAiDraft: undefined,
       }
     case 'setResult':
       return {
@@ -145,6 +192,45 @@ export function applyCommitComposeAction(
       return {
         ...state,
         streamingPreview: action.value,
+      }
+    case 'setPendingAiDraft':
+      // Audit finding #7: route the AI draft here (instead of straight
+      // to summary/body via `setDraft`) when the user has unsaved
+      // typing the draft would clobber. The dispatcher does the
+      // user-content check; this reducer just stashes the draft and
+      // surfaces a message inviting the user to accept or dismiss.
+      return {
+        ...state,
+        loading: false,
+        streamingPreview: undefined,
+        pendingAiDraft: action.value,
+        message: 'AI draft ready. Press R to replace your text, or Esc to keep what you have.',
+        details: undefined,
+      }
+    case 'acceptPendingAiDraft':
+      // Swap the pending draft into the editable fields and clear it.
+      // Mirrors `setDraft`'s field positioning (focus on summary,
+      // editing on) so the user lands in the same place whether they
+      // accepted immediately or after deliberation.
+      if (!state.pendingAiDraft) return state
+      return {
+        ...state,
+        ...splitCommitDraft(state.pendingAiDraft),
+        field: 'summary',
+        editing: true,
+        loading: false,
+        message: undefined,
+        details: undefined,
+        streamingPreview: undefined,
+        pendingAiDraft: undefined,
+      }
+    case 'dismissPendingAiDraft':
+      // User chose to keep their typing; drop the AI draft.
+      return {
+        ...state,
+        pendingAiDraft: undefined,
+        message: undefined,
+        details: undefined,
       }
     case 'reset':
       // Drop message/details too — the post-commit "Created commit ..."

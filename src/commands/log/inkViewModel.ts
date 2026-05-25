@@ -752,12 +752,12 @@ export type LogInkAction =
   | { type: 'toggleDiffViewMode' }
   | { type: 'setDiffViewMode'; value: LogInkDiffViewMode }
   | { type: 'setChangelogLoading'; branch: string; baseLabel: string }
-  | { type: 'setChangelogReady'; branch: string; baseLabel: string; text: string }
+  | { type: 'setChangelogReady'; branch: string; baseLabel: string; text: string; generatedAt: number }
   | { type: 'setChangelogError'; branch: string; baseLabel: string; error: string }
-  | { type: 'setChangelogText'; text: string }
+  | { type: 'setChangelogText'; text: string; generatedAt: number }
   | { type: 'pageChangelog'; delta: number; lineCount: number }
   | { type: 'clearChangelogCache'; branch?: string }
-  | { type: 'markRecentCommits'; hashes: string[] }
+  | { type: 'markRecentCommits'; hashes: string[]; markedAt: number }
   | { type: 'clearRecentCommits' }
   | { type: 'startSplitPlanLoad' }
   | {
@@ -2050,10 +2050,14 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       // Cache the result so re-entry (or `c` to PR) reuses it instead of
       // re-running the LLM. Keyed by branch so a checkout naturally
       // produces a fresh generation.
+      // Audit finding #9: `generatedAt` arrives on the action payload
+      // instead of being read from `Date.now()` here, so the reducer
+      // stays pure. Dispatchers (currently `runChangelogView` in
+      // app.ts) call `Date.now()` at dispatch time.
       const cached: ChangelogCacheEntry = {
         text: action.text,
         baseLabel: action.baseLabel,
-        generatedAt: Date.now(),
+        generatedAt: action.generatedAt,
       }
       return {
         ...state,
@@ -2107,7 +2111,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
             // Updated-at timestamp reflects the edit. Not the original
             // generation time — `r` (regenerate) is the explicit knob
             // for "I want fresh LLM output, not my edits".
-            generatedAt: Date.now(),
+            // Audit finding #9: timestamp arrives on the action.
+            generatedAt: action.generatedAt,
           },
         },
         pendingKey: undefined,
@@ -2146,7 +2151,9 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       }
       return {
         ...state,
-        recentCommitHashes: { hashes: action.hashes, markedAt: Date.now() },
+        // Audit finding #9: timestamp arrives on the action payload
+        // instead of being read from `Date.now()` here.
+        recentCommitHashes: { hashes: action.hashes, markedAt: action.markedAt },
         pendingKey: undefined,
       }
     case 'clearRecentCommits':

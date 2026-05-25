@@ -222,6 +222,14 @@ export async function executeChainStreaming<T>({
     const stream = await chain.stream(variables, signal ? { signal } : undefined)
 
     let chunkCount = 0
+    let callbackFailureCount = 0
+    // Audit finding #13: cap consecutive callback failures so a
+    // genuinely broken render handler can't tie up the LLM call
+    // silently for the user's entire wait. Five strikes (out of an
+    // expected ~50-500 chunks for a normal commit message) is enough
+    // to ride out a transient blip but small enough to bail before
+    // the user finishes waiting on a useless stream.
+    const MAX_CALLBACK_FAILURES = 5
     for await (const messageChunk of stream) {
       const text = coerceChunkText(messageChunk)
       if (!text) continue
@@ -229,16 +237,30 @@ export async function executeChainStreaming<T>({
       chunkCount += 1
       try {
         onChunk({ text, accumulated })
+        // Successful callback resets the consecutive-failure counter —
+        // we only bail on a STREAK of failures, not on isolated ones.
+        callbackFailureCount = 0
       } catch (callbackError) {
         // Deliberately swallow callback errors so a bad render handler
         // can't tank the entire LLM call. Log at verbose so users with
         // verbose mode on can still see what happened.
+        callbackFailureCount += 1
         logger?.verbose(
-          `executeChainStreaming: onChunk handler threw: ${
+          `executeChainStreaming: onChunk handler threw (${callbackFailureCount}/${MAX_CALLBACK_FAILURES}): ${
             callbackError instanceof Error ? callbackError.message : String(callbackError)
           }`,
           { color: 'yellow' },
         )
+        if (callbackFailureCount >= MAX_CALLBACK_FAILURES) {
+          logger?.verbose(
+            `executeChainStreaming: bailing stream — ${MAX_CALLBACK_FAILURES} consecutive callback failures suggest a broken render handler.`,
+            { color: 'red' },
+          )
+          throw new LangChainExecutionError(
+            `executeChainStreaming: render handler failed ${MAX_CALLBACK_FAILURES} times in a row; aborting stream so the failure surfaces to the caller.`,
+            { accumulatedLength: accumulated.length, chunkCount },
+          )
+        }
       }
     }
 
@@ -282,16 +304,23 @@ export async function executeChainStreaming<T>({
     return result
   } catch (error) {
     // Cancellation classifier (#881 phase 3). Three signals: an
-    // explicitly aborted user signal (post-throw check), the
-    // standard DOM `AbortError`, or a Node `AbortSignal` with
-    // `signal.aborted === true` while a chain-internal error
-    // propagates. Any of these means "user wanted out," not "the
-    // call failed." Wrap the raw error so callers can pattern-match
-    // on `LangChainCancelledError` and carry the partial accumulated
-    // text in case the caller wants to salvage anything.
+    // explicitly aborted user signal (post-throw check) or a thrown
+    // `AbortError` from the standard DOM API. Either means "user
+    // wanted out," not "the call failed." Wrap the raw error so
+    // callers can pattern-match on `LangChainCancelledError` and
+    // carry the partial accumulated text in case the caller wants
+    // to salvage anything.
+    //
+    // Audit finding #8: an earlier implementation also fell back to
+    // `error.message.includes('aborted')` as a third signal. That
+    // substring heuristic is footgun-shaped — legitimate provider
+    // errors ("model not aborted properly", future API copy) would
+    // misclassify as user cancels. Dropped; rely on the structured
+    // signal (`signal.aborted`) and the standard error class
+    // (`name === 'AbortError'`).
     const aborted =
       signal?.aborted ||
-      (error instanceof Error && (error.name === 'AbortError' || error.message?.includes('aborted')))
+      (error instanceof Error && error.name === 'AbortError')
     if (aborted) {
       throw new LangChainCancelledError(
         error instanceof Error ? error.message : 'Streaming aborted by user',

@@ -925,16 +925,24 @@ export function getLogInkInputEvents(
   }
 
   // Cancel in-flight AI commit draft (#881 phase 3). When the compose
-  // surface is mid-stream (loading === true), Esc aborts the LLM call
-  // and the runtime handler cleans up (clear loading, clear preview,
-  // status line shows "AI draft cancelled."). Sits above the editing
-  // / view handlers so the cancel keystroke can't fall through to
-  // "leave compose" or anything else.
+  // state has a draft in flight (loading === true), Esc aborts the
+  // LLM call and the runtime handler cleans up (clear loading, clear
+  // preview, status line shows "AI draft cancelled.").
   //
-  // Loading and editing are mutually exclusive in practice (the user
-  // can't type while the AI is generating), but the order here makes
-  // the precedence explicit if that ever changes.
-  if (state.activeView === 'compose' && state.commitCompose.loading && key.escape) {
+  // Audit finding #5: the `activeView === 'compose'` gate from the
+  // original phase 3 implementation made the cancel keystroke
+  // unreachable after the user chord-navigated away from compose
+  // mid-stream (Esc would fall through to popView etc., consuming
+  // the navigation intent while the LLM call silently ran to
+  // completion). Cancel should work wherever the user is — they
+  // can always navigate back to compose afterwards.
+  //
+  // Sits above the editing / view handlers so the cancel keystroke
+  // can't fall through to "leave compose" or anything else. Loading
+  // and editing are mutually exclusive in practice (the user can't
+  // type while the AI is generating), but the order here makes the
+  // precedence explicit if that ever changes.
+  if (state.commitCompose.loading && key.escape) {
     return [{ type: 'cancelAiCommitDraft' }]
   }
 
@@ -954,6 +962,28 @@ export function getLogInkInputEvents(
   // they decide to bail.
   if (state.pendingPullRequestBodyDraft && key.escape) {
     return [{ type: 'cancelPullRequestBodyDraft' }]
+  }
+
+  // Pending AI draft confirmation (audit finding #7). When the AI
+  // draft completes against a non-empty compose surface, it lands in
+  // `pendingAiDraft` instead of overwriting the user's typing. `R`
+  // accepts the swap (user's typing is lost, AI draft becomes the
+  // new content). `Esc` dismisses the AI draft (typing is preserved,
+  // AI draft is lost — the user paid for the tokens but explicitly
+  // chose not to use them).
+  //
+  // Gated on `activeView === 'compose'` because the pending draft is
+  // only meaningful on the compose surface (where the message line
+  // surfaces the prompt). A user who chord-navigated away while the
+  // draft was pending should see the original `R` / Esc semantics of
+  // wherever they are now.
+  if (state.activeView === 'compose' && state.commitCompose.pendingAiDraft) {
+    if (inputValue === 'R' && !key.ctrl && !key.meta) {
+      return [action({ type: 'commitCompose', action: { type: 'acceptPendingAiDraft' } })]
+    }
+    if (key.escape) {
+      return [action({ type: 'commitCompose', action: { type: 'dismissPendingAiDraft' } })]
+    }
   }
 
   if (state.commitCompose.editing) {

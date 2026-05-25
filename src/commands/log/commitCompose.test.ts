@@ -199,5 +199,132 @@ describe('log commit compose state', () => {
       const reset = applyCommitComposeAction(seeded, { type: 'reset' })
       expect(reset.streamingPreview).toBeUndefined()
     })
+
+    it('clears the preview when setEditing(false) fires AND no draft is in flight (audit #12)', () => {
+      // Defensive: the current input pipeline never lands setEditing
+      // off while a stream is still pumping (loading=true blocks the
+      // user from toggling), but the reducer is the source of truth.
+      const seeded = applyCommitComposeAction(createCommitComposeState({ editing: true }), {
+        type: 'setStreamingPreview',
+        value: 'orphan preview',
+      })
+      const cleared = applyCommitComposeAction(seeded, { type: 'setEditing', value: false })
+      expect(cleared.streamingPreview).toBeUndefined()
+    })
+
+    it('preserves the preview when setEditing(false) fires while loading is still true', () => {
+      // The opposite invariant: streaming workflow drives loading and
+      // preview together. If editing somehow toggles off mid-stream,
+      // the preview should survive because the loader is still showing.
+      const loading = applyCommitComposeAction(createCommitComposeState({ editing: true }), {
+        type: 'setLoading',
+        value: true,
+      })
+      const seeded = applyCommitComposeAction(loading, {
+        type: 'setStreamingPreview',
+        value: 'mid-stream',
+      })
+      const cleared = applyCommitComposeAction(seeded, { type: 'setEditing', value: false })
+      expect(cleared.streamingPreview).toBe('mid-stream')
+    })
+  })
+
+  describe('pendingAiDraft confirmation (audit finding #7)', () => {
+    it('routes setDraft to pendingAiDraft when summary or body has user content', () => {
+      // Before the fix: a user mid-typing who fired the AI draft would
+      // have their work silently clobbered when the draft landed. Now
+      // the draft is staged in `pendingAiDraft` and a confirmation
+      // message appears.
+      let state = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'append',
+        value: 'my partial title',
+      })
+      expect(state.summary).toBe('my partial title')
+
+      state = applyCommitComposeAction(state, {
+        type: 'setDraft',
+        value: 'feat: AI version\n\nAI generated body',
+      })
+      // User's typing is preserved.
+      expect(state.summary).toBe('my partial title')
+      expect(state.body).toBe('')
+      // AI draft is staged.
+      expect(state.pendingAiDraft).toBe('feat: AI version\n\nAI generated body')
+      // Confirmation message surfaces.
+      expect(state.message).toMatch(/Press R to replace/)
+    })
+
+    it('routes setDraft to summary/body directly when fields are empty (no clobber risk)', () => {
+      // Common path: user fires `I` without typing first; AI draft
+      // lands straight into the editable fields as before.
+      const state = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'setDraft',
+        value: 'feat: from scratch\n\nbody text',
+      })
+      expect(state.summary).toBe('feat: from scratch')
+      expect(state.body).toBe('body text')
+      expect(state.pendingAiDraft).toBeUndefined()
+      expect(state.editing).toBe(true)
+    })
+
+    it('treats whitespace-only fields as empty (no false positives on the clobber guard)', () => {
+      // Spaces / newlines in the fields shouldn't trigger the
+      // confirmation flow — those are no-op typing artifacts, not
+      // meaningful content.
+      let state = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'append',
+        value: '   ',
+      })
+      state = applyCommitComposeAction(state, {
+        type: 'setDraft',
+        value: 'feat: real content\n\nbody',
+      })
+      expect(state.summary).toBe('feat: real content')
+      expect(state.pendingAiDraft).toBeUndefined()
+    })
+
+    it('acceptPendingAiDraft swaps the staged draft into summary/body and clears the pending state', () => {
+      const state = applyCommitComposeAction(
+        applyCommitComposeAction(createCommitComposeState(), {
+          type: 'append',
+          value: 'user text',
+        }),
+        { type: 'setDraft', value: 'feat: AI draft\n\nAI body' }
+      )
+      expect(state.pendingAiDraft).toBeDefined()
+
+      const accepted = applyCommitComposeAction(state, { type: 'acceptPendingAiDraft' })
+      expect(accepted.summary).toBe('feat: AI draft')
+      expect(accepted.body).toBe('AI body')
+      expect(accepted.pendingAiDraft).toBeUndefined()
+      expect(accepted.message).toBeUndefined()
+      expect(accepted.editing).toBe(true)
+    })
+
+    it('dismissPendingAiDraft drops the staged draft and preserves user typing', () => {
+      const state = applyCommitComposeAction(
+        applyCommitComposeAction(createCommitComposeState(), {
+          type: 'append',
+          value: 'fix: my typing',
+        }),
+        { type: 'setDraft', value: 'feat: AI version\n\nbody' }
+      )
+      expect(state.summary).toBe('fix: my typing')
+      expect(state.pendingAiDraft).toBeDefined()
+
+      const dismissed = applyCommitComposeAction(state, { type: 'dismissPendingAiDraft' })
+      expect(dismissed.summary).toBe('fix: my typing')
+      expect(dismissed.pendingAiDraft).toBeUndefined()
+      expect(dismissed.message).toBeUndefined()
+    })
+
+    it('acceptPendingAiDraft is a no-op when no draft is staged', () => {
+      // Defensive: if the input handler somehow dispatched accept
+      // without a pending draft (race, stale event, future bug), the
+      // reducer should not throw or corrupt state.
+      const state = createCommitComposeState()
+      const after = applyCommitComposeAction(state, { type: 'acceptPendingAiDraft' })
+      expect(after).toBe(state)
+    })
   })
 })

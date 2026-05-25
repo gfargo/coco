@@ -351,6 +351,12 @@ export async function generateCommitDraft({
       // schema-validated retry — paying for a second LLM call only
       // on the edge case where the streamed output is unsalvageable.
       const streamingParser = createSchemaParser(schema, llm)
+      // Capture the final accumulated text out-of-band so we can
+      // attempt salvage if the parser throws on completion (audit
+      // finding #1). Updated on every chunk; the last value is
+      // whatever the stream produced before the parser ran. Empty
+      // string when streaming throws before any chunks arrived.
+      let streamedAccumulated = ''
       let salvaged: { title: string; body: string } | undefined
       try {
         // `executeChainStreaming` runs the parser on the accumulated
@@ -364,6 +370,7 @@ export async function generateCommitDraft({
           variables: budgetedPrompt.variables,
           parser: streamingParser,
           onChunk: ({ text, accumulated }) => {
+            streamedAccumulated = accumulated
             onStreamChunk(text, accumulated)
           },
           signal,
@@ -392,18 +399,32 @@ export async function generateCommitDraft({
             cancelled: true,
           }
         }
-        // Streamed accumulated text didn't parse cleanly. Try the
-        // lossy salvager on whatever we have; if that produces a
-        // non-placeholder title, accept it. Otherwise fall through
-        // to the non-streaming path which can retry with a fresh
-        // LLM call.
-        logger.verbose(
-          `Streaming attempt produced unparseable output: ${
-            streamErr instanceof Error ? streamErr.message : String(streamErr)
-          }. Falling back to non-streaming.`,
-          { color: 'yellow' }
-        )
-        salvaged = undefined
+        // Audit finding #1: try the lossy salvager on the accumulated
+        // text before paying for a second LLM call. The salvager
+        // strips code fences, attempts strict JSON parse, and falls
+        // back to "first line is title, rest is body." We only accept
+        // its output when it produced a real title — the placeholder
+        // title ("Auto-generated commit") means the salvager
+        // couldn't extract anything meaningful and the non-streaming
+        // retry is the better choice.
+        if (streamedAccumulated) {
+          const candidate = salvageCommitMessageFromText(streamedAccumulated)
+          if (candidate.title && candidate.title !== 'Auto-generated commit') {
+            salvaged = candidate
+            logger.verbose(
+              `Streaming parser failed but salvager recovered a draft from ${streamedAccumulated.length} accumulated chars; skipping non-streaming retry.`,
+              { color: 'green' },
+            )
+          }
+        }
+        if (!salvaged) {
+          logger.verbose(
+            `Streaming attempt produced unparseable output: ${
+              streamErr instanceof Error ? streamErr.message : String(streamErr)
+            }. Falling back to non-streaming.`,
+            { color: 'yellow' }
+          )
+        }
       }
       // Type-narrow: commitMsg is set inside try{}, but TS doesn't
       // see that across the catch. Re-init through the salvage path
@@ -411,10 +432,12 @@ export async function generateCommitDraft({
       if (salvaged) {
         commitMsg = salvaged
       } else if (!(commitMsg!)) {
-        // Streaming threw; do the standard non-streaming flow to
-        // recover. This is the trade-off documented in the issue —
-        // streaming gives us a preview but the validated result still
-        // comes from the schema-aware retry path when streaming fails.
+        // Streaming threw AND the salvager couldn't recover anything
+        // useful; fall back to the standard non-streaming flow.
+        // Documented trade-off from the issue: streaming gives us a
+        // preview but the validated result still comes from the
+        // schema-aware retry path when both streaming AND salvage
+        // fail.
         commitMsg = await executeChainWithSchema(schema, llm, prompt, budgetedPrompt.variables, {
           logger,
           tokenizer,
