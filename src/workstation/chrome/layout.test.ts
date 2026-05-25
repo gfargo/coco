@@ -34,18 +34,58 @@ describe('log Ink layout', () => {
     expect(layout.detailWidth).toBe(26)
   })
 
-  it('caps side panel widths on wide terminals', () => {
+  it('caps side panel widths on wide terminals so the main panel absorbs extra width', () => {
     const layout = getLogInkLayout({ columns: 200, rows: 60 })
 
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(55)
-    // 200 cols is `wide`, where the sidebar uses 24% × cols clamped
-    // to 28-48: 0.24 × 200 = 48 — exactly the cap, so the sidebar
-    // grows naturally with the terminal rather than getting pinned
-    // at a 34-cell ceiling like before.
-    expect(layout.sidebarWidth).toBe(48)
-    // 200 * 0.22 = 44 → clamped down to the 32-cell maximum
+    // 200 cols is `wide`. Sidebar clamps to 28-32: 0.20 × 200 = 40
+    // → capped at 32. The sidebar stops growing past the wide-tier
+    // ceiling so all the additional terminal width flows to the
+    // history graph (the dominant view by user intent).
+    expect(layout.sidebarWidth).toBe(32)
+    // Inspector mirrors the same shape: 200 * 0.22 = 44 → clamped
+    // at the 32-cell maximum.
     expect(layout.detailWidth).toBe(32)
+    // Main panel gets everything else — at 200 cols that's
+    // 200 - 32 - 32 = 136 cells for the commit graph. On wider
+    // terminals (250, 300+ cols) the side panels stay at 32 and the
+    // graph keeps growing.
+    expect(layout.mainPanelWidth).toBe(136)
+  })
+
+  it('keeps the sidebar pinned at 32 across very wide terminals', () => {
+    // Pin the "sidebar doesn't grow past 32" invariant explicitly so
+    // a future tweak to the wide-tier fraction can't silently
+    // re-introduce the old "sidebar bloats on big screens" behaviour.
+    const huge = getLogInkLayout({ columns: 300, rows: 60 })
+    const insane = getLogInkLayout({ columns: 500, rows: 60 })
+
+    expect(huge.sidebarWidth).toBe(32)
+    expect(insane.sidebarWidth).toBe(32)
+    // Main panel keeps growing linearly: 300 - 32 - 32 = 236;
+    // 500 - 32 - 32 = 436. The graph view gets all the extra real
+    // estate.
+    expect(huge.mainPanelWidth).toBe(236)
+    expect(insane.mainPanelWidth).toBe(436)
+  })
+
+  it('holds the wide-tier floor at 28 so the sidebar doesn\'t shrink at the 159→160 boundary', () => {
+    // Sanity that resizing UP across the normal→wide boundary doesn't
+    // produce a jarring visual shrink. At 159 cols (normal tier),
+    // 159 * 0.22 = 34 → clamped to 30. At 160 (wide), 160 * 0.20 = 32.
+    // The floor of 28 means even smaller fractions land at 28+.
+    const normalEdge = getLogInkLayout({ columns: 159, rows: 60 })
+    const wideEdge = getLogInkLayout({ columns: 160, rows: 60 })
+
+    expect(normalEdge.density).toBe('normal')
+    expect(wideEdge.density).toBe('wide')
+    expect(normalEdge.sidebarWidth).toBe(30)
+    expect(wideEdge.sidebarWidth).toBe(32)
+    // Wide-tier sidebar is the same or larger than the normal-tier
+    // sidebar — never smaller. Avoids the "I expanded my terminal
+    // and the sidebar got smaller" surprise.
+    expect(wideEdge.sidebarWidth).toBeGreaterThanOrEqual(normalEdge.sidebarWidth)
   })
 
   it('clamps the inspector at rest to its 20-32 cell range above the rail tier', () => {
@@ -281,13 +321,17 @@ describe('log Ink layout', () => {
     )
 
     it.each([
-      [160, 38, 'wide'],
-      [180, 43, 'wide'],
-      [200, 48, 'wide'],
-      [250, 48, 'wide'],
-      [400, 48, 'wide'],
+      // Wide tier now caps at 32 so the main panel absorbs extra
+      // terminal width. 160 cols: floor (28) wins over 160 × 0.20 = 32
+      // ... actually both equal 32 at 160 cols, but the cap takes
+      // over from 165 onward.
+      [160, 32, 'wide'],
+      [180, 32, 'wide'],
+      [200, 32, 'wide'],
+      [250, 32, 'wide'],
+      [400, 32, 'wide'],
     ] as const)(
-      'wide tier %i cols → sidebar %i',
+      'wide tier %i cols → sidebar capped at 32',
       (columns, expected, density) => {
         const layout = getLogInkLayout({ columns, rows: 40 })
         expect(layout.density).toBe(density)
@@ -296,15 +340,16 @@ describe('log Ink layout', () => {
     )
 
     it('crosses the 159 → 160 boundary without the sidebar visibly shrinking', () => {
-      // The wide tier raises the floor to 28 (vs normal's 22) so a
-      // user dragging a window from 159 → 160 cols doesn't see the
-      // sidebar lurch downward. Normal ends at 30 (cap), wide starts
-      // at 38 (formula); the boundary feels like growth, not a
-      // discontinuity.
+      // The wide tier raises the floor to 28 (vs normal's 22) and
+      // caps at 32 — so a user dragging a window from 159 → 160 cols
+      // sees the sidebar nudge up from 30 to 32 rather than lurching
+      // down. The boundary feels like a small growth, not a
+      // discontinuity, and from there the sidebar holds steady while
+      // the main panel absorbs all the extra width.
       const normalEdge = getLogInkLayout({ columns: 159, rows: 40 })
       const wideEdge = getLogInkLayout({ columns: 160, rows: 40 })
       expect(normalEdge.sidebarWidth).toBe(30)
-      expect(wideEdge.sidebarWidth).toBe(38)
+      expect(wideEdge.sidebarWidth).toBe(32)
       expect(wideEdge.sidebarWidth).toBeGreaterThan(normalEdge.sidebarWidth)
     })
 
