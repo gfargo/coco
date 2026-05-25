@@ -2028,6 +2028,54 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('Esc cancels in-flight PR body draft (#881 phase 4)', () => {
+    it('dispatches cancelPullRequestBodyDraft when Esc is pressed during the draft', () => {
+      // While `pendingPullRequestBodyDraft` is true, Esc routes to the
+      // soft-cancel handler so the user can bail before the prompt
+      // opens. Unlike the compose-loading cancel binding above, this
+      // is NOT gated on `activeView` — the C keystroke can be fired
+      // from anywhere via the palette, so cancel has to work from
+      // anywhere too.
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setPendingPullRequestBodyDraft',
+        value: true,
+      })
+      expect(state.pendingPullRequestBodyDraft).toBe(true)
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toEqual([{ type: 'cancelPullRequestBodyDraft' }])
+    })
+
+    it('does not fire when no PR body draft is pending (normal Esc preserved)', () => {
+      // Sanity: the cancel binding only fires when the flag is set.
+      // With no draft pending, Esc falls through to the global handler
+      // (which pops view stack, etc. — not asserted here, just that
+      // we don't steal the keystroke).
+      const events = getLogInkInputEvents(createLogInkState(rows), '', { escape: true })
+      expect(events).not.toContainEqual({ type: 'cancelPullRequestBodyDraft' })
+    })
+
+    it('takes precedence over the compose-cancel binding when both could match', () => {
+      // Edge case: both `pendingPullRequestBodyDraft` AND
+      // `commitCompose.loading` are true simultaneously (unusual but
+      // recoverable state). The compose handler sits above PR-body
+      // in the input pipeline, so compose cancel wins. Document the
+      // precedence here so a future reorder doesn't silently swap it.
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setPendingPullRequestBodyDraft',
+        value: true,
+      })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setLoading', value: true },
+      })
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toEqual([{ type: 'cancelAiCommitDraft' }])
+    })
+  })
+
   describe('s cycles sort modes (P4.2)', () => {
     it('cycles branch sort when active view is branches', () => {
       let state = createLogInkState(rows)

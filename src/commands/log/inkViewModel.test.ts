@@ -1793,4 +1793,42 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
     state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
     expect(state.pendingKey).toBeUndefined()
   })
+
+  describe('setPendingPullRequestBodyDraft (#881 phase 4)', () => {
+    it('starts undefined and flips on / off via the action', () => {
+      // The flag gates the Esc cancel binding in the input handler.
+      // `startCreatePullRequest` sets it true before awaiting the
+      // workflow and clears it in a `finally` so a thrown error can't
+      // strand the user in a cancellable state.
+      const state = createLogInkState(rows)
+      expect(state.pendingPullRequestBodyDraft).toBeUndefined()
+
+      const pending = applyLogInkAction(state, {
+        type: 'setPendingPullRequestBodyDraft',
+        value: true,
+      })
+      expect(pending.pendingPullRequestBodyDraft).toBe(true)
+
+      const cleared = applyLogInkAction(pending, {
+        type: 'setPendingPullRequestBodyDraft',
+        value: false,
+      })
+      // Cleared to `undefined` rather than `false` so the flag's
+      // absence is uniform — readers can shorthand the check with
+      // `!state.pendingPullRequestBodyDraft` either way.
+      expect(cleared.pendingPullRequestBodyDraft).toBeUndefined()
+    })
+
+    it('clears the pending key (chord prefix) on toggle', () => {
+      // Same hygiene as the other dispatched actions: any incoming
+      // dispatch resets a half-typed chord (`g`-prefix) so we don't
+      // accumulate stale prefixes across async workflow events.
+      const seeded = { ...createLogInkState(rows), pendingKey: 'g' }
+      const next = applyLogInkAction(seeded, {
+        type: 'setPendingPullRequestBodyDraft',
+        value: true,
+      })
+      expect(next.pendingKey).toBeUndefined()
+    })
+  })
 })

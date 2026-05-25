@@ -1881,6 +1881,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // missing) we surface the failure on the status line and skip the
   // prompt entirely — better than opening a prompt the user can't
   // actually submit successfully.
+  // Soft-cancel handle for the PR body draft (#881 phase 4). A mutable
+  // ref rather than state because the cancel decision needs to be
+  // visible synchronously inside the async workflow without forcing
+  // re-renders. Owned by the in-flight invocation: the cancel callback
+  // mutates `.cancelled` on the live ref; the workflow checks it after
+  // `await` resolves and decides whether to open the follow-up prompt.
+  //
+  // The LLM call itself keeps running (no AbortSignal threaded through
+  // `changelogHandler` today). The user-visible outcome — "PR draft
+  // cancelled, no prompt opens" — is identical to a hard cancel, at
+  // the cost of paying for the in-flight tokens. Deeper threading
+  // lands in a follow-up if hard cancel becomes a request.
+  const pullRequestBodyCancelRef = React.useRef<{ cancelled: boolean } | null>(null)
   const startCreatePullRequest = React.useCallback(async () => {
     const head = context.branches?.currentBranch || context.provider?.currentBranch
     if (!head) {
@@ -1910,34 +1923,65 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       return
     }
 
+    // Set up the cancel handle BEFORE flipping the pending flag so a
+    // race between the flag-set and a synchronous Esc keystroke can't
+    // leave the input handler dispatching cancel without a ref to
+    // mutate. The cancel callback no-ops cleanly when the ref is null
+    // (call already settled).
+    const cancelHandle = { cancelled: false }
+    pullRequestBodyCancelRef.current = cancelHandle
+
+    dispatch({ type: 'setPendingPullRequestBodyDraft', value: true })
     dispatch({
       type: 'setStatus',
-      value: `generating PR body from changelog (vs ${defaultBranch})…`,
+      value: `generating PR body from changelog (vs ${defaultBranch}) — Esc to cancel`,
       loading: true,
     })
-    const body = await runPullRequestBodyWorkflow({ baseBranch: defaultBranch })
 
-    // Fallback shape when the changelog generation fails — open the
-    // prompt with empty title + body rather than aborting, so the user
-    // can still author the PR manually. The status line surfaces why
-    // we couldn't pre-fill.
-    const initialTitle = body.title || head.replace(/^(feat|fix|chore|docs|refactor|test)\//, '').replace(/[-_]/g, ' ')
-    const initialBody = body.body || ''
-    const initial = initialBody ? `${initialTitle}\n\n${initialBody}` : initialTitle
+    try {
+      const body = await runPullRequestBodyWorkflow({ baseBranch: defaultBranch })
 
-    if (!body.ok) {
-      dispatch({ type: 'setStatus', value: `PR body generation failed: ${body.message}. Edit manually.` })
-    } else {
-      dispatch({ type: 'setStatus', value: 'PR body drafted — review and Ctrl+D to submit.' })
+      // Soft-cancel check (#881 phase 4). If the user pressed Esc
+      // while the workflow was awaiting, skip opening the prompt and
+      // surface a neutral status. The underlying LLM call has
+      // already settled — its result is discarded. Hard cancel
+      // (aborting the HTTP request mid-flight) is a follow-up.
+      if (cancelHandle.cancelled) {
+        dispatch({ type: 'setStatus', value: 'PR draft cancelled.' })
+        return
+      }
+
+      // Fallback shape when the changelog generation fails — open the
+      // prompt with empty title + body rather than aborting, so the user
+      // can still author the PR manually. The status line surfaces why
+      // we couldn't pre-fill.
+      const initialTitle = body.title || head.replace(/^(feat|fix|chore|docs|refactor|test)\//, '').replace(/[-_]/g, ' ')
+      const initialBody = body.body || ''
+      const initial = initialBody ? `${initialTitle}\n\n${initialBody}` : initialTitle
+
+      if (!body.ok) {
+        dispatch({ type: 'setStatus', value: `PR body generation failed: ${body.message}. Edit manually.` })
+      } else {
+        dispatch({ type: 'setStatus', value: 'PR body drafted — review and Ctrl+D to submit.' })
+      }
+
+      dispatch({
+        type: 'openInputPrompt',
+        kind: 'create-pr',
+        label: `Create PR: ${head} → ${defaultBranch}  (line 1 title · rest body · Enter newline · Ctrl+D submit)`,
+        initial,
+        multiline: true,
+      })
+    } finally {
+      // Clear the flag + the ref so a subsequent draft starts clean.
+      // Only clear the ref if we still own it — a second invocation
+      // would have already taken ownership in which case the cancel
+      // duty has rolled over.
+      dispatch({ type: 'setPendingPullRequestBodyDraft', value: false })
+      if (pullRequestBodyCancelRef.current === cancelHandle) {
+        pullRequestBodyCancelRef.current = null
+      }
     }
-
-    dispatch({
-      type: 'openInputPrompt',
-      kind: 'create-pr',
-      label: `Create PR: ${head} → ${defaultBranch}  (line 1 title · rest body · Enter newline · Ctrl+D submit)`,
-      initial,
-      multiline: true,
-    })
   }, [
     context.branches?.currentBranch,
     context.provider?.currentBranch,
@@ -1946,6 +1990,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context.pullRequest?.currentPullRequest,
     dispatch,
   ])
+
+  /**
+   * Soft-cancel the in-flight PR body draft (#881 phase 4). The
+   * cancel ref's `.cancelled` flag is checked after the workflow's
+   * await resolves; setting it true causes the workflow to skip the
+   * prompt-open and surface a neutral "cancelled" status. The LLM
+   * call itself isn't aborted (no signal threaded through the
+   * `changelogHandler` chain) so the user still pays for the in-flight
+   * tokens. Acceptable for a 5-15s draft; hard cancel lands in a
+   * follow-up if it becomes a real ask.
+   *
+   * Idempotent — calling without an active draft is a no-op.
+   */
+  const cancelPullRequestBodyDraft = React.useCallback(() => {
+    const handle = pullRequestBodyCancelRef.current
+    if (!handle) return
+    handle.cancelled = true
+  }, [])
 
   // Copy an arbitrary string to the system clipboard. Distinct from
   // `yankFromActiveView` which derives the value from the current view
@@ -4003,6 +4065,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         cancelAiCommitDraft()
       } else if (event.type === 'startCreatePullRequest') {
         void startCreatePullRequest()
+      } else if (event.type === 'cancelPullRequestBodyDraft') {
+        cancelPullRequestBodyDraft()
       } else if (event.type === 'startChangelogView') {
         void startChangelogView()
       } else if (event.type === 'regenerateChangelog') {
