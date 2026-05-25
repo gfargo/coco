@@ -111,10 +111,22 @@ Ink                ← reconciles to terminal
 
 A few invariants worth knowing before changing any of those modules:
 
-- **The reducer is pure.** `applyLogInkAction(state, action)` never throws, never reads the file system, never calls git. Side effects belong in workflows.
+- **The reducer is pure.** `applyLogInkAction(state, action)` never throws, never reads the file system, never calls git, never calls `Date.now()`. Side effects (and time, treated as a side effect) belong in workflows; timestamps arrive on action payloads.
 - **Workflows return actions.** A workflow that succeeds dispatches a `LogInkAction` via the runtime; failures dispatch a status-message action. The reducer is the only place state changes.
 - **Confirmation gating is data, not control flow.** Workflows declare `requiresConfirmation: 'y' | 'enter'` in `inkWorkflows.ts`; the runtime intercepts and routes through the y-confirm overlay.
 - **Re-renders are cheap.** Ink reconciles the React tree on every state change; render helpers are pure functions of `(state, theme, layout)`.
+
+## Async LLM calls + cancellation (#881)
+
+LLM-driven workflows have their own conventions because they live across several boundaries (workstation → `src/git/` workflow → `src/lib/langchain/` → provider API) and the user can change their mind mid-call.
+
+- **Streaming is opt-in.** Wire calls through `executeChainStreaming` (sibling of `executeChain`) when the surface has a place to render a live preview. Gated by `service.streaming.enabled` (default `false`). The streaming function returns the final parsed value just like `executeChain`; the only difference is the `onChunk` callback that fires per text fragment.
+- **Cancel via `AbortController`.** The runtime callback that owns an LLM call creates a controller per invocation and stashes it in a ref (`aiDraftAbortRef`, etc.). The input handler's cancel binding reads the ref synchronously and calls `controller.abort()`. The signal threads through the workflow to `executeChainStreaming` which forwards it into `chain.stream(input, { signal })`. The HTTP transport tears down cleanly.
+- **Cancel is a structured result, not an error.** When the signal aborts mid-stream, `executeChainStreaming` throws `LangChainCancelledError` (distinct class so callers can pattern-match). The wrapping workflow (e.g. `runCommitDraftWorkflow`) catches and translates to `{ ok: false, cancelled: true, message: 'AI draft cancelled.' }`. The runtime treats `cancelled` separately from `ok: false` failures — no error styling, no retry, just clean up the spinner and preview.
+- **Streaming preview is preview-only.** The final draft goes through the same parser / schema validator / commitlint retry as the non-streaming path. The `onChunk` callback feeds a chrome formatter (`chrome/streamingPreview.ts`) that produces last-N-lines view; the surface renders it below the loader. When the call settles, the preview clears and the validated final draft lands in the editable fields.
+- **Stdout commands stay non-streaming.** `coco commit --mode stdout` and `coco review` (CLI) have output contracts that pipes, hooks, and CI scripts depend on. Don't add streaming there.
+- **Cancel keystrokes are not view-gated.** The user might chord-navigate away during a long LLM call; Esc cancel must work from any view while the loading flag is set. This was an audit finding (#5) — keep it in mind when adding new cancel bindings.
+- **`pendingAiDraft` confirmation flow.** If the user has typed content in the compose surface and then fires an AI draft, the draft stages in `commitCompose.pendingAiDraft` rather than replacing their typing. `R` accepts (typing → AI draft), `Esc` dismisses (typing preserved). This was audit finding #7; the routing happens inside the `setDraft` reducer based on whether `summary` or `body` has non-whitespace content.
 
 ## Nested-repo navigation (#931)
 
