@@ -170,6 +170,14 @@ export type CreateLogInkStateOptions = {
    * direct-constructing state) don't have to thread it through.
    */
   repoWorkdir?: string
+  /**
+   * Override the initial graph mode. Defaults to `true` (full
+   * multi-ref graph) since 0.54.x — tests that need the compact
+   * single-branch view pass `fullGraph: false` here rather than
+   * relying on the global default (which has moved before and may
+   * move again).
+   */
+  fullGraph?: boolean
 }
 
 export type LogInkState = {
@@ -1245,7 +1253,16 @@ export function createLogInkState(
     worktreeDiffOffset: 0,
     filter: '',
     filterMode: false,
-    fullGraph: false,
+    // Default to the full multi-ref graph (`git log --all`) so users
+    // see how branches, tags, and stashes weave through the history
+    // out of the box. Pre-0.54.x this defaulted to false (current
+    // branch only); user feedback consistently asked for the
+    // GitKraken-style "see everything" view as the starting state.
+    // The `\` toggle still flips back to compact / current-branch
+    // mode for users who want the cleaner single-line graph. Tests
+    // override via `options.fullGraph` when they need the compact
+    // case explicitly.
+    fullGraph: options.fullGraph ?? true,
     showHelp: false,
     helpScrollOffset: 0,
     showCommandPalette: false,

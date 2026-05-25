@@ -53,7 +53,9 @@ const rows: GitLogRow[] = [
 
 describe('Ink history rows', () => {
   it('keeps compact mode calm by rendering commits only', () => {
-    const state = createLogInkState(rows)
+    // 0.54.x flipped the default `fullGraph` to true; explicit
+    // override here so the compact-mode behaviour stays pinned.
+    const state = createLogInkState(rows, { fullGraph: false })
     const visible = getVisibleLogInkHistory(state, 5)
 
     expect(visible.items.map((item) => item.type)).toEqual(['commit', 'commit', 'commit'])
@@ -61,7 +63,9 @@ describe('Ink history rows', () => {
   })
 
   it('preserves graph continuation rows in full graph mode', () => {
-    const state = applyLogInkAction(createLogInkState(rows), { type: 'toggleGraph' })
+    // Full mode is the 0.54.x default; pass explicitly so the test
+    // intent reads correctly without depending on the default.
+    const state = createLogInkState(rows, { fullGraph: true })
     const visible = getVisibleLogInkHistory(state, 5)
 
     expect(visible.items.map((item) => item.type)).toEqual([
@@ -90,7 +94,7 @@ describe('Ink history rows', () => {
   // synthetic single `*` per commit and gets no lane info.
   describe('lane segment attachment', () => {
     it('attaches lane segments to each visible item in full graph mode', () => {
-      const state = applyLogInkAction(createLogInkState(rows), { type: 'toggleGraph' })
+      const state = createLogInkState(rows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 5)
 
       const types = visible.items.map((item) => Boolean(item.laneSegments))
@@ -125,7 +129,7 @@ describe('Ink history rows', () => {
         refs: [],
         message: `commit ${i}`,
       }))
-      const state = applyLogInkAction(createLogInkState(longRows), { type: 'toggleGraph' })
+      const state = createLogInkState(longRows, { fullGraph: true })
       const scrolled = applyLogInkAction(state, { type: 'move', delta: 5 })
       const visible = getVisibleLogInkHistory(scrolled, 3)
 
@@ -142,7 +146,7 @@ describe('Ink history rows', () => {
       // merge / HEAD glyph but stay laneId-undefined so they render
       // muted (matching the legacy compact look). Stage 3 (#791) — the
       // glyph differentiation is the win.
-      const state = createLogInkState(rows)
+      const state = createLogInkState(rows, { fullGraph: false })
       const visible = getVisibleLogInkHistory(state, 5)
 
       visible.items.forEach((item) => {
@@ -231,7 +235,7 @@ describe('Ink history rows', () => {
 
   describe('lane segments thread the commit glyph through', () => {
     it('renders the HEAD commit with ◉ in full graph mode', () => {
-      const state = applyLogInkAction(createLogInkState(rows), { type: 'toggleGraph' })
+      const state = createLogInkState(rows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 5)
 
       // First fixture row is HEAD -> main + a merge — HEAD wins.
@@ -241,7 +245,7 @@ describe('Ink history rows', () => {
     })
 
     it('renders compact-mode commits with their distinct glyphs', () => {
-      const state = createLogInkState(rows)
+      const state = createLogInkState(rows, { fullGraph: false })
       const visible = getVisibleLogInkHistory(state, 5)
 
       // Order in compact (no graph rows): HEAD merge, side commit, root.
@@ -269,7 +273,7 @@ describe('Ink history rows', () => {
     }))
 
     it('injects a vertical-only graph row after every commit in full mode', () => {
-      const state = applyLogInkAction(createLogInkState(linearRows), { type: 'toggleGraph' })
+      const state = createLogInkState(linearRows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 8, { fullGraphSpacing: true })
 
       expect(visible.items.map((item) => item.type)).toEqual([
@@ -310,7 +314,7 @@ describe('Ink history rows', () => {
           parents: [], date: '2026-04-22', author: 'Coco', refs: [], message: 'feat: side',
         },
       ]
-      const state = applyLogInkAction(createLogInkState(mergeShapedRows), { type: 'toggleGraph' })
+      const state = createLogInkState(mergeShapedRows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
 
       const items = visible.items as Array<{ type: string; spacer?: boolean }>
@@ -325,21 +329,21 @@ describe('Ink history rows', () => {
     })
 
     it('does not inject spacers when fullGraphSpacing is off', () => {
-      const state = applyLogInkAction(createLogInkState(linearRows), { type: 'toggleGraph' })
+      const state = createLogInkState(linearRows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 8)
 
       expect(visible.items.every((item) => item.type === 'commit')).toBe(true)
     })
 
     it('does not inject spacers in compact mode regardless of option', () => {
-      const state = createLogInkState(linearRows)
+      const state = createLogInkState(linearRows, { fullGraph: false })
       const visible = getVisibleLogInkHistory(state, 8, { fullGraphSpacing: true })
 
       expect(visible.items.every((item) => item.type === 'commit')).toBe(true)
     })
 
     it('preserves trunk lane id 0 across spacers when scrolling', () => {
-      const state = applyLogInkAction(createLogInkState(linearRows), { type: 'toggleGraph' })
+      const state = createLogInkState(linearRows, { fullGraph: true })
       const scrolled = applyLogInkAction(state, { type: 'move', delta: 2 })
       const visible = getVisibleLogInkHistory(scrolled, 4, { fullGraphSpacing: true })
 
@@ -378,7 +382,7 @@ describe('Ink history rows', () => {
           parents: [], date: '2026-04-15', author: 'Coco', refs: [], message: 'feat: main below merge',
         },
       ]
-      const state = applyLogInkAction(createLogInkState(mergeShapedRows), { type: 'toggleGraph' })
+      const state = createLogInkState(mergeShapedRows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
 
       // Expected sequence — no synthetic spacers between the merge
@@ -416,7 +420,7 @@ describe('Ink history rows', () => {
           parents: [], date: '2026-04-22', author: 'Coco', refs: [], message: 'feat: side commit',
         },
       ]
-      const state = applyLogInkAction(createLogInkState(compressedMergeRows), { type: 'toggleGraph' })
+      const state = createLogInkState(compressedMergeRows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
 
       // No spacer between merge and side: merge's graph has `\` so
@@ -498,7 +502,7 @@ describe('Ink history rows', () => {
     })
 
     it('injects headers in full graph mode without disturbing lane tracking', () => {
-      const state = applyLogInkAction(createLogInkState(fixtureRows), { type: 'toggleGraph' })
+      const state = createLogInkState(fixtureRows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 10, { dateBucketingNow: NOW })
 
       // Headers appear; commits still carry lane segments.
@@ -525,7 +529,7 @@ describe('Ink history rows', () => {
           parents: [], date: '2026-05-13', author: 'Coco', refs: [], message: `yesterday ${i}`,
         })),
       ]
-      const state = applyLogInkAction(createLogInkState(longRows), { type: 'toggleGraph' })
+      const state = createLogInkState(longRows, { fullGraph: true })
       // Move the cursor to the 8th commit (deep in yesterday)
       const scrolled = applyLogInkAction(state, { type: 'move', delta: 7 })
       const visible = getVisibleLogInkHistory(scrolled, 4, { dateBucketingNow: NOW })

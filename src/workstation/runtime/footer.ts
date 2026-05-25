@@ -64,28 +64,22 @@ export function renderFooter(
   // etc.) feel less frozen even when they're sub-second.
   const spinnerPrefix = isLoading ? `${pickSpinnerFrame(spinnerFrame)} ` : ''
   const trailingWithSpinner = trailing ? `${spinnerPrefix}${trailing}` : ''
+  // Separated status text so loading rendering can give the message
+  // its own visual treatment (bold + accent) without dragging the
+  // keyboard hints along. Pre-loading users reported the spinner
+  // was nearly invisible against the dimmed footer; isolating the
+  // status to its own Text span fixes that.
   const status = trailingWithSpinner ? `  ${trailingWithSpinner}` : ''
+  const hintsText = hints.contextual.join('   ')
   const isError = state.statusKind === 'error'
   const isSuccess = state.statusKind === 'success'
-  const contextualText = isError
-    // Errors get the full footer width and a `✗` prefix so they read
-    // as alarming. We drop the contextual hints when an error is
-    // active — they'd compete for attention with the message and
-    // long validator outputs (#907 polish: split-plan validator
-    // errors are often 100+ chars and got truncated against the hints).
-    ? `✗ ${state.statusMessage || ''}`
-    : `${hints.contextual.join('   ')}${status}`
+  const errorText = isError ? `✗ ${state.statusMessage || ''}` : ''
   const globalText = hints.global.join(' · ')
 
-  // Error rendering: hide the global hints on the right so the
-  // message can wrap into that space. Success rendering: accent
-  // color on the message, hints stay visible. Default: existing
-  // muted styling.
-  const contextualColor = isError
-    ? 'red'
-    : isSuccess
-      ? theme.colors.accent
-      : theme.colors.muted
+  // Color the status portion based on kind. Loading uses the accent
+  // color (same as success) so motion glyphs stay readable; default
+  // status messages stay muted to match the surrounding chrome.
+  const statusColor = isSuccess || isLoading ? theme.colors.accent : undefined
 
   return h(Box, {
     flexDirection: 'row',
@@ -93,11 +87,21 @@ export function renderFooter(
     justifyContent: 'space-between',
     paddingX: 1,
   },
-  h(Text, {
-    color: contextualColor,
-    dimColor: !isError && !isSuccess,
-    bold: isError,
-  }, contextualText),
+  // Errors take over the whole contextual area (replace hints + status).
+  // Otherwise: hints stay dim/muted, status gets its own non-dim span
+  // when loading / success so it pops.
+  isError
+    ? h(Text, { color: 'red', bold: true }, errorText)
+    : h(Text, undefined,
+        h(Text, { color: theme.colors.muted, dimColor: true }, hintsText),
+        status
+          ? h(Text, {
+              color: statusColor,
+              dimColor: !isLoading && !isSuccess,
+              bold: isLoading,
+            }, status)
+          : ''
+      ),
   // Globals are dropped entirely when an error is on screen — that
   // space is what the long message needs to render. They come back
   // the moment the status flips to info / success / cleared.

@@ -1574,7 +1574,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       (state.focus === 'sidebar' && state.sidebarTab === 'branches')
     const onTagTab = state.activeView === 'tags' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'tags')
-    if (!onBranchTab && !onTagTab) return
+    // User-reported gap: cursoring a stash didn't sync the history
+    // cursor the way cursoring a branch / tag did. Same auto-jump
+    // affordance now extends to stashes; the stash's commit hash IS
+    // the row to land on (stashes are commits living off the
+    // `refs/stash` tree, visible under `--all` / fullGraph).
+    const onStashTab = state.activeView === 'stash' ||
+      (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
+    if (!onBranchTab && !onTagTab && !onStashTab) return
 
     let targetHash: string | undefined
     let targetLabel: string | undefined
@@ -1598,6 +1605,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       if (tag) {
         targetHash = tag.hash
         targetLabel = `tag ${tag.name}`
+      }
+    } else if (onStashTab) {
+      const all = context.stashes?.stashes || []
+      const visible = state.filter
+        ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+        : all
+      const stash = visible[Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1))]
+      if (stash) {
+        targetHash = stash.hash
+        // `stash@{N}` is the canonical name and what the user sees in
+        // the sidebar row; using it verbatim makes the status copy
+        // match the visible label.
+        targetLabel = stash.ref
       }
     }
 
@@ -1630,22 +1650,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       })
     }
   }, [
-    dispatch, context.branches, context.tags,
+    dispatch, context.branches, context.tags, context.stashes,
     state.activeView, state.focus, state.sidebarTab,
-    state.selectedBranchIndex, state.selectedTagIndex,
+    state.selectedBranchIndex, state.selectedTagIndex, state.selectedStashIndex,
     state.branchSort, state.tagSort, state.filter,
     state.filteredCommits,
   ])
 
   // Reset the dedup ref when the user moves focus away from the
-  // sidebar branches / tags tab so re-entering re-fires the sync
-  // even if the cursored branch is the same as before.
+  // sidebar branches / tags / stashes tab so re-entering re-fires the
+  // sync even if the cursored row is the same as before.
   React.useEffect(() => {
     const onBranchTab = state.activeView === 'branches' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'branches')
     const onTagTab = state.activeView === 'tags' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'tags')
-    if (!onBranchTab && !onTagTab) {
+    const onStashTab = state.activeView === 'stash' ||
+      (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
+    if (!onBranchTab && !onTagTab && !onStashTab) {
       lastSyncedHashRef.current = undefined
     }
   }, [state.activeView, state.focus, state.sidebarTab])
@@ -3537,7 +3559,38 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // without flickering the surfaces through a 'loading' phase.
       await refreshContext({ silent: true })
     }
-  }, [context, dispatch, git, refreshContext, refreshHistoryRows, state.branchSort, state.filter, state.selectedBranchIndex,
+
+    // Stash workflow follow-up. Two distinct behaviours.
+    //
+    // **apply / pop**: the user brought stashed content back into the
+    // worktree, but the sidebar still has them on the stash view.
+    // Expected next move is "look at what landed in my worktree", so
+    // jump them to history view (where the worktree counts in the
+    // sidebar are visible) AND refresh worktree context explicitly so
+    // the staged / unstaged / untracked numbers reflect the changes.
+    //
+    // **drop**: the silent context refresh above already re-fetched
+    // the stash list, BUT users reported it feeling like nothing
+    // happened. Fix two things: refresh worktree alongside (drops can
+    // affect untracked files when the stash held `-u` state), and
+    // surface the new stash count on the status line so there's
+    // unambiguous feedback that the drop landed and the list shrank.
+    if (result?.ok && (id === 'apply-stash' || id === 'pop-stash')) {
+      dispatch({ type: 'pushView', value: 'history' })
+      await refreshWorktreeContext()
+    }
+    if (result?.ok && id === 'drop-stash') {
+      // Explicit worktree refresh in case the dropped stash carried
+      // untracked-file state that's now collected.
+      await refreshWorktreeContext()
+      // The silent context refresh already replaced `context.stashes`;
+      // reading the count back here would be stale because closures
+      // capture the pre-refresh value. Status message stays generic
+      // ("Dropped stash@{N}") — the visible list shrinking is the
+      // unambiguous signal that the operation landed.
+    }
+  }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
+    state.branchSort, state.filter, state.selectedBranchIndex,
     state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
     state.statusFilterMask, state.tagSort])
 

@@ -16,6 +16,17 @@ export function createLogArgvFromUiArgv(argv: UiArgv): LogArgv {
   return {
     $0: argv.$0,
     _: ['log'],
+    // Pass `--all` through from the CLI. The yargs default is `true`
+    // since 0.54.x — user feedback consistently asked for the
+    // GitKraken-style "see all branches, tags, stashes" view as the
+    // starting state. `coco ui --no-all` opts back to
+    // current-branch-only.
+    //
+    // Note: passing `--branch foo` does NOT automatically scope away
+    // from --all. If the user wants strictly that branch, they pass
+    // `coco ui --branch foo --no-all`. We considered the implicit
+    // scope-narrowing but it surprises users who pass `--branch` as
+    // a "highlight this branch in the all-refs view" hint.
     all: argv.all,
     branch: argv.branch,
     format: 'table',

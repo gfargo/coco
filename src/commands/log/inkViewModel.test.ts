@@ -362,13 +362,17 @@ describe('log Ink view model', () => {
   })
 
   it('toggles graph, help, and command palette overlays', () => {
+    // Note: since 0.54.x the default `fullGraph` flipped to true so
+    // the workstation opens on the full multi-ref graph. The toggle
+    // just flips the boolean, so one `toggleGraph` lands at false.
     let state = createLogInkState(rows)
+    expect(state.fullGraph).toBe(true)
 
     state = applyLogInkAction(state, { type: 'toggleGraph' })
     state = applyLogInkAction(state, { type: 'toggleHelp' })
     state = applyLogInkAction(state, { type: 'toggleCommandPalette' })
 
-    expect(state.fullGraph).toBe(true)
+    expect(state.fullGraph).toBe(false)
     expect(state.showHelp).toBe(false)
     expect(state.showCommandPalette).toBe(true)
   })
