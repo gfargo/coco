@@ -3954,18 +3954,46 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     loadingMoreCommitsRef.current = loadingMoreCommits
   }, [loadingMoreCommits])
 
-  // Extracted as a callback (was inline inside the scroll-near-bottom
-  // effect) so the cursor-syncs-history auto-load path can invoke it
-  // directly when a stash / branch / tag's target commit isn't yet
-  // in the loaded window. Returns a flag indicating whether a load
-  // actually fired so the caller can update its attempt counter.
+  // STABLE useCallback (empty deps) for loadMoreCommits. The function
+  // reads the volatile state (commit counts, fetch args, hasMore) via
+  // refs that update on every render so the identity stays constant.
+  //
+  // Why stable matters: the cursor-syncs-history auto-load chain
+  // calls this through a forward-reference ref (loadMoreCommitsRef).
+  // If loadMoreCommits regenerated on every render — as the previous
+  // implementation did via state deps — there was a render-order
+  // race: the cursor sync effect would call the PREVIOUS render's
+  // callback (still in the ref because the ref-setter useEffect runs
+  // after the cursor-sync effect in declaration order), which had
+  // captured a stale `state.commits.length` and re-fetched the same
+  // window. The auto-load chain appeared to fire but never advanced
+  // through history.
+  //
+  // Stable identity + refs sidesteps the race entirely: the function
+  // never changes, and every call reads the latest state.
+  const loadMoreStateRef = React.useRef({
+    commitsLength: state.commits.length,
+    filteredCommitsLength: state.filteredCommits.length,
+    historyFetchArgs: state.historyFetchArgs,
+    hasMoreCommits,
+    logArgv,
+  })
+  loadMoreStateRef.current = {
+    commitsLength: state.commits.length,
+    filteredCommitsLength: state.filteredCommits.length,
+    historyFetchArgs: state.historyFetchArgs,
+    hasMoreCommits,
+    logArgv,
+  }
+
   const loadMoreCommits = React.useCallback(async (
     options: { statusMessage?: string } = {}
   ): Promise<{ fired: boolean; addedCommits: number }> => {
-    if (!logArgv || logArgv.limit || loadingMoreCommitsRef.current || !hasMoreCommits) {
+    const snap = loadMoreStateRef.current
+    if (!snap.logArgv || snap.logArgv.limit || loadingMoreCommitsRef.current || !snap.hasMoreCommits) {
       return { fired: false, addedCommits: 0 }
     }
-    if (state.filteredCommits.length === 0) {
+    if (snap.filteredCommitsLength === 0) {
       return { fired: false, addedCommits: 0 }
     }
 
@@ -3978,9 +4006,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       value: options.statusMessage || 'loading older commits',
       loading: true,
     })
-    const fetchArgs = state.historyFetchArgs
+    const fetchArgs = snap.historyFetchArgs
     const mergedArgv: LogArgv = {
-      ...logArgv,
+      ...snap.logArgv,
       ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
       ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
     }
@@ -3992,7 +4020,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const nextRows = await safe(
       getLogRows(git, mergedArgv, {
         limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
-        skip: state.commits.length,
+        skip: snap.commitsLength,
         extraRefs: stashHashes,
       })
     )
@@ -4017,15 +4045,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
     setHasMoreCommits(nextCommitCount >= LOG_INTERACTIVE_DEFAULT_LIMIT)
     return { fired: true, addedCommits: nextCommitCount }
-  }, [
-    dispatch,
-    git,
-    hasMoreCommits,
-    logArgv,
-    state.commits.length,
-    state.filteredCommits.length,
-    state.historyFetchArgs,
-  ])
+    // Empty deps — the function is intentionally stable. State is
+    // read via `loadMoreStateRef.current` at call time, and `dispatch`
+    // / `git` / `setLoadingMoreCommits` / `setHasMoreCommits` are
+    // already stable across renders by React's contract.
+  }, [dispatch, git])
 
   // Expose `loadMoreCommits` to the cursor-sync effect via the
   // forward-reference ref set up above. Keeps the effect's chained
