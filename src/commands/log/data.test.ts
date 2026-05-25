@@ -75,6 +75,51 @@ describe('log data layer', () => {
     expect(args).not.toContain('--no-merges')
   })
 
+  it('appends extraRefs as positional graph roots after --all', () => {
+    // Workstation includes stash commit hashes here so they appear as
+    // graph nodes even though `git log --all` only walks `refs/stash`
+    // (the latest stash) by default. Each hash becomes an additional
+    // root the traversal starts from.
+    const args = buildLogArgs(argv({ all: true }), {
+      extraRefs: ['abc1234', 'def5678'],
+    })
+
+    expect(args).toContain('--all')
+    expect(args).toContain('abc1234')
+    expect(args).toContain('def5678')
+    // Ordering matters: extraRefs come after --all so git parses them
+    // as positional refs, not as flag args.
+    const allIdx = args.indexOf('--all')
+    const refIdx = args.indexOf('abc1234')
+    expect(refIdx).toBeGreaterThan(allIdx)
+  })
+
+  it('appends extraRefs before the -- path separator', () => {
+    // When a path filter is set, extraRefs must land BEFORE the `--`
+    // separator so git treats them as refs rather than paths.
+    const args = buildLogArgs(argv({ all: true, path: ['src'] }), {
+      extraRefs: ['abc1234'],
+    })
+
+    const refIdx = args.indexOf('abc1234')
+    const sepIdx = args.indexOf('--')
+    expect(refIdx).toBeGreaterThan(-1)
+    expect(sepIdx).toBeGreaterThan(refIdx)
+  })
+
+  it('omits extraRefs when the array is empty', () => {
+    // Repos with no stashes pass an empty array; we shouldn't emit
+    // anything that would confuse git or change the argument shape.
+    const args = buildLogArgs(argv({ all: true }), { extraRefs: [] })
+
+    expect(args).toContain('--all')
+    // No extra positional refs landed in the args list.
+    const positionalRefs = args.filter((arg) =>
+      !arg.startsWith('--') && !arg.startsWith('-') && arg !== 'log'
+    )
+    expect(positionalRefs.filter((arg) => /^[a-f0-9]+$/i.test(arg))).toEqual([])
+  })
+
   describe('buildToggleGraphArgs', () => {
     it('switches to full topology when fullGraph is true', () => {
       const merged = buildToggleGraphArgs(argv({ view: 'compact' }), true)

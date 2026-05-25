@@ -55,6 +55,29 @@ export function parseStashFiles(output: string): string[] {
     .filter(Boolean)
 }
 
+/**
+ * Resolve the commit hashes for every stash, in `stash@{N}` order.
+ *
+ * Used by the workstation's history loader to include older stashes
+ * as graph roots — `git log --all` only walks `refs/stash` (the
+ * latest stash) by default, so stash@{1+} commits live off-graph
+ * unless explicitly referenced. Passing this list as positional refs
+ * to `git log` makes every stash appear as a graph node, which lets
+ * the cursor-syncs-history effect actually land on them when the
+ * user navigates the stashes sidebar.
+ *
+ * Cheap: one `git stash list` call, no per-stash fan-out. Returns
+ * an empty array when there are no stashes — callers can pass the
+ * result through unconditionally.
+ */
+export async function getStashCommitHashes(git: SimpleGit): Promise<string[]> {
+  const raw = await git.raw(['stash', 'list', '--format=%H']).catch(() => '')
+  return raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
 export async function getStashOverview(git: SimpleGit): Promise<StashOverview> {
   const stashes = parseStashList(
     await git.raw(['stash', 'list', '--date=iso', '--format=%gd%x1f%H%x1f%ci%x1f%gs'])

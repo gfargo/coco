@@ -302,6 +302,7 @@ import {
 import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import {
     findStashFileForOffset,
+    getStashCommitHashes,
     getStashDiff,
     getStashOverview,
     parseStashDiffFiles,
@@ -924,8 +925,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
         ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
       } as LogArgv
+      // Stash commits as graph roots so post-operation refreshes
+      // keep the same rich graph the boot loader assembled. Without
+      // this, every commit / split-apply / etc. would drop stash
+      // anchors and the cursor-syncs-history effect would degrade
+      // back to "tip not in loaded window" for older stashes.
+      const stashHashes = await getStashCommitHashes(git).catch(() => [])
       const fresh = await getLogRows(git, mergedArgv, {
         limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+        extraRefs: stashHashes,
       })
       if (mountedRef.current && fresh) {
         dispatch({ type: 'replaceRows', rows: fresh })
@@ -3848,10 +3856,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
         ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
       }
+      // Load-more paths a fresh page from git AFTER what's already
+      // loaded; pass the stash hashes again so the additional rows
+      // stay graph-consistent with the boot fetch (a window that
+      // dropped stashes mid-stream would render with broken
+      // junctions).
+      const stashHashes = await getStashCommitHashes(git).catch(() => [])
       const nextRows = await safe(
         getLogRows(git, mergedArgv, {
           limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
           skip: state.commits.length,
+          extraRefs: stashHashes,
         })
       )
 
@@ -3932,7 +3947,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     })
 
     void (async () => {
-      const nextRows = await safe(getLogRows(git, merged, { limit: LOG_INTERACTIVE_DEFAULT_LIMIT }))
+      const stashHashes = await getStashCommitHashes(git).catch(() => [])
+      const nextRows = await safe(getLogRows(git, merged, {
+        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+        extraRefs: stashHashes,
+      }))
       if (!mountedRef.current || historyFetchRequestRef.current !== requestId) {
         return
       }
@@ -3980,7 +3999,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     })
 
     void (async () => {
-      const nextRows = await safe(getLogRows(git, merged, { limit: LOG_INTERACTIVE_DEFAULT_LIMIT }))
+      // Include stash commits as graph roots so the toggle's re-fetch
+      // sees the same rich graph the boot loader assembles. Without
+      // this, flipping `\` into full mode and back loses the stash
+      // anchors that loadRowsWithStashes seeded on boot.
+      const stashHashes = await getStashCommitHashes(git).catch(() => [])
+      const nextRows = await safe(getLogRows(git, merged, {
+        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+        extraRefs: stashHashes,
+      }))
       if (!mountedRef.current || toggleGraphRequestRef.current !== requestId) {
         return
       }

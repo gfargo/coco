@@ -16,6 +16,21 @@ export const LOG_INTERACTIVE_DEFAULT_LIMIT = 300
 export type LogRowLoadOptions = {
   limit?: number
   skip?: number
+  /**
+   * Additional refs / commit hashes to include as graph roots beyond
+   * what `--all` covers. The canonical use case is stashes: `git log
+   * --all` only includes `refs/stash` (the latest stash; stash@{0}),
+   * not older `stash@{N}` entries which live in the stash reflog
+   * rather than as refs. Passing their commit hashes here makes them
+   * appear as nodes in the loaded graph window, so cursor-syncs from
+   * the stash sidebar can actually land somewhere.
+   *
+   * Appended as positional args at the end of the `git log` command,
+   * after the `--all` flag and before any path separator. Each entry
+   * should be a resolvable ref / commit hash; the caller is
+   * responsible for filtering out invalid values.
+   */
+  extraRefs?: string[]
 }
 
 export type GitLogCommitRow = {
@@ -301,6 +316,14 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
     args.push('--all')
   } else if (argv.branch) {
     args.push(argv.branch)
+  }
+
+  // Extra refs (stash commits etc.) — append after the --all / branch
+  // selector but BEFORE the path separator. Git treats them as
+  // additional graph roots, so the traversal includes them alongside
+  // whatever --all / --branch already covers.
+  if (options.extraRefs && options.extraRefs.length > 0) {
+    args.push(...options.extraRefs)
   }
 
   const paths = toArray(argv.path)
