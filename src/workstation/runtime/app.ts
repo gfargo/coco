@@ -1577,6 +1577,35 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // fetched yet); a status hint surfaces in that case so the user
   // knows to toggle full graph or load older commits.
   const lastSyncedHashRef = React.useRef<string | undefined>(undefined)
+  // Auto-load-to-find-target state (#1034 follow-up). When the user
+  // cursors a branch / tag / stash whose target commit isn't in the
+  // loaded window, the cursor-sync effect chains `loadMoreCommits()`
+  // calls until the target shows up OR we hit the cap. This ref
+  // tracks the in-flight target so each load-more completion can
+  // re-check ("did the page we just loaded contain my target?")
+  // without restarting from attempt zero.
+  //
+  // Reset when the user navigates to a different target (cursor
+  // moves to a different stash, branch swap, etc.) so the attempt
+  // counter starts fresh per new request.
+  const pendingAutoLoadRef = React.useRef<{
+    hash: string
+    label: string
+    attempts: number
+  } | null>(null)
+  const MAX_AUTO_LOAD_ATTEMPTS = 5
+  // Forward-reference: `loadMoreCommits` is defined later in the
+  // component body, but the cursor-sync effect (declared here) needs
+  // to invoke it. Using a ref breaks the circularity without moving
+  // 200+ LOC of unrelated helpers above this effect just for ordering.
+  // The loadMoreCommits useCallback writes itself into this ref on
+  // mount; the cursor sync calls through `current?.()` so the
+  // brief window before the ref is populated falls through cleanly.
+  type LoadMoreCommitsFn = (options?: { statusMessage?: string }) => Promise<{
+    fired: boolean
+    addedCommits: number
+  }>
+  const loadMoreCommitsRef = React.useRef<LoadMoreCommitsFn | null>(null)
   React.useEffect(() => {
     const onBranchTab = state.activeView === 'branches' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'branches')
@@ -1676,6 +1705,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     )
     if (loaded) {
       lastSyncedHashRef.current = targetHash
+      // Found it — clear any pending auto-load tracking for this
+      // target so subsequent navigations don't carry stale attempt
+      // counters forward.
+      pendingAutoLoadRef.current = null
       dispatch({ type: 'selectCommitByHash', hash: targetHash })
       // Confirmation status message so the user gets feedback even
       // when the dedicated branches / tags view is occupying the
@@ -1685,9 +1718,59 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         value: `Synced history to ${targetLabel} tip`,
       })
     } else {
-      dispatch({
-        type: 'setStatus',
-        value: `${targetLabel} tip not in loaded window — press \\ for full graph or Ctrl+L to load more`,
+      // Target isn't in the loaded window. Try to auto-load more
+      // commits and re-check rather than just telling the user
+      // "tip not in loaded window" and giving up. Each successful
+      // load-more updates `state.filteredCommits` which re-fires
+      // this effect; the pendingAutoLoadRef carries the attempt
+      // counter so we cap the chain at `MAX_AUTO_LOAD_ATTEMPTS`
+      // and don't loop forever on a ref pointing at a commit
+      // unreachable from any current branch.
+      const pending = pendingAutoLoadRef.current
+      const startedNewTarget = !pending || pending.hash !== targetHash
+      if (startedNewTarget) {
+        pendingAutoLoadRef.current = {
+          hash: targetHash,
+          // `targetLabel` is technically `string | undefined` per the
+          // declaration above, but we only reach this branch when
+          // `targetHash` is set, and every branch that sets
+          // `targetHash` also sets `targetLabel`. Fall back to the
+          // raw hash if a future code path forgets to set the label.
+          label: targetLabel || targetHash,
+          attempts: 0,
+        }
+      }
+      const current = pendingAutoLoadRef.current!
+      if (current.attempts >= MAX_AUTO_LOAD_ATTEMPTS) {
+        // Cap hit — stop chaining and surface the manual escape
+        // valve. Don't clear pendingAutoLoadRef here; if the user
+        // navigates elsewhere we'll reset on the next mismatch.
+        dispatch({
+          type: 'setStatus',
+          value: `${targetLabel} target commit is beyond ${LOG_INTERACTIVE_DEFAULT_LIMIT * MAX_AUTO_LOAD_ATTEMPTS} commits — too far back to auto-load.`,
+        })
+        return
+      }
+      if (!hasMoreCommits) {
+        // Nothing left to load — the target ref points at a commit
+        // that isn't reachable from any ref we know about (e.g. a
+        // stash whose base branch was deleted and the stash itself
+        // is so old it fell off git's effective walk).
+        dispatch({
+          type: 'setStatus',
+          value: `${targetLabel} target commit is unreachable from any loaded ref.`,
+        })
+        pendingAutoLoadRef.current = null
+        return
+      }
+      current.attempts += 1
+      // Fire-and-forget — `appendRows` updates `state.filteredCommits`
+      // which re-fires this effect; the next pass either finds the
+      // target or increments the counter again. Go through the ref
+      // because `loadMoreCommits` is declared later in the component
+      // body (see the forward-reference note where the ref is set up).
+      void loadMoreCommitsRef.current?.({
+        statusMessage: `Loading more commits to find ${current.label} (${current.attempts}/${MAX_AUTO_LOAD_ATTEMPTS})…`,
       })
     }
   }, [
@@ -1696,6 +1779,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedBranchIndex, state.selectedTagIndex, state.selectedStashIndex,
     state.branchSort, state.tagSort, state.filter,
     state.filteredCommits,
+    hasMoreCommits,
   ])
 
   // Reset the dedup ref when the user moves focus away from the
@@ -1710,6 +1794,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
     if (!onBranchTab && !onTagTab && !onStashTab) {
       lastSyncedHashRef.current = undefined
+      // Drop any in-flight auto-load chain too — the user left the
+      // ref sidebar so we no longer want to keep paging through
+      // commits searching for a target they've stopped caring about.
+      pendingAutoLoadRef.current = null
     }
   }, [state.activeView, state.focus, state.sidebarTab])
 
@@ -3866,80 +3954,108 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     loadingMoreCommitsRef.current = loadingMoreCommits
   }, [loadingMoreCommits])
 
-  React.useEffect(() => {
-    const remaining = state.filteredCommits.length - state.selectedIndex - 1
-
-    async function loadMoreCommits(): Promise<void> {
-      if (!logArgv || logArgv.limit || loadingMoreCommitsRef.current || !hasMoreCommits) {
-        return
-      }
-
-      if (state.filteredCommits.length === 0 || remaining > 20) {
-        return
-      }
-
-      loadingMoreCommitsRef.current = true
-      const requestId = loadMoreRequestRef.current + 1
-      loadMoreRequestRef.current = requestId
-      setLoadingMoreCommits(true)
-      dispatch({ type: 'setStatus', value: 'loading older commits' })
-      const fetchArgs = state.historyFetchArgs
-      const mergedArgv: LogArgv = {
-        ...logArgv,
-        ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
-        ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
-      }
-      // Load-more paths a fresh page from git AFTER what's already
-      // loaded; pass the stash hashes again so the additional rows
-      // stay graph-consistent with the boot fetch (a window that
-      // dropped stashes mid-stream would render with broken
-      // junctions).
-      const stashHashes = await getStashCommitHashes(git).catch(() => [])
-      const nextRows = await safe(
-        getLogRows(git, mergedArgv, {
-          limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
-          skip: state.commits.length,
-          extraRefs: stashHashes,
-        })
-      )
-
-      if (!mountedRef.current || loadMoreRequestRef.current !== requestId) {
-        return
-      }
-
-      loadingMoreCommitsRef.current = false
-      setLoadingMoreCommits(false)
-
-      const nextCommitCount = nextRows ? getCommitRows(nextRows).length : 0
-
-      if (!nextRows) {
-        dispatch({ type: 'setStatus', value: 'failed to load older commits' })
-        return
-      }
-
-      if (nextRows?.length) {
-        dispatch({ type: 'appendRows', rows: nextRows })
-      }
-
-      setHasMoreCommits(nextCommitCount >= LOG_INTERACTIVE_DEFAULT_LIMIT)
-      dispatch({
-        type: 'setStatus',
-        value: nextCommitCount
-          ? `loaded ${nextCommitCount} older commits`
-          : 'end of history',
-      })
+  // Extracted as a callback (was inline inside the scroll-near-bottom
+  // effect) so the cursor-syncs-history auto-load path can invoke it
+  // directly when a stash / branch / tag's target commit isn't yet
+  // in the loaded window. Returns a flag indicating whether a load
+  // actually fired so the caller can update its attempt counter.
+  const loadMoreCommits = React.useCallback(async (
+    options: { statusMessage?: string } = {}
+  ): Promise<{ fired: boolean; addedCommits: number }> => {
+    if (!logArgv || logArgv.limit || loadingMoreCommitsRef.current || !hasMoreCommits) {
+      return { fired: false, addedCommits: 0 }
+    }
+    if (state.filteredCommits.length === 0) {
+      return { fired: false, addedCommits: 0 }
     }
 
-    void loadMoreCommits()
+    loadingMoreCommitsRef.current = true
+    const requestId = loadMoreRequestRef.current + 1
+    loadMoreRequestRef.current = requestId
+    setLoadingMoreCommits(true)
+    dispatch({
+      type: 'setStatus',
+      value: options.statusMessage || 'loading older commits',
+      loading: true,
+    })
+    const fetchArgs = state.historyFetchArgs
+    const mergedArgv: LogArgv = {
+      ...logArgv,
+      ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
+      ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
+    }
+    // Load-more paths a fresh page from git AFTER what's already
+    // loaded; pass the stash hashes again so the additional rows
+    // stay graph-consistent with the boot fetch (a window that
+    // dropped stashes mid-stream would render with broken junctions).
+    const stashHashes = await getStashCommitHashes(git).catch(() => [])
+    const nextRows = await safe(
+      getLogRows(git, mergedArgv, {
+        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+        skip: state.commits.length,
+        extraRefs: stashHashes,
+      })
+    )
+
+    if (!mountedRef.current || loadMoreRequestRef.current !== requestId) {
+      return { fired: false, addedCommits: 0 }
+    }
+
+    loadingMoreCommitsRef.current = false
+    setLoadingMoreCommits(false)
+
+    const nextCommitCount = nextRows ? getCommitRows(nextRows).length : 0
+
+    if (!nextRows) {
+      dispatch({ type: 'setStatus', value: 'failed to load older commits' })
+      return { fired: false, addedCommits: 0 }
+    }
+
+    if (nextRows?.length) {
+      dispatch({ type: 'appendRows', rows: nextRows })
+    }
+
+    setHasMoreCommits(nextCommitCount >= LOG_INTERACTIVE_DEFAULT_LIMIT)
+    return { fired: true, addedCommits: nextCommitCount }
   }, [
     dispatch,
     git,
     hasMoreCommits,
-    loadingMoreCommits,
     logArgv,
     state.commits.length,
     state.filteredCommits.length,
     state.historyFetchArgs,
+  ])
+
+  // Expose `loadMoreCommits` to the cursor-sync effect via the
+  // forward-reference ref set up above. Keeps the effect's chained
+  // auto-load logic decoupled from the lexical ordering of these
+  // callbacks (the effect runs at line ~1670; this useCallback is
+  // declared 2000+ lines later).
+  React.useEffect(() => {
+    loadMoreCommitsRef.current = loadMoreCommits
+  }, [loadMoreCommits])
+
+  // Scroll-near-bottom auto-trigger. Fires when the user's cursor is
+  // within 20 rows of the last loaded commit so older history is
+  // already on its way by the time they reach the bottom.
+  React.useEffect(() => {
+    const remaining = state.filteredCommits.length - state.selectedIndex - 1
+    if (remaining > 20) return
+    void loadMoreCommits().then((result) => {
+      if (result.fired) {
+        dispatch({
+          type: 'setStatus',
+          value: result.addedCommits
+            ? `loaded ${result.addedCommits} older commits`
+            : 'end of history',
+        })
+      }
+    })
+  }, [
+    dispatch,
+    loadMoreCommits,
+    state.filteredCommits.length,
     state.selectedIndex,
   ])
 
