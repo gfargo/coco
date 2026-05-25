@@ -584,6 +584,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // workdirs for submodule paths recorded in `.gitmodules` (which
   // are repo-relative). Undefined during the brief moment between
   // git swap and the revparse callback resolving.
+  //
+  // Audit finding #10: rapid frame push/pop races are prevented by
+  // the per-effect `cancelled` flag — React fires the cleanup
+  // synchronously BEFORE running the next effect body, so any
+  // pending revparse from the old `git` sees `cancelled === true`
+  // and skips its write. The `git` reference itself is captured by
+  // closure, so each effect run resolves against the right binding.
+  // No additional depth tagging is needed.
   const [activeRepoRoot, setActiveRepoRoot] = React.useState<string | undefined>(undefined)
   React.useEffect(() => {
     let cancelled = false
@@ -1065,17 +1073,47 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     return () => { cancelled = true }
   }, [git, dispatch])
 
+  // Audit finding #2: re-resolve the repo root inline on every save
+  // and key the deps off `git` + the saved value. The original
+  // implementation read from `repoRootRef.current`, which is async-
+  // populated by the resolver effect above and can lag behind a git
+  // swap. After #995's synchronous pop-restore, the parent's freshly
+  // restored sidebar tab was being written into the submodule's
+  // cache because the ref still held the submodule root during the
+  // brief window before the resolver settled.
+  //
+  // The extra `revparse` cost per save is negligible (saves fire
+  // once per user-initiated tab change, not per render) and the
+  // cancellation flag prevents a stale resolution from racing a
+  // newer one in flight.
   React.useEffect(() => {
-    const repoRoot = repoRootRef.current
-    if (!repoRoot) return
-    saveSidebarTab(repoRoot, state.userSidebarTab)
-  }, [state.userSidebarTab])
+    let cancelled = false
+    void (async () => {
+      try {
+        const root = (await git.revparse(['--show-toplevel'])).trim()
+        if (cancelled || !root) return
+        saveSidebarTab(root, state.userSidebarTab)
+      } catch {
+        // Not in a worktree, or revparse failed — silently skip.
+        // The next save attempt will retry.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [state.userSidebarTab, git])
 
   React.useEffect(() => {
-    const repoRoot = repoRootRef.current
-    if (!repoRoot) return
-    saveDiffViewMode(repoRoot, state.diffViewMode)
-  }, [state.diffViewMode])
+    let cancelled = false
+    void (async () => {
+      try {
+        const root = (await git.revparse(['--show-toplevel'])).trim()
+        if (cancelled || !root) return
+        saveDiffViewMode(root, state.diffViewMode)
+      } catch {
+        // Same as above.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [state.diffViewMode, git])
 
   // P-stash-explorer: load `git stash show -p <ref>` once the diff view
   // becomes active with diffSource='stash'. Best-effort — empty stashes
@@ -1804,6 +1842,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         git,
         signal: controller.signal,
         onStreamChunk: (_text, accumulated) => {
+          // Audit finding #4: skip dispatching into a torn-down
+          // tree. If the user quit (or otherwise unmounted the
+          // workstation) mid-stream, React warns about updates on
+          // an unmounted component. Drop the chunk silently.
+          if (!mountedRef.current) return
           // Dispatch the full accumulated text — the preview chrome
           // helper does the last-N-lines slicing at render time, so
           // re-doing the slice here would be wasted work. Per-chunk
@@ -1815,6 +1858,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           })
         },
       })
+
+      // Audit finding #4 (unmount race): bail out before any
+      // post-await dispatch if the user quit while the LLM call was
+      // in flight. Same pattern as `refreshHistoryRows` upstream.
+      if (!mountedRef.current) return
 
       // Cancel path (#881 phase 3). User pressed Esc during the
       // stream; reducer drops loading + preview, status line shows
@@ -1837,6 +1885,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         action: { type: 'setResult', message: result.message, details: result.details },
       })
       dispatch({ type: 'setStatus', value: result.message })
+    } catch (error) {
+      // Audit finding #3: defensive recovery for unexpected throws
+      // from the workflow. The workflow catches its own errors
+      // today, so this catch is latent — but any future refactor
+      // that lets an error escape would otherwise strand the
+      // spinner permanently with no user-facing recovery short of
+      // quitting. Surface a generic failure and clear the loading
+      // state so the user can re-try.
+      if (mountedRef.current) {
+        dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: false } })
+        dispatch({
+          type: 'setStatus',
+          value: `AI draft failed unexpectedly: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          kind: 'error',
+        })
+      }
     } finally {
       // Clear the ref only if it still points at OUR controller — a
       // rapid second invocation could have already replaced it, in
@@ -1932,9 +1998,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     pullRequestBodyCancelRef.current = cancelHandle
 
     dispatch({ type: 'setPendingPullRequestBodyDraft', value: true })
+    // Audit finding #6: soft cancel today — Esc skips opening the
+    // follow-up prompt, but the LLM call itself keeps running to
+    // completion (no AbortSignal threaded through the changelog CLI
+    // chain). Status copy reflects that honestly so the user isn't
+    // misled into thinking they're saving tokens.
     dispatch({
       type: 'setStatus',
-      value: `generating PR body from changelog (vs ${defaultBranch}) — Esc to cancel`,
+      value: `generating PR body from changelog (vs ${defaultBranch}) — Esc to skip prompt`,
       loading: true,
     })
 
@@ -1965,6 +2036,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         dispatch({ type: 'setStatus', value: 'PR body drafted — review and Ctrl+D to submit.' })
       }
 
+      // Audit finding #11: clear the pending flag BEFORE opening the
+      // prompt. If a future refactor adds an `await` between the flag
+      // clear (currently in `finally`) and the `openInputPrompt`
+      // dispatch, an Esc keystroke in the gap would dispatch
+      // `cancelPullRequestBodyDraft` AFTER the prompt opens, leaving
+      // the prompt visible with a stale "cancelled" message. Clearing
+      // here moves the flag teardown into the same React batch as the
+      // prompt open, eliminating the race.
+      dispatch({ type: 'setPendingPullRequestBodyDraft', value: false })
+
       dispatch({
         type: 'openInputPrompt',
         kind: 'create-pr',
@@ -1973,11 +2054,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         multiline: true,
       })
     } finally {
-      // Clear the flag + the ref so a subsequent draft starts clean.
+      // Belt-and-suspenders: the `try` block clears the flag on the
+      // success path (audit finding #11). This duplicate clear handles
+      // the error / cancel paths where the early-returns skip the
+      // success-path dispatch. Safe to no-op when already false.
+      dispatch({ type: 'setPendingPullRequestBodyDraft', value: false })
       // Only clear the ref if we still own it — a second invocation
       // would have already taken ownership in which case the cancel
       // duty has rolled over.
-      dispatch({ type: 'setPendingPullRequestBodyDraft', value: false })
       if (pullRequestBodyCancelRef.current === cancelHandle) {
         pullRequestBodyCancelRef.current = null
       }
@@ -2080,6 +2164,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         branch: head,
         baseLabel: cached.baseLabel,
         text: cached.text,
+        // Audit finding #9: cache-hit path preserves the original
+        // generation timestamp rather than minting a fresh one — the
+        // "X ago" header should reflect when the LLM ran, not when
+        // the cached entry was re-displayed.
+        generatedAt: cached.generatedAt,
       })
       dispatch({
         type: 'setStatus',
@@ -2112,6 +2201,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       branch: head,
       baseLabel,
       text: result.text,
+      // Audit finding #9: timestamp captured at dispatch time, not
+      // inside the reducer.
+      generatedAt: Date.now(),
     })
     dispatch({
       type: 'setStatus',
@@ -2212,7 +2304,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     if (editorOk) {
       try {
         const content = readFileSync(file, 'utf8')
-        dispatch({ type: 'setChangelogText', text: content })
+        dispatch({ type: 'setChangelogText', text: content, generatedAt: Date.now() })
         dispatch({ type: 'setStatus', value: 'Changelog updated from editor.' })
       } catch (error) {
         dispatch({
@@ -2572,7 +2664,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // that could disagree with reality on partial-apply.
     const commitHashes = result.commitHashes || []
     if (commitHashes.length > 0) {
-      dispatch({ type: 'markRecentCommits', hashes: commitHashes })
+      // Audit finding #9: timestamp captured at dispatch time.
+      dispatch({ type: 'markRecentCommits', hashes: commitHashes, markedAt: Date.now() })
       // DevSkim: ignore DS172411 — function literal, fixed delay,
       // no caller-supplied data flowing through.
       setTimeout(() => dispatch({ type: 'clearRecentCommits' }), 5000)

@@ -2010,21 +2010,25 @@ describe('log Ink input interactions', () => {
       expect(events).not.toContainEqual({ type: 'cancelAiCommitDraft' })
     })
 
-    it('does not fire cancelAiCommitDraft from views other than compose', () => {
-      // Defensive: even if `commitCompose.loading` is true (it
-      // shouldn't normally be while the user navigated away, but
-      // it's recoverable state), Esc on a different surface should
-      // do its surface-local thing, not steal the cancel keystroke.
+    it('fires cancelAiCommitDraft from any view while loading is true (audit finding #5)', () => {
+      // The original Phase 3 implementation gated cancel on
+      // `activeView === 'compose'`, which made the keystroke
+      // unreachable after chord-navigation away from compose
+      // mid-stream. The audit caught this: user starts AI draft on
+      // compose, presses `g h` to glance at history while waiting,
+      // realizes they want to bail — Esc should still cancel even
+      // though they're not on compose anymore. The fix drops the
+      // activeView gate; this test pins the new behaviour.
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, {
         type: 'commitCompose',
         action: { type: 'setLoading', value: true },
       })
-      // Stay on history view.
+      // Stay on history view (not compose).
       expect(state.activeView).toBe('history')
 
       const events = getLogInkInputEvents(state, '', { escape: true })
-      expect(events).not.toContainEqual({ type: 'cancelAiCommitDraft' })
+      expect(events).toEqual([{ type: 'cancelAiCommitDraft' }])
     })
   })
 
@@ -2055,17 +2059,21 @@ describe('log Ink input interactions', () => {
       expect(events).not.toContainEqual({ type: 'cancelPullRequestBodyDraft' })
     })
 
-    it('takes precedence over the compose-cancel binding when both could match', () => {
+    it('compose cancel takes precedence over PR-body cancel when both could match', () => {
       // Edge case: both `pendingPullRequestBodyDraft` AND
       // `commitCompose.loading` are true simultaneously (unusual but
       // recoverable state). The compose handler sits above PR-body
       // in the input pipeline, so compose cancel wins. Document the
       // precedence here so a future reorder doesn't silently swap it.
+      //
+      // Note: after audit finding #5, neither binding is gated on
+      // `activeView`, so the active view is irrelevant to the
+      // precedence — the order of handlers in the input pipeline
+      // is the only thing that matters.
       let state = applyLogInkAction(createLogInkState(rows), {
         type: 'setPendingPullRequestBodyDraft',
         value: true,
       })
-      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
       state = applyLogInkAction(state, {
         type: 'commitCompose',
         action: { type: 'setLoading', value: true },

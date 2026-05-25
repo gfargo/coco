@@ -1391,16 +1391,19 @@ describe('log Ink view model', () => {
   })
 
   describe('recent-commit markers', () => {
-    it('markRecentCommits records the hash list with a timestamp', () => {
-      const before = Date.now()
+    it('markRecentCommits records the hash list with the action-supplied timestamp', () => {
+      // Audit finding #9: `markedAt` is now part of the action payload
+      // so the reducer stays pure. The dispatcher (in app.ts) calls
+      // `Date.now()` and passes the result; the reducer just stores it.
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, {
         type: 'markRecentCommits',
         hashes: ['abc123', 'def456'],
+        markedAt: 1234567890,
       })
 
       expect(state.recentCommitHashes?.hashes).toEqual(['abc123', 'def456'])
-      expect(state.recentCommitHashes?.markedAt).toBeGreaterThanOrEqual(before)
+      expect(state.recentCommitHashes?.markedAt).toBe(1234567890)
     })
 
     it('markRecentCommits with empty list closes the marker', () => {
@@ -1411,8 +1414,9 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, {
         type: 'markRecentCommits',
         hashes: ['abc123'],
+        markedAt: 1,
       })
-      state = applyLogInkAction(state, { type: 'markRecentCommits', hashes: [] })
+      state = applyLogInkAction(state, { type: 'markRecentCommits', hashes: [], markedAt: 2 })
       expect(state.recentCommitHashes).toBeUndefined()
     })
 
@@ -1421,6 +1425,7 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, {
         type: 'markRecentCommits',
         hashes: ['abc123'],
+        markedAt: 1,
       })
       state = applyLogInkAction(state, { type: 'clearRecentCommits' })
       expect(state.recentCommitHashes).toBeUndefined()
@@ -1434,10 +1439,12 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, {
         type: 'markRecentCommits',
         hashes: ['old1', 'old2'],
+        markedAt: 1,
       })
       state = applyLogInkAction(state, {
         type: 'markRecentCommits',
         hashes: ['new1'],
+        markedAt: 2,
       })
 
       expect(state.recentCommitHashes?.hashes).toEqual(['new1'])

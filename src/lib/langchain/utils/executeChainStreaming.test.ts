@@ -98,15 +98,19 @@ describe('executeChainStreaming', () => {
     expect(runningSum).toBe('abc')
   })
 
-  it('swallows handler errors so a bad render handler cannot tank the LLM call', async () => {
-    // A render handler that throws on every chunk used to mean the
-    // user paid for the LLM call and got nothing back; the helper now
-    // catches each callback error and keeps consuming the stream.
+  it('swallows transient handler errors (single failure) so the LLM call still resolves', async () => {
+    // A render handler that throws intermittently shouldn't tank the
+    // user's LLM call. The helper catches each callback error and
+    // keeps consuming the stream as long as failures aren't
+    // consecutive past the bail threshold (audit finding #13).
     const llm = new FakeListChatModel({ responses: ['hello'] })
     let invocations = 0
     const onChunk = () => {
       invocations += 1
-      throw new Error('handler exploded')
+      // Throw only on the first chunk — subsequent chunks succeed.
+      if (invocations === 1) {
+        throw new Error('transient handler blip')
+      }
     }
 
     const result = await executeChainStreaming<string>({
@@ -118,10 +122,67 @@ describe('executeChainStreaming', () => {
       logger: silentLogger(),
     })
 
-    expect(invocations).toBeGreaterThan(0)
-    // Despite the handler throwing, the call resolves with the
-    // fully-accumulated parsed result.
+    expect(invocations).toBeGreaterThan(1)
+    // Despite the first chunk's handler throwing, the call resolves
+    // with the fully-accumulated parsed result.
     expect(result).toBe('hello')
+  })
+
+  it('bails the stream after 5 consecutive callback failures (audit finding #13)', async () => {
+    // A genuinely broken render handler (one that throws on every
+    // chunk) used to silently log to verbose for the entire LLM call,
+    // wasting the user's wait. The bail threshold ensures the failure
+    // surfaces as a thrown LangChainExecutionError after MAX_CALLBACK_FAILURES
+    // consecutive throws.
+    const llm = new FakeListChatModel({ responses: ['hello world this is a longer response'] })
+    let invocations = 0
+    const onChunk = () => {
+      invocations += 1
+      throw new Error('handler is completely broken')
+    }
+
+    await expect(
+      executeChainStreaming<string>({
+        llm: asLlm(llm),
+        prompt,
+        variables,
+        parser: new StringOutputParser(),
+        onChunk,
+        logger: silentLogger(),
+      }),
+    ).rejects.toThrow(/render handler failed 5 times in a row/)
+    // Bail kicks in at the threshold so we don't burn through the
+    // whole stream. The fake emits character-by-character; 5+ throws
+    // happen well before the response ends.
+    expect(invocations).toBeGreaterThanOrEqual(5)
+  })
+
+  it('resets the consecutive-failure counter on a successful callback (audit finding #13)', async () => {
+    // The bail counts CONSECUTIVE failures. A handler that fails,
+    // succeeds, fails again should not trigger the bail because the
+    // failure streak got broken. Otherwise a flaky-but-mostly-working
+    // handler would bail spuriously.
+    const llm = new FakeListChatModel({ responses: ['abcdefghij'] })
+    let invocations = 0
+    const onChunk = () => {
+      invocations += 1
+      // Throw on odd invocations only; even ones succeed. Pattern
+      // alternates so the streak never reaches 5.
+      if (invocations % 2 === 1) {
+        throw new Error('intermittent failure')
+      }
+    }
+
+    const result = await executeChainStreaming<string>({
+      llm: asLlm(llm),
+      prompt,
+      variables,
+      parser: new StringOutputParser(),
+      onChunk,
+      logger: silentLogger(),
+    })
+
+    expect(result).toBe('abcdefghij')
   })
 
   it('throws LangChainExecutionError when the stream completes with no text chunks', async () => {
