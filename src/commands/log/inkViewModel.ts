@@ -360,6 +360,15 @@ export type LogInkState = {
    */
   statusLoading?: boolean
   /**
+   * Set while the `C` keystroke's PR body draft is in flight (#881
+   * phase 4). The input handler reads this to gate the Esc cancel
+   * binding: pressing Esc while a draft is pending dispatches
+   * `cancelPullRequestBodyDraft` (soft cancel — skip opening the
+   * follow-up prompt) instead of falling through to the global Esc
+   * handler. Cleared by the workflow callback in `finally`.
+   */
+  pendingPullRequestBodyDraft?: boolean
+  /**
    * Set by `navigateOpenDiffForCommit` / `navigateOpenDiffForWorktreeFile`
    * to disambiguate the diff view when both a worktree file and a commit
    * are selectable. Cleared when the diff view is popped or replaced.
@@ -717,6 +726,7 @@ export type LogInkAction =
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
   | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success'; loading?: boolean }
+  | { type: 'setPendingPullRequestBodyDraft'; value: boolean }
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
@@ -1896,6 +1906,17 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // doesn't explicitly opt in (loading: true) clears the flag so
         // a stale spinner doesn't linger after the LLM call finishes.
         statusLoading: !action.value ? undefined : (action.loading ? true : undefined),
+        pendingKey: undefined,
+      }
+    case 'setPendingPullRequestBodyDraft':
+      // PR-body draft tracker (#881 phase 4). Set true while
+      // `startCreatePullRequest` is awaiting the changelog-based
+      // body generation; gates the Esc cancel binding in the input
+      // handler so pressing Esc during the wait skips opening the
+      // follow-up prompt instead of falling through to global Esc.
+      return {
+        ...state,
+        pendingPullRequestBodyDraft: action.value || undefined,
         pendingKey: undefined,
       }
     case 'setWorkflowAction':

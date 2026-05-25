@@ -52,6 +52,7 @@ export type LogInkInputEvent =
   | { type: 'runAiCommitDraft' }
   | { type: 'cancelAiCommitDraft' }
   | { type: 'startCreatePullRequest' }
+  | { type: 'cancelPullRequestBodyDraft' }
   | { type: 'startChangelogView' }
   | { type: 'regenerateChangelog' }
   | { type: 'yankChangelog' }
@@ -935,6 +936,24 @@ export function getLogInkInputEvents(
   // the precedence explicit if that ever changes.
   if (state.activeView === 'compose' && state.commitCompose.loading && key.escape) {
     return [{ type: 'cancelAiCommitDraft' }]
+  }
+
+  // Cancel in-flight PR body draft (#881 phase 4). The `C` keystroke
+  // kicks off a changelog-based draft that runs for 5-15 seconds
+  // before the input prompt opens. While the draft is pending, Esc
+  // tells the runtime to skip the prompt and surface a "cancelled"
+  // status. Unlike the compose cancel above, this is a *soft* cancel
+  // — the background LLM call still completes, but its result is
+  // discarded. Acceptable trade-off for now; deeper signal threading
+  // through `changelogHandler` lands in a follow-up if real cancel
+  // becomes a request.
+  //
+  // Sits unconditionally on the global Esc check (no `activeView`
+  // gate) because the draft can be initiated from any view via the
+  // palette `C` binding; Esc must work wherever the user is when
+  // they decide to bail.
+  if (state.pendingPullRequestBodyDraft && key.escape) {
+    return [{ type: 'cancelPullRequestBodyDraft' }]
   }
 
   if (state.commitCompose.editing) {
