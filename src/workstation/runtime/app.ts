@@ -1621,27 +1621,44 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         : all
       const stash = visible[Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1))]
       if (stash) {
-        // Target the stash's BASE commit (its first parent, the branch
-        // tip when `git stash push` ran) rather than the stash commit
-        // itself. This answers the user-visible question "where in
-        // larger git history was this stash created?" — that's the
-        // branch origin point, not the stash's own merge-commit row
-        // off in `refs/stash`. Practical benefit: base commits are on
-        // regular branches and are basically always in the loaded
-        // `git log --max-count=300` window, so the cursor actually
-        // moves on every stash; stash commits older than the 300th
-        // most recent often fall outside the window even when passed
-        // as graph roots.
+        // Two-step fallback chain for stash cursor sync:
         //
-        // Fallback to stash.hash when baseHash is empty (legacy /
-        // corrupted stash refs that omitted %P from the format
-        // output). The cursor may still hit "tip not in loaded
-        // window" in that edge case but at least we tried.
-        targetHash = stash.baseHash || stash.hash
-        // `stash@{N}` is the canonical name and what the user sees in
-        // the sidebar row; using it verbatim makes the status copy
-        // match the visible label.
-        targetLabel = stash.ref
+        //   1. Try `baseHash` (the branch tip the stash was created
+        //      from). This answers the user-visible question "where
+        //      in larger git history was this stash made?" — that's
+        //      the branch origin point, not the stash's own merge-
+        //      commit row off in `refs/stash`. Base commits live on
+        //      regular branches so they're almost always in the
+        //      loaded window.
+        //
+        //   2. If `baseHash` isn't in the loaded window (the stash's
+        //      base branch was deleted, or the base is older than
+        //      the 1000-commit cap), fall back to `stash.hash`
+        //      itself. The stash commit was added as an extraRef so
+        //      it's reachable from the graph if it fits the window.
+        //
+        // Only after BOTH miss does the effect report "tip not in
+        // loaded window." The label flips to mention "base" vs the
+        // stash commit so the user knows what they're looking at.
+        const baseLoaded = stash.baseHash && state.filteredCommits.some((c) =>
+          c.hash === stash.baseHash || c.shortHash === stash.baseHash
+        )
+        const hashLoaded = state.filteredCommits.some((c) =>
+          c.hash === stash.hash || c.shortHash === stash.hash
+        )
+        if (baseLoaded) {
+          targetHash = stash.baseHash
+          targetLabel = `${stash.ref}'s base`
+        } else if (hashLoaded) {
+          targetHash = stash.hash
+          targetLabel = stash.ref
+        } else {
+          // Neither in window — set to baseHash so the standard
+          // "not in loaded window" message fires with a meaningful
+          // label (the base is what the user actually wants to see).
+          targetHash = stash.baseHash || stash.hash
+          targetLabel = stash.ref
+        }
       }
     }
 

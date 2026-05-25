@@ -11,7 +11,15 @@ export const FIELD_SEPARATOR = '\x1f'
 const LOG_FORMAT = `%x1f%h%x1f%H%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s`
 const DETAIL_FORMAT = `%H%x1f%h%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s%x1f%b`
 export const LOG_DEFAULT_LIMIT = 30
-export const LOG_INTERACTIVE_DEFAULT_LIMIT = 300
+// Bumped from 300 → 1000 in 0.54.2. With the full-graph default
+// (#1034) the workstation surfaces many more refs (all branches, all
+// tags, plus stash commits added via `extraRefs`), and on active repos
+// the 300-commit cap was cutting off year+-old stash bases and old
+// tag commits — making the cursor-syncs-history effect report "tip
+// not in loaded window" instead of moving the graph cursor. 1000
+// fits a year of activity for most repos, git log is still sub-200ms,
+// and Ink virtualises scroll so render cost stays flat.
+export const LOG_INTERACTIVE_DEFAULT_LIMIT = 1000
 
 export type LogRowLoadOptions = {
   limit?: number
