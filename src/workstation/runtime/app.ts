@@ -4053,10 +4053,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       loading: true,
     })
     try {
-      const stashHashes = await getStashCommitHashes(git).catch(() => [])
-      const rows = await getLogRowsAnchoredOn(git, snap.logArgv, target.hash, {
-        extraRefs: stashHashes,
-      })
+      // No stashHashes here — `getLogRowsAnchoredOn` walks only from
+      // the target so it can guarantee the target's inclusion.
+      // Stashes are already in the loaded graph from boot's
+      // `loadRowsWithStashes`; `appendRows` deduplicates by hash so
+      // the merged result keeps both views without double-counting.
+      const rows = await getLogRowsAnchoredOn(git, snap.logArgv, target.hash, {})
       if (!mountedRef.current) return
       if (rows.length > 0) {
         dispatch({ type: 'appendRows', rows })

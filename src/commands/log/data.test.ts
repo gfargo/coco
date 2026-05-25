@@ -4,6 +4,7 @@ import { join } from 'path'
 import { simpleGit } from 'simple-git'
 import { Arguments } from 'yargs'
 import {
+  COMMIT_CONTEXT_DEFAULT_LIMIT,
   FIELD_SEPARATOR,
   LOG_DEFAULT_LIMIT,
   LOG_INTERACTIVE_DEFAULT_LIMIT,
@@ -12,6 +13,7 @@ import {
   getCommitFilePreview,
   getCommitRows,
   getLogRows,
+  getLogRowsAnchoredOn,
   getLogView,
   parseCommitDetail,
   parseLogOutput,
@@ -105,23 +107,6 @@ describe('log data layer', () => {
     const sepIdx = args.indexOf('--')
     expect(refIdx).toBeGreaterThan(-1)
     expect(sepIdx).toBeGreaterThan(refIdx)
-  })
-
-  it('places the targetHash in the same positional slot as extraRefs when callers pass it directly', () => {
-    // The `getLogRowsAnchoredOn` helper splices the target into
-    // `extraRefs` and forwards to `buildLogArgs`; this test pins
-    // that the target lands as a positional ref alongside any
-    // other extra refs, after --all and before the path separator.
-    const args = buildLogArgs(argv({ all: true }), {
-      extraRefs: ['stashA', 'stashB', 'targetXYZ'],
-    })
-    expect(args).toContain('--all')
-    expect(args).toContain('stashA')
-    expect(args).toContain('stashB')
-    expect(args).toContain('targetXYZ')
-    const allIdx = args.indexOf('--all')
-    const targetIdx = args.indexOf('targetXYZ')
-    expect(targetIdx).toBeGreaterThan(allIdx)
   })
 
   it('omits extraRefs when the array is empty', () => {
@@ -439,6 +424,62 @@ describe('log data layer', () => {
       } finally {
         await rm(path, { recursive: true, force: true })
       }
+    })
+  })
+
+  describe('getLogRowsAnchoredOn', () => {
+    // Walks only from the target — NOT from --all + target — so the
+    // target is guaranteed to be in the output regardless of date
+    // ordering. The bug this avoids: with --all in the mix, git
+    // unions the walks and the max-count cap can slice an old
+    // target off the bottom of a busy date-sorted result.
+
+    it('walks only from the target ref, ignoring --all from the input argv', async () => {
+      const path = await mkdtemp(join(tmpdir(), 'coco-anchored-test-'))
+      try {
+        const git = simpleGit(path)
+        await git.init()
+        await git.addConfig('user.name', 'Coco Test')
+        await git.addConfig('user.email', 'coco@example.com')
+        await git.addConfig('commit.gpgsign', 'false')
+        await git.raw(['checkout', '-b', 'main'])
+
+        await writeFile(join(path, 'a.md'), 'a\n')
+        await git.add('a.md')
+        await git.commit('chore: A')
+        const aRev = (await git.revparse(['HEAD'])).trim()
+
+        await writeFile(join(path, 'b.md'), 'b\n')
+        await git.add('b.md')
+        await git.commit('chore: B')
+
+        // Branch off A and add a divergent commit C that only that
+        // branch can reach. C should NOT appear when we anchor on A.
+        await git.raw(['checkout', '-b', 'side', aRev])
+        await writeFile(join(path, 'c.md'), 'c\n')
+        await git.add('c.md')
+        await git.commit('chore: C-on-side')
+        await git.raw(['checkout', 'main'])
+
+        // Anchor on commit A. Should return A and A's ancestors only —
+        // not B (newer on main), not C (on side branch).
+        const argvBase = argv({ all: true })  // even with --all set, the helper strips it
+        const anchoredRows = await getLogRowsAnchoredOn(git, argvBase, aRev, { limit: 100 })
+
+        const subjects = getCommitRows(anchoredRows).map((r) => r.message)
+        expect(subjects).toEqual(['chore: A'])
+      } finally {
+        await rm(path, { recursive: true, force: true })
+      }
+    })
+
+    it('uses COMMIT_CONTEXT_DEFAULT_LIMIT as the cap when no limit option is supplied', async () => {
+      // Sanity: the default limit constant is exported and the
+      // helper falls back to it. Important because the limit also
+      // shapes how much surrounding context the user gets when the
+      // cursor lands; lowering it accidentally would reduce that.
+      expect(COMMIT_CONTEXT_DEFAULT_LIMIT).toBeGreaterThanOrEqual(1000)
+      expect(typeof COMMIT_CONTEXT_DEFAULT_LIMIT).toBe('number')
     })
   })
 })

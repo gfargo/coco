@@ -353,47 +353,58 @@ export const COMMIT_CONTEXT_DEFAULT_LIMIT = 5000
 /**
  * Load a window of commits anchored on a specific hash. Used by the
  * cursor-sync effect when the user selects a ref (branch / tag /
- * stash) whose target commit isn't already in the loaded graph
- * window. Passing the hash as an explicit positional ref makes git
- * include it (and its ancestors) in the walk regardless of how far
- * back it sits relative to HEAD.
+ * stash) whose target commit isn't in the loaded graph window.
  *
- * The result includes everything reachable from any of:
- *   - `--all` (refs/heads, refs/remotes, refs/tags, refs/stash)
- *   - The supplied `targetHash`
- *   - Any `extraRefs` (stash commits, typically — same plumbing the
- *     boot loader uses)
+ * Critical detail: this walks **only from the target** (and its
+ * ancestors), NOT from `--all`. Why: when you combine `--all` with
+ * `<targetHash>` AND `--max-count=N`, git unions the walks, sorts
+ * the result by date, and slices the newest N rows. If the target
+ * is older than the Nth newest commit across all refs (very common
+ * for year-old tags / branches on active repos), it falls off the
+ * slice even though it was passed as a root. Walking from the
+ * target alone guarantees the target IS the first row of the
+ * output and its ancestors fill the rest.
  *
- * Capped at `options.limit` (default 5000). Past that, git's
- * `--max-count` truncates and the target may still fall outside the
- * window IF its ancestors are extremely deep AND many other refs
- * have newer commits. In practice that's rare; raising the limit
- * is the escape valve.
+ * The caller merges the result via the `appendRows` reducer action
+ * which deduplicates by hash, so the target's ancestry slots into
+ * the existing `--all` graph cleanly. The user's loaded view ends
+ * up as the union of: the original `--all` window + target's
+ * ancestry — exactly what's needed for the cursor to land.
  *
- * The caller is responsible for merging the result into existing
- * state. Use the existing `appendRows` action which already
- * deduplicates by hash.
+ * Capped at `options.limit` (default 5000) to keep one targeted
+ * fetch bounded. For most refs, even a 100-commit limit would be
+ * enough to surface the target; we go higher to also pull in the
+ * surrounding context so the user can scroll around the landed
+ * cursor.
  */
 export async function getLogRowsAnchoredOn(
   git: SimpleGit,
   argv: LogArgv,
   targetHash: string,
-  options: { extraRefs?: string[]; limit?: number } = {}
+  options: { limit?: number } = {}
 ): Promise<GitLogRow[]> {
-  const extraRefs = options.extraRefs || []
-  // Splice the target into extraRefs so `buildLogArgs` lays it out
-  // alongside any stash hashes after --all and before the --
-  // separator. Avoids hand-rolling a parallel arg builder.
-  const refs = [...extraRefs, targetHash]
-  // Force `all` on for this fetch — we want the union of every ref
-  // plus the explicit target, never a single-branch slice. Even if
-  // the caller's argv was `--no-all`, a targeted lookup should
-  // still walk from everywhere.
-  const merged: LogArgv = { ...argv, all: true }
-  return getLogRows(git, merged, {
+  // Strip every "walk many refs" toggle so buildLogArgs produces a
+  // clean `git log <flags> <targetHash>` — exactly the walk that
+  // guarantees the target's inclusion.
+  const merged: LogArgv = {
+    ...argv,
+    all: false,
+    view: 'compact',  // suppresses 'full' → '--all' mapping
+    branch: undefined,
+    path: undefined,
+  }
+  // Also drop --first-parent / --no-merges so the target's ancestry
+  // renders with full topology (matters for stash commits which are
+  // merges by construction).
+  const baseArgs = buildLogArgs(merged, {
     limit: options.limit ?? COMMIT_CONTEXT_DEFAULT_LIMIT,
-    extraRefs: refs,
-  })
+  }).filter((arg) => arg !== '--first-parent' && arg !== '--no-merges')
+  // Splice the target as the positional ref. `buildLogArgs` already
+  // appended any `--all`/`--branch`/`<extraRefs>` it considered;
+  // since we cleared all those above, the only positional ref we
+  // add is the target.
+  baseArgs.push(targetHash)
+  return parseLogOutput(await git.raw(baseArgs))
 }
 
 /**
