@@ -1,5 +1,6 @@
 import {
   buildLoadedHashSet,
+  isHashLoaded,
   resolveCursorSyncDecision,
 } from './cursorSyncResolver'
 
@@ -138,5 +139,70 @@ describe('buildLoadedHashSet', () => {
     const set = buildLoadedHashSet([{ hash: 'abc1234567890' }])
     expect(set.has('abc1234567890')).toBe(true)
     expect(set.size).toBe(1)
+  })
+})
+
+describe('isHashLoaded', () => {
+  it('returns true on an exact hit (fast path)', () => {
+    // The O(1) Set.has short-circuit. This is the path taken for the
+    // vast majority of lookups: full-hash to full-hash, or short-hash
+    // to short-hash when git's abbreviation happens to match.
+    expect(isHashLoaded('abc1234', new Set(['abc1234', 'def5678']))).toBe(true)
+  })
+
+  it('returns false when the hash has no prefix relationship to any loaded entry', () => {
+    expect(isHashLoaded('abc1234', new Set(['def5678', 'ghi9012']))).toBe(false)
+  })
+
+  it('matches when target is shorter than a loaded full hash', () => {
+    // The real bug: refs sometimes carry a short hash from
+    // `for-each-ref --format=%(objectname:short)` while the loaded
+    // window contains full 40-char hashes. The short target should
+    // still match by prefix.
+    expect(
+      isHashLoaded(
+        'abc1234',
+        new Set(['abc12345678901234567890123456789012345678'])
+      )
+    ).toBe(true)
+  })
+
+  it('matches when target is longer than a loaded short hash', () => {
+    // Inverse direction: target is a long hash, loaded set has a
+    // short form (e.g. when rows store only shortHash). Still a
+    // match via `target.startsWith(loaded)`.
+    expect(
+      isHashLoaded(
+        'abc12345678901234567890123456789012345678',
+        new Set(['abc1234'])
+      )
+    ).toBe(true)
+  })
+
+  it("matches when target and loaded short hashes have DIFFERENT lengths (the production bug)", () => {
+    // The exact production case: `for-each-ref --format=%(objectname:short)`
+    // returned 7 chars for the branch tip ('abc1234'), but `git log
+    // --pretty=format:%h` auto-extended to 8 chars for the same commit
+    // ('abc12345') because of a collision elsewhere in the loaded
+    // window. Bidirectional prefix matching covers this.
+    expect(isHashLoaded('abc1234', new Set(['abc12345']))).toBe(true)
+    expect(isHashLoaded('abc12345', new Set(['abc1234']))).toBe(true)
+  })
+
+  it('refuses to prefix-match on absurdly short targets', () => {
+    // A 3-char "hash" would collide with too many real commits.
+    // Bail rather than report a false positive.
+    expect(isHashLoaded('abc', new Set(['abc1234567'])).valueOf()).toBe(false)
+  })
+
+  it('returns false on an empty loaded set', () => {
+    expect(isHashLoaded('abc1234', new Set())).toBe(false)
+  })
+
+  it('does not match unrelated hashes that share a too-short common prefix', () => {
+    // The shorter of the two strings is 'abc' (only 3 chars common).
+    // Even though abc1xxx and abc2yyy both start with "abc", neither
+    // is a prefix of the other.
+    expect(isHashLoaded('abc1234', new Set(['abc5678']))).toBe(false)
   })
 })
