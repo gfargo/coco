@@ -20,7 +20,7 @@ import { isLogInkContextKeyLoading } from '../chrome/context'
 import { branchRowMarker, sidebarTabCount } from '../chrome/iconography'
 import { getSidebarVisibleWindow } from '../chrome/sidebarSelection'
 import { sortBranches, sortTags } from '../chrome/sorting'
-import { truncateCells } from '../chrome/text'
+import { cellWidth, truncateCells, truncatePathCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import type {
   LogInkSidebarTab,
@@ -108,10 +108,21 @@ function renderActiveStatusTabContent(
     h(Text, { key }, '  ', h(Text, { color: colorOf(kind), bold: count > 0 }, `${count} ${label}`))
   const fileRows = worktree.files.slice(0, 12).map((file, index) => {
     const codes = `${file.indexStatus}${file.worktreeStatus}`
+    // Smart path truncation: keep the leading status codes and elide
+    // middle directory segments to preserve the filename. Falls back
+    // to plain truncation when the codes + a meaningful filename
+    // don't both fit. Same shape as the detail surface so all the
+    // status-row renderings elide consistently.
+    const prefix = `  ${codes} `
+    const totalBudget = width - 4
+    const pathBudget = totalBudget - cellWidth(prefix)
+    const label = pathBudget >= 8
+      ? `${prefix}${truncatePathCells(file.path, pathBudget)}`
+      : truncateCells(`${prefix}${file.path}`, totalBudget)
     return h(Text, {
       key: `tab-status-file-${index}`,
       color: colorOf(file.state),
-    }, truncateCells(`  ${codes} ${file.path}`, width - 4))
+    }, label)
   })
   return [
     summaryRow(worktree.stagedCount, 'staged', 'tab-status-staged', 'staged'),

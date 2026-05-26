@@ -47,7 +47,7 @@ import type { LfsAttributeStatus } from '../../../git/lfsAttributes'
 import { isPathLfsTracked } from '../../../git/lfsAttributes'
 import type { SubmoduleEntry, SubmoduleOverview } from '../../../git/submoduleData'
 import { findSubmoduleByPath } from '../../../git/submoduleData'
-import { truncateCells, wrapCells } from '../../chrome/text'
+import { cellWidth, truncateCells, truncatePathCells, wrapCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type {
   GitCommitDetail,
@@ -169,6 +169,25 @@ function renderInspectorRefs(
 }
 
 /**
+ * Compose a `<prefix><path><suffix>` line where the path gets smart
+ * middle-elision truncation if needed, while the fixed prefix/suffix
+ * decorations stay intact. Falls back to plain whole-line truncation
+ * when the suffix decorations consume too much of the budget for the
+ * path-aware variant to leave a meaningful filename.
+ *
+ * Used by the changed-files list AND the compose-context staged /
+ * unstaged sections so all three places elide identically — same
+ * floor (8 cells), same fallback shape.
+ */
+function smartPathLabel(prefix: string, path: string, suffix: string, totalBudget: number): string {
+  const pathBudget = totalBudget - cellWidth(prefix) - cellWidth(suffix)
+  if (pathBudget >= 8) {
+    return `${prefix}${truncatePathCells(path, pathBudget)}${suffix}`
+  }
+  return truncateCells(`${prefix}${path}${suffix}`, totalBudget)
+}
+
+/**
  * Render a list of changed files with status-code colors and stats. Used
  * by both the history inspector and the commit-diff detail panel so the
  * two surfaces stay visually consistent.
@@ -207,14 +226,23 @@ function renderCommitFileList(
     // in `lfsPointer.ts` so even rename / mode-only rows are
     // flagged.
     const lfsBadge = lfsStatus && isPathLfsTracked(lfsStatus, file.path) ? ' [LFS]' : ''
-    const label = `${cursor} ${statusCode} ${file.path}${renamed}${lfsBadge}${stats ? `  ${stats}` : ''}`
+
+    // Smart path truncation via `smartPathLabel`: keeps the cursor +
+    // status-code prefix and the stats/badge suffix intact, gives
+    // the path's remaining width budget to middle-elision so the
+    // filename survives instead of getting blunt-truncated off the
+    // end (the issue users hit when inspector paths read like
+    // `src/commands/log/da...`).
+    const labelPrefix = `${cursor} ${statusCode} `
+    const labelSuffix = `${renamed}${lfsBadge}${stats ? `  ${stats}` : ''}`
+    const label = smartPathLabel(labelPrefix, file.path, labelSuffix, width - 4)
 
     return h(Text, {
       key: `commit-file-${index}`,
       color: statusCodeColor(file.status, theme),
       inverse: isSelected && focused && !theme.noColor,
       bold: isSelected,
-    }, truncateCells(label, width - 4))
+    }, label)
   })
 }
 
@@ -608,7 +636,7 @@ export function renderComposeContextPanel(
       ...stagedFiles.map((file, index) => h(Text, {
         key: `compose-context-staged-${index}`,
         color: theme.noColor ? undefined : theme.colors.gitAdded,
-      }, truncateCells(`  ${file.indexStatus} ${file.path}`, width - 4))),
+      }, smartPathLabel(`  ${file.indexStatus} `, file.path, '', width - 4))),
       h(Text, { key: 'compose-context-staged-spacer' }, ''),
     ]
     : []),
@@ -619,7 +647,7 @@ export function renderComposeContextPanel(
       ...unstagedFiles.map((file, index) => h(Text, {
         key: `compose-context-unstaged-${index}`,
         color: theme.noColor ? undefined : theme.colors.gitModified,
-      }, truncateCells(`  ${file.worktreeStatus} ${file.path}`, width - 4))),
+      }, smartPathLabel(`  ${file.worktreeStatus} `, file.path, '', width - 4))),
     ]
     : !stagedFiles.length && !loadingWorktree
       ? [h(Text, { dimColor: true }, 'No worktree changes detected.')]

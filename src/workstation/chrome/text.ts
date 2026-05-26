@@ -151,3 +151,63 @@ export function truncateCells(value: string, width: number): string {
 
   return `${output}${suffix}`
 }
+
+/**
+ * Truncate a file path so the filename (last segment) is preserved,
+ * eliding middle directory segments with `…/` instead of dropping
+ * end-of-string characters.
+ *
+ * `truncateCells` is the wrong tool for paths because it preserves the
+ * START of the string and drops the END — losing the filename, which
+ * is the most useful part. Example with `truncateCells`:
+ *
+ *   "src/commands/log/data.ts" (24) at width 18 → "src/commands/lo..."
+ *
+ * `truncatePathCells` preserves the filename and elides middle:
+ *
+ *   "src/commands/log/data.ts" (24) at width 18 → "src/…/log/data.ts"
+ *
+ * The algorithm tries successively-smaller prefixes (keeping the start
+ * of the path, the filename, and replacing the dropped middle segments
+ * with `…`) and returns the largest variant that fits. When even
+ * `…/<filename>` doesn't fit, falls back to plain `truncateCells` on
+ * the abbreviated form — better to show end-of-name than start-of-path.
+ *
+ * For inputs without `/` separators, behaves identically to
+ * `truncateCells`. Empty / width-0 cases match `truncateCells` too.
+ *
+ * @example
+ *   truncatePathCells('src/commands/log/data.ts', 18) // 'src/…/log/data.ts'
+ *   truncatePathCells('src/commands/log/data.ts', 12) // '…/data.ts'
+ *   truncatePathCells('a/b/c.ts', 100)                // 'a/b/c.ts'  (fits)
+ *   truncatePathCells('plainname.ts', 8)              // 'plain...'
+ */
+export function truncatePathCells(value: string, width: number): string {
+  if (width < 1) return ''
+  if (cellWidth(value) <= width) return value
+
+  // No path structure to exploit — fall through to plain truncation.
+  if (!value.includes('/')) return truncateCells(value, width)
+
+  const segments = value.split('/')
+  const filename = segments[segments.length - 1] ?? ''
+  const prefix = segments.slice(0, -1)
+
+  // Path is just '/filename' or has only the filename — no middle to
+  // elide. Defer to plain truncation.
+  if (prefix.length === 0) return truncateCells(value, width)
+
+  // Walk from "keep all prefix segments except the deepest" down to
+  // "keep no prefix segments." First variant that fits wins.
+  for (let keep = prefix.length - 1; keep >= 0; keep--) {
+    const candidate = keep === 0
+      ? `…/${filename}`
+      : `${prefix.slice(0, keep).join('/')}/…/${filename}`
+    if (cellWidth(candidate) <= width) return candidate
+  }
+
+  // Even `…/<filename>` doesn't fit. Use plain truncation on that
+  // form — preserves the leading `…/` so the user knows a path was
+  // elided, then ellipsis-truncates the filename.
+  return truncateCells(`…/${filename}`, width)
+}
