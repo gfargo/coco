@@ -1394,10 +1394,29 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       // branch's tip without the user manually scrolling. No-op when
       // the hash isn't in the loaded list (the runtime surfaces a
       // status hint in that case).
+      //
+      // Matching mirrors `isHashLoaded` in cursorSyncResolver: exact
+      // hit first (the common path), then a bidirectional `startsWith`
+      // scan to cover the short-hash auto-extension mismatch between
+      // `for-each-ref --format=%(objectname:short)` (cursored ref) and
+      // `git log --pretty=format:%h` (history row). Without the
+      // fallback the resolver could decide "jump" but this reducer
+      // would silently no-op — the status updates but the cursor
+      // doesn't move, exactly the branch-cursor bug surfaced in
+      // 0.54.1 testing. Kept inline rather than importing from
+      // `workstation/runtime/` because `commands/log/` must not
+      // depend on `workstation/`.
       const target = action.hash
-      const index = state.filteredCommits.findIndex((commit) =>
-        commit.hash === target || commit.shortHash === target
-      )
+      const index = state.filteredCommits.findIndex((commit) => {
+        if (commit.hash === target || commit.shortHash === target) return true
+        if (target.length < 4) return false
+        const candidates = [commit.hash, commit.shortHash].filter(
+          (value): value is string => typeof value === 'string' && value.length > 0
+        )
+        return candidates.some(
+          (candidate) => candidate.startsWith(target) || target.startsWith(candidate)
+        )
+      })
       if (index < 0) {
         return state
       }
