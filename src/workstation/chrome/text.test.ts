@@ -1,4 +1,4 @@
-import { cellWidth, truncateCells, wrapCells } from './text'
+import { cellWidth, truncateCells, truncatePathCells, wrapCells } from './text'
 
 describe('log Ink text helpers', () => {
   it('measures wide and emoji characters by terminal cell width', () => {
@@ -37,6 +37,81 @@ describe('log Ink text helpers', () => {
     it('respects wide-character cell counts', () => {
       const lines = wrapCells('変更 を加える branch', 6)
       expect(lines.every((line) => cellWidth(line) <= 6)).toBe(true)
+    })
+  })
+
+  describe('truncatePathCells', () => {
+    // The motivating case: file paths shown in the inspector were
+    // being blunt-truncated by `truncateCells` so the user lost the
+    // filename — the most useful part. `truncatePathCells` preserves
+    // the filename and elides middle directory segments instead.
+
+    it('returns the path unchanged when it already fits', () => {
+      expect(truncatePathCells('src/log/data.ts', 100)).toBe('src/log/data.ts')
+    })
+
+    it('elides one middle segment when one drop is enough', () => {
+      // 'src/commands/log/data.ts' = 24 cells.
+      // Drop one segment from the end of the prefix:
+      // 'src/commands/log/…/data.ts' is wider, not narrower — wait, that's because
+      // we keep the START segments. Walking down: keep=2 → 'src/commands/…/data.ts'
+      // (22 cells). Fits in 22, returns that.
+      expect(truncatePathCells('src/commands/log/data.ts', 22)).toBe('src/commands/…/data.ts')
+    })
+
+    it('keeps shrinking until the filename + ellipsis fits', () => {
+      // At width 12, only `…/data.ts` (9) fits.
+      expect(truncatePathCells('src/commands/log/data.ts', 12)).toBe('…/data.ts')
+    })
+
+    it('falls back to plain truncation when even `…/filename` is too wide', () => {
+      // Filename `verylongfilename.txt` (20) + `…/` (2) = 22. At
+      // width 10, `…/verylongfilename.txt` doesn't fit; we truncate it
+      // with the regular trailing-ellipsis suffix so the user sees
+      // start-of-name (truncated) instead of nothing.
+      const result = truncatePathCells('a/b/c/verylongfilename.txt', 10)
+      expect(result.length).toBeGreaterThan(0)
+      expect(cellWidth(result)).toBeLessThanOrEqual(10)
+      // Contains the path-elision marker so the user knows the path
+      // got truncated AND the filename did too.
+      expect(result).toContain('…/')
+    })
+
+    it('falls back to plain truncation for inputs without path separators', () => {
+      // No `/` in the input — there's no middle to elide, so the
+      // helper behaves identically to `truncateCells`.
+      expect(truncatePathCells('plainname.ts', 8)).toBe(truncateCells('plainname.ts', 8))
+    })
+
+    it('handles a bare filename like a single-segment path', () => {
+      // Filename only, no parent directories. No path-aware elision
+      // can help; defer to plain truncation.
+      expect(truncatePathCells('data.test.ts', 8)).toBe(truncateCells('data.test.ts', 8))
+    })
+
+    it('returns empty for width < 1', () => {
+      expect(truncatePathCells('any/path.ts', 0)).toBe('')
+      expect(truncatePathCells('any/path.ts', -5)).toBe('')
+    })
+
+    it('returns input unchanged for paths at exactly the budget', () => {
+      // 11 cells for 'src/data.ts'. Width 11 matches exactly.
+      expect(truncatePathCells('src/data.ts', 11)).toBe('src/data.ts')
+    })
+
+    it('handles deeply-nested paths by elision near the deepest level', () => {
+      // 'a/b/c/d/e/f/file.ts' = 19 cells. At width 18, the largest
+      // prefix that fits is keep=5: 'a/b/c/d/e/…/file.ts' = 19 — no.
+      // Wait, `a/b/c/d/e/…/file.ts` is 19 wide which exceeds 18. So
+      // keep=4: 'a/b/c/d/…/file.ts' = 17 cells. Fits.
+      expect(truncatePathCells('a/b/c/d/e/f/file.ts', 18)).toBe('a/b/c/d/…/file.ts')
+    })
+
+    it('preserves the entire filename including extensions', () => {
+      // The filename `data.test.ts` has internal dots — make sure we
+      // don't accidentally split on `.` (only `/`).
+      const result = truncatePathCells('src/very/deep/path/data.test.ts', 16)
+      expect(result.endsWith('data.test.ts')).toBe(true)
     })
   })
 })

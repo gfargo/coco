@@ -25,7 +25,7 @@ import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatStashHeaderIdentity } from '../../chrome/stashHeader'
-import { truncateCells } from '../../chrome/text'
+import { cellWidth, truncateCells, truncatePathCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type {
   GitCommitDetail,
@@ -150,7 +150,17 @@ export function renderDiffSurface(
               color: theme.noColor ? undefined : theme.colors.accent,
               backgroundColor: isActive && focused && !theme.noColor ? theme.colors.selection : undefined,
               inverse: isActive && focused,
-            }, truncateCells(`${arrow}${headerFile.path}`, width - 4))
+            }, (() => {
+              // Smart path truncation for the diff file header: keep
+              // the leading arrow glyph and elide middle path
+              // segments so the filename is never lost. Falls back to
+              // plain truncation when there isn't room for a
+              // meaningful filename.
+              const pathBudget = (width - 4) - cellWidth(arrow)
+              return pathBudget >= 8
+                ? `${arrow}${truncatePathCells(headerFile.path, pathBudget)}`
+                : truncateCells(`${arrow}${headerFile.path}`, width - 4)
+            })())
           }
           return h(Text, {
             key: `stash-diff-line-${absoluteIndex}`,
