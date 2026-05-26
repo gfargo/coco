@@ -58,6 +58,7 @@ import * as nodePath from 'node:path'
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { getBranchOverview } from '../../git/branchData'
+import { hashesMatchAny } from '../../git/hashes'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
 import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
@@ -1664,11 +1665,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         // Only after BOTH miss does the effect report "tip not in
         // loaded window." The label flips to mention "base" vs the
         // stash commit so the user knows what they're looking at.
-        const baseLoaded = stash.baseHash && state.filteredCommits.some((c) =>
-          c.hash === stash.baseHash || c.shortHash === stash.baseHash
+        // hashesMatchAny handles the short-hash auto-extension
+        // mismatch between `git stash list --format=%h` (stash hash)
+        // and `git log --pretty=format:%h` (history row). Same
+        // hazard as the branch/tag cursor sync — see src/git/hashes.ts.
+        const baseLoaded = Boolean(stash.baseHash) && state.filteredCommits.some((c) =>
+          hashesMatchAny(stash.baseHash, [c.hash, c.shortHash])
         )
         const hashLoaded = state.filteredCommits.some((c) =>
-          c.hash === stash.hash || c.shortHash === stash.hash
+          hashesMatchAny(stash.hash, [c.hash, c.shortHash])
         )
         if (baseLoaded) {
           targetHash = stash.baseHash

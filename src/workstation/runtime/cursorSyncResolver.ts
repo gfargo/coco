@@ -1,3 +1,5 @@
+import { hashLoaded } from '../../git/hashes'
+
 /**
  * Pure decision logic for the history-view cursor sync effect.
  *
@@ -93,36 +95,14 @@ export function resolveCursorSyncDecision(
 }
 
 /**
- * Check whether `hash` matches any commit in the loaded set, allowing
- * for short-hash length mismatches.
- *
- * The real-world problem this solves: `for-each-ref
- * --format=%(objectname:short)` (used to load branches / tags) and
- * `git log --pretty=format:%h` (used to load history rows) both use
- * git's `core.abbrev` setting for short hash length, but git
- * auto-extends short hashes when needed to keep them unique. The two
- * commands can return DIFFERENT abbreviation lengths for the same
- * commit — for-each-ref might give 7 chars while git log gives 8, or
- * vice versa. Exact `.has()` lookup fails in that case even though
- * both hashes refer to the same commit.
- *
- * Bidirectional `startsWith` covers every length combination:
- *   - target is shorter than a loaded entry → `loaded.startsWith(target)`
- *   - target is longer than a loaded entry → `target.startsWith(loaded)`
- *
- * The set is small (1k-5k entries in practice), so O(N) iteration is
- * fine. The early `.has()` short-circuit keeps the common case
- * (exact match) at O(1).
+ * Re-export of the shared `hashLoaded` helper under the resolver's
+ * historical name. Kept exported so existing tests (and any external
+ * importers) keep working unchanged — see `src/git/hashes.ts` for the
+ * canonical implementation and the rationale behind bidirectional
+ * prefix matching.
  */
 export function isHashLoaded(hash: string, loadedHashes: ReadonlySet<string>): boolean {
-  if (loadedHashes.has(hash)) return true
-  // Don't try to prefix-match on absurdly short inputs — a 3-char
-  // "hash" would collide with too many real commits.
-  if (hash.length < 4) return false
-  for (const loaded of loadedHashes) {
-    if (loaded.startsWith(hash) || hash.startsWith(loaded)) return true
-  }
-  return false
+  return hashLoaded(hash, loadedHashes)
 }
 
 /**
