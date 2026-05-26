@@ -343,20 +343,30 @@ export type LogInkState = {
   statusMessage?: string
   /**
    * Visual category for `statusMessage` — drives footer styling.
-   *   - 'info'    (default) : dim muted text, regular contextual hints
-   *   - 'error'              : red text + footer hides the global hints
-   *                            on the right so long error messages get
-   *                            the full width to render. Set explicitly
-   *                            by failure paths (LLM errors, validator
-   *                            issues, etc.) so users notice them.
-   *   - 'success'            : accent-colored text. Set by ops that
+   *   - 'info'    (default) : info-color text + `ℹ ` glyph (or ASCII
+   *                            `i`). Used for neutral status updates
+   *                            that the user should notice but aren't
+   *                            wins or failures.
+   *   - 'error'              : danger-color (red) + bold + `✗ ` glyph.
+   *                            Set explicitly by failure paths (LLM
+   *                            errors, validator issues, etc.) so
+   *                            users notice them.
+   *   - 'warning'            : warning-color (yellow) + bold + `⚠ `
+   *                            glyph (`!` in ASCII). Set by paths
+   *                            that succeed but with caveats —
+   *                            unupstreamed branch, dirty worktree
+   *                            during sensitive ops, partial fetch.
+   *   - 'success'            : success-color (green) + bold + `✓ `
+   *                            glyph (`+` in ASCII). Set by ops that
    *                            mutate state successfully (commit
    *                            created, split applied, PR opened, …)
-   *                            so the affirmative feedback stands out.
+   *                            so the affirmative feedback stands out
+   *                            from in-flight ops (which use accent /
+   *                            cyan via the spinner).
    * Cleared alongside `statusMessage` when `setStatus` fires without
    * a `kind` (or with `kind: 'info'`).
    */
-  statusKind?: 'info' | 'error' | 'success'
+  statusKind?: 'info' | 'error' | 'success' | 'warning'
   /**
    * Transient loading flag for the status line. When true, the footer
    * prefixes the message with the shared spinner frame so users see
@@ -734,7 +744,7 @@ export type LogInkAction =
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
-  | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success'; loading?: boolean }
+  | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' | 'warning'; loading?: boolean }
   | { type: 'setPendingPullRequestBodyDraft'; value: boolean }
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }

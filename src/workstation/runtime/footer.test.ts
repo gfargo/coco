@@ -59,9 +59,10 @@ function makeState(overrides: Partial<LogInkState> = {}): LogInkState {
 function render(
   state: LogInkState,
   idleTip?: string,
-  spinnerFrame = 0
+  spinnerFrame = 0,
+  options: { ascii?: boolean } = {}
 ): ReactElement {
-  const theme = createLogInkTheme({ noColor: false })
+  const theme = createLogInkTheme({ noColor: false, ascii: options.ascii })
   return renderFooter(
     createElement,
     { Box, Text },
@@ -92,7 +93,12 @@ describe('renderFooter', () => {
     // the surrounding layout stable when status flips on/off.
   })
 
-  it('row 2 shows the idle tip dimmed when no status is set', () => {
+  it('row 2 shows the idle tip dimmed when no status is set (no glyph — passive channel)', () => {
+    // Idle tips are the passive channel — purely educational, never
+    // workflow feedback. They get no glyph prefix and stay dim+muted
+    // so they blend into the chrome and don't compete with the hint
+    // band. The info-kind status (with glyph + color) is the
+    // contrast point.
     const tree = asNode(render(makeState(), 'press / to filter'))
     const row2 = childAt(tree, 1)
     expect(row2.props.children).toBe('press / to filter')
@@ -128,7 +134,7 @@ describe('renderFooter', () => {
     expect(row2.props.color).toBeDefined() // accent
   })
 
-  it('error status takes row 2 with ✗ prefix + red + bold; hints stay on row 1', () => {
+  it('error status renders with ✗ prefix + danger color + bold; hints stay on row 1', () => {
     // Critical UX: errors must NOT take over the hint band like they
     // did pre-refactor — users often need ?/:/q to recover.
     const tree = asNode(render(
@@ -137,6 +143,8 @@ describe('renderFooter', () => {
     const row1 = childAt(tree, 0)
     const row2 = childAt(tree, 1)
     expect(row2.props.children).toBe('✗ remote rejected push')
+    // Uses the theme's danger color (typically red), not a hardcoded
+    // literal — so dark / light / colorblind themes can override it.
     expect(row2.props.color).toBe('red')
     expect(row2.props.bold).toBe(true)
     expect(row2.props.dimColor).toBe(false)
@@ -146,24 +154,75 @@ describe('renderFooter', () => {
     expect(row1.props.children).toHaveLength(2)
   })
 
-  it('success status gets accent + bold + non-dim, no prefix glyph', () => {
+  it('warning status renders with ⚠ prefix + warning color + bold', () => {
+    // The yellow / warning kind sits between info and error — used
+    // for ops that succeeded with caveats (no upstream, dirty
+    // worktree, partial fetch).
     const tree = asNode(render(
-      makeState({ statusMessage: 'pushed main to origin', statusKind: 'success' })
+      makeState({ statusMessage: 'no upstream — nothing to fetch.', statusKind: 'warning' })
     ))
     const row2 = childAt(tree, 1)
-    expect(row2.props.children).toBe('pushed main to origin')
+    expect(row2.props.children).toBe('⚠ no upstream — nothing to fetch.')
+    expect(row2.props.color).toBe('yellow')
     expect(row2.props.bold).toBe(true)
     expect(row2.props.dimColor).toBe(false)
   })
 
-  it('info status is dim+muted with no prefix — matches surrounding chrome', () => {
-    // Default informational status (no kind set) shouldn't compete
-    // with the hint band — same dim treatment as the hints.
+  it('success status renders with ✓ prefix + success color + bold (distinct from loading)', () => {
+    // Pre-redesign success and loading both used `accent` (cyan)
+    // and the user couldn't tell "done" from "in progress" without
+    // squinting at the prefix. Success now uses the theme's success
+    // color (green) so the two states read at a glance.
+    const tree = asNode(render(
+      makeState({ statusMessage: 'pushed main to origin', statusKind: 'success' })
+    ))
+    const row2 = childAt(tree, 1)
+    expect(row2.props.children).toBe('✓ pushed main to origin')
+    expect(row2.props.color).toBe('green')
+    expect(row2.props.bold).toBe(true)
+    expect(row2.props.dimColor).toBe(false)
+  })
+
+  it('info status renders with ℹ prefix + info color + bold (more visible than idle tips)', () => {
+    // Status messages without an explicit kind are deliberate updates
+    // and should be more visible than the passive idle-tip channel.
+    // Idle tips stay dim+muted; info-kind status pops with its own
+    // theme color and glyph.
     const tree = asNode(render(makeState({ statusMessage: 'on branch main' })))
     const row2 = childAt(tree, 1)
-    expect(row2.props.children).toBe('on branch main')
-    expect(row2.props.dimColor).toBe(true)
-    expect(row2.props.bold).toBe(false)
+    expect(row2.props.children).toBe('ℹ on branch main')
+    expect(row2.props.color).toBe('blue')
+    expect(row2.props.bold).toBe(true)
+    expect(row2.props.dimColor).toBe(false)
+  })
+
+  it('ASCII mode degrades unicode glyphs to printable single-char fallbacks', () => {
+    // Under TERM=dumb / vt100, unicode glyphs render as garbage. The
+    // ASCII fallback for each kind: ! for error/warning, + for
+    // success, i for info — printable everywhere.
+    const errorAscii = asNode(render(
+      makeState({ statusMessage: 'oops', statusKind: 'error' }),
+      undefined, 0, { ascii: true }
+    ))
+    expect(childAt(errorAscii, 1).props.children).toBe('! oops')
+
+    const warnAscii = asNode(render(
+      makeState({ statusMessage: 'careful', statusKind: 'warning' }),
+      undefined, 0, { ascii: true }
+    ))
+    expect(childAt(warnAscii, 1).props.children).toBe('! careful')
+
+    const successAscii = asNode(render(
+      makeState({ statusMessage: 'done', statusKind: 'success' }),
+      undefined, 0, { ascii: true }
+    ))
+    expect(childAt(successAscii, 1).props.children).toBe('+ done')
+
+    const infoAscii = asNode(render(
+      makeState({ statusMessage: 'fyi' }),
+      undefined, 0, { ascii: true }
+    ))
+    expect(childAt(infoAscii, 1).props.children).toBe('i fyi')
   })
 
   it('row 1 splits contextual vs global hints into opposite edges', () => {

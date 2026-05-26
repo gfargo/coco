@@ -27,8 +27,25 @@
  * Idle tips fill row 2 only when no real status message is set so the
  * tip cycle never overwrites genuine workflow feedback.
  *
+ * Row 2 styling is kind-aware. Each statusKind gets its own theme
+ * color and glyph prefix so the message is identifiable at a glance
+ * — even with NO_COLOR set, the glyph alone communicates kind:
+ *
+ *   loading  →  spinner + accent  + bold
+ *   error    →  ✗ / !  + danger   + bold
+ *   warning  →  ⚠ / !  + warning  + bold
+ *   success  →  ✓ / +  + success  + bold
+ *   info     →  ℹ / i  + info     + bold
+ *   idle tip →  no glyph + dim muted (passive)
+ *
+ * Pre-redesign success and loading both used `accent` (cyan), so the
+ * user couldn't tell "done" from "in progress" by color alone. Each
+ * kind now uses its dedicated theme color and ships an ASCII glyph
+ * fallback for `theme.ascii` mode (TERM=dumb / vt100).
+ *
  * Extracted from `src/commands/log/inkRuntime.ts` as part of phase
- * 5a.7 of #890. Two-row layout introduced post-0.54.2.
+ * 5a.7 of #890. Two-row layout introduced post-0.54.2; per-kind
+ * colors + glyphs added in the same pass.
  */
 
 import type * as ReactTypes from 'react'
@@ -76,33 +93,63 @@ export function renderFooter(
   })
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.
-  const isLoading = Boolean(state.statusLoading && state.statusMessage)
+  const hasStatusMessage = Boolean(state.statusMessage)
+  const isLoading = Boolean(state.statusLoading && hasStatusMessage)
   const isError = state.statusKind === 'error'
+  const isWarning = state.statusKind === 'warning'
   const isSuccess = state.statusKind === 'success'
+  // 'info' is the implicit kind when statusKind is undefined but
+  // statusMessage is set — it's a deliberate status update, not an
+  // idle tip, so it gets info treatment rather than the dim fallback.
+  const isInfo = hasStatusMessage && !isError && !isWarning && !isSuccess && !isLoading
   const rawTrailing = state.statusMessage || idleTip || ''
 
-  // Loading status gets a spinner prefix in front of the message —
-  // motion makes transient LLM calls (create-PR body, PR fetches,
-  // etc.) feel less frozen even when they're sub-second. Errors get
-  // the ✗ glyph; nothing else gets a prefix.
-  const prefix = isError
-    ? '✗ '
-    : isLoading
-      ? `${pickSpinnerFrame(spinnerFrame)} `
-      : ''
-  const statusBody = rawTrailing ? `${prefix}${rawTrailing}` : ''
+  // Glyphs per kind so the message is identifiable even before reading
+  // the color — improves scan-ability and degrades gracefully when the
+  // terminal lacks color. ASCII fallback for `theme.ascii` mode (TERM
+  // = dumb / vt100) where unicode glyphs render as garbage.
+  //   loading  →  spinner (animated)
+  //   error    →  ✗  / !
+  //   warning  →  ⚠  / !
+  //   success  →  ✓  / +
+  //   info     →  ℹ  / i
+  //   idle tip →  no glyph (passive)
+  const glyph = ((): string => {
+    if (isLoading) return pickSpinnerFrame(spinnerFrame)
+    if (isError) return theme.ascii ? '!' : '✗'
+    if (isWarning) return theme.ascii ? '!' : '⚠'
+    if (isSuccess) return theme.ascii ? '+' : '✓'
+    if (isInfo) return theme.ascii ? 'i' : 'ℹ'
+    return ''
+  })()
+  const statusBody = rawTrailing
+    ? glyph
+      ? `${glyph} ${rawTrailing}`
+      : rawTrailing
+    : ''
 
-  // Row 2 color picks: errors red+bold (must pop), loading/success
-  // accent+bold (visible against the muted hint row above), everything
-  // else dim+muted (idle tips and informational status shouldn't
-  // compete with the hint band for attention).
+  // Row 2 color picks. Each kind gets its own theme color so success
+  // and loading are visually distinct (was conflated under `accent`
+  // pre-redesign — users couldn't tell "done" from "in progress").
+  //   loading → accent  (cyan / preset blue)
+  //   error   → danger  (red / preset red)
+  //   warning → warning (yellow)
+  //   success → success (green)
+  //   info    → info    (blue / preset accent in light themes)
+  //   idle    → undefined + dim (passive, blends with chrome)
   const statusColor = isError
-    ? 'red'
-    : (isLoading || isSuccess)
-      ? theme.colors.accent
-      : undefined
-  const statusBold = isError || isLoading || isSuccess
-  const statusDim = !isError && !isLoading && !isSuccess
+    ? theme.colors.danger
+    : isWarning
+      ? theme.colors.warning
+      : isSuccess
+        ? theme.colors.success
+        : isLoading
+          ? theme.colors.accent
+          : isInfo
+            ? theme.colors.info
+            : undefined
+  const statusBold = isError || isWarning || isSuccess || isLoading || isInfo
+  const statusDim = !statusBold
 
   const hintsText = hints.contextual.join('   ')
   const globalText = hints.global.join(' · ')
