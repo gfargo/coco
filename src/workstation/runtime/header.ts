@@ -1,27 +1,34 @@
 /**
- * Title-bar renderer. Surfaces:
- *   - the app label (e.g. "coco ui")
- *   - current repo owner/name (or "local repository")
- *   - current branch + dirty / BISECTING flag
- *   - PR glyph + label when one is detected
- *   - breadcrumb of the view stack
- *   - loading hint for boot / context fetches
- *   - mode indicator: [NORMAL] / [EDIT] / [FILTER]
- *   - active filter / search input
+ * Title-bar renderer. Surfaces the workstation's identity + navigation
+ * state as a row of small visually-distinct chips:
  *
- * Truncation: when the assembled title overruns the available columns we
- * fall back to a single-fragment Text (truncating the joined string) so
- * the ellipsis can't land mid-glyph. The split-fragment path keeps the PR
- * glyph in its own colored span when there's headroom.
+ *   coco · gfargo/coco · ⎇ main · ✓ clean · ⊘ no PR · [NORMAL]
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.7
- * of #890. No behavior change.
+ * Per-chip color/glyph treatment lets the user scan in chunks ("what
+ * app, what repo, what branch, how clean, what PR state, what mode")
+ * instead of parsing one long sentence. Chip construction is in
+ * `chrome/headerChips.ts`; this runtime just renders.
+ *
+ * Truncation: when the assembled chip row overruns the available
+ * columns we fall back to a single Text fragment (truncating the
+ * joined chip labels) so the ellipsis can't land mid-glyph. This is
+ * the same defensive pattern the pre-redesign single-fragment code
+ * used, applied at the chip-list level instead of the inline glyph
+ * split.
+ *
+ * Extracted from `src/commands/log/inkRuntime.ts` as part of phase
+ * 5a.7 of #890. Chip restructuring introduced post-0.54.2.
  */
 
 import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../chrome/context'
 import { isLogInkContextLoading } from '../chrome/context'
-import { getPullRequestStateGlyph } from '../chrome/iconography'
+import {
+  HEADER_CHIP_SEPARATOR,
+  buildHeaderChips,
+  measureHeaderChipsWidth,
+  type HeaderChip,
+} from '../chrome/headerChips'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import {
@@ -43,57 +50,60 @@ export function renderHeader(
   appLabel: string
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
+
+  // Pull the source state into the small "describe what to render"
+  // shape the chip builder expects. Keeps the runtime decoupled from
+  // the chip layout — the builder doesn't know about LogInkState /
+  // LogInkContext, just plain values.
   const branch = context.branches?.currentBranch || context.provider?.currentBranch || '<detached>'
-  // #784 — surface bisect-in-progress in the title bar so users entering
-  // the TUI mid-bisect see it immediately, before they navigate to gB.
-  const dirtyBase = context.branches?.dirty ? 'dirty' : 'clean'
-  const dirty = context.bisect?.active ? `${dirtyBase} · BISECTING` : dirtyBase
+  const dirty = Boolean(context.branches?.dirty)
+  const bisecting = Boolean(context.bisect?.active)
   const repo = context.provider?.repository.owner && context.provider.repository.name
     ? `${context.provider.repository.owner}/${context.provider.repository.name}`
     : 'local repository'
   const prInfo = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
-  const prGlyph = prInfo ? getPullRequestStateGlyph(prInfo, theme) : null
-  const prLabel = prInfo
-    ? `PR #${prInfo.number} ${prInfo.isDraft ? 'DRAFT' : prInfo.state}`
-    : 'no PR'
-  const search = state.filterMode ? `search: ${state.filter}_` : state.filter ? `filter: ${state.filter}` : ''
-  // Boot loading wins over the per-context loading hint because it
-  // tells the user the headline thing they care about (commits aren't
-  // ready yet) — the context fetches finish independently and surface
-  // their own per-section loading copy in the sidebars.
+  // Boot loading wins over the per-context loading hint — same
+  // priority as pre-redesign. Context fetches still surface their own
+  // copy in the sidebars.
   const loading = state.bootLoading
-    ? '  loading commits'
-    : isLogInkContextLoading(contextStatus) ? '  loading context' : ''
+    ? 'loading commits'
+    : isLogInkContextLoading(contextStatus) ? 'loading context' : ''
   const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
   const repoCrumb = formatLogInkRepoBreadcrumb(state.repoStack)
-  // Repo breadcrumb (when nested) comes first so the user sees which
-  // submodule they're in at a glance, then the view breadcrumb (when
-  // pushed deeper than the root view). The truncate fallback in the
-  // title row still applies — when both fight for space, the ellipsis
-  // lands at the end of whichever segment overflows.
   const view = combineLogInkBreadcrumbSegments(repoCrumb, breadcrumb)
-  // Mode indicator (P2.2) — surfaces the current input mode so users
-  // never wonder why `q` doesn't quit while they're editing or filtering.
-  const mode = state.commitCompose.editing
-    ? '[EDIT]'
+  const mode: 'NORMAL' | 'EDIT' | 'FILTER' = state.commitCompose.editing
+    ? 'EDIT'
     : state.filterMode
-      ? '[FILTER]'
-      : '[NORMAL]'
-  const titlePrefix = `${appLabel}  ${repo}  ${branch}  ${dirty}  `
-  const glyphPart = prGlyph?.glyph ? `${prGlyph.glyph} ` : ''
-  const titleSuffix = `${view}${loading}`
-  const fullTitle = `${titlePrefix}${glyphPart}${prLabel}${titleSuffix}`
-  const titleBudget = columns - mode.length - 4
-  const truncatedTitle = truncateCells(fullTitle, titleBudget)
-  // Only split into colored fragments when the prefix + glyph + label all
-  // fit unmodified — otherwise the truncate ellipsis can land mid-fragment
-  // and we'd render half a glyph in the wrong color.
-  const splitFragments = truncatedTitle === fullTitle && glyphPart.length > 0
-  const modeColor = theme.noColor
-    ? undefined
-    : state.filterMode || state.commitCompose.editing
-      ? theme.colors.warning
-      : theme.colors.accent
+      ? 'FILTER'
+      : 'NORMAL'
+  const search = state.filterMode
+    ? `search: ${state.filter}_`
+    : state.filter
+      ? `filter: ${state.filter}`
+      : ''
+
+  const chips = buildHeaderChips({
+    appLabel,
+    repo,
+    branch,
+    dirty,
+    bisecting,
+    pullRequest: prInfo ? {
+      number: prInfo.number,
+      state: prInfo.state,
+      isDraft: prInfo.isDraft,
+    } : undefined,
+    breadcrumb: view,
+    loading,
+    mode,
+    search: search ? truncateCells(search, 36) : '',
+    theme,
+  })
+
+  // Truncation budget. Header line gets the full terminal width minus
+  // the box's horizontal padding (2 cells) and a small safety margin.
+  const budget = Math.max(0, columns - 4)
+  const chipsWidth = measureHeaderChipsWidth(chips)
 
   return h(Box, {
     borderColor: theme.colors.border,
@@ -101,15 +111,54 @@ export function renderHeader(
     height: 3,
     paddingX: 1,
   },
-  splitFragments
-    ? h(Text, { bold: true, color: theme.colors.accent }, titlePrefix)
-    : h(Text, { bold: true, color: theme.colors.accent }, truncatedTitle),
-  splitFragments
-    ? h(Text, { bold: true, color: prGlyph?.color, dimColor: prGlyph?.dim }, glyphPart)
-    : undefined,
-  splitFragments
-    ? h(Text, { bold: true, color: theme.colors.accent }, `${prLabel}${titleSuffix}`)
-    : undefined,
-  h(Text, { bold: true, color: modeColor }, `  ${mode}`),
-  search ? h(Text, { dimColor: true }, `  ${truncateCells(search, 36)}`) : undefined)
+  chipsWidth <= budget
+    ? renderChipRow(h, Text, chips)
+    : renderFallback(h, Text, chips, theme, budget))
+}
+
+/**
+ * Render every chip as its own Text span with its own color/style,
+ * interleaved with dim separator spans. This is the path used when
+ * everything fits — the eye gets the full chip treatment.
+ */
+function renderChipRow(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  chips: ReadonlyArray<HeaderChip>
+): ReactTypes.ReactNode {
+  const nodes: ReactTypes.ReactNode[] = []
+  chips.forEach((chip, index) => {
+    if (index > 0) {
+      // Separator is intentionally dim so the eye can use it as a
+      // visual delimiter without it competing with chip labels for
+      // attention.
+      nodes.push(h(Text, { key: `sep-${index}`, dimColor: true }, HEADER_CHIP_SEPARATOR))
+    }
+    nodes.push(h(Text, {
+      key: chip.id,
+      color: chip.color,
+      dimColor: chip.dim,
+      bold: chip.bold,
+    }, chip.label))
+  })
+  return nodes
+}
+
+/**
+ * Fallback path for narrow terminals. Concatenates every chip label
+ * with separators, then truncates the whole string with
+ * `truncateCells` so the ellipsis lands at a cell boundary. Loses the
+ * per-chip color treatment in exchange for guaranteed legibility on
+ * narrow displays — the same trade-off the pre-redesign single-
+ * fragment code made for its inline glyph color split.
+ */
+function renderFallback(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  chips: ReadonlyArray<HeaderChip>,
+  theme: LogInkTheme,
+  budget: number
+): ReactTypes.ReactNode {
+  const joined = chips.map((chip) => chip.label).join(HEADER_CHIP_SEPARATOR)
+  return h(Text, { bold: true, color: theme.colors.accent }, truncateCells(joined, budget))
 }
