@@ -1,0 +1,97 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderFooter structural snapshot — default no-status footer 1`] = `
+<Box
+  flexDirection="column"
+  height={2}
+  paddingX={1}
+>
+  <Box
+    flexDirection="row"
+    justifyContent="space-between"
+  >
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      ↑/↓ move   enter diff   c/R/Z/i mutate   B/gT new   m compare   y/Y yank   / search
+    </Text>
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      g jump · &lt; back · ? help · : cmds · q quit
+    </Text>
+  </Box>
+  <Text
+    bold={false}
+    dimColor={true}
+  />
+</Box>
+`;
+
+exports[`renderFooter structural snapshot — error keeps hints visible on row 1 1`] = `
+<Box
+  flexDirection="column"
+  height={2}
+  paddingX={1}
+>
+  <Box
+    flexDirection="row"
+    justifyContent="space-between"
+  >
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      ↑/↓ move   enter diff   c/R/Z/i mutate   B/gT new   m compare   y/Y yank   / search
+    </Text>
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      g jump · &lt; back · ? help · : cmds · q quit
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    color="red"
+    dimColor={false}
+  >
+    ✗ merge conflict
+  </Text>
+</Box>
+`;
+
+exports[`renderFooter structural snapshot — loading status on row 2 1`] = `
+<Box
+  flexDirection="column"
+  height={2}
+  paddingX={1}
+>
+  <Box
+    flexDirection="row"
+    justifyContent="space-between"
+  >
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      ↑/↓ move   enter diff   c/R/Z/i mutate   B/gT new   m compare   y/Y yank   / search
+    </Text>
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      g jump · &lt; back · ? help · : cmds · q quit
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    color="cyan"
+    dimColor={false}
+  >
+    ⠹ fetching…
+  </Text>
+</Box>
+`;

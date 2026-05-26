@@ -1,15 +1,34 @@
 /**
- * Status-bar / footer renderer. Two-column layout:
- *   - Left: contextual hints for the active view (built by inkKeymap's
- *     `getLogInkFooterHints`), with the optional status message / idle
- *     tip appended.
- *   - Right: global key hints (`?` help, `:` palette, `q` quit, …).
+ * Status-bar / footer renderer. Two-row layout, using the full
+ * `height: 2` the footer already reserves:
  *
- * Idle tips only fill the slot when no real status message is set so the
+ *   Row 1 — keyboard hint band:
+ *     ┌──── contextual hints ────┐                ┌──── globals ────┐
+ *     ↑/↓ branches  ←/→ tab  …                    ? help · : cmds · q
+ *
+ *   Row 2 — status / feedback band:
+ *     ⠋ main has no upstream — nothing to fetch.
+ *
+ * Row 2 is empty when there's no status message, idle tip, or error.
+ * This is a behaviour change from the pre-0.54.2 single-row layout
+ * where the status message sat awkwardly between the contextual and
+ * global hints, getting visually crushed.
+ *
+ * The separation matters because:
+ *   - status text and key hints serve different cognitive purposes
+ *     (read vs. scan) and competing for the same row makes both
+ *     harder to use,
+ *   - long status messages (especially errors / multi-clause loading
+ *     copy) no longer push global hints off screen or wrap into the
+ *     hint cluster,
+ *   - errors now keep the global hints visible — the user often
+ *     needs `?` / `:` / `q` to *recover* from the error.
+ *
+ * Idle tips fill row 2 only when no real status message is set so the
  * tip cycle never overwrites genuine workflow feedback.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.7
- * of #890. No behavior change.
+ * Extracted from `src/commands/log/inkRuntime.ts` as part of phase
+ * 5a.7 of #890. Two-row layout introduced post-0.54.2.
  */
 
 import type * as ReactTypes from 'react'
@@ -58,54 +77,51 @@ export function renderFooter(
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.
   const isLoading = Boolean(state.statusLoading && state.statusMessage)
-  const trailing = state.statusMessage || idleTip || ''
-  // Loading status gets a spinner prefix in front of the message —
-  // motion makes transient LLM calls (create-PR body, PR fetches,
-  // etc.) feel less frozen even when they're sub-second.
-  const spinnerPrefix = isLoading ? `${pickSpinnerFrame(spinnerFrame)} ` : ''
-  const trailingWithSpinner = trailing ? `${spinnerPrefix}${trailing}` : ''
-  // Separated status text so loading rendering can give the message
-  // its own visual treatment (bold + accent) without dragging the
-  // keyboard hints along. Pre-loading users reported the spinner
-  // was nearly invisible against the dimmed footer; isolating the
-  // status to its own Text span fixes that.
-  const status = trailingWithSpinner ? `  ${trailingWithSpinner}` : ''
-  const hintsText = hints.contextual.join('   ')
   const isError = state.statusKind === 'error'
   const isSuccess = state.statusKind === 'success'
-  const errorText = isError ? `✗ ${state.statusMessage || ''}` : ''
+  const rawTrailing = state.statusMessage || idleTip || ''
+
+  // Loading status gets a spinner prefix in front of the message —
+  // motion makes transient LLM calls (create-PR body, PR fetches,
+  // etc.) feel less frozen even when they're sub-second. Errors get
+  // the ✗ glyph; nothing else gets a prefix.
+  const prefix = isError
+    ? '✗ '
+    : isLoading
+      ? `${pickSpinnerFrame(spinnerFrame)} `
+      : ''
+  const statusBody = rawTrailing ? `${prefix}${rawTrailing}` : ''
+
+  // Row 2 color picks: errors red+bold (must pop), loading/success
+  // accent+bold (visible against the muted hint row above), everything
+  // else dim+muted (idle tips and informational status shouldn't
+  // compete with the hint band for attention).
+  const statusColor = isError
+    ? 'red'
+    : (isLoading || isSuccess)
+      ? theme.colors.accent
+      : undefined
+  const statusBold = isError || isLoading || isSuccess
+  const statusDim = !isError && !isLoading && !isSuccess
+
+  const hintsText = hints.contextual.join('   ')
   const globalText = hints.global.join(' · ')
 
-  // Color the status portion based on kind. Loading uses the accent
-  // color (same as success) so motion glyphs stay readable; default
-  // status messages stay muted to match the surrounding chrome.
-  const statusColor = isSuccess || isLoading ? theme.colors.accent : undefined
-
-  return h(Box, {
-    flexDirection: 'row',
-    height: 2,
-    justifyContent: 'space-between',
-    paddingX: 1,
-  },
-  // Errors take over the whole contextual area (replace hints + status).
-  // Otherwise: hints stay dim/muted, status gets its own non-dim span
-  // when loading / success so it pops.
-  isError
-    ? h(Text, { color: 'red', bold: true }, errorText)
-    : h(Text, undefined,
-        h(Text, { color: theme.colors.muted, dimColor: true }, hintsText),
-        status
-          ? h(Text, {
-              color: statusColor,
-              dimColor: !isLoading && !isSuccess,
-              bold: isLoading,
-            }, status)
-          : ''
-      ),
-  // Globals are dropped entirely when an error is on screen — that
-  // space is what the long message needs to render. They come back
-  // the moment the status flips to info / success / cleared.
-  isError
-    ? h(Text, undefined, '')
-    : h(Text, { color: theme.colors.muted, dimColor: true }, globalText))
+  return h(Box, { flexDirection: 'column', height: 2, paddingX: 1 },
+    // Row 1: contextual ↔ global hints. justifyContent pushes them
+    // to opposite edges so the eye can scan each cluster as one
+    // block instead of hunting through a single concatenated line.
+    h(Box, { flexDirection: 'row', justifyContent: 'space-between' },
+      h(Text, { color: theme.colors.muted, dimColor: true }, hintsText),
+      h(Text, { color: theme.colors.muted, dimColor: true }, globalText)
+    ),
+    // Row 2: status / loading / idle tip / error. Empty Text keeps
+    // the row reserved when nothing's set so the surrounding layout
+    // doesn't shift as status flips on/off.
+    h(Text, {
+      color: statusColor,
+      dimColor: statusDim,
+      bold: statusBold,
+    }, statusBody)
+  )
 }
