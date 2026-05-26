@@ -362,13 +362,17 @@ describe('log Ink view model', () => {
   })
 
   it('toggles graph, help, and command palette overlays', () => {
+    // Note: since 0.54.x the default `fullGraph` flipped to true so
+    // the workstation opens on the full multi-ref graph. The toggle
+    // just flips the boolean, so one `toggleGraph` lands at false.
     let state = createLogInkState(rows)
+    expect(state.fullGraph).toBe(true)
 
     state = applyLogInkAction(state, { type: 'toggleGraph' })
     state = applyLogInkAction(state, { type: 'toggleHelp' })
     state = applyLogInkAction(state, { type: 'toggleCommandPalette' })
 
-    expect(state.fullGraph).toBe(true)
+    expect(state.fullGraph).toBe(false)
     expect(state.showHelp).toBe(false)
     expect(state.showCommandPalette).toBe(true)
   })
@@ -971,6 +975,34 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, { type: 'selectCommitByHash', hash: 'fed999900000' })
       expect(state.selectedFileIndex).toBe(0)
       expect(state.diffPreviewOffset).toBe(0)
+    })
+
+    it('matches a target that is a prefix of a loaded commit hash', () => {
+      // The production short-hash mismatch: `for-each-ref` returned
+      // 'fed9' for the cursored ref but `git log` stored 'fed9999' on
+      // the row. Exact lookup would miss; prefix matching catches it.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'selectCommitByHash', hash: 'fed9' })
+      expect(state.selectedIndex).toBe(2)
+    })
+
+    it('matches a target that is longer than a loaded short hash', () => {
+      // Inverse direction: cursored ref carries an 8-char hash, the
+      // loaded row only has a 7-char short form. The reducer should
+      // still resolve the jump.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'selectCommitByHash', hash: 'fed99990' })
+      expect(state.selectedIndex).toBe(2)
+    })
+
+    it('refuses to prefix-match on absurdly short targets', () => {
+      // A 3-char "hash" would collide with too many real commits.
+      // Same floor as `isHashLoaded` in the resolver.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'move', delta: 1 })
+      expect(state.selectedIndex).toBe(1)
+      state = applyLogInkAction(state, { type: 'selectCommitByHash', hash: 'fed' })
+      expect(state.selectedIndex).toBe(1) // unchanged
     })
   })
 

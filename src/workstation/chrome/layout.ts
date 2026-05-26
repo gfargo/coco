@@ -135,19 +135,24 @@ export const LAYOUT_RAIL_PANEL_WIDTH = 8
  * the layout — the history graph + diff are usually the focal point.
  *
  * The tier split lets narrow terminals stay compact (the user has
- * little room to spare) while wide terminals scale the sidebar in
- * proportion to the rest of the chrome instead of pinning it at an
- * arbitrary cap.
+ * little room to spare) while wider terminals get a slightly larger
+ * sidebar. **Pinned at the wide-tier ceiling**: once the terminal
+ * grows past the normal tier the sidebar tops out at 32 cells. All
+ * additional terminal width flows to the history graph + inspector
+ * instead of bloating the sidebar. Matches user expectation that the
+ * git graph is the dominant view on big terminals.
  *
  *   tight  (100-119) → `clamp(22, 28, 24% × cols)`  e.g. 100→24, 119→28
  *   normal (120-159) → `clamp(22, 30, 22% × cols)`  e.g. 120→26, 140→30
- *   wide   (≥ 160)   → `clamp(28, 48, 24% × cols)`  e.g. 160→38, 200→48
+ *   wide   (≥ 160)   → `clamp(28, 32, 20% × cols)`  e.g. 160→32, 220→32
  *
  * The `tight` and `normal` tiers honor a hard floor of 22 cells —
  * narrower than that and the tab labels stop fitting on a single
  * line. The `wide` tier raises the floor to 28 so the sidebar
  * doesn't visually shrink when crossing the 159→160 boundary on a
- * resize.
+ * resize. The wide-tier max of 32 keeps the sidebar from growing
+ * past what the normal tier asks for — extra space goes to the
+ * main panel.
  *
  * Focused state (Tab → sidebar) uses a different formula entirely
  * (`clamp(32, 50, 36% × cols)`) — deliberate user intent to read the
@@ -158,7 +163,7 @@ const SIDEBAR_AT_REST_BY_TIER: Record<LogInkLayoutDensity, SidebarAtRestConfig> 
   rail: { min: 22, max: 28, fraction: 0.24 }, // unused — rail collapses to LAYOUT_RAIL_PANEL_WIDTH
   tight: { min: 22, max: 28, fraction: 0.24 },
   normal: { min: 22, max: 30, fraction: 0.22 },
-  wide: { min: 28, max: 48, fraction: 0.24 },
+  wide: { min: 28, max: 32, fraction: 0.20 },
 }
 
 function calcSidebarAtRestWidth(columns: number, density: LogInkLayoutDensity): number {

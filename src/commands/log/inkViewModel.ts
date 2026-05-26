@@ -1,4 +1,5 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from './data'
+import { hashesMatchAny } from '../../git/hashes'
 import {
     CommitComposeAction,
     CommitComposeState,
@@ -170,6 +171,14 @@ export type CreateLogInkStateOptions = {
    * direct-constructing state) don't have to thread it through.
    */
   repoWorkdir?: string
+  /**
+   * Override the initial graph mode. Defaults to `true` (full
+   * multi-ref graph) since 0.54.x — tests that need the compact
+   * single-branch view pass `fullGraph: false` here rather than
+   * relying on the global default (which has moved before and may
+   * move again).
+   */
+  fullGraph?: boolean
 }
 
 export type LogInkState = {
@@ -1245,7 +1254,16 @@ export function createLogInkState(
     worktreeDiffOffset: 0,
     filter: '',
     filterMode: false,
-    fullGraph: false,
+    // Default to the full multi-ref graph (`git log --all`) so users
+    // see how branches, tags, and stashes weave through the history
+    // out of the box. Pre-0.54.x this defaulted to false (current
+    // branch only); user feedback consistently asked for the
+    // GitKraken-style "see everything" view as the starting state.
+    // The `\` toggle still flips back to compact / current-branch
+    // mode for users who want the cleaner single-line graph. Tests
+    // override via `options.fullGraph` when they need the compact
+    // case explicitly.
+    fullGraph: options.fullGraph ?? true,
     showHelp: false,
     helpScrollOffset: 0,
     showCommandPalette: false,
@@ -1377,9 +1395,18 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       // branch's tip without the user manually scrolling. No-op when
       // the hash isn't in the loaded list (the runtime surfaces a
       // status hint in that case).
+      //
+      // Uses the shared `hashesMatchAny` helper to cover the
+      // short-hash auto-extension mismatch between
+      // `for-each-ref --format=%(objectname:short)` (cursored ref)
+      // and `git log --pretty=format:%h` (history row). Without that
+      // tolerance the resolver could decide "jump" but this reducer
+      // would silently no-op — the status updates but the cursor
+      // doesn't move, exactly the branch-cursor bug surfaced in 0.54.1
+      // testing. See `src/git/hashes.ts` for the matching rules.
       const target = action.hash
       const index = state.filteredCommits.findIndex((commit) =>
-        commit.hash === target || commit.shortHash === target
+        hashesMatchAny(target, [commit.hash, commit.shortHash])
       )
       if (index < 0) {
         return state

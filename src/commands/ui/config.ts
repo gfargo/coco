@@ -27,9 +27,10 @@ export const options = {
     default: 'history',
   },
   all: {
-    description: 'Load commits from all local and remote refs in history mode',
+    description:
+      'Load commits from all local and remote refs in history mode. Defaults to true so the history view shows the full multi-ref graph (branches, tags, stashes) out of the box; pass `--no-all` to scope to the current branch only.',
     type: 'boolean',
-    default: false,
+    default: true,
   },
   branch: {
     description: 'Load history reachable from a branch or ref',

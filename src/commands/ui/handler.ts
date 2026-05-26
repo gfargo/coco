@@ -6,6 +6,7 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { LogArgv, LogOptions } from '../log/config'
 import { GitLogRow, getLogRows } from '../log/data'
+import { getStashCommitHashes } from '../../git/stashData'
 import { startInkInteractiveLog } from '../log/inkRuntime'
 import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { readCachedCommits, writeCachedCommits } from '../../workstation/chrome/overviewCache'
@@ -16,6 +17,17 @@ export function createLogArgvFromUiArgv(argv: UiArgv): LogArgv {
   return {
     $0: argv.$0,
     _: ['log'],
+    // Pass `--all` through from the CLI. The yargs default is `true`
+    // since 0.54.x — user feedback consistently asked for the
+    // GitKraken-style "see all branches, tags, stashes" view as the
+    // starting state. `coco ui --no-all` opts back to
+    // current-branch-only.
+    //
+    // Note: passing `--branch foo` does NOT automatically scope away
+    // from --all. If the user wants strictly that branch, they pass
+    // `coco ui --branch foo --no-all`. We considered the implicit
+    // scope-narrowing but it surprises users who pass `--branch` as
+    // a "highlight this branch in the all-refs view" hint.
     all: argv.all,
     branch: argv.branch,
     format: 'table',
@@ -65,6 +77,30 @@ function withCacheWrite(
   }
 }
 
+/**
+ * Workstation-aware log loader (#1034 follow-up). Calls `git stash
+ * list` first to collect every stash's commit hash, then passes them
+ * as extra refs to `getLogRows` so the graph includes every stash as
+ * a node — not just the latest (which is the only one `refs/stash`
+ * points at and the only one `git log --all` walks).
+ *
+ * Without this, the stash → history cursor sync added in #1034 only
+ * worked for `stash@{0}`; cursoring any older stash row reported
+ * "tip not in loaded window" because that stash's commit hash was
+ * never in the loaded graph window in the first place.
+ *
+ * The extra git call is cheap (one `git stash list --format=%H`,
+ * usually sub-50ms). It's only an additive cost when stashes exist;
+ * users on stash-free repos pay nothing.
+ */
+async function loadRowsWithStashes(
+  git: SimpleGit,
+  logArgv: LogArgv
+): Promise<GitLogRow[]> {
+  const stashHashes = await getStashCommitHashes(git).catch(() => [])
+  return getLogRows(git, logArgv, { extraRefs: stashHashes })
+}
+
 export async function startCocoUiFromLogArgv(
   logArgv: LogArgv,
   options: StartCocoUiFromLogArgvOptions = {}
@@ -87,7 +123,7 @@ export async function startCocoUiFromLogArgv(
   const initialRows = options.rows || cachedRows || []
   const loadRows = options.rows
     ? undefined
-    : withCacheWrite(repoPath, () => getLogRows(git, logArgv))
+    : withCacheWrite(repoPath, () => loadRowsWithStashes(git, logArgv))
 
   await startInkInteractiveLog(git, initialRows, {}, {
     appLabel: 'coco',
@@ -120,7 +156,7 @@ export async function startCocoUi(argv: UiArgv): Promise<void> {
     idleTips: config.logTui?.idleTips,
     dateBucketing: config.logTui?.dateBucketing,
     initialView: argv.view || 'history',
-    loadRows: withCacheWrite(repoPath, () => getLogRows(git, logArgv)),
+    loadRows: withCacheWrite(repoPath, () => loadRowsWithStashes(git, logArgv)),
     logArgv,
     theme: createUiTheme(config, argv),
   })

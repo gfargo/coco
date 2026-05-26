@@ -171,11 +171,13 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, '', { tab: true, shift: true })
     expect(state.focus).toBe('commits')
 
-    state = applyInput(state, '\\')
-    expect(state.fullGraph).toBe(true)
-
+    // Since 0.54.x the default `fullGraph` is true; first `\\` flips
+    // to compact, second flips back to full.
     state = applyInput(state, '\\')
     expect(state.fullGraph).toBe(false)
+
+    state = applyInput(state, '\\')
+    expect(state.fullGraph).toBe(true)
 
     // gg jump to top: first 'g' is a pure prefix, second 'g' fires moveToTop.
     state = applyLogInkAction(state, { type: 'move', delta: 2 })
@@ -1834,15 +1836,24 @@ describe('log Ink input interactions', () => {
   })
 
   it('toggles graph with the relocated \\\\ key (g is now a pure prefix)', () => {
+    // Note: since 0.54.x the default `fullGraph` flipped to true so
+    // users see the full multi-ref graph out of the box. The toggle
+    // semantics didn't change — `\\` still flips between full and
+    // compact — the starting state is just the inverse of what
+    // earlier tests assumed.
     let state = createLogInkState(rows)
-    expect(state.fullGraph).toBe(false)
+    expect(state.fullGraph).toBe(true)
 
     // Single g press only sets a pending chord — no graph flicker.
     state = applyInput(state, 'g')
-    expect(state.fullGraph).toBe(false)
+    expect(state.fullGraph).toBe(true)
     expect(state.pendingKey).toBe('g')
 
-    // \\ is the new toggle.
+    // \\ flips from default (full) to compact.
+    state = applyInput(state, '\\')
+    expect(state.fullGraph).toBe(false)
+
+    // Pressing it again flips back to full.
     state = applyInput(state, '\\')
     expect(state.fullGraph).toBe(true)
   })

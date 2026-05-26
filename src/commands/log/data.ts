@@ -11,11 +11,34 @@ export const FIELD_SEPARATOR = '\x1f'
 const LOG_FORMAT = `%x1f%h%x1f%H%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s`
 const DETAIL_FORMAT = `%H%x1f%h%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s%x1f%b`
 export const LOG_DEFAULT_LIMIT = 30
-export const LOG_INTERACTIVE_DEFAULT_LIMIT = 300
+// Bumped from 300 → 1000 in 0.54.2. With the full-graph default
+// (#1034) the workstation surfaces many more refs (all branches, all
+// tags, plus stash commits added via `extraRefs`), and on active repos
+// the 300-commit cap was cutting off year+-old stash bases and old
+// tag commits — making the cursor-syncs-history effect report "tip
+// not in loaded window" instead of moving the graph cursor. 1000
+// fits a year of activity for most repos, git log is still sub-200ms,
+// and Ink virtualises scroll so render cost stays flat.
+export const LOG_INTERACTIVE_DEFAULT_LIMIT = 1000
 
 export type LogRowLoadOptions = {
   limit?: number
   skip?: number
+  /**
+   * Additional refs / commit hashes to include as graph roots beyond
+   * what `--all` covers. The canonical use case is stashes: `git log
+   * --all` only includes `refs/stash` (the latest stash; stash@{0}),
+   * not older `stash@{N}` entries which live in the stash reflog
+   * rather than as refs. Passing their commit hashes here makes them
+   * appear as nodes in the loaded graph window, so cursor-syncs from
+   * the stash sidebar can actually land somewhere.
+   *
+   * Appended as positional args at the end of the `git log` command,
+   * after the `--all` flag and before any path separator. Each entry
+   * should be a resolvable ref / commit hash; the caller is
+   * responsible for filtering out invalid values.
+   */
+  extraRefs?: string[]
 }
 
 export type GitLogCommitRow = {
@@ -303,12 +326,85 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
     args.push(argv.branch)
   }
 
+  // Extra refs (stash commits etc.) — append after the --all / branch
+  // selector but BEFORE the path separator. Git treats them as
+  // additional graph roots, so the traversal includes them alongside
+  // whatever --all / --branch already covers.
+  if (options.extraRefs && options.extraRefs.length > 0) {
+    args.push(...options.extraRefs)
+  }
+
   const paths = toArray(argv.path)
   if (paths.length > 0) {
     args.push('--', ...paths)
   }
 
   return args
+}
+
+/**
+ * Default size of a targeted-context window. Sized to comfortably
+ * cover a year of activity on most repos so the cursor-sync's
+ * "jump to commit anchored on a ref I just selected" can succeed
+ * without paginating through the whole history.
+ */
+export const COMMIT_CONTEXT_DEFAULT_LIMIT = 5000
+
+/**
+ * Load a window of commits anchored on a specific hash. Used by the
+ * cursor-sync effect when the user selects a ref (branch / tag /
+ * stash) whose target commit isn't in the loaded graph window.
+ *
+ * Critical detail: this walks **only from the target** (and its
+ * ancestors), NOT from `--all`. Why: when you combine `--all` with
+ * `<targetHash>` AND `--max-count=N`, git unions the walks, sorts
+ * the result by date, and slices the newest N rows. If the target
+ * is older than the Nth newest commit across all refs (very common
+ * for year-old tags / branches on active repos), it falls off the
+ * slice even though it was passed as a root. Walking from the
+ * target alone guarantees the target IS the first row of the
+ * output and its ancestors fill the rest.
+ *
+ * The caller merges the result via the `appendRows` reducer action
+ * which deduplicates by hash, so the target's ancestry slots into
+ * the existing `--all` graph cleanly. The user's loaded view ends
+ * up as the union of: the original `--all` window + target's
+ * ancestry — exactly what's needed for the cursor to land.
+ *
+ * Capped at `options.limit` (default 5000) to keep one targeted
+ * fetch bounded. For most refs, even a 100-commit limit would be
+ * enough to surface the target; we go higher to also pull in the
+ * surrounding context so the user can scroll around the landed
+ * cursor.
+ */
+export async function getLogRowsAnchoredOn(
+  git: SimpleGit,
+  argv: LogArgv,
+  targetHash: string,
+  options: { limit?: number } = {}
+): Promise<GitLogRow[]> {
+  // Strip every "walk many refs" toggle so buildLogArgs produces a
+  // clean `git log <flags> <targetHash>` — exactly the walk that
+  // guarantees the target's inclusion.
+  const merged: LogArgv = {
+    ...argv,
+    all: false,
+    view: 'compact',  // suppresses 'full' → '--all' mapping
+    branch: undefined,
+    path: undefined,
+  }
+  // Also drop --first-parent / --no-merges so the target's ancestry
+  // renders with full topology (matters for stash commits which are
+  // merges by construction).
+  const baseArgs = buildLogArgs(merged, {
+    limit: options.limit ?? COMMIT_CONTEXT_DEFAULT_LIMIT,
+  }).filter((arg) => arg !== '--first-parent' && arg !== '--no-merges')
+  // Splice the target as the positional ref. `buildLogArgs` already
+  // appended any `--all`/`--branch`/`<extraRefs>` it considered;
+  // since we cleared all those above, the only positional ref we
+  // add is the target.
+  baseArgs.push(targetHash)
+  return parseLogOutput(await git.raw(baseArgs))
 }
 
 /**

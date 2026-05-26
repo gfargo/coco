@@ -36,6 +36,7 @@ const baseTag = (overrides: Partial<GitTagRef> = {}): GitTagRef => ({
 const baseStash = (overrides: Partial<StashEntry> = {}): StashEntry => ({
   ref: 'stash@{0}',
   hash: 'cafef00dba5eba11',
+  baseHash: 'base0fb45e0fb45e0',
   date: '2026-04-29',
   branch: 'feat/foo',
   message: 'WIP debugging',

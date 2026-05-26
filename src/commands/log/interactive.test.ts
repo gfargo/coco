@@ -167,6 +167,7 @@ const stashOverview: StashOverview = {
     {
       ref: 'stash@{0}',
       hash: 'abc123',
+      baseHash: 'base111',
       date: '2026-04-28 09:00:00 -0400',
       branch: 'main',
       message: 'save local edits',
