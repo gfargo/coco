@@ -2536,7 +2536,7 @@ describe('log Ink input interactions', () => {
       expect(events.find((e) => e.type === 'runWorkflowAction')).toBeUndefined()
       expect(events).toContainEqual({
         type: 'action',
-        action: { type: 'setStatus', value: 'Unknown reset mode: extreme. Use soft, mixed, or hard.' },
+        action: { type: 'setStatus', value: 'Unknown reset mode: extreme. Use soft, mixed, or hard.', kind: 'warning' },
       })
     })
 
@@ -2673,7 +2673,7 @@ describe('log Ink input interactions', () => {
       expect(events.find((e) => e.type === 'runWorkflowAction')).toBeUndefined()
       expect(events).toContainEqual({
         type: 'action',
-        action: { type: 'setStatus', value: 'enter a value or press esc to cancel' },
+        action: { type: 'setStatus', value: 'enter a value or press esc to cancel', kind: 'warning' },
       })
     })
   })
@@ -2687,7 +2687,7 @@ describe('log Ink input interactions', () => {
         { type: 'action', action: { type: 'toggleDiffViewMode' } },
         {
           type: 'action',
-          action: { type: 'setStatus', value: 'Switched to side-by-side diff' },
+          action: { type: 'setStatus', value: 'Switched to side-by-side diff', kind: 'success' },
         },
       ])
     })
@@ -2702,7 +2702,7 @@ describe('log Ink input interactions', () => {
 
       expect(events).toContainEqual({
         type: 'action',
-        action: { type: 'setStatus', value: 'Switched to unified diff' },
+        action: { type: 'setStatus', value: 'Switched to unified diff', kind: 'success' },
       })
     })
 
@@ -2859,7 +2859,7 @@ describe('log Ink input interactions', () => {
       const events = getLogInkInputEvents(state, 'H')
       expect(events).toContainEqual({
         type: 'action',
-        action: { type: 'setStatus', value: expect.stringContaining('gH applies a hunk') },
+        action: { type: 'setStatus', value: expect.stringContaining('gH applies a hunk'), kind: 'warning' },
       })
     })
   })
@@ -2948,7 +2948,7 @@ describe('log Ink input interactions', () => {
       const state = openMultilinePrompt()
       const events = getLogInkInputEvents(state, 'd', { ctrl: true })
       expect(events).toEqual([
-        { type: 'action', action: { type: 'setStatus', value: 'enter a value or press esc to cancel' } },
+        { type: 'action', action: { type: 'setStatus', value: 'enter a value or press esc to cancel', kind: 'warning' } },
       ])
     })
 
@@ -3015,7 +3015,7 @@ describe('log Ink input interactions', () => {
       expect(getLogInkInputEvents(conflictsBlocked, 'C', {}, { conflictFileCount: 2 })[0])
         .toMatchObject({
           type: 'action',
-          action: { type: 'setStatus', value: 'Resolve all conflicts before continuing' },
+          action: { type: 'setStatus', value: 'Resolve all conflicts before continuing', kind: 'warning' },
         })
 
       // Compose: claims the keystroke with an explicit "finish draft
@@ -3027,7 +3027,7 @@ describe('log Ink input interactions', () => {
       expect(getLogInkInputEvents(composeState, 'C')).toEqual([
         {
           type: 'action',
-          action: { type: 'setStatus', value: 'Finish or cancel the commit draft before creating a PR.' },
+          action: { type: 'setStatus', value: 'Finish or cancel the commit draft before creating a PR.', kind: 'warning' },
         },
       ])
     })
@@ -3151,7 +3151,7 @@ describe('log Ink input interactions', () => {
       expect(events).toEqual([
         {
           type: 'action',
-          action: { type: 'setStatus', value: 'enter a value or press esc to cancel' },
+          action: { type: 'setStatus', value: 'enter a value or press esc to cancel', kind: 'warning' },
         },
       ])
     })
@@ -3619,7 +3619,7 @@ describe('log Ink input interactions', () => {
         { inspectorActionCount: 8 },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'setStatus', value: 'No commit selected' } },
+        { type: 'action', action: { type: 'setStatus', value: 'No commit selected', kind: 'warning' } },
       ])
     })
 
@@ -3869,7 +3869,7 @@ describe('log Ink input interactions', () => {
       // to the global C (Create PR) binding. Shows a status hint instead.
       expect(events).toContainEqual({
         type: 'action',
-        action: { type: 'setStatus', value: 'Resolve all conflicts before continuing' },
+        action: { type: 'setStatus', value: 'Resolve all conflicts before continuing', kind: 'warning' },
       })
       const hasConflictContinue = events.some(
         (e) => e.type === 'runWorkflowAction' && (e as { id: string }).id === 'continue-operation'

@@ -286,7 +286,7 @@ export function getInspectorActionExecuteEvents(
     fn: (sha: string, commitIndex: number) => LogInkInputEvent[]
   ): LogInkInputEvent[] => {
     if (!commit) {
-      return [action({ type: 'setStatus', value: 'No commit selected' })]
+      return [action({ type: 'setStatus', value: 'No commit selected', kind: 'warning' })]
     }
     return fn(commit.hash, state.selectedIndex)
   }
@@ -326,6 +326,7 @@ export function getInspectorActionExecuteEvents(
       return [action({
         type: 'setStatus',
         value: `Action ${inspectorAction.key} not yet wired`,
+        kind: 'warning',
       })]
   }
 }
@@ -561,6 +562,7 @@ export function getLogInkPaletteExecuteEvents(
       return [action({
         type: 'setStatus',
         value: 'open the diff view and press [ or ] to jump hunks',
+        kind: 'warning',
       })]
     case 'focusNext':
       return [action({ type: 'focusNext' })]
@@ -609,6 +611,7 @@ export function getLogInkPaletteExecuteEvents(
       return [action({
         type: 'setStatus',
         value: 'open branches / tags / history and press m on the cursored ref',
+        kind: 'warning',
       })]
     case 'navigateBack':
       // Mirror the Esc / `<` semantics (#931): drain the frame's view
@@ -684,6 +687,7 @@ export function getLogInkPaletteExecuteEvents(
       return [action({
         type: 'setStatus',
         value: 'Sort cycle is available in the branches and tags views',
+        kind: 'warning',
       })]
     case 'yankClipboard':
       // The runtime resolves the value/label against the live filtered
@@ -742,7 +746,7 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   if (!state.inputPrompt) return []
   const value = state.inputPrompt.value.trim()
   if (!value) {
-    return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel' })]
+    return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel', kind: 'warning' })]
   }
   if (state.inputPrompt.kind === 'reset-mode') {
     const mode = value.toLowerCase()
@@ -750,6 +754,7 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       return [action({
         type: 'setStatus',
         value: `Unknown reset mode: ${value}. Use soft, mixed, or hard.`,
+        kind: 'warning',
       })]
     }
     return [
@@ -763,6 +768,7 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       return [action({
         type: 'setStatus',
         value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
+        kind: 'warning',
       })]
     }
     return [
@@ -826,6 +832,7 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       return [action({
         type: 'setStatus',
         value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
+        kind: 'warning',
       })]
     }
     return [
@@ -1498,7 +1505,7 @@ export function getLogInkInputEvents(
     }
     return [
       action({ type: 'setPendingKey', value: undefined }),
-      action({ type: 'setStatus', value: 'gH applies a hunk in commit-diff or stash-diff view' }),
+      action({ type: 'setStatus', value: 'gH applies a hunk in commit-diff or stash-diff view', kind: 'warning' }),
     ]
   }
 
@@ -1525,7 +1532,7 @@ export function getLogInkInputEvents(
     }
     return [
       action({ type: 'setPendingKey', value: undefined }),
-      action({ type: 'setStatus', value: 'gT creates a tag at the cursored commit on the history view' }),
+      action({ type: 'setStatus', value: 'gT creates a tag at the cursored commit on the history view', kind: 'warning' }),
     ]
   }
 
@@ -1645,6 +1652,7 @@ export function getLogInkInputEvents(
         value: next === 'split'
           ? 'Switched to side-by-side diff'
           : 'Switched to unified diff',
+        kind: 'success',
       }),
     ]
   }
@@ -2166,10 +2174,10 @@ export function getLogInkInputEvents(
   if (key.return && state.compareBase && isCompareFlowTarget(state)) {
     const head = getCursoredCompareRef(state, context)
     if (!head) {
-      return [action({ type: 'setStatus', value: 'No ref under cursor — move to a branch / tag / commit row first' })]
+      return [action({ type: 'setStatus', value: 'No ref under cursor — move to a branch / tag / commit row first', kind: 'warning' })]
     }
     if (head.ref === state.compareBase.ref && head.kind === state.compareBase.kind) {
-      return [action({ type: 'setStatus', value: 'Compare base and head are the same ref — pick a different one' })]
+      return [action({ type: 'setStatus', value: 'Compare base and head are the same ref — pick a different one', kind: 'warning' })]
     }
     return [
       action({
@@ -2396,7 +2404,7 @@ export function getLogInkInputEvents(
           action({ type: 'setFocus', value: 'commits' }),
         ]
       }
-      return [action({ type: 'setStatus', value: 'no detail view for this tab' })]
+      return [action({ type: 'setStatus', value: 'no detail view for this tab', kind: 'warning' })]
     }
     // Fall through — per-entity Enter handler below claims the keystroke.
   }
@@ -2522,7 +2530,7 @@ export function getLogInkInputEvents(
   if (inputValue === 'm' && isCompareFlowTarget(state)) {
     const ref = getCursoredCompareRef(state, context)
     if (!ref) {
-      return [action({ type: 'setStatus', value: 'No ref under cursor — move to a branch / tag / commit row first' })]
+      return [action({ type: 'setStatus', value: 'No ref under cursor — move to a branch / tag / commit row first', kind: 'warning' })]
     }
     if (state.compareBase && state.compareBase.ref === ref.ref && state.compareBase.kind === ref.kind) {
       return [
@@ -2762,7 +2770,7 @@ export function getLogInkInputEvents(
   // Always intercept `C` on the conflicts view to prevent fallthrough to
   // the global `C` (Create PR) binding when conflicts remain.
   if (inputValue === 'C' && state.activeView === 'conflicts') {
-    return [action({ type: 'setStatus', value: 'Resolve all conflicts before continuing' })]
+    return [action({ type: 'setStatus', value: 'Resolve all conflicts before continuing', kind: 'warning' })]
   }
   // Global `C` — create a pull request from the current branch. The
   // runtime callback handles pre-flight (current branch resolution,
@@ -2778,6 +2786,7 @@ export function getLogInkInputEvents(
     return [action({
       type: 'setStatus',
       value: 'Finish or cancel the commit draft before creating a PR.',
+      kind: 'warning',
     })]
   }
   if (inputValue === 'C' && state.activeView !== 'conflicts') {
@@ -2847,7 +2856,7 @@ export function getLogInkInputEvents(
       return events
     }
     if (state.activeView === 'diff' && (state.diffSource === 'commit' || state.diffSource === 'stash')) {
-      return [action({ type: 'setStatus', value: 'no hunk under cursor — j/k to a + or - line first' })]
+      return [action({ type: 'setStatus', value: 'no hunk under cursor — j/k to a + or - line first', kind: 'warning' })]
     }
   }
 

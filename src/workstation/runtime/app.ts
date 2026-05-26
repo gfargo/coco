@@ -862,7 +862,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       .catch((error: unknown) => {
         if (cancelled || !mountedRef.current) return
         const message = error instanceof Error ? error.message : String(error)
-        dispatch({ type: 'setStatus', value: `Failed to load commits: ${message}` })
+        dispatch({ type: 'setStatus', value: `Failed to load commits: ${message}`, kind: 'error' })
         dispatch({ type: 'setBootLoading', value: false })
       })
     return () => {
@@ -1727,6 +1727,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         dispatch({
           type: 'setStatus',
           value: `${decision.target.label} target commit is unreachable — not in any walked ref's history.`,
+          kind: 'warning',
         })
         return
     }
@@ -1791,7 +1792,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   const toggleSelectedFileStage = React.useCallback(async () => {
     if (!selectedWorktreeFile) {
-      dispatch({ type: 'setStatus', value: 'no worktree file selected' })
+      dispatch({ type: 'setStatus', value: 'no worktree file selected', kind: 'warning' })
       return
     }
 
@@ -1810,7 +1811,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
 
     if (!selectedHunk) {
-      dispatch({ type: 'setStatus', value: 'no hunk selected' })
+      dispatch({ type: 'setStatus', value: 'no hunk selected', kind: 'warning' })
       return
     }
 
@@ -1825,6 +1826,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: `${selectedHunk.state === 'staged' ? 'Unstaged' : 'Staged'} hunk`,
+        kind: 'success',
       })
       await refreshWorktreeContext()
       setWorktreeDiff(undefined)
@@ -1833,13 +1835,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: (error as Error).message || 'failed to update hunk stage state',
+        kind: 'error',
       })
     }
   }, [dispatch, git, refreshWorktreeContext, state.selectedWorktreeHunkIndex, worktreeHunks])
 
   const revertSelectedFile = React.useCallback(async () => {
     if (!selectedWorktreeFile) {
-      dispatch({ type: 'setStatus', value: 'no worktree file selected' })
+      dispatch({ type: 'setStatus', value: 'no worktree file selected', kind: 'warning' })
       return
     }
 
@@ -1856,14 +1859,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
 
     if (!selectedHunk) {
-      dispatch({ type: 'setStatus', value: 'no hunk selected' })
+      dispatch({ type: 'setStatus', value: 'no hunk selected', kind: 'warning' })
       return
     }
 
     dispatch({ type: 'setStatus', value: 'reverting selected hunk' })
     try {
       await revertHunk(git, selectedHunk)
-      dispatch({ type: 'setStatus', value: `Reverted hunk in ${selectedHunk.filePath}` })
+      dispatch({ type: 'setStatus', value: `Reverted hunk in ${selectedHunk.filePath}`, kind: 'success' })
       await refreshWorktreeContext()
       setWorktreeDiff(undefined)
       setWorktreeHunks(undefined)
@@ -1871,6 +1874,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: (error as Error).message || 'failed to revert hunk',
+        kind: 'error',
       })
     }
   }, [dispatch, git, refreshWorktreeContext, state.selectedWorktreeHunkIndex, worktreeHunks])
@@ -1879,7 +1883,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const stagedCount = context.worktree?.stagedCount || 0
 
     if (!stagedCount) {
-      dispatch({ type: 'setStatus', value: 'stage changes before committing' })
+      dispatch({ type: 'setStatus', value: 'stage changes before committing', kind: 'warning' })
       return
     }
 
@@ -1977,13 +1981,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // dispatches because the user already knows what happened.
       if (result.cancelled) {
         dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: false } })
-        dispatch({ type: 'setStatus', value: 'AI draft cancelled.' })
+        dispatch({ type: 'setStatus', value: 'AI draft cancelled.', kind: 'info' })
         return
       }
 
       if (result.ok && result.draft) {
         dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: result.draft } })
-        dispatch({ type: 'setStatus', value: 'AI draft ready for editing' })
+        dispatch({ type: 'setStatus', value: 'AI draft ready for editing', kind: 'success' })
         return
       }
 
@@ -2070,7 +2074,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const startCreatePullRequest = React.useCallback(async () => {
     const head = context.branches?.currentBranch || context.provider?.currentBranch
     if (!head) {
-      dispatch({ type: 'setStatus', value: 'No current branch to create a PR from.' })
+      dispatch({ type: 'setStatus', value: 'No current branch to create a PR from.', kind: 'warning' })
       return
     }
     const defaultBranch = context.provider?.repository.defaultBranch
@@ -2078,11 +2082,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: 'No default branch detected. Set origin/HEAD or ensure main/master exists locally.',
+        kind: 'warning',
       })
       return
     }
     if (head === defaultBranch) {
-      dispatch({ type: 'setStatus', value: `Current branch is ${defaultBranch}; check out a feature branch first.` })
+      dispatch({ type: 'setStatus', value: `Current branch is ${defaultBranch}; check out a feature branch first.`, kind: 'warning' })
       return
     }
     if (context.pullRequest?.currentPullRequest || context.provider?.currentPullRequest) {
@@ -2092,6 +2097,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         value: existing
           ? `PR #${existing.number} already open for ${head}. Use the PR view to manage it.`
           : `A pull request is already open for ${head}.`,
+        kind: 'warning',
       })
       return
     }
@@ -2138,9 +2144,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       const initial = initialBody ? `${initialTitle}\n\n${initialBody}` : initialTitle
 
       if (!body.ok) {
-        dispatch({ type: 'setStatus', value: `PR body generation failed: ${body.message}. Edit manually.` })
+        dispatch({ type: 'setStatus', value: `PR body generation failed: ${body.message}. Edit manually.`, kind: 'error' })
       } else {
-        dispatch({ type: 'setStatus', value: 'PR body drafted — review and Ctrl+D to submit.' })
+        dispatch({ type: 'setStatus', value: 'PR body drafted — review and Ctrl+D to submit.', kind: 'success' })
       }
 
       // Audit finding #11: clear the pending flag BEFORE opening the
@@ -2209,16 +2215,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const yankText = React.useCallback(async (value: string, label: string) => {
     const clipboard: ClipboardRunner = clipboardRunner || defaultClipboardRunner
     if (!value) {
-      dispatch({ type: 'setStatus', value: `Nothing to copy — ${label} is empty.` })
+      dispatch({ type: 'setStatus', value: `Nothing to copy — ${label} is empty.`, kind: 'warning' })
       return
     }
     try {
       await clipboard(value)
-      dispatch({ type: 'setStatus', value: `Copied ${label} to clipboard.` })
+      dispatch({ type: 'setStatus', value: `Copied ${label} to clipboard.`, kind: 'success' })
     } catch (error) {
       dispatch({
         type: 'setStatus',
         value: `Copy failed (${label}): ${(error as Error).message}`,
+        kind: 'error',
       })
     }
   }, [clipboardRunner, dispatch])
@@ -2243,7 +2250,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const startChangelogView = React.useCallback(async (options: { force?: boolean } = {}) => {
     const head = context.branches?.currentBranch || context.provider?.currentBranch
     if (!head) {
-      dispatch({ type: 'setStatus', value: 'No current branch — check out a branch first.' })
+      dispatch({ type: 'setStatus', value: 'No current branch — check out a branch first.', kind: 'warning' })
       return
     }
     const defaultBranch = context.provider?.repository.defaultBranch
@@ -2299,7 +2306,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         baseLabel,
         error: result.message,
       })
-      dispatch({ type: 'setStatus', value: `Changelog failed: ${result.message}` })
+      dispatch({ type: 'setStatus', value: `Changelog failed: ${result.message}`, kind: 'error' })
       return
     }
 
@@ -2315,6 +2322,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch({
       type: 'setStatus',
       value: 'Changelog ready — y yank · E $EDITOR · c PR · r regen · < back.',
+      kind: 'success',
     })
   }, [
     context.branches?.currentBranch,
@@ -2337,7 +2345,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const yankChangelog = React.useCallback(() => {
     const text = state.changelogView.text
     if (!text) {
-      dispatch({ type: 'setStatus', value: 'No changelog text to copy.' })
+      dispatch({ type: 'setStatus', value: 'No changelog text to copy.', kind: 'warning' })
       return
     }
     void yankText(text, 'changelog')
@@ -2351,7 +2359,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const openChangelogInEditor = React.useCallback(() => {
     const current = state.changelogView.text
     if (current === undefined) {
-      dispatch({ type: 'setStatus', value: 'Changelog not loaded yet — wait for generation.' })
+      dispatch({ type: 'setStatus', value: 'Changelog not loaded yet — wait for generation.', kind: 'warning' })
       return
     }
 
@@ -2362,6 +2370,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: `Failed to create temp file for editor: ${(error as Error).message}`,
+        kind: 'error',
       })
       return
     }
@@ -2372,6 +2381,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: `Failed to seed temp file: ${(error as Error).message}`,
+        kind: 'error',
       })
       try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
       return
@@ -2394,11 +2404,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
       const result = spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
       if (result.error) {
-        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}` })
+        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
       } else if (result.signal) {
-        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}` })
+        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}`, kind: 'warning' })
       } else if (typeof result.status === 'number' && result.status !== 0) {
-        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}` })
+        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}`, kind: 'warning' })
       } else {
         editorOk = true
       }
@@ -2412,11 +2422,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       try {
         const content = readFileSync(file, 'utf8')
         dispatch({ type: 'setChangelogText', text: content, generatedAt: Date.now() })
-        dispatch({ type: 'setStatus', value: 'Changelog updated from editor.' })
+        dispatch({ type: 'setStatus', value: 'Changelog updated from editor.', kind: 'success' })
       } catch (error) {
         dispatch({
           type: 'setStatus',
           value: `Failed to read back edited changelog: ${(error as Error).message}`,
+          kind: 'error',
         })
       }
     }
@@ -2455,16 +2466,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
       const result = spawnSync(editor, [...editorPrefixArgs, path], { stdio: 'inherit' })
       if (result.error) {
-        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}` })
+        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
       } else if (result.signal) {
         // Editor was killed by a signal (e.g. ^C, SIGTERM). status is
         // null in this case, so the old `status !== 0` check would
         // mistakenly fall through to the success branch.
-        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}` })
+        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}`, kind: 'warning' })
       } else if (typeof result.status === 'number' && result.status !== 0) {
-        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}` })
+        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}`, kind: 'warning' })
       } else {
-        dispatch({ type: 'setStatus', value: `Edited ${path}` })
+        dispatch({ type: 'setStatus', value: `Edited ${path}`, kind: 'success' })
       }
     } finally {
       // Re-enter the alt screen + raw mode + hidden cursor; nudge React
@@ -2511,6 +2522,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: `Failed to create temp file for editor: ${(error as Error).message}`,
+        kind: 'error',
       })
       return
     }
@@ -2521,6 +2533,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: `Failed to seed temp file: ${(error as Error).message}`,
+        kind: 'error',
       })
       try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
       return
@@ -2543,11 +2556,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
       const result = spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
       if (result.error) {
-        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}` })
+        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
       } else if (result.signal) {
-        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}` })
+        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}`, kind: 'warning' })
       } else if (typeof result.status === 'number' && result.status !== 0) {
-        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}` })
+        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}`, kind: 'warning' })
       } else {
         editorOk = true
       }
@@ -2565,11 +2578,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       try {
         const content = readFileSync(file, 'utf8')
         dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: content } })
-        dispatch({ type: 'setStatus', value: 'Commit draft updated from editor.' })
+        dispatch({ type: 'setStatus', value: 'Commit draft updated from editor.', kind: 'success' })
       } catch (error) {
         dispatch({
           type: 'setStatus',
           value: `Failed to read back edited draft: ${(error as Error).message}`,
+          kind: 'error',
         })
       }
     }
@@ -2649,7 +2663,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const applyCommitSplit = React.useCallback(async () => {
     const splitPlan = state.splitPlan
     if (!splitPlan?.plan || !splitPlan.planContext) {
-      dispatch({ type: 'setStatus', value: 'No split plan loaded yet — wait for generation.' })
+      dispatch({ type: 'setStatus', value: 'No split plan loaded yet — wait for generation.', kind: 'warning' })
       return
     }
 
@@ -3599,7 +3613,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
     const handler = handlers[id]
     if (!handler) {
-      dispatch({ type: 'setStatus', value: `Workflow action ${id} not yet wired` })
+      dispatch({ type: 'setStatus', value: `Workflow action ${id} not yet wired`, kind: 'warning' })
       return
     }
     const result = await handler()
@@ -3833,15 +3847,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
 
     if (!value || !label) {
-      dispatch({ type: 'setStatus', value: 'Nothing to yank in this view' })
+      dispatch({ type: 'setStatus', value: 'Nothing to yank in this view', kind: 'warning' })
       return
     }
 
     try {
       await clipboard(value)
-      dispatch({ type: 'setStatus', value: `Copied ${label}` })
+      dispatch({ type: 'setStatus', value: `Copied ${label}`, kind: 'success' })
     } catch (error) {
-      dispatch({ type: 'setStatus', value: `Copy failed: ${(error as Error).message}` })
+      dispatch({ type: 'setStatus', value: `Copy failed: ${(error as Error).message}`, kind: 'error' })
     }
   }, [
     clipboardRunner,
@@ -3991,7 +4005,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const nextCommitCount = nextRows ? getCommitRows(nextRows).length : 0
 
     if (!nextRows) {
-      dispatch({ type: 'setStatus', value: 'failed to load older commits' })
+      dispatch({ type: 'setStatus', value: 'failed to load older commits', kind: 'error' })
       return { fired: false, addedCommits: 0 }
     }
 
@@ -4075,6 +4089,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         dispatch({
           type: 'setStatus',
           value: `${target.label} target commit returned no rows — orphan ref?`,
+          kind: 'warning',
         })
       }
     } catch (error) {
@@ -4140,7 +4155,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         return
       }
       if (!nextRows) {
-        dispatch({ type: 'setStatus', value: 'Failed to refetch with active filter' })
+        dispatch({ type: 'setStatus', value: 'Failed to refetch with active filter', kind: 'error' })
         return
       }
       dispatch({ type: 'replaceRows', rows: nextRows })
@@ -4151,6 +4166,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         value: description
           ? `Showing ${matched} commits matching ${description}`
           : 'Showing full log',
+        kind: 'success',
       })
     })()
   }, [dispatch, git, logArgv, state.historyFetchArgs])
@@ -4196,7 +4212,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         return
       }
       if (!nextRows) {
-        dispatch({ type: 'setStatus', value: 'Failed to refetch graph rows' })
+        dispatch({ type: 'setStatus', value: 'Failed to refetch graph rows', kind: 'error' })
         return
       }
       dispatch({ type: 'replaceRows', rows: nextRows })
@@ -4207,6 +4223,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         value: state.fullGraph
           ? `Showing ${matched} commits across all branches`
           : `Showing ${matched} commits (compact)`,
+        kind: 'success',
       })
     })()
   }, [dispatch, git, logArgv, state.fullGraph])
