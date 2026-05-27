@@ -3,7 +3,9 @@ import { WorkspaceOverview, WorkspaceRepoSummary } from '../../../git/workspaceD
 import {
   buildWorkspaceFooter,
   buildWorkspaceHeader,
+  buildWorkspaceHelpRows,
   buildWorkspaceListRows,
+  buildWorkspaceOnboarding,
   buildWorkspaceSidebar,
 } from './render'
 import { applyWorkspaceAction, createWorkspaceState } from './state'
@@ -130,5 +132,29 @@ describe('workspace render builders', () => {
   it('footer hint flips to the add-repo prompt when add-repo focus is active', () => {
     const focused = applyWorkspaceAction(state, { type: 'set-focus', focus: 'add-repo' })
     expect(buildWorkspaceFooter(focused).hint).toContain('tab to complete')
+  })
+
+  it('help rows cover every binding wired by the input resolver', () => {
+    const rows = buildWorkspaceHelpRows()
+    const allKeys = rows.map((row) => row.keys).join(' | ')
+    for (const expected of ['j', 'k', 'g', 'G', 's', '/', 'r', 'a', '?', 'q', 'enter', 'tab', 'esc']) {
+      expect(allKeys).toContain(expected)
+    }
+  })
+
+  it('onboarding model returns show=false unless the flag is set', () => {
+    expect(buildWorkspaceOnboarding(state)).toEqual({ show: false })
+  })
+
+  it('onboarding model surfaces empty + populated hints based on overview shape', () => {
+    const populated = { ...state, showOnboarding: true }
+    expect(buildWorkspaceOnboarding(populated).populatedHint).toContain('enter')
+    const empty = {
+      ...state,
+      showOnboarding: true,
+      overview: { ...state.overview, repos: [] },
+    }
+    expect(buildWorkspaceOnboarding(empty).emptyHint).toContain('No repos found')
+    expect(buildWorkspaceOnboarding(empty).populatedHint).toBeUndefined()
   })
 })

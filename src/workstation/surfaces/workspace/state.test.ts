@@ -154,4 +154,26 @@ describe('workspace state reducer', () => {
     })
     expect(anchored.selectedIndex).toBe(baseState.selectedIndex)
   })
+
+  it('toggles the help overlay and auto-dismisses any onboarding banner', () => {
+    const seeded = { ...baseState, showOnboarding: true }
+    const opened = applyWorkspaceAction(seeded, { type: 'toggle-help' })
+    expect(opened.showHelp).toBe(true)
+    expect(opened.showOnboarding).toBe(false)
+    const closed = applyWorkspaceAction(opened, { type: 'toggle-help' })
+    expect(closed.showHelp).toBe(false)
+  })
+
+  it('close-help only clears the help flag', () => {
+    const opened = applyWorkspaceAction(baseState, { type: 'toggle-help' })
+    const closed = applyWorkspaceAction(opened, { type: 'close-help' })
+    expect(closed.showHelp).toBe(false)
+  })
+
+  it('dismiss-onboarding clears just the banner flag', () => {
+    const seeded = { ...baseState, showOnboarding: true }
+    const dismissed = applyWorkspaceAction(seeded, { type: 'dismiss-onboarding' })
+    expect(dismissed.showOnboarding).toBe(false)
+    expect(dismissed.showHelp).toBe(false)
+  })
 })
