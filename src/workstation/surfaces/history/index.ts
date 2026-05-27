@@ -19,31 +19,32 @@ import type * as ReactTypes from 'react'
 import { filterChippedRefs, getBranchTipChip } from '../../chrome/branchTip'
 import { formatUpstreamAheadBanner } from '../../chrome/iconography'
 import {
-  getConventionalCommitColor,
-  parseConventionalCommitPrefix,
+    getConventionalCommitColor,
+    parseConventionalCommitPrefix,
 } from '../../chrome/conventionalCommit'
 import { formatCompactRelativeDate } from '../../chrome/dateFormat'
 import { substituteGraphChars } from '../../chrome/graphChars'
 import type { LaneSegment } from '../../chrome/graphLanes'
 import { getLaneColor } from '../../chrome/graphLanes'
 import {
-  formatInkRefLabels,
-  getVisibleLogInkHistory,
+    formatInkRefLabels,
+    getVisibleLogInkHistory,
 } from '../../chrome/historyRows'
 import type { LogInkLayoutDensity } from '../../chrome/layout'
 import {
-  formatLogInkHistoryEmpty,
-  formatLogInkLoading,
+    formatLogInkHistoryEmpty,
+    formatLogInkLoading,
 } from '../../chrome/surfaceStates'
 import { cellWidth, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { GitLogCommitRow } from '../../../commands/log/data'
 import type {
-  LogInkHistoryFetchArgs,
-  LogInkState,
+    LogInkHistoryFetchArgs,
+    LogInkState,
 } from '../../../commands/log/inkViewModel'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+import { getRenderNow } from '../../chrome/snapshotMode'
 
 /**
  * How the date column should render for a given density tier:
@@ -522,7 +523,7 @@ export function renderHistoryPanel(
   density: LogInkLayoutDensity,
   rowMode: 'single' | 'stacked',
   dateBucketingEnabled: boolean = false,
-  now: Date = new Date()
+  now: Date = getRenderNow()
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'commits'

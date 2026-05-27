@@ -72,3 +72,7 @@ specs/
 # input. These are local artifacts; no committed baseline yet
 # (regression-detection follow-up).
 .bench/structural-extract-eval/
+
+
+# Screenshot captures (regenerated via `npm run screenshot`)
+.screenshots/
