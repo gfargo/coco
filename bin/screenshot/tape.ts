@@ -27,9 +27,21 @@ type TapeOptions = {
   outputGif?: string
   /**
    * Path to the coco CLI entry point we should run. Typically
-   * `node <repo>/dist/index.js` or `npx tsx <repo>/src/index.ts`.
+   * `<repo>/node_modules/.bin/tsx <repo>/src/index.ts`.
    */
   cocoCommand: string
+  /**
+   * Absolute path to the repo root. Used to prepend
+   * `node_modules/.bin` to PATH so the VHS shell can find `tsx`,
+   * `node`, etc. without relying on the user's global PATH.
+   */
+  repoRoot: string
+  /**
+   * Directory containing the `node` binary (dirname of
+   * `process.execPath`). Prepended to PATH so tsx can find node
+   * at runtime inside the VHS shell.
+   */
+  nodeBinDir: string
 }
 
 const DEFAULT_DIMENSIONS = { cols: 140, rows: 40 } as const
@@ -95,6 +107,12 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // captured frame is just the rendered view, not "$ coco ui …".
     `Hide`,
     `Type "cd ${quoteTapeString(options.cwd)}"`,
+    `Enter`,
+    // Ensure the VHS shell can find node + tsx without relying on
+    // the user's login shell PATH. Prepend the project's local
+    // node_modules/.bin (for tsx) and the directory containing the
+    // current node binary (so tsx can find node at runtime).
+    `Type "export PATH='${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:$PATH'"`,
     `Enter`,
     // Snapshot mode pin — freezes wall-clock `now` for relative
     // date formatters in the workstation render path.

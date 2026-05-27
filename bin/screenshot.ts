@@ -22,14 +22,15 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { tmpdir } from 'os'
-import { join, resolve } from 'path'
+import { dirname, join, resolve } from 'path'
 import { fromScenario, listRegistered } from '@gfargo/git-scenarios'
 import { findRecipe, listRecipeNames, RECIPES, type ScreenshotRecipe } from './screenshot/recipes'
 import { buildTape } from './screenshot/tape'
 
 const REPO_ROOT = resolve(__dirname, '..')
 const SCREENSHOTS_DIR = join(REPO_ROOT, '.screenshots')
-const COCO_CLI = `npx tsx ${join(REPO_ROOT, 'src', 'index.ts')}`
+const COCO_CLI = join(REPO_ROOT, 'node_modules', '.bin', 'tsx') + ' ' + join(REPO_ROOT, 'src', 'index.ts')
+const NODE_BIN_DIR = dirname(process.execPath)
 
 type CliArgs = {
   list: boolean
@@ -131,12 +132,19 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
       outputPng: pngPath,
       outputGif: gifPath,
       cocoCommand: COCO_CLI,
+      repoRoot: REPO_ROOT,
+      nodeBinDir: NODE_BIN_DIR,
     })
     writeFileSync(tapePath, tape, 'utf8')
 
     const result = spawnSync('vhs', [tapePath], {
       stdio: 'inherit',
-      env: { ...process.env, NO_COLOR: process.env.NO_COLOR },
+      env: {
+        ...process.env,
+        // Pass the current PATH so VHS's bash shell can find node.
+        // The tape itself prepends node_modules/.bin for tsx.
+        PATH: process.env.PATH,
+      },
     })
 
     if (result.status !== 0) {
