@@ -11,23 +11,24 @@
 import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { getRenderNow } from '../../chrome/snapshotMode'
 import {
-  branchRowMarker,
-  formatBranchDivergence,
-  formatBranchLastTouched,
-  getBranchRowMarkerColor,
+    branchRowMarker,
+    formatBranchDivergence,
+    formatBranchLastTouched,
+    getBranchRowMarkerColor,
 } from '../../chrome/iconography'
 import { formatSortIndicator, sortBranches } from '../../chrome/sorting'
 import {
-  formatLogInkBranchesEmpty,
-  formatLogInkLoading,
+    formatLogInkBranchesEmpty,
+    formatLogInkLoading,
 } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { LogInkState } from '../../../commands/log/inkViewModel'
 import {
-  matchesPromotedFilter,
-  renderPromotedFilterAffordance,
+    matchesPromotedFilter,
+    renderPromotedFilterAffordance,
 } from '../../runtime/promotedFilter'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -83,7 +84,7 @@ export function renderBranchesSurface(
         const marker = branchRowMarker(branch, { ascii: theme.ascii })
         const markerColor = getBranchRowMarkerColor(marker.kind, theme)
         const divergence = formatBranchDivergence(branch, { ascii: theme.ascii })
-        const lastTouched = formatBranchLastTouched(branch.date, new Date())
+        const lastTouched = formatBranchLastTouched(branch.date, getRenderNow())
         // Split the row into spans so the timestamp stays dim even on the
         // currently-selected (bold) row, and the sync-state marker keeps
         // its own colour even when the surrounding row text is dimmed.
