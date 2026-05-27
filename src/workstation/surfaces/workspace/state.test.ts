@@ -120,4 +120,38 @@ describe('workspace state reducer', () => {
     const status = applyWorkspaceAction(loading, { type: 'set-status', status: 'Refreshed.' })
     expect(status.status).toBe('Refreshed.')
   })
+
+  it('seeds the cursor onto the matching repo when selectedRepoPath is provided', () => {
+    const seeded = createWorkspaceState({
+      overview: baseState.overview,
+      roots: ['~/code'],
+      selectedRepoPath: '/tmp/bravo',
+    })
+    expect(seeded.selectedIndex).toBe(1)
+  })
+
+  it('falls back to index 0 when the seed path does not exist in the visible list', () => {
+    const seeded = createWorkspaceState({
+      overview: baseState.overview,
+      roots: ['~/code'],
+      selectedRepoPath: '/tmp/zzz-not-found',
+    })
+    expect(seeded.selectedIndex).toBe(0)
+  })
+
+  it('anchor-cursor-by-path moves the cursor to the matching repo', () => {
+    const anchored = applyWorkspaceAction(baseState, {
+      type: 'anchor-cursor-by-path',
+      path: '/tmp/charlie',
+    })
+    expect(anchored.selectedIndex).toBe(2)
+  })
+
+  it('anchor-cursor-by-path is a no-op when the path is unknown', () => {
+    const anchored = applyWorkspaceAction(baseState, {
+      type: 'anchor-cursor-by-path',
+      path: '/tmp/not-there',
+    })
+    expect(anchored.selectedIndex).toBe(baseState.selectedIndex)
+  })
 })

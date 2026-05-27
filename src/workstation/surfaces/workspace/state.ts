@@ -60,6 +60,7 @@ export type WorkspaceState = {
 
 export type WorkspaceAction =
   | { type: 'replace-overview'; overview: WorkspaceOverview }
+  | { type: 'anchor-cursor-by-path'; path: string }
   | { type: 'replace-pull-request-counts'; counts: Readonly<Record<string, number>>; authenticated: boolean }
   | { type: 'set-sort'; sort: WorkspaceSortMode }
   | { type: 'cycle-sort' }
@@ -78,22 +79,38 @@ export type WorkspaceStateInit = {
   roots: ReadonlyArray<string>
   sortMode?: WorkspaceSortMode
   tab?: WorkspaceTab
+  filter?: string
   pullRequestCounts?: Readonly<Record<string, number>>
   loading?: boolean
+  /**
+   * When set, the constructor seeds the cursor onto the row whose
+   * repo path matches. Used by the drill-in loop (#880 PR3) so the
+   * cursor lands back on the repo the user just exited.
+   */
+  selectedRepoPath?: string
 }
 
 export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
-  return {
+  const base: WorkspaceState = {
     overview: init.overview,
     pullRequestCounts: init.pullRequestCounts ?? {},
     sortMode: init.sortMode ?? 'recency',
     tab: init.tab ?? 'all',
-    filter: '',
+    filter: init.filter ?? '',
     focus: 'list',
     selectedIndex: 0,
     loading: Boolean(init.loading),
     roots: init.roots,
   }
+  if (!init.selectedRepoPath) {
+    return base
+  }
+  const visible = selectVisibleRepos(base)
+  const idx = visible.findIndex((entry) => entry.path === init.selectedRepoPath)
+  if (idx < 0) {
+    return base
+  }
+  return { ...base, selectedIndex: idx }
 }
 
 /**
@@ -145,6 +162,14 @@ export function applyWorkspaceAction(
         overview: action.overview,
         loading: false,
       })
+    }
+    case 'anchor-cursor-by-path': {
+      const visible = selectVisibleRepos(state)
+      const idx = visible.findIndex((entry) => entry.path === action.path)
+      if (idx < 0) {
+        return state
+      }
+      return { ...state, selectedIndex: idx }
     }
     case 'replace-pull-request-counts': {
       return rectifySelection({
