@@ -239,10 +239,15 @@ export async function startWorkspace(
     resumeRef,
   })
 
-  const instance = ink.render(
-    app,
-    getLogInkRenderOptions({ input, output, error })
-  )
+  // Override exitOnCtrlC. Ink's default ctrl+c handler reaches into
+  // process.kill, which on some terminals races with stdin teardown
+  // and surfaces as TTY EIO. We handle ctrl+c in our own useInput
+  // handler so the quit path is the same as `q`.
+  const renderOptions = {
+    ...getLogInkRenderOptions({ input, output, error }),
+    exitOnCtrlC: false,
+  }
+  const instance = ink.render(app, renderOptions)
 
   const lifecycle = installTerminalLifecycle({
     input,
@@ -373,6 +378,21 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   // could keep the event loop alive after the user hit `q`, making
   // the process linger and stdin race against the next loop iteration.
   const unmountedRef = React.useRef(false)
+
+  // Mirror state into a ref so the input handler can read the
+  // latest values without us having to put `state` in its
+  // useCallback deps. Without this trick, the handler closure
+  // changes every render → Ink unsubscribes + re-subscribes
+  // stdin on every keystroke → stdin can race with itself and the
+  // surface visibly judders. Same pattern coco ui uses.
+  const stateRef = React.useRef(state)
+  stateRef.current = state
+  const filterDraftRef = React.useRef(filterDraft)
+  filterDraftRef.current = filterDraft
+  const addRepoDraftRef = React.useRef(addRepoDraft)
+  addRepoDraftRef.current = addRepoDraft
+  const addRepoCompletionRef = React.useRef(addRepoCompletion)
+  addRepoCompletionRef.current = addRepoCompletion
 
   // Background discovery + PR-count refresh on mount.
   React.useEffect(() => {
@@ -537,7 +557,35 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     }
   }, [addRepoDraft, dispatch, props])
 
-  useInput((rawInput: string, key: WorkspaceInputKey) => {
+  // Callback refs so the stable input handler can reach the latest
+  // closure without taking them in deps.
+  const commitAddRepoRef = React.useRef(commitAddRepo)
+  commitAddRepoRef.current = commitAddRepo
+  const drillInRef = React.useRef(drillIn)
+  drillInRef.current = drillIn
+  const refreshRef = React.useRef(refresh)
+  refreshRef.current = refresh
+  const openAddRepoRef = React.useRef(openAddRepo)
+  openAddRepoRef.current = openAddRepo
+  const requestDeleteRef = React.useRef(requestDelete)
+  requestDeleteRef.current = requestDelete
+  const confirmDeleteRef = React.useRef(confirmDelete)
+  confirmDeleteRef.current = confirmDelete
+  const exitRefHolder = React.useRef(props.exitRef)
+  exitRefHolder.current = props.exitRef
+  const exitFnRef = React.useRef(exit)
+  exitFnRef.current = exit
+
+  // Stable input handler. All reads go through refs so the closure
+  // identity never changes — Ink's useInput effect re-runs zero
+  // times after mount, eliminating per-keystroke stdin churn that
+  // was likely contributing to the visible flicker / restart effect.
+  const handleInput = React.useCallback((rawInput: string, key: WorkspaceInputKey) => {
+    const state = stateRef.current
+    const filterDraft = filterDraftRef.current
+    const addRepoDraft = addRepoDraftRef.current
+    const addRepoCompletion = addRepoCompletionRef.current
+
     // First-run onboarding is non-modal — any keypress dismisses it
     // and persists the marker. The keypress still flows through to
     // the normal handler below so the user's first action isn't
@@ -573,7 +621,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         return
       }
       if (key.return) {
-        void commitAddRepo()
+        void commitAddRepoRef.current()
         return
       }
       if (key.tab) {
@@ -596,35 +644,50 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       return
     }
 
+    // Ctrl+C → quit, since we disabled Ink's built-in ctrl+c exit.
+    // Handled here (rather than in the pure resolver) because the
+    // resolver doesn't have a notion of "raw key with ctrl flag" for
+    // the quit shortcut — it just sees  with ctrl=true.
+    if (key.ctrl && (rawInput === 'c' || rawInput === '')) {
+      exitRefHolder.current.current = { kind: 'quit' }
+      exitFnRef.current()
+      return
+    }
+
     const intent = resolveWorkspaceInput(rawInput, key, state)
     switch (intent.kind) {
       case 'action':
         dispatch(intent.action)
         break
       case 'quit':
-        props.exitRef.current = { kind: 'quit' }
-        exit()
+        exitRefHolder.current.current = { kind: 'quit' }
+        exitFnRef.current()
         break
       case 'drill-in':
-        drillIn()
+        drillInRef.current()
         break
       case 'refresh':
-        void refresh()
+        void refreshRef.current()
         break
       case 'add-repo':
-        openAddRepo()
+        openAddRepoRef.current()
         break
       case 'request-delete':
-        requestDelete()
+        requestDeleteRef.current()
         break
       case 'confirm-delete':
-        void confirmDelete()
+        void confirmDeleteRef.current()
         break
       case 'noop':
       default:
         break
     }
-  })
+    // Empty deps intentional — every reference goes through a ref so
+    // the closure identity never changes. Ink's useInput effect runs
+    // exactly once.
+  }, [])
+
+  useInput(handleInput)
 
   React.useEffect(() => {
     props.resumeRef.current = () => {
