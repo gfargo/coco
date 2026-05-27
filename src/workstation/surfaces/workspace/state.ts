@@ -23,7 +23,23 @@ import {
  * dispatches them on action payloads.
  */
 
-export type WorkspaceFocus = 'list' | 'filter' | 'add-repo' | 'confirm-delete'
+/**
+ * Which panel currently receives j/k input. Modeled to match
+ * `coco ui`'s `'sidebar' | 'commits' | 'detail'` so users moving
+ * between the two surfaces don't have to learn a different focus
+ * model.
+ *
+ * - `sidebar`: j/k cycles the tab filter (All / Dirty / Behind / PRs)
+ * - `list`:    j/k moves the cursor through repos
+ * - `filter`:  modal text-input for the search filter
+ * - `add-repo`: modal path-prompt
+ * - `confirm-delete`: modal y-confirm before removing a repo
+ *
+ * Tab / Shift+Tab cycles between `sidebar` and `list`. Modal focuses
+ * are entered/exited via their own keys (`/`, `a`, `d`) and ignore
+ * Tab while open.
+ */
+export type WorkspaceFocus = 'sidebar' | 'list' | 'filter' | 'add-repo' | 'confirm-delete'
 
 export type WorkspaceState = {
   overview: WorkspaceOverview
@@ -85,6 +101,7 @@ export type WorkspaceAction =
   | { type: 'cycle-sort' }
   | { type: 'set-tab'; tab: WorkspaceTab }
   | { type: 'cycle-tab'; direction: 'next' | 'previous' }
+  | { type: 'cycle-panel-focus'; direction: 'next' | 'previous' }
   | { type: 'set-filter'; filter: string }
   | { type: 'clear-filter' }
   | { type: 'set-focus'; focus: WorkspaceFocus }
@@ -229,6 +246,17 @@ export function applyWorkspaceAction(
           ? nextWorkspaceTab(state.tab)
           : previousWorkspaceTab(state.tab)
       return rectifySelection({ ...state, tab, selectedIndex: 0 })
+    }
+    case 'cycle-panel-focus': {
+      // Two-panel cycle: sidebar ↔ list. Modal focuses (filter,
+      // add-repo, confirm-delete) are reached/dismissed via their
+      // own bindings and ignore Tab — explicit modes shouldn't be
+      // exit-able by an accidental Tab press.
+      if (state.focus !== 'sidebar' && state.focus !== 'list') {
+        return state
+      }
+      const next: WorkspaceFocus = state.focus === 'sidebar' ? 'list' : 'sidebar'
+      return { ...state, focus: next }
     }
     case 'set-filter': {
       return rectifySelection({ ...state, filter: action.filter, selectedIndex: 0 })

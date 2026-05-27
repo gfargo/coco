@@ -42,7 +42,7 @@ describe('resolveWorkspaceInput', () => {
     })
   })
 
-  it('moves the cursor on j/k and arrow keys', () => {
+  it('moves the cursor on j/k and arrow keys (list focus)', () => {
     expect(resolveWorkspaceInput('j', key(), listState())).toEqual({
       kind: 'action',
       action: { type: 'move-cursor', delta: 1 },
@@ -61,7 +61,7 @@ describe('resolveWorkspaceInput', () => {
     })
   })
 
-  it('jumps to top with g and bottom with G', () => {
+  it('jumps to top with g and bottom with G (list focus)', () => {
     expect(resolveWorkspaceInput('g', key(), listState())).toEqual({
       kind: 'action',
       action: { type: 'set-cursor', index: 0 },
@@ -72,17 +72,46 @@ describe('resolveWorkspaceInput', () => {
     })
   })
 
-  it('cycles tabs on tab / shift-tab / h / l', () => {
+  it('cycles panel focus on tab / shift-tab', () => {
     expect(resolveWorkspaceInput('', key({ tab: true }), listState())).toEqual({
       kind: 'action',
-      action: { type: 'cycle-tab', direction: 'next' },
+      action: { type: 'cycle-panel-focus', direction: 'next' },
     })
     expect(resolveWorkspaceInput('', key({ tab: true, shift: true }), listState())).toEqual({
       kind: 'action',
+      action: { type: 'cycle-panel-focus', direction: 'previous' },
+    })
+  })
+
+  it('list focus: h / ← moves focus to the sidebar', () => {
+    expect(resolveWorkspaceInput('h', key(), listState())).toEqual({
+      kind: 'action',
+      action: { type: 'set-focus', focus: 'sidebar' },
+    })
+    expect(resolveWorkspaceInput('', key({ leftArrow: true }), listState())).toEqual({
+      kind: 'action',
+      action: { type: 'set-focus', focus: 'sidebar' },
+    })
+  })
+
+  it('sidebar focus: j/k cycles the active tab and l/Enter jumps back to the list', () => {
+    const sidebar = { ...listState(), focus: 'sidebar' as const }
+    expect(resolveWorkspaceInput('j', key(), sidebar)).toEqual({
+      kind: 'action',
+      action: { type: 'cycle-tab', direction: 'next' },
+    })
+    expect(resolveWorkspaceInput('k', key(), sidebar)).toEqual({
+      kind: 'action',
       action: { type: 'cycle-tab', direction: 'previous' },
     })
-    expect(resolveWorkspaceInput('h', key(), listState()).kind).toBe('action')
-    expect(resolveWorkspaceInput('l', key(), listState()).kind).toBe('action')
+    expect(resolveWorkspaceInput('l', key(), sidebar)).toEqual({
+      kind: 'action',
+      action: { type: 'set-focus', focus: 'list' },
+    })
+    expect(resolveWorkspaceInput('', key({ return: true }), sidebar)).toEqual({
+      kind: 'action',
+      action: { type: 'set-focus', focus: 'list' },
+    })
   })
 
   it('opens the filter prompt on / and routes drill-in on enter', () => {
