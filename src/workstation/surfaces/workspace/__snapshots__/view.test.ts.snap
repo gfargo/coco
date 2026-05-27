@@ -3,6 +3,7 @@
 exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is authenticated 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -23,12 +24,14 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -57,6 +60,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -323,6 +327,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
 exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -343,12 +348,14 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -377,6 +384,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -487,6 +495,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
 exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs sidebar tab 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -507,12 +516,14 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -543,6 +554,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -809,6 +821,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
 exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-budget regressions surface 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -829,12 +842,14 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -863,6 +878,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -1067,6 +1083,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
 exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -1087,12 +1104,14 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
   </Box>
   <Box
     flexDirection="row"
+    height={33}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={33}
       paddingX={1}
       width={18}
     >
@@ -1121,6 +1140,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={33}
       paddingX={1}
     >
       <Box
@@ -1392,6 +1412,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
 exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — path drops out 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -1412,12 +1433,14 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -1446,6 +1469,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -1586,6 +1610,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
 exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns grow up to their caps 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -1606,12 +1631,14 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -1640,6 +1667,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -1906,6 +1934,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
 exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading false) 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -1926,12 +1955,14 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -1960,6 +1991,7 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -2001,6 +2033,7 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
 exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the header chip 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -2021,12 +2054,14 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="gray"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -2055,6 +2090,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -2321,6 +2357,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
 exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -2341,12 +2378,14 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
   </Box>
   <Box
     flexDirection="row"
+    height={29}
   >
     <Box
       borderColor="gray"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={29}
       paddingX={1}
       width={18}
     >
@@ -2375,6 +2414,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={29}
       paddingX={1}
     >
       <Box
@@ -2663,6 +2703,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
 exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -2683,12 +2724,14 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -2717,6 +2760,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -2826,6 +2870,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
 exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -2846,12 +2891,14 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
   </Box>
   <Box
     flexDirection="row"
+    height={29}
   >
     <Box
       borderColor="gray"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={29}
       paddingX={1}
       width={18}
     >
@@ -2880,6 +2927,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={29}
       paddingX={1}
     >
       <Box
@@ -3168,6 +3216,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
 exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -3188,12 +3237,14 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -3222,6 +3273,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -3331,6 +3383,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
 exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -3351,12 +3404,14 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
   </Box>
   <Box
     flexDirection="row"
+    height={29}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={29}
       paddingX={1}
       width={18}
     >
@@ -3385,6 +3440,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={29}
       paddingX={1}
     >
       <Box
@@ -3671,6 +3727,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
 exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -3892,6 +3949,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
 exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is in flight 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -3912,12 +3970,14 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -3946,6 +4006,7 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box
@@ -3987,6 +4048,7 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
 exports[`renderWorkspaceApp snapshots the populated workspace with the default tab + sort 1`] = `
 <Box
   flexDirection="column"
+  height={40}
 >
   <Box
     borderColor="cyan"
@@ -4007,12 +4069,14 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
   </Box>
   <Box
     flexDirection="row"
+    height={34}
   >
     <Box
       borderColor="cyan"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
+      height={34}
       paddingX={1}
       width={18}
     >
@@ -4041,6 +4105,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
+      height={34}
       paddingX={1}
     >
       <Box

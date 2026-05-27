@@ -313,7 +313,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   const { React, ink } = props
   const { useApp, useInput, useWindowSize } = ink
   const { exit } = useApp()
-  const { columns } = useWindowSize()
+  const { columns, rows } = useWindowSize()
 
   const [state, setState] = React.useState<WorkspaceState>(() =>
     createWorkspaceState({
@@ -618,5 +618,6 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     addRepoDraft,
     addRepoCompletion,
     columns,
+    rows,
   })
 }

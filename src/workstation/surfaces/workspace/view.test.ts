@@ -95,6 +95,7 @@ function render(
     addRepoDraft?: string
     addRepoCompletion?: ReturnType<typeof completePath>
     columns?: number
+    rows?: number
   } = {}
 ): ReactElement {
   const theme = createLogInkTheme({ ascii: true })
@@ -116,6 +117,7 @@ function render(
         isDirectory: false,
       } as ReturnType<typeof completePath>),
     columns: options.columns ?? 120,
+    rows: options.rows ?? 40,
   })
 }
 

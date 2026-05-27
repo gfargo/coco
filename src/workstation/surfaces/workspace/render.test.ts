@@ -6,6 +6,7 @@ import {
   buildWorkspaceHeader,
   buildWorkspaceHelpRows,
   buildWorkspaceListRows,
+  buildWorkspaceListWindow,
   buildWorkspaceOnboarding,
   buildWorkspaceSidebar,
 } from './render'
@@ -233,5 +234,62 @@ describe('workspace render builders', () => {
     }
     expect(buildWorkspaceOnboarding(empty).emptyHint).toContain('No repos found')
     expect(buildWorkspaceOnboarding(empty).populatedHint).toBeUndefined()
+  })
+
+  describe('buildWorkspaceListWindow', () => {
+    function bigState(count: number) {
+      const repos = Array.from({ length: count }, (_, i) =>
+        repo({
+          name: `repo-${String(i).padStart(2, '0')}`,
+          path: `/tmp/repo-${i}`,
+          lastCommit: { hash: `h${i}`, date: '2026-05-01', subject: `subject ${i}` },
+        })
+      )
+      return createWorkspaceState({
+        overview: overview(repos),
+        roots: ['~/code'],
+      })
+    }
+
+    it('returns every row when the list fits the viewport', () => {
+      const win = buildWorkspaceListWindow(bigState(5), { rows: 10 })
+      expect(win.rows).toHaveLength(5)
+      expect(win.hiddenAbove).toBe(0)
+      expect(win.hiddenBelow).toBe(0)
+      expect(win.totalRows).toBe(5)
+    })
+
+    it('windows the list to the viewport height when overflowing', () => {
+      const win = buildWorkspaceListWindow(bigState(50), { rows: 10 })
+      expect(win.rows).toHaveLength(10)
+      expect(win.hiddenAbove + win.rows.length + win.hiddenBelow).toBe(50)
+    })
+
+    it('keeps the cursor inside the window when scrolled to the bottom', () => {
+      const state = bigState(50)
+      const moved = applyWorkspaceAction(state, { type: 'set-cursor', index: 49 })
+      const win = buildWorkspaceListWindow(moved, { rows: 10 })
+      expect(win.hiddenBelow).toBe(0)
+      expect(win.hiddenAbove).toBe(40)
+      // Cursor row should appear in the window.
+      const cursorRow = win.rows.find((row) => row.cursor)
+      expect(cursorRow).toBeDefined()
+      expect(cursorRow?.repo.name).toBe('repo-49')
+    })
+
+    it('keeps the cursor about a third from the top when scrolling through the middle', () => {
+      const state = bigState(50)
+      const moved = applyWorkspaceAction(state, { type: 'set-cursor', index: 25 })
+      const win = buildWorkspaceListWindow(moved, { rows: 12 })
+      // restAbove = floor(12 / 3) = 4 → start = max(0, 25 - 4) = 21
+      expect(win.hiddenAbove).toBe(21)
+      expect(win.rows[4].repo.name).toBe('repo-25')
+      expect(win.rows[4].cursor).toBe(true)
+    })
+
+    it('floors viewport rows at 1 even when given 0', () => {
+      const win = buildWorkspaceListWindow(bigState(5), { rows: 0 })
+      expect(win.rows.length).toBeGreaterThanOrEqual(1)
+    })
   })
 })

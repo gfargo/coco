@@ -18,10 +18,11 @@ import {
   buildWorkspaceFooter,
   buildWorkspaceHeader,
   buildWorkspaceHelpRows,
-  buildWorkspaceListRows,
+  buildWorkspaceListWindow,
   buildWorkspaceOnboarding,
   buildWorkspaceSidebar,
   type WorkspaceListColumn,
+  type WorkspaceListRow,
 } from './render'
 import { selectVisibleRepos, type WorkspaceState } from './state'
 
@@ -36,6 +37,8 @@ type RenderWorkspaceAppDeps = {
   addRepoCompletion: PathCompletionResult
   /** Terminal width in cells. Caller resolves via Ink's useWindowSize. */
   columns: number
+  /** Terminal height in rows. Caller resolves via Ink's useWindowSize. */
+  rows: number
 }
 
 function toneColor(tone: WorkspaceListColumn['tone'], theme: LogInkTheme): string | undefined {
@@ -76,7 +79,8 @@ function renderHeader(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
 }
 
 function renderSidebar(
-  deps: RenderWorkspaceAppDeps
+  deps: RenderWorkspaceAppDeps,
+  height: number
 ): ReactTypes.ReactElement {
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
@@ -99,6 +103,7 @@ function renderSidebar(
       borderStyle: theme.borderStyle,
       flexDirection: 'column',
       flexShrink: 0,
+      height,
       paddingX: 1,
       width: 18,
     },
@@ -109,7 +114,7 @@ function renderSidebar(
 
 function renderListRow(
   deps: RenderWorkspaceAppDeps,
-  row: ReturnType<typeof buildWorkspaceListRows>[number],
+  row: WorkspaceListRow,
   key: string
 ): ReactTypes.ReactElement {
   const { React, ink, theme } = deps
@@ -140,12 +145,18 @@ function renderListRow(
 
 function renderListBody(
   deps: RenderWorkspaceAppDeps,
-  width: number
+  width: number,
+  height: number
 ): ReactTypes.ReactElement {
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
   const focused = state.focus !== 'filter'
-  const rows = buildWorkspaceListRows(state, { width })
+  // Reserve: 1 row for the panel header, 1 for each scroll indicator
+  // (if shown), 2 for the border. Floor at 1 so the panel always
+  // renders at least one row.
+  const reservedChrome = 3
+  const listRows = Math.max(1, height - reservedChrome)
+  const windowed = buildWorkspaceListWindow(state, { width, rows: listRows })
   const visibleRepos = selectVisibleRepos(state)
   const filterChip = state.filter
     ? `  ·  filter: ${state.filter}`
@@ -155,7 +166,7 @@ function renderListBody(
   const headerRight = state.loading
     ? 'loading repos…'
     : `${visibleRepos.length} visible${filterChip}`
-  const lines: ReactTypes.ReactNode[] = rows.length === 0
+  const lines: ReactTypes.ReactNode[] = windowed.rows.length === 0
     ? [
       React.createElement(
         Text,
@@ -167,7 +178,23 @@ function renderListBody(
             : 'No repos match the current filter.'
       ),
     ]
-    : rows.map((row, index) => renderListRow(deps, row, `row-${index}`))
+    : windowed.rows.map((row, index) =>
+      renderListRow(deps, row, `row-${windowed.hiddenAbove + index}`)
+    )
+  const topChevron = windowed.hiddenAbove > 0
+    ? React.createElement(
+      Text,
+      { key: 'chevron-top', dimColor: true },
+      `↑ ${windowed.hiddenAbove} more`
+    )
+    : null
+  const bottomChevron = windowed.hiddenBelow > 0
+    ? React.createElement(
+      Text,
+      { key: 'chevron-bottom', dimColor: true },
+      `↓ ${windowed.hiddenBelow} more`
+    )
+    : null
   return React.createElement(
     Box,
     {
@@ -175,6 +202,7 @@ function renderListBody(
       borderStyle: theme.borderStyle,
       flexDirection: 'column',
       flexGrow: 1,
+      height,
       paddingX: 1,
     },
     React.createElement(
@@ -183,7 +211,9 @@ function renderListBody(
       React.createElement(Text, { bold: true }, panelTitle('Workspace', focused)),
       React.createElement(Text, { dimColor: true }, headerRight)
     ),
-    ...lines
+    topChevron,
+    ...lines,
+    bottomChevron
   )
 }
 
@@ -318,31 +348,52 @@ function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   )
 }
 
+/**
+ * Lay out vertical space for the workspace. Reserves rows for the
+ * header (3 cells: top border + content + bottom border), the footer
+ * (3 cells minimum, +1 when a status is set), and any overlay panels
+ * currently showing. Body height is what's left, floored at 8 so the
+ * list panel always renders something even on a tiny terminal.
+ */
+function computeBodyHeight(deps: RenderWorkspaceAppDeps): number {
+  const HEADER_ROWS = 3
+  const FOOTER_ROWS = deps.state.status ? 4 : 3
+  const onboardingRows = buildWorkspaceOnboarding(deps.state).show ? 5 : 0
+  const addRepoRows = deps.state.focus === 'add-repo' ? 5 : 0
+  const confirmRows = deps.state.focus === 'confirm-delete' ? 5 : 0
+  const reserved = HEADER_ROWS + FOOTER_ROWS + onboardingRows + addRepoRows + confirmRows
+  return Math.max(8, deps.rows - reserved)
+}
+
 export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   const { React, ink } = deps
   const { Box } = ink
   const bodyWidth = Math.max(40, deps.columns - 4)
+  // Lock the root box to the terminal height so Ink never paints past
+  // the screen. Same shape as `coco ui`'s root.
+  const rootHeight = Math.max(10, deps.rows)
   // Help is modal — when it's up, replace the main list/sidebar pair
   // with the help panel so the user isn't distracted by background
   // updates while reading.
   if (deps.state.showHelp) {
     return React.createElement(
       Box,
-      { flexDirection: 'column' },
+      { flexDirection: 'column', height: rootHeight },
       renderHeader(deps),
       renderHelpOverlay(deps),
       renderFooter(deps)
     )
   }
+  const bodyHeight = computeBodyHeight(deps)
   return React.createElement(
     Box,
-    { flexDirection: 'column' },
+    { flexDirection: 'column', height: rootHeight },
     renderHeader(deps),
     React.createElement(
       Box,
-      { flexDirection: 'row' },
-      renderSidebar(deps),
-      renderListBody(deps, bodyWidth - 22)
+      { flexDirection: 'row', height: bodyHeight },
+      renderSidebar(deps, bodyHeight),
+      renderListBody(deps, bodyWidth - 22, bodyHeight)
     ),
     renderOnboardingBanner(deps),
     renderAddRepoPrompt(deps),
