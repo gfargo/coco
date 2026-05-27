@@ -4,7 +4,12 @@ import { SimpleGit } from 'simple-git'
 
 const execFileAsync = promisify(execFile)
 
-export type GhRunner = (args: string[]) => Promise<string>
+export type GhRunOptions = {
+  /** Abort the gh process when the signal fires (Node 16.14+). */
+  signal?: AbortSignal
+}
+
+export type GhRunner = (args: string[], options?: GhRunOptions) => Promise<string>
 
 export type GitHubRepository = {
   owner: string
@@ -27,8 +32,11 @@ export function parseGitHubRemoteUrl(url: string): GitHubRepository | undefined 
   }
 }
 
-export async function defaultGhRunner(args: string[]): Promise<string> {
-  const result = await execFileAsync('gh', args)
+export async function defaultGhRunner(
+  args: string[],
+  options: GhRunOptions = {}
+): Promise<string> {
+  const result = await execFileAsync('gh', args, options.signal ? { signal: options.signal } : {})
   return result.stdout
 }
 
