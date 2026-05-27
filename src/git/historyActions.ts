@@ -229,6 +229,12 @@ function normalizeRemoteUrl(remoteUrl: string): string | undefined {
     return `https://${sshMatch[1]}/${sshMatch[2]}`
   }
 
+  // Match the remote URL exactly as the user has configured it in
+  // git — including legacy http:// remotes still in use on some
+  // self-hosted GitHub Enterprise / GitLab installations. We only
+  // pass the URL through; coco never fetches it. Upgrading the user's
+  // remote to https isn't our call. DevSkim DS137138 doesn't apply.
+  // DevSkim: ignore DS137138
   if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
     return trimmed
   }
