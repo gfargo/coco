@@ -62,6 +62,27 @@ describe('workspace state reducer', () => {
     expect(cursored.selectedIndex).toBe(0)
   })
 
+  it('cycle-panel-focus toggles between sidebar and list', () => {
+    expect(baseState.focus).toBe('list')
+    const onSidebar = applyWorkspaceAction(baseState, {
+      type: 'cycle-panel-focus',
+      direction: 'next',
+    })
+    expect(onSidebar.focus).toBe('sidebar')
+    const backToList = applyWorkspaceAction(onSidebar, {
+      type: 'cycle-panel-focus',
+      direction: 'next',
+    })
+    expect(backToList.focus).toBe('list')
+  })
+
+  it('cycle-panel-focus is a no-op while a modal focus is active', () => {
+    const inFilter = { ...baseState, focus: 'filter' as const }
+    expect(
+      applyWorkspaceAction(inFilter, { type: 'cycle-panel-focus', direction: 'next' }).focus
+    ).toBe('filter')
+  })
+
   it('cycles tabs forward and backward', () => {
     const next = applyWorkspaceAction(baseState, { type: 'cycle-tab', direction: 'next' })
     expect(next.tab).toBe('dirty')

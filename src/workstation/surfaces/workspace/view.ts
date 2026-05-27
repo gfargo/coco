@@ -58,12 +58,31 @@ function toneColor(tone: WorkspaceListColumn['tone'], theme: LogInkTheme): strin
   }
 }
 
+function focusLabel(focus: WorkspaceState['focus']): string {
+  switch (focus) {
+    case 'sidebar':
+      return 'Tabs'
+    case 'list':
+      return 'List'
+    case 'filter':
+      return 'Filter'
+    case 'add-repo':
+      return 'Add'
+    case 'confirm-delete':
+      return 'Confirm'
+    default:
+      return 'List'
+  }
+}
+
 function renderHeader(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   const { React, ink, state, theme, appLabel } = deps
   const { Box, Text } = ink
   const model = buildWorkspaceHeader(state, { appLabel })
+  const focusChip = `focus: ${focusLabel(state.focus)}`
   const left = `${model.appLabel}  roots: ${model.rootsLabel || '—'}`
   const right = [
+    focusChip,
     `${model.visibleCount}/${model.repoCount} repos`,
     `sort: ${model.sortLabel}`,
     model.loading ? 'refreshing…' : '',
@@ -84,12 +103,19 @@ function renderSidebar(
 ): ReactTypes.ReactElement {
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
-  const focused = state.focus === 'list'
+  // Sidebar owns the focus when the user is cycling tabs.
+  const focused = state.focus === 'sidebar'
   const tabs = buildWorkspaceSidebar(state)
   const rows = tabs.map((row) => {
     const props: Record<string, unknown> = { key: row.tab }
     if (row.active) {
       props.bold = true
+      // While the sidebar is focused, the active tab gets the
+      // accent color so users can tell at a glance that their
+      // j/k presses are landing on a tab cycle.
+      if (focused && !theme.noColor) {
+        props.color = theme.colors.accent
+      }
     } else if (row.disabled) {
       props.dimColor = true
     }
@@ -139,7 +165,10 @@ function renderListRow(
     Box,
     { key, flexDirection: 'row' },
     React.createElement(Text, { bold: row.cursor }, `${cursor} `),
-    React.createElement(Box, { flexDirection: 'row', flexShrink: 1, flexWrap: 'wrap' }, ...cells)
+    // flexWrap removed deliberately — wrapping caused extra layout
+    // passes per render and contributed to the alt-screen flicker.
+    // The column-width helper already truncates each cell to fit.
+    React.createElement(Box, { flexDirection: 'row', flexShrink: 1 }, ...cells)
   )
 }
 
@@ -150,7 +179,11 @@ function renderListBody(
 ): ReactTypes.ReactElement {
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
-  const focused = state.focus !== 'filter'
+  // List panel is "focused" when j/k means cursor movement — i.e.
+  // when the user is in list mode or a modal that was opened from
+  // the list (filter, add-repo, confirm-delete). Sidebar focus
+  // dims the list panel border to make the active panel obvious.
+  const focused = state.focus !== 'sidebar'
   // Reserve: 1 row for the panel header, 1 for each scroll indicator
   // (if shown), 2 for the border. Floor at 1 so the panel always
   // renders at least one row.

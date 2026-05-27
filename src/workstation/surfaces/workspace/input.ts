@@ -119,40 +119,60 @@ export function resolveWorkspaceInput(
     return { kind: 'quit' }
   }
 
-  if (key.return) {
-    return { kind: 'drill-in' }
-  }
-
-  if (key.downArrow || input === 'j') {
-    return { kind: 'action', action: { type: 'move-cursor', delta: 1 } }
-  }
-  if (key.upArrow || input === 'k') {
-    return { kind: 'action', action: { type: 'move-cursor', delta: -1 } }
-  }
-  if (key.pageDown) {
-    return { kind: 'action', action: { type: 'move-cursor', delta: 10 } }
-  }
-  if (key.pageUp) {
-    return { kind: 'action', action: { type: 'move-cursor', delta: -10 } }
-  }
-  if (input === 'g' && !key.shift) {
-    return { kind: 'action', action: { type: 'set-cursor', index: 0 } }
-  }
-  if (input === 'G' || (input === 'g' && key.shift)) {
-    return { kind: 'action', action: { type: 'set-cursor', index: Number.MAX_SAFE_INTEGER } }
-  }
-
+  // Tab / Shift+Tab cycles between sidebar and list focus. Always
+  // available (in both list and sidebar modes) so the user can always
+  // pop back to the panel they need.
   if (key.tab) {
     return {
       kind: 'action',
-      action: { type: 'cycle-tab', direction: key.shift ? 'previous' : 'next' },
+      action: { type: 'cycle-panel-focus', direction: key.shift ? 'previous' : 'next' },
     }
   }
-  if (input === 'h' || key.leftArrow) {
-    return { kind: 'action', action: { type: 'cycle-tab', direction: 'previous' } }
+
+  // Sidebar focus: j/k changes the active tab; Enter / l / →
+  // commits the selection and jumps focus to the list.
+  if (state.focus === 'sidebar') {
+    if (key.downArrow || input === 'j') {
+      return { kind: 'action', action: { type: 'cycle-tab', direction: 'next' } }
+    }
+    if (key.upArrow || input === 'k') {
+      return { kind: 'action', action: { type: 'cycle-tab', direction: 'previous' } }
+    }
+    if (key.return || key.rightArrow || input === 'l') {
+      return { kind: 'action', action: { type: 'set-focus', focus: 'list' } }
+    }
+    // Global keys (sort, filter, refresh, etc.) still work while
+    // the sidebar has focus — fall through to the shared handlers
+    // below.
   }
-  if (input === 'l' || key.rightArrow) {
-    return { kind: 'action', action: { type: 'cycle-tab', direction: 'next' } }
+
+  // List focus: j/k moves the cursor; Enter drills in; h / ←
+  // jumps focus to the sidebar.
+  if (state.focus === 'list') {
+    if (key.return) {
+      return { kind: 'drill-in' }
+    }
+    if (key.downArrow || input === 'j') {
+      return { kind: 'action', action: { type: 'move-cursor', delta: 1 } }
+    }
+    if (key.upArrow || input === 'k') {
+      return { kind: 'action', action: { type: 'move-cursor', delta: -1 } }
+    }
+    if (key.pageDown) {
+      return { kind: 'action', action: { type: 'move-cursor', delta: 10 } }
+    }
+    if (key.pageUp) {
+      return { kind: 'action', action: { type: 'move-cursor', delta: -10 } }
+    }
+    if (input === 'g' && !key.shift) {
+      return { kind: 'action', action: { type: 'set-cursor', index: 0 } }
+    }
+    if (input === 'G' || (input === 'g' && key.shift)) {
+      return { kind: 'action', action: { type: 'set-cursor', index: Number.MAX_SAFE_INTEGER } }
+    }
+    if (input === 'h' || key.leftArrow) {
+      return { kind: 'action', action: { type: 'set-focus', focus: 'sidebar' } }
+    }
   }
 
   if (input === 's') {
