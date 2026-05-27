@@ -201,6 +201,44 @@ describe('workspace state reducer', () => {
     expect(requested.pendingDeletePath).toBe('/tmp/bravo')
   })
 
+  it('restores the cursor onto the previously-selected repo when clear-filter fires', () => {
+    // Cursor on bravo (index 1) before opening the filter.
+    const positioned = applyWorkspaceAction(baseState, { type: 'move-cursor', delta: 1 })
+    expect(positioned.selectedIndex).toBe(1)
+    const opened = applyWorkspaceAction(positioned, { type: 'set-focus', focus: 'filter' })
+    const filtered = applyWorkspaceAction(opened, { type: 'set-filter', filter: 'char' })
+    // Filtered list is now [charlie] at index 0.
+    expect(selectFocusedRepo(filtered)?.name).toBe('charlie')
+    const cleared = applyWorkspaceAction(filtered, { type: 'clear-filter' })
+    // Cursor should land back on bravo.
+    expect(selectFocusedRepo(cleared)?.name).toBe('bravo')
+    expect(cleared.cursorBeforeFilter).toBeUndefined()
+  })
+
+  it('falls back to index 0 when the pre-filter row no longer exists', () => {
+    const positioned = applyWorkspaceAction(baseState, { type: 'move-cursor', delta: 1 })
+    const opened = applyWorkspaceAction(positioned, { type: 'set-focus', focus: 'filter' })
+    // Replace the overview while filter is open so the pre-filter
+    // row goes away entirely.
+    const replaced = applyWorkspaceAction(opened, {
+      type: 'replace-overview',
+      overview: {
+        ...baseState.overview,
+        repos: [baseState.overview.repos[0]], // only alpha survives
+      },
+    })
+    const cleared = applyWorkspaceAction(replaced, { type: 'clear-filter' })
+    expect(cleared.selectedIndex).toBe(0)
+    expect(selectFocusedRepo(cleared)?.name).toBe('alpha')
+  })
+
+  it('committing the filter (focus → list) clears the snapshot so a later Esc does not restore', () => {
+    const opened = applyWorkspaceAction(baseState, { type: 'set-focus', focus: 'filter' })
+    expect(opened.cursorBeforeFilter).toBeDefined()
+    const committed = applyWorkspaceAction(opened, { type: 'set-focus', focus: 'list' })
+    expect(committed.cursorBeforeFilter).toBeUndefined()
+  })
+
   it('cancel-delete returns focus to the list and clears the pending path', () => {
     const known = applyWorkspaceAction(baseState, {
       type: 'replace-known-repos',
