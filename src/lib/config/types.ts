@@ -122,6 +122,39 @@ type BaseConfig = {
      */
     dateBucketing?: boolean
   }
+
+  /**
+   * Multi-repo workspace surface settings (`coco workspace`).
+   */
+  workspace?: {
+    /**
+     * Directories to scan for git repositories. Each entry may use a
+     * `~` prefix; resolved against the user's home directory. Defaults
+     * to `['~/code']` when omitted.
+     *
+     * @default ['~/code']
+     */
+    roots?: string[]
+
+    /**
+     * Repositories outside the configured roots that should still
+     * appear in the workspace view. Useful for one-off projects kept
+     * somewhere other than the main `code` tree. Entries may use a
+     * `~` prefix.
+     *
+     * @default []
+     */
+    knownRepos?: string[]
+
+    /**
+     * Maximum depth to recurse into each configured root when looking
+     * for `.git/` directories. Stops descending as soon as a directory
+     * is identified as a repo.
+     *
+     * @default 3
+     */
+    maxDepth?: number
+  }
 }
 
 export type ConfigWithServiceObject = BaseConfig &
