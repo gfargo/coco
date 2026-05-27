@@ -216,6 +216,16 @@ describe('renderWorkspaceApp', () => {
     expect(tree).toMatchSnapshot()
   })
 
+  it('snapshots a very narrow terminal (60 columns) — path drops out', () => {
+    const tree = render(baseState(), { columns: 60 })
+    expect(tree).toMatchSnapshot()
+  })
+
+  it('snapshots a wide terminal (200 columns) — columns grow up to their caps', () => {
+    const tree = render(baseState(), { columns: 200 })
+    expect(tree).toMatchSnapshot()
+  })
+
   it('snapshots the keymap help overlay when toggled on', () => {
     const state = applyWorkspaceAction(baseState(), { type: 'toggle-help' })
     const tree = render(state)

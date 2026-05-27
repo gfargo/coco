@@ -10,7 +10,6 @@
 import type * as ReactTypes from 'react'
 
 import type { LogInkTheme } from '../../chrome/theme'
-import { truncateCells } from '../../chrome/text'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 import type { WorkspaceComponents } from './runtime'
@@ -111,8 +110,7 @@ function renderSidebar(
 function renderListRow(
   deps: RenderWorkspaceAppDeps,
   row: ReturnType<typeof buildWorkspaceListRows>[number],
-  key: string,
-  width: number
+  key: string
 ): ReactTypes.ReactElement {
   const { React, ink, theme } = deps
   const { Box, Text } = ink
@@ -136,8 +134,7 @@ function renderListRow(
     Box,
     { key, flexDirection: 'row' },
     React.createElement(Text, { bold: row.cursor }, `${cursor} `),
-    React.createElement(Box, { flexDirection: 'row', flexShrink: 1, flexWrap: 'wrap' }, ...cells),
-    React.createElement(Box, { flexShrink: 0 }, React.createElement(Text, { dimColor: true }, truncateCells('', Math.max(0, width)))) // reserve trailing space
+    React.createElement(Box, { flexDirection: 'row', flexShrink: 1, flexWrap: 'wrap' }, ...cells)
   )
 }
 
@@ -148,7 +145,7 @@ function renderListBody(
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
   const focused = state.focus !== 'filter'
-  const rows = buildWorkspaceListRows(state)
+  const rows = buildWorkspaceListRows(state, { width })
   const visibleRepos = selectVisibleRepos(state)
   const filterChip = state.filter
     ? `  ·  filter: ${state.filter}`
@@ -170,7 +167,7 @@ function renderListBody(
             : 'No repos match the current filter.'
       ),
     ]
-    : rows.map((row, index) => renderListRow(deps, row, `row-${index}`, width))
+    : rows.map((row, index) => renderListRow(deps, row, `row-${index}`))
   return React.createElement(
     Box,
     {
