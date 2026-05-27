@@ -139,16 +139,29 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
 
     const result = spawnSync('vhs', [tapePath], {
       stdio: 'inherit',
+      // Run VHS from the scenario dir so `Screenshot screenshot.png`
+      // lands there (VHS resolves relative paths from its cwd).
+      cwd: repo.path,
       env: {
         ...process.env,
-        // Pass the current PATH so VHS's bash shell can find node.
-        // The tape itself prepends node_modules/.bin for tsx.
         PATH: process.env.PATH,
       },
     })
 
     if (result.status !== 0) {
       throw new Error(`vhs exited with status ${result.status} for recipe ${recipe.name}`)
+    }
+
+    // Move the screenshot from the scenario temp dir to the final
+    // output location. VHS's Screenshot command only supports bare
+    // filenames (no absolute paths), so we capture to `screenshot.png`
+    // in the cwd and relocate here.
+    const capturedPath = join(repo.path, 'screenshot.png')
+    if (existsSync(capturedPath)) {
+      const { renameSync } = await import('fs')
+      renameSync(capturedPath, pngPath)
+    } else {
+      throw new Error(`VHS did not produce screenshot.png in ${repo.path} for recipe ${recipe.name}`)
     }
 
     console.log(`  ✓ ${pngPath}`)
