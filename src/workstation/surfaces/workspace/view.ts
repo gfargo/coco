@@ -13,7 +13,7 @@ import type { LogInkTheme } from '../../chrome/theme'
 import { truncateCells } from '../../chrome/text'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
-import type { WorkspaceComponents, WorkspaceInkRuntime } from './runtime'
+import type { WorkspaceComponents } from './runtime'
 import { type PathCompletionResult } from './pathCompletion'
 import {
   buildWorkspaceFooter,
@@ -26,13 +26,15 @@ import { selectVisibleRepos, type WorkspaceState } from './state'
 
 type RenderWorkspaceAppDeps = {
   React: typeof ReactTypes
-  ink: WorkspaceInkRuntime['ink']
+  ink: WorkspaceComponents
   state: WorkspaceState
   theme: LogInkTheme
   appLabel: string
   filterDraft: string
   addRepoDraft: string
   addRepoCompletion: PathCompletionResult
+  /** Terminal width in cells. Caller resolves via Ink's useWindowSize. */
+  columns: number
 }
 
 function toneColor(tone: WorkspaceListColumn['tone'], theme: LogInkTheme): string | undefined {
@@ -237,8 +239,7 @@ function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
 export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   const { React, ink } = deps
   const { Box } = ink
-  const { columns } = ink.useWindowSize()
-  const bodyWidth = Math.max(40, columns - 4)
+  const bodyWidth = Math.max(40, deps.columns - 4)
   return React.createElement(
     Box,
     { flexDirection: 'column' },
@@ -254,4 +255,4 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
   )
 }
 
-export type { WorkspaceComponents }
+export type { RenderWorkspaceAppDeps }

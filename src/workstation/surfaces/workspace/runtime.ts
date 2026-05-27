@@ -293,8 +293,9 @@ type WorkspaceInkAppProps = {
 
 function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   const { React, ink } = props
-  const { useApp, useInput } = ink
+  const { useApp, useInput, useWindowSize } = ink
   const { exit } = useApp()
+  const { columns } = useWindowSize()
 
   const [state, setState] = React.useState<WorkspaceState>(() =>
     createWorkspaceState({
@@ -523,12 +524,13 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
 
   return renderWorkspaceApp({
     React,
-    ink,
+    ink: { Box: ink.Box, Text: ink.Text },
     state,
     theme: props.theme,
     appLabel: props.appLabel,
     filterDraft,
     addRepoDraft,
     addRepoCompletion,
+    columns,
   })
 }
