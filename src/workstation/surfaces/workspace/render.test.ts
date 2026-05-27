@@ -52,13 +52,14 @@ describe('workspace render builders', () => {
     expect(rows.map((row) => row.repo.name)).toEqual(['coco', 'docs'])
     expect(rows[0].cursor).toBe(true)
     expect(rows[1].cursor).toBe(false)
-    const [name, branch, status, date, path] = rows[0].columns
+    const [name, branch, status, date, subject, path] = rows[0].columns
     expect(name.text.startsWith('coco')).toBe(true)
     expect(branch.text.startsWith('main')).toBe(true)
     expect(status.text).toContain('●2')
     expect(status.text).toContain('↑1')
     expect(status.text).toContain('↓3')
     expect(date.text.startsWith('2026-05-01')).toBe(true)
+    expect(subject.text).toContain('feat: thing')
     expect(path.text).toContain('/tmp/coco')
   })
 
@@ -144,34 +145,45 @@ describe('workspace render builders', () => {
   })
 
   describe('assignWorkspaceColumnWidths', () => {
-    it('drops the path column when it cannot fit the row budget', () => {
-      // All five minimums total 66 cells once gaps + cursor are
-      // included; budgets in [49, 68) drop path but keep date.
-      const widths = assignWorkspaceColumnWidths(58)
+    it('drops the path column first on narrow terminals', () => {
+      // All six minimums total ~87 cells once gaps + cursor are
+      // included; budgets in [68, 86) keep subject but drop path.
+      const widths = assignWorkspaceColumnWidths(72)
       expect(widths.name).toBeDefined()
       expect(widths.branch).toBeDefined()
       expect(widths.status).toBeDefined()
       expect(widths.date).toBeDefined()
+      expect(widths.subject).toBeDefined()
       expect(widths.path).toBeUndefined()
     })
 
-    it('drops both path and date when very narrow', () => {
-      // Below ~49 cells, date also drops; status is the last
-      // non-essential to go before we're down to name + branch.
+    it('drops the subject column next when even path-less is too wide', () => {
+      const widths = assignWorkspaceColumnWidths(56)
+      expect(widths.name).toBeDefined()
+      expect(widths.branch).toBeDefined()
+      expect(widths.status).toBeDefined()
+      expect(widths.date).toBeDefined()
+      expect(widths.subject).toBeUndefined()
+      expect(widths.path).toBeUndefined()
+    })
+
+    it('drops date when very narrow', () => {
       const widths = assignWorkspaceColumnWidths(42)
       expect(widths.name).toBeDefined()
       expect(widths.branch).toBeDefined()
       expect(widths.status).toBeDefined()
       expect(widths.date).toBeUndefined()
+      expect(widths.subject).toBeUndefined()
       expect(widths.path).toBeUndefined()
     })
 
     it('keeps every column at standard width', () => {
-      const widths = assignWorkspaceColumnWidths(120)
+      const widths = assignWorkspaceColumnWidths(140)
       expect(widths.name).toBeGreaterThanOrEqual(14)
       expect(widths.branch).toBeGreaterThanOrEqual(12)
       expect(widths.status).toBeGreaterThanOrEqual(8)
       expect(widths.date).toBe(10)
+      expect(widths.subject).toBeGreaterThanOrEqual(18)
       expect(widths.path).toBeGreaterThanOrEqual(18)
     })
 
@@ -181,6 +193,7 @@ describe('workspace render builders', () => {
       expect(widths.branch).toBeLessThanOrEqual(28)
       expect(widths.status).toBeLessThanOrEqual(16)
       expect(widths.date).toBe(10)
+      expect(widths.subject).toBeLessThanOrEqual(60)
     })
 
     it('returns the empty map when no column can fit', () => {

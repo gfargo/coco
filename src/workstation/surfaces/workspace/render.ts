@@ -52,7 +52,7 @@ export type WorkspaceSidebarTabRow = {
  * Drop priority on a narrow terminal: path → date → status → branch.
  * Name always stays.
  */
-export type WorkspaceColumnKey = 'name' | 'branch' | 'status' | 'date' | 'path'
+export type WorkspaceColumnKey = 'name' | 'branch' | 'status' | 'date' | 'subject' | 'path'
 
 type ColumnSpec = {
   key: WorkspaceColumnKey
@@ -66,7 +66,10 @@ const COLUMN_SPECS: ColumnSpec[] = [
   { key: 'branch', min: 12, weight: 2, max: 28 },
   { key: 'status', min: 8, weight: 1, max: 16 },
   { key: 'date', min: 10, weight: 0, max: 10 },
-  { key: 'path', min: 18, weight: 3 },
+  // Subject grows aggressively at the expense of path so wide
+  // terminals get a meaningful "what changed" line per row.
+  { key: 'subject', min: 18, weight: 4, max: 60 },
+  { key: 'path', min: 18, weight: 1 },
 ]
 
 /** Inter-cell gap reserved by the layout helper. */
@@ -200,6 +203,13 @@ export function buildWorkspaceListRows(
     }
     if (widths.date !== undefined) {
       columns.push(formatDateCell(repo, widths.date))
+    }
+    if (widths.subject !== undefined) {
+      const subject = repo.lastCommit?.subject ?? '—'
+      columns.push({
+        text: truncateCells(subject, widths.subject),
+        tone: repo.lastCommit?.subject ? 'default' : 'dim',
+      })
     }
     if (widths.path !== undefined) {
       columns.push({
