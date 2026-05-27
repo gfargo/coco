@@ -68,6 +68,13 @@ export type WorkspaceState = {
   knownRepoPaths: ReadonlyArray<string>
   /** Path the user is being asked to confirm deletion for. */
   pendingDeletePath?: string
+  /**
+   * Repo path the cursor was on right before the user opened the
+   * filter prompt. Used to restore the cursor when the filter is
+   * cleared (Esc) — without it, the cursor would land at index 0
+   * which is a papercut every time you cancel a filter.
+   */
+  cursorBeforeFilter?: string
 }
 
 export type WorkspaceAction =
@@ -227,9 +234,45 @@ export function applyWorkspaceAction(
       return rectifySelection({ ...state, filter: action.filter, selectedIndex: 0 })
     }
     case 'clear-filter': {
-      return rectifySelection({ ...state, filter: '', focus: 'list', selectedIndex: 0 })
+      // Drop the filter, return to list focus, and try to restore the
+      // cursor onto the row that was selected before we entered the
+      // filter prompt. Falls back to index 0 when the snapshot row no
+      // longer exists in the visible list (e.g., it was removed
+      // between filter open and clear).
+      const restored: WorkspaceState = {
+        ...state,
+        filter: '',
+        focus: 'list',
+        selectedIndex: 0,
+        cursorBeforeFilter: undefined,
+      }
+      if (!state.cursorBeforeFilter) {
+        return restored
+      }
+      const visible = selectVisibleRepos(restored)
+      const idx = visible.findIndex((entry) => entry.path === state.cursorBeforeFilter)
+      if (idx < 0) {
+        return restored
+      }
+      return { ...restored, selectedIndex: idx }
     }
     case 'set-focus': {
+      // Snapshot the cursor when the user opens the filter prompt so
+      // we can put them back where they were if they bail with Esc.
+      if (action.focus === 'filter' && state.focus !== 'filter') {
+        const focused = selectFocusedRepo(state)
+        return {
+          ...state,
+          focus: action.focus,
+          cursorBeforeFilter: focused?.path ?? state.cursorBeforeFilter,
+        }
+      }
+      // Committing the filter from inside the prompt (focus → list)
+      // clears the snapshot — the user is keeping the filtered view,
+      // so any cancel from here on should restart the cycle.
+      if (action.focus === 'list' && state.focus === 'filter') {
+        return { ...state, focus: action.focus, cursorBeforeFilter: undefined }
+      }
       return { ...state, focus: action.focus }
     }
     case 'move-cursor': {
