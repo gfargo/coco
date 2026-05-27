@@ -71,6 +71,15 @@ export function resolveWorkspaceInput(
     return { kind: 'noop' }
   }
 
+  if (state.focus === 'add-repo') {
+    if (key.escape) {
+      return { kind: 'action', action: { type: 'set-focus', focus: 'list' } }
+    }
+    // Enter, Tab, and printable keys are owned by the runtime so it
+    // can drive the path-completion prompt.
+    return { kind: 'noop' }
+  }
+
   if (key.escape) {
     if (state.filter) {
       return { kind: 'action', action: { type: 'clear-filter' } }

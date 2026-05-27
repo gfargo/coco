@@ -126,4 +126,9 @@ describe('workspace render builders', () => {
     const footer = buildWorkspaceFooter(noted)
     expect(footer.status).toBe('Refreshed.')
   })
+
+  it('footer hint flips to the add-repo prompt when add-repo focus is active', () => {
+    const focused = applyWorkspaceAction(state, { type: 'set-focus', focus: 'add-repo' })
+    expect(buildWorkspaceFooter(focused).hint).toContain('tab to complete')
+  })
 })

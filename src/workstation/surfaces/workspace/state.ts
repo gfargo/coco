@@ -23,7 +23,7 @@ import {
  * dispatches them on action payloads.
  */
 
-export type WorkspaceFocus = 'list' | 'filter'
+export type WorkspaceFocus = 'list' | 'filter' | 'add-repo'
 
 export type WorkspaceState = {
   overview: WorkspaceOverview

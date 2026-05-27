@@ -22,6 +22,10 @@ function filterState(): WorkspaceState {
   return { ...createWorkspaceState({ overview: emptyOverview, roots: ['~/code'] }), focus: 'filter' }
 }
 
+function addRepoState(): WorkspaceState {
+  return { ...createWorkspaceState({ overview: emptyOverview, roots: ['~/code'] }), focus: 'add-repo' }
+}
+
 describe('resolveWorkspaceInput', () => {
   it('quits on q or escape (no filter active)', () => {
     expect(resolveWorkspaceInput('q', key(), listState()).kind).toBe('quit')
@@ -105,5 +109,15 @@ describe('resolveWorkspaceInput', () => {
       action: { type: 'set-focus', focus: 'list' },
     })
     expect(resolveWorkspaceInput('a', key(), filterState()).kind).toBe('noop')
+  })
+
+  it('routes escape out of the add-repo prompt and lets the runtime own other keys', () => {
+    expect(resolveWorkspaceInput('', key({ escape: true }), addRepoState())).toEqual({
+      kind: 'action',
+      action: { type: 'set-focus', focus: 'list' },
+    })
+    expect(resolveWorkspaceInput('', key({ return: true }), addRepoState()).kind).toBe('noop')
+    expect(resolveWorkspaceInput('', key({ tab: true }), addRepoState()).kind).toBe('noop')
+    expect(resolveWorkspaceInput('a', key(), addRepoState()).kind).toBe('noop')
   })
 })

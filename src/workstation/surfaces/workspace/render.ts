@@ -150,10 +150,23 @@ export type WorkspaceFooterModel = {
 
 const LIST_HINT = 'j/k move · enter open · tab tab · s sort · / filter · r refresh · a add · q quit'
 const FILTER_HINT = 'type filter · enter to apply · esc to clear'
+const ADD_REPO_HINT = 'type path · tab to complete · enter to add · esc to cancel'
+
+function hintFor(focus: WorkspaceState['focus']): string {
+  switch (focus) {
+    case 'filter':
+      return FILTER_HINT
+    case 'add-repo':
+      return ADD_REPO_HINT
+    case 'list':
+    default:
+      return LIST_HINT
+  }
+}
 
 export function buildWorkspaceFooter(state: WorkspaceState): WorkspaceFooterModel {
   return {
-    hint: state.focus === 'filter' ? FILTER_HINT : LIST_HINT,
+    hint: hintFor(state.focus),
     status: state.status,
     filterMode: state.focus === 'filter',
   }

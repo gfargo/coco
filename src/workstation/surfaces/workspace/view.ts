@@ -14,6 +14,7 @@ import { truncateCells } from '../../chrome/text'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 import type { WorkspaceComponents, WorkspaceInkRuntime } from './runtime'
+import { type PathCompletionResult } from './pathCompletion'
 import {
   buildWorkspaceFooter,
   buildWorkspaceHeader,
@@ -30,6 +31,8 @@ type RenderWorkspaceAppDeps = {
   theme: LogInkTheme
   appLabel: string
   filterDraft: string
+  addRepoDraft: string
+  addRepoCompletion: PathCompletionResult
 }
 
 function toneColor(tone: WorkspaceListColumn['tone'], theme: LogInkTheme): string | undefined {
@@ -183,6 +186,35 @@ function renderListBody(
   )
 }
 
+function renderAddRepoPrompt(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
+  if (deps.state.focus !== 'add-repo') {
+    return null
+  }
+  const { React, ink, theme, addRepoDraft, addRepoCompletion } = deps
+  const { Box, Text } = ink
+  const completionLine = addRepoCompletion.completions.slice(0, 8).join('  ')
+  const hint =
+    addRepoCompletion.completions.length === 0
+      ? 'no matches'
+      : `${addRepoCompletion.completions.length} match${
+        addRepoCompletion.completions.length === 1 ? '' : 'es'
+      } · tab to extend · * = git repo`
+  return React.createElement(
+    Box,
+    {
+      borderColor: focusBorderColor(theme, true),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      paddingX: 1,
+    },
+    React.createElement(Text, { bold: true }, `Add repo: ${addRepoDraft}_`),
+    React.createElement(Text, { dimColor: true }, hint),
+    completionLine
+      ? React.createElement(Text, { color: toneColor('dim', theme) }, completionLine)
+      : null
+  )
+}
+
 function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
@@ -217,6 +249,7 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
       renderSidebar(deps),
       renderListBody(deps, bodyWidth - 22)
     ),
+    renderAddRepoPrompt(deps),
     renderFooter(deps)
   )
 }

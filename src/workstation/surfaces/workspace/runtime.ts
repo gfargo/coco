@@ -51,6 +51,17 @@ import {
   type WorkspaceState,
 } from './state'
 import { resolveWorkspaceInput, type WorkspaceInputKey } from './input'
+import {
+  applyTabCompletion,
+  completePath,
+  expandHomePrefix,
+  type PathCompletionResult,
+} from './pathCompletion'
+import {
+  appendKnownRepo,
+  readKnownRepos,
+} from '../../chrome/workspaceKnownRepos'
+import { isGitWorkingTree } from '../../../git/workspaceData'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
 const dynamicImport = new Function('specifier', 'return import(specifier)') as DynamicImport
@@ -150,6 +161,13 @@ const EMPTY_OVERVIEW = (roots: ReadonlyArray<string>): WorkspaceOverview => ({
   scannedAt: new Date(0).toISOString(),
 })
 
+export function mergeKnownRepos(
+  configEntries: ReadonlyArray<string>,
+  cachedEntries: ReadonlyArray<string>
+): string[] {
+  return [...new Set([...configEntries, ...cachedEntries])]
+}
+
 export async function startWorkspace(
   options: WorkspaceStartOptions
 ): Promise<WorkspaceExitResult> {
@@ -157,7 +175,7 @@ export async function startWorkspace(
   const input = streams.input ?? process.stdin
   const output = streams.output ?? process.stdout
   const error = streams.error ?? process.stderr
-  const knownRepos = options.knownRepos ?? []
+  const knownRepos = mergeKnownRepos(options.knownRepos ?? [], readKnownRepos())
 
   const loadOverview =
     options.loadOverview ??
@@ -291,6 +309,10 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   )
 
   const [filterDraft, setFilterDraft] = React.useState<string>('')
+  const [addRepoDraft, setAddRepoDraft] = React.useState<string>('~/')
+  const [addRepoCompletion, setAddRepoCompletion] = React.useState<PathCompletionResult>(() =>
+    completePath('~/')
+  )
 
   const dispatch = React.useCallback((action: WorkspaceAction) => {
     setState((prev) => applyWorkspaceAction(prev, action))
@@ -377,16 +399,42 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     exit()
   }, [exit, props.exitRef, state])
 
-  const addRepo = React.useCallback(async () => {
-    if (!props.onAddRepo) {
-      dispatch({ type: 'set-status', status: 'Add-repo prompt is wired in PR4.' })
+  const openAddRepo = React.useCallback(() => {
+    setAddRepoDraft('~/')
+    setAddRepoCompletion(completePath('~/'))
+    dispatch({ type: 'set-focus', focus: 'add-repo' })
+  }, [dispatch])
+
+  const commitAddRepo = React.useCallback(async () => {
+    const candidate = expandHomePrefix(addRepoDraft.trim().replace(/\/+$/, ''))
+    if (!candidate) {
+      dispatch({ type: 'set-status', status: 'Enter a path.' })
       return
     }
-    const added = await props.onAddRepo()
-    if (added) {
-      dispatch({ type: 'set-status', status: `Added ${added}.` })
+    if (!isGitWorkingTree(candidate)) {
+      dispatch({ type: 'set-status', status: `${candidate} is not a git repo.` })
+      return
     }
-  }, [dispatch, props])
+    appendKnownRepo(candidate)
+    dispatch({ type: 'set-focus', focus: 'list' })
+    dispatch({ type: 'set-status', status: `Added ${candidate}.` })
+    // Refresh discovery so the new repo lands in the list and the
+    // cursor anchors onto it.
+    dispatch({ type: 'set-loading', loading: true })
+    try {
+      const merged = mergeKnownRepos(props.knownRepos, readKnownRepos())
+      const overview = await props.loadOverview(props.roots, merged)
+      writeCachedWorkspace(props.roots, overview)
+      dispatch({ type: 'replace-overview', overview })
+      dispatch({ type: 'anchor-cursor-by-path', path: candidate })
+    } catch (err) {
+      dispatch({ type: 'set-loading', loading: false })
+      dispatch({
+        type: 'set-status',
+        status: err instanceof Error ? err.message : 'Refresh failed.',
+      })
+    }
+  }, [addRepoDraft, dispatch, props])
 
   useInput((rawInput: string, key: WorkspaceInputKey) => {
     if (state.focus === 'filter') {
@@ -410,6 +458,35 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       return
     }
 
+    if (state.focus === 'add-repo') {
+      if (key.escape) {
+        dispatch({ type: 'set-focus', focus: 'list' })
+        return
+      }
+      if (key.return) {
+        void commitAddRepo()
+        return
+      }
+      if (key.tab) {
+        const next = applyTabCompletion(addRepoDraft, addRepoCompletion)
+        setAddRepoDraft(next)
+        setAddRepoCompletion(completePath(next))
+        return
+      }
+      if (key.backspace || key.delete) {
+        const next = addRepoDraft.slice(0, -1)
+        setAddRepoDraft(next)
+        setAddRepoCompletion(completePath(next || '~/'))
+        return
+      }
+      if (rawInput && !key.ctrl && !key.meta) {
+        const next = addRepoDraft + rawInput
+        setAddRepoDraft(next)
+        setAddRepoCompletion(completePath(next))
+      }
+      return
+    }
+
     const intent = resolveWorkspaceInput(rawInput, key, state)
     switch (intent.kind) {
       case 'action':
@@ -426,7 +503,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         void refresh()
         break
       case 'add-repo':
-        void addRepo()
+        openAddRepo()
         break
       case 'noop':
       default:
@@ -451,5 +528,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     theme: props.theme,
     appLabel: props.appLabel,
     filterDraft,
+    addRepoDraft,
+    addRepoCompletion,
   })
 }
