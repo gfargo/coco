@@ -320,13 +320,16 @@ export type WorkspaceFooterModel = {
   filterMode: boolean
 }
 
-const LIST_HINT = 'j/k move · enter open · tab tab · s sort · / filter · r refresh · a add · d remove · ? help · q quit'
+const LIST_HINT = 'j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit'
+const SIDEBAR_HINT = 'j/k change tab · enter / l → list · tab → list · ? help · q quit'
 const FILTER_HINT = 'type filter · enter to apply · esc to clear'
 const ADD_REPO_HINT = 'type path · tab to complete · enter to add · esc to cancel'
 const CONFIRM_DELETE_HINT = 'press y to remove · any other key to cancel'
 
 function hintFor(focus: WorkspaceState['focus']): string {
   switch (focus) {
+    case 'sidebar':
+      return SIDEBAR_HINT
     case 'filter':
       return FILTER_HINT
     case 'add-repo':
@@ -367,12 +370,13 @@ export type WorkspaceHelpRow = {
  */
 export function buildWorkspaceHelpRows(): WorkspaceHelpRow[] {
   return [
-    { keys: 'j / ↓', description: 'Move cursor down' },
-    { keys: 'k / ↑', description: 'Move cursor up' },
-    { keys: 'g / G', description: 'Jump to top / bottom' },
-    { keys: 'enter', description: 'Drill into the cursored repo (coco ui)' },
-    { keys: 'tab / shift-tab', description: 'Cycle sidebar tab forward / backward' },
-    { keys: 'h / l', description: 'Cycle sidebar tab (Vim-style)' },
+    { keys: 'tab / shift-tab', description: 'Move focus between sidebar and list' },
+    { keys: 'j / ↓', description: 'List: move cursor down · Sidebar: next tab' },
+    { keys: 'k / ↑', description: 'List: move cursor up · Sidebar: previous tab' },
+    { keys: 'h / ←', description: 'List → sidebar focus' },
+    { keys: 'l / →', description: 'Sidebar → list focus (also enter)' },
+    { keys: 'g / G', description: 'List: jump to top / bottom' },
+    { keys: 'enter', description: 'List: drill into the cursored repo (coco ui)' },
     { keys: 's', description: 'Cycle sort mode (recency → name → dirty)' },
     { keys: '/', description: 'Filter the list by name or branch' },
     { keys: 'r', description: 'Refresh discovery' },
