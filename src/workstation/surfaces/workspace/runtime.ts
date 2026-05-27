@@ -66,6 +66,10 @@ import {
   hasSeenWorkspaceOnboarding,
   markWorkspaceOnboardingSeen,
 } from '../../chrome/workspaceOnboarding'
+import {
+  readWorkspacePreferences,
+  writeWorkspacePreferences,
+} from '../../chrome/workspacePreferences'
 import { isGitWorkingTree } from '../../../git/workspaceData'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
@@ -193,6 +197,15 @@ export async function startWorkspace(
       getWorkspacePullRequestCounts(repos.map((entry) => entry.path)))
 
   const cached = readCachedWorkspace(options.roots) ?? EMPTY_OVERVIEW(options.roots)
+  const persisted = readWorkspacePreferences(options.roots)
+  // Resume (post-drill-in) takes precedence over the persisted store —
+  // mid-session intent shouldn't lose to last-launch defaults.
+  const effectiveResume: WorkspaceResumeState = {
+    sortMode: options.resume?.sortMode ?? persisted.sortMode,
+    tab: options.resume?.tab ?? persisted.tab,
+    filter: options.resume?.filter ?? persisted.filter,
+    selectedRepoPath: options.resume?.selectedRepoPath,
+  }
 
   if (!canStartLogInkTui(input, output)) {
     // Non-TTY snapshot fallback. Print the visible repo list and
@@ -218,7 +231,7 @@ export async function startWorkspace(
     loadOverview,
     loadPullRequestCounts,
     onAddRepo: options.onAddRepo,
-    resume: options.resume,
+    resume: effectiveResume,
     exitRef,
     ink,
     React,
@@ -583,6 +596,17 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       props.resumeRef.current = null
     }
   }, [props.resumeRef])
+
+  // Persist user preferences whenever a relevant slice changes. The
+  // disk write is best-effort and synchronous; the cost is sub-ms on
+  // a typical SSD so we don't bother with a debounce.
+  React.useEffect(() => {
+    writeWorkspacePreferences(props.roots, {
+      sortMode: state.sortMode,
+      tab: state.tab,
+      filter: state.filter,
+    })
+  }, [props.roots, state.sortMode, state.tab, state.filter])
 
   return renderWorkspaceApp({
     React,
