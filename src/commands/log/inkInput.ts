@@ -667,8 +667,22 @@ export function getLogInkPaletteExecuteEvents(
     case 'commandPalette':
       // Re-toggling closes; the dispatcher will close after execute anyway.
       return []
-    case 'workflowActions':
-      // Aggregate entry; individual workflows are surfaced separately.
+    case 'workflowDeleteBranch':
+    case 'workflowDeleteTag':
+    case 'workflowDropStash':
+    case 'workflowRemoveWorktree':
+    case 'workflowAbortOperation':
+    case 'workflowAiCommitSummary':
+    case 'workflowAiConflictHelp':
+    case 'viewCherryPick':
+    case 'viewRevert':
+    case 'viewReset':
+    case 'viewInteractiveRebase':
+    case 'viewCreateBranchHere':
+    case 'viewCreateTagHere':
+    case 'viewChangelog':
+      // Individual workflow entries; actual dispatch handled by the
+      // workflow action lookup below.
       return []
     case 'quit':
       if (hasUnsavedComposeDraft(state)) {

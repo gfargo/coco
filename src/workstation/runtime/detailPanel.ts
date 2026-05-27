@@ -17,30 +17,30 @@ import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../chrome/context'
 import type { LogInkTheme } from '../chrome/theme'
 import type {
-  GitCommitDetail,
-  GitCommitFilePreview,
+    GitCommitDetail,
+    GitCommitFilePreview,
 } from '../../commands/log/data'
 import { getSelectedInkCommit } from '../../commands/log/inkViewModel'
 import type { LogInkState } from '../../commands/log/inkViewModel'
 import { focusBorderColor, panelTitle } from './utils'
 import {
-  renderBranchPreviewPanel,
-  renderCommitDiffDetail,
-  renderCommitPanel,
-  renderComposeContextPanel,
-  renderHistoryInspector,
-  renderIssueTriagePreviewPanel,
-  renderPullRequestTriagePreviewPanel,
-  renderStashPreviewPanel,
-  renderSubmodulePreviewPanel,
-  renderTagPreviewPanel,
+    renderBranchPreviewPanel,
+    renderCommitDiffDetail,
+    renderCommitPanel,
+    renderComposeContextPanel,
+    renderHistoryInspector,
+    renderIssueTriagePreviewPanel,
+    renderPullRequestTriagePreviewPanel,
+    renderStashPreviewPanel,
+    renderSubmodulePreviewPanel,
+    renderTagPreviewPanel,
 } from '../surfaces/detail'
 import {
-  renderChordOverlay,
-  renderCommandPalette,
-  renderConfirmationPanel,
-  renderHelpPanel,
-  renderInputPromptPanel,
+    renderChordOverlay,
+    renderCommandPalette,
+    renderConfirmationPanel,
+    renderHelpPanel,
+    renderInputPromptPanel,
 } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
@@ -99,7 +99,8 @@ export function renderDetailPanel(
   width: number,
   tabbed: boolean,
   theme: LogInkTheme,
-  railed: boolean = false
+  railed: boolean = false,
+  bodyRows: number = 0
 ): ReactTypes.ReactElement {
   const focused = state.focus === 'detail'
 
@@ -108,7 +109,7 @@ export function renderDetailPanel(
   // via the help-overlay layout branch — and railing those would
   // defeat their whole purpose (the user is reading them).
   if (state.showHelp) {
-    return renderHelpPanel(h, components, state, width, theme, focused)
+    return renderHelpPanel(h, components, state, width, theme, focused, bodyRows)
   }
 
   if (state.showCommandPalette) {

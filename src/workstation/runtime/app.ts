@@ -63,9 +63,9 @@ import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
 import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
 import {
-  runCommitDraftWorkflow,
-  runCommitSplitApplyWorkflow,
-  runCommitSplitPlanWorkflow,
+    runCommitDraftWorkflow,
+    runCommitSplitApplyWorkflow,
+    runCommitSplitPlanWorkflow,
 } from '../../git/commitWorkflowActions'
 import { runChangelogTextWorkflow } from '../../git/aiActions'
 import {
@@ -95,16 +95,144 @@ import { formatSplitApplySuccess } from '../chrome/postApplyHints'
 import { SPINNER_TICK_MS } from '../chrome/spinner'
 import { createInitialContextStatus, createRepoFrameRuntime } from './repoFrameFactory'
 import {
-  resolveCommitDiffDrillInTarget,
-  resolveSubmoduleViewDrillInTarget,
+    resolveCommitDiffDrillInTarget,
+    resolveSubmoduleViewDrillInTarget,
 } from './repoFrameDrillIn'
 import {
-  getActiveRepoFrameRuntime,
-  syncRepoStackRuntimes,
-  updateRepoFrameRuntime,
-  type RepoFrameRuntime,
-  type RepoStackRuntimes,
+    getActiveRepoFrameRuntime,
+    syncRepoStackRuntimes,
+    updateRepoFrameRuntime,
+    type RepoFrameRuntime,
+    type RepoStackRuntimes,
 } from './repoStackRuntime'
+import { getSavedDiffViewMode, saveDiffViewMode } from '../chrome/diffViewModePersistence'
+import { getSavedSidebarTab, saveSidebarTab } from '../chrome/sidebarPersistence'
+import {
+    PromotedSelectionsSnapshot,
+    rectifyPromotedSelectionIndex,
+} from '../chrome/selectionRectify'
+import {
+    LogInkRefreshWatcher,
+    createRefreshWatcher,
+} from '../chrome/refreshWatcher'
+import {
+    LOG_INK_DEFAULT_COLUMNS,
+    LOG_INK_DEFAULT_ROWS,
+    LOG_INK_MIN_COLUMNS,
+    LOG_INK_MIN_ROWS,
+    getLogInkLayout,
+} from '../chrome/layout'
+import { sortBranches, sortTags } from '../chrome/sorting'
+import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../chrome/idleTips'
+import {
+    LogInkState,
+    applyLogInkAction,
+    createLogInkState,
+    getSelectedInkCommit,
+} from '../../commands/log/inkViewModel'
+import { getGitOperationOverview } from '../../git/operationData'
+import { openProviderUrl } from '../../git/providerActions'
+import { getProviderOverview } from '../../git/providerData'
+import {
+    checkoutBranch,
+    createBranch,
+    deleteBranch,
+    fetchBranch,
+    fetchRemotes,
+    pullBranch,
+    pullCurrentBranch,
+    pushBranch,
+    pushCurrentBranch,
+    renameBranch,
+    setUpstream,
+} from '../../git/branchActions'
+import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
+import {
+    ClipboardRunner,
+    ResetMode,
+    checkoutFileFromCommit,
+    cherryPickCommit,
+    createBranchFromCommit,
+    createTagAtCommit,
+    defaultClipboardRunner,
+    defaultOpenUrlRunner,
+    isResetMode,
+    resetToCommit,
+    revertCommit,
+    startInteractiveRebase,
+} from '../../git/historyActions'
+import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from '../../git/stashActions'
+import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
+import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
+import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
+import { getIssueDetail } from '../../git/issueDetailData'
+import { getIssueList } from '../../git/issuesListData'
+import {
+    addIssueAssignee,
+    addIssueLabel,
+    closeIssue,
+    commentIssue,
+    reopenIssue,
+} from '../../git/issueActions'
+import { getPullRequestDetail } from '../../git/pullRequestDetailData'
+import { getPullRequestOverview } from '../../git/pullRequestData'
+import { getPullRequestList } from '../../git/pullRequestListData'
+import { clearGitHubListCache } from '../../git/githubListCache'
+import {
+    issueFilterForPreset,
+    pullRequestFilterForPreset,
+} from '../../git/triageFilterPresets'
+import {
+    addPullRequestAssignee,
+    addPullRequestLabel,
+    approvePullRequest,
+    approvePullRequestByNumber,
+    closePullRequest,
+    closePullRequestByNumber,
+    commentPullRequest,
+    commentPullRequestByNumber,
+    createPullRequest,
+    isPullRequestMergeStrategy,
+    mergePullRequest,
+    mergePullRequestByNumber,
+    requestChangesPullRequest,
+    requestChangesPullRequestByNumber,
+} from '../../git/pullRequestActions'
+import { runPullRequestBodyWorkflow } from '../../git/aiActions'
+import {
+    findStashFileForOffset,
+    getStashCommitHashes,
+    getStashDiff,
+    getStashOverview,
+    parseStashDiffFiles,
+} from '../../git/stashData'
+import {
+    revertFile,
+    stageAllFiles,
+    stageFile,
+    unstageAllFiles,
+    unstageFile,
+} from '../../git/statusActions'
+import {
+    applyStatusFilterMask,
+    flattenWorktreeGroups,
+    getWorktreeOverview,
+    groupWorktreeFiles,
+} from '../../git/statusData'
+import {
+    WorktreeHunkOverview,
+    getWorktreeHunks,
+    revertHunk,
+    stageHunk,
+    unstageHunk,
+} from '../../git/statusHunks'
+import { getBisectCompletion, getBisectStatus } from '../../git/bisectData'
+import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../git/bisectActions'
+import { getCompareDiff } from '../../git/compareData'
+import { getReflogOverview } from '../../git/reflogData'
+import { getTagOverview } from '../../git/tagData'
+import { getWorktreeListOverview } from '../../git/worktreeData'
+import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
 
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -208,134 +336,6 @@ function loadLogInkContextEntries(git: SimpleGit): Array<{
     },
   ]
 }
-import { getSavedDiffViewMode, saveDiffViewMode } from '../chrome/diffViewModePersistence'
-import { getSavedSidebarTab, saveSidebarTab } from '../chrome/sidebarPersistence'
-import {
-    PromotedSelectionsSnapshot,
-    rectifyPromotedSelectionIndex,
-} from '../chrome/selectionRectify'
-import {
-    LogInkRefreshWatcher,
-    createRefreshWatcher,
-} from '../chrome/refreshWatcher'
-import {
-    LOG_INK_DEFAULT_COLUMNS,
-    LOG_INK_DEFAULT_ROWS,
-    LOG_INK_MIN_COLUMNS,
-    LOG_INK_MIN_ROWS,
-    getLogInkLayout,
-} from '../chrome/layout'
-import { sortBranches, sortTags } from '../chrome/sorting'
-import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../chrome/idleTips'
-import {
-    LogInkState,
-    applyLogInkAction,
-    createLogInkState,
-    getSelectedInkCommit,
-} from '../../commands/log/inkViewModel'
-import { getGitOperationOverview } from '../../git/operationData'
-import { openProviderUrl } from '../../git/providerActions'
-import { getProviderOverview } from '../../git/providerData'
-import {
-    checkoutBranch,
-    createBranch,
-    deleteBranch,
-    fetchBranch,
-    fetchRemotes,
-    pullBranch,
-    pullCurrentBranch,
-    pushBranch,
-    pushCurrentBranch,
-    renameBranch,
-    setUpstream,
-} from '../../git/branchActions'
-import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
-import {
-    ClipboardRunner,
-    ResetMode,
-    checkoutFileFromCommit,
-    cherryPickCommit,
-    createBranchFromCommit,
-    createTagAtCommit,
-    defaultClipboardRunner,
-    defaultOpenUrlRunner,
-    isResetMode,
-    resetToCommit,
-    revertCommit,
-    startInteractiveRebase,
-} from '../../git/historyActions'
-import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from '../../git/stashActions'
-import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
-import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
-import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
-import { getIssueDetail } from '../../git/issueDetailData'
-import { getIssueList } from '../../git/issuesListData'
-import {
-  addIssueAssignee,
-  addIssueLabel,
-  closeIssue,
-  commentIssue,
-  reopenIssue,
-} from '../../git/issueActions'
-import { getPullRequestDetail } from '../../git/pullRequestDetailData'
-import { getPullRequestOverview } from '../../git/pullRequestData'
-import { getPullRequestList } from '../../git/pullRequestListData'
-import { clearGitHubListCache } from '../../git/githubListCache'
-import {
-  issueFilterForPreset,
-  pullRequestFilterForPreset,
-} from '../../git/triageFilterPresets'
-import {
-    addPullRequestAssignee,
-    addPullRequestLabel,
-    approvePullRequest,
-    approvePullRequestByNumber,
-    closePullRequest,
-    closePullRequestByNumber,
-    commentPullRequest,
-    commentPullRequestByNumber,
-    createPullRequest,
-    isPullRequestMergeStrategy,
-    mergePullRequest,
-    mergePullRequestByNumber,
-    requestChangesPullRequest,
-    requestChangesPullRequestByNumber,
-} from '../../git/pullRequestActions'
-import { runPullRequestBodyWorkflow } from '../../git/aiActions'
-import {
-    findStashFileForOffset,
-    getStashCommitHashes,
-    getStashDiff,
-    getStashOverview,
-    parseStashDiffFiles,
-} from '../../git/stashData'
-import {
-    revertFile,
-    stageAllFiles,
-    stageFile,
-    unstageAllFiles,
-    unstageFile,
-} from '../../git/statusActions'
-import {
-    applyStatusFilterMask,
-    flattenWorktreeGroups,
-    getWorktreeOverview,
-    groupWorktreeFiles,
-} from '../../git/statusData'
-import {
-    WorktreeHunkOverview,
-    getWorktreeHunks,
-    revertHunk,
-    stageHunk,
-    unstageHunk,
-} from '../../git/statusHunks'
-import { getBisectCompletion, getBisectStatus } from '../../git/bisectData'
-import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../git/bisectActions'
-import { getCompareDiff } from '../../git/compareData'
-import { getReflogOverview } from '../../git/reflogData'
-import { getTagOverview } from '../../git/tagData'
-import { getWorktreeListOverview } from '../../git/worktreeData'
-import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
 // Entry-point types (LogInkStreams, LogInkOptions) and the orchestration
 // types (DynamicImport, LogInkRuntime) stay in inkRuntime.ts since they're
 // only needed by startInkInteractiveLog.
@@ -348,8 +348,8 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
 import {
-  buildLoadedHashSet,
-  resolveCursorSyncDecision,
+    buildLoadedHashSet,
+    resolveCursorSyncDecision,
 } from './cursorSyncResolver'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
@@ -4554,7 +4554,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         layout.detailWidth,
         layout.inspectorTabbed,
         theme,
-        layout.inspectorRailed
+        layout.inspectorRailed,
+        layout.bodyRows
       )
     ),
     renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame)
