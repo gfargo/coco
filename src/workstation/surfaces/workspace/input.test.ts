@@ -111,6 +111,24 @@ describe('resolveWorkspaceInput', () => {
     expect(resolveWorkspaceInput('a', key(), filterState()).kind).toBe('noop')
   })
 
+  it('routes d to request-delete while focused on the list', () => {
+    expect(resolveWorkspaceInput('d', key(), listState()).kind).toBe('request-delete')
+  })
+
+  it('confirm-delete focus accepts only y/Y; every other key cancels', () => {
+    const state = { ...listState(), focus: 'confirm-delete' as const, pendingDeletePath: '/tmp/r' }
+    expect(resolveWorkspaceInput('y', key(), state).kind).toBe('confirm-delete')
+    expect(resolveWorkspaceInput('Y', key(), state).kind).toBe('confirm-delete')
+    expect(resolveWorkspaceInput('n', key(), state)).toEqual({
+      kind: 'action',
+      action: { type: 'cancel-delete' },
+    })
+    expect(resolveWorkspaceInput('', key({ escape: true }), state)).toEqual({
+      kind: 'action',
+      action: { type: 'cancel-delete' },
+    })
+  })
+
   it('routes ? to toggle-help while focused on the list', () => {
     expect(resolveWorkspaceInput('?', key(), listState())).toEqual({
       kind: 'action',

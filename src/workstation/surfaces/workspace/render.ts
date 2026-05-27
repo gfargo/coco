@@ -148,9 +148,10 @@ export type WorkspaceFooterModel = {
   filterMode: boolean
 }
 
-const LIST_HINT = 'j/k move · enter open · tab tab · s sort · / filter · r refresh · a add · q quit'
+const LIST_HINT = 'j/k move · enter open · tab tab · s sort · / filter · r refresh · a add · d remove · ? help · q quit'
 const FILTER_HINT = 'type filter · enter to apply · esc to clear'
 const ADD_REPO_HINT = 'type path · tab to complete · enter to add · esc to cancel'
+const CONFIRM_DELETE_HINT = 'press y to remove · any other key to cancel'
 
 function hintFor(focus: WorkspaceState['focus']): string {
   switch (focus) {
@@ -158,6 +159,8 @@ function hintFor(focus: WorkspaceState['focus']): string {
       return FILTER_HINT
     case 'add-repo':
       return ADD_REPO_HINT
+    case 'confirm-delete':
+      return CONFIRM_DELETE_HINT
     case 'list':
     default:
       return LIST_HINT
@@ -202,6 +205,7 @@ export function buildWorkspaceHelpRows(): WorkspaceHelpRow[] {
     { keys: '/', description: 'Filter the list by name or branch' },
     { keys: 'r', description: 'Refresh discovery' },
     { keys: 'a', description: 'Add a repo via path prompt (tab-completes)' },
+    { keys: 'd', description: 'Remove the cursored repo from the known-repos store (y-confirm)' },
     { keys: '?', description: 'Toggle this help overlay' },
     { keys: 'esc', description: 'Clear filter or close overlay' },
     { keys: 'q', description: 'Quit the workspace surface' },

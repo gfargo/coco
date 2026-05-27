@@ -23,7 +23,7 @@ import {
  * dispatches them on action payloads.
  */
 
-export type WorkspaceFocus = 'list' | 'filter' | 'add-repo'
+export type WorkspaceFocus = 'list' | 'filter' | 'add-repo' | 'confirm-delete'
 
 export type WorkspaceState = {
   overview: WorkspaceOverview
@@ -60,6 +60,14 @@ export type WorkspaceState = {
   showHelp: boolean
   /** First-run onboarding overlay toggle. Self-dismisses on first user action. */
   showOnboarding: boolean
+  /**
+   * Paths added through the add-repo prompt. Only entries in this set
+   * can be removed via the delete affordance — repos discovered via
+   * configured roots would just come back on the next refresh.
+   */
+  knownRepoPaths: ReadonlyArray<string>
+  /** Path the user is being asked to confirm deletion for. */
+  pendingDeletePath?: string
 }
 
 export type WorkspaceAction =
@@ -80,6 +88,9 @@ export type WorkspaceAction =
   | { type: 'toggle-help' }
   | { type: 'close-help' }
   | { type: 'dismiss-onboarding' }
+  | { type: 'replace-known-repos'; paths: ReadonlyArray<string> }
+  | { type: 'request-delete'; path: string }
+  | { type: 'cancel-delete' }
 
 export type WorkspaceStateInit = {
   overview: WorkspaceOverview
@@ -97,6 +108,8 @@ export type WorkspaceStateInit = {
   selectedRepoPath?: string
   /** Render the first-run onboarding overlay. */
   showOnboarding?: boolean
+  /** Paths considered "known" (added via the add-repo prompt). */
+  knownRepoPaths?: ReadonlyArray<string>
 }
 
 export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
@@ -112,6 +125,7 @@ export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
     roots: init.roots,
     showHelp: false,
     showOnboarding: Boolean(init.showOnboarding),
+    knownRepoPaths: init.knownRepoPaths ?? [],
   }
   if (!init.selectedRepoPath) {
     return base
@@ -244,9 +258,28 @@ export function applyWorkspaceAction(
     case 'dismiss-onboarding': {
       return { ...state, showOnboarding: false }
     }
+    case 'replace-known-repos': {
+      return { ...state, knownRepoPaths: action.paths }
+    }
+    case 'request-delete': {
+      // No-op if the cursor target isn't actually in the known set —
+      // the input layer is supposed to gate this, but defensive
+      // gating here keeps the reducer authoritative.
+      if (!state.knownRepoPaths.includes(action.path)) {
+        return state
+      }
+      return { ...state, focus: 'confirm-delete', pendingDeletePath: action.path }
+    }
+    case 'cancel-delete': {
+      return { ...state, focus: 'list', pendingDeletePath: undefined }
+    }
     default:
       return state
   }
+}
+
+export function isRepoRemovable(state: WorkspaceState, repoPath: string): boolean {
+  return state.knownRepoPaths.includes(repoPath)
 }
 
 export function selectFocusedRepo(state: WorkspaceState): WorkspaceRepoSummary | undefined {

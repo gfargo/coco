@@ -28,6 +28,8 @@ export type WorkspaceInputIntent =
   | { kind: 'drill-in' }
   | { kind: 'refresh' }
   | { kind: 'add-repo' }
+  | { kind: 'request-delete' }
+  | { kind: 'confirm-delete' }
   | { kind: 'noop' }
 
 /**
@@ -90,6 +92,14 @@ export function resolveWorkspaceInput(
     return { kind: 'noop' }
   }
 
+  // Confirm-delete is modal: only `y` confirms, anything else cancels.
+  if (state.focus === 'confirm-delete') {
+    if (input === 'y' || input === 'Y') {
+      return { kind: 'confirm-delete' }
+    }
+    return { kind: 'action', action: { type: 'cancel-delete' } }
+  }
+
   if (key.escape) {
     if (state.filter) {
       return { kind: 'action', action: { type: 'clear-filter' } }
@@ -148,6 +158,9 @@ export function resolveWorkspaceInput(
   }
   if (input === 'a') {
     return { kind: 'add-repo' }
+  }
+  if (input === 'd') {
+    return { kind: 'request-delete' }
   }
   if (input === '?') {
     return { kind: 'action', action: { type: 'toggle-help' } }
