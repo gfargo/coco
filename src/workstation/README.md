@@ -1,6 +1,6 @@
 # Workstation
 
-The Ink-based TUI that ships behind `coco ui` and `coco log -i`. Twelve top-level views, chord-driven (`g<key>`) navigation, keyboard-only by design.
+The Ink-based TUI that ships behind `coco ui` and `coco log -i`. Sixteen top-level views, chord-driven (`g<key>`) navigation, keyboard-only by design.
 
 For user-facing docs:
 - [Interactive Log TUI](https://github.com/gfargo/coco/wiki/Interactive-Log-TUI) — keymap, configuration, screenshots.
