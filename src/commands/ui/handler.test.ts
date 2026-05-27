@@ -1,5 +1,6 @@
-import { createLogArgvFromUiArgv } from './handler'
+import { createLogArgvFromUiArgv, createUiTheme } from './handler'
 import { UiArgv } from './config'
+import type { Config } from '../../lib/config/types'
 
 function argv(overrides: Partial<UiArgv> = {}): UiArgv {
   return {
@@ -61,5 +62,51 @@ describe('ui command handler utilities', () => {
     const logArgv = createLogArgvFromUiArgv(argv({ branch: 'feature/x' }))
     expect(logArgv.all).toBe(true)
     expect(logArgv.branch).toBe('feature/x')
+  })
+})
+
+describe('createUiTheme', () => {
+  function makeConfig(overrides: Partial<Config> = {}): Config {
+    return {
+      logTui: undefined,
+      ...overrides,
+    } as unknown as Config
+  }
+
+  it('returns undefined when neither config nor argv specify a theme', () => {
+    // No theme anywhere → chrome picks its built-in default preset.
+    const theme = createUiTheme(makeConfig(), argv({}))
+    expect(theme).toBeUndefined()
+  })
+
+  it('passes through config.logTui.theme when no CLI override is given', () => {
+    const config = makeConfig({
+      logTui: { theme: { preset: 'gruvbox' } },
+    } as unknown as Config)
+    const theme = createUiTheme(config, argv({}))
+    expect(theme).toEqual({ preset: 'gruvbox' })
+  })
+
+  it('CLI --theme overrides the config preset but preserves other theme fields', () => {
+    // Critical merge behaviour: the user's `noColor`, `ascii`, etc.
+    // configured in `logTui.theme` must survive a `--theme` flag.
+    // This used to wipe the entire block and lost user
+    // customizations on every CLI run.
+    const config = makeConfig({
+      logTui: {
+        theme: { preset: 'default', noColor: true, ascii: true },
+      },
+    } as unknown as Config)
+    const theme = createUiTheme(config, argv({ theme: 'catppuccin' }))
+    expect(theme).toEqual({
+      preset: 'catppuccin',
+      noColor: true,
+      ascii: true,
+    })
+  })
+
+  it('CLI --theme works even when config has no logTui block', () => {
+    const theme = createUiTheme(makeConfig(), argv({ theme: 'monochrome' }))
+    expect(theme).toEqual({ preset: 'monochrome' })
   })
 })

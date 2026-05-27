@@ -12,13 +12,56 @@ on:
 permissions:
   contents: read
 
+# Cancel in-progress runs for the same PR/branch when a new push lands.
+# Saves CI minutes and prevents stale results from racing fresh ones.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  release-gate:
-    name: Release gate (Node ${{ matrix.node-version }})
+  # Cheap, fast-failing job — runs in ~5s and gives near-instant
+  # feedback on style violations before we wait on the full test
+  # suite. Doesn't block the test/build jobs (they run in parallel)
+  # but a lint failure surfaces on PRs immediately.
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lockfile hygiene
+        # Catches accidental npm usage in a yarn project. The
+        # `yarn install --frozen-lockfile` above already fails on
+        # drift, but this guard makes the failure mode obvious.
+        run: test -f yarn.lock && test ! -f package-lock.json
+
+      - name: Lint
+        run: npm run lint
+
+  # Test matrix runs in parallel with lint and build. Coverage is
+  # collected on the primary OS+Node combo only (Ubuntu / 22.22.2)
+  # to keep upload bandwidth + Codecov processing time reasonable;
+  # the other matrix cells still run the full test suite, just
+  # without coverage instrumentation.
+  test:
+    name: Test (Node ${{ matrix.node-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os:
+          - ubuntu-latest
         node-version:
           # Pinned to the floor declared in package.json engines
           # (^22.22.2 || ^24.15.0 || >=26.0.0). The floor moved when
@@ -27,6 +70,14 @@ jobs:
           # silently raise the floor without us noticing here first.
           - 22.22.2
           - 24.15.0
+        include:
+          # macOS smoke run on the primary Node version. Catches
+          # platform-specific issues (path separators, signal
+          # handling, TTY behaviour) that Linux-only CI would miss.
+          # Most coco users are on macOS, so a green Linux run isn't
+          # enough confidence on its own.
+          - os: macos-latest
+            node-version: 22.22.2
 
     steps:
       - name: Checkout
@@ -42,19 +93,63 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Check package manager hygiene
-        run: test -f yarn.lock && test ! -f package-lock.json
+      - name: Run Jest tests with coverage
+        # `--coverage` enables istanbul instrumentation and writes
+        # lcov + json-summary output to coverage/. Thresholds in
+        # jest.config.ts are enforced automatically.
+        run: npm run test:coverage
 
-      - name: Lint
-        run: npm run lint
+      - name: Upload coverage to Codecov
+        # Only upload from the canonical job (Linux + lowest Node).
+        # Multiple uploads from the matrix would land as separate
+        # reports and confuse Codecov's PR comments.
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22.22.2'
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/lcov.info
+          fail_ci_if_error: false
+          verbose: true
 
-      - name: Run Jest tests
-        run: npm run test:jest
+      - name: Upload coverage artifact
+        # Persist coverage data from the canonical job so we can
+        # inspect it directly even if Codecov is down or
+        # unconfigured.
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22.22.2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  # Build job runs in parallel with test and lint. Validates the
+  # rollup pipeline, schema generation, package contents, and the
+  # release-it dry run. Doesn't run jest — that's the test job's job.
+  build:
+    name: Build & package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
 
       - name: Build
         run: npm run build
 
       - name: Check generated schema drift
+        # The schema is generated from src/lib/schema.ts at build
+        # time. If a type changed but the committed schema.json
+        # didn't, the user's editor will hint against stale schema.
+        # Fail loudly here so the PR author regenerates.
         run: git diff --exit-code -- schema.json src/lib/schema.ts
 
       - name: Verify package dry run
@@ -62,3 +157,50 @@ jobs:
 
       - name: Validate release dry run
         run: npm run release:dry-run
+
+      - name: Upload built dist artifact
+        # Reused by the smoke job so we don't double-build.
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/
+            schema.json
+          retention-days: 7
+
+  # Smoke test runs the packaged CLI against a temporary git repo.
+  # Depends on `build` so we test against the real bundled output,
+  # not the tsx-driven source. Catches issues that only show up
+  # post-bundling (missing externs, wrong CJS/ESM exports, etc.).
+  smoke:
+    name: Packaged CLI smoke
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Download built dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+
+      - name: Configure git identity
+        # smokeCli.ts spins up temp repos and commits to them; CI
+        # runners don't have a global git identity by default.
+        run: |
+          git config --global user.name "Coco CI"
+          git config --global user.email "ci@example.com"
+
+      - name: Run packaged CLI smoke
+        run: npm run test:cli

@@ -14,4 +14,36 @@ export default {
   // independently scans its own `src/` + `bin/` and the main checkout
   // does the same. No cross-contamination.
   roots: ['<rootDir>/src', '<rootDir>/bin'],
+  // Coverage configuration — opt-in via `--coverage` so the default
+  // `npm run test:jest` stays fast. CI runs `--coverage` to upload
+  // lcov output to Codecov.
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.test.ts',
+    // Type-only modules and yargs glue files are scaffolding rather
+    // than logic — excluded so they don't dilute the signal of
+    // actually-tested code.
+    '!src/**/types.ts',
+    '!src/**/index.ts',
+    // Generated files (build info, schema) re-emit on every build.
+    '!src/lib/buildInfo.ts',
+    '!src/lib/schema.ts',
+  ],
+  coverageReporters: ['text-summary', 'lcov', 'json-summary'],
+  coverageDirectory: 'coverage',
+  // Thresholds set just below current measured coverage so they
+  // act as a guardrail against regressions while leaving headroom
+  // for normal noise. Current floor (May 2026): statements 63.78%,
+  // branches 58.18%, functions 64.69%, lines 64.39%. Ratchet up
+  // when surface tests + inkRuntime boot tests land. CI fails if
+  // coverage drops below these numbers, which is the bare minimum
+  // protection against accidental regressions.
+  coverageThreshold: {
+    global: {
+      statements: 60,
+      branches: 55,
+      functions: 60,
+      lines: 60,
+    },
+  },
 }
