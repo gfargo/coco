@@ -221,6 +221,60 @@ export function buildWorkspaceListRows(
   })
 }
 
+export type WorkspaceListWindow = {
+  rows: WorkspaceListRow[]
+  /** Total visible (sort + filter) row count — for the "N visible" header chip. */
+  totalRows: number
+  /** Number of rows above the window (for the "↑ N more" indicator). */
+  hiddenAbove: number
+  /** Number of rows below the window (for the "↓ N more" indicator). */
+  hiddenBelow: number
+}
+
+/**
+ * Window the row list onto a fixed height so we never render past the
+ * terminal bounds. Keeps the cursor row inside the window using a
+ * "rest in the upper third" heuristic — same shape used by the
+ * history surface — so users see plenty of context below the cursor
+ * for scrolling without the cursor immediately jumping off-screen.
+ */
+export function buildWorkspaceListWindow(
+  state: WorkspaceState,
+  options: { width?: number; rows: number } = { rows: 20 }
+): WorkspaceListWindow {
+  const all = buildWorkspaceListRows(state, { width: options.width })
+  const visibleCount = Math.max(1, options.rows)
+  if (all.length <= visibleCount) {
+    return {
+      rows: all,
+      totalRows: all.length,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    }
+  }
+  const cursor = Math.max(
+    0,
+    Math.min(state.selectedIndex, all.length - 1)
+  )
+  // Keep the cursor about a third of the way down so the user has
+  // context above and below. Matches the historyRow behaviour the
+  // existing surfaces have already trained users to expect.
+  const restAbove = Math.floor(visibleCount / 3)
+  let start = Math.max(0, cursor - restAbove)
+  // Don't scroll past the bottom — pin the window so the last row
+  // stays visible when the cursor is near the end of the list.
+  if (start + visibleCount > all.length) {
+    start = all.length - visibleCount
+  }
+  const end = start + visibleCount
+  return {
+    rows: all.slice(start, end),
+    totalRows: all.length,
+    hiddenAbove: start,
+    hiddenBelow: Math.max(0, all.length - end),
+  }
+}
+
 export function buildWorkspaceSidebar(state: WorkspaceState): WorkspaceSidebarTabRow[] {
   return WORKSPACE_TABS.map((tab) => {
     const disabled = tab === 'pull-requests' && state.ghAuthenticated === false
