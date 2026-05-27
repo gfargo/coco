@@ -90,6 +90,27 @@ async function loadWorkspaceInkRuntime(): Promise<WorkspaceInkRuntime> {
   return { ink, React }
 }
 
+export type WorkspaceExitResult =
+  | { kind: 'quit' }
+  | {
+      kind: 'drill-in'
+      repo: WorkspaceRepoSummary
+      /** Last-rendered surface state — passed back when the caller relaunches workspace after the drill-in. */
+      resume: {
+        sortMode: WorkspaceState['sortMode']
+        tab: WorkspaceState['tab']
+        filter: WorkspaceState['filter']
+        selectedRepoPath: string
+      }
+    }
+
+export type WorkspaceResumeState = {
+  sortMode?: WorkspaceState['sortMode']
+  tab?: WorkspaceState['tab']
+  filter?: WorkspaceState['filter']
+  selectedRepoPath?: string
+}
+
 export type WorkspaceStartOptions = {
   roots: ReadonlyArray<string>
   knownRepos?: ReadonlyArray<string>
@@ -97,13 +118,11 @@ export type WorkspaceStartOptions = {
   appLabel?: string
   theme?: LogInkThemeConfig
   /**
-   * Test/PR3 seam: invoked when the user presses Enter on a repo
-   * row. Returning a promise pauses workspace input until it
-   * resolves. PR3 fills this in with a launch of the existing ui
-   * runtime for the focused repo; for PR2 it falls back to a footer
-   * status message.
+   * Optional resume seed — applied to the new state on mount.
+   * Lets the drill-in loop re-anchor the cursor on the repo the
+   * user just exited and preserve their sort / tab / filter.
    */
-  onDrillIn?: (repo: WorkspaceRepoSummary) => Promise<void>
+  resume?: WorkspaceResumeState
   /**
    * Test/PR4 seam: invoked when the user presses `a`. PR4 fills this
    * in with the fuzzy path prompt.
@@ -131,7 +150,9 @@ const EMPTY_OVERVIEW = (roots: ReadonlyArray<string>): WorkspaceOverview => ({
   scannedAt: new Date(0).toISOString(),
 })
 
-export async function startWorkspace(options: WorkspaceStartOptions): Promise<void> {
+export async function startWorkspace(
+  options: WorkspaceStartOptions
+): Promise<WorkspaceExitResult> {
   const streams = options.streams ?? {}
   const input = streams.input ?? process.stdin
   const output = streams.output ?? process.stdout
@@ -156,7 +177,7 @@ export async function startWorkspace(options: WorkspaceStartOptions): Promise<vo
     const fresh = await loadOverview(options.roots, knownRepos)
     writeCachedWorkspace(options.roots, fresh)
     renderWorkspaceSnapshot(fresh, output)
-    return
+    return { kind: 'quit' }
   }
 
   const runtime = await loadWorkspaceInkRuntime()
@@ -164,6 +185,7 @@ export async function startWorkspace(options: WorkspaceStartOptions): Promise<vo
   const theme = createLogInkTheme(options.theme)
 
   const resumeRef: { current: (() => void) | null } = { current: null }
+  const exitRef: { current: WorkspaceExitResult } = { current: { kind: 'quit' } }
 
   const app = React.createElement(WorkspaceInkApp, {
     appLabel: options.appLabel ?? 'coco workspace',
@@ -172,8 +194,9 @@ export async function startWorkspace(options: WorkspaceStartOptions): Promise<vo
     knownRepos,
     loadOverview,
     loadPullRequestCounts,
-    onDrillIn: options.onDrillIn,
     onAddRepo: options.onAddRepo,
+    resume: options.resume,
+    exitRef,
     ink,
     React,
     theme,
@@ -197,6 +220,7 @@ export async function startWorkspace(options: WorkspaceStartOptions): Promise<vo
   } finally {
     lifecycle.dispose()
   }
+  return exitRef.current
 }
 
 function renderWorkspaceSnapshot(
@@ -240,8 +264,9 @@ type WorkspaceInkAppProps = {
   loadPullRequestCounts: (
     repos: ReadonlyArray<WorkspaceRepoSummary>
   ) => Promise<WorkspacePullRequestCounts>
-  onDrillIn?: (repo: WorkspaceRepoSummary) => Promise<void>
   onAddRepo?: () => Promise<string | undefined>
+  resume?: WorkspaceResumeState
+  exitRef: { current: WorkspaceExitResult }
   ink: WorkspaceInkRuntime['ink']
   React: typeof ReactTypes
   theme: LogInkTheme
@@ -258,6 +283,10 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       overview: props.initialOverview,
       roots: props.roots,
       loading: props.initialOverview.repos.length === 0,
+      sortMode: props.resume?.sortMode,
+      tab: props.resume?.tab,
+      filter: props.resume?.filter,
+      selectedRepoPath: props.resume?.selectedRepoPath,
     })
   )
 
@@ -277,6 +306,9 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         if (cancelled) return
         writeCachedWorkspace(props.roots, overview)
         dispatch({ type: 'replace-overview', overview })
+        if (props.resume?.selectedRepoPath) {
+          dispatch({ type: 'anchor-cursor-by-path', path: props.resume.selectedRepoPath })
+        }
         const pr = await props.loadPullRequestCounts(overview.repos)
         if (cancelled) return
         dispatch({
@@ -327,17 +359,23 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     }
   }, [dispatch, props])
 
-  const drillIn = React.useCallback(async () => {
+  const drillIn = React.useCallback(() => {
     const focused = selectFocusedRepo(state)
     if (!focused) {
       return
     }
-    if (!props.onDrillIn) {
-      dispatch({ type: 'set-status', status: 'Drill-in is wired in PR3.' })
-      return
+    props.exitRef.current = {
+      kind: 'drill-in',
+      repo: focused,
+      resume: {
+        sortMode: state.sortMode,
+        tab: state.tab,
+        filter: state.filter,
+        selectedRepoPath: focused.path,
+      },
     }
-    await props.onDrillIn(focused)
-  }, [dispatch, props, state])
+    exit()
+  }, [exit, props.exitRef, state])
 
   const addRepo = React.useCallback(async () => {
     if (!props.onAddRepo) {
@@ -378,10 +416,11 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         dispatch(intent.action)
         break
       case 'quit':
+        props.exitRef.current = { kind: 'quit' }
         exit()
         break
       case 'drill-in':
-        void drillIn()
+        drillIn()
         break
       case 'refresh':
         void refresh()

@@ -1,4 +1,9 @@
-export { startWorkspace, type WorkspaceStartOptions } from './runtime'
+export {
+  startWorkspace,
+  type WorkspaceExitResult,
+  type WorkspaceResumeState,
+  type WorkspaceStartOptions,
+} from './runtime'
 export { resolveWorkspaceInput, type WorkspaceInputIntent, type WorkspaceInputKey } from './input'
 export {
   applyWorkspaceAction,
