@@ -10,6 +10,16 @@ import {
 } from './githubCli'
 
 /**
+ * Default per-call timeout for the workspace PR-count fetcher.
+ * Sized to land well under the 30s a user would tolerate for the
+ * whole overview to settle, while still leaving headroom for
+ * legitimately slow networks. A hung gh past this is treated as
+ * "no count available" — the surface drops the badge rather than
+ * spinning forever.
+ */
+export const WORKSPACE_PR_COUNT_TIMEOUT_MS = 5000
+
+/**
  * Open-PR counts for the workspace surface (#880). One `gh` invocation
  * per repo with a GitHub remote, cheap enough to fan out across a
  * dozen repos. Hidden entirely when `gh` is missing or unauthenticated
@@ -86,12 +96,48 @@ export function parseOpenPullRequestCount(json: string): number | undefined {
   return undefined
 }
 
+/**
+ * Race a single gh call against a timeout. If the timeout wins, abort
+ * the underlying process (so we don't leak a long-running gh) and
+ * resolve to `undefined` so the caller can drop the badge. Wraps the
+ * runner so a hung gh on any one repo can't stall the whole overview.
+ */
+export async function runGhWithTimeout(
+  runner: GhRunner,
+  args: string[],
+  timeoutMs: number
+): Promise<string | undefined> {
+  const controller = new AbortController()
+  let timer: NodeJS.Timeout | undefined
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      resolve(undefined)
+    }, timeoutMs)
+  })
+  try {
+    const result = await Promise.race([
+      runner(args, { signal: controller.signal }).then((stdout) => stdout),
+      timeout,
+    ])
+    return result
+  } catch {
+    return undefined
+  } finally {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  }
+}
+
 async function fetchPullRequestCount(
   runner: GhRunner,
-  repository: GitHubRepository
+  repository: GitHubRepository,
+  timeoutMs: number
 ): Promise<number | undefined> {
-  try {
-    const out = await runner([
+  const out = await runGhWithTimeout(
+    runner,
+    [
       'pr',
       'list',
       '-R',
@@ -102,11 +148,13 @@ async function fetchPullRequestCount(
       'number',
       '--limit',
       '100',
-    ])
-    return parseOpenPullRequestCount(out)
-  } catch {
+    ],
+    timeoutMs
+  )
+  if (out === undefined) {
     return undefined
   }
+  return parseOpenPullRequestCount(out)
 }
 
 export type GetWorkspacePullRequestCountsOptions = {
@@ -116,6 +164,8 @@ export type GetWorkspacePullRequestCountsOptions = {
   remoteUrls?: ReadonlyMap<string, string>
   /** Maximum number of concurrent gh calls. Default 4. */
   concurrency?: number
+  /** Per-call timeout in ms. Default `WORKSPACE_PR_COUNT_TIMEOUT_MS`. */
+  timeoutMs?: number
 }
 
 async function mapWithConcurrency<T, U>(
@@ -147,6 +197,7 @@ export async function getWorkspacePullRequestCounts(
 
   const counts: Record<string, number> = {}
   const concurrency = Math.max(1, options.concurrency ?? 4)
+  const timeoutMs = options.timeoutMs ?? WORKSPACE_PR_COUNT_TIMEOUT_MS
 
   await mapWithConcurrency(repoPaths, concurrency, async (repoPath) => {
     const url = options.remoteUrls?.get(repoPath) ?? readOriginRemoteUrl(repoPath)
@@ -157,7 +208,7 @@ export async function getWorkspacePullRequestCounts(
     if (!repo) {
       return
     }
-    const count = await fetchPullRequestCount(runner, repo)
+    const count = await fetchPullRequestCount(runner, repo, timeoutMs)
     if (typeof count === 'number') {
       counts[repoPath] = count
     }

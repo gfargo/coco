@@ -7,6 +7,7 @@ import {
   getWorkspacePullRequestCounts,
   parseOpenPullRequestCount,
   readOriginRemoteUrl,
+  runGhWithTimeout,
 } from './workspacePullRequestData'
 
 describe('workspacePullRequestData parsers', () => {
@@ -60,6 +61,51 @@ describe('getWorkspacePullRequestCounts', () => {
     expect(result).toEqual({ authenticated: false, counts: {} })
     // Only the auth probe should have been issued.
     expect(runner).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops the badge when gh blows past the per-call timeout', async () => {
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/repo-slow', 'git@github.com:owner/repo-slow.git'],
+    ])
+    const runner = jest.fn(async (args: string[], opts?: { signal?: AbortSignal }) => {
+      if (args[0] === 'auth') return 'ok'
+      if (args[0] === 'pr') {
+        // Hang until aborted.
+        return new Promise<string>((_, reject) => {
+          opts?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        })
+      }
+      return ''
+    })
+
+    const result = await getWorkspacePullRequestCounts(['/tmp/repo-slow'], {
+      ghRunner: runner,
+      remoteUrls,
+      timeoutMs: 25,
+    })
+
+    expect(result.authenticated).toBe(true)
+    expect(result.counts).toEqual({})
+    // Auth probe + pr list both went out.
+    expect(runner).toHaveBeenCalledTimes(2)
+  })
+
+  it('runGhWithTimeout aborts the signal and resolves undefined on timeout', async () => {
+    const runner = jest.fn(async (_args: string[], opts?: { signal?: AbortSignal }) => {
+      return new Promise<string>((_, reject) => {
+        opts?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+      })
+    })
+
+    const result = await runGhWithTimeout(runner, ['pr', 'list'], 20)
+    expect(result).toBeUndefined()
+    expect(runner).toHaveBeenCalled()
+  })
+
+  it('runGhWithTimeout returns the stdout when the call finishes before the deadline', async () => {
+    const runner = jest.fn(async () => '[]')
+    const result = await runGhWithTimeout(runner, ['pr', 'list'], 5000)
+    expect(result).toBe('[]')
   })
 
   it('issues one gh pr list per repo with a GitHub remote and records the count', async () => {
