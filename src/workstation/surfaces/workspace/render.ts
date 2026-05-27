@@ -41,13 +41,101 @@ export type WorkspaceSidebarTabRow = {
   disabled: boolean
 }
 
-const NAME_WIDTH = 28
-const BRANCH_WIDTH = 22
-const STATUS_WIDTH = 14
-const DATE_WIDTH = 11
-const PATH_WIDTH = 40
+/**
+ * Responsive column widths for the workspace row list.
+ *
+ * Columns in display order, paired with a minimum cell width and a
+ * growth weight. The cursor caret + per-cell separators are reserved
+ * by the layout helper, so the budget passed in here is purely the
+ * cell-content width.
+ *
+ * Drop priority on a narrow terminal: path → date → status → branch.
+ * Name always stays.
+ */
+export type WorkspaceColumnKey = 'name' | 'branch' | 'status' | 'date' | 'path'
 
-function formatStatusCell(repo: WorkspaceRepoSummary, ghAuthenticated?: boolean, prCount?: number): WorkspaceListColumn {
+type ColumnSpec = {
+  key: WorkspaceColumnKey
+  min: number
+  weight: number
+  max?: number
+}
+
+const COLUMN_SPECS: ColumnSpec[] = [
+  { key: 'name', min: 14, weight: 3, max: 36 },
+  { key: 'branch', min: 12, weight: 2, max: 28 },
+  { key: 'status', min: 8, weight: 1, max: 16 },
+  { key: 'date', min: 10, weight: 0, max: 10 },
+  { key: 'path', min: 18, weight: 3 },
+]
+
+/** Inter-cell gap reserved by the layout helper. */
+const COLUMN_GAP = 1
+/** Width of the cursor caret prefix ("› " or "  "). */
+const CURSOR_WIDTH = 2
+
+export type WorkspaceColumnWidths = Partial<Record<WorkspaceColumnKey, number>>
+
+/**
+ * Resolve per-column widths from a body budget. Drops columns from
+ * the tail when the budget can't fit their minimums; what survives
+ * gets a share of the remaining slack proportional to each spec's
+ * weight, capped at the column's `max`.
+ */
+export function assignWorkspaceColumnWidths(budget: number): WorkspaceColumnWidths {
+  const usable = Math.max(0, budget - CURSOR_WIDTH)
+  const kept: ColumnSpec[] = [...COLUMN_SPECS]
+  while (kept.length > 0) {
+    const minTotal = kept.reduce((acc, spec) => acc + spec.min, 0)
+    const gapTotal = Math.max(0, kept.length - 1) * COLUMN_GAP
+    if (minTotal + gapTotal <= usable) {
+      break
+    }
+    kept.pop()
+  }
+  if (kept.length === 0) {
+    return {}
+  }
+  const minTotal = kept.reduce((acc, spec) => acc + spec.min, 0)
+  const gapTotal = Math.max(0, kept.length - 1) * COLUMN_GAP
+  let slack = Math.max(0, usable - minTotal - gapTotal)
+  const totalWeight = kept.reduce((acc, spec) => acc + spec.weight, 0) || 1
+  const widths: WorkspaceColumnWidths = {}
+  // First pass: distribute slack proportionally to weight, respecting
+  // per-column max caps.
+  for (const spec of kept) {
+    const share = Math.floor((slack * spec.weight) / totalWeight)
+    const targetMax = spec.max ?? Number.POSITIVE_INFINITY
+    const grown = Math.min(spec.min + share, targetMax)
+    widths[spec.key] = grown
+  }
+  // Second pass: any unspent slack (due to caps or rounding) tries to
+  // land on the first uncapped column, otherwise drops on the floor.
+  const used = Object.values(widths).reduce((acc, val) => acc + (val ?? 0), 0)
+  slack = usable - used - gapTotal
+  if (slack > 0) {
+    for (const spec of kept) {
+      const max = spec.max ?? Number.POSITIVE_INFINITY
+      const current = widths[spec.key] ?? spec.min
+      if (current < max) {
+        const grow = Math.min(slack, max - current)
+        widths[spec.key] = current + grow
+        slack -= grow
+        if (slack <= 0) {
+          break
+        }
+      }
+    }
+  }
+  return widths
+}
+
+function formatStatusCell(
+  repo: WorkspaceRepoSummary,
+  width: number,
+  ghAuthenticated?: boolean,
+  prCount?: number
+): WorkspaceListColumn {
   const tokens: string[] = []
   if (repo.dirty > 0) {
     tokens.push(`●${repo.dirty}`)
@@ -63,43 +151,63 @@ function formatStatusCell(repo: WorkspaceRepoSummary, ghAuthenticated?: boolean,
   }
   const text = tokens.length === 0 ? '·' : tokens.join(' ')
   const tone: WorkspaceListColumn['tone'] = repo.behind > 0 || repo.dirty > 0 ? 'warn' : 'dim'
-  return { text: truncateCells(text, STATUS_WIDTH), tone }
+  return { text: truncateCells(text, width), tone }
 }
 
-function formatDateCell(repo: WorkspaceRepoSummary): WorkspaceListColumn {
+function formatDateCell(repo: WorkspaceRepoSummary, width: number): WorkspaceListColumn {
   const date = repo.lastCommit?.date
   if (!date) {
-    return { text: truncateCells('—', DATE_WIDTH), tone: 'dim' }
+    return { text: truncateCells('—', width), tone: 'dim' }
   }
   // Trim ISO date to YYYY-MM-DD — full precision is noise in the row.
-  return { text: truncateCells(date.slice(0, 10), DATE_WIDTH), tone: 'dim' }
+  return { text: truncateCells(date.slice(0, 10), width), tone: 'dim' }
 }
 
-export function buildWorkspaceListRows(state: WorkspaceState): WorkspaceListRow[] {
+export type BuildWorkspaceListRowsOptions = {
+  /** Available row width (before cursor + separators). Default 120. */
+  width?: number
+}
+
+const DEFAULT_ROW_WIDTH = 120
+
+export function buildWorkspaceListRows(
+  state: WorkspaceState,
+  options: BuildWorkspaceListRowsOptions = {}
+): WorkspaceListRow[] {
   const visible = selectVisibleRepos(state)
+  const widths = assignWorkspaceColumnWidths(options.width ?? DEFAULT_ROW_WIDTH)
   return visible.map((repo, index) => {
     const cursor = index === state.selectedIndex
     const nameTone: WorkspaceListColumn['tone'] = repo.error ? 'warn' : 'default'
-    const name: WorkspaceListColumn = {
-      text: truncateCells(repo.name, NAME_WIDTH),
-      primary: true,
-      tone: nameTone,
+    const columns: WorkspaceListColumn[] = []
+    if (widths.name !== undefined) {
+      columns.push({
+        text: truncateCells(repo.name, widths.name),
+        primary: true,
+        tone: nameTone,
+      })
     }
-    const branch: WorkspaceListColumn = {
-      text: truncateCells(repo.branch ?? '—', BRANCH_WIDTH),
-      tone: repo.branch ? 'default' : 'dim',
+    if (widths.branch !== undefined) {
+      columns.push({
+        text: truncateCells(repo.branch ?? '—', widths.branch),
+        tone: repo.branch ? 'default' : 'dim',
+      })
     }
-    const status = formatStatusCell(repo, state.ghAuthenticated, state.pullRequestCounts[repo.path])
-    const date = formatDateCell(repo)
-    const path: WorkspaceListColumn = {
-      text: truncatePathCells(repo.path, PATH_WIDTH),
-      tone: 'dim',
+    if (widths.status !== undefined) {
+      columns.push(
+        formatStatusCell(repo, widths.status, state.ghAuthenticated, state.pullRequestCounts[repo.path])
+      )
     }
-    return {
-      repo,
-      cursor,
-      columns: [name, branch, status, date, path],
+    if (widths.date !== undefined) {
+      columns.push(formatDateCell(repo, widths.date))
     }
+    if (widths.path !== undefined) {
+      columns.push({
+        text: truncatePathCells(repo.path, widths.path),
+        tone: 'dim',
+      })
+    }
+    return { repo, cursor, columns }
   })
 }
 
