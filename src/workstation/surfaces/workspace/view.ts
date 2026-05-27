@@ -249,6 +249,30 @@ function renderOnboardingBanner(deps: RenderWorkspaceAppDeps): ReactTypes.ReactE
   )
 }
 
+function renderConfirmDelete(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
+  if (deps.state.focus !== 'confirm-delete' || !deps.state.pendingDeletePath) {
+    return null
+  }
+  const { React, ink, theme } = deps
+  const { Box, Text } = ink
+  return React.createElement(
+    Box,
+    {
+      borderColor: focusBorderColor(theme, true),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      paddingX: 1,
+    },
+    React.createElement(Text, { bold: true }, `Remove ${deps.state.pendingDeletePath}?`),
+    React.createElement(
+      Text,
+      { dimColor: true },
+      'Only removes the entry from the known-repos store · the repo on disk is untouched.'
+    ),
+    React.createElement(Text, { color: toneColor('warn', theme) }, 'press y to confirm · any other key to cancel')
+  )
+}
+
 function renderAddRepoPrompt(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
   if (deps.state.focus !== 'add-repo') {
     return null
@@ -325,6 +349,7 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
     ),
     renderOnboardingBanner(deps),
     renderAddRepoPrompt(deps),
+    renderConfirmDelete(deps),
     renderFooter(deps)
   )
 }

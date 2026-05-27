@@ -137,9 +137,21 @@ describe('workspace render builders', () => {
   it('help rows cover every binding wired by the input resolver', () => {
     const rows = buildWorkspaceHelpRows()
     const allKeys = rows.map((row) => row.keys).join(' | ')
-    for (const expected of ['j', 'k', 'g', 'G', 's', '/', 'r', 'a', '?', 'q', 'enter', 'tab', 'esc']) {
+    for (const expected of ['j', 'k', 'g', 'G', 's', '/', 'r', 'a', 'd', '?', 'q', 'enter', 'tab', 'esc']) {
       expect(allKeys).toContain(expected)
     }
+  })
+
+  it('footer hint flips to the confirm-delete copy when pending', () => {
+    const focused = applyWorkspaceAction(state, {
+      type: 'replace-known-repos',
+      paths: [state.overview.repos[0].path],
+    })
+    const requested = applyWorkspaceAction(focused, {
+      type: 'request-delete',
+      path: state.overview.repos[0].path,
+    })
+    expect(buildWorkspaceFooter(requested).hint).toContain('press y')
   })
 
   it('onboarding model returns show=false unless the flag is set', () => {

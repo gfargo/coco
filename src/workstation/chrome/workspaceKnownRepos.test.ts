@@ -6,6 +6,7 @@ import {
   appendKnownRepo,
   getKnownReposStorePath,
   readKnownRepos,
+  removeKnownRepo,
   writeKnownRepos,
 } from './workspaceKnownRepos'
 
@@ -58,5 +59,17 @@ describe('workspaceKnownRepos persistence', () => {
     fs.writeFileSync(blocker, '')
     process.env.XDG_CACHE_HOME = blocker
     expect(() => writeKnownRepos(['/c'])).not.toThrow()
+  })
+
+  it('removeKnownRepo drops the path from the store + returns the new list', () => {
+    writeKnownRepos(['/a', '/b', '/c'])
+    expect(removeKnownRepo('/b')).toEqual(['/a', '/c'])
+    expect(readKnownRepos()).toEqual(['/a', '/c'])
+  })
+
+  it('removeKnownRepo is a no-op for unknown paths', () => {
+    writeKnownRepos(['/a'])
+    expect(removeKnownRepo('/zzz')).toEqual(['/a'])
+    expect(readKnownRepos()).toEqual(['/a'])
   })
 })

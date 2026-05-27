@@ -85,3 +85,18 @@ export function appendKnownRepo(repoPath: string): string[] {
   writeKnownRepos(next)
   return next
 }
+
+/**
+ * Remove an entry from the store. No-op when the path isn't present.
+ * Returns the updated list so the caller can echo it into state
+ * without re-reading from disk.
+ */
+export function removeKnownRepo(repoPath: string): string[] {
+  const existing = readKnownRepos()
+  if (!existing.includes(repoPath)) {
+    return existing
+  }
+  const next = existing.filter((entry) => entry !== repoPath)
+  writeKnownRepos(next)
+  return next
+}

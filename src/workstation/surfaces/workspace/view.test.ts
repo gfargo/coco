@@ -222,6 +222,20 @@ describe('renderWorkspaceApp', () => {
     expect(tree).toMatchSnapshot()
   })
 
+  it('snapshots the confirm-delete prompt for a known repo', () => {
+    let state = baseState()
+    state = applyWorkspaceAction(state, {
+      type: 'replace-known-repos',
+      paths: [state.overview.repos[1].path],
+    })
+    state = applyWorkspaceAction(state, {
+      type: 'request-delete',
+      path: state.overview.repos[1].path,
+    })
+    const tree = render(state)
+    expect(tree).toMatchSnapshot()
+  })
+
   it('snapshots the first-run onboarding banner', () => {
     const state = { ...baseState(), showOnboarding: true }
     const tree = render(state)

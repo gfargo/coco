@@ -3,6 +3,7 @@ import { WorkspaceOverview, WorkspaceRepoSummary } from '../../../git/workspaceD
 import {
   applyWorkspaceAction,
   createWorkspaceState,
+  isRepoRemovable,
   selectFocusedRepo,
   selectVisibleRepos,
 } from './state'
@@ -175,5 +176,39 @@ describe('workspace state reducer', () => {
     const dismissed = applyWorkspaceAction(seeded, { type: 'dismiss-onboarding' })
     expect(dismissed.showOnboarding).toBe(false)
     expect(dismissed.showHelp).toBe(false)
+  })
+
+  it('replace-known-repos updates the removable-set', () => {
+    const next = applyWorkspaceAction(baseState, {
+      type: 'replace-known-repos',
+      paths: ['/tmp/bravo'],
+    })
+    expect(isRepoRemovable(next, '/tmp/bravo')).toBe(true)
+    expect(isRepoRemovable(next, '/tmp/alpha')).toBe(false)
+  })
+
+  it('request-delete only fires when the path is in the known set', () => {
+    const known = applyWorkspaceAction(baseState, {
+      type: 'replace-known-repos',
+      paths: ['/tmp/bravo'],
+    })
+    const ignored = applyWorkspaceAction(known, { type: 'request-delete', path: '/tmp/alpha' })
+    expect(ignored.focus).toBe('list')
+    expect(ignored.pendingDeletePath).toBeUndefined()
+
+    const requested = applyWorkspaceAction(known, { type: 'request-delete', path: '/tmp/bravo' })
+    expect(requested.focus).toBe('confirm-delete')
+    expect(requested.pendingDeletePath).toBe('/tmp/bravo')
+  })
+
+  it('cancel-delete returns focus to the list and clears the pending path', () => {
+    const known = applyWorkspaceAction(baseState, {
+      type: 'replace-known-repos',
+      paths: ['/tmp/bravo'],
+    })
+    const requested = applyWorkspaceAction(known, { type: 'request-delete', path: '/tmp/bravo' })
+    const cancelled = applyWorkspaceAction(requested, { type: 'cancel-delete' })
+    expect(cancelled.focus).toBe('list')
+    expect(cancelled.pendingDeletePath).toBeUndefined()
   })
 })

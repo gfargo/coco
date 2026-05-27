@@ -60,6 +60,7 @@ import {
 import {
   appendKnownRepo,
   readKnownRepos,
+  removeKnownRepo,
 } from '../../chrome/workspaceKnownRepos'
 import {
   hasSeenWorkspaceOnboarding,
@@ -311,6 +312,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       filter: props.resume?.filter,
       selectedRepoPath: props.resume?.selectedRepoPath,
       showOnboarding: !hasSeenWorkspaceOnboarding(),
+      knownRepoPaths: readKnownRepos(),
     })
   )
 
@@ -405,6 +407,46 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     exit()
   }, [exit, props.exitRef, state])
 
+  const requestDelete = React.useCallback(() => {
+    const focused = selectFocusedRepo(state)
+    if (!focused) {
+      return
+    }
+    if (!state.knownRepoPaths.includes(focused.path)) {
+      dispatch({
+        type: 'set-status',
+        status: 'Only repos added via `a` can be removed. Edit workspace.roots in config to drop a discovered repo.',
+      })
+      return
+    }
+    dispatch({ type: 'request-delete', path: focused.path })
+  }, [dispatch, state])
+
+  const confirmDelete = React.useCallback(async () => {
+    const target = state.pendingDeletePath
+    if (!target) {
+      return
+    }
+    const updated = removeKnownRepo(target)
+    dispatch({ type: 'replace-known-repos', paths: updated })
+    dispatch({ type: 'cancel-delete' })
+    dispatch({ type: 'set-status', status: `Removed ${target}.` })
+    // Refresh discovery so the deleted entry drops out of the list.
+    dispatch({ type: 'set-loading', loading: true })
+    try {
+      const merged = mergeKnownRepos(props.knownRepos, updated)
+      const overview = await props.loadOverview(props.roots, merged)
+      writeCachedWorkspace(props.roots, overview)
+      dispatch({ type: 'replace-overview', overview })
+    } catch (err) {
+      dispatch({ type: 'set-loading', loading: false })
+      dispatch({
+        type: 'set-status',
+        status: err instanceof Error ? err.message : 'Refresh failed.',
+      })
+    }
+  }, [dispatch, props, state.pendingDeletePath])
+
   const openAddRepo = React.useCallback(() => {
     setAddRepoDraft('~/')
     setAddRepoCompletion(completePath('~/'))
@@ -421,7 +463,8 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-status', status: `${candidate} is not a git repo.` })
       return
     }
-    appendKnownRepo(candidate)
+    const updated = appendKnownRepo(candidate)
+    dispatch({ type: 'replace-known-repos', paths: updated })
     dispatch({ type: 'set-focus', focus: 'list' })
     dispatch({ type: 'set-status', status: `Added ${candidate}.` })
     // Refresh discovery so the new repo lands in the list and the
@@ -518,6 +561,12 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         break
       case 'add-repo':
         openAddRepo()
+        break
+      case 'request-delete':
+        requestDelete()
+        break
+      case 'confirm-delete':
+        void confirmDelete()
         break
       case 'noop':
       default:
