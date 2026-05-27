@@ -143,4 +143,13 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
 
 export const handler: CommandHandler<WorkspaceArgv> = async (argv) => {
   await startCocoWorkspace(argv)
+  // Force-exit on clean quit. Without this, a still-pending background
+  // gh PR-count fetch (or any other child process) keeps the event
+  // loop alive after the user hits `q`, and the process lingers until
+  // the gh timeout (5s by default) fires. Users perceive that delay
+  // as the UI being stuck; pressing more keys then races with the
+  // half-torn-down stdin handler and surfaces as a TTY EIO. The
+  // workspace surface doesn't have any side effects worth waiting on
+  // past this point, so process.exit(0) is the right call.
+  process.exit(0)
 }
