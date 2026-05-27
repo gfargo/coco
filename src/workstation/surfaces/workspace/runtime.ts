@@ -180,8 +180,6 @@ export function mergeKnownRepos(
 export async function startWorkspace(
   options: WorkspaceStartOptions
 ): Promise<WorkspaceExitResult> {
-  installWorkspaceDebugHandlers()
-  workspaceDebug(`startWorkspace called roots=${options.roots.join(',')} hasResume=${Boolean(options.resume)}`)
   const streams = options.streams ?? {}
   const input = streams.input ?? process.stdin
   const output = streams.output ?? process.stdout
@@ -273,68 +271,17 @@ export async function startWorkspace(
 }
 
 /**
- * Diagnostic logger toggled by COCO_DEBUG_WORKSPACE=1. Writes to a
- * file (NOT stderr) because alt-screen mode buries stderr output
- * under the rendered frames — by the time the user exits the alt
- * screen, scrollback usually loses the diagnostic lines.
- *
- * Each entry is timestamped relative to process start so the user
- * can spot timing-related restarts. Default path is
- * `/tmp/coco-workspace-debug.log`; override via the env var
- * `COCO_DEBUG_WORKSPACE_PATH`.
- *
- * One-time process-level handlers (installed on first call) log:
- *   - uncaught exceptions / unhandled rejections (the most likely
- *     restart trigger — panics from useInput callbacks)
- *   - process.exit codes (so we can tell whether tsx watch restarted
- *     us vs. we exited cleanly)
- *   - SIGINT / SIGTERM (terminal-driven kills)
+ * Tiny diagnostic logger toggled by COCO_DEBUG_WORKSPACE=1. Writes a
+ * single line to stderr (preserved across alt-screen exits) so users
+ * can share what the workspace runtime saw without us having to ship
+ * a debugger build.
  */
-
-const WORKSPACE_DEBUG_START = Date.now()
-let workspaceDebugPath: string | undefined
-let workspaceDebugInstalled = false
-
-function workspaceDebugEnabled(): boolean {
-  return Boolean(process.env.COCO_DEBUG_WORKSPACE)
-}
-
-function resolveWorkspaceDebugPath(): string {
-  if (workspaceDebugPath) return workspaceDebugPath
-  workspaceDebugPath = process.env.COCO_DEBUG_WORKSPACE_PATH || '/tmp/coco-workspace-debug.log'
-  return workspaceDebugPath
-}
-
-function installWorkspaceDebugHandlers(): void {
-  if (workspaceDebugInstalled || !workspaceDebugEnabled()) return
-  workspaceDebugInstalled = true
-  process.on('uncaughtException', (err) => {
-    workspaceDebug(`uncaughtException: ${err instanceof Error ? err.stack || err.message : String(err)}`)
-  })
-  process.on('unhandledRejection', (reason) => {
-    workspaceDebug(`unhandledRejection: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}`)
-  })
-  process.on('exit', (code) => {
-    workspaceDebug(`process.exit code=${code}`)
-  })
-  process.on('SIGINT', () => workspaceDebug('SIGINT'))
-  process.on('SIGTERM', () => workspaceDebug('SIGTERM'))
-  process.on('SIGHUP', () => workspaceDebug('SIGHUP'))
-  workspaceDebug(`debug log opened pid=${process.pid} cwd=${process.cwd()}`)
-}
-
-export function workspaceDebug(message: string): void {
-  if (!workspaceDebugEnabled()) return
-  installWorkspaceDebugHandlers()
-  const ts = Date.now() - WORKSPACE_DEBUG_START
-  const line = `[+${String(ts).padStart(6, ' ')}ms] ${message}\n`
+function workspaceDebug(message: string): void {
+  if (!process.env.COCO_DEBUG_WORKSPACE) {
+    return
+  }
   try {
-    // appendFileSync is sync + creates the file if missing; on a panic
-    // path this is the only way to guarantee the line lands before
-    // process.exit fires.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const fs = require('node:fs') as typeof import('node:fs')
-    fs.appendFileSync(resolveWorkspaceDebugPath(), line)
+    process.stderr.write(`[workspace] ${message}\n`)
   } catch {
     // best-effort
   }
@@ -591,17 +538,6 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   }, [addRepoDraft, dispatch, props])
 
   useInput((rawInput: string, key: WorkspaceInputKey) => {
-    // Diagnostic: log every keypress with its raw bytes + flags +
-    // current focus + visible repo count. Without this, restart bugs
-    // are guesswork — this gives us a forensic trail.
-    const charCode = rawInput ? rawInput.charCodeAt(0) : -1
-    const flags = Object.entries(key)
-      .filter(([, value]) => value)
-      .map(([name]) => name)
-      .join(',') || '(none)'
-    workspaceDebug(
-      `useInput rawInput="${rawInput}" code=${charCode} flags=${flags} focus=${state.focus} showOnboarding=${state.showOnboarding} showHelp=${state.showHelp}`
-    )
     // First-run onboarding is non-modal — any keypress dismisses it
     // and persists the marker. The keypress still flows through to
     // the normal handler below so the user's first action isn't
@@ -661,20 +597,15 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     }
 
     const intent = resolveWorkspaceInput(rawInput, key, state)
-    workspaceDebug(
-      `resolved intent=${intent.kind}${intent.kind === 'action' ? ` actionType=${intent.action.type}` : ''}`
-    )
     switch (intent.kind) {
       case 'action':
         dispatch(intent.action)
         break
       case 'quit':
-        workspaceDebug('intent=quit → calling exit()')
         props.exitRef.current = { kind: 'quit' }
         exit()
         break
       case 'drill-in':
-        workspaceDebug('intent=drill-in → calling drillIn()')
         drillIn()
         break
       case 'refresh':
