@@ -1,0 +1,336 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Commits *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      3/3 commits | full graph | loaded
+    </Text>
+  </Box>
+  <Text
+    backgroundColor="cyan"
+    inverse={true}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      ◉
+    </Text>
+     
+    <Text
+      bold={true}
+      color="cyan"
+    >
+      aaa1111
+    </Text>
+     
+    <Text
+      dimColor={true}
+    >
+      8d
+       
+    </Text>
+    <Text
+      bold={true}
+    >
+      [main] 
+    </Text>
+    <Text
+      bold={false}
+      color="green"
+    >
+      feat: 
+    </Text>
+    <Text>
+      add something
+    </Text>
+  </Text>
+  <Text
+    dimColor={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      │
+    </Text>
+  </Text>
+  <Text
+    inverse={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      ●
+    </Text>
+     
+    <Text
+      bold={false}
+      color="cyan"
+    >
+      bbb2222
+    </Text>
+     
+    <Text
+      dimColor={true}
+    >
+      8d
+       
+    </Text>
+    <Text
+      bold={false}
+      color="yellow"
+    >
+      fix: 
+    </Text>
+    <Text>
+      resolve regression
+    </Text>
+  </Text>
+  <Text
+    dimColor={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      │
+    </Text>
+  </Text>
+  <Text
+    inverse={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      ●
+    </Text>
+     
+    <Text
+      bold={false}
+      color="cyan"
+    >
+      ccc3333
+    </Text>
+     
+    <Text
+      dimColor={true}
+    >
+      8d
+       
+    </Text>
+    <Text
+      bold={false}
+      color="blue"
+    >
+      docs: 
+    </Text>
+    <Text>
+      update README
+    </Text>
+  </Text>
+  <Text
+    dimColor={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      │
+    </Text>
+  </Text>
+</Box>
+`;
+
+exports[`renderHistoryPanel structural snapshot — empty repo 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Commits *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0/0 commits | full graph | loaded
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+    No commits yet. Make your first commit to populate the history.
+  </Text>
+</Box>
+`;
+
+exports[`renderHistoryPanel structural snapshot — narrow terminal (tight density) 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={60}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Commits *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      3/3 commits | full graph | loaded
+    </Text>
+  </Box>
+  <Text
+    backgroundColor="cyan"
+    inverse={true}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      ◉
+    </Text>
+     
+    <Text
+      bold={true}
+      color="cyan"
+    >
+      aaa1111
+    </Text>
+     
+    <Text
+      bold={true}
+    >
+      [main] 
+    </Text>
+    <Text
+      bold={false}
+      color="green"
+    >
+      feat: 
+    </Text>
+    <Text>
+      add something
+    </Text>
+  </Text>
+  <Text
+    dimColor={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      │
+    </Text>
+  </Text>
+  <Text
+    inverse={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      ●
+    </Text>
+     
+    <Text
+      bold={false}
+      color="cyan"
+    >
+      bbb2222
+    </Text>
+     
+    <Text
+      bold={false}
+      color="yellow"
+    >
+      fix: 
+    </Text>
+    <Text>
+      resolve regression
+    </Text>
+  </Text>
+  <Text
+    dimColor={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      │
+    </Text>
+  </Text>
+  <Text
+    inverse={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      ●
+    </Text>
+     
+    <Text
+      bold={false}
+      color="cyan"
+    >
+      ccc3333
+    </Text>
+     
+    <Text
+      bold={false}
+      color="blue"
+    >
+      docs: 
+    </Text>
+    <Text>
+      update README
+    </Text>
+  </Text>
+  <Text
+    dimColor={false}
+  >
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+      │
+    </Text>
+  </Text>
+</Box>
+`;

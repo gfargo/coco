@@ -43,7 +43,17 @@ export function createLogArgvFromUiArgv(argv: UiArgv): LogArgv {
   } as Arguments<LogOptions>
 }
 
-function createUiTheme(config: Config, argv: UiArgv): LogInkThemeConfig | undefined {
+/**
+ * Resolve which theme to apply for the workstation. CLI `--theme`
+ * overrides the config's preset; otherwise we pass through the
+ * config's `logTui.theme` block (or `undefined` if none is set, to
+ * let the chrome layer pick the default preset).
+ *
+ * Exported for unit testing — the merge/override logic is small but
+ * easy to break (e.g. accidentally overwriting the entire theme
+ * block instead of just the preset).
+ */
+export function createUiTheme(config: Config, argv: UiArgv): LogInkThemeConfig | undefined {
   if (!argv.theme) {
     return config.logTui?.theme
   }

@@ -13,7 +13,11 @@ jobs:
     if: ${{ contains(github.event.*.labels.*.name, 'gpt review') }} # Optional; to run only when a label is attached
     runs-on: ubuntu-latest
     steps:
-      - uses: anc95/ChatGPT-CodeReview@main
+      # Pinned to a specific tag instead of `@main` so an upstream
+      # change to anc95/ChatGPT-CodeReview can't silently break this
+      # workflow or leak unexpected behaviour into PR reviews. Bump
+      # this manually after reviewing the upstream changelog.
+      - uses: anc95/ChatGPT-CodeReview@v1.0.23
         env:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
           OPENAI_API_KEY: '${{ secrets.OPENAI_API_KEY }}'

@@ -1,0 +1,150 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderStatusSurface structural snapshot — clean worktree 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Worktree *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0 staged | 0 unstaged | 0 untracked
+    </Text>
+  </Box>
+  <Text
+    dimColor={false}
+  >
+    Worktree clean. Press gh for history, gb for branches, gz for stash.
+  </Text>
+</Box>
+`;
+
+exports[`renderStatusSurface structural snapshot — loading worktree status 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Worktree *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      status loading
+    </Text>
+  </Box>
+  <Text
+    dimColor={false}
+  >
+    · Loading worktree status…
+  </Text>
+</Box>
+`;
+
+exports[`renderStatusSurface structural snapshot — mixed staged + unstaged + untracked 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Worktree *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1 staged | 1 unstaged | 1 untracked
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    dimColor={false}
+    inverse={false}
+  >
+      ▾ Staged (1)
+  </Text>
+  <Text
+    backgroundColor="cyan"
+    dimColor={false}
+    inverse={true}
+  >
+      &gt; 
+    <Text
+      color="yellow"
+    >
+      ●
+    </Text>
+     
+    M  src/a.ts
+  </Text>
+  <Text
+    bold={true}
+    dimColor={true}
+    inverse={false}
+  >
+      ▾ Unstaged (1)
+  </Text>
+  <Text
+    dimColor={true}
+    inverse={false}
+  >
+        
+    <Text
+      color="red"
+    >
+      ●
+    </Text>
+     
+     M src/b.ts
+  </Text>
+  <Text
+    bold={true}
+    dimColor={true}
+    inverse={false}
+  >
+      ▾ Untracked (1)
+  </Text>
+  <Text
+    dimColor={true}
+    inverse={false}
+  >
+        
+    <Text
+      color="gray"
+    >
+      ●
+    </Text>
+     
+    ?? README.md
+  </Text>
+</Box>
+`;
