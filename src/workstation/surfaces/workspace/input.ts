@@ -100,13 +100,21 @@ export function resolveWorkspaceInput(
     return { kind: 'action', action: { type: 'cancel-delete' } }
   }
 
+  // Escape clears a filter or closes overlays only — it MUST NOT quit
+  // the app. Some terminals deliver arrow keys as separate bytes
+  // (ESC + [ + letter) and Ink may surface the bare ESC as its own
+  // keypress before the rest arrives. Treating that as quit caused
+  // "any navigation key restarts the app" because the loop would
+  // exit cleanly and tsx watch would relaunch the process.
   if (key.escape) {
     if (state.filter) {
       return { kind: 'action', action: { type: 'clear-filter' } }
     }
-    return { kind: 'quit' }
+    return { kind: 'noop' }
   }
 
+  // Quit is bound to `q` (or Ctrl+C, which Ink handles at the render
+  // layer). Same shape as the existing `coco ui` keymap.
   if (input === 'q' && !key.ctrl && !key.meta) {
     return { kind: 'quit' }
   }
