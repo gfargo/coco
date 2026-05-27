@@ -16,6 +16,9 @@
  * just show a footer hint.
  */
 
+import * as nodeFs from 'node:fs'
+import * as nodeOs from 'node:os'
+import * as nodePath from 'node:path'
 import type * as ReactTypes from 'react'
 
 import {
@@ -180,6 +183,8 @@ export function mergeKnownRepos(
 export async function startWorkspace(
   options: WorkspaceStartOptions
 ): Promise<WorkspaceExitResult> {
+  installWorkspaceDebugHandlers()
+  workspaceDebug(`startWorkspace roots=${options.roots.join(',')} hasResume=${Boolean(options.resume)}`)
   const streams = options.streams ?? {}
   const input = streams.input ?? process.stdin
   const output = streams.output ?? process.stdout
@@ -276,19 +281,83 @@ export async function startWorkspace(
 }
 
 /**
- * Tiny diagnostic logger toggled by COCO_DEBUG_WORKSPACE=1. Writes a
- * single line to stderr (preserved across alt-screen exits) so users
- * can share what the workspace runtime saw without us having to ship
- * a debugger build.
+ * Diagnostic ring-buffer (toggled by COCO_DEBUG_WORKSPACE=1).
+ *
+ * Why a ring buffer rather than live file writes:
+ *   - Live file writes during the session can trigger overzealous
+ *     file watchers (we've been bitten by this on /tmp).
+ *   - stderr writes interleave with Ink's alt-screen output and get
+ *     destroyed on screen restore.
+ *
+ * Strategy:
+ *   - Append in-memory only during the session (last 500 events).
+ *   - Flush to ~/.cache/coco/workspace-trace.log ONCE at exit
+ *     (process.on('exit') handler, plus an explicit flush in the
+ *     startWorkspace finally block as a belt-and-suspenders).
+ *
+ * Override the path with COCO_DEBUG_WORKSPACE_PATH.
  */
-function workspaceDebug(message: string): void {
-  if (!process.env.COCO_DEBUG_WORKSPACE) {
-    return
+
+const WORKSPACE_DEBUG_START = Date.now()
+const WORKSPACE_DEBUG_BUFFER: string[] = []
+const WORKSPACE_DEBUG_MAX = 500
+let workspaceDebugInstalled = false
+let workspaceDebugFlushed = false
+
+function workspaceDebugEnabled(): boolean {
+  return Boolean(process.env.COCO_DEBUG_WORKSPACE)
+}
+
+function resolveWorkspaceTracePath(): string {
+  if (process.env.COCO_DEBUG_WORKSPACE_PATH) {
+    return process.env.COCO_DEBUG_WORKSPACE_PATH
   }
+  const xdg = process.env.XDG_CACHE_HOME
+  // Default lives under the cache dir the user already confirmed
+  // their tsx watcher ignores.
+  const cacheRoot = xdg && xdg.trim() ? xdg : nodePath.join(nodeOs.homedir(), '.cache')
+  return nodePath.join(cacheRoot, 'coco', 'workspace-trace.log')
+}
+
+export function flushWorkspaceTrace(): void {
+  if (!workspaceDebugEnabled() || workspaceDebugFlushed) return
+  workspaceDebugFlushed = true
+  if (WORKSPACE_DEBUG_BUFFER.length === 0) return
   try {
-    process.stderr.write(`[workspace] ${message}\n`)
+    const target = resolveWorkspaceTracePath()
+    nodeFs.mkdirSync(nodePath.dirname(target), { recursive: true })
+    nodeFs.writeFileSync(target, WORKSPACE_DEBUG_BUFFER.join('\n') + '\n')
   } catch {
     // best-effort
+  }
+}
+
+function installWorkspaceDebugHandlers(): void {
+  if (workspaceDebugInstalled || !workspaceDebugEnabled()) return
+  workspaceDebugInstalled = true
+  process.on('uncaughtException', (err) => {
+    workspaceDebug(`uncaughtException: ${err instanceof Error ? err.stack || err.message : String(err)}`)
+    flushWorkspaceTrace()
+  })
+  process.on('unhandledRejection', (reason) => {
+    workspaceDebug(`unhandledRejection: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}`)
+    flushWorkspaceTrace()
+  })
+  process.on('exit', (code) => {
+    workspaceDebug(`process.exit code=${code}`)
+    flushWorkspaceTrace()
+  })
+  process.on('SIGINT', () => { workspaceDebug('SIGINT'); flushWorkspaceTrace() })
+  process.on('SIGTERM', () => { workspaceDebug('SIGTERM'); flushWorkspaceTrace() })
+  workspaceDebug(`debug buffer opened pid=${process.pid} cwd=${process.cwd()}`)
+}
+
+export function workspaceDebug(message: string): void {
+  if (!workspaceDebugEnabled()) return
+  const ts = Date.now() - WORKSPACE_DEBUG_START
+  WORKSPACE_DEBUG_BUFFER.push(`[+${String(ts).padStart(6, ' ')}ms] ${message}`)
+  if (WORKSPACE_DEBUG_BUFFER.length > WORKSPACE_DEBUG_MAX) {
+    WORKSPACE_DEBUG_BUFFER.shift()
   }
 }
 
@@ -586,6 +655,18 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     const addRepoDraft = addRepoDraftRef.current
     const addRepoCompletion = addRepoCompletionRef.current
 
+    // Diagnostic: log every key with the raw byte code + key flags +
+    // current focus + onboarding/help state. This is the forensic
+    // trail we need to chase restart bugs.
+    const charCode = rawInput ? rawInput.charCodeAt(0) : -1
+    const flags = Object.entries(key)
+      .filter(([, value]) => value)
+      .map(([name]) => name)
+      .join(',') || '(none)'
+    workspaceDebug(
+      `key raw="${JSON.stringify(rawInput)}" code=${charCode} flags=${flags} focus=${state.focus} showOnboarding=${state.showOnboarding} showHelp=${state.showHelp}`
+    )
+
     // First-run onboarding is non-modal — any keypress dismisses it
     // and persists the marker. The keypress still flows through to
     // the normal handler below so the user's first action isn't
@@ -655,15 +736,20 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     }
 
     const intent = resolveWorkspaceInput(rawInput, key, state)
+    workspaceDebug(
+      `intent=${intent.kind}${intent.kind === 'action' ? ` action=${intent.action.type}` : ''}`
+    )
     switch (intent.kind) {
       case 'action':
         dispatch(intent.action)
         break
       case 'quit':
+        workspaceDebug('→ exit() called from quit intent')
         exitRefHolder.current.current = { kind: 'quit' }
         exitFnRef.current()
         break
       case 'drill-in':
+        workspaceDebug('→ drillIn() called from drill-in intent')
         drillInRef.current()
         break
       case 'refresh':
