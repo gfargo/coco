@@ -254,9 +254,37 @@ export async function startWorkspace(
   try {
     await instance.waitUntilExit()
   } finally {
+    // Belt-and-suspenders: explicit unmount after waitUntilExit
+    // resolves. Ink usually handles this, but on some terminals the
+    // stdin handler outlives the resolution by a tick, which then
+    // races with the next mount in runWorkspaceLoop and surfaces as
+    // a TTY EIO. Calling unmount() here is idempotent.
+    try {
+      instance.unmount()
+    } catch {
+      // ignore — already unmounted
+    }
     lifecycle.dispose()
   }
+  workspaceDebug(`exit: kind=${exitRef.current.kind}`)
   return exitRef.current
+}
+
+/**
+ * Tiny diagnostic logger toggled by COCO_DEBUG_WORKSPACE=1. Writes a
+ * single line to stderr (preserved across alt-screen exits) so users
+ * can share what the workspace runtime saw without us having to ship
+ * a debugger build.
+ */
+function workspaceDebug(message: string): void {
+  if (!process.env.COCO_DEBUG_WORKSPACE) {
+    return
+  }
+  try {
+    process.stderr.write(`[workspace] ${message}\n`)
+  } catch {
+    // best-effort
+  }
 }
 
 function renderWorkspaceSnapshot(
@@ -339,6 +367,13 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     setState((prev) => applyWorkspaceAction(prev, action))
   }, [])
 
+  // Track an unmount flag in a ref so async work scheduled by the
+  // input handler (refresh, drillIn, etc.) can short-circuit when the
+  // user has already quit. Without this, a pending gh call from `r`
+  // could keep the event loop alive after the user hit `q`, making
+  // the process linger and stdin race against the next loop iteration.
+  const unmountedRef = React.useRef(false)
+
   // Background discovery + PR-count refresh on mount.
   React.useEffect(() => {
     let cancelled = false
@@ -346,14 +381,14 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     void (async () => {
       try {
         const overview = await props.loadOverview(props.roots, props.knownRepos)
-        if (cancelled) return
+        if (cancelled || unmountedRef.current) return
         writeCachedWorkspace(props.roots, overview)
         dispatch({ type: 'replace-overview', overview })
         if (props.resume?.selectedRepoPath) {
           dispatch({ type: 'anchor-cursor-by-path', path: props.resume.selectedRepoPath })
         }
         const pr = await props.loadPullRequestCounts(overview.repos)
-        if (cancelled) return
+        if (cancelled || unmountedRef.current) return
         dispatch({
           type: 'replace-pull-request-counts',
           counts: pr.counts,
@@ -366,7 +401,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           })
         }
       } catch (err) {
-        if (cancelled) return
+        if (cancelled || unmountedRef.current) return
         dispatch({ type: 'set-loading', loading: false })
         dispatch({
           type: 'set-status',
@@ -376,6 +411,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     })()
     return () => {
       cancelled = true
+      unmountedRef.current = true
     }
     // Mount-only effect. Refreshes go through the input handler.
   }, [])
@@ -384,16 +420,19 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, props.knownRepos)
+      if (unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       dispatch({ type: 'set-status', status: `Refreshed ${overview.repos.length} repos.` })
       const pr = await props.loadPullRequestCounts(overview.repos)
+      if (unmountedRef.current) return
       dispatch({
         type: 'replace-pull-request-counts',
         counts: pr.counts,
         authenticated: pr.authenticated,
       })
     } catch (err) {
+      if (unmountedRef.current) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
