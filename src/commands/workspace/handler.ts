@@ -68,6 +68,7 @@ export function buildDrillInUiArgv(argv: WorkspaceArgv): UiArgv {
 }
 
 import type { WorkspaceExitResult } from '../../workstation/surfaces/workspace'
+import { workspaceDebug } from '../../workstation/surfaces/workspace/runtime'
 
 export type WorkspaceLoopDeps = {
   startWorkspace: (
@@ -88,16 +89,23 @@ export type WorkspaceLoopDeps = {
  */
 export async function runWorkspaceLoop(deps: WorkspaceLoopDeps): Promise<void> {
   let resume: WorkspaceResumeState | undefined
+  let iteration = 0
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    iteration += 1
+    workspaceDebug(`loop iteration=${iteration} resume=${JSON.stringify(resume)}`)
     const result = await deps.startWorkspace(resume)
+    workspaceDebug(`loop result kind=${result.kind}`)
     if (result.kind === 'quit') {
+      workspaceDebug('loop returning (quit)')
       return
     }
     resume = result.resume
     try {
       deps.chdir(result.repo.path)
+      workspaceDebug(`loop running ui for ${result.repo.path}`)
       await deps.runUiForRepo(result.repo.path)
+      workspaceDebug('loop ui finished')
     } finally {
       deps.chdir(deps.baseCwd)
     }
