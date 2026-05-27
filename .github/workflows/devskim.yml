@@ -27,6 +27,62 @@ jobs:
 
       - name: Run DevSkim scanner
         uses: microsoft/DevSkim-Action@v1
+        with:
+          # Skip globs that produce noise instead of signal:
+          #
+          #   - **/*.test.ts / **/__fixtures__/** / **/__snapshots__/**
+          #     Test fixtures contain fake tokens, localhost URLs,
+          #     setTimeout patterns, and SHA hashes by design. Flagging
+          #     them as security issues drowns the real signal.
+          #
+          #   - schema.json / src/lib/schema.ts
+          #     Generated JSON Schema document with `http://json-schema.org/...`
+          #     `$id` references — those aren't insecure URLs to fetch,
+          #     they're schema identifiers per spec.
+          #
+          #   - **/__tree_sitter__/** (manifest.ts + download.test.ts)
+          #     The "tokens" DevSkim flags here are SHA-256 integrity
+          #     hashes verifying the wasm files we download. That's a
+          #     security feature, not a leaked secret.
+          #
+          #   - dist/, coverage/, .bench/, .wiki/, .www/
+          #     Build outputs and vendored content shouldn't trigger
+          #     scans against the source tree.
+          ignore-globs: >-
+            **/.git/**,**/bin/**,**/node_modules/**,**/dist/**,**/coverage/**,**/.bench/**,**/.wiki/**,**/.www/**,**/.claude/**,**/*.test.ts,**/__fixtures__/**,**/__snapshots__/**,**/__tree_sitter__/**,schema.json,src/lib/schema.ts
+          # Exclude rules that produce only false positives in this
+          # codebase:
+          #
+          #   - DS162092 (DoNotLeaveDebugCodeInProduction): flags any
+          #     `localhost` reference. The doctor command's network
+          #     probe legitimately checks localhost; everything else
+          #     is in test files we already filtered.
+          #
+          #   - DS172411 (ReviewSettimeoutForUntrustedData): flags any
+          #     `setTimeout(...)` regardless of arguments. We use it
+          #     with literal numeric delays for the idle-tip cycle and
+          #     refresh debounce. No untrusted data ever reaches it.
+          #
+          #   - DS176209 (SuspiciousComment): flags TODO/FIXME/HACK in
+          #     comments. We intentionally use TODOs to mark followup
+          #     work — they're a feature, not a vulnerability.
+          #
+          #   - DS126858 (WeakbrokenHashAlgorithm): flags any sha1 use.
+          #     Every sha1 in this codebase is a non-security cache-key
+          #     derivation (overview cache, sidebar persistence, diff
+          #     view-mode marker, github list cache). No PII or auth
+          #     context is hashed and no collision-resistance against
+          #     an adversary is required. Inline `DevSkim: ignore`
+          #     comments are inconsistently honored, so we exclude the
+          #     rule globally. Re-enable if real crypto is introduced.
+          #
+          #   - DS173237 (DoNotStoreTokensOrKeysInSourceCode): all
+          #     surviving instances after the test-file glob filter
+          #     are SHA-256 integrity hashes for verifying tree-sitter
+          #     wasm downloads — a security feature, not a leaked
+          #     secret. The tree-sitter manifest globs catch these
+          #     too; rule exclusion is belt-and-suspenders.
+          exclude-rules: DS126858,DS162092,DS172411,DS173237,DS176209
 
       - name: Upload DevSkim scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
