@@ -68,6 +68,7 @@ export function buildDrillInUiArgv(argv: WorkspaceArgv): UiArgv {
 }
 
 import type { WorkspaceExitResult } from '../../workstation/surfaces/workspace'
+import { flushWorkspaceTrace, workspaceDebug } from '../../workstation/surfaces/workspace/runtime'
 
 export type WorkspaceLoopDeps = {
   startWorkspace: (
@@ -88,16 +89,23 @@ export type WorkspaceLoopDeps = {
  */
 export async function runWorkspaceLoop(deps: WorkspaceLoopDeps): Promise<void> {
   let resume: WorkspaceResumeState | undefined
+  let iteration = 0
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    iteration += 1
+    workspaceDebug(`loop iter=${iteration} resume=${JSON.stringify(resume)}`)
     const result = await deps.startWorkspace(resume)
+    workspaceDebug(`loop result kind=${result.kind}`)
     if (result.kind === 'quit') {
+      workspaceDebug('loop returning (quit)')
       return
     }
     resume = result.resume
     try {
       deps.chdir(result.repo.path)
+      workspaceDebug(`loop running ui for ${result.repo.path}`)
       await deps.runUiForRepo(result.repo.path)
+      workspaceDebug('loop ui finished')
     } finally {
       deps.chdir(deps.baseCwd)
     }
@@ -146,10 +154,7 @@ export const handler: CommandHandler<WorkspaceArgv> = async (argv) => {
   // Force-exit on clean quit. Without this, a still-pending background
   // gh PR-count fetch (or any other child process) keeps the event
   // loop alive after the user hits `q`, and the process lingers until
-  // the gh timeout (5s by default) fires. Users perceive that delay
-  // as the UI being stuck; pressing more keys then races with the
-  // half-torn-down stdin handler and surfaces as a TTY EIO. The
-  // workspace surface doesn't have any side effects worth waiting on
-  // past this point, so process.exit(0) is the right call.
+  // the gh timeout (5s by default) fires.
+  flushWorkspaceTrace()
   process.exit(0)
 }
