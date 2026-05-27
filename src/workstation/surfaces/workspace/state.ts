@@ -56,6 +56,10 @@ export type WorkspaceState = {
    * without the renderer reaching back into the runtime closure.
    */
   roots: ReadonlyArray<string>
+  /** Keymap help overlay toggle. */
+  showHelp: boolean
+  /** First-run onboarding overlay toggle. Self-dismisses on first user action. */
+  showOnboarding: boolean
 }
 
 export type WorkspaceAction =
@@ -73,6 +77,9 @@ export type WorkspaceAction =
   | { type: 'set-cursor'; index: number }
   | { type: 'set-loading'; loading: boolean }
   | { type: 'set-status'; status?: string }
+  | { type: 'toggle-help' }
+  | { type: 'close-help' }
+  | { type: 'dismiss-onboarding' }
 
 export type WorkspaceStateInit = {
   overview: WorkspaceOverview
@@ -88,6 +95,8 @@ export type WorkspaceStateInit = {
    * cursor lands back on the repo the user just exited.
    */
   selectedRepoPath?: string
+  /** Render the first-run onboarding overlay. */
+  showOnboarding?: boolean
 }
 
 export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
@@ -101,6 +110,8 @@ export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
     selectedIndex: 0,
     loading: Boolean(init.loading),
     roots: init.roots,
+    showHelp: false,
+    showOnboarding: Boolean(init.showOnboarding),
   }
   if (!init.selectedRepoPath) {
     return base
@@ -223,6 +234,15 @@ export function applyWorkspaceAction(
     }
     case 'set-status': {
       return { ...state, status: action.status }
+    }
+    case 'toggle-help': {
+      return { ...state, showHelp: !state.showHelp, showOnboarding: false }
+    }
+    case 'close-help': {
+      return { ...state, showHelp: false }
+    }
+    case 'dismiss-onboarding': {
+      return { ...state, showOnboarding: false }
     }
     default:
       return state

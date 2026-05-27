@@ -179,3 +179,55 @@ export function describeSortModesForLegend(): Record<WorkspaceSortMode, string> 
     dirty: 'Most working-tree changes first',
   }
 }
+
+export type WorkspaceHelpRow = {
+  keys: string
+  description: string
+}
+
+/**
+ * Keymap legend rendered by the help overlay (`?`). Sectionless flat
+ * list so the overlay stays short — every binding fits in one screen
+ * even on a 24-row terminal.
+ */
+export function buildWorkspaceHelpRows(): WorkspaceHelpRow[] {
+  return [
+    { keys: 'j / ↓', description: 'Move cursor down' },
+    { keys: 'k / ↑', description: 'Move cursor up' },
+    { keys: 'g / G', description: 'Jump to top / bottom' },
+    { keys: 'enter', description: 'Drill into the cursored repo (coco ui)' },
+    { keys: 'tab / shift-tab', description: 'Cycle sidebar tab forward / backward' },
+    { keys: 'h / l', description: 'Cycle sidebar tab (Vim-style)' },
+    { keys: 's', description: 'Cycle sort mode (recency → name → dirty)' },
+    { keys: '/', description: 'Filter the list by name or branch' },
+    { keys: 'r', description: 'Refresh discovery' },
+    { keys: 'a', description: 'Add a repo via path prompt (tab-completes)' },
+    { keys: '?', description: 'Toggle this help overlay' },
+    { keys: 'esc', description: 'Clear filter or close overlay' },
+    { keys: 'q', description: 'Quit the workspace surface' },
+  ]
+}
+
+export type WorkspaceOnboardingModel = {
+  show: boolean
+  /** Short hint shown on first run when discovery returns no repos. */
+  emptyHint?: string
+  /** Short hint shown on first run when discovery returned repos. */
+  populatedHint?: string
+}
+
+export function buildWorkspaceOnboarding(state: WorkspaceState): WorkspaceOnboardingModel {
+  if (!state.showOnboarding) {
+    return { show: false }
+  }
+  const empty = state.overview.repos.length === 0
+  return {
+    show: true,
+    emptyHint: empty
+      ? 'No repos found. Press `a` to add one by path, or set workspace.roots in your config.'
+      : undefined,
+    populatedHint: empty
+      ? undefined
+      : 'Press `enter` to open a repo · `?` for the full keymap · `a` to add a repo by path.',
+  }
+}

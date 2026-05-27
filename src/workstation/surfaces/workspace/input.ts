@@ -61,6 +61,16 @@ export function resolveWorkspaceInput(
   key: WorkspaceInputKey,
   state: WorkspaceState
 ): WorkspaceInputIntent {
+  // Help overlay is modal — Esc / `?` close it, every other key is
+  // dropped so the underlying state doesn't move while the user is
+  // reading the keymap.
+  if (state.showHelp) {
+    if (key.escape || input === '?' || input === 'q') {
+      return { kind: 'action', action: { type: 'close-help' } }
+    }
+    return { kind: 'noop' }
+  }
+
   if (state.focus === 'filter') {
     if (key.escape) {
       return { kind: 'action', action: { type: 'clear-filter' } }
@@ -138,6 +148,9 @@ export function resolveWorkspaceInput(
   }
   if (input === 'a') {
     return { kind: 'add-repo' }
+  }
+  if (input === '?') {
+    return { kind: 'action', action: { type: 'toggle-help' } }
   }
 
   return { kind: 'noop' }

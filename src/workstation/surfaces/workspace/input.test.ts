@@ -111,6 +111,31 @@ describe('resolveWorkspaceInput', () => {
     expect(resolveWorkspaceInput('a', key(), filterState()).kind).toBe('noop')
   })
 
+  it('routes ? to toggle-help while focused on the list', () => {
+    expect(resolveWorkspaceInput('?', key(), listState())).toEqual({
+      kind: 'action',
+      action: { type: 'toggle-help' },
+    })
+  })
+
+  it('drops every keystroke while the help overlay is up except esc/?/q', () => {
+    const state = { ...listState(), showHelp: true }
+    expect(resolveWorkspaceInput('j', key(), state).kind).toBe('noop')
+    expect(resolveWorkspaceInput('', key({ return: true }), state).kind).toBe('noop')
+    expect(resolveWorkspaceInput('', key({ escape: true }), state)).toEqual({
+      kind: 'action',
+      action: { type: 'close-help' },
+    })
+    expect(resolveWorkspaceInput('?', key(), state)).toEqual({
+      kind: 'action',
+      action: { type: 'close-help' },
+    })
+    expect(resolveWorkspaceInput('q', key(), state)).toEqual({
+      kind: 'action',
+      action: { type: 'close-help' },
+    })
+  })
+
   it('routes escape out of the add-repo prompt and lets the runtime own other keys', () => {
     expect(resolveWorkspaceInput('', key({ escape: true }), addRepoState())).toEqual({
       kind: 'action',

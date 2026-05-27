@@ -61,6 +61,10 @@ import {
   appendKnownRepo,
   readKnownRepos,
 } from '../../chrome/workspaceKnownRepos'
+import {
+  hasSeenWorkspaceOnboarding,
+  markWorkspaceOnboardingSeen,
+} from '../../chrome/workspaceOnboarding'
 import { isGitWorkingTree } from '../../../git/workspaceData'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
@@ -306,6 +310,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       tab: props.resume?.tab,
       filter: props.resume?.filter,
       selectedRepoPath: props.resume?.selectedRepoPath,
+      showOnboarding: !hasSeenWorkspaceOnboarding(),
     })
   )
 
@@ -438,6 +443,14 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   }, [addRepoDraft, dispatch, props])
 
   useInput((rawInput: string, key: WorkspaceInputKey) => {
+    // First-run onboarding is non-modal — any keypress dismisses it
+    // and persists the marker. The keypress still flows through to
+    // the normal handler below so the user's first action isn't
+    // wasted.
+    if (state.showOnboarding) {
+      markWorkspaceOnboardingSeen()
+      dispatch({ type: 'dismiss-onboarding' })
+    }
     if (state.focus === 'filter') {
       if (key.escape) {
         setFilterDraft('')
