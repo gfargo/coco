@@ -52,20 +52,58 @@ export type LogInkCommandId =
   | 'search'
   | 'toggleDiffViewMode'
   | 'toggleGraph'
-  | 'workflowActions'
+  | 'workflowDeleteBranch'
+  | 'workflowDeleteTag'
+  | 'workflowDropStash'
+  | 'workflowRemoveWorktree'
+  | 'workflowAbortOperation'
+  | 'workflowAiCommitSummary'
+  | 'workflowAiConflictHelp'
+  | 'viewCherryPick'
+  | 'viewRevert'
+  | 'viewReset'
+  | 'viewInteractiveRebase'
+  | 'viewCreateBranchHere'
+  | 'viewCreateTagHere'
+  | 'viewChangelog'
   | 'yankClipboard'
+
+export type LogInkBindingCategory =
+  | 'essentials'
+  | 'navigation'
+  | 'movement'
+  | 'view'
+  | 'edit'
+  | 'mutate'
+  | 'history-actions'
 
 export type LogInkKeyBinding = {
   id: LogInkCommandId
   keys: string[]
   label: string
   description: string
-  contexts: Array<'normal' | 'search' | LogInkFocus>
+  contexts: Array<'normal' | 'search' | LogInkFocus | LogInkView>
+}
+
+export type LogInkHelpSubgroup = {
+  category: LogInkBindingCategory
+  /** Display label for the subgroup heading (e.g. "Essentials"). */
+  title: string
+  bindings: LogInkKeyBinding[]
 }
 
 export type LogInkHelpSection = {
   title: string
   bindings: LogInkKeyBinding[]
+  /**
+   * Bindings grouped by category, ordered by how commonly users reach
+   * for each group. The legacy `bindings` field stays in place for
+   * back-compat — renderers that don't care about subgroups can keep
+   * iterating it. Subgroup ordering is fixed by the help section
+   * builder so the same section in the same view always renders in
+   * the same order.
+   */
+  subgroups: LogInkHelpSubgroup[]
 }
 
 export type LogInkCommandPaletteItem = {
@@ -368,7 +406,7 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['c'],
     label: 'commit',
     description: 'Create a commit from staged changes with the current draft.',
-    contexts: ['commits'],
+    contexts: ['status', 'diff', 'compose'],
   },
   {
     id: 'cycleSort',
@@ -399,11 +437,108 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
-    id: 'workflowActions',
-    keys: ['D', 'T', 'X', 'W', 'A', 'I', 'M'],
-    label: 'workflows',
-    description: 'Open workflow actions with confirmation for destructive or AI operations.',
+    id: 'workflowDeleteBranch',
+    keys: ['D'],
+    label: 'delete branch',
+    description: 'Delete the selected branch after confirmation.',
     contexts: ['normal', 'sidebar', 'detail'],
+  },
+  {
+    id: 'workflowDeleteTag',
+    keys: ['T'],
+    label: 'delete tag',
+    description: 'Delete the selected tag after confirmation.',
+    contexts: ['normal', 'sidebar', 'detail'],
+  },
+  {
+    id: 'workflowDropStash',
+    keys: ['X'],
+    label: 'drop stash',
+    description: 'Drop the selected stash after confirmation.',
+    contexts: ['normal', 'sidebar', 'detail'],
+  },
+  {
+    id: 'workflowRemoveWorktree',
+    keys: ['W'],
+    label: 'remove worktree',
+    description: 'Remove the selected linked worktree after confirmation.',
+    contexts: ['normal', 'sidebar', 'detail'],
+  },
+  {
+    id: 'workflowAbortOperation',
+    keys: ['A'],
+    label: 'abort operation',
+    description: 'Abort the in-progress Git operation after confirmation.',
+    contexts: ['normal', 'sidebar', 'detail'],
+  },
+  {
+    id: 'workflowAiCommitSummary',
+    keys: ['I'],
+    label: 'AI commit summary',
+    description: 'Summarize the selected commit with AI (token/cost awareness).',
+    contexts: ['normal', 'sidebar', 'detail'],
+  },
+  {
+    id: 'workflowAiConflictHelp',
+    keys: ['M'],
+    label: 'AI conflict help',
+    description: 'Explain conflicted files and suggest resolution steps with AI.',
+    contexts: ['normal', 'sidebar', 'detail'],
+  },
+  // ── History-view-only mutating bindings ───────────────────────────
+  // These keys are dispatched contextually in inkInput.ts when the
+  // user is on the history view. Documented as proper bindings here
+  // so they show up in the "This view (history)" help section. The
+  // descriptions match the workflow registry entries that actually
+  // execute when the keys fire.
+  {
+    id: 'viewCherryPick',
+    keys: ['c'],
+    label: 'cherry-pick',
+    description: 'Cherry-pick the cursored commit onto the current branch.',
+    contexts: ['history'],
+  },
+  {
+    id: 'viewRevert',
+    keys: ['R'],
+    label: 'revert commit',
+    description: 'Revert the cursored commit (adds an inverse commit on HEAD).',
+    contexts: ['history'],
+  },
+  {
+    id: 'viewReset',
+    keys: ['Z'],
+    label: 'reset to commit',
+    description: 'Move the branch tip to the cursored commit (prompts for soft/mixed/hard).',
+    contexts: ['history'],
+  },
+  {
+    id: 'viewInteractiveRebase',
+    keys: ['i'],
+    label: 'interactive rebase',
+    description: 'Start an interactive rebase from the cursored commit.',
+    contexts: ['history'],
+  },
+  {
+    id: 'viewCreateBranchHere',
+    keys: ['B'],
+    label: 'create branch here',
+    description: 'Create a branch at the cursored commit (does not switch).',
+    contexts: ['history'],
+  },
+  {
+    id: 'viewCreateTagHere',
+    keys: ['gT'],
+    label: 'create tag here',
+    description: 'Create a lightweight tag at the cursored commit.',
+    contexts: ['history'],
+  },
+  {
+    id: 'viewChangelog',
+    keys: ['L'],
+    label: 'changelog',
+    description: 'Generate a changelog from the current view context.',
+    contexts: ['history', 'branches'],
   },
   {
     id: 'quit',
@@ -508,7 +643,13 @@ export type LogInkFooterHints = {
 const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'help',
   'commandPalette',
-  'workflowActions',
+  'workflowDeleteBranch',
+  'workflowDeleteTag',
+  'workflowDropStash',
+  'workflowRemoveWorktree',
+  'workflowAbortOperation',
+  'workflowAiCommitSummary',
+  'workflowAiConflictHelp',
   'focusNext',
   'focusPrevious',
   'refresh',
@@ -531,6 +672,163 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
 ]
 
 const NORMAL_GLOBAL_HINTS = ['g jump', '< back', '? help', ': cmds', 'q quit']
+
+/**
+ * Per-binding category mapping. Used to subdivide the help overlay's
+ * Global and view sections into named clusters so users don't face a
+ * 30-row wall of keys with no visual structure.
+ *
+ * Bindings without an explicit entry default to `'movement'` (for
+ * commit-list / sidebar movement) or `'navigation'` (for globals).
+ * The categorization is intentionally coarse — too many groups
+ * fragments the help and forces users to remember a category
+ * taxonomy on top of the bindings themselves.
+ */
+const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCategory>> = {
+  // ── Essentials: most-used keys, surfaced first so newcomers see
+  //    them above everything else.
+  help: 'essentials',
+  commandPalette: 'essentials',
+  quit: 'essentials',
+  refresh: 'essentials',
+  navigateBack: 'essentials',
+  // ── Navigation: focus + view jumps. The g-prefix navigation chords
+  //    cluster here so users learn them as a set.
+  focusNext: 'navigation',
+  focusPrevious: 'navigation',
+  navigateHome: 'navigation',
+  navigateStatus: 'navigation',
+  navigateDiff: 'navigation',
+  navigateCompose: 'navigation',
+  navigateBranches: 'navigation',
+  navigateTags: 'navigation',
+  navigateStash: 'navigation',
+  navigateWorktrees: 'navigation',
+  navigatePullRequest: 'navigation',
+  navigatePullRequestTriage: 'navigation',
+  navigateIssues: 'navigation',
+  navigateConflicts: 'navigation',
+  navigateReflog: 'navigation',
+  navigateBisect: 'navigation',
+  navigateSubmodules: 'navigation',
+  // ── Movement: cursor movement + search navigation within a view.
+  moveUp: 'movement',
+  moveDown: 'movement',
+  pageUp: 'movement',
+  pageDown: 'movement',
+  moveToTop: 'movement',
+  moveToBottom: 'movement',
+  nextMatch: 'movement',
+  previousMatch: 'movement',
+  nextHunk: 'movement',
+  previousHunk: 'movement',
+  nextSidebarTab: 'movement',
+  previousSidebarTab: 'movement',
+  // ── View: visual toggles + search/filter that change what's shown
+  //    without mutating the repo.
+  search: 'view',
+  clearSearch: 'view',
+  toggleGraph: 'view',
+  toggleDiffViewMode: 'view',
+  markForCompare: 'view',
+  openSelected: 'view',
+  cycleSort: 'view',
+  yankClipboard: 'view',
+  // ── Edit: compose-surface authoring keys.
+  commit: 'edit',
+  editCommit: 'edit',
+  editCommitExternal: 'edit',
+  commitSplit: 'edit',
+  revertSelection: 'edit',
+  // ── Mutate: destructive / AI workflows that fire from anywhere
+  //    (hence the global confirmation gating).
+  workflowDeleteBranch: 'mutate',
+  workflowDeleteTag: 'mutate',
+  workflowDropStash: 'mutate',
+  workflowRemoveWorktree: 'mutate',
+  workflowAbortOperation: 'mutate',
+  workflowAiCommitSummary: 'mutate',
+  workflowAiConflictHelp: 'mutate',
+  // ── History actions: per-view-only mutations scoped to the history
+  //    surface. Distinct from the global mutate cluster so users see
+  //    them grouped under their actual context.
+  viewCherryPick: 'history-actions',
+  viewRevert: 'history-actions',
+  viewReset: 'history-actions',
+  viewInteractiveRebase: 'history-actions',
+  viewCreateBranchHere: 'history-actions',
+  viewCreateTagHere: 'history-actions',
+  viewChangelog: 'history-actions',
+}
+
+/**
+ * Display order + display title for each category in help sections.
+ * The order is "what users reach for most often, first" — essentials
+ * before everything, mutations last because they're confirmation-gated
+ * power moves rather than everyday operations.
+ */
+const CATEGORY_ORDER: LogInkBindingCategory[] = [
+  'essentials',
+  'navigation',
+  'movement',
+  'view',
+  'edit',
+  'history-actions',
+  'mutate',
+]
+
+const CATEGORY_TITLES: Record<LogInkBindingCategory, string> = {
+  essentials: 'Essentials',
+  navigation: 'Navigate',
+  movement: 'Move',
+  view: 'View & search',
+  edit: 'Edit & compose',
+  'history-actions': 'History actions',
+  mutate: 'Workflows (confirm)',
+}
+
+function categorizeBinding(
+  binding: LogInkKeyBinding,
+  isGlobal: boolean
+): LogInkBindingCategory {
+  const explicit = BINDING_CATEGORY_BY_ID[binding.id]
+  if (explicit) return explicit
+  // Sensible defaults for any binding that hasn't been categorized
+  // yet — globals fall into navigation, view-scoped fall into
+  // movement. New bindings stay reachable in the help without
+  // requiring a category entry up front.
+  return isGlobal ? 'navigation' : 'movement'
+}
+
+function buildSubgroups(
+  bindings: LogInkKeyBinding[],
+  isGlobal: boolean
+): LogInkHelpSubgroup[] {
+  const buckets = new Map<LogInkBindingCategory, LogInkKeyBinding[]>()
+  for (const binding of bindings) {
+    const category = categorizeBinding(binding, isGlobal)
+    const bucket = buckets.get(category)
+    if (bucket) {
+      bucket.push(binding)
+    } else {
+      buckets.set(category, [binding])
+    }
+  }
+
+  const subgroups: LogInkHelpSubgroup[] = []
+  for (const category of CATEGORY_ORDER) {
+    const bucketBindings = buckets.get(category)
+    if (bucketBindings && bucketBindings.length > 0) {
+      subgroups.push({
+        category,
+        title: CATEGORY_TITLES[category],
+        bindings: bucketBindings,
+      })
+    }
+  }
+
+  return subgroups
+}
 
 export function formatBindingKeys(binding: LogInkKeyBinding): string {
   return binding.keys.join('/')
@@ -929,6 +1227,10 @@ function bindingMatchesViewContext(
     return true
   }
 
+  if (binding.contexts.includes(options.activeView)) {
+    return true
+  }
+
   if (binding.contexts.includes('normal')) {
     return true
   }
@@ -958,8 +1260,16 @@ export function getLogInkHelpSections(
   )
 
   return [
-    { title: 'Global', bindings: globals },
-    { title: `This view (${options.activeView})`, bindings: viewBindings },
+    {
+      title: 'Global',
+      bindings: globals,
+      subgroups: buildSubgroups(globals, true),
+    },
+    {
+      title: `This view (${options.activeView})`,
+      bindings: viewBindings,
+      subgroups: buildSubgroups(viewBindings, false),
+    },
   ]
 }
 

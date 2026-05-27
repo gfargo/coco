@@ -21,11 +21,11 @@ import { pickSpinnerFrame } from '../chrome/spinner'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import {
-  filterLogInkPaletteCommands,
-  formatBindingKeys,
-  getLogInkChordContinuations,
-  getLogInkHelpSections,
-  getLogInkPaletteCommands,
+    filterLogInkPaletteCommands,
+    formatBindingKeys,
+    getLogInkChordContinuations,
+    getLogInkHelpSections,
+    getLogInkPaletteCommands,
 } from '../../commands/log/inkKeymap'
 import type { LogInkState } from '../../commands/log/inkViewModel'
 import { getLogInkWorkflowActionById } from '../../commands/log/inkWorkflows'
@@ -232,7 +232,8 @@ export function renderHelpPanel(
   state: LogInkState,
   width: number,
   theme: LogInkTheme,
-  focused: boolean
+  focused: boolean,
+  bodyRows: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
 
@@ -248,19 +249,39 @@ export function renderHelpPanel(
   for (const section of sections) {
     body.push(h(Text, { key: `${section.title}-spacer` }, ''))
     body.push(h(Text, { bold: true, key: section.title }, section.title))
-    section.bindings.forEach((binding) => {
-      body.push(h(Text, { key: `${section.title}:${binding.id}` },
-        truncateCells(`${formatBindingKeys(binding).padEnd(14)} ${binding.description}`, width - 4)
-      ))
+    section.subgroups.forEach((subgroup, subgroupIndex) => {
+      // Dim subgroup heading; first subgroup follows the section
+      // title directly so we skip the leading spacer to keep the
+      // visual hierarchy tight (section title → subgroup → bindings).
+      if (subgroupIndex > 0) {
+        body.push(h(Text, { key: `${section.title}:${subgroup.category}:spacer` }, ''))
+      }
+      body.push(h(Text, {
+        dimColor: true,
+        key: `${section.title}:${subgroup.category}`,
+      }, `  ${subgroup.title}`))
+      subgroup.bindings.forEach((binding) => {
+        body.push(h(Text, { key: `${section.title}:${subgroup.category}:${binding.id}` },
+          truncateCells(`  ${formatBindingKeys(binding).padEnd(12)} ${binding.description}`, width - 4)
+        ))
+      })
     })
   }
+
+  // Reserve rows for: title (1), border (2), padding (0). The "more
+  // above" / "more below" hints take 1 row each when present and are
+  // accounted for inside the window calculation below. When no
+  // bodyRows is provided, fall back to rendering everything (legacy
+  // path; tests pass undefined).
+  const titleAndChromeRows = 3
+  const visibleRows = bodyRows > 0
+    ? Math.max(4, bodyRows - titleAndChromeRows)
+    : body.length
 
   // Clamp the offset against actual content length. The reducer
   // only floor-clamps at 0; here we ceiling-clamp so j past EOF
   // sticks at the last row rather than scrolling into emptiness.
-  // Reserve one row at the bottom so the user can always see the
-  // tail of the last section.
-  const maxOffset = Math.max(0, body.length - 1)
+  const maxOffset = Math.max(0, body.length - visibleRows)
   const offset = Math.min(state.helpScrollOffset, maxOffset)
 
   const children: ReactTypes.ReactNode[] = [
@@ -271,10 +292,21 @@ export function renderHelpPanel(
   // matches the rest of the chrome's "metadata" voice and avoids
   // stealing attention from the bindings themselves.
   if (offset > 0) {
-    children.push(h(Text, { key: 'more-above', dimColor: true }, '↑ more above'))
+    children.push(h(Text, { key: 'more-above', dimColor: true }, '↑ more above (j/k or ↑/↓ to scroll)'))
   }
 
-  children.push(...body.slice(offset))
+  // Reserve a row each for the visible "more above" / "more below"
+  // hints so they don't push body content off-screen.
+  let windowSize = visibleRows
+  if (offset > 0) windowSize -= 1
+  const hasMoreBelow = offset + windowSize < body.length
+  if (hasMoreBelow) windowSize -= 1
+
+  children.push(...body.slice(offset, offset + windowSize))
+
+  if (hasMoreBelow) {
+    children.push(h(Text, { key: 'more-below', dimColor: true }, '↓ more below (j/k or ↑/↓ to scroll)'))
+  }
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),

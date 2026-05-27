@@ -358,7 +358,10 @@ describe('log Ink keymap', () => {
     expect(helpText).toContain('z Ask to revert the selected file or hunk.')
     expect(helpText).toContain('e Edit the manual commit summary or body inline.')
     expect(helpText).toContain('E Open the current commit draft in $EDITOR (or $VISUAL) for full editing, write-back on save.')
-    expect(helpText).toContain('c Create a commit from staged changes with the current draft.')
+    // On history view, `c` is cherry-pick (the `c commit` binding is
+    // scoped to status/diff/compose where it actually fires).
+    expect(helpText).toContain('c Cherry-pick the cursored commit onto the current branch.')
+    expect(helpText).toContain('B Create a branch at the cursored commit (does not switch).')
     expect(helpText).toContain('q/ctrl+c Quit the interactive log.')
     expect(helpText).toContain('tab Move focus to the next panel.')
   })
@@ -523,8 +526,11 @@ describe('log Ink keymap', () => {
       keys: ':',
       label: 'commands',
     })
-    expect(palette.find((item) => item.id === 'workflowActions')).toMatchObject({
-      label: 'workflows',
+    expect(palette.find((item) => item.id === 'workflowDeleteBranch')).toMatchObject({
+      label: 'delete branch',
+    })
+    expect(palette.find((item) => item.id === 'workflowAiCommitSummary')).toMatchObject({
+      label: 'AI commit summary',
     })
   })
 
