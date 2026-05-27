@@ -1,6 +1,7 @@
 import { WorkspaceOverview, WorkspaceRepoSummary } from '../../../git/workspaceData'
 
 import {
+  assignWorkspaceColumnWidths,
   buildWorkspaceFooter,
   buildWorkspaceHeader,
   buildWorkspaceHelpRows,
@@ -140,6 +141,57 @@ describe('workspace render builders', () => {
     for (const expected of ['j', 'k', 'g', 'G', 's', '/', 'r', 'a', 'd', '?', 'q', 'enter', 'tab', 'esc']) {
       expect(allKeys).toContain(expected)
     }
+  })
+
+  describe('assignWorkspaceColumnWidths', () => {
+    it('drops the path column when it cannot fit the row budget', () => {
+      // All five minimums total 66 cells once gaps + cursor are
+      // included; budgets in [49, 68) drop path but keep date.
+      const widths = assignWorkspaceColumnWidths(58)
+      expect(widths.name).toBeDefined()
+      expect(widths.branch).toBeDefined()
+      expect(widths.status).toBeDefined()
+      expect(widths.date).toBeDefined()
+      expect(widths.path).toBeUndefined()
+    })
+
+    it('drops both path and date when very narrow', () => {
+      // Below ~49 cells, date also drops; status is the last
+      // non-essential to go before we're down to name + branch.
+      const widths = assignWorkspaceColumnWidths(42)
+      expect(widths.name).toBeDefined()
+      expect(widths.branch).toBeDefined()
+      expect(widths.status).toBeDefined()
+      expect(widths.date).toBeUndefined()
+      expect(widths.path).toBeUndefined()
+    })
+
+    it('keeps every column at standard width', () => {
+      const widths = assignWorkspaceColumnWidths(120)
+      expect(widths.name).toBeGreaterThanOrEqual(14)
+      expect(widths.branch).toBeGreaterThanOrEqual(12)
+      expect(widths.status).toBeGreaterThanOrEqual(8)
+      expect(widths.date).toBe(10)
+      expect(widths.path).toBeGreaterThanOrEqual(18)
+    })
+
+    it('respects per-column max caps when widening', () => {
+      const widths = assignWorkspaceColumnWidths(400)
+      expect(widths.name).toBeLessThanOrEqual(36)
+      expect(widths.branch).toBeLessThanOrEqual(28)
+      expect(widths.status).toBeLessThanOrEqual(16)
+      expect(widths.date).toBe(10)
+    })
+
+    it('returns the empty map when no column can fit', () => {
+      expect(assignWorkspaceColumnWidths(0)).toEqual({})
+    })
+
+    it('builds list rows with only the surviving columns at narrow widths', () => {
+      const rows = buildWorkspaceListRows(state, { width: 50 })
+      // Path drops below ~68 cells; expect <=4 columns per row.
+      expect(rows[0].columns.length).toBeLessThanOrEqual(4)
+    })
   })
 
   it('footer hint flips to the confirm-delete copy when pending', () => {
