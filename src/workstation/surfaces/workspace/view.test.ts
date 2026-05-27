@@ -216,6 +216,18 @@ describe('renderWorkspaceApp', () => {
     expect(tree).toMatchSnapshot()
   })
 
+  it('snapshots the keymap help overlay when toggled on', () => {
+    const state = applyWorkspaceAction(baseState(), { type: 'toggle-help' })
+    const tree = render(state)
+    expect(tree).toMatchSnapshot()
+  })
+
+  it('snapshots the first-run onboarding banner', () => {
+    const state = { ...baseState(), showOnboarding: true }
+    const tree = render(state)
+    expect(tree).toMatchSnapshot()
+  })
+
   it('shifts borderColor between focus modes', () => {
     const list = render(baseState())
     const filter = render(applyWorkspaceAction(baseState(), { type: 'set-focus', focus: 'filter' }))

@@ -2473,6 +2473,546 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
 </Box>
 `;
 
+exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
+<Box
+  flexDirection="column"
+>
+  <Box
+    borderColor="cyan"
+    borderStyle="classic"
+    justifyContent="space-between"
+    paddingX={1}
+  >
+    <Text
+      bold={true}
+    >
+      coco workspace  roots: ~/code
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      3/3 repos  ·  sort: Recent
+    </Text>
+  </Box>
+  <Box
+    flexDirection="row"
+  >
+    <Box
+      borderColor="cyan"
+      borderStyle="classic"
+      flexDirection="column"
+      flexShrink={0}
+      paddingX={1}
+      width={18}
+    >
+      <Text
+        bold={true}
+      >
+        Tabs *
+      </Text>
+      <Text
+        bold={true}
+      >
+        › All
+      </Text>
+      <Text>
+          Dirty
+      </Text>
+      <Text>
+          Behind
+      </Text>
+      <Text>
+          PRs
+      </Text>
+    </Box>
+    <Box
+      borderColor="cyan"
+      borderStyle="classic"
+      flexDirection="column"
+      flexGrow={1}
+      paddingX={1}
+    >
+      <Box
+        justifyContent="space-between"
+      >
+        <Text
+          bold={true}
+        >
+          Workspace *
+        </Text>
+        <Text
+          dimColor={true}
+        >
+          3 visible
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text
+          bold={true}
+        >
+          › 
+        </Text>
+        <Box
+          flexDirection="row"
+          flexShrink={1}
+          flexWrap="wrap"
+        >
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={true}
+              dimColor={false}
+            >
+              coco
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              dimColor={false}
+            >
+              main
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              color="yellow"
+              dimColor={false}
+            >
+              ●2 ↑1
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              color="gray"
+              dimColor={false}
+            >
+              2026-05-01
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              color="gray"
+              dimColor={false}
+            >
+              /tmp/coco
+            </Text>
+          </Box>
+        </Box>
+        <Box
+          flexShrink={0}
+        >
+          <Text
+            dimColor={true}
+          />
+        </Box>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text
+          bold={false}
+        >
+            
+        </Text>
+        <Box
+          flexDirection="row"
+          flexShrink={1}
+          flexWrap="wrap"
+        >
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              docs
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              feature/landing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="yellow"
+              dimColor={false}
+            >
+              ↓3
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              /tmp/docs
+            </Text>
+          </Box>
+        </Box>
+        <Box
+          flexShrink={0}
+        >
+          <Text
+            dimColor={true}
+          />
+        </Box>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text
+          bold={false}
+        >
+            
+        </Text>
+        <Box
+          flexDirection="row"
+          flexShrink={1}
+          flexWrap="wrap"
+        >
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              lib
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              main
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              /tmp/lib
+            </Text>
+          </Box>
+        </Box>
+        <Box
+          flexShrink={0}
+        >
+          <Text
+            dimColor={true}
+          />
+        </Box>
+      </Box>
+    </Box>
+  </Box>
+  <Box
+    borderColor="cyan"
+    borderStyle="classic"
+    flexDirection="column"
+    paddingX={1}
+  >
+    <Text
+      bold={true}
+    >
+      Welcome to \`coco workspace\`
+    </Text>
+    <Text>
+      Press \`enter\` to open a repo · \`?\` for the full keymap · \`a\` to add a repo by path.
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      Any keypress dismisses this banner.
+    </Text>
+  </Box>
+  <Box
+    borderColor="gray"
+    borderStyle="classic"
+    flexDirection="column"
+    paddingX={1}
+  >
+    <Text
+      dimColor={true}
+    >
+      j/k move · enter open · tab tab · s sort · / filter · r refresh · a add · q quit
+    </Text>
+  </Box>
+</Box>
+`;
+
+exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`] = `
+<Box
+  flexDirection="column"
+>
+  <Box
+    borderColor="cyan"
+    borderStyle="classic"
+    justifyContent="space-between"
+    paddingX={1}
+  >
+    <Text
+      bold={true}
+    >
+      coco workspace  roots: ~/code
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      3/3 repos  ·  sort: Recent
+    </Text>
+  </Box>
+  <Box
+    borderColor="cyan"
+    borderStyle="classic"
+    flexDirection="column"
+    paddingX={1}
+  >
+    <Text
+      bold={true}
+    >
+      Workspace keymap
+    </Text>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        j / ↓            
+      </Text>
+      <Text>
+        Move cursor down
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        k / ↑            
+      </Text>
+      <Text>
+        Move cursor up
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        g / G            
+      </Text>
+      <Text>
+        Jump to top / bottom
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        enter            
+      </Text>
+      <Text>
+        Drill into the cursored repo (coco ui)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        tab / shift-tab  
+      </Text>
+      <Text>
+        Cycle sidebar tab forward / backward
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        h / l            
+      </Text>
+      <Text>
+        Cycle sidebar tab (Vim-style)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        s                
+      </Text>
+      <Text>
+        Cycle sort mode (recency → name → dirty)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        /                
+      </Text>
+      <Text>
+        Filter the list by name or branch
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        r                
+      </Text>
+      <Text>
+        Refresh discovery
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        a                
+      </Text>
+      <Text>
+        Add a repo via path prompt (tab-completes)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        ?                
+      </Text>
+      <Text>
+        Toggle this help overlay
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        esc              
+      </Text>
+      <Text>
+        Clear filter or close overlay
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        q                
+      </Text>
+      <Text>
+        Quit the workspace surface
+      </Text>
+    </Box>
+    <Text
+      dimColor={true}
+    >
+      esc / ? / q close · auto-refresh disabled while help is open
+    </Text>
+  </Box>
+  <Box
+    borderColor="gray"
+    borderStyle="classic"
+    flexDirection="column"
+    paddingX={1}
+  >
+    <Text
+      dimColor={true}
+    >
+      j/k move · enter open · tab tab · s sort · / filter · r refresh · a add · q quit
+    </Text>
+  </Box>
+</Box>
+`;
+
 exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is in flight 1`] = `
 <Box
   flexDirection="column"

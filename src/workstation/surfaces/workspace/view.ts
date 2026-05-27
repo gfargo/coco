@@ -18,7 +18,9 @@ import { type PathCompletionResult } from './pathCompletion'
 import {
   buildWorkspaceFooter,
   buildWorkspaceHeader,
+  buildWorkspaceHelpRows,
   buildWorkspaceListRows,
+  buildWorkspaceOnboarding,
   buildWorkspaceSidebar,
   type WorkspaceListColumn,
 } from './render'
@@ -188,6 +190,65 @@ function renderListBody(
   )
 }
 
+function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
+  if (!deps.state.showHelp) {
+    return null
+  }
+  const { React, ink, theme } = deps
+  const { Box, Text } = ink
+  const rows = buildWorkspaceHelpRows()
+  const widest = rows.reduce((acc, row) => Math.max(acc, row.keys.length), 0)
+  return React.createElement(
+    Box,
+    {
+      borderColor: focusBorderColor(theme, true),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      paddingX: 1,
+    },
+    React.createElement(Text, { bold: true }, 'Workspace keymap'),
+    ...rows.map((row, index) =>
+      React.createElement(
+        Box,
+        { key: index, flexDirection: 'row' },
+        React.createElement(
+          Text,
+          { color: toneColor('ok', theme) },
+          row.keys.padEnd(widest + 2)
+        ),
+        React.createElement(Text, null, row.description)
+      )
+    ),
+    React.createElement(
+      Text,
+      { dimColor: true },
+      'esc / ? / q close · auto-refresh disabled while help is open'
+    )
+  )
+}
+
+function renderOnboardingBanner(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
+  const model = buildWorkspaceOnboarding(deps.state)
+  if (!model.show) {
+    return null
+  }
+  const { React, ink, theme } = deps
+  const { Box, Text } = ink
+  const lines = [model.emptyHint, model.populatedHint].filter(Boolean) as string[]
+  return React.createElement(
+    Box,
+    {
+      borderColor: focusBorderColor(theme, true),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      paddingX: 1,
+    },
+    React.createElement(Text, { bold: true }, 'Welcome to `coco workspace`'),
+    ...lines.map((line, idx) => React.createElement(Text, { key: idx }, line)),
+    React.createElement(Text, { dimColor: true }, 'Any keypress dismisses this banner.')
+  )
+}
+
 function renderAddRepoPrompt(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
   if (deps.state.focus !== 'add-repo') {
     return null
@@ -240,6 +301,18 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
   const { React, ink } = deps
   const { Box } = ink
   const bodyWidth = Math.max(40, deps.columns - 4)
+  // Help is modal — when it's up, replace the main list/sidebar pair
+  // with the help panel so the user isn't distracted by background
+  // updates while reading.
+  if (deps.state.showHelp) {
+    return React.createElement(
+      Box,
+      { flexDirection: 'column' },
+      renderHeader(deps),
+      renderHelpOverlay(deps),
+      renderFooter(deps)
+    )
+  }
   return React.createElement(
     Box,
     { flexDirection: 'column' },
@@ -250,6 +323,7 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
       renderSidebar(deps),
       renderListBody(deps, bodyWidth - 22)
     ),
+    renderOnboardingBanner(deps),
     renderAddRepoPrompt(deps),
     renderFooter(deps)
   )
