@@ -27,9 +27,12 @@ function addRepoState(): WorkspaceState {
 }
 
 describe('resolveWorkspaceInput', () => {
-  it('quits on q or escape (no filter active)', () => {
+  it('quits on q only — escape never quits because terminals can deliver bare ESC on arrow keys', () => {
     expect(resolveWorkspaceInput('q', key(), listState()).kind).toBe('quit')
-    expect(resolveWorkspaceInput('', key({ escape: true }), listState()).kind).toBe('quit')
+    // Bare ESC must NOT quit; it would crash the app every time the
+    // user pressed an arrow key on terminals that deliver ESC + [ + A
+    // as separate keypresses.
+    expect(resolveWorkspaceInput('', key({ escape: true }), listState()).kind).toBe('noop')
   })
 
   it('clears the filter on escape when a filter is set', () => {
