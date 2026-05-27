@@ -164,6 +164,11 @@ try {
     args: ['ui', '--help'],
     label: 'packaged ui command help',
   })
+  runHelpCheck({
+    command: packagedBinPath(prefix),
+    args: ['workspace', '--help'],
+    label: 'packaged workspace command help',
+  })
   runCheck({
     command: packagedBinPath(prefix),
     args: ['init', '--dry-run', '--scope', 'project'],

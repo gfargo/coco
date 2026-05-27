@@ -137,6 +137,36 @@ export const schema = {
           },
           "additionalProperties": false,
           "description": "Interactive log TUI settings."
+        },
+        "workspace": {
+          "type": "object",
+          "properties": {
+            "roots": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Directories to scan for git repositories. Each entry may use a `~` prefix; resolved against the user's home directory. Defaults to `['~/code']` when omitted.",
+              "default": [
+                "~/code"
+              ]
+            },
+            "knownRepos": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Repositories outside the configured roots that should still appear in the workspace view. Useful for one-off projects kept somewhere other than the main `code` tree. Entries may use a `~` prefix.",
+              "default": []
+            },
+            "maxDepth": {
+              "type": "number",
+              "description": "Maximum depth to recurse into each configured root when looking for `.git/` directories. Stops descending as soon as a directory is identified as a repo.",
+              "default": 3
+            }
+          },
+          "additionalProperties": false,
+          "description": "Multi-repo workspace surface settings (`coco workspace`)."
         }
       },
       "required": [

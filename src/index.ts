@@ -11,6 +11,7 @@ import prs from './commands/prs'
 import recap from './commands/recap'
 import review from './commands/review'
 import ui from './commands/ui'
+import workspace from './commands/workspace'
 
 import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
@@ -23,6 +24,7 @@ import { PrsOptions } from './commands/prs/config'
 import { RecapOptions } from './commands/recap/config'
 import { ReviewOptions } from './commands/review/config'
 import { UiOptions } from './commands/ui/config'
+import { WorkspaceOptions } from './commands/workspace/config'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
 
@@ -99,6 +101,13 @@ y.command<UiOptions>(
   ui.handler
 )
 
+y.command<WorkspaceOptions>(
+  workspace.command,
+  workspace.desc,
+  workspace.builder,
+  workspace.handler
+)
+
 y.command<CacheOptions>(
   cache.command,
   cache.desc,
@@ -153,4 +162,5 @@ export {
   recap,
   types,
   ui,
+  workspace,
 }
