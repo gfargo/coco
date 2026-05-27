@@ -112,7 +112,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
               color="yellow"
               dimColor={false}
             >
-              ●2 ↑1 pr4
+              ●2 ↑1...
             </Text>
           </Box>
           <Box
@@ -123,6 +123,15 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
               dimColor={false}
             >
               2026-05-01
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              dimColor={false}
+            >
+              feat: thing
             </Text>
           </Box>
           <Box
@@ -167,7 +176,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
               bold={false}
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -190,6 +199,16 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
               dimColor={true}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -247,6 +266,17 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
@@ -422,6 +452,16 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
               color="gray"
               dimColor={false}
             >
+              —
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              color="gray"
+              dimColor={false}
+            >
               /tmp/lib
             </Text>
           </Box>
@@ -575,6 +615,15 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -613,7 +662,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
               bold={false}
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -636,6 +685,16 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
               dimColor={true}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -693,6 +752,17 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
@@ -1123,6 +1193,15 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -1161,7 +1240,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
               bold={false}
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -1184,6 +1263,16 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
               dimColor={true}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -1241,6 +1330,17 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
@@ -1612,6 +1712,15 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -1680,6 +1789,16 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           >
             <Text
               bold={false}
+              dimColor={false}
+            >
+              wip
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
               color="gray"
               dimColor={true}
             >
@@ -1730,6 +1849,17 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
@@ -1997,6 +2127,15 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -2035,7 +2174,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
               bold={false}
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -2058,6 +2197,16 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
               dimColor={true}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -2115,6 +2264,17 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
@@ -2287,6 +2447,15 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -2325,7 +2494,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
               bold={false}
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -2348,6 +2517,16 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
               dimColor={true}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -2405,6 +2584,17 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
@@ -2572,7 +2762,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
             <Text
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -2593,6 +2783,15 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
               dimColor={false}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -2753,6 +2952,15 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -2791,7 +2999,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
               bold={false}
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -2814,6 +3022,16 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
               dimColor={true}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -2871,6 +3089,17 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
@@ -3065,6 +3294,15 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -3219,6 +3457,15 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -3257,7 +3504,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
               bold={false}
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -3280,6 +3527,16 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
               dimColor={true}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -3337,6 +3594,17 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
@@ -3845,6 +4113,15 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
             marginRight={1}
           >
             <Text
+              dimColor={false}
+            >
+              feat: thing
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
               color="gray"
               dimColor={false}
             >
@@ -3883,7 +4160,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
               bold={false}
               dimColor={false}
             >
-              feature/landing
+              feature/la...
             </Text>
           </Box>
           <Box
@@ -3906,6 +4183,16 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
               dimColor={true}
             >
               2026-04-15
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              dimColor={false}
+            >
+              wip
             </Text>
           </Box>
           <Box
@@ -3963,6 +4250,17 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
               dimColor={true}
             >
               ·
+            </Text>
+          </Box>
+          <Box
+            marginRight={1}
+          >
+            <Text
+              bold={false}
+              color="gray"
+              dimColor={true}
+            >
+              —
             </Text>
           </Box>
           <Box
