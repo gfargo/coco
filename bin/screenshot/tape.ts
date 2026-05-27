@@ -89,8 +89,11 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `# Recipe: ${recipe.name}`,
     `# ${recipe.description}`,
     ``,
-    `Output "${options.outputPng}"`,
-    options.outputGif ? `Output "${options.outputGif}"` : null,
+    // No `Output` directive for screenshots — `Output` records the
+    // entire session as a frame sequence or GIF. We use `Screenshot`
+    // at the end to capture a single PNG at the settled frame.
+    // GIF output (when emitGif is true) still uses Output.
+    ...(options.outputGif ? [`Output "${options.outputGif}"`] : []),
     ``,
     `Set Shell "bash"`,
     `Set FontSize 14`,
@@ -139,10 +142,16 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
   const trailer = [
     ``,
     `Sleep 500ms`,
+    // Take a single screenshot. VHS resolves the path relative to
+    // its own cwd (which the driver sets to the scenario dir). Use
+    // a bare filename; the driver moves it to the final location.
+    `Screenshot screenshot.png`,
+    `Sleep 200ms`,
     // Quit the workstation cleanly so VHS doesn't hold the PTY open.
     // For non-TTY commands (`coco log`) this is a no-op since the
     // command already exited.
     `Type "q"`,
+    `Sleep 200ms`,
   ]
 
   return [
