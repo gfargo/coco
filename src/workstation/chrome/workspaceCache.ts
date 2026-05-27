@@ -43,8 +43,7 @@ export function workspaceCacheKey(roots: ReadonlyArray<string>): string {
   const normalized = [...roots].map((entry) => entry.trim()).filter(Boolean).sort()
   // sha1 here is a non-security cache-key derivation. DevSkim DS126858
   // does not apply.
-  // DevSkim: ignore DS126858
-  return crypto.createHash('sha1').update(normalized.join('\n')).digest('hex').slice(0, 16)
+  return crypto.createHash('sha1').update(normalized.join('\n')).digest('hex').slice(0, 16) // DevSkim: ignore DS126858
 }
 
 export function getWorkspaceCachePath(roots: ReadonlyArray<string>): string {
