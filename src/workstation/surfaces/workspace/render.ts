@@ -100,12 +100,11 @@ const COLUMN_DROP_ORDER: WorkspaceColumnKey[] = [
 /** Inter-cell gap reserved by the layout helper. */
 const COLUMN_GAP = 1
 /**
- * Width of the cursor prefix — 3 cells: caret + drill-in hint glyph
- * (`↵`) + trailing space. The hint glyph only appears on the cursored
- * row when list focus is active, but the budget reserves the cell
- * unconditionally so rows stay aligned regardless of focus.
+ * Width of the cursor prefix — 2 cells: caret/drill-in glyph + space.
+ * The caret swaps between `↵` and `›` on the cursored row depending
+ * on focus, but always occupies a single cell.
  */
-const CURSOR_WIDTH = 3
+const CURSOR_WIDTH = 2
 
 export type WorkspaceColumnWidths = Partial<Record<WorkspaceColumnKey, number>>
 
