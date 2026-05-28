@@ -113,6 +113,74 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────
+  // `coco ui` — additional views and scenarios
+  // ─────────────────────────────────────────────────────────────────
+  {
+    name: 'ui-branches-sync-showcase',
+    description: 'Branches view showing 5 branches in different upstream sync states',
+    scenario: 'branch-sync-showcase',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-diff-feature-branch',
+    description: 'Diff view showing a commit diff on a feature branch',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff',
+  },
+  {
+    name: 'ui-merge-conflict',
+    description: 'Workstation during an active merge conflict',
+    scenario: 'mid-merge-conflict',
+    command: 'ui --view history',
+  },
+  {
+    name: 'ui-rebase-conflict',
+    description: 'Workstation during an active rebase conflict',
+    scenario: 'mid-rebase-conflict',
+    command: 'ui --view history',
+  },
+  {
+    name: 'ui-multi-commit-branch',
+    description: 'History view with 8 varied conventional commits (feat/fix/chore/docs/refactor/test)',
+    scenario: 'multi-commit-branch',
+    command: 'ui --view history --no-all',
+  },
+  {
+    name: 'ui-large-repo',
+    description: 'History view with 115 commits across 3 branches — pagination stress test',
+    scenario: 'large-repo',
+    command: 'ui --view history',
+  },
+  {
+    name: 'ui-worktrees',
+    description: 'Worktrees view showing 3 linked worktrees on different branches',
+    scenario: 'multiple-worktrees',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gw' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-submodule',
+    description: 'History view of a repo with a submodule',
+    scenario: 'submodule-with-history',
+    command: 'ui --view history --no-all',
+  },
+  {
+    name: 'ui-detached-head',
+    description: 'Workstation in detached HEAD state',
+    scenario: 'detached-head',
+    command: 'ui --view history --no-all',
+  },
+
+  // ─────────────────────────────────────────────────────────────────
   // `coco log` — stdout / non-interactive renders
   // ─────────────────────────────────────────────────────────────────
   {
@@ -121,6 +189,13 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'two-commit-feature',
     command: 'log --limit 10 --no-color',
     dimensions: { cols: 120, rows: 24 },
+  },
+  {
+    name: 'log-stdout-rich-graph',
+    description: 'Stdout `coco log` with full graph on a multi-branch repo',
+    scenario: 'rich-history-graph',
+    command: 'log --limit 20 --all --no-color',
+    dimensions: { cols: 140, rows: 30 },
   },
 
   // ─────────────────────────────────────────────────────────────────
