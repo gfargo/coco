@@ -1,26 +1,19 @@
+import type { Key as InkKey } from 'ink'
+
 import type { WorkspaceAction, WorkspaceState } from './state'
 
 /**
- * Key descriptor for the workspace surface. Mirrors the structural
- * type from `LogInkInputKey` so we don't pull React/Ink into the pure
- * input layer — the runtime hands the same shape into both surfaces.
+ * Key descriptor for the workspace surface. A wrapped `Partial<Key>`
+ * — Ink's real `Key` has every flag as required `boolean`, but tests
+ * (and the resolver's branch-by-branch reads) want the cleaner
+ * "either it's true or it's missing" shape. The runtime passes Ink's
+ * fully-populated `Key` instance straight through; the structural
+ * widening is purely a test ergonomics win.
+ *
+ * Type-only import: the `import type` is erased at compile time so
+ * the pure input layer still doesn't pull Ink into its bundle.
  */
-export type WorkspaceInputKey = {
-  upArrow?: boolean
-  downArrow?: boolean
-  leftArrow?: boolean
-  rightArrow?: boolean
-  return?: boolean
-  escape?: boolean
-  tab?: boolean
-  shift?: boolean
-  ctrl?: boolean
-  meta?: boolean
-  pageDown?: boolean
-  pageUp?: boolean
-  delete?: boolean
-  backspace?: boolean
-}
+export type WorkspaceInputKey = Partial<InkKey>
 
 export type WorkspaceInputIntent =
   | { kind: 'action'; action: WorkspaceAction }

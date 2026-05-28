@@ -21,6 +21,23 @@ import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
 import type * as ReactTypes from 'react'
 
+// Ink is ESM-only and loaded at runtime via the dynamicImport smuggle
+// below. Types are erased at compile time, so `import type` is safe
+// here — ts-jest's CJS transform leaves type-only imports alone.
+//
+// Pulling the real prop shapes (BoxProps, TextProps) + hook return
+// types (AppProps, WindowSize) + Key into the runtime gives the view
+// layer actual prop checking instead of `Record<string, unknown>`.
+import type {
+  AppProps as InkAppProps,
+  BoxProps,
+  Instance,
+  Key as InkKey,
+  RenderOptions as InkRenderOptions,
+  TextProps,
+  WindowSize,
+} from 'ink'
+
 import {
   getWorkspaceOverview,
   type WorkspaceOverview,
@@ -92,25 +109,12 @@ const dynamicImport = new Function('specifier', 'return import(specifier)') as D
 
 export type WorkspaceInkRuntime = {
   ink: {
-    Box: ReactTypes.ComponentType<Record<string, unknown>>
-    Text: ReactTypes.ComponentType<Record<string, unknown>>
-    render: (
-      app: ReactTypes.ReactElement,
-      options: {
-        alternateScreen?: boolean
-        exitOnCtrlC?: boolean
-        patchConsole?: boolean
-        stderr?: NodeJS.WriteStream
-        stdin?: NodeJS.ReadStream
-        stdout?: NodeJS.WriteStream
-      }
-    ) => {
-      waitUntilExit: () => Promise<void>
-      unmount: () => void
-    }
-    useApp: () => { exit: () => void }
-    useInput: (handler: (input: string, key: WorkspaceInputKey) => void) => void
-    useWindowSize: () => { columns: number; rows: number }
+    Box: ReactTypes.ComponentType<BoxProps>
+    Text: ReactTypes.ComponentType<TextProps>
+    render: (app: ReactTypes.ReactElement, options: InkRenderOptions) => Instance
+    useApp: () => InkAppProps
+    useInput: (handler: (input: string, key: InkKey) => void) => void
+    useWindowSize: () => WindowSize
   }
   React: typeof ReactTypes
 }
