@@ -205,11 +205,11 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -284,23 +284,22 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -309,9 +308,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -320,7 +317,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1 ⊙4
           </Text>
@@ -330,7 +327,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -339,9 +336,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -350,7 +345,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -361,23 +356,20 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -387,9 +379,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -399,10 +389,8 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -412,10 +400,8 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -425,9 +411,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={20}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -437,10 +421,8 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -451,23 +433,20 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -477,9 +456,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -489,10 +466,8 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -502,10 +477,8 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -515,10 +488,8 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={20}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -528,10 +499,8 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>
@@ -781,11 +750,11 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -860,23 +829,22 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             lib
           </Text>
@@ -885,9 +853,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -896,7 +862,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
           width={9}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             ·
           </Text>
@@ -906,7 +872,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             —
           </Text>
@@ -916,7 +882,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
           width={20}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             —
           </Text>
@@ -926,7 +892,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/lib
           </Text>
@@ -1169,11 +1135,11 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -1248,23 +1214,22 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -1273,9 +1238,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -1284,7 +1247,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -1294,7 +1257,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -1303,9 +1266,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -1314,7 +1275,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -1325,23 +1286,20 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -1351,9 +1309,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -1363,10 +1319,8 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -1376,10 +1330,8 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -1389,9 +1341,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={20}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -1401,10 +1351,8 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -1415,23 +1363,20 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -1441,9 +1386,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -1453,10 +1396,8 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -1466,10 +1407,8 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -1479,10 +1418,8 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={20}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -1492,10 +1429,8 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>
@@ -1669,11 +1604,11 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={15}
+          width={16}
         >
           <Text
             color="gray"
@@ -1737,23 +1672,22 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={15}
+          width={16}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -1762,9 +1696,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -1773,7 +1705,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -1783,7 +1715,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -1792,9 +1724,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           flexShrink={0}
           width={18}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -1804,23 +1734,20 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={15}
+          width={16}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -1830,9 +1757,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -1842,10 +1767,8 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -1855,10 +1778,8 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -1868,9 +1789,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={18}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -1881,23 +1800,20 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={15}
+          width={16}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -1907,9 +1823,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -1919,10 +1833,8 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -1932,10 +1844,8 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -1945,10 +1855,8 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -2187,11 +2095,11 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -2266,23 +2174,22 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -2291,9 +2198,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -2302,7 +2207,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -2312,7 +2217,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -2321,9 +2226,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -2332,7 +2235,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -2343,23 +2246,20 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -2369,9 +2269,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -2381,10 +2279,8 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -2394,10 +2290,8 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -2407,9 +2301,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={20}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -2419,10 +2311,8 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -2433,23 +2323,20 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -2459,9 +2346,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -2471,10 +2356,8 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -2484,10 +2367,8 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -2497,10 +2378,8 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={20}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -2510,10 +2389,8 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>
@@ -2688,11 +2565,11 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={21}
+          width={15}
         >
           <Text
             color="gray"
@@ -2703,7 +2580,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
         </Box>
         <Box
           flexShrink={0}
-          width={16}
+          width={13}
         >
           <Text
             color="gray"
@@ -2723,6 +2600,17 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
             STATUS
           </Text>
         </Box>
+        <Box
+          flexShrink={0}
+          width={10}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            LAST
+          </Text>
+        </Box>
       </Box>
       <Text
         dimColor={true}
@@ -2734,34 +2622,31 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={21}
+          width={15}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={16}
+          width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -2770,9 +2655,19 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={10}
+        >
+          <Text
+            color="gray"
+          >
+            3w
           </Text>
         </Box>
       </Box>
@@ -2781,37 +2676,32 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={21}
+          width={15}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={16}
+          width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
-            feature/landing
+            feature/l...
           </Text>
         </Box>
         <Box
@@ -2819,12 +2709,21 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={10}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            6w
           </Text>
         </Box>
       </Box>
@@ -2833,35 +2732,30 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={21}
+          width={15}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={16}
+          width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -2871,12 +2765,21 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={10}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            —
           </Text>
         </Box>
       </Box>
@@ -3113,7 +3016,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
@@ -3161,7 +3064,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
         </Box>
         <Box
           flexShrink={0}
-          width={50}
+          width={51}
         >
           <Text
             color="gray"
@@ -3192,14 +3095,13 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
@@ -3208,7 +3110,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -3217,9 +3119,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           flexShrink={0}
           width={29}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -3228,7 +3128,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={17}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -3238,18 +3138,16 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             2026-05-01
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={50}
+          width={51}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -3258,7 +3156,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={25}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -3269,13 +3167,12 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
@@ -3283,9 +3180,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={37}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -3295,9 +3190,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={29}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/landing
           </Text>
@@ -3307,10 +3200,8 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={17}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -3320,22 +3211,18 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             2026-04-15
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={50}
+          width={51}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -3345,10 +3232,8 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={25}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -3359,13 +3244,12 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
@@ -3373,9 +3257,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={37}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -3385,9 +3267,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={29}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -3397,10 +3277,8 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={17}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -3410,23 +3288,19 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={50}
+          width={51}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -3436,10 +3310,8 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
           width={25}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>
@@ -3678,11 +3550,11 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -4003,11 +3875,11 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -4082,23 +3954,22 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›  
+            › 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -4107,9 +3978,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -4118,7 +3987,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -4128,7 +3997,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -4137,9 +4006,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -4148,7 +4015,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -4159,23 +4026,20 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -4185,9 +4049,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -4197,10 +4059,8 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -4210,10 +4070,8 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -4223,9 +4081,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={20}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -4235,10 +4091,8 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -4249,23 +4103,20 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -4275,9 +4126,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -4287,10 +4136,8 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -4300,10 +4147,8 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -4313,10 +4158,8 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={20}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -4326,10 +4169,8 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>
@@ -4568,11 +4409,11 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -4647,23 +4488,22 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›  
+            › 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -4672,9 +4512,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -4683,7 +4521,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -4693,7 +4531,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -4702,9 +4540,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -4713,7 +4549,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -4724,23 +4560,20 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -4750,9 +4583,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -4762,10 +4593,8 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -4775,10 +4604,8 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -4788,9 +4615,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={20}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -4800,10 +4625,8 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -4814,23 +4637,20 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -4840,9 +4660,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -4852,10 +4670,8 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -4865,10 +4681,8 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -4878,10 +4692,8 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={20}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -4891,10 +4703,8 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>
@@ -5155,11 +4965,11 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -5234,23 +5044,22 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             docs
           </Text>
@@ -5259,9 +5068,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feature/l...
           </Text>
         </Box>
@@ -5270,7 +5077,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ↓3
           </Text>
@@ -5280,7 +5087,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             6w
           </Text>
@@ -5289,9 +5096,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             wip
           </Text>
         </Box>
@@ -5300,7 +5105,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/docs
           </Text>
@@ -5539,11 +5344,11 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -5618,23 +5423,22 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›  
+            › 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -5643,9 +5447,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -5654,7 +5456,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -5664,7 +5466,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -5673,9 +5475,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -5684,7 +5484,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -5695,23 +5495,20 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -5721,9 +5518,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -5733,10 +5528,8 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -5746,10 +5539,8 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -5759,9 +5550,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={20}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -5771,10 +5560,8 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -5785,23 +5572,20 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -5811,9 +5595,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -5823,10 +5605,8 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -5836,10 +5616,8 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -5849,10 +5627,8 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={20}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -5862,10 +5638,8 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>
@@ -6126,11 +5900,11 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -6205,23 +5979,22 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -6230,9 +6003,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -6241,7 +6012,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -6251,7 +6022,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -6260,9 +6031,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -6271,7 +6040,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -6510,11 +6279,11 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -6589,23 +6358,22 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -6614,9 +6382,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -6625,7 +6391,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -6635,7 +6401,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -6644,9 +6410,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -6655,7 +6419,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -6666,23 +6430,20 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -6692,9 +6453,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -6704,10 +6463,8 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -6717,10 +6474,8 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -6730,9 +6485,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={20}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -6742,10 +6495,8 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -6756,23 +6507,20 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -6782,9 +6530,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -6794,10 +6540,8 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -6807,10 +6551,8 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -6820,10 +6562,8 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={20}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -6833,10 +6573,8 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>
@@ -7421,11 +7159,11 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -7740,11 +7478,11 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         />
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             color="gray"
@@ -7819,23 +7557,22 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={true}
             color="cyan"
-            inverse={true}
           >
-            ›↵ 
+            ↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
             bold={true}
-            inverse={true}
+            color="cyan"
           >
             coco
           </Text>
@@ -7844,9 +7581,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           flexShrink={0}
           width={13}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             main
           </Text>
         </Box>
@@ -7855,7 +7590,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={9}
         >
           <Text
-            inverse={true}
+            color="yellow"
           >
             ●2 ↑1
           </Text>
@@ -7865,7 +7600,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={11}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             3w
           </Text>
@@ -7874,9 +7609,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           flexShrink={0}
           width={20}
         >
-          <Text
-            inverse={true}
-          >
+          <Text>
             feat: thing
           </Text>
         </Box>
@@ -7885,7 +7618,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={18}
         >
           <Text
-            inverse={true}
+            color="gray"
           >
             /tmp/coco
           </Text>
@@ -7896,23 +7629,20 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             docs
           </Text>
@@ -7922,9 +7652,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             feature/l...
           </Text>
@@ -7934,10 +7662,8 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={9}
         >
           <Text
-            bold={false}
             color="yellow"
             dimColor={false}
-            inverse={false}
           >
             ↓3
           </Text>
@@ -7947,10 +7673,8 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             6w
           </Text>
@@ -7960,9 +7684,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={20}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             wip
           </Text>
@@ -7972,10 +7694,8 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/docs
           </Text>
@@ -7986,23 +7706,20 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
         <Box
           flexShrink={0}
-          width={3}
+          width={2}
         >
           <Text
             bold={false}
-            inverse={false}
           >
-               
+              
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={18}
+          width={19}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             lib
           </Text>
@@ -8012,9 +7729,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={13}
         >
           <Text
-            bold={false}
             dimColor={false}
-            inverse={false}
           >
             main
           </Text>
@@ -8024,10 +7739,8 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={9}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             ·
           </Text>
@@ -8037,10 +7750,8 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={11}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -8050,10 +7761,8 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={20}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             —
           </Text>
@@ -8063,10 +7772,8 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           width={18}
         >
           <Text
-            bold={false}
             color="gray"
             dimColor={true}
-            inverse={false}
           >
             /tmp/lib
           </Text>

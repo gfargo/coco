@@ -205,8 +205,12 @@ function renderSidebar(
   const tabs = buildWorkspaceSidebar(state)
   const widest = tabs.reduce((acc, row) => Math.max(acc, row.label.length), SIDEBAR_LABEL_WIDTH)
   const rows = tabs.map((row) => {
-    const labelProps: Record<string, unknown> = { key: 'label' }
-    const glyphProps: Record<string, unknown> = { key: 'glyph' }
+    // The `key` is on each call site (caret/glyph/label/count) so we
+    // don't recycle the same key string across siblings — that tripped
+    // React's dup-key warning when both the caret cell and the label
+    // cell shared `{ key: 'label' }` via the same props object.
+    const labelProps: Record<string, unknown> = {}
+    const glyphProps: Record<string, unknown> = {}
     if (row.active) {
       labelProps.bold = true
       glyphProps.bold = true
@@ -236,12 +240,16 @@ function renderSidebar(
     return React.createElement(
       Box,
       { key: row.tab, flexDirection: 'row' },
-      React.createElement(Text, labelProps, `${cursor} `),
-      React.createElement(Text, glyphProps, `${row.glyph} `),
-      React.createElement(Text, labelProps, paddedLabel),
+      React.createElement(Text, { ...labelProps, key: 'caret' }, `${cursor} `),
+      React.createElement(Text, { ...glyphProps, key: 'glyph' }, `${row.glyph} `),
+      React.createElement(Text, { ...labelProps, key: 'label' }, paddedLabel),
       React.createElement(
         Text,
-        { dimColor: !row.active, color: row.active && !theme.noColor ? theme.colors.accent : undefined },
+        {
+          key: 'count',
+          dimColor: !row.active,
+          color: row.active && !theme.noColor ? theme.colors.accent : undefined,
+        },
         ` ${countText}`
       )
     )
@@ -263,11 +271,12 @@ function renderSidebar(
 }
 
 const COLUMN_GAP = 1
-// Cursor prefix is 3 cells: caret, drill-in hint, trailing space.
-// The hint glyph only renders on the cursored row when list focus is
-// active (drill-in is reachable); other rows show two blanks so the
-// table stays aligned.
-const CURSOR_PREFIX_WIDTH = 3
+// Cursor prefix is 2 cells: caret + trailing space. The caret swaps
+// between `↵` (cursored + list focus, since Enter drills in) and
+// `›` (cursored + non-list focus, where Enter is repurposed). Other
+// rows render two blanks so the table stays aligned regardless of
+// which row is selected.
+const CURSOR_PREFIX_WIDTH = 2
 
 function renderListRow(
   deps: RenderWorkspaceAppDeps,
@@ -276,30 +285,43 @@ function renderListRow(
 ): ReactTypes.ReactElement {
   const { React, ink, theme, state } = deps
   const { Box, Text } = ink
-  const cursor = row.cursor ? '›' : ' '
-  // Drill-in glyph (`↵`) sits next to the cursor caret on the focused
-  // row when list focus is active — surfaces the Enter affordance
-  // without requiring the user to remember it from the footer.
-  // Suppressed when the user is in any modal focus (filter, add-repo,
-  // confirm-delete) since Enter is repurposed there.
-  const drillHint = row.cursor && state.focus === 'list' ? '↵' : ' '
-  // Cursored rows use reverse video for the strongest selection
-  // signal — the canonical TUI convention since VT100 and the same
-  // affordance coco ui uses for active commits. Reverse video skips
-  // applying per-cell tone colors because the inverted background
-  // makes faint tones unreadable.
-  const cursorReverse = row.cursor
+  // Single-glyph cursor that doubles as the drill-in hint when
+  // appropriate. `↵` reads as "Enter to open this row" inline; `›`
+  // is the fallback when Enter is repurposed (filter / add-repo /
+  // confirm-delete focus). Replaces the earlier `›↵` pair which
+  // landed on the screen as visual noise.
+  const cursorGlyph = row.cursor
+    ? state.focus === 'list'
+      ? '↵'
+      : '›'
+    : ' '
   const cells = row.columns.map((column, index) => {
-    const textProps: Record<string, unknown> = {
-      bold: row.cursor && column.primary,
-      inverse: cursorReverse,
-    }
-    if (!cursorReverse) {
+    // Cursored rows lean on bold + a richer color treatment rather
+    // than full-row reverse video. The earlier inverse-background
+    // approach made the row's other cells (especially dim tones)
+    // hard to read on most themes.
+    const textProps: Record<string, unknown> = {}
+    if (row.cursor) {
+      textProps.bold = column.primary
+      if (!theme.noColor) {
+        if (column.primary) {
+          // Primary cell (name) gets the accent color so the
+          // cursor's position pops without inverting the row.
+          textProps.color = theme.colors.accent
+        } else {
+          // Other cells keep their semantic tone colors (warn for
+          // dirty/behind, ok for ahead, dim for muted) but skip the
+          // dimColor flag so the cursor row reads brighter than its
+          // neighbors as a whole.
+          const color = toneColor(column.tone, theme)
+          if (color) textProps.color = color
+        }
+      }
+    } else {
       textProps.dimColor = column.tone === 'dim'
       const color = toneColor(column.tone, theme)
       if (color) textProps.color = color
     }
-    // Fixed-width Box per column — table-style alignment across rows.
     return React.createElement(
       Box,
       {
@@ -320,10 +342,9 @@ function renderListRow(
         Text,
         {
           bold: row.cursor,
-          inverse: cursorReverse,
           color: row.cursor && !theme.noColor ? theme.colors.accent : undefined,
         },
-        `${cursor}${drillHint} `
+        `${cursorGlyph} `
       )
     ),
     ...cells
