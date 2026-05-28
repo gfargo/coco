@@ -18,12 +18,13 @@ import {
   buildWorkspaceColumnHeaders,
   buildWorkspaceFooter,
   buildWorkspaceHeaderChips,
-  buildWorkspaceHelpRows,
+  buildWorkspaceHelpSections,
   buildWorkspaceListWindow,
   buildWorkspaceOnboarding,
   buildWorkspaceSidebar,
   shouldRailWorkspaceSidebar,
   type WorkspaceHeaderChip,
+  type WorkspaceHelpRow,
   type WorkspaceListColumn,
   type WorkspaceListRow,
 } from './render'
@@ -511,14 +512,117 @@ function renderListBody(
   )
 }
 
+function renderHelpRow(
+  deps: RenderWorkspaceAppDeps,
+  row: WorkspaceHelpRow,
+  glyphWidth: number,
+  keysWidth: number,
+  key: string
+): ReactTypes.ReactElement {
+  const { React, ink, theme } = deps
+  const { Box, Text } = ink
+  return React.createElement(
+    Box,
+    { key, flexDirection: 'row' },
+    React.createElement(
+      Box,
+      { width: glyphWidth, flexShrink: 0 },
+      React.createElement(
+        Text,
+        { color: theme.noColor ? undefined : theme.colors.accent, bold: true },
+        ` ${row.glyph ?? ' '} `
+      )
+    ),
+    React.createElement(
+      Box,
+      { width: keysWidth, flexShrink: 0 },
+      React.createElement(
+        Text,
+        { color: theme.noColor ? undefined : theme.colors.success, bold: true },
+        row.keys
+      )
+    ),
+    React.createElement(Text, null, row.description)
+  )
+}
+
 function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
   if (!deps.state.showHelp) {
     return null
   }
   const { React, ink, theme } = deps
   const { Box, Text } = ink
-  const rows = buildWorkspaceHelpRows()
-  const widest = rows.reduce((acc, row) => Math.max(acc, row.keys.length), 0)
+  const sections = buildWorkspaceHelpSections()
+  const allRows = sections.flatMap((section) => section.rows)
+  // Columns: glyph cell (4 cells) · keys (padded to longest) · description.
+  const glyphWidth = 4
+  const keysWidth = Math.max(
+    14,
+    allRows.reduce((acc, row) => Math.max(acc, row.keys.length), 0) + 4
+  )
+
+  const children: ReactTypes.ReactNode[] = []
+
+  // Title bar — accent-tinged, matches the chip-style header on the
+  // main surface so the help reads as the same app, just a different
+  // panel.
+  children.push(
+    React.createElement(
+      Box,
+      { key: 'title', flexDirection: 'row', justifyContent: 'space-between' },
+      React.createElement(
+        Box,
+        { key: 'title-left', flexDirection: 'row' },
+        React.createElement(
+          Text,
+          { bold: true, color: theme.noColor ? undefined : theme.colors.accent },
+          ' ?  coco workspace'
+        ),
+        React.createElement(Text, { dimColor: true }, '  keymap · '),
+        React.createElement(Text, { dimColor: true }, `${allRows.length} bindings`)
+      ),
+      React.createElement(
+        Text,
+        { dimColor: true },
+        'esc / ? to close '
+      )
+    )
+  )
+  children.push(React.createElement(Text, { key: 'title-sep', dimColor: true }, ''))
+
+  // Sections — each gets a title in accent, optional subtitle dim,
+  // then its rows, then a blank line.
+  sections.forEach((section, sIndex) => {
+    children.push(
+      React.createElement(
+        Text,
+        {
+          key: `section-${sIndex}-title`,
+          bold: true,
+          color: theme.noColor ? undefined : theme.colors.muted,
+        },
+        section.title.toUpperCase()
+      )
+    )
+    if (section.subtitle) {
+      children.push(
+        React.createElement(
+          Text,
+          { key: `section-${sIndex}-subtitle`, dimColor: true },
+          ` ${section.subtitle}`
+        )
+      )
+    }
+    section.rows.forEach((row, rIndex) => {
+      children.push(
+        renderHelpRow(deps, row, glyphWidth, keysWidth, `row-${sIndex}-${rIndex}`)
+      )
+    })
+    if (sIndex < sections.length - 1) {
+      children.push(React.createElement(Text, { key: `section-${sIndex}-spacer` }, ''))
+    }
+  })
+
   return React.createElement(
     Box,
     {
@@ -527,24 +631,7 @@ function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElemen
       flexDirection: 'column',
       paddingX: 1,
     },
-    React.createElement(Text, { bold: true }, 'Workspace keymap'),
-    ...rows.map((row, index) =>
-      React.createElement(
-        Box,
-        { key: index, flexDirection: 'row' },
-        React.createElement(
-          Text,
-          { color: toneColor('ok', theme) },
-          row.keys.padEnd(widest + 2)
-        ),
-        React.createElement(Text, null, row.description)
-      )
-    ),
-    React.createElement(
-      Text,
-      { dimColor: true },
-      'esc / ? / q close · auto-refresh disabled while help is open'
-    )
+    ...children
   )
 }
 
