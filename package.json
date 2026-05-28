@@ -28,6 +28,7 @@
   "scripts": {
     "start": "npm run dev",
     "dev": "tsx watch src/index.ts",
+    "dev:tui": "tsx src/index.ts",
     "prebuild": "npm run build:schema && npm run build:info",
     "build": "rollup -c",
     "postbuild": "node bin/copyTreeSitterWasm.mjs",
