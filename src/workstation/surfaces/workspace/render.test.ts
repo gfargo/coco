@@ -146,7 +146,7 @@ describe('workspace render builders', () => {
     const focused = applyWorkspaceAction(state, { type: 'set-focus', focus: 'filter' })
     const footer = buildWorkspaceFooter(focused)
     expect(footer.filterMode).toBe(true)
-    expect(footer.hint).toContain('type filter')
+    expect(footer.hint).toContain('type to filter')
   })
 
   it('footer shows status when the runtime set one', () => {

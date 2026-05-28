@@ -523,7 +523,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -915,7 +915,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -1453,7 +1453,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -1879,7 +1879,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -2413,7 +2413,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       color="yellow"
@@ -2800,7 +2800,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -3334,7 +3334,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -3659,7 +3659,7 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -4193,7 +4193,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
     <Text
       dimColor={true}
     >
-      type filter · enter to apply · esc to clear
+      type to filter · enter apply · esc cancel
     </Text>
     <Text
       dimColor={true}
@@ -5128,7 +5128,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -6063,7 +6063,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -6617,7 +6617,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -6707,139 +6707,256 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     flexDirection="column"
     paddingX={1}
   >
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
+    >
+      <Box
+        flexDirection="row"
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ?  coco workspace
+        </Text>
+        <Text
+          dimColor={true}
+        >
+            keymap · 
+        </Text>
+        <Text
+          dimColor={true}
+        >
+          15 bindings
+        </Text>
+      </Box>
+      <Text
+        dimColor={true}
+      >
+        esc / ? to close 
+      </Text>
+    </Box>
+    <Text
+      dimColor={true}
+    />
     <Text
       bold={true}
+      color="gray"
     >
-      Workspace keymap
+      NAVIGATE
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       Move the cursor and switch focus between panels.
     </Text>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        tab / shift-tab  
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ↕ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          j / k / ↑ / ↓
+        </Text>
+      </Box>
       <Text>
-        Move focus between sidebar and list
+        Move cursor up & down (list) · cycle tab (sidebar)
       </Text>
     </Box>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        j / ↓            
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ⇥ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          tab / shift-tab
+        </Text>
+      </Box>
       <Text>
-        List: move cursor down · Sidebar: next tab
+        Toggle focus between sidebar and list
       </Text>
     </Box>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        k / ↑            
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ← 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          h
+        </Text>
+      </Box>
       <Text>
-        List: move cursor up · Sidebar: previous tab
+        Jump focus to the sidebar
       </Text>
     </Box>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        h / ←            
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           → 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          l
+        </Text>
+      </Box>
       <Text>
-        List → sidebar focus
+        Jump focus to the list
       </Text>
     </Box>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        l / →            
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ⤒ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          g / G
+        </Text>
+      </Box>
       <Text>
-        Sidebar → list focus (also enter)
+        Jump to top / bottom of the list
       </Text>
     </Box>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        g / G            
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ↵ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          enter
+        </Text>
+      </Box>
       <Text>
-        List: jump to top / bottom
+        Drill into the cursored repo (coco ui)
       </Text>
     </Box>
+    <Text />
+    <Text
+      bold={true}
+      color="gray"
+    >
+      FILTER & SORT
+    </Text>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        enter            
-      </Text>
-      <Text>
-        List: drill into the cursored repo (coco ui)
-      </Text>
-    </Box>
-    <Box
-      flexDirection="row"
-    >
-      <Text
-        color="green"
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           / 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
       >
-        s                
-      </Text>
-      <Text>
-        Cycle sort mode (recency → name → dirty)
-      </Text>
-    </Box>
-    <Box
-      flexDirection="row"
-    >
-      <Text
-        color="green"
-      >
-        r                
-      </Text>
-      <Text>
-        Refresh discovery (all repos)
-      </Text>
-    </Box>
-    <Box
-      flexDirection="row"
-    >
-      <Text
-        color="green"
-      >
-        R                
-      </Text>
-      <Text>
-        Refresh just the cursored repo (faster)
-      </Text>
-    </Box>
-    <Box
-      flexDirection="row"
-    >
-      <Text
-        color="green"
-      >
-        /                
-      </Text>
+        <Text
+          bold={true}
+          color="green"
+        >
+          /
+        </Text>
+      </Box>
       <Text>
         Filter the list by name or branch
       </Text>
@@ -6847,23 +6964,127 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        r                
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ↑↓ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          s
+        </Text>
+      </Box>
       <Text>
-        Refresh discovery
+        Cycle sort mode (recency → name → dirty)
+      </Text>
+    </Box>
+    <Text />
+    <Text
+      bold={true}
+      color="gray"
+    >
+      REPOS
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       Add, remove, and refresh the workspace inventory.
+    </Text>
+    <Box
+      flexDirection="row"
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ⟳ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          r
+        </Text>
+      </Box>
+      <Text>
+        Refresh all repos (discovery + PR counts)
       </Text>
     </Box>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        a                
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ⟲ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          R
+        </Text>
+      </Box>
+      <Text>
+        Refresh just the cursored repo (faster)
       </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ＋ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          a
+        </Text>
+      </Box>
       <Text>
         Add a repo via path prompt (tab-completes)
       </Text>
@@ -6871,23 +7092,64 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        d                
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ✕ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          d
+        </Text>
+      </Box>
       <Text>
-        Remove the cursored repo from the known-repos store (y-confirm)
+        Remove the cursored repo from the known-repos store
       </Text>
     </Box>
+    <Text />
+    <Text
+      bold={true}
+      color="gray"
+    >
+      GENERAL
+    </Text>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        ?                
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ? 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          ?
+        </Text>
+      </Box>
       <Text>
         Toggle this help overlay
       </Text>
@@ -6895,32 +7157,61 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        esc              
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ⎋ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          esc
+        </Text>
+      </Box>
       <Text>
-        Clear filter or close overlay
+        Clear filter / close overlay / cancel prompt
       </Text>
     </Box>
     <Box
       flexDirection="row"
     >
-      <Text
-        color="green"
+      <Box
+        flexShrink={0}
+        width={4}
       >
-        q                
-      </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ◴ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          q · ctrl+c
+        </Text>
+      </Box>
       <Text>
         Quit the workspace surface
       </Text>
     </Box>
-    <Text
-      dimColor={true}
-    >
-      esc / ? / q close · auto-refresh disabled while help is open
-    </Text>
   </Box>
   <Box
     borderColor="gray"
@@ -6932,7 +7223,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -7262,7 +7553,7 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -7796,7 +8087,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
+      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}

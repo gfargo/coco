@@ -597,9 +597,13 @@ export type WorkspaceFooterModel = {
   filterMode: boolean
 }
 
-const LIST_HINT = 'j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit'
-const SIDEBAR_HINT = 'j/k change tab · enter / l → list · tab → list · ? help · q quit'
-const FILTER_HINT = 'type filter · enter to apply · esc to clear'
+// Footer hints prioritize discoverable / forgettable actions and
+// drop the bindings users can find on their own (arrow keys, Enter
+// for "open", Tab for "switch panels"). The full keymap lives behind
+// `?` so nothing is hidden, just decluttered.
+const LIST_HINT = 's sort · / filter · r/R refresh · a add · d remove · ? help · q quit'
+const SIDEBAR_HINT = '? help · q quit'
+const FILTER_HINT = 'type to filter · enter apply · esc cancel'
 const ADD_REPO_HINT = 'type path · tab to complete · enter to add · esc to cancel'
 const CONFIRM_DELETE_HINT = 'press y to remove · any other key to cancel'
 
@@ -638,33 +642,73 @@ export function describeSortModesForLegend(): Record<WorkspaceSortMode, string> 
 export type WorkspaceHelpRow = {
   keys: string
   description: string
+  /** Optional glyph rendered to the left of the keys — adds visual texture without competing with content. */
+  glyph?: string
+}
+
+export type WorkspaceHelpSection = {
+  title: string
+  /** Short subtitle line under the section title (dim). */
+  subtitle?: string
+  rows: WorkspaceHelpRow[]
 }
 
 /**
- * Keymap legend rendered by the help overlay (`?`). Sectionless flat
- * list so the overlay stays short — every binding fits in one screen
- * even on a 24-row terminal.
+ * Keymap legend rendered by the help overlay (`?`). Grouped into
+ * sections so users can scan by intent ("how do I navigate?" "how
+ * do I act?") rather than reading a flat alphabetized list.
+ *
+ * The view layer composes these into a panel with section titles,
+ * a leading app/title bar, and a closing hint at the bottom.
+ */
+export function buildWorkspaceHelpSections(): WorkspaceHelpSection[] {
+  return [
+    {
+      title: 'Navigate',
+      subtitle: 'Move the cursor and switch focus between panels.',
+      rows: [
+        { glyph: '↕', keys: 'j / k / ↑ / ↓', description: 'Move cursor up & down (list) · cycle tab (sidebar)' },
+        { glyph: '⇥', keys: 'tab / shift-tab', description: 'Toggle focus between sidebar and list' },
+        { glyph: '←', keys: 'h', description: 'Jump focus to the sidebar' },
+        { glyph: '→', keys: 'l', description: 'Jump focus to the list' },
+        { glyph: '⤒', keys: 'g / G', description: 'Jump to top / bottom of the list' },
+        { glyph: '↵', keys: 'enter', description: 'Drill into the cursored repo (coco ui)' },
+      ],
+    },
+    {
+      title: 'Filter & sort',
+      rows: [
+        { glyph: '/', keys: '/', description: 'Filter the list by name or branch' },
+        { glyph: '↑↓', keys: 's', description: 'Cycle sort mode (recency → name → dirty)' },
+      ],
+    },
+    {
+      title: 'Repos',
+      subtitle: 'Add, remove, and refresh the workspace inventory.',
+      rows: [
+        { glyph: '⟳', keys: 'r', description: 'Refresh all repos (discovery + PR counts)' },
+        { glyph: '⟲', keys: 'R', description: 'Refresh just the cursored repo (faster)' },
+        { glyph: '＋', keys: 'a', description: 'Add a repo via path prompt (tab-completes)' },
+        { glyph: '✕', keys: 'd', description: 'Remove the cursored repo from the known-repos store' },
+      ],
+    },
+    {
+      title: 'General',
+      rows: [
+        { glyph: '?', keys: '?', description: 'Toggle this help overlay' },
+        { glyph: '⎋', keys: 'esc', description: 'Clear filter / close overlay / cancel prompt' },
+        { glyph: '◴', keys: 'q · ctrl+c', description: 'Quit the workspace surface' },
+      ],
+    },
+  ]
+}
+
+/**
+ * Flattened view of the keymap for tests + the global command palette.
+ * Returns every row across every section in display order.
  */
 export function buildWorkspaceHelpRows(): WorkspaceHelpRow[] {
-  return [
-    { keys: 'tab / shift-tab', description: 'Move focus between sidebar and list' },
-    { keys: 'j / ↓', description: 'List: move cursor down · Sidebar: next tab' },
-    { keys: 'k / ↑', description: 'List: move cursor up · Sidebar: previous tab' },
-    { keys: 'h / ←', description: 'List → sidebar focus' },
-    { keys: 'l / →', description: 'Sidebar → list focus (also enter)' },
-    { keys: 'g / G', description: 'List: jump to top / bottom' },
-    { keys: 'enter', description: 'List: drill into the cursored repo (coco ui)' },
-    { keys: 's', description: 'Cycle sort mode (recency → name → dirty)' },
-    { keys: 'r', description: 'Refresh discovery (all repos)' },
-    { keys: 'R', description: 'Refresh just the cursored repo (faster)' },
-    { keys: '/', description: 'Filter the list by name or branch' },
-    { keys: 'r', description: 'Refresh discovery' },
-    { keys: 'a', description: 'Add a repo via path prompt (tab-completes)' },
-    { keys: 'd', description: 'Remove the cursored repo from the known-repos store (y-confirm)' },
-    { keys: '?', description: 'Toggle this help overlay' },
-    { keys: 'esc', description: 'Clear filter or close overlay' },
-    { keys: 'q', description: 'Quit the workspace surface' },
-  ]
+  return buildWorkspaceHelpSections().flatMap((section) => section.rows)
 }
 
 export type WorkspaceOnboardingModel = {
