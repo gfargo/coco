@@ -95,8 +95,36 @@ async function spinUpAsync(scenarioName: string | null): Promise<{ path: string;
   if (!scenarioName) {
     const dir = mkdtempSync(join(tmpdir(), 'coco-screenshot-'))
     return {
-      path: dir,
+      path: realpathSync(dir),
       cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    }
+  }
+
+  // Special multi-repo workspace scenario: creates 3 repos in
+  // subdirectories of a parent dir for the workspace command to scan.
+  if (scenarioName === '_workspace') {
+    const { mkdirSync: mkdirSyncFs } = await import('fs')
+    const parentDir = mkdtempSync(join(tmpdir(), 'coco-workspace-'))
+    const realParent = realpathSync(parentDir)
+
+    // Create 3 repos as subdirectories
+    const scenarios = ['feature-pr-ready', 'dirty-many-files', 'stashed-changes']
+    const repos: Array<{ cleanup: () => void }> = []
+    for (let i = 0; i < scenarios.length; i++) {
+      const repo = await fromScenario(scenarios[i])
+      const targetDir = join(realParent, ['widget-app', 'dashboard', 'api-server'][i])
+      mkdirSyncFs(targetDir, { recursive: true })
+      const { execSync } = await import('child_process')
+      execSync(`cp -a ${repo.path}/. ${targetDir}/`)
+      repos.push(repo)
+    }
+
+    return {
+      path: realParent,
+      cleanup: async () => {
+        for (const r of repos) await r.cleanup()
+        rmSync(realParent, { recursive: true, force: true })
+      },
     }
   }
 
