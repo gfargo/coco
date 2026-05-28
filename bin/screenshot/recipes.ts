@@ -350,6 +350,70 @@ export const RECIPES: ScreenshotRecipe[] = [
     command: 'ui --view history --theme monochrome',
     theme: 'monochrome',
   },
+
+  // ─────────────────────────────────────────────────────────────────
+  // `coco ui` — interactive overlays and focus states
+  // ─────────────────────────────────────────────────────────────────
+  {
+    name: 'ui-command-palette',
+    description: 'Command palette overlay showing searchable command list',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: ':' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-search-filter',
+    description: 'History view with an active search filter narrowing commits',
+    scenario: 'multi-commit-branch',
+    command: 'ui --view history --no-all',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: '/' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'type', text: 'feat' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-inspector-focused',
+    description: 'History view with the inspector panel focused via tab',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'key', key: 'Tab' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+
+  // ─────────────────────────────────────────────────────────────────
+  // Subcommand help outputs — useful for docs reference pages
+  // ─────────────────────────────────────────────────────────────────
+  {
+    name: 'cmd-commit-help',
+    description: 'coco commit --help showing all commit options',
+    scenario: null,
+    command: 'commit --help',
+    dimensions: { cols: 100, rows: 35 },
+  },
+  {
+    name: 'cmd-changelog-help',
+    description: 'coco changelog --help showing all changelog options',
+    scenario: null,
+    command: 'changelog --help',
+    dimensions: { cols: 100, rows: 30 },
+  },
+  {
+    name: 'cmd-log-help',
+    description: 'coco log --help showing all log options',
+    scenario: null,
+    command: 'log --help',
+    dimensions: { cols: 100, rows: 35 },
+  },
 ]
 
 export function findRecipe(name: string): ScreenshotRecipe | undefined {
