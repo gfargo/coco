@@ -42,6 +42,11 @@ type RenderWorkspaceAppDeps = {
   columns: number
   /** Terminal height in rows. Caller resolves via Ink's useWindowSize. */
   rows: number
+  /**
+   * Tick counter for the per-row PR-fetch spinner. Caller increments
+   * this on a setInterval while any row is mid-fetch.
+   */
+  spinnerTick: number
 }
 
 function toneColor(tone: WorkspaceListColumn['tone'], theme: LogInkTheme): string | undefined {
@@ -412,7 +417,11 @@ function renderListBody(
   // render at least one row of content.
   const reservedChrome = 5
   const listRows = Math.max(1, height - reservedChrome)
-  const windowed = buildWorkspaceListWindow(state, { width, rows: listRows })
+  const windowed = buildWorkspaceListWindow(state, {
+    width,
+    rows: listRows,
+    spinnerTick: deps.spinnerTick,
+  })
   const visibleRepos = selectVisibleRepos(state)
 
   const filterChip = state.filter

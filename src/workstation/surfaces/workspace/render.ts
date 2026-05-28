@@ -161,11 +161,24 @@ export function assignWorkspaceColumnWidths(budget: number): WorkspaceColumnWidt
   return widths
 }
 
+/**
+ * Spinner frames cycled by the runtime tick. Same Braille-style
+ * spinner the existing `chrome/spinner.ts` uses so workspace +
+ * coco ui feel consistent.
+ */
+export const WORKSPACE_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
+
+export function workspaceSpinnerFrame(tick: number): string {
+  return WORKSPACE_SPINNER_FRAMES[tick % WORKSPACE_SPINNER_FRAMES.length]
+}
+
 function formatStatusCell(
   repo: WorkspaceRepoSummary,
   width: number,
-  ghAuthenticated?: boolean,
-  prCount?: number
+  ghAuthenticated: boolean | undefined,
+  prCount: number | undefined,
+  isFetchingPr: boolean,
+  spinnerFrame: string
 ): WorkspaceListColumn {
   const tokens: string[] = []
   if (repo.dirty > 0) {
@@ -177,7 +190,12 @@ function formatStatusCell(
   if (repo.behind > 0) {
     tokens.push(`↓${repo.behind}`)
   }
-  if (ghAuthenticated && typeof prCount === 'number' && prCount > 0) {
+  if (isFetchingPr) {
+    // Animated spinner replaces the PR token while the gh call is
+    // in flight. Same glyph family as the existing TUI's
+    // workspace-wide loading indicator so users learn one shape.
+    tokens.push(spinnerFrame)
+  } else if (ghAuthenticated && typeof prCount === 'number' && prCount > 0) {
     // `⊙ N` matches the PRs tab glyph so the status column reads as a
     // glance-grokable summary of the same data the tabs filter on.
     tokens.push(`⊙${prCount}`)
@@ -240,6 +258,13 @@ export type BuildWorkspaceListRowsOptions = {
    * determinism; the view layer passes `new Date()`.
    */
   now?: Date
+  /**
+   * Tick counter for the spinner frame. The runtime increments this
+   * on a setInterval while any row is fetching its PR count, so the
+   * Braille spinner animates without keeping React busy when nothing
+   * is in flight.
+   */
+  spinnerTick?: number
 }
 
 const DEFAULT_ROW_WIDTH = 120
@@ -265,6 +290,8 @@ export function buildWorkspaceListRows(
   const widths = assignWorkspaceColumnWidths(rowWidth)
   const dateMode = options.dateMode ?? pickWorkspaceDateMode(rowWidth)
   const now = options.now ?? new Date()
+  const spinner = workspaceSpinnerFrame(options.spinnerTick ?? 0)
+  const fetchingSet = new Set(state.pullRequestFetching)
   return visible.map((repo, index) => {
     const cursor = index === state.selectedIndex
     const nameTone: WorkspaceListColumn['tone'] = repo.error ? 'warn' : 'default'
@@ -288,7 +315,14 @@ export function buildWorkspaceListRows(
     }
     if (widths.status !== undefined) {
       columns.push(
-        formatStatusCell(repo, widths.status, state.ghAuthenticated, state.pullRequestCounts[repo.path])
+        formatStatusCell(
+          repo,
+          widths.status,
+          state.ghAuthenticated,
+          state.pullRequestCounts[repo.path],
+          fetchingSet.has(repo.path),
+          spinner
+        )
       )
     }
     if (widths.date !== undefined) {
@@ -362,9 +396,12 @@ export type WorkspaceListWindow = {
  */
 export function buildWorkspaceListWindow(
   state: WorkspaceState,
-  options: { width?: number; rows: number } = { rows: 20 }
+  options: { width?: number; rows: number; spinnerTick?: number } = { rows: 20 }
 ): WorkspaceListWindow {
-  const all = buildWorkspaceListRows(state, { width: options.width })
+  const all = buildWorkspaceListRows(state, {
+    width: options.width,
+    spinnerTick: options.spinnerTick,
+  })
   const visibleCount = Math.max(1, options.rows)
   if (all.length <= visibleCount) {
     return {
@@ -556,7 +593,7 @@ export type WorkspaceFooterModel = {
   filterMode: boolean
 }
 
-const LIST_HINT = 'j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit'
+const LIST_HINT = 'j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit'
 const SIDEBAR_HINT = 'j/k change tab · enter / l → list · tab → list · ? help · q quit'
 const FILTER_HINT = 'type filter · enter to apply · esc to clear'
 const ADD_REPO_HINT = 'type path · tab to complete · enter to add · esc to cancel'
@@ -614,6 +651,8 @@ export function buildWorkspaceHelpRows(): WorkspaceHelpRow[] {
     { keys: 'g / G', description: 'List: jump to top / bottom' },
     { keys: 'enter', description: 'List: drill into the cursored repo (coco ui)' },
     { keys: 's', description: 'Cycle sort mode (recency → name → dirty)' },
+    { keys: 'r', description: 'Refresh discovery (all repos)' },
+    { keys: 'R', description: 'Refresh just the cursored repo (faster)' },
     { keys: '/', description: 'Filter the list by name or branch' },
     { keys: 'r', description: 'Refresh discovery' },
     { keys: 'a', description: 'Add a repo via path prompt (tab-completes)' },

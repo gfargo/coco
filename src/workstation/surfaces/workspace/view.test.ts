@@ -118,6 +118,7 @@ function render(
       } as ReturnType<typeof completePath>),
     columns: options.columns ?? 120,
     rows: options.rows ?? 40,
+    spinnerTick: 0,
   })
 }
 

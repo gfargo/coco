@@ -156,9 +156,15 @@ export type WorkspaceStartOptions = {
     roots: ReadonlyArray<string>,
     knownRepos: ReadonlyArray<string>
   ) => Promise<WorkspaceOverview>
-  /** Override gh PR-count fetch (used by tests + when caller already has data). */
+  /**
+   * Override gh PR-count fetch (used by tests + when caller already
+   * has data). Second arg lets the runtime watch per-repo completion
+   * so the surface can clear the per-row spinner the moment each
+   * repo's count lands, instead of waiting for the whole batch.
+   */
   loadPullRequestCounts?: (
-    repos: ReadonlyArray<WorkspaceRepoSummary>
+    repos: ReadonlyArray<WorkspaceRepoSummary>,
+    onRepoComplete?: (path: string, count: number | undefined) => void
   ) => Promise<WorkspacePullRequestCounts>
   streams?: {
     input?: NodeJS.ReadStream
@@ -196,10 +202,16 @@ export async function startWorkspace(
     ((roots: ReadonlyArray<string>, repos: ReadonlyArray<string>) =>
       getWorkspaceOverview(roots, { knownRepos: repos, maxDepth: options.maxDepth }))
 
-  const loadPullRequestCounts =
+  const loadPullRequestCounts: (
+    repos: ReadonlyArray<WorkspaceRepoSummary>,
+    onRepoComplete?: (path: string, count: number | undefined) => void
+  ) => Promise<WorkspacePullRequestCounts> =
     options.loadPullRequestCounts ??
-    ((repos: ReadonlyArray<WorkspaceRepoSummary>) =>
-      getWorkspacePullRequestCounts(repos.map((entry) => entry.path)))
+    ((repos, onRepoComplete) =>
+      getWorkspacePullRequestCounts(
+        repos.map((entry) => entry.path),
+        { onRepoComplete }
+      ))
 
   const cached = readCachedWorkspace(options.roots) ?? EMPTY_OVERVIEW(options.roots)
   const persisted = readWorkspacePreferences(options.roots)
@@ -400,7 +412,8 @@ type WorkspaceInkAppProps = {
     knownRepos: ReadonlyArray<string>
   ) => Promise<WorkspaceOverview>
   loadPullRequestCounts: (
-    repos: ReadonlyArray<WorkspaceRepoSummary>
+    repos: ReadonlyArray<WorkspaceRepoSummary>,
+    onRepoComplete?: (path: string, count: number | undefined) => void
   ) => Promise<WorkspacePullRequestCounts>
   onAddRepo?: () => Promise<string | undefined>
   resume?: WorkspaceResumeState
@@ -436,10 +449,25 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   const [addRepoCompletion, setAddRepoCompletion] = React.useState<PathCompletionResult>(() =>
     completePath('~/')
   )
+  // Tick counter for the per-row PR-fetch spinner. Bumped on a
+  // setInterval that only runs while at least one row is mid-fetch
+  // (see effect below) so idle workspaces don't burn CPU on animation
+  // frames.
+  const [spinnerTick, setSpinnerTick] = React.useState(0)
 
   const dispatch = React.useCallback((action: WorkspaceAction) => {
     setState((prev) => applyWorkspaceAction(prev, action))
   }, [])
+
+  // Spinner tick — only ticks while at least one row is fetching a
+  // PR count. Stops as soon as the fetching set empties so the
+  // workspace idles at zero render cost.
+  const fetchingCount = state.pullRequestFetching.length
+  React.useEffect(() => {
+    if (fetchingCount === 0) return
+    const id = setInterval(() => setSpinnerTick((tick) => (tick + 1) % 1000), 80)
+    return () => clearInterval(id)
+  }, [fetchingCount])
 
   // Track an unmount flag in a ref so async work scheduled by the
   // input handler (refresh, drillIn, etc.) can short-circuit when the
@@ -476,13 +504,27 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         if (props.resume?.selectedRepoPath) {
           dispatch({ type: 'anchor-cursor-by-path', path: props.resume.selectedRepoPath })
         }
-        const pr = await props.loadPullRequestCounts(overview.repos)
+        // Mark every repo as "fetching PRs" up front so the row
+        // spinners light up immediately. As each repo's gh call
+        // completes, mark-pull-request-fetched clears just that row.
+        dispatch({
+          type: 'set-pull-request-fetching',
+          paths: overview.repos.map((entry) => entry.path),
+        })
+        const pr = await props.loadPullRequestCounts(overview.repos, (path) => {
+          if (cancelled || unmountedRef.current) return
+          dispatch({ type: 'mark-pull-request-fetched', path })
+        })
         if (cancelled || unmountedRef.current) return
         dispatch({
           type: 'replace-pull-request-counts',
           counts: pr.counts,
           authenticated: pr.authenticated,
         })
+        // Belt-and-suspenders: clear any stragglers in the fetching set
+        // (e.g. repos without a GitHub remote that the data layer
+        // skipped silently in older versions).
+        dispatch({ type: 'set-pull-request-fetching', paths: [] })
         if (!pr.authenticated) {
           dispatch({
             type: 'set-status',
@@ -491,6 +533,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         }
       } catch (err) {
         if (cancelled || unmountedRef.current) return
+        dispatch({ type: 'set-pull-request-fetching', paths: [] })
         dispatch({ type: 'set-loading', loading: false })
         dispatch({
           type: 'set-status',
@@ -513,19 +556,63 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       dispatch({ type: 'set-status', status: `Refreshed ${overview.repos.length} repos.` })
-      const pr = await props.loadPullRequestCounts(overview.repos)
+      dispatch({
+        type: 'set-pull-request-fetching',
+        paths: overview.repos.map((entry) => entry.path),
+      })
+      const pr = await props.loadPullRequestCounts(overview.repos, (path) => {
+        if (unmountedRef.current) return
+        dispatch({ type: 'mark-pull-request-fetched', path })
+      })
       if (unmountedRef.current) return
       dispatch({
         type: 'replace-pull-request-counts',
         counts: pr.counts,
         authenticated: pr.authenticated,
       })
+      dispatch({ type: 'set-pull-request-fetching', paths: [] })
     } catch (err) {
       if (unmountedRef.current) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
         status: err instanceof Error ? err.message : 'Discovery failed.',
+      })
+    }
+  }, [dispatch, props])
+
+  const refreshRow = React.useCallback(async () => {
+    const focused = selectFocusedRepo(stateRef.current)
+    if (!focused) return
+    dispatch({ type: 'set-pull-request-fetching', paths: [focused.path] })
+    dispatch({ type: 'set-status', status: `Refreshing ${focused.name}…` })
+    try {
+      const pr = await props.loadPullRequestCounts([focused], (path) => {
+        if (unmountedRef.current) return
+        dispatch({ type: 'mark-pull-request-fetched', path })
+      })
+      if (unmountedRef.current) return
+      // Merge into existing counts rather than replacing them — a
+      // per-row refresh shouldn't clobber other rows' counts.
+      const merged: Record<string, number> = { ...stateRef.current.pullRequestCounts }
+      if (typeof pr.counts[focused.path] === 'number') {
+        merged[focused.path] = pr.counts[focused.path]
+      } else {
+        delete merged[focused.path]
+      }
+      dispatch({
+        type: 'replace-pull-request-counts',
+        counts: merged,
+        authenticated: pr.authenticated,
+      })
+      dispatch({ type: 'set-pull-request-fetching', paths: [] })
+      dispatch({ type: 'set-status', status: `Refreshed ${focused.name}.` })
+    } catch (err) {
+      if (unmountedRef.current) return
+      dispatch({ type: 'set-pull-request-fetching', paths: [] })
+      dispatch({
+        type: 'set-status',
+        status: err instanceof Error ? err.message : 'Row refresh failed.',
       })
     }
   }, [dispatch, props])
@@ -634,6 +721,8 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   drillInRef.current = drillIn
   const refreshRef = React.useRef(refresh)
   refreshRef.current = refresh
+  const refreshRowRef = React.useRef(refreshRow)
+  refreshRowRef.current = refreshRow
   const openAddRepoRef = React.useRef(openAddRepo)
   openAddRepoRef.current = openAddRepo
   const requestDeleteRef = React.useRef(requestDelete)
@@ -755,6 +844,9 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       case 'refresh':
         void refreshRef.current()
         break
+      case 'refresh-row':
+        void refreshRowRef.current()
+        break
       case 'add-repo':
         openAddRepoRef.current()
         break
@@ -807,5 +899,6 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     addRepoCompletion,
     columns,
     rows,
+    spinnerTick,
   })
 }

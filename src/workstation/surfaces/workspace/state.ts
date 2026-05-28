@@ -85,6 +85,13 @@ export type WorkspaceState = {
   /** Path the user is being asked to confirm deletion for. */
   pendingDeletePath?: string
   /**
+   * Repo paths whose PR count is currently being fetched. Used by the
+   * row renderer to show a spinner glyph in the status cell while
+   * the gh call is in flight, and to surface in-flight state for
+   * per-row refreshes (Shift+R).
+   */
+  pullRequestFetching: ReadonlyArray<string>
+  /**
    * Repo path the cursor was on right before the user opened the
    * filter prompt. Used to restore the cursor when the filter is
    * cleared (Esc) — without it, the cursor would land at index 0
@@ -115,6 +122,8 @@ export type WorkspaceAction =
   | { type: 'replace-known-repos'; paths: ReadonlyArray<string> }
   | { type: 'request-delete'; path: string }
   | { type: 'cancel-delete' }
+  | { type: 'set-pull-request-fetching'; paths: ReadonlyArray<string> }
+  | { type: 'mark-pull-request-fetched'; path: string }
 
 export type WorkspaceStateInit = {
   overview: WorkspaceOverview
@@ -150,6 +159,7 @@ export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
     showHelp: false,
     showOnboarding: Boolean(init.showOnboarding),
     knownRepoPaths: init.knownRepoPaths ?? [],
+    pullRequestFetching: [],
   }
   if (!init.selectedRepoPath) {
     return base
@@ -344,6 +354,18 @@ export function applyWorkspaceAction(
     case 'cancel-delete': {
       return { ...state, focus: 'list', pendingDeletePath: undefined }
     }
+    case 'set-pull-request-fetching': {
+      // Replace the whole fetching set. Used at the start of a batch
+      // load (mark every queued repo as fetching) or to clear.
+      return { ...state, pullRequestFetching: [...action.paths] }
+    }
+    case 'mark-pull-request-fetched': {
+      if (!state.pullRequestFetching.includes(action.path)) return state
+      return {
+        ...state,
+        pullRequestFetching: state.pullRequestFetching.filter((entry) => entry !== action.path),
+      }
+    }
     default:
       return state
   }
@@ -351,6 +373,10 @@ export function applyWorkspaceAction(
 
 export function isRepoRemovable(state: WorkspaceState, repoPath: string): boolean {
   return state.knownRepoPaths.includes(repoPath)
+}
+
+export function isRepoFetchingPullRequest(state: WorkspaceState, repoPath: string): boolean {
+  return state.pullRequestFetching.includes(repoPath)
 }
 
 export function selectFocusedRepo(state: WorkspaceState): WorkspaceRepoSummary | undefined {

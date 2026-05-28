@@ -166,6 +166,13 @@ export type GetWorkspacePullRequestCountsOptions = {
   concurrency?: number
   /** Per-call timeout in ms. Default `WORKSPACE_PR_COUNT_TIMEOUT_MS`. */
   timeoutMs?: number
+  /**
+   * Fired as each repo finishes — `count` is undefined when the repo
+   * has no GitHub remote or the gh call failed/timed out. Lets the UI
+   * surface per-row spinner state and drop the spinner the moment a
+   * row's data lands, rather than waiting for the whole batch.
+   */
+  onRepoComplete?: (repoPath: string, count: number | undefined) => void
 }
 
 async function mapWithConcurrency<T, U>(
@@ -202,16 +209,19 @@ export async function getWorkspacePullRequestCounts(
   await mapWithConcurrency(repoPaths, concurrency, async (repoPath) => {
     const url = options.remoteUrls?.get(repoPath) ?? readOriginRemoteUrl(repoPath)
     if (!url) {
+      options.onRepoComplete?.(repoPath, undefined)
       return
     }
     const repo = parseGitHubRemoteUrl(url)
     if (!repo) {
+      options.onRepoComplete?.(repoPath, undefined)
       return
     }
     const count = await fetchPullRequestCount(runner, repo, timeoutMs)
     if (typeof count === 'number') {
       counts[repoPath] = count
     }
+    options.onRepoComplete?.(repoPath, count)
   })
 
   return { authenticated: true, counts }
