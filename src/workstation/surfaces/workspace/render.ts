@@ -19,8 +19,12 @@ import { selectVisibleRepos, type WorkspaceState } from './state'
  */
 
 export type WorkspaceListColumn = {
-  /** Right-padded text — already truncated to the column width. */
+  /** Cell content. Truncated to width; the view layer pads to fill. */
   text: string
+  /** Resolved column width in cells. Set by the row builder so the view can render a fixed-width Box for table alignment across rows. */
+  width: number
+  /** Column identity — used by the view for header row + tone selection. */
+  key: WorkspaceColumnKey
   /** True for the column that should grow on screen (the name). */
   primary?: boolean
   /** Hint for the renderer: `'dim'` for muted, `'warn'` for behind/dirty. */
@@ -36,6 +40,8 @@ export type WorkspaceListRow = {
 export type WorkspaceSidebarTabRow = {
   tab: WorkspaceTab
   label: string
+  /** Number of repos in the overview that match this tab's predicate. */
+  count: number
   active: boolean
   /** True when this tab is unavailable (e.g. PRs without gh auth). */
   disabled: boolean
@@ -154,16 +160,16 @@ function formatStatusCell(
   }
   const text = tokens.length === 0 ? '·' : tokens.join(' ')
   const tone: WorkspaceListColumn['tone'] = repo.behind > 0 || repo.dirty > 0 ? 'warn' : 'dim'
-  return { text: truncateCells(text, width), tone }
+  return { text: truncateCells(text, width), width, key: 'status', tone }
 }
 
 function formatDateCell(repo: WorkspaceRepoSummary, width: number): WorkspaceListColumn {
   const date = repo.lastCommit?.date
   if (!date) {
-    return { text: truncateCells('—', width), tone: 'dim' }
+    return { text: truncateCells('—', width), width, key: 'date', tone: 'dim' }
   }
   // Trim ISO date to YYYY-MM-DD — full precision is noise in the row.
-  return { text: truncateCells(date.slice(0, 10), width), tone: 'dim' }
+  return { text: truncateCells(date.slice(0, 10), width), width, key: 'date', tone: 'dim' }
 }
 
 export type BuildWorkspaceListRowsOptions = {
@@ -186,6 +192,8 @@ export function buildWorkspaceListRows(
     if (widths.name !== undefined) {
       columns.push({
         text: truncateCells(repo.name, widths.name),
+        width: widths.name,
+        key: 'name',
         primary: true,
         tone: nameTone,
       })
@@ -193,6 +201,8 @@ export function buildWorkspaceListRows(
     if (widths.branch !== undefined) {
       columns.push({
         text: truncateCells(repo.branch ?? '—', widths.branch),
+        width: widths.branch,
+        key: 'branch',
         tone: repo.branch ? 'default' : 'dim',
       })
     }
@@ -208,17 +218,49 @@ export function buildWorkspaceListRows(
       const subject = repo.lastCommit?.subject ?? '—'
       columns.push({
         text: truncateCells(subject, widths.subject),
+        width: widths.subject,
+        key: 'subject',
         tone: repo.lastCommit?.subject ? 'default' : 'dim',
       })
     }
     if (widths.path !== undefined) {
       columns.push({
         text: truncatePathCells(repo.path, widths.path),
+        width: widths.path,
+        key: 'path',
         tone: 'dim',
       })
     }
     return { repo, cursor, columns }
   })
+}
+
+/**
+ * Column headings shown above the rows. Mirrors the column key order
+ * the row builder produces so the view can lay them out under the
+ * same widths.
+ */
+export type WorkspaceColumnHeader = {
+  key: WorkspaceColumnKey
+  label: string
+  width: number
+}
+
+const COLUMN_LABELS: Record<WorkspaceColumnKey, string> = {
+  name: 'REPO',
+  branch: 'BRANCH',
+  status: 'STATUS',
+  date: 'LAST',
+  subject: 'SUBJECT',
+  path: 'PATH',
+}
+
+export function buildWorkspaceColumnHeaders(width: number): WorkspaceColumnHeader[] {
+  const widths = assignWorkspaceColumnWidths(width)
+  const order: WorkspaceColumnKey[] = ['name', 'branch', 'status', 'date', 'subject', 'path']
+  return order
+    .filter((key) => widths[key] !== undefined)
+    .map((key) => ({ key, label: COLUMN_LABELS[key], width: widths[key]! }))
 }
 
 export type WorkspaceListWindow = {
@@ -276,11 +318,30 @@ export function buildWorkspaceListWindow(
 }
 
 export function buildWorkspaceSidebar(state: WorkspaceState): WorkspaceSidebarTabRow[] {
+  const repos = state.overview.repos
   return WORKSPACE_TABS.map((tab) => {
     const disabled = tab === 'pull-requests' && state.ghAuthenticated === false
+    let count = repos.length
+    switch (tab) {
+      case 'dirty':
+        count = repos.filter((repo) => repo.dirty > 0).length
+        break
+      case 'behind':
+        count = repos.filter((repo) => repo.behind > 0).length
+        break
+      case 'pull-requests': {
+        const counts = state.pullRequestCounts
+        count = repos.filter((repo) => (counts[repo.path] ?? 0) > 0).length
+        break
+      }
+      case 'all':
+      default:
+        count = repos.length
+    }
     return {
       tab,
       label: workspaceTabLabel(tab),
+      count,
       active: state.tab === tab,
       disabled,
     }
@@ -312,6 +373,85 @@ export function buildWorkspaceHeader(
     loading: state.loading,
     filter: state.filter || undefined,
   }
+}
+
+/**
+ * Chip-style header model. Mirrors the `chrome/headerChips.ts` shape
+ * used by `coco ui` so the two surfaces feel like the same app.
+ */
+export type WorkspaceHeaderChipId =
+  | 'app'
+  | 'verb'
+  | 'roots'
+  | 'repos'
+  | 'sort'
+  | 'filter'
+  | 'loading'
+  | 'focus'
+
+export type WorkspaceHeaderChip = {
+  id: WorkspaceHeaderChipId
+  label: string
+  tone: 'accent' | 'default' | 'dim' | 'warn'
+  bold?: boolean
+}
+
+export function buildWorkspaceHeaderChips(
+  state: WorkspaceState,
+  options: { appLabel?: string; focusLabel: string } = { focusLabel: 'List' }
+): WorkspaceHeaderChip[] {
+  const chips: WorkspaceHeaderChip[] = []
+
+  // App identity — accent + bold, anchors the left edge.
+  chips.push({ id: 'app', label: 'coco', tone: 'accent', bold: true })
+  chips.push({ id: 'verb', label: options.appLabel?.replace(/^coco\s+/i, '') ?? 'workspace', tone: 'default', bold: true })
+
+  // Roots — dim chrome.
+  chips.push({
+    id: 'roots',
+    label: state.roots.join(', ') || '—',
+    tone: 'dim',
+  })
+
+  // Repos count — visible / total.
+  const visibleCount = selectVisibleRepos(state).length
+  chips.push({
+    id: 'repos',
+    label: `${visibleCount}/${state.overview.repos.length} repos`,
+    tone: 'default',
+  })
+
+  // Sort mode.
+  chips.push({
+    id: 'sort',
+    label: `sort: ${workspaceSortLabel(state.sortMode)}`,
+    tone: 'dim',
+  })
+
+  // Filter — only when active.
+  if (state.filter) {
+    chips.push({
+      id: 'filter',
+      label: `filter: ${state.filter}`,
+      tone: 'warn',
+    })
+  }
+
+  // Loading — only when refresh is in flight.
+  if (state.loading) {
+    chips.push({ id: 'loading', label: 'refreshing…', tone: 'warn' })
+  }
+
+  // Focus indicator — bracketed accent chip at the end so it reads
+  // like coco ui's `[NORMAL]` mode chip.
+  chips.push({
+    id: 'focus',
+    label: `[${options.focusLabel}]`,
+    tone: 'accent',
+    bold: true,
+  })
+
+  return chips
 }
 
 export type WorkspaceFooterModel = {
