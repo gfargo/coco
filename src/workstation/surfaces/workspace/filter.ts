@@ -27,6 +27,11 @@ const TAB_LABELS: Record<WorkspaceTab, string> = {
  * Used in two places: as a label prefix in the expanded sidebar,
  * and as the standalone icon when the sidebar is rail-collapsed at
  * narrow terminal widths.
+ *
+ * ASCII fallback isn't wired through yet — none of these glyphs
+ * affect layout (they're width-1), so even on `TERM=dumb` they
+ * render as best the terminal can. Add a `theme.ascii`-aware lookup
+ * here if we hit a real environment where the unicode breaks.
  */
 const TAB_GLYPHS: Record<WorkspaceTab, string> = {
   all: '◯',
@@ -35,19 +40,12 @@ const TAB_GLYPHS: Record<WorkspaceTab, string> = {
   'pull-requests': '⊙',
 }
 
-const TAB_GLYPHS_ASCII: Record<WorkspaceTab, string> = {
-  all: 'o',
-  dirty: '*',
-  behind: 'v',
-  'pull-requests': '@',
-}
-
 export function workspaceTabLabel(tab: WorkspaceTab): string {
   return TAB_LABELS[tab]
 }
 
-export function workspaceTabGlyph(tab: WorkspaceTab, ascii = false): string {
-  return ascii ? TAB_GLYPHS_ASCII[tab] : TAB_GLYPHS[tab]
+export function workspaceTabGlyph(tab: WorkspaceTab): string {
+  return TAB_GLYPHS[tab]
 }
 
 export function nextWorkspaceTab(current: WorkspaceTab): WorkspaceTab {

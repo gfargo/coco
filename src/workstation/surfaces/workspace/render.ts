@@ -6,10 +6,7 @@ import {
   WORKSPACE_TABS,
   type WorkspaceTab,
 } from './filter'
-import {
-  workspaceSortLabel,
-  type WorkspaceSortMode,
-} from './sort'
+import { workspaceSortLabel } from './sort'
 import { selectVisibleRepos, type WorkspaceState } from './state'
 
 /**
@@ -628,14 +625,6 @@ export function buildWorkspaceFooter(state: WorkspaceState): WorkspaceFooterMode
     hint: hintFor(state.focus),
     status: state.status,
     filterMode: state.focus === 'filter',
-  }
-}
-
-export function describeSortModesForLegend(): Record<WorkspaceSortMode, string> {
-  return {
-    recency: 'Most-recent commit first',
-    name: 'Alphabetical',
-    dirty: 'Most working-tree changes first',
   }
 }
 

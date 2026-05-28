@@ -108,6 +108,26 @@ describe('getWorkspacePullRequestCounts', () => {
     expect(result).toBe('[]')
   })
 
+  it('runGhWithTimeout swallows a post-abort runner rejection', async () => {
+    // After timeout aborts the signal, the runner may still reject
+    // with the abort reason. That late rejection must not surface as
+    // an unhandled rejection — the helper's `try { … } catch {}`
+    // should absorb it and the overall result stays `undefined`.
+    let abortReject!: () => void
+    const runner = jest.fn(async (_args: string[], opts?: { signal?: AbortSignal }) => {
+      return new Promise<string>((_, reject) => {
+        abortReject = () => reject(new Error('AbortError'))
+        opts?.signal?.addEventListener('abort', abortReject)
+      })
+    })
+    const result = await runGhWithTimeout(runner, ['pr', 'list'], 10)
+    expect(result).toBeUndefined()
+    // Now imagine the runner's promise was still pending when the
+    // timeout fired — give it one more microtask to reject and
+    // ensure nothing else throws.
+    await new Promise((resolve) => setImmediate(resolve))
+  })
+
   it('issues one gh pr list per repo with a GitHub remote and records the count', async () => {
     const remoteUrls = new Map<string, string>([
       ['/tmp/repo-a', 'git@github.com:owner/repo-a.git'],

@@ -1,6 +1,8 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
+import { mapWithConcurrency } from '../lib/utils/mapWithConcurrency'
+
 import {
   defaultGhRunner,
   isGhAuthenticated,
@@ -173,23 +175,6 @@ export type GetWorkspacePullRequestCountsOptions = {
    * row's data lands, rather than waiting for the whole batch.
    */
   onRepoComplete?: (repoPath: string, count: number | undefined) => void
-}
-
-async function mapWithConcurrency<T, U>(
-  inputs: ReadonlyArray<T>,
-  limit: number,
-  fn: (input: T) => Promise<U>
-): Promise<U[]> {
-  const results: U[] = []
-  let cursor = 0
-  const workers = Array.from({ length: Math.min(limit, inputs.length) }, async () => {
-    while (cursor < inputs.length) {
-      const idx = cursor++
-      results[idx] = await fn(inputs[idx])
-    }
-  })
-  await Promise.all(workers)
-  return results
 }
 
 export async function getWorkspacePullRequestCounts(

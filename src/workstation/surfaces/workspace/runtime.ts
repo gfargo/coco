@@ -76,6 +76,18 @@ import {
 import { isGitWorkingTree } from '../../../git/workspaceData'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
+/**
+ * `import()` smuggle. ts-jest's CJS transform downgrades a bare
+ * `await import(spec)` into `require(spec)`, which fails for the
+ * ESM-only `ink` / `react` packages with "A dynamic import callback
+ * was invoked without --experimental-vm-modules". Wrapping the
+ * import in a `new Function('return import(...)')` body keeps the
+ * import expression as a string at compile time — the runtime then
+ * eval-parses it as native ESM dynamic import.
+ *
+ * Same trick `src/commands/log/inkRuntime.ts` uses; documented in
+ * `src/workstation/README.md`.
+ */
 const dynamicImport = new Function('specifier', 'return import(specifier)') as DynamicImport
 
 export type WorkspaceInkRuntime = {

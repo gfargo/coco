@@ -3,6 +3,8 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import simpleGit, { SimpleGit } from 'simple-git'
 
+import { mapWithConcurrency } from '../lib/utils/mapWithConcurrency'
+
 const FIELD_SEPARATOR = '\x1f'
 
 /**
@@ -368,23 +370,6 @@ export type GetWorkspaceOverviewOptions = WorkspaceDiscoveryOptions & {
 }
 
 const DEFAULT_CONCURRENCY = 8
-
-async function mapWithConcurrency<T, U>(
-  inputs: ReadonlyArray<T>,
-  limit: number,
-  fn: (input: T) => Promise<U>
-): Promise<U[]> {
-  const results: U[] = []
-  let cursor = 0
-  const workers = Array.from({ length: Math.min(limit, inputs.length) }, async () => {
-    while (cursor < inputs.length) {
-      const idx = cursor++
-      results[idx] = await fn(inputs[idx])
-    }
-  })
-  await Promise.all(workers)
-  return results
-}
 
 export async function getWorkspaceOverview(
   roots: ReadonlyArray<string>,
