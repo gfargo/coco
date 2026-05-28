@@ -22,6 +22,7 @@ import {
   buildWorkspaceListWindow,
   buildWorkspaceOnboarding,
   buildWorkspaceSidebar,
+  shouldRailWorkspaceSidebar,
   type WorkspaceHeaderChip,
   type WorkspaceListColumn,
   type WorkspaceListRow,
@@ -134,8 +135,55 @@ function renderHeader(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   )
 }
 
-const SIDEBAR_WIDTH = 22
+const SIDEBAR_WIDTH_EXPANDED = 22
+const SIDEBAR_WIDTH_RAILED = 5
 const SIDEBAR_LABEL_WIDTH = 9 // " Dirty " etc. — enough for the longest tab label
+
+function sidebarWidthFor(deps: RenderWorkspaceAppDeps): number {
+  const focused = deps.state.focus === 'sidebar'
+  return shouldRailWorkspaceSidebar(deps.columns, focused)
+    ? SIDEBAR_WIDTH_RAILED
+    : SIDEBAR_WIDTH_EXPANDED
+}
+
+function renderSidebarRail(
+  deps: RenderWorkspaceAppDeps,
+  height: number
+): ReactTypes.ReactElement {
+  const { React, ink, state, theme } = deps
+  const { Box, Text } = ink
+  const focused = state.focus === 'sidebar' // never true while railed, but defensive
+  const tabs = buildWorkspaceSidebar(state)
+  const rows = tabs.map((row) => {
+    const tone = row.disabled
+      ? { dimColor: true }
+      : row.active
+        ? { bold: true, color: theme.noColor ? undefined : theme.colors.accent }
+        : { dimColor: true }
+    // Single-glyph rail row. The active tab's glyph keeps its accent
+    // even when the sidebar isn't focused so the user can still see
+    // "which filter is on" at a glance.
+    return React.createElement(
+      Text,
+      { key: row.tab, ...tone },
+      ` ${row.glyph}`
+    )
+  })
+  return React.createElement(
+    Box,
+    {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexShrink: 0,
+      height,
+      paddingX: 0,
+      width: SIDEBAR_WIDTH_RAILED,
+    },
+    React.createElement(Text, { dimColor: true }, ' »'),
+    ...rows
+  )
+}
 
 function renderSidebar(
   deps: RenderWorkspaceAppDeps,
@@ -143,30 +191,49 @@ function renderSidebar(
 ): ReactTypes.ReactElement {
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
-  // Sidebar owns the focus when the user is cycling tabs.
   const focused = state.focus === 'sidebar'
+
+  if (shouldRailWorkspaceSidebar(deps.columns, focused)) {
+    return renderSidebarRail(deps, height)
+  }
+
   const tabs = buildWorkspaceSidebar(state)
   const widest = tabs.reduce((acc, row) => Math.max(acc, row.label.length), SIDEBAR_LABEL_WIDTH)
   const rows = tabs.map((row) => {
-    const props: Record<string, unknown> = { key: row.tab }
+    const labelProps: Record<string, unknown> = { key: 'label' }
+    const glyphProps: Record<string, unknown> = { key: 'glyph' }
     if (row.active) {
-      props.bold = true
+      labelProps.bold = true
+      glyphProps.bold = true
       if (focused && !theme.noColor) {
-        props.color = theme.colors.accent
+        labelProps.color = theme.colors.accent
+        glyphProps.color = theme.colors.accent
+      } else if (!theme.noColor) {
+        // Tab glyph keeps a hint of color even while the sidebar
+        // isn't focused, so users see "which filter is on" without
+        // peering at the bold treatment.
+        glyphProps.color = theme.colors.accent
       }
-    } else if (row.disabled) {
-      props.dimColor = true
+    } else {
+      if (row.disabled) {
+        labelProps.dimColor = true
+        glyphProps.dimColor = true
+      } else if (!theme.noColor) {
+        // Inactive glyphs render in muted color so the column reads
+        // as a visual key — never relying on color alone since the
+        // glyph itself is the primary signal.
+        glyphProps.color = theme.colors.muted
+      }
     }
     const cursor = row.active ? '›' : ' '
     const paddedLabel = row.label.padEnd(widest)
     const countText = row.count > 0 ? String(row.count) : '·'
-    // Render label + count on the same line so the count is always
-    // right after the label and reads as part of the tab. Count is
-    // dim so the label keeps visual priority.
     return React.createElement(
       Box,
       { key: row.tab, flexDirection: 'row' },
-      React.createElement(Text, props, `${cursor} ${paddedLabel}`),
+      React.createElement(Text, labelProps, `${cursor} `),
+      React.createElement(Text, glyphProps, `${row.glyph} `),
+      React.createElement(Text, labelProps, paddedLabel),
       React.createElement(
         Text,
         { dimColor: !row.active, color: row.active && !theme.noColor ? theme.colors.accent : undefined },
@@ -183,7 +250,7 @@ function renderSidebar(
       flexShrink: 0,
       height,
       paddingX: 1,
-      width: SIDEBAR_WIDTH,
+      width: SIDEBAR_WIDTH_EXPANDED,
     },
     React.createElement(Text, { bold: true }, panelTitle('Tabs', focused)),
     ...rows
@@ -201,28 +268,33 @@ function renderListRow(
   const { React, ink, theme } = deps
   const { Box, Text } = ink
   const cursor = row.cursor ? '›' : ' '
-  const cells = row.columns.map((column, index) =>
-    // Fixed-width Box per column — this is what was missing before.
-    // Without it, cells with shorter content collapsed and the
-    // table rows wandered out of alignment across rows.
-    React.createElement(
+  // Cursored rows use reverse video for the strongest selection
+  // signal — the canonical TUI convention since VT100 and the same
+  // affordance coco ui uses for active commits. Reverse video skips
+  // applying per-cell tone colors because the inverted background
+  // makes faint tones unreadable.
+  const cursorReverse = row.cursor
+  const cells = row.columns.map((column, index) => {
+    const textProps: Record<string, unknown> = {
+      bold: row.cursor && column.primary,
+      inverse: cursorReverse,
+    }
+    if (!cursorReverse) {
+      textProps.dimColor = column.tone === 'dim'
+      const color = toneColor(column.tone, theme)
+      if (color) textProps.color = color
+    }
+    // Fixed-width Box per column — table-style alignment across rows.
+    return React.createElement(
       Box,
       {
         key: column.key,
         width: column.width + (index < row.columns.length - 1 ? COLUMN_GAP : 0),
         flexShrink: 0,
       },
-      React.createElement(
-        Text,
-        {
-          bold: row.cursor && column.primary,
-          dimColor: !row.cursor && column.tone === 'dim',
-          color: toneColor(column.tone, theme),
-        },
-        column.text
-      )
+      React.createElement(Text, textProps, column.text)
     )
-  )
+  })
   return React.createElement(
     Box,
     { key, flexDirection: 'row' },
@@ -231,11 +303,68 @@ function renderListRow(
       { width: CURSOR_PREFIX_WIDTH, flexShrink: 0 },
       React.createElement(
         Text,
-        { bold: row.cursor, color: row.cursor && !theme.noColor ? theme.colors.accent : undefined },
+        {
+          bold: row.cursor,
+          inverse: cursorReverse,
+          color: row.cursor && !theme.noColor ? theme.colors.accent : undefined,
+        },
         `${cursor} `
       )
     ),
     ...cells
+  )
+}
+
+/**
+ * Centered empty-state rendered when there's nothing to show in the
+ * list (loading, no repos discovered, or filtered to zero). Uses
+ * Box marginLeft to center horizontally — cheaper than computing a
+ * perfect width and skipping cells, and visually equivalent.
+ */
+function renderEmptyState(
+  deps: RenderWorkspaceAppDeps,
+  width: number
+): ReactTypes.ReactElement {
+  const { React, ink, state, theme } = deps
+  const { Box, Text } = ink
+  const variant: 'loading' | 'no-repos' | 'no-matches' = state.loading
+    ? 'loading'
+    : state.overview.repos.length === 0
+      ? 'no-repos'
+      : 'no-matches'
+  const glyph = variant === 'loading' ? '◐' : variant === 'no-repos' ? '∅' : '○'
+  const headline =
+    variant === 'loading'
+      ? 'Scanning configured roots…'
+      : variant === 'no-repos'
+        ? 'No repositories discovered'
+        : 'No repos match the current filter'
+  const detail =
+    variant === 'no-repos'
+      ? 'Press `a` to add a repo by path, or configure `workspace.roots`.'
+      : variant === 'no-matches'
+        ? 'Press `esc` to clear the filter, or `tab` to change the sidebar tab.'
+        : ''
+  return React.createElement(
+    Box,
+    {
+      key: 'empty',
+      flexDirection: 'column',
+      alignItems: 'center',
+      width,
+      marginTop: 2,
+    },
+    React.createElement(
+      Text,
+      {
+        bold: true,
+        color: variant === 'no-repos' && !theme.noColor ? theme.colors.muted : undefined,
+      },
+      `${glyph}  ${headline}`
+    ),
+    detail
+      ? React.createElement(Text, { dimColor: true, key: 'detail' }, detail)
+      : null
   )
 }
 
@@ -291,22 +420,14 @@ function renderListBody(
     : state.focus === 'filter'
       ? `  ·  filter: ${deps.filterDraft}_`
       : ''
+  // Half-circle ◐ reads as "in progress" without animation; pairs
+  // nicely with the text so the column doesn't depend on color alone.
   const headerRight = state.loading
-    ? 'loading repos…'
+    ? '◐ loading repos…'
     : `${visibleRepos.length} visible${filterChip}`
 
   const lines: ReactTypes.ReactNode[] = windowed.rows.length === 0
-    ? [
-      React.createElement(
-        Text,
-        { dimColor: true, key: 'empty' },
-        state.loading
-          ? 'Scanning configured roots…'
-          : state.overview.repos.length === 0
-            ? 'No repositories discovered. Configure workspace.roots and try again.'
-            : 'No repos match the current filter.'
-      ),
-    ]
+    ? [renderEmptyState(deps, width)]
     : windowed.rows.map((row, index) =>
       renderListRow(deps, row, `row-${windowed.hiddenAbove + index}`)
     )
@@ -541,7 +662,7 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
       Box,
       { flexDirection: 'row', height: bodyHeight },
       renderSidebar(deps, bodyHeight),
-      renderListBody(deps, bodyWidth - SIDEBAR_WIDTH - 2, bodyHeight)
+      renderListBody(deps, bodyWidth - sidebarWidthFor(deps) - 2, bodyHeight)
     ),
     renderOnboardingBanner(deps),
     renderAddRepoPrompt(deps),

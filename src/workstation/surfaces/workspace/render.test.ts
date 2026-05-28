@@ -48,8 +48,8 @@ describe('workspace render builders', () => {
     roots: ['~/code'],
   })
 
-  it('builds a list row per visible repo with the expected columns', () => {
-    const rows = buildWorkspaceListRows(state)
+  it('builds a list row per visible repo with the expected columns (absolute dates)', () => {
+    const rows = buildWorkspaceListRows(state, { width: 160, dateMode: 'absolute' })
     expect(rows.map((row) => row.repo.name)).toEqual(['coco', 'docs'])
     expect(rows[0].cursor).toBe(true)
     expect(rows[1].cursor).toBe(false)
@@ -62,6 +62,16 @@ describe('workspace render builders', () => {
     expect(date.text.startsWith('2026-05-01')).toBe(true)
     expect(subject.text).toContain('feat: thing')
     expect(path.text).toContain('/tmp/coco')
+  })
+
+  it('relative date mode formats the date column compactly', () => {
+    const rows = buildWorkspaceListRows(state, {
+      width: 120,
+      dateMode: 'relative',
+      now: new Date('2026-05-30T00:00:00Z'),
+    })
+    // coco's lastCommit is 2026-05-01 → 29 days → 4w
+    expect(rows[0].columns[3].text.trim()).toMatch(/^(\d+(d|w|mo|y)|now|\dh|\d+m)$/)
   })
 
   it('renders the placeholder · for a clean repo and dims the status cell', () => {
@@ -78,7 +88,8 @@ describe('workspace render builders', () => {
       authenticated: true,
     })
     const rows = buildWorkspaceListRows(next)
-    expect(rows[1].columns[2].text).toContain('pr4')
+    // PR token uses the ⊙ glyph matching the PRs tab.
+    expect(rows[1].columns[2].text).toContain('⊙4')
   })
 
   it('omits pr tokens when gh is unauthenticated', () => {
@@ -88,7 +99,7 @@ describe('workspace render builders', () => {
       authenticated: false,
     })
     const rows = buildWorkspaceListRows(next)
-    expect(rows[1].columns[2].text).not.toContain('pr4')
+    expect(rows[1].columns[2].text).not.toContain('⊙4')
   })
 
   it('dims the PRs sidebar tab when gh is unauthenticated', () => {
@@ -147,9 +158,7 @@ describe('workspace render builders', () => {
 
   describe('assignWorkspaceColumnWidths', () => {
     it('drops the path column first on narrow terminals', () => {
-      // All six minimums total ~87 cells once gaps + cursor are
-      // included; budgets in [68, 86) keep subject but drop path.
-      const widths = assignWorkspaceColumnWidths(72)
+      const widths = assignWorkspaceColumnWidths(70)
       expect(widths.name).toBeDefined()
       expect(widths.branch).toBeDefined()
       expect(widths.status).toBeDefined()
@@ -158,8 +167,8 @@ describe('workspace render builders', () => {
       expect(widths.path).toBeUndefined()
     })
 
-    it('drops the subject column next when even path-less is too wide', () => {
-      const widths = assignWorkspaceColumnWidths(56)
+    it('drops the subject column next', () => {
+      const widths = assignWorkspaceColumnWidths(50)
       expect(widths.name).toBeDefined()
       expect(widths.branch).toBeDefined()
       expect(widths.status).toBeDefined()
@@ -168,14 +177,24 @@ describe('workspace render builders', () => {
       expect(widths.path).toBeUndefined()
     })
 
-    it('drops date when very narrow', () => {
-      const widths = assignWorkspaceColumnWidths(42)
+    it('drops date next when very narrow', () => {
+      const widths = assignWorkspaceColumnWidths(40)
       expect(widths.name).toBeDefined()
       expect(widths.branch).toBeDefined()
       expect(widths.status).toBeDefined()
       expect(widths.date).toBeUndefined()
       expect(widths.subject).toBeUndefined()
       expect(widths.path).toBeUndefined()
+    })
+
+    it('keeps status longer than branch — status drops only after branch', () => {
+      // Branch min 12 + cursor 2 + status 8 + gap 1 = 23 → budget 25 fits
+      // name+status. Below that we drop status too.
+      const widths = assignWorkspaceColumnWidths(28)
+      expect(widths.name).toBeDefined()
+      expect(widths.status).toBeDefined()
+      expect(widths.branch).toBeUndefined()
+      expect(widths.date).toBeUndefined()
     })
 
     it('keeps every column at standard width', () => {
@@ -197,8 +216,11 @@ describe('workspace render builders', () => {
       expect(widths.subject).toBeLessThanOrEqual(60)
     })
 
-    it('returns the empty map when no column can fit', () => {
-      expect(assignWorkspaceColumnWidths(0)).toEqual({})
+    it('keeps name as the irreducible minimum even at zero budget', () => {
+      const widths = assignWorkspaceColumnWidths(0)
+      expect(widths.name).toBeDefined()
+      expect(widths.branch).toBeUndefined()
+      expect(widths.status).toBeUndefined()
     })
 
     it('builds list rows with only the surviving columns at narrow widths', () => {
