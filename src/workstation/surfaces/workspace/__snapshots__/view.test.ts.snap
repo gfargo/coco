@@ -205,11 +205,11 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -284,19 +284,19 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -361,18 +361,18 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -451,18 +451,18 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -781,11 +781,11 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -860,19 +860,19 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -1169,11 +1169,11 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -1248,19 +1248,19 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -1325,18 +1325,18 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -1415,18 +1415,18 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -1669,11 +1669,11 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={16}
+          width={15}
         >
           <Text
             color="gray"
@@ -1737,19 +1737,19 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={16}
+          width={15}
         >
           <Text
             bold={true}
@@ -1804,18 +1804,18 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={16}
+          width={15}
         >
           <Text
             bold={false}
@@ -1881,18 +1881,18 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={16}
+          width={15}
         >
           <Text
             bold={false}
@@ -2187,11 +2187,11 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -2266,19 +2266,19 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -2343,18 +2343,18 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -2433,18 +2433,18 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -2688,11 +2688,11 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={15}
+          width={21}
         >
           <Text
             color="gray"
@@ -2703,7 +2703,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
         </Box>
         <Box
           flexShrink={0}
-          width={13}
+          width={16}
         >
           <Text
             color="gray"
@@ -2723,17 +2723,6 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
             STATUS
           </Text>
         </Box>
-        <Box
-          flexShrink={0}
-          width={10}
-        >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            LAST
-          </Text>
-        </Box>
       </Box>
       <Text
         dimColor={true}
@@ -2745,19 +2734,19 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={15}
+          width={21}
         >
           <Text
             bold={true}
@@ -2768,7 +2757,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
         </Box>
         <Box
           flexShrink={0}
-          width={13}
+          width={16}
         >
           <Text
             inverse={true}
@@ -2786,34 +2775,24 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
             ●2 ↑1
           </Text>
         </Box>
-        <Box
-          flexShrink={0}
-          width={10}
-        >
-          <Text
-            inverse={true}
-          >
-            3w
-          </Text>
-        </Box>
       </Box>
       <Box
         flexDirection="row"
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={15}
+          width={21}
         >
           <Text
             bold={false}
@@ -2825,14 +2804,14 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
         </Box>
         <Box
           flexShrink={0}
-          width={13}
+          width={16}
         >
           <Text
             bold={false}
             dimColor={false}
             inverse={false}
           >
-            feature/l...
+            feature/landing
           </Text>
         </Box>
         <Box
@@ -2848,37 +2827,24 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
             ↓3
           </Text>
         </Box>
-        <Box
-          flexShrink={0}
-          width={10}
-        >
-          <Text
-            bold={false}
-            color="gray"
-            dimColor={true}
-            inverse={false}
-          >
-            6w
-          </Text>
-        </Box>
       </Box>
       <Box
         flexDirection="row"
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={15}
+          width={21}
         >
           <Text
             bold={false}
@@ -2890,7 +2856,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
         </Box>
         <Box
           flexShrink={0}
-          width={13}
+          width={16}
         >
           <Text
             bold={false}
@@ -2911,19 +2877,6 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
             inverse={false}
           >
             ·
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={10}
-        >
-          <Text
-            bold={false}
-            color="gray"
-            dimColor={true}
-            inverse={false}
-          >
-            —
           </Text>
         </Box>
       </Box>
@@ -3160,7 +3113,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
@@ -3208,7 +3161,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
         </Box>
         <Box
           flexShrink={0}
-          width={51}
+          width={50}
         >
           <Text
             color="gray"
@@ -3239,14 +3192,14 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
@@ -3292,7 +3245,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
         </Box>
         <Box
           flexShrink={0}
-          width={51}
+          width={50}
         >
           <Text
             inverse={true}
@@ -3316,13 +3269,13 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
@@ -3377,7 +3330,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
         </Box>
         <Box
           flexShrink={0}
-          width={51}
+          width={50}
         >
           <Text
             bold={false}
@@ -3406,13 +3359,13 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
@@ -3467,7 +3420,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
         </Box>
         <Box
           flexShrink={0}
-          width={51}
+          width={50}
         >
           <Text
             bold={false}
@@ -3725,11 +3678,11 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -4050,11 +4003,11 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -4129,19 +4082,19 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›  
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -4206,18 +4159,18 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -4296,18 +4249,18 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -4615,11 +4568,11 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -4694,19 +4647,19 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›  
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -4771,18 +4724,18 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -4861,18 +4814,18 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -5202,11 +5155,11 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -5281,19 +5234,19 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -5586,11 +5539,11 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -5665,19 +5618,19 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›  
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -5742,18 +5695,18 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -5832,18 +5785,18 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -6173,11 +6126,11 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -6252,19 +6205,19 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -6557,11 +6510,11 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -6636,19 +6589,19 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -6713,18 +6666,18 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -6803,18 +6756,18 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -7468,11 +7421,11 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -7787,11 +7740,11 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         />
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             color="gray"
@@ -7866,19 +7819,19 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={true}
             color="cyan"
             inverse={true}
           >
-            › 
+            ›↵ 
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={true}
@@ -7943,18 +7896,18 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}
@@ -8033,18 +7986,18 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
         <Box
           flexShrink={0}
-          width={2}
+          width={3}
         >
           <Text
             bold={false}
             inverse={false}
           >
-              
+               
           </Text>
         </Box>
         <Box
           flexShrink={0}
-          width={19}
+          width={18}
         >
           <Text
             bold={false}

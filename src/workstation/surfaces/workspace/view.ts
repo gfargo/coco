@@ -263,16 +263,26 @@ function renderSidebar(
 }
 
 const COLUMN_GAP = 1
-const CURSOR_PREFIX_WIDTH = 2
+// Cursor prefix is 3 cells: caret, drill-in hint, trailing space.
+// The hint glyph only renders on the cursored row when list focus is
+// active (drill-in is reachable); other rows show two blanks so the
+// table stays aligned.
+const CURSOR_PREFIX_WIDTH = 3
 
 function renderListRow(
   deps: RenderWorkspaceAppDeps,
   row: WorkspaceListRow,
   key: string
 ): ReactTypes.ReactElement {
-  const { React, ink, theme } = deps
+  const { React, ink, theme, state } = deps
   const { Box, Text } = ink
   const cursor = row.cursor ? '›' : ' '
+  // Drill-in glyph (`↵`) sits next to the cursor caret on the focused
+  // row when list focus is active — surfaces the Enter affordance
+  // without requiring the user to remember it from the footer.
+  // Suppressed when the user is in any modal focus (filter, add-repo,
+  // confirm-delete) since Enter is repurposed there.
+  const drillHint = row.cursor && state.focus === 'list' ? '↵' : ' '
   // Cursored rows use reverse video for the strongest selection
   // signal — the canonical TUI convention since VT100 and the same
   // affordance coco ui uses for active commits. Reverse video skips
@@ -313,7 +323,7 @@ function renderListRow(
           inverse: cursorReverse,
           color: row.cursor && !theme.noColor ? theme.colors.accent : undefined,
         },
-        `${cursor} `
+        `${cursor}${drillHint} `
       )
     ),
     ...cells
