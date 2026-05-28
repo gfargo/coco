@@ -19,7 +19,7 @@
  *   brew install vhs
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
@@ -113,7 +113,10 @@ async function spinUpAsync(scenarioName: string | null): Promise<{ path: string;
 
   const repo = await fromScenario(scenarioName)
   return {
-    path: repo.path,
+    // Resolve symlinks (macOS /var → /private/var) so git's
+    // safe.directory checks and path comparisons work correctly
+    // inside VHS's isolated shell.
+    path: realpathSync(repo.path),
     cleanup: () => repo.cleanup(),
   }
 }
