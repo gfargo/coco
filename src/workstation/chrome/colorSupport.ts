@@ -68,7 +68,7 @@ export function getColorLevel(env: ColorEnv = process.env): ColorLevel {
   return '16'
 }
 
-const TRUECOLOR_PRESETS = new Set<string>(['catppuccin', 'gruvbox'])
+const TRUECOLOR_PRESETS = new Set<string>(['catppuccin', 'gruvbox', 'dracula', 'nord', 'solarized-dark', 'tokyo-night', 'one-dark', 'rose-pine', 'kanagawa', 'everforest', 'monokai', 'synthwave', 'ayu-dark', 'palenight', 'github-dark', 'horizon'])
 
 /**
  * `true` when the named preset relies on hex colors that look best under

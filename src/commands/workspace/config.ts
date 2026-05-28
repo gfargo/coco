@@ -32,7 +32,7 @@ export const options = {
   },
   theme: {
     description: 'TUI theme preset',
-    choices: ['default', 'monochrome', 'catppuccin', 'gruvbox'],
+    choices: ['default', 'monochrome', 'catppuccin', 'gruvbox', 'dracula', 'nord', 'solarized-dark', 'tokyo-night', 'one-dark', 'rose-pine', 'kanagawa', 'everforest', 'monokai', 'synthwave', 'ayu-dark', 'palenight', 'github-dark', 'horizon'],
   },
 } as Record<string, Options>
 
