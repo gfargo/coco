@@ -351,6 +351,61 @@ export const RECIPES: ScreenshotRecipe[] = [
     theme: 'monochrome',
   },
 
+  // Theme variants across different views — shows how each theme
+  // adapts to status, diff, and branches surfaces
+  {
+    name: 'ui-status-theme-catppuccin',
+    description: 'Status view with catppuccin theme',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status --theme catppuccin',
+    theme: 'catppuccin',
+  },
+  {
+    name: 'ui-status-theme-gruvbox',
+    description: 'Status view with gruvbox theme',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status --theme gruvbox',
+    theme: 'gruvbox',
+  },
+  {
+    name: 'ui-branches-theme-catppuccin',
+    description: 'Branches view with catppuccin theme showing sync indicators',
+    scenario: 'branch-sync-showcase',
+    command: 'ui --theme catppuccin',
+    theme: 'catppuccin',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-branches-theme-gruvbox',
+    description: 'Branches view with gruvbox theme showing sync indicators',
+    scenario: 'branch-sync-showcase',
+    command: 'ui --theme gruvbox',
+    theme: 'gruvbox',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-diff-theme-catppuccin',
+    description: 'Diff view with catppuccin theme',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff --theme catppuccin',
+    theme: 'catppuccin',
+  },
+  {
+    name: 'ui-diff-theme-gruvbox',
+    description: 'Diff view with gruvbox theme',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff --theme gruvbox',
+    theme: 'gruvbox',
+  },
+
   // ─────────────────────────────────────────────────────────────────
   // `coco ui` — interactive overlays and focus states
   // ─────────────────────────────────────────────────────────────────
