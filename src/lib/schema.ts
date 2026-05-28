@@ -1140,7 +1140,21 @@ export const schema = {
         "default",
         "monochrome",
         "catppuccin",
-        "gruvbox"
+        "gruvbox",
+        "dracula",
+        "nord",
+        "solarized-dark",
+        "tokyo-night",
+        "one-dark",
+        "rose-pine",
+        "kanagawa",
+        "everforest",
+        "monokai",
+        "synthwave",
+        "ayu-dark",
+        "palenight",
+        "github-dark",
+        "horizon"
       ]
     }
   }

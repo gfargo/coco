@@ -54,7 +54,7 @@ export type ScreenshotRecipe = {
   /**
    * Theme preset to lock the capture to. Defaults to `default`.
    */
-  theme?: 'default' | 'monochrome' | 'catppuccin' | 'gruvbox'
+  theme?: 'default' | 'monochrome' | 'catppuccin' | 'gruvbox' | 'dracula' | 'nord' | 'solarized-dark' | 'tokyo-night' | 'one-dark' | 'rose-pine' | 'kanagawa' | 'everforest' | 'monokai' | 'synthwave' | 'ayu-dark' | 'palenight' | 'github-dark' | 'horizon'
   /**
    * When true, also emit a GIF (`.screenshots/<name>.gif`). Cost is
    * ~3-5x the PNG capture time, so opt-in per recipe rather than
@@ -349,6 +349,90 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'feature-pr-ready',
     command: 'ui --view history --theme monochrome',
     theme: 'monochrome',
+  },
+  {
+    name: 'ui-history-theme-dracula',
+    description: 'History view rendered with the dracula theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme dracula',
+  },
+  {
+    name: 'ui-history-theme-nord',
+    description: 'History view rendered with the nord theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme nord',
+  },
+  {
+    name: 'ui-history-theme-solarized-dark',
+    description: 'History view rendered with the solarized-dark theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme solarized-dark',
+  },
+  {
+    name: 'ui-history-theme-tokyo-night',
+    description: 'History view rendered with the tokyo-night theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme tokyo-night',
+  },
+  {
+    name: 'ui-history-theme-one-dark',
+    description: 'History view rendered with the one-dark theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme one-dark',
+  },
+  {
+    name: 'ui-history-theme-rose-pine',
+    description: 'History view rendered with the rose-pine theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme rose-pine',
+  },
+  {
+    name: 'ui-history-theme-kanagawa',
+    description: 'History view rendered with the kanagawa theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme kanagawa',
+  },
+  {
+    name: 'ui-history-theme-everforest',
+    description: 'History view rendered with the everforest theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme everforest',
+  },
+  {
+    name: 'ui-history-theme-monokai',
+    description: 'History view rendered with the monokai theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme monokai',
+  },
+  {
+    name: 'ui-history-theme-synthwave',
+    description: 'History view rendered with the synthwave theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme synthwave',
+  },
+  {
+    name: 'ui-history-theme-ayu-dark',
+    description: 'History view rendered with the ayu-dark theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme ayu-dark',
+  },
+  {
+    name: 'ui-history-theme-palenight',
+    description: 'History view rendered with the palenight theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme palenight',
+  },
+  {
+    name: 'ui-history-theme-github-dark',
+    description: 'History view rendered with the github-dark theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme github-dark',
+  },
+  {
+    name: 'ui-history-theme-horizon',
+    description: 'History view rendered with the horizon theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme horizon',
   },
 
   // Theme variants across different views — shows how each theme
