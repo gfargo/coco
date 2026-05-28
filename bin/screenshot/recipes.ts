@@ -181,6 +181,98 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────
+  // `coco ui` — remaining view surfaces for full coverage
+  // ─────────────────────────────────────────────────────────────────
+  {
+    name: 'ui-compose',
+    description: 'Compose view with staged changes ready to commit',
+    scenario: 'single-staged-file',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gc' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-tags',
+    description: 'Tags view on a repo with tagged releases',
+    scenario: 'large-repo',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gt' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-conflicts-merge',
+    description: 'Conflicts view during an active merge conflict',
+    scenario: 'mid-merge-conflict',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gx' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-reflog',
+    description: 'Reflog view showing HEAD movement history',
+    scenario: 'rich-history-graph',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gr' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-bisect-view',
+    description: 'Bisect surface showing the active bisect state and decision log',
+    scenario: 'mid-bisect',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gB' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-changelog',
+    description: 'Changelog view for a feature branch',
+    scenario: 'feature-pr-ready',
+    command: 'ui --no-all',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'L' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-submodules-view',
+    description: 'Submodules view showing registered submodules with status',
+    scenario: 'submodule-with-history',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gM' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
+    name: 'ui-help-overlay',
+    description: 'Help overlay showing all keybindings grouped by category',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: '?' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+
+  // ─────────────────────────────────────────────────────────────────
   // `coco log` — stdout / non-interactive renders
   // ─────────────────────────────────────────────────────────────────
   {
