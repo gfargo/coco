@@ -1,6 +1,4 @@
-import * as fs from 'node:fs'
-import * as os from 'node:os'
-import * as path from 'node:path'
+import { createJsonStore } from './jsonStore'
 
 /**
  * Per-user list of "known" repos added via the workspace add-repo
@@ -9,65 +7,36 @@ import * as path from 'node:path'
  * version-controlled) `.coco.config.json`.
  *
  * The discovery layer merges this list with `config.workspace.knownRepos`
- * — config wins for de-dupe so users can pin repos that the
- * add-repo prompt removed via the in-app delete affordance later
- * (out of scope for v1).
+ * — config wins for de-dupe (see `mergeKnownRepos` in `runtime.ts`).
  *
- * Best-effort: read failures return an empty list, write failures
- * are swallowed silently.
+ * Persistence is delegated to `jsonStore.ts`.
  */
 
 const STORE_SCHEMA_VERSION = 1
-const STORE_DIR_NAME = 'workspace'
-const STORE_FILE_NAME = 'known-repos.json'
 
-type Envelope = {
-  version: number
-  paths: string[]
-  updatedAt: string
-}
-
-function resolveStoreDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  if (xdg && xdg.trim().length > 0) {
-    return path.join(xdg, 'coco', STORE_DIR_NAME)
-  }
-  return path.join(os.homedir(), '.cache', 'coco', STORE_DIR_NAME)
-}
+const store = createJsonStore<string[]>({
+  subdir: 'workspace',
+  basename: 'known-repos.json',
+  version: STORE_SCHEMA_VERSION,
+  // Legacy on-disk shape carries the array directly under `paths`,
+  // not nested. Pin the field so existing files remain readable.
+  payloadField: 'paths',
+  validate: (raw) =>
+    Array.isArray(raw)
+      ? raw.filter((entry): entry is string => typeof entry === 'string')
+      : undefined,
+})
 
 export function getKnownReposStorePath(): string {
-  return path.join(resolveStoreDir(), STORE_FILE_NAME)
+  return store.path()
 }
 
 export function readKnownRepos(): string[] {
-  try {
-    const raw = fs.readFileSync(getKnownReposStorePath(), 'utf8')
-    const parsed = JSON.parse(raw) as Envelope
-    if (parsed.version !== STORE_SCHEMA_VERSION) {
-      return []
-    }
-    if (!Array.isArray(parsed.paths)) {
-      return []
-    }
-    return parsed.paths.filter((entry): entry is string => typeof entry === 'string')
-  } catch {
-    return []
-  }
+  return store.read() ?? []
 }
 
 export function writeKnownRepos(paths: ReadonlyArray<string>): void {
-  const envelope: Envelope = {
-    version: STORE_SCHEMA_VERSION,
-    paths: [...new Set(paths)],
-    updatedAt: new Date().toISOString(),
-  }
-  const file = getKnownReposStorePath()
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, JSON.stringify(envelope, null, 2))
-  } catch {
-    // Best-effort persistence.
-  }
+  store.write([...new Set(paths)])
 }
 
 /**
