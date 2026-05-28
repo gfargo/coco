@@ -1,6 +1,7 @@
 import type { WorkspaceRepoSummary } from '../../../git/workspaceData'
 import { truncateCells, truncatePathCells } from '../../chrome/text'
 import {
+  workspaceTabGlyph,
   workspaceTabLabel,
   WORKSPACE_TABS,
   type WorkspaceTab,
@@ -40,6 +41,8 @@ export type WorkspaceListRow = {
 export type WorkspaceSidebarTabRow = {
   tab: WorkspaceTab
   label: string
+  /** Single-cell glyph for the tab (used in rail mode + as a label prefix). */
+  glyph: string
   /** Number of repos in the overview that match this tab's predicate. */
   count: number
   active: boolean
@@ -55,8 +58,12 @@ export type WorkspaceSidebarTabRow = {
  * by the layout helper, so the budget passed in here is purely the
  * cell-content width.
  *
- * Drop priority on a narrow terminal: path → date → status → branch.
- * Name always stays.
+ * Display order (left → right): name · branch · status · date · subject · path.
+ * Drop order (first dropped → last kept): path · subject · date · branch · status · name.
+ *
+ * Status is kept longer than branch because it's the most actionable
+ * signal — "what needs my attention" reads cleaner from
+ * `coco ●2 ↓3` than from `coco main`. Name is always kept.
  */
 export type WorkspaceColumnKey = 'name' | 'branch' | 'status' | 'date' | 'subject' | 'path'
 
@@ -67,6 +74,7 @@ type ColumnSpec = {
   max?: number
 }
 
+// Display order is fixed — this is the left-to-right layout in the row.
 const COLUMN_SPECS: ColumnSpec[] = [
   { key: 'name', min: 14, weight: 3, max: 36 },
   { key: 'branch', min: 12, weight: 2, max: 28 },
@@ -76,6 +84,17 @@ const COLUMN_SPECS: ColumnSpec[] = [
   // terminals get a meaningful "what changed" line per row.
   { key: 'subject', min: 18, weight: 4, max: 60 },
   { key: 'path', min: 18, weight: 1 },
+]
+
+// Drop order — when the row can't fit, these get removed first.
+// First entry drops first; last entry survives longest. Name is
+// not in this list because it never drops.
+const COLUMN_DROP_ORDER: WorkspaceColumnKey[] = [
+  'path',
+  'subject',
+  'date',
+  'branch',
+  'status',
 ]
 
 /** Inter-cell gap reserved by the layout helper. */
@@ -93,14 +112,17 @@ export type WorkspaceColumnWidths = Partial<Record<WorkspaceColumnKey, number>>
  */
 export function assignWorkspaceColumnWidths(budget: number): WorkspaceColumnWidths {
   const usable = Math.max(0, budget - CURSOR_WIDTH)
-  const kept: ColumnSpec[] = [...COLUMN_SPECS]
-  while (kept.length > 0) {
+  // Keep all columns in display order. Drop by walking the
+  // COLUMN_DROP_ORDER list — earlier entries drop first.
+  const droppedKeys = new Set<WorkspaceColumnKey>()
+  let kept: ColumnSpec[] = COLUMN_SPECS.filter((spec) => !droppedKeys.has(spec.key))
+  for (const dropKey of COLUMN_DROP_ORDER) {
     const minTotal = kept.reduce((acc, spec) => acc + spec.min, 0)
     const gapTotal = Math.max(0, kept.length - 1) * COLUMN_GAP
-    if (minTotal + gapTotal <= usable) {
-      break
-    }
-    kept.pop()
+    if (minTotal + gapTotal <= usable) break
+    droppedKeys.add(dropKey)
+    kept = COLUMN_SPECS.filter((spec) => !droppedKeys.has(spec.key))
+    if (kept.length === 0) break
   }
   if (kept.length === 0) {
     return {}
@@ -156,35 +178,93 @@ function formatStatusCell(
     tokens.push(`↓${repo.behind}`)
   }
   if (ghAuthenticated && typeof prCount === 'number' && prCount > 0) {
-    tokens.push(`pr${prCount}`)
+    // `⊙ N` matches the PRs tab glyph so the status column reads as a
+    // glance-grokable summary of the same data the tabs filter on.
+    tokens.push(`⊙${prCount}`)
   }
   const text = tokens.length === 0 ? '·' : tokens.join(' ')
   const tone: WorkspaceListColumn['tone'] = repo.behind > 0 || repo.dirty > 0 ? 'warn' : 'dim'
   return { text: truncateCells(text, width), width, key: 'status', tone }
 }
 
-function formatDateCell(repo: WorkspaceRepoSummary, width: number): WorkspaceListColumn {
+/**
+ * Relative-date formatter for narrow terminals. Returns ≤4 chars when
+ * possible (`2d`, `3w`, `5mo`, `1y`) so the date column compresses
+ * naturally. Wide terminals get the full ISO date through
+ * formatDateCell's wide path.
+ */
+function formatRelativeDate(iso: string, now: Date): string {
+  const past = new Date(iso).getTime()
+  if (!Number.isFinite(past)) return '—'
+  const seconds = Math.max(0, Math.floor((now.getTime() - past) / 1000))
+  if (seconds < 60) return 'now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 14) return `${days}d`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 8) return `${weeks}w`
+  const months = Math.floor(days / 30)
+  if (months < 24) return `${months}mo`
+  const years = Math.floor(days / 365)
+  return `${years}y`
+}
+
+export type WorkspaceDateMode = 'absolute' | 'relative'
+
+function formatDateCell(
+  repo: WorkspaceRepoSummary,
+  width: number,
+  mode: WorkspaceDateMode,
+  now: Date
+): WorkspaceListColumn {
   const date = repo.lastCommit?.date
   if (!date) {
     return { text: truncateCells('—', width), width, key: 'date', tone: 'dim' }
   }
-  // Trim ISO date to YYYY-MM-DD — full precision is noise in the row.
-  return { text: truncateCells(date.slice(0, 10), width), width, key: 'date', tone: 'dim' }
+  const text = mode === 'relative'
+    ? formatRelativeDate(date, now)
+    : date.slice(0, 10) // YYYY-MM-DD — full precision is noise in the row otherwise.
+  return { text: truncateCells(text, width), width, key: 'date', tone: 'dim' }
 }
 
 export type BuildWorkspaceListRowsOptions = {
   /** Available row width (before cursor + separators). Default 120. */
   width?: number
+  /** Date format mode. Default `absolute` (use `relative` on narrow widths). */
+  dateMode?: WorkspaceDateMode
+  /**
+   * Reference timestamp for relative-date math. Tests pin this for
+   * determinism; the view layer passes `new Date()`.
+   */
+  now?: Date
 }
 
 const DEFAULT_ROW_WIDTH = 120
+
+/**
+ * Density tier breakpoint — at this width and above we keep absolute
+ * dates; below we switch to relative. Picked to match the breakpoint
+ * where the date column is one of the last to drop, so the relative
+ * format buys real screen real estate.
+ */
+export const WORKSPACE_RELATIVE_DATE_BELOW = 140
+
+export function pickWorkspaceDateMode(width: number): WorkspaceDateMode {
+  return width < WORKSPACE_RELATIVE_DATE_BELOW ? 'relative' : 'absolute'
+}
 
 export function buildWorkspaceListRows(
   state: WorkspaceState,
   options: BuildWorkspaceListRowsOptions = {}
 ): WorkspaceListRow[] {
   const visible = selectVisibleRepos(state)
-  const widths = assignWorkspaceColumnWidths(options.width ?? DEFAULT_ROW_WIDTH)
+  const rowWidth = options.width ?? DEFAULT_ROW_WIDTH
+  const widths = assignWorkspaceColumnWidths(rowWidth)
+  const dateMode = options.dateMode ?? pickWorkspaceDateMode(rowWidth)
+  const now = options.now ?? new Date()
   return visible.map((repo, index) => {
     const cursor = index === state.selectedIndex
     const nameTone: WorkspaceListColumn['tone'] = repo.error ? 'warn' : 'default'
@@ -212,7 +292,7 @@ export function buildWorkspaceListRows(
       )
     }
     if (widths.date !== undefined) {
-      columns.push(formatDateCell(repo, widths.date))
+      columns.push(formatDateCell(repo, widths.date, dateMode, now))
     }
     if (widths.subject !== undefined) {
       const subject = repo.lastCommit?.subject ?? '—'
@@ -317,6 +397,21 @@ export function buildWorkspaceListWindow(
   }
 }
 
+/**
+ * Width threshold for collapsing the sidebar to a rail. Below this
+ * width we render only tab glyphs; above we render the full
+ * label + count. When the sidebar has focus we always expand it
+ * regardless of width (focus-grow pattern).
+ */
+export const WORKSPACE_SIDEBAR_RAIL_BELOW = 100
+
+export function shouldRailWorkspaceSidebar(
+  columns: number,
+  sidebarFocused: boolean
+): boolean {
+  return columns < WORKSPACE_SIDEBAR_RAIL_BELOW && !sidebarFocused
+}
+
 export function buildWorkspaceSidebar(state: WorkspaceState): WorkspaceSidebarTabRow[] {
   const repos = state.overview.repos
   return WORKSPACE_TABS.map((tab) => {
@@ -341,6 +436,7 @@ export function buildWorkspaceSidebar(state: WorkspaceState): WorkspaceSidebarTa
     return {
       tab,
       label: workspaceTabLabel(tab),
+      glyph: workspaceTabGlyph(tab),
       count,
       active: state.tab === tab,
       disabled,

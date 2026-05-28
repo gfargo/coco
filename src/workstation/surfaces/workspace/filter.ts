@@ -17,8 +17,37 @@ const TAB_LABELS: Record<WorkspaceTab, string> = {
   'pull-requests': 'PRs',
 }
 
+/**
+ * Tab glyphs — semantic, color-paired in the renderer:
+ *   ◯ All     (neutral / circle)
+ *   ● Dirty   (warn / filled)
+ *   ↓ Behind  (warn / down)
+ *   ⊙ PRs     (accent / target)
+ *
+ * Used in two places: as a label prefix in the expanded sidebar,
+ * and as the standalone icon when the sidebar is rail-collapsed at
+ * narrow terminal widths.
+ */
+const TAB_GLYPHS: Record<WorkspaceTab, string> = {
+  all: '◯',
+  dirty: '●',
+  behind: '↓',
+  'pull-requests': '⊙',
+}
+
+const TAB_GLYPHS_ASCII: Record<WorkspaceTab, string> = {
+  all: 'o',
+  dirty: '*',
+  behind: 'v',
+  'pull-requests': '@',
+}
+
 export function workspaceTabLabel(tab: WorkspaceTab): string {
   return TAB_LABELS[tab]
+}
+
+export function workspaceTabGlyph(tab: WorkspaceTab, ascii = false): string {
+  return ascii ? TAB_GLYPHS_ASCII[tab] : TAB_GLYPHS[tab]
 }
 
 export function nextWorkspaceTab(current: WorkspaceTab): WorkspaceTab {
