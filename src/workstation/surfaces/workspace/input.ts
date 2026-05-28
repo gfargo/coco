@@ -165,10 +165,12 @@ export function resolveWorkspaceInput(
     if (key.pageUp) {
       return { kind: 'action', action: { type: 'move-cursor', delta: -10 } }
     }
-    if (input === 'g' && !key.shift) {
+    // Shells deliver Shift+g as the raw byte 'G' (no shift flag),
+    // so a single literal match is enough — no need for `g + shift`.
+    if (input === 'g') {
       return { kind: 'action', action: { type: 'set-cursor', index: 0 } }
     }
-    if (input === 'G' || (input === 'g' && key.shift)) {
+    if (input === 'G') {
       return { kind: 'action', action: { type: 'set-cursor', index: Number.MAX_SAFE_INTEGER } }
     }
     if (input === 'h' || key.leftArrow) {
