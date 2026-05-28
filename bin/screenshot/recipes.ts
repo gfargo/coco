@@ -54,7 +54,7 @@ export type ScreenshotRecipe = {
   /**
    * Theme preset to lock the capture to. Defaults to `default`.
    */
-  theme?: 'default' | 'monochrome' | 'catppuccin' | 'gruvbox' | 'dracula' | 'nord' | 'solarized-dark' | 'tokyo-night' | 'one-dark' | 'rose-pine' | 'kanagawa' | 'everforest' | 'monokai' | 'synthwave' | 'ayu-dark' | 'palenight' | 'github-dark' | 'horizon'
+  theme?: string
   /**
    * When true, also emit a GIF (`.screenshots/<name>.gif`). Cost is
    * ~3-5x the PNG capture time, so opt-in per recipe rather than
@@ -552,6 +552,166 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: null,
     command: 'log --help',
     dimensions: { cols: 100, rows: 35 },
+  },
+
+  // ─────────────────────────────────────────────────────────────────
+  // GIF demos — animated workflows for the marketing site
+  // ─────────────────────────────────────────────────────────────────
+  {
+    name: 'demo-workstation-tour',
+    description: 'Workspace: browse repos, cursor through list',
+    scenario: '_workspace',
+    command: 'workspace --root . --maxDepth 1',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 2000 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 800 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 800 },
+      { kind: 'key', key: 'Up' },
+      { kind: 'sleep', ms: 800 },
+      { kind: 'key', key: 'Up' },
+      { kind: 'sleep', ms: 1500 },
+    ],
+  },
+  {
+    name: 'demo-ui-view-switching',
+    description: 'UI: chord navigation between history → status → branches → diff',
+    scenario: 'rich-history-graph',
+    command: 'ui --view history',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'type', text: 'gs' },
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'type', text: 'gd' },
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'type', text: 'gh' },
+      { kind: 'sleep', ms: 1000 },
+    ],
+  },
+  {
+    name: 'demo-hunk-staging',
+    description: 'UI: navigate status files and stage with Space',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 1500 },
+      // Move down to a file
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 400 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 400 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 600 },
+      // Stage it
+      { kind: 'key', key: 'Space' },
+      { kind: 'sleep', ms: 800 },
+      // Move down and stage another
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 400 },
+      { kind: 'key', key: 'Space' },
+      { kind: 'sleep', ms: 800 },
+      // Move down and stage one more
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 400 },
+      { kind: 'key', key: 'Space' },
+      { kind: 'sleep', ms: 1200 },
+    ],
+  },
+  {
+    name: 'demo-help-overlay',
+    description: 'UI: open help overlay, scroll, close',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 1200 },
+      { kind: 'type', text: '?' },
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 1200 },
+      { kind: 'type', text: '?' },
+      { kind: 'sleep', ms: 1000 },
+    ],
+  },
+  {
+    name: 'demo-search-filter',
+    description: 'UI: open search, type query, see results filter live, clear',
+    scenario: 'multi-commit-branch',
+    command: 'ui --view history --no-all',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 1200 },
+      { kind: 'type', text: '/' },
+      { kind: 'sleep', ms: 500 },
+      { kind: 'type', text: 'f' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'type', text: 'e' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'type', text: 'a' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'type', text: 't' },
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 1000 },
+    ],
+  },
+  {
+    name: 'demo-workspace-to-ui',
+    description: 'Workspace → enter repo → switch views in ui → quit back to workspace',
+    scenario: '_workspace',
+    command: 'workspace --root . --maxDepth 1',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 2000 },
+      // Enter the first repo
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 3000 },
+      // Switch to status
+      { kind: 'type', text: 'gs' },
+      { kind: 'sleep', ms: 1500 },
+      // Switch to branches
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 1500 },
+      // Quit back to workspace
+      { kind: 'type', text: 'q' },
+      { kind: 'sleep', ms: 2000 },
+    ],
+  },
+  {
+    name: 'demo-commit-flow',
+    description: 'coco commit: show AI generating a commit message from staged changes',
+    scenario: 'single-staged-file',
+    command: 'commit --dry-run --conventional',
+    emitGif: true,
+    dimensions: { cols: 100, rows: 24 },
+    actions: [
+      { kind: 'sleep', ms: 3000 },
+    ],
+  },
+  {
+    name: 'demo-changelog',
+    description: 'coco changelog: generate a changelog for a feature branch',
+    scenario: 'feature-pr-ready',
+    command: 'changelog --branch main',
+    emitGif: true,
+    dimensions: { cols: 100, rows: 24 },
+    actions: [
+      { kind: 'sleep', ms: 3000 },
+    ],
   },
 ]
 
