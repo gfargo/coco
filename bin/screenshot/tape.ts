@@ -49,10 +49,10 @@ const DEFAULT_DIMENSIONS = { cols: 140, rows: 40 } as const
 /**
  * How long to wait after the command launches before capturing. The
  * workstation's three-stage boot (cache read → mount → background
- * fetch) usually settles within ~600ms on a fast machine; we give a
- * bit of buffer so cold runs don't snapshot a half-loaded view.
+ * fetch) needs time for tsx cold-start (~2-3s inside VHS) plus the
+ * async git data load (~1-2s). 5000ms gives comfortable headroom.
  */
-const POST_LAUNCH_SETTLE_MS = 1200
+const POST_LAUNCH_SETTLE_MS = 5000
 
 /**
  * Quote a string for safe inclusion in a VHS `Type "..."` directive.
@@ -109,27 +109,42 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // Hide the boot of the command (cd + the launch line) so the
     // captured frame is just the rendered view, not "$ coco ui …".
     `Hide`,
+    // Type setup commands instantly (0ms) so the shell processes
+    // them before the visible portion starts. The default TypingSpeed
+    // only applies to the visible command for aesthetics.
+    `Set TypingSpeed 0ms`,
     `Type "cd ${quoteTapeString(options.cwd)}"`,
     `Enter`,
-    // Ensure the VHS shell can find node + tsx without relying on
-    // the user's login shell PATH. Prepend the project's local
-    // node_modules/.bin (for tsx) and the directory containing the
-    // current node binary (so tsx can find node at runtime).
-    `Type "export PATH='${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:$PATH'"`,
+    `Sleep 300ms`,
+    // VHS spawns a fresh bash without the user's gitconfig. Mark all
+    // directories as safe so git doesn't refuse to operate on the
+    // temp scenario dir (macOS safe.directory check).
+    `Type "git config --global --add safe.directory '*'"`,
     `Enter`,
+    `Sleep 300ms`,
+    // Ensure the VHS shell can find node + tsx + git + system utils.
+    // The PATH value has no spaces so we can skip quoting in bash.
+    // $PATH expands to the shell's existing PATH (includes /usr/bin etc).
+    `Type "export PATH=${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:$PATH"`,
+    `Enter`,
+    `Sleep 300ms`,
     // Snapshot mode pin — freezes wall-clock `now` for relative
     // date formatters in the workstation render path.
     `Type "export COCO_SNAPSHOT_NOW='${SNAPSHOT_NOW}'"`,
     `Enter`,
+    `Sleep 300ms`,
     // NO_COLOR is set per-recipe via theme=monochrome; otherwise we
     // let coco's own theme machinery paint.
     recipe.theme === 'monochrome' ? `Type "export NO_COLOR=1"` : null,
     recipe.theme === 'monochrome' ? `Enter` : null,
     `Type "clear"`,
     `Enter`,
+    `Sleep 200ms`,
     `Show`,
     ``,
-    `Type "${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)}"`,
+    // Launch coco with --repo pointing at the scenario dir. Keep
+    // TypingSpeed at 0 so the command executes immediately.
+    `Type "${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
     `Enter`,
     `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
   ]
