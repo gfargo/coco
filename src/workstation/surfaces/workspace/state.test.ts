@@ -270,4 +270,30 @@ describe('workspace state reducer', () => {
     expect(cancelled.focus).toBe('list')
     expect(cancelled.pendingDeletePath).toBeUndefined()
   })
+
+  it('set-pull-request-fetching replaces the whole fetching set', () => {
+    const next = applyWorkspaceAction(baseState, {
+      type: 'set-pull-request-fetching',
+      paths: ['/tmp/alpha', '/tmp/bravo'],
+    })
+    expect(next.pullRequestFetching).toEqual(['/tmp/alpha', '/tmp/bravo'])
+  })
+
+  it('mark-pull-request-fetched removes the path from the fetching set', () => {
+    let s = applyWorkspaceAction(baseState, {
+      type: 'set-pull-request-fetching',
+      paths: ['/tmp/alpha', '/tmp/bravo'],
+    })
+    s = applyWorkspaceAction(s, { type: 'mark-pull-request-fetched', path: '/tmp/alpha' })
+    expect(s.pullRequestFetching).toEqual(['/tmp/bravo'])
+  })
+
+  it('mark-pull-request-fetched is a no-op for an unknown path', () => {
+    const s = applyWorkspaceAction(baseState, {
+      type: 'set-pull-request-fetching',
+      paths: ['/tmp/alpha'],
+    })
+    const t = applyWorkspaceAction(s, { type: 'mark-pull-request-fetched', path: '/tmp/zzz' })
+    expect(t.pullRequestFetching).toEqual(['/tmp/alpha'])
+  })
 })

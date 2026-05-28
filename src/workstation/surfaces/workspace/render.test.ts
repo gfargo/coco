@@ -92,6 +92,18 @@ describe('workspace render builders', () => {
     expect(rows[1].columns[2].text).toContain('⊙4')
   })
 
+  it('shows a spinner glyph in the status cell while a row is fetching its PR count', () => {
+    const fetching = applyWorkspaceAction(state, {
+      type: 'set-pull-request-fetching',
+      paths: [state.overview.repos[1].path],
+    })
+    const rows = buildWorkspaceListRows(fetching, { spinnerTick: 3 })
+    // Spinner frame at tick 3 is the fourth Braille glyph.
+    expect(rows[1].columns[2].text).toContain('⠸')
+    // Non-fetching row stays unaffected.
+    expect(rows[0].columns[2].text).not.toContain('⠸')
+  })
+
   it('omits pr tokens when gh is unauthenticated', () => {
     const next = applyWorkspaceAction(state, {
       type: 'replace-pull-request-counts',

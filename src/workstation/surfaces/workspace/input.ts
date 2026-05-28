@@ -27,6 +27,7 @@ export type WorkspaceInputIntent =
   | { kind: 'quit' }
   | { kind: 'drill-in' }
   | { kind: 'refresh' }
+  | { kind: 'refresh-row' }
   | { kind: 'add-repo' }
   | { kind: 'request-delete' }
   | { kind: 'confirm-delete' }
@@ -183,6 +184,9 @@ export function resolveWorkspaceInput(
   }
   if (input === 'r') {
     return { kind: 'refresh' }
+  }
+  if (input === 'R') {
+    return { kind: 'refresh-row' }
   }
   if (input === 'a') {
     return { kind: 'add-repo' }

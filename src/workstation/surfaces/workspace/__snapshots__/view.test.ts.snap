@@ -554,7 +554,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -949,7 +949,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -1518,7 +1518,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -1971,7 +1971,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -2536,7 +2536,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       color="yellow"
@@ -2944,7 +2944,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -3509,7 +3509,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -3834,7 +3834,7 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -5370,7 +5370,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -6341,7 +6341,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -6926,7 +6926,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -7123,6 +7123,30 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
       <Text
         color="green"
       >
+        r                
+      </Text>
+      <Text>
+        Refresh discovery (all repos)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
+        R                
+      </Text>
+      <Text>
+        Refresh just the cursored repo (faster)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Text
+        color="green"
+      >
         /                
       </Text>
       <Text>
@@ -7217,7 +7241,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -7547,7 +7571,7 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
@@ -8112,7 +8136,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
     <Text
       dimColor={true}
     >
-      j/k move · enter open · tab → sidebar · s sort · / filter · r refresh · a add · d remove · ? help · q quit
+      j/k move · enter open · tab → sidebar · s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
     </Text>
     <Text
       dimColor={true}
