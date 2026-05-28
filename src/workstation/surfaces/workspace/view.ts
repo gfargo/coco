@@ -8,6 +8,7 @@
  */
 
 import type * as ReactTypes from 'react'
+import type { TextProps } from 'ink'
 
 import type { LogInkTheme } from '../../chrome/theme'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -210,31 +211,28 @@ function renderSidebar(
     // don't recycle the same key string across siblings — that tripped
     // React's dup-key warning when both the caret cell and the label
     // cell shared `{ key: 'label' }` via the same props object.
-    const labelProps: Record<string, unknown> = {}
-    const glyphProps: Record<string, unknown> = {}
-    if (row.active) {
-      labelProps.bold = true
-      glyphProps.bold = true
-      if (focused && !theme.noColor) {
-        labelProps.color = theme.colors.accent
-        glyphProps.color = theme.colors.accent
-      } else if (!theme.noColor) {
-        // Tab glyph keeps a hint of color even while the sidebar
-        // isn't focused, so users see "which filter is on" without
-        // peering at the bold treatment.
-        glyphProps.color = theme.colors.accent
-      }
-    } else {
-      if (row.disabled) {
-        labelProps.dimColor = true
-        glyphProps.dimColor = true
-      } else if (!theme.noColor) {
-        // Inactive glyphs render in muted color so the column reads
-        // as a visual key — never relying on color alone since the
-        // glyph itself is the primary signal.
-        glyphProps.color = theme.colors.muted
-      }
-    }
+    //
+    // Props are built as plain literals (rather than mutated) because
+    // Ink's TextProps fields are `readonly`. The tone choices follow
+    // a small decision matrix:
+    //   active + focused: bold + accent on both label and glyph
+    //   active + unfocused: bold + glyph keeps accent so the user
+    //     can still see "which filter is on" without the focus cue
+    //   inactive + disabled: dim everything
+    //   inactive + enabled: glyph in muted color (it's a visual key,
+    //     never relying on color alone since the glyph itself is the
+    //     primary signal)
+    const useColor = !theme.noColor
+    const labelProps: TextProps = row.active
+      ? { bold: true, color: focused && useColor ? theme.colors.accent : undefined }
+      : row.disabled
+        ? { dimColor: true }
+        : {}
+    const glyphProps: TextProps = row.active
+      ? { bold: true, color: useColor ? theme.colors.accent : undefined }
+      : row.disabled
+        ? { dimColor: true }
+        : { color: useColor ? theme.colors.muted : undefined }
     const cursor = row.active ? '›' : ' '
     const paddedLabel = row.label.padEnd(widest)
     const countText = row.count > 0 ? String(row.count) : '·'
@@ -301,28 +299,27 @@ function renderListRow(
     // than full-row reverse video. The earlier inverse-background
     // approach made the row's other cells (especially dim tones)
     // hard to read on most themes.
-    const textProps: Record<string, unknown> = {}
-    if (row.cursor) {
-      textProps.bold = column.primary
-      if (!theme.noColor) {
-        if (column.primary) {
-          // Primary cell (name) gets the accent color so the
-          // cursor's position pops without inverting the row.
-          textProps.color = theme.colors.accent
-        } else {
-          // Other cells keep their semantic tone colors (warn for
-          // dirty/behind, ok for ahead, dim for muted) but skip the
-          // dimColor flag so the cursor row reads brighter than its
-          // neighbors as a whole.
-          const color = toneColor(column.tone, theme)
-          if (color) textProps.color = color
-        }
+    //
+    // Props are built as plain literals (rather than mutated) because
+    // Ink's TextProps fields are `readonly`. The matrix:
+    //   cursored + primary cell: bold + accent color
+    //   cursored + secondary cell: skip dimColor, keep the cell's
+    //     semantic tone so the row reads brighter than its neighbors
+    //     without inverting the background
+    //   uncursored: dim flag + semantic tone if any
+    const tonedColor = !theme.noColor ? toneColor(column.tone, theme) : undefined
+    const textProps: TextProps = row.cursor
+      ? {
+        bold: column.primary,
+        color:
+          !theme.noColor && column.primary
+            ? theme.colors.accent
+            : tonedColor,
       }
-    } else {
-      textProps.dimColor = column.tone === 'dim'
-      const color = toneColor(column.tone, theme)
-      if (color) textProps.color = color
-    }
+      : {
+        dimColor: column.tone === 'dim',
+        color: tonedColor,
+      }
     return React.createElement(
       Box,
       {
