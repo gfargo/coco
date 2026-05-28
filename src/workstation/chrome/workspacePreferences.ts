@@ -1,7 +1,4 @@
 import * as crypto from 'node:crypto'
-import * as fs from 'node:fs'
-import * as os from 'node:os'
-import * as path from 'node:path'
 
 import {
   WORKSPACE_SORT_MODES,
@@ -12,46 +9,25 @@ import {
   type WorkspaceTab,
 } from '../surfaces/workspace/filter'
 
+import { createJsonStore } from './jsonStore'
+
 /**
  * Persist sort mode, sidebar tab, and filter text between
  * `coco workspace` launches. Keyed per root set so two different
  * configured root lists keep separate preferences. Mirrors the
  * existing `chrome/sidebarPersistence.ts` pattern.
  *
- * Best-effort: read/write failures fall back to defaults so a stale
- * file or sandboxed FS never blocks boot.
+ * Persistence is delegated to `jsonStore.ts`. Stale files (schema
+ * mismatch, invalid sort/tab values) read as `{}` so a corrupt
+ * preferences file never blocks boot.
  */
 
 const SCHEMA_VERSION = 1
-const STORE_DIR_NAME = 'workspace'
 
 export type WorkspacePreferences = {
   sortMode?: WorkspaceSortMode
   tab?: WorkspaceTab
   filter?: string
-}
-
-type Envelope = {
-  version: number
-  savedAt: string
-  preferences: WorkspacePreferences
-}
-
-function resolveCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  if (xdg && xdg.trim().length > 0) {
-    return path.join(xdg, 'coco', STORE_DIR_NAME)
-  }
-  return path.join(os.homedir(), '.cache', 'coco', STORE_DIR_NAME)
-}
-
-export function workspacePreferencesKey(roots: ReadonlyArray<string>): string {
-  const normalized = [...roots].map((entry) => entry.trim()).filter(Boolean).sort()
-  return crypto.createHash('sha1').update(normalized.join('\n')).digest('hex').slice(0, 16) // DevSkim: ignore DS126858
-}
-
-export function getWorkspacePreferencesPath(roots: ReadonlyArray<string>): string {
-  return path.join(resolveCacheDir(), `preferences.${workspacePreferencesKey(roots)}.json`)
 }
 
 function isValidSortMode(value: unknown): value is WorkspaceSortMode {
@@ -62,44 +38,39 @@ function isValidTab(value: unknown): value is WorkspaceTab {
   return typeof value === 'string' && (WORKSPACE_TABS as ReadonlyArray<string>).includes(value)
 }
 
+const store = createJsonStore<WorkspacePreferences>({
+  subdir: 'workspace',
+  basename: (key) => `preferences.${key}.json`,
+  version: SCHEMA_VERSION,
+  // Legacy envelopes used `preferences` as the payload field.
+  payloadField: 'preferences',
+  validate: (raw) => {
+    if (!raw || typeof raw !== 'object') return undefined
+    const source = raw as WorkspacePreferences
+    const result: WorkspacePreferences = {}
+    if (isValidSortMode(source.sortMode)) result.sortMode = source.sortMode
+    if (isValidTab(source.tab)) result.tab = source.tab
+    if (typeof source.filter === 'string') result.filter = source.filter
+    return result
+  },
+})
+
+export function workspacePreferencesKey(roots: ReadonlyArray<string>): string {
+  const normalized = [...roots].map((entry) => entry.trim()).filter(Boolean).sort()
+  return crypto.createHash('sha1').update(normalized.join('\n')).digest('hex').slice(0, 16) // DevSkim: ignore DS126858
+}
+
+export function getWorkspacePreferencesPath(roots: ReadonlyArray<string>): string {
+  return store.path(workspacePreferencesKey(roots))
+}
+
 export function readWorkspacePreferences(roots: ReadonlyArray<string>): WorkspacePreferences {
-  try {
-    const raw = fs.readFileSync(getWorkspacePreferencesPath(roots), 'utf8')
-    const parsed = JSON.parse(raw) as Envelope
-    if (parsed.version !== SCHEMA_VERSION) {
-      return {}
-    }
-    const prefs = parsed.preferences ?? {}
-    const validated: WorkspacePreferences = {}
-    if (isValidSortMode(prefs.sortMode)) {
-      validated.sortMode = prefs.sortMode
-    }
-    if (isValidTab(prefs.tab)) {
-      validated.tab = prefs.tab
-    }
-    if (typeof prefs.filter === 'string') {
-      validated.filter = prefs.filter
-    }
-    return validated
-  } catch {
-    return {}
-  }
+  return store.read(workspacePreferencesKey(roots)) ?? {}
 }
 
 export function writeWorkspacePreferences(
   roots: ReadonlyArray<string>,
   preferences: WorkspacePreferences
 ): void {
-  const envelope: Envelope = {
-    version: SCHEMA_VERSION,
-    savedAt: new Date().toISOString(),
-    preferences,
-  }
-  const file = getWorkspacePreferencesPath(roots)
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, JSON.stringify(envelope, null, 2))
-  } catch {
-    // Best-effort persistence.
-  }
+  store.write(preferences, workspacePreferencesKey(roots))
 }
