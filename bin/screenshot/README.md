@@ -32,6 +32,20 @@ The screenshots have to look identical between runs to be useful. The harness co
 - **Theme colours** — recipes can lock to a specific preset (`default` / `monochrome` / `catppuccin` / `gruvbox`) via the `theme` field.
 - **Terminal palette** — the VHS tape pins the *terminal's* theme to "Catppuccin Mocha" so the xterm.js render is consistent regardless of the upstream VHS default.
 
+## VHS shell environment (critical gotchas)
+
+VHS spawns a fresh `bash` shell that does NOT inherit the parent process's environment. This caused several hard-to-debug issues during development:
+
+1. **PATH must use unquoted `$PATH`** — VHS's `Type "..."` command types literal characters. If you single-quote the PATH export (`'...:$PATH'`), bash treats `$PATH` as a literal string and the shell loses access to `git`, `sleep`, and all system binaries. The tape uses `export PATH=.../node_modules/.bin:.../node/bin:$PATH` (no quotes around the value) so `$PATH` expands correctly.
+
+2. **Settle time must account for tsx cold-start** — Inside VHS, tsx takes 2-3 seconds to cold-start (vs ~500ms in a warm terminal). The `POST_LAUNCH_SETTLE_MS` constant (currently 5000ms) gives enough time for tsx boot + the workstation's async git data load. If screenshots show "loading commits" or empty state, increase this value.
+
+3. **macOS `/var` → `/private/var` symlink** — Temp dirs created by Node live at `/var/folders/...` but the real path is `/private/var/folders/...`. Git's `safe.directory` checks can fail on the symlinked path. The driver resolves symlinks via `realpathSync()` and the tape runs `git config --global --add safe.directory '*'` in the hidden setup.
+
+4. **`--repo` flag is required** — VHS's `cd` command changes the shell's cwd, but coco's `process.chdir()` in the `--repo` handler is what actually binds the git instance. Always pass `--repo <path>` explicitly rather than relying on cwd.
+
+5. **`Screenshot` vs `Output`** — VHS's `Output "foo.png"` records the entire session as a frame-sequence directory. Use `Screenshot filename.png` (bare filename, no path) to capture a single frame. The driver runs VHS with `cwd` set to the scenario dir so the screenshot lands there, then moves it to the final output path.
+
 ## Adding a recipe
 
 Append to `RECIPES` in `bin/screenshot/recipes.ts`:
