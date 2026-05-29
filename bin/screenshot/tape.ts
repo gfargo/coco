@@ -205,9 +205,10 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // a bare filename; the driver moves it to the final location.
     `Screenshot screenshot.png`,
     `Sleep 200ms`,
+    // For GIF recipes: Hide before quitting so the recording ends
+    // on the last rendered UI frame, not the shell prompt after exit.
+    ...(recipe.emitGif ? [`Hide`] : []),
     // Quit the workstation cleanly so VHS doesn't hold the PTY open.
-    // For non-TTY commands (`coco log`) this is a no-op since the
-    // command already exited.
     `Type "q"`,
     `Sleep 200ms`,
   ]

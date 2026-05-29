@@ -589,7 +589,7 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
   {
     name: 'demo-ui-view-switching',
-    description: 'UI: chord navigation + cursor movement + open diff via Enter',
+    description: 'UI: cursor movement + open diff + scroll + chord navigation',
     scenario: 'rich-history-graph',
     command: 'ui --view history',
     emitGif: true,
@@ -604,7 +604,16 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 600 },
       // Open diff for the selected commit
       { kind: 'key', key: 'Enter' },
-      { kind: 'sleep', ms: 1500 },
+      { kind: 'sleep', ms: 1200 },
+      // Scroll down in the diff
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 800 },
       // Navigate to status
       { kind: 'type', text: 'gs' },
       { kind: 'sleep', ms: 1500 },
