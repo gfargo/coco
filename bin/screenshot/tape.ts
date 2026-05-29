@@ -124,11 +124,9 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `# Recipe: ${recipe.name}`,
     `# ${recipe.description}`,
     ``,
-    // No `Output` directive for screenshots — `Output` records the
-    // entire session as a frame sequence or GIF. We use `Screenshot`
-    // at the end to capture a single PNG at the settled frame.
-    // GIF output (when emitGif is true) still uses Output.
-    ...(options.outputGif ? [`Output "${options.outputGif}"`] : []),
+    // For screenshots: no Output directive (we use Screenshot command).
+    // For GIFs: Output is placed AFTER the settle time (below) so the
+    // recording starts with the fully-loaded UI, not the boot phase.
     ``,
     `Set Shell "bash"`,
     `Set FontSize 14`,
@@ -188,9 +186,9 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Type "${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
     `Enter`,
     `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
-    // For GIF recipes: Show AFTER the settle — recording starts
-    // with the fully-rendered UI, no boot frames visible.
-    ...(recipe.emitGif ? [`Show`, ``] : []),
+    // For GIF recipes: start recording NOW — after the UI is fully
+    // loaded. Output placed here means the GIF contains zero boot frames.
+    ...(recipe.emitGif ? [`Output "${options.outputGif}"`, `Show`, ``] : []),
   ]
 
   const actionLines = (recipe.actions || []).flatMap((action) => renderAction(action))
