@@ -328,8 +328,12 @@ function renderCommitHistoryRow(
   const message = truncateCells(commit.message, messageRoom)
 
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
-  const accent = theme.noColor ? undefined : theme.colors.accent
-  const muted = theme.noColor ? undefined : theme.colors.muted
+  // When a row is selected (inverse: true), child text colors must be
+  // suppressed — otherwise cyan/green text stays light against the
+  // now-light inverted background, making it unreadable. Children
+  // inherit the inverted foreground (dark) when their color is undefined.
+  const accent = selected ? undefined : (theme.noColor ? undefined : theme.colors.accent)
+  const muted = selected ? undefined : (theme.noColor ? undefined : theme.colors.muted)
 
   // Lane-colored graph spans when full graph mode + non-ASCII rendering
   // is in play; otherwise fall back to the legacy single-muted span so
@@ -368,7 +372,7 @@ function renderCommitHistoryRow(
   // Date column drops out entirely at `tight` density — no spacer
   // either, so the message column slides left into the freed cells.
   dateText
-    ? h(Text, { key: `${commit.hash}-${index}-date`, dimColor: true }, dateText, ' ')
+    ? h(Text, { key: `${commit.hash}-${index}-date`, dimColor: !selected }, dateText, ' ')
     : null,
   // Branch chip prefix (full-graph mode only) lands right before the
   // message so the eye reads "branch · subject" as a unit.
@@ -406,8 +410,11 @@ function renderStackedCommitHistoryRow(
   remoteNames?: string[]
 ): ReactTypes.ReactElement {
   const totalWidth = Math.max(20, panelWidth - 4)
-  const accent = theme.noColor ? undefined : theme.colors.accent
-  const muted = theme.noColor ? undefined : theme.colors.muted
+  // Suppress child colors on selected rows — same rationale as the
+  // single-line renderer: inverse flips bg/fg, but explicit child
+  // colors override the inversion and become unreadable.
+  const accent = selected ? undefined : (theme.noColor ? undefined : theme.colors.accent)
+  const muted = selected ? undefined : (theme.noColor ? undefined : theme.colors.muted)
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
 
   // Line 1 — subject row. Mostly mirrors the single-line layout but
