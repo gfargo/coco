@@ -186,9 +186,10 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Type "${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
     `Enter`,
     `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
-    // For GIF recipes: start recording NOW — after the UI is fully
-    // loaded. Output placed here means the GIF contains zero boot frames.
-    ...(recipe.emitGif ? [`Output "${options.outputGif}"`, `Show`, ``] : []),
+    // For GIF recipes: Show first so the terminal renders the UI,
+    // then start Output recording. The extra Sleep ensures the
+    // first captured frame is the fully-painted UI, not a transition.
+    ...(recipe.emitGif ? [`Show`, `Sleep 500ms`, `Output "${options.outputGif}"`, ``] : []),
   ]
 
   const actionLines = (recipe.actions || []).flatMap((action) => renderAction(action))

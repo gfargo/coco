@@ -54,7 +54,7 @@ const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'>, LogI
     gitModified: 'yellow',
     info: 'blue',
     muted: 'gray',
-    selection: 'cyan',
+    selection: '#1a3a4a',
     success: 'green',
     warning: 'yellow',
   },

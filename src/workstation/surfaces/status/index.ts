@@ -135,7 +135,7 @@ export function renderStatusSurface(
           bold: true,
           dimColor: !headerSelected && rowIndex > cursorRowIndex,
           backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
-          inverse: headerSelected,
+
         }, truncateCells(text, 140))
       }
       const isSelected = !headerFocused && row.flatIndex === selectedIndex
@@ -155,7 +155,7 @@ export function renderStatusSurface(
         key: `status-file-${row.flatIndex}-${rowIndex}`,
         dimColor: !isSelected && rowIndex > cursorRowIndex,
         backgroundColor: isSelected && focused && !theme.noColor ? theme.colors.selection : undefined,
-        inverse: isSelected && focused,
+
       },
       `  ${cursorPart}`,
       // Suppress dot color on selected rows — inverse makes colored

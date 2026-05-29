@@ -140,7 +140,7 @@ function renderInspectorActionsSection(
       return h(Text, {
         key: `actions-${index}`,
         backgroundColor: isSelected && !theme.noColor ? theme.colors.selection : undefined,
-        inverse: isSelected,
+
       }, ...children)
     }),
   ]
@@ -240,7 +240,7 @@ function renderCommitFileList(
     return h(Text, {
       key: `commit-file-${index}`,
       color: statusCodeColor(file.status, theme),
-      inverse: isSelected && focused && !theme.noColor,
+
       bold: isSelected,
     }, label)
   })

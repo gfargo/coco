@@ -326,10 +326,12 @@ function renderCommitHistoryRow(
   const message = truncateCells(commit.message, messageRoom)
 
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
-  // When a row is selected (inverse: true), child text colors must be
-  // suppressed — otherwise cyan/green text stays light against the
-  // now-light inverted background, making it unreadable. Children
-  // inherit the inverted foreground (dark) when their color is undefined.
+  // Don't use inverse — it makes child colors unreadable. Instead,
+  // use backgroundColor only. The selection color in each theme is
+  // chosen to contrast with the default foreground (light text).
+  // Suppress accent/muted colors on selected rows so all text renders
+  // in the default foreground for maximum contrast against the
+  // selection background.
   const accent = selected ? undefined : (theme.noColor ? undefined : theme.colors.accent)
   const muted = selected ? undefined : (theme.noColor ? undefined : theme.colors.muted)
 
@@ -344,7 +346,7 @@ function renderCommitHistoryRow(
   return h(Text, {
     key: `${commit.hash}-${index}`,
     backgroundColor: selectedBg,
-    inverse: selected,
+
   },
   ...graphChildren,
   ' ',
@@ -408,9 +410,8 @@ function renderStackedCommitHistoryRow(
   remoteNames?: string[]
 ): ReactTypes.ReactElement {
   const totalWidth = Math.max(20, panelWidth - 4)
-  // Suppress child colors on selected rows — same rationale as the
-  // single-line renderer: inverse flips bg/fg, but explicit child
-  // colors override the inversion and become unreadable.
+  // Suppress child colors on selected rows so all text renders in
+  // the default foreground for contrast against the selection bg.
   const accent = selected ? undefined : (theme.noColor ? undefined : theme.colors.accent)
   const muted = selected ? undefined : (theme.noColor ? undefined : theme.colors.muted)
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
@@ -435,7 +436,7 @@ function renderStackedCommitHistoryRow(
   const lineOne = h(Text, {
     key: `${commit.hash}-${index}-l1`,
     backgroundColor: selectedBg,
-    inverse: selected,
+
   },
   ...graphChildren,
   ' ',
@@ -510,7 +511,7 @@ function renderPendingCommitRow(
     key: 'pending-commit-row',
     bold: true,
     color: theme.noColor ? undefined : theme.colors.accent,
-    inverse: selected,
+
     backgroundColor: selected && !theme.noColor ? theme.colors.selection : undefined,
   }, truncateCells(label, 140))
 }
