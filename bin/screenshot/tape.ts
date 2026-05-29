@@ -78,6 +78,37 @@ function renderAction(action: ScreenshotRecipeAction): string[] {
 }
 
 /**
+ * Keys to forward from the driver's process.env into the VHS shell.
+ * These enable AI-powered commands (commit, changelog, review) to
+ * make real LLM calls for demo GIFs. Only exported if present.
+ */
+const FORWARDED_ENV_KEYS = [
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'OLLAMA_HOST',
+  'OPENROUTER_API_KEY',
+  'COCO_SERVICE_PROVIDER',
+  'COCO_SERVICE_MODEL',
+  'COCO_SERVICE_BASE_URL',
+  'COCO_SERVICE_ENDPOINT',
+]
+
+function buildEnvExports(): string[] {
+  const lines: string[] = []
+  for (const key of FORWARDED_ENV_KEYS) {
+    const value = process.env[key]
+    if (value) {
+      // Use unquoted export — values shouldn't contain spaces.
+      // If they do, the user should set them in their shell directly.
+      lines.push(`Type "export ${key}=${value}"`)
+      lines.push(`Enter`)
+      lines.push(`Sleep 100ms`)
+    }
+  }
+  return lines
+}
+
+/**
  * Build the VHS tape content for a recipe. The result is a string
  * ready to write to a `.tape` file.
  */
@@ -133,6 +164,10 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Type "export COCO_SNAPSHOT_NOW='${SNAPSHOT_NOW}'"`,
     `Enter`,
     `Sleep 300ms`,
+    // Forward API keys from the driver's env (loaded from .env) into
+    // the VHS shell so AI-powered commands (commit, changelog, review)
+    // can make real LLM calls for demo GIFs.
+    ...buildEnvExports(),
     // NO_COLOR is set per-recipe via theme=monochrome; otherwise we
     // let coco's own theme machinery paint.
     recipe.theme === 'monochrome' ? `Type "export NO_COLOR=1"` : null,

@@ -19,7 +19,7 @@
  *   brew install vhs
  */
 
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
@@ -28,6 +28,35 @@ import { findRecipe, listRecipeNames, RECIPES, type ScreenshotRecipe } from './s
 import { buildTape } from './screenshot/tape'
 
 const REPO_ROOT = resolve(__dirname, '..')
+
+// Load .env file from the project root so API keys (OPENAI_API_KEY,
+// ANTHROPIC_API_KEY, etc.) are available to the VHS shell without
+// requiring the user to export them in their terminal session.
+// Supports KEY=VALUE format, ignores comments and blank lines.
+function loadDotEnv(): void {
+  const envPath = join(REPO_ROOT, '.env')
+  if (!existsSync(envPath)) return
+  const content = readFileSync(envPath, 'utf8')
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eqIndex = trimmed.indexOf('=')
+    if (eqIndex === -1) continue
+    const key = trimmed.slice(0, eqIndex).trim()
+    let value = trimmed.slice(eqIndex + 1).trim()
+    // Strip surrounding quotes
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1)
+    }
+    // Don't override existing env vars (user's shell takes precedence)
+    if (!(key in process.env)) {
+      process.env[key] = value
+    }
+  }
+}
+
+loadDotEnv()
 const SCREENSHOTS_DIR = join(REPO_ROOT, '.screenshots')
 const COCO_CLI = join(REPO_ROOT, 'node_modules', '.bin', 'tsx') + ' ' + join(REPO_ROOT, 'src', 'index.ts')
 const NODE_BIN_DIR = dirname(process.execPath)
