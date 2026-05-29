@@ -83,6 +83,7 @@ function renderAction(action: ScreenshotRecipeAction): string[] {
  * make real LLM calls for demo GIFs. Only exported if present.
  */
 const FORWARDED_ENV_KEYS = [
+  // AI providers
   'OPENAI_API_KEY',
   'ANTHROPIC_API_KEY',
   'OLLAMA_HOST',
@@ -91,6 +92,9 @@ const FORWARDED_ENV_KEYS = [
   'COCO_SERVICE_MODEL',
   'COCO_SERVICE_BASE_URL',
   'COCO_SERVICE_ENDPOINT',
+  // GitHub CLI — needed for PR counts, issue triage, etc.
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
 ]
 
 function buildEnvExports(): string[] {
@@ -153,10 +157,10 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Type "git config --global --add safe.directory '*'"`,
     `Enter`,
     `Sleep 300ms`,
-    // Ensure the VHS shell can find node + tsx + git + system utils.
-    // The PATH value has no spaces so we can skip quoting in bash.
+    // Ensure the VHS shell can find node + tsx + git + gh + system utils.
+    // Include /usr/local/bin and /opt/homebrew/bin for tools like gh.
     // $PATH expands to the shell's existing PATH (includes /usr/bin etc).
-    `Type "export PATH=${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:$PATH"`,
+    `Type "export PATH=${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
     `Enter`,
     `Sleep 300ms`,
     // Snapshot mode pin — freezes wall-clock `now` for relative
@@ -175,13 +179,18 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Type "clear"`,
     `Enter`,
     `Sleep 200ms`,
-    `Show`,
-    ``,
+    // For GIF recipes: keep hidden through boot so the recording
+    // starts with the fully-loaded UI, not the typing/loading phase.
+    // For screenshot-only recipes: Show before the command.
+    ...(recipe.emitGif ? [] : [`Show`, ``]),
     // Launch coco with --repo pointing at the scenario dir. Keep
     // TypingSpeed at 0 so the command executes immediately.
     `Type "${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
     `Enter`,
     `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
+    // For GIF recipes: Show AFTER the settle — recording starts
+    // with the fully-rendered UI, no boot frames visible.
+    ...(recipe.emitGif ? [`Show`, ``] : []),
   ]
 
   const actionLines = (recipe.actions || []).flatMap((action) => renderAction(action))

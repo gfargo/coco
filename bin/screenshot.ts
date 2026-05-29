@@ -57,6 +57,23 @@ function loadDotEnv(): void {
 }
 
 loadDotEnv()
+
+// If GH_TOKEN isn't set (from .env or shell), try to get it from
+// `gh auth token` so the workspace command can show PR counts.
+if (!process.env.GH_TOKEN && !process.env.GITHUB_TOKEN) {
+  try {
+    const result = spawnSync('gh', ['auth', 'token'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    if (result.status === 0 && result.stdout.trim()) {
+      process.env.GH_TOKEN = result.stdout.trim()
+    }
+  } catch {
+    // gh not installed or not authenticated — skip silently
+  }
+}
+
 const SCREENSHOTS_DIR = join(REPO_ROOT, '.screenshots')
 const COCO_CLI = join(REPO_ROOT, 'node_modules', '.bin', 'tsx') + ' ' + join(REPO_ROOT, 'src', 'index.ts')
 const NODE_BIN_DIR = dirname(process.execPath)
