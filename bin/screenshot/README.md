@@ -77,6 +77,102 @@ The list of named scenarios comes from `@gfargo/git-scenarios`. Run `npm run sce
 - `rich-history-graph` — multi-branch with date-bucket coverage and lane topology
 - `mid-bisect`, `mid-merge-conflict`, `mid-rebase-conflict` — in-progress operations
 - `stashed-changes` — clean worktree + 3 stashes
+- `_workspace` — special: creates 3 repos in subdirectories for workspace command
+
+## Full recipe catalog
+
+Run `npm run screenshot -- --list` for the live list. Current catalog:
+
+### Workstation views (22 screenshots)
+| Recipe | View | Scenario |
+|--------|------|----------|
+| `ui-history-pr-ready` | History | feature-pr-ready |
+| `ui-history-rich-graph` | History (full graph) | rich-history-graph |
+| `ui-multi-commit-branch` | History (varied commits) | multi-commit-branch |
+| `ui-large-repo` | History (115 commits) | large-repo |
+| `ui-bisect-in-progress` | History (mid-bisect) | mid-bisect |
+| `ui-detached-head` | History (detached) | detached-head |
+| `ui-merge-conflict` | History (merge conflict) | mid-merge-conflict |
+| `ui-rebase-conflict` | History (rebase conflict) | mid-rebase-conflict |
+| `ui-status-dirty-worktree` | Status | dirty-many-files |
+| `ui-diff-feature-branch` | Diff | feature-pr-ready |
+| `ui-compose` | Compose | single-staged-file |
+| `ui-branches-sync-showcase` | Branches | branch-sync-showcase |
+| `ui-tags` | Tags | large-repo |
+| `ui-stash-list` | Stash | stashed-changes |
+| `ui-worktrees` | Worktrees | multiple-worktrees |
+| `ui-conflicts-merge` | Conflicts | mid-merge-conflict |
+| `ui-reflog` | Reflog | rich-history-graph |
+| `ui-bisect-view` | Bisect | mid-bisect |
+| `ui-changelog` | Changelog | feature-pr-ready |
+| `ui-submodules-view` | Submodules | submodule-with-history |
+| `ui-submodule` | History (with submodule) | submodule-with-history |
+| `ui-help-overlay` | Help overlay | feature-pr-ready |
+
+### Interactive overlays (3 screenshots)
+| Recipe | What it shows |
+|--------|--------------|
+| `ui-command-palette` | `:` command palette |
+| `ui-search-filter` | `/feat` live filter |
+| `ui-inspector-focused` | Tab-focused inspector |
+
+### Workspace (1 screenshot)
+| Recipe | What it shows |
+|--------|--------------|
+| `workspace-multi-repo` | 3 repos in different states |
+
+### Theme variants (16+ screenshots)
+Each theme gets a `ui-history-theme-<name>` recipe. Current themes:
+default, monochrome, catppuccin, gruvbox, dracula, nord, solarized-dark,
+tokyo-night, one-dark, rose-pine, kanagawa, everforest, monokai, synthwave,
+ayu-dark, palenight, github-dark, horizon, nightfox, carbonfox,
+tokyonight-storm, catppuccin-latte, solarized-light, github-light, iceberg,
+material-ocean, moonlight, poimandres, vitesse-dark, vesper, flexoki, mellow
+
+### Stdout / utility (8 screenshots)
+| Recipe | What it shows |
+|--------|--------------|
+| `log-stdout-feature` | `coco log` table output |
+| `log-stdout-rich-graph` | `coco log --all` graph output |
+| `cmd-help` | `coco --help` |
+| `cmd-commit-help` | `coco commit --help` |
+| `cmd-changelog-help` | `coco changelog --help` |
+| `cmd-log-help` | `coco log --help` |
+| `cmd-doctor` | `coco doctor` |
+| `cmd-init-dry-run` | `coco init --dry-run` |
+
+### GIF demos (8 animated recordings)
+| Recipe | What it shows | Duration |
+|--------|--------------|----------|
+| `demo-workstation-tour` | Workspace multi-repo browsing | ~8s |
+| `demo-ui-view-switching` | Chord navigation between views | ~8s |
+| `demo-hunk-staging` | Stage files from status view | ~7s |
+| `demo-help-overlay` | Open/scroll/close help | ~7s |
+| `demo-search-filter` | Live filter with `/` | ~5s |
+| `demo-workspace-to-ui` | Workspace → repo → ui → quit back | ~12s |
+| `demo-commit-flow` | `coco commit --dry-run` | ~5s |
+| `demo-changelog` | `coco changelog --branch main` | ~5s |
+
+## Environment variables
+
+The driver loads `.env` from the project root before running VHS. This means you can put API keys there for AI-powered demo GIFs:
+
+```bash
+# .env (gitignored)
+OPENAI_API_KEY=sk-...
+```
+
+The following keys are forwarded into the VHS shell when present:
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `OLLAMA_HOST`
+- `OPENROUTER_API_KEY`
+- `COCO_SERVICE_PROVIDER`
+- `COCO_SERVICE_MODEL`
+- `COCO_SERVICE_BASE_URL`
+- `COCO_SERVICE_ENDPOINT`
+
+Keys already in your shell environment take precedence over `.env` values.
 
 ## Marketing site (`.www/`)
 
