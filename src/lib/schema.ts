@@ -1154,7 +1154,21 @@ export const schema = {
         "ayu-dark",
         "palenight",
         "github-dark",
-        "horizon"
+        "horizon",
+        "nightfox",
+        "carbonfox",
+        "tokyonight-storm",
+        "catppuccin-latte",
+        "solarized-light",
+        "github-light",
+        "iceberg",
+        "material-ocean",
+        "moonlight",
+        "poimandres",
+        "vitesse-dark",
+        "vesper",
+        "flexoki",
+        "mellow"
       ]
     }
   }
