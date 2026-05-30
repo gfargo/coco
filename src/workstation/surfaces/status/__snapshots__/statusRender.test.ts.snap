@@ -88,19 +88,15 @@ exports[`renderStatusSurface structural snapshot — mixed staged + unstaged + u
   <Text
     bold={true}
     dimColor={false}
-    inverse={false}
   >
       ▾ Staged (1)
   </Text>
   <Text
-    backgroundColor="cyan"
+    backgroundColor="#1a3a4a"
     dimColor={false}
-    inverse={true}
   >
       &gt; 
-    <Text
-      color="yellow"
-    >
+    <Text>
       ●
     </Text>
      
@@ -109,13 +105,11 @@ exports[`renderStatusSurface structural snapshot — mixed staged + unstaged + u
   <Text
     bold={true}
     dimColor={true}
-    inverse={false}
   >
       ▾ Unstaged (1)
   </Text>
   <Text
     dimColor={true}
-    inverse={false}
   >
         
     <Text
@@ -129,13 +123,11 @@ exports[`renderStatusSurface structural snapshot — mixed staged + unstaged + u
   <Text
     bold={true}
     dimColor={true}
-    inverse={false}
   >
       ▾ Untracked (1)
   </Text>
   <Text
     dimColor={true}
-    inverse={false}
   >
         
     <Text

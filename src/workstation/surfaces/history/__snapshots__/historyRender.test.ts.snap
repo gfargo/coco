@@ -24,11 +24,9 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
     </Text>
   </Box>
   <Text
-    backgroundColor="cyan"
-    inverse={true}
+    backgroundColor="#1a3a4a"
   >
     <Text
-      color="cyan"
       dimColor={false}
     >
       ◉
@@ -36,13 +34,12 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
      
     <Text
       bold={true}
-      color="cyan"
     >
       aaa1111
     </Text>
      
     <Text
-      dimColor={true}
+      dimColor={false}
     >
       8d
        
@@ -54,7 +51,6 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
     </Text>
     <Text
       bold={false}
-      color="green"
     >
       feat: 
     </Text>
@@ -72,9 +68,7 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
       │
     </Text>
   </Text>
-  <Text
-    inverse={false}
-  >
+  <Text>
     <Text
       color="cyan"
       dimColor={false}
@@ -115,9 +109,7 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
       │
     </Text>
   </Text>
-  <Text
-    inverse={false}
-  >
+  <Text>
     <Text
       color="cyan"
       dimColor={false}
@@ -216,11 +208,9 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
     </Text>
   </Box>
   <Text
-    backgroundColor="cyan"
-    inverse={true}
+    backgroundColor="#1a3a4a"
   >
     <Text
-      color="cyan"
       dimColor={false}
     >
       ◉
@@ -228,7 +218,6 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
      
     <Text
       bold={true}
-      color="cyan"
     >
       aaa1111
     </Text>
@@ -240,7 +229,6 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
     </Text>
     <Text
       bold={false}
-      color="green"
     >
       feat: 
     </Text>
@@ -258,9 +246,7 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
       │
     </Text>
   </Text>
-  <Text
-    inverse={false}
-  >
+  <Text>
     <Text
       color="cyan"
       dimColor={false}
@@ -295,9 +281,7 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
       │
     </Text>
   </Text>
-  <Text
-    inverse={false}
-  >
+  <Text>
     <Text
       color="cyan"
       dimColor={false}
