@@ -43,7 +43,7 @@ export type CreateLogInkThemeOptions = LogInkThemeConfig & {
   env?: ColorEnv
 }
 
-const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'>, LogInkThemeColors> = {
+export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'>, LogInkThemeColors> = {
   default: {
     accent: 'cyan',
     border: 'gray',

@@ -453,6 +453,24 @@ export const RECIPES: ScreenshotRecipe[] = [
     command: 'ui --view history --theme tokyonight-storm',
   },
   {
+    name: 'ui-history-theme-catppuccin-latte',
+    description: 'History view rendered with the catppuccin-latte light theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme catppuccin-latte',
+  },
+  {
+    name: 'ui-history-theme-solarized-light',
+    description: 'History view rendered with the solarized-light theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme solarized-light',
+  },
+  {
+    name: 'ui-history-theme-github-light',
+    description: 'History view rendered with the github-light theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme github-light',
+  },
+  {
     name: 'ui-history-theme-iceberg',
     description: 'History view rendered with the iceberg theme preset',
     scenario: 'feature-pr-ready',
