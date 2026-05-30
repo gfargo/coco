@@ -207,7 +207,8 @@ function renderTypedSubject(
   Text: LogInkComponents['Text'],
   text: string,
   theme: LogInkTheme,
-  key: string
+  key: string,
+  suppressColor: boolean = false
 ): ReactTypes.ReactElement[] {
   const parsed = parseConventionalCommitPrefix(text)
   if (!parsed) {
@@ -216,7 +217,9 @@ function renderTypedSubject(
   if (text.length < parsed.prefix.length) {
     return [h(Text, { key: `${key}-msg` }, text)]
   }
-  const color = getConventionalCommitColor(parsed, theme)
+  // When the row is selected (inverted), suppress the type color so
+  // text inherits the dark inverted foreground and stays readable.
+  const color = suppressColor ? undefined : getConventionalCommitColor(parsed, theme)
   return [
     h(Text, { key: `${key}-type`, color, bold: parsed.breaking }, parsed.prefix),
     h(Text, { key: `${key}-rest` }, text.slice(parsed.prefix.length)),
@@ -240,22 +243,17 @@ function renderLaneSegmentSpans(
   theme: LogInkTheme,
   padTo: number,
   keyPrefix: string,
-  options: { forceDim?: boolean } = {}
+  options: { forceDim?: boolean; suppressColor?: boolean } = {}
 ): ReactTypes.ReactElement[] {
   const muted = theme.noColor ? undefined : theme.colors.muted
   const elements: ReactTypes.ReactElement[] = []
   let totalLen = 0
 
   segments.forEach((seg, idx) => {
-    const laneColor = getLaneColor(seg.laneId, theme)
+    const laneColor = options.suppressColor ? undefined : (getLaneColor(seg.laneId, theme) ?? muted)
     elements.push(h(Text, {
       key: `${keyPrefix}-${idx}`,
-      color: laneColor ?? muted,
-      // Ink does not cascade dimColor from a parent Text to children,
-      // so the caller's "this whole row should fade" intent has to
-      // travel here as an explicit flag (#831). Used for graph-only
-      // lane-closure rows, where the lane colors otherwise compete
-      // for attention with the commits they connect.
+      color: laneColor,
       dimColor: options.forceDim || (theme.noColor && seg.laneId === undefined),
     }, seg.text))
     totalLen += seg.text.length
@@ -328,21 +326,27 @@ function renderCommitHistoryRow(
   const message = truncateCells(commit.message, messageRoom)
 
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
-  const accent = theme.noColor ? undefined : theme.colors.accent
-  const muted = theme.noColor ? undefined : theme.colors.muted
+  // Don't use inverse — it makes child colors unreadable. Instead,
+  // use backgroundColor only. The selection color in each theme is
+  // chosen to contrast with the default foreground (light text).
+  // Suppress accent/muted colors on selected rows so all text renders
+  // in the default foreground for maximum contrast against the
+  // selection background.
+  const accent = selected ? undefined : (theme.noColor ? undefined : theme.colors.accent)
+  const muted = selected ? undefined : (theme.noColor ? undefined : theme.colors.muted)
 
   // Lane-colored graph spans when full graph mode + non-ASCII rendering
   // is in play; otherwise fall back to the legacy single-muted span so
   // compact mode and legacy terminals stay visually unchanged.
   const graphChildren = laneSegments && !theme.ascii
-    ? renderLaneSegmentSpans(h, Text, laneSegments, theme, graphWidth, `c${index}`)
-    : [h(Text, { color: muted, dimColor: theme.noColor },
+    ? renderLaneSegmentSpans(h, Text, laneSegments, theme, graphWidth, `c${index}`, { suppressColor: selected })
+    : [h(Text, { color: muted, dimColor: !selected && theme.noColor },
         substituteGraphChars(graph.padEnd(graphWidth), { ascii: theme.ascii }))]
 
   return h(Text, {
     key: `${commit.hash}-${index}`,
     backgroundColor: selectedBg,
-    inverse: selected,
+
   },
   ...graphChildren,
   ' ',
@@ -368,12 +372,12 @@ function renderCommitHistoryRow(
   // Date column drops out entirely at `tight` density — no spacer
   // either, so the message column slides left into the freed cells.
   dateText
-    ? h(Text, { key: `${commit.hash}-${index}-date`, dimColor: true }, dateText, ' ')
+    ? h(Text, { key: `${commit.hash}-${index}-date`, dimColor: !selected }, dateText, ' ')
     : null,
   // Branch chip prefix (full-graph mode only) lands right before the
   // message so the eye reads "branch · subject" as a unit.
   chip.node,
-  ...renderTypedSubject(h, Text, message, theme, `${commit.hash}-${index}-subj`),
+  ...renderTypedSubject(h, Text, message, theme, `${commit.hash}-${index}-subj`, selected),
   refsTrunc ? h(Text, { color: accent }, refsTrunc) : null)
 }
 
@@ -406,8 +410,10 @@ function renderStackedCommitHistoryRow(
   remoteNames?: string[]
 ): ReactTypes.ReactElement {
   const totalWidth = Math.max(20, panelWidth - 4)
-  const accent = theme.noColor ? undefined : theme.colors.accent
-  const muted = theme.noColor ? undefined : theme.colors.muted
+  // Suppress child colors on selected rows so all text renders in
+  // the default foreground for contrast against the selection bg.
+  const accent = selected ? undefined : (theme.noColor ? undefined : theme.colors.accent)
+  const muted = selected ? undefined : (theme.noColor ? undefined : theme.colors.muted)
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
 
   // Line 1 — subject row. Mostly mirrors the single-line layout but
@@ -423,14 +429,14 @@ function renderStackedCommitHistoryRow(
   const subject = truncateCells(commit.message, Math.max(8, totalWidth - lineOneFixed))
 
   const graphChildren = laneSegments && !theme.ascii
-    ? renderLaneSegmentSpans(h, Text, laneSegments, theme, graphWidth, `cs${index}`)
-    : [h(Text, { color: muted, dimColor: theme.noColor },
+    ? renderLaneSegmentSpans(h, Text, laneSegments, theme, graphWidth, `cs${index}`, { suppressColor: selected })
+    : [h(Text, { color: muted, dimColor: !selected && theme.noColor },
         substituteGraphChars(graph.padEnd(graphWidth), { ascii: theme.ascii }))]
 
   const lineOne = h(Text, {
     key: `${commit.hash}-${index}-l1`,
     backgroundColor: selectedBg,
-    inverse: selected,
+
   },
   ...graphChildren,
   ' ',
@@ -440,7 +446,7 @@ function renderStackedCommitHistoryRow(
   h(Text, { color: accent, bold: selected || isRecent }, commit.shortHash),
   ' ',
   chip.node,
-  ...renderTypedSubject(h, Text, subject, theme, `${commit.hash}-${index}-stk-subj`))
+  ...renderTypedSubject(h, Text, subject, theme, `${commit.hash}-${index}-stk-subj`, selected))
 
   // Line 2 — metadata row, padded to align with the start of the
   // shortHash on line 1 so the eye still groups them as one commit.
@@ -505,7 +511,7 @@ function renderPendingCommitRow(
     key: 'pending-commit-row',
     bold: true,
     color: theme.noColor ? undefined : theme.colors.accent,
-    inverse: selected,
+
     backgroundColor: selected && !theme.noColor ? theme.colors.selection : undefined,
   }, truncateCells(label, 140))
 }

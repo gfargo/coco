@@ -20,8 +20,8 @@ import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { STAGE_STATUS_DOT, getStageStatusDotColor } from '../../chrome/iconography'
 import {
-  formatLogInkLoading,
-  formatLogInkStatusEmpty,
+    formatLogInkLoading,
+    formatLogInkStatusEmpty,
 } from '../../chrome/surfaceStates'
 import { cellWidth, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
@@ -29,8 +29,8 @@ import { isPathLfsTracked } from '../../../git/lfsAttributes'
 import type { WorktreeFile, WorktreeFileGroup } from '../../../git/statusData'
 import { applyStatusFilterMask, groupWorktreeFiles } from '../../../git/statusData'
 import type {
-  LogInkState,
-  LogInkStatusFilterMask,
+    LogInkState,
+    LogInkStatusFilterMask,
 } from '../../../commands/log/inkViewModel'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -135,7 +135,7 @@ export function renderStatusSurface(
           bold: true,
           dimColor: !headerSelected && rowIndex > cursorRowIndex,
           backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
-          inverse: headerSelected,
+
         }, truncateCells(text, 140))
       }
       const isSelected = !headerFocused && row.flatIndex === selectedIndex
@@ -155,10 +155,12 @@ export function renderStatusSurface(
         key: `status-file-${row.flatIndex}-${rowIndex}`,
         dimColor: !isSelected && rowIndex > cursorRowIndex,
         backgroundColor: isSelected && focused && !theme.noColor ? theme.colors.selection : undefined,
-        inverse: isSelected && focused,
+
       },
       `  ${cursorPart}`,
-      ...(useDot ? [h(Text, { color: dotColor }, STAGE_STATUS_DOT), ' '] : []),
+      // Suppress dot color on selected rows — inverse makes colored
+      // text unreadable against the light background.
+      ...(useDot ? [h(Text, { color: (isSelected && focused) ? undefined : dotColor }, STAGE_STATUS_DOT), ' '] : []),
       tailTrunc)
     })
   // When the mask narrows the list to nothing but the underlying repo

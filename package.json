@@ -44,6 +44,7 @@
     "bench": "tsx bin/benchmark.ts",
     "scenario": "tsx bin/scenarioRunner.ts",
     "screenshot": "tsx bin/screenshot.ts",
+    "screenshot:sync": "tsx bin/syncScreenshots.ts",
     "eval:structural-extract": "tsx bin/structuralExtractEval.ts",
     "pretest:jest": "npm run build:info && node bin/copyTreeSitterWasm.mjs",
     "test:jest": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",

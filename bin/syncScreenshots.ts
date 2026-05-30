@@ -1,0 +1,176 @@
+#!/usr/bin/env tsx
+/**
+ * Regenerate all screenshots and GIFs used on the marketing site
+ * (.www) and sync them to .www/public/screenshots/.
+ *
+ * Run after making visual changes to the workstation (themes, layout,
+ * selection styling, etc.) to update the live site assets.
+ *
+ * Usage:
+ *   npm run screenshot:sync
+ */
+
+import { cpSync, existsSync, mkdirSync, rmSync } from 'fs'
+import { join, resolve } from 'path'
+import { spawnSync } from 'child_process'
+
+const REPO_ROOT = resolve(__dirname, '..')
+const SCREENSHOTS_DIR = join(REPO_ROOT, '.screenshots')
+const WWW_PUBLIC = join(REPO_ROOT, '.www', 'public', 'screenshots')
+
+/**
+ * Recipes that produce assets used on the marketing site.
+ * This is the canonical list — if a recipe isn't here, it won't
+ * be synced to .www even if it exists in the recipe catalog.
+ */
+const SITE_RECIPES = [
+  // Hero GIFs
+  'demo-workstation-tour',
+  'demo-ui-view-switching',
+  // Workflow GIFs
+  'demo-hunk-staging',
+  'demo-search-filter',
+  // View screenshots (used in the 16-view grid)
+  'ui-history-rich-graph',
+  'ui-status-dirty-worktree',
+  'ui-diff-feature-branch',
+  'ui-compose',
+  'ui-branches-sync-showcase',
+  'ui-tags',
+  'ui-stash-list',
+  'ui-worktrees',
+  'ui-history-pr-ready',
+  'ui-conflicts-merge',
+  'ui-reflog',
+  'ui-bisect-view',
+  'ui-submodules-view',
+  'ui-changelog',
+  'ui-help-overlay',
+  // Theme carousel
+  'ui-history-theme-catppuccin',
+  'ui-history-theme-gruvbox',
+  'ui-history-theme-dracula',
+  'ui-history-theme-nord',
+  'ui-history-theme-tokyo-night',
+  'ui-history-theme-one-dark',
+  'ui-history-theme-rose-pine',
+  'ui-history-theme-kanagawa',
+  'ui-history-theme-everforest',
+  'ui-history-theme-solarized-dark',
+  'ui-history-theme-monochrome',
+  // Utility
+  'workspace-multi-repo',
+  'ui-command-palette',
+  'ui-search-filter',
+  'ui-inspector-focused',
+]
+
+/**
+ * Map from recipe name to the filename(s) used in .www/public/screenshots/.
+ * Most recipes map 1:1 (recipe-name.png), but some have custom names
+ * for semantic clarity on the site.
+ */
+const FILENAME_MAP: Record<string, string[]> = {
+  'ui-history-rich-graph': ['hero-history-graph.png', 'view-history.png'],
+  'ui-status-dirty-worktree': ['feature-status.png', 'view-status.png'],
+  'ui-diff-feature-branch': ['view-diff.png'],
+  'ui-compose': ['view-compose.png'],
+  'ui-branches-sync-showcase': ['view-branches.png'],
+  'ui-tags': ['view-tags.png'],
+  'ui-stash-list': ['view-stash.png'],
+  'ui-worktrees': ['view-worktrees.png'],
+  'ui-history-pr-ready': ['workstation-history.png', 'view-pull-request.png', 'view-pr-triage.png', 'view-issues.png'],
+  'ui-conflicts-merge': ['view-conflicts.png'],
+  'ui-reflog': ['view-reflog.png'],
+  'ui-bisect-view': ['view-bisect.png'],
+  'ui-submodules-view': ['view-submodules.png'],
+  'ui-changelog': ['view-changelog.png'],
+  'ui-help-overlay': ['workstation-help.png'],
+  'ui-history-theme-catppuccin': ['theme-catppuccin.png'],
+  'ui-history-theme-gruvbox': ['theme-gruvbox.png'],
+  'ui-history-theme-dracula': ['theme-dracula.png'],
+  'ui-history-theme-nord': ['theme-nord.png'],
+  'ui-history-theme-tokyo-night': ['theme-tokyo-night.png'],
+  'ui-history-theme-one-dark': ['theme-one-dark.png'],
+  'ui-history-theme-rose-pine': ['theme-rose-pine.png'],
+  'ui-history-theme-kanagawa': ['theme-kanagawa.png'],
+  'ui-history-theme-everforest': ['theme-everforest.png'],
+  'ui-history-theme-solarized-dark': ['theme-solarized-dark.png'],
+  'ui-history-theme-monochrome': ['theme-monochrome.png'],
+  'workspace-multi-repo': ['workspace-multi-repo.png'],
+  'ui-command-palette': ['feature-palette.png'],
+  'ui-search-filter': ['docs-search.png'],
+  'ui-inspector-focused': ['workstation-history.png'],
+  'demo-workstation-tour': ['demo-workstation-tour.gif'],
+  'demo-ui-view-switching': ['demo-ui-view-switching.gif'],
+  'demo-hunk-staging': ['demo-hunk-staging.gif'],
+  'demo-search-filter': ['demo-search-filter.gif'],
+}
+
+function main() {
+  console.log('🖼️  Regenerating marketing site screenshots...\n')
+
+  // Clean .screenshots/
+  if (existsSync(SCREENSHOTS_DIR)) {
+    rmSync(SCREENSHOTS_DIR, { recursive: true })
+  }
+
+  // Generate all site recipes
+  let succeeded = 0
+  let failed = 0
+
+  for (const recipe of SITE_RECIPES) {
+    const result = spawnSync('npm', ['run', 'screenshot', '--', '--recipe', recipe], {
+      cwd: REPO_ROOT,
+      stdio: 'pipe',
+      encoding: 'utf8',
+      timeout: 120_000,
+    })
+
+    if (result.status === 0) {
+      succeeded++
+      process.stdout.write(`  ✓ ${recipe}\n`)
+    } else {
+      failed++
+      process.stdout.write(`  ✗ ${recipe}\n`)
+      if (result.stderr) {
+        process.stdout.write(`    ${result.stderr.trim().split('\n')[0]}\n`)
+      }
+    }
+  }
+
+  console.log(`\n${succeeded} generated, ${failed} failed.\n`)
+
+  if (failed > 0) {
+    console.log('⚠️  Some recipes failed. Syncing what succeeded.\n')
+  }
+
+  // Sync to .www/public/screenshots/
+  if (!existsSync(WWW_PUBLIC)) {
+    mkdirSync(WWW_PUBLIC, { recursive: true })
+  }
+
+  let synced = 0
+  for (const recipe of SITE_RECIPES) {
+    const targets = FILENAME_MAP[recipe]
+    if (!targets) continue
+
+    // Find the source file (PNG or GIF)
+    const pngSrc = join(SCREENSHOTS_DIR, `${recipe}.png`)
+    const gifSrc = join(SCREENSHOTS_DIR, `${recipe}.gif`)
+
+    for (const target of targets) {
+      const src = target.endsWith('.gif') ? gifSrc : pngSrc
+      if (!existsSync(src)) continue
+
+      const dest = join(WWW_PUBLIC, target)
+      cpSync(src, dest)
+      synced++
+    }
+  }
+
+  console.log(`📦 Synced ${synced} files to .www/public/screenshots/`)
+  console.log('   Run `cd .www && yarn dev` to preview.')
+}
+
+main()

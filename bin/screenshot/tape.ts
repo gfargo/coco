@@ -83,6 +83,7 @@ function renderAction(action: ScreenshotRecipeAction): string[] {
  * make real LLM calls for demo GIFs. Only exported if present.
  */
 const FORWARDED_ENV_KEYS = [
+  // AI providers
   'OPENAI_API_KEY',
   'ANTHROPIC_API_KEY',
   'OLLAMA_HOST',
@@ -91,6 +92,9 @@ const FORWARDED_ENV_KEYS = [
   'COCO_SERVICE_MODEL',
   'COCO_SERVICE_BASE_URL',
   'COCO_SERVICE_ENDPOINT',
+  // GitHub CLI — needed for PR counts, issue triage, etc.
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
 ]
 
 function buildEnvExports(): string[] {
@@ -120,11 +124,9 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `# Recipe: ${recipe.name}`,
     `# ${recipe.description}`,
     ``,
-    // No `Output` directive for screenshots — `Output` records the
-    // entire session as a frame sequence or GIF. We use `Screenshot`
-    // at the end to capture a single PNG at the settled frame.
-    // GIF output (when emitGif is true) still uses Output.
-    ...(options.outputGif ? [`Output "${options.outputGif}"`] : []),
+    // For screenshots: no Output directive (we use Screenshot command).
+    // For GIFs: Output is placed AFTER the settle time (below) so the
+    // recording starts with the fully-loaded UI, not the boot phase.
     ``,
     `Set Shell "bash"`,
     `Set FontSize 14`,
@@ -153,10 +155,10 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Type "git config --global --add safe.directory '*'"`,
     `Enter`,
     `Sleep 300ms`,
-    // Ensure the VHS shell can find node + tsx + git + system utils.
-    // The PATH value has no spaces so we can skip quoting in bash.
+    // Ensure the VHS shell can find node + tsx + git + gh + system utils.
+    // Include /usr/local/bin and /opt/homebrew/bin for tools like gh.
     // $PATH expands to the shell's existing PATH (includes /usr/bin etc).
-    `Type "export PATH=${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:$PATH"`,
+    `Type "export PATH=${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
     `Enter`,
     `Sleep 300ms`,
     // Snapshot mode pin — freezes wall-clock `now` for relative
@@ -175,13 +177,19 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Type "clear"`,
     `Enter`,
     `Sleep 200ms`,
-    `Show`,
-    ``,
+    // For GIF recipes: keep hidden through boot so the recording
+    // starts with the fully-loaded UI, not the typing/loading phase.
+    // For screenshot-only recipes: Show before the command.
+    ...(recipe.emitGif ? [] : [`Show`, ``]),
     // Launch coco with --repo pointing at the scenario dir. Keep
     // TypingSpeed at 0 so the command executes immediately.
     `Type "${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
     `Enter`,
     `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
+    // For GIF recipes: Show first so the terminal renders the UI,
+    // then start Output recording. The extra Sleep ensures the
+    // first captured frame is the fully-painted UI, not a transition.
+    ...(recipe.emitGif ? [`Show`, `Sleep 500ms`, `Output "${options.outputGif}"`, ``] : []),
   ]
 
   const actionLines = (recipe.actions || []).flatMap((action) => renderAction(action))
@@ -197,9 +205,10 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // a bare filename; the driver moves it to the final location.
     `Screenshot screenshot.png`,
     `Sleep 200ms`,
+    // For GIF recipes: Hide before quitting so the recording ends
+    // on the last rendered UI frame, not the shell prompt after exit.
+    ...(recipe.emitGif ? [`Hide`] : []),
     // Quit the workstation cleanly so VHS doesn't hold the PTY open.
-    // For non-TTY commands (`coco log`) this is a no-op since the
-    // command already exited.
     `Type "q"`,
     `Sleep 200ms`,
   ]
