@@ -329,7 +329,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -1259,7 +1259,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -1717,7 +1717,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -2219,7 +2219,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -2667,7 +2667,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
       </Box>
@@ -3999,7 +3999,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -4533,7 +4533,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -5468,7 +5468,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -6024,7 +6024,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -6403,7 +6403,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
@@ -7893,7 +7893,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           <Text
             color="gray"
           >
-            3w
+            4w
           </Text>
         </Box>
         <Box
