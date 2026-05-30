@@ -20,6 +20,7 @@ Three components:
 
 - **`bin/screenshot/recipes.ts`** — catalog of named scenes. Each recipe declares which `@gfargo/git-scenarios` scenario to spin up, which coco command to run, what keystrokes to send, and the terminal dimensions.
 - **`bin/screenshot/tape.ts`** — converts a recipe into a [VHS tape file](https://github.com/charmbracelet/vhs#vhs-tapes) (the DSL that drives the PTY).
+- **`bin/screenshot/terminalThemes.ts`** — resolves the VHS terminal palette for a coco preset (matching background/foreground per theme, ANSI slots derived from coco's own accents). See the "Terminal palette" note under Determinism.
 - **`bin/screenshot.ts`** — the driver: spins up the scenario, generates the tape, hands it to `vhs`, captures the PNG, cleans up.
 
 ## Determinism
@@ -29,8 +30,8 @@ The screenshots have to look identical between runs to be useful. The harness co
 - **Wall-clock relative dates** ("3d ago", "2 mo") — locked via `COCO_SNAPSHOT_NOW` env var, which the workstation's `getRenderNow()` helper honors. Set per-tape so every run renders against the same fixed moment.
 - **Idle tip rotation** — off by default in coco; recipes don't enable it.
 - **Spinner ticks** — only animate during loading states. Recipes wait for the view to settle before capture.
-- **Theme colours** — recipes can lock to a specific preset (`default` / `monochrome` / `catppuccin` / `gruvbox`) via the `theme` field.
-- **Terminal palette** — the VHS tape pins the *terminal's* theme to "Catppuccin Mocha" so the xterm.js render is consistent regardless of the upstream VHS default.
+- **Theme colours** — recipes can lock to a specific preset (`default` / `monochrome` / `catppuccin` / `gruvbox` / …) via the `theme` field, or by passing `--theme <preset>` in the command.
+- **Terminal palette** — the VHS tape sets the *terminal's* palette to match coco's `--theme`. coco presets only carry foreground accents (no background), so without a matching terminal background every theme would render on the same surface and look near-identical. `terminalThemes.ts` pairs each preset with its canonical background/foreground and derives the ANSI slots from coco's own accent colours, keeping the terminal palette in sync with the app. The `default` and `monochrome` presets keep the named "Catppuccin Mocha" terminal theme.
 
 ## VHS shell environment (critical gotchas)
 
@@ -121,13 +122,16 @@ Run `npm run screenshot -- --list` for the live list. Current catalog:
 |--------|--------------|
 | `workspace-multi-repo` | 3 repos in different states |
 
-### Theme variants (16+ screenshots)
-Each theme gets a `ui-history-theme-<name>` recipe. Current themes:
-default, monochrome, catppuccin, gruvbox, dracula, nord, solarized-dark,
-tokyo-night, one-dark, rose-pine, kanagawa, everforest, monokai, synthwave,
-ayu-dark, palenight, github-dark, horizon, nightfox, carbonfox,
-tokyonight-storm, catppuccin-latte, solarized-light, github-light, iceberg,
-material-ocean, moonlight, poimandres, vitesse-dark, vesper, flexoki, mellow
+### Theme variants (30 `ui-history-theme-*` screenshots)
+Every truecolor preset gets a `ui-history-theme-<name>` recipe, each captured
+with its matching terminal palette (see Determinism → Terminal palette).
+Current themes:
+catppuccin, gruvbox, dracula, nord, solarized-dark, tokyo-night, one-dark,
+rose-pine, kanagawa, everforest, monokai, synthwave, ayu-dark, palenight,
+github-dark, horizon, nightfox, carbonfox, tokyonight-storm, catppuccin-latte,
+solarized-light, github-light, iceberg, material-ocean, moonlight, poimandres,
+vitesse-dark, vesper, flexoki, mellow — plus `monochrome` and the `default`
+preset (both on the Catppuccin Mocha terminal palette).
 
 ### Stdout / utility (8 screenshots)
 | Recipe | What it shows |

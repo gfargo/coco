@@ -10,6 +10,18 @@
 
 import type { ScreenshotRecipe, ScreenshotRecipeAction } from './recipes'
 import { SNAPSHOT_NOW } from './recipes'
+import { renderSetTheme, resolveVhsTheme } from './terminalThemes'
+
+/**
+ * Determine which coco theme preset a recipe renders. Prefers the
+ * explicit `theme` field, falling back to parsing `--theme <preset>`
+ * out of the command string (most theme recipes only set it there).
+ */
+function resolvePreset(recipe: ScreenshotRecipe): string | undefined {
+  if (recipe.theme) return recipe.theme
+  const match = recipe.command.match(/--theme[=\s]+(\S+)/)
+  return match?.[1]
+}
 
 type TapeOptions = {
   /**
@@ -134,10 +146,13 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Set Height ${dims.rows * 20}`,
     `Set TypingSpeed 50ms`,
     `Set CursorBlink false`,
-    // Pin the colour theme of the rendered terminal itself so VHS's
-    // xterm.js palette doesn't drift if the upstream default changes.
-    // (This is the *terminal's* theme, separate from coco's --theme.)
-    `Set Theme "Catppuccin Mocha"`,
+    // Pin the *terminal's* palette to match coco's --theme. coco presets
+    // only carry foreground accents, so without a matching terminal
+    // background every theme would render on the same surface and look
+    // near-identical. resolveVhsTheme pairs the preset with its canonical
+    // background/foreground (named "Catppuccin Mocha" fallback for the
+    // default + monochrome presets). See terminalThemes.ts.
+    renderSetTheme(resolveVhsTheme(resolvePreset(recipe))),
     ``,
     // Hide the boot of the command (cd + the launch line) so the
     // captured frame is just the rendered view, not "$ coco ui …".
