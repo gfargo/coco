@@ -434,6 +434,72 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'feature-pr-ready',
     command: 'ui --view history --theme horizon',
   },
+  {
+    name: 'ui-history-theme-nightfox',
+    description: 'History view rendered with the nightfox theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme nightfox',
+  },
+  {
+    name: 'ui-history-theme-carbonfox',
+    description: 'History view rendered with the carbonfox theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme carbonfox',
+  },
+  {
+    name: 'ui-history-theme-tokyonight-storm',
+    description: 'History view rendered with the tokyonight-storm theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme tokyonight-storm',
+  },
+  {
+    name: 'ui-history-theme-iceberg',
+    description: 'History view rendered with the iceberg theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme iceberg',
+  },
+  {
+    name: 'ui-history-theme-material-ocean',
+    description: 'History view rendered with the material-ocean theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme material-ocean',
+  },
+  {
+    name: 'ui-history-theme-moonlight',
+    description: 'History view rendered with the moonlight theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme moonlight',
+  },
+  {
+    name: 'ui-history-theme-poimandres',
+    description: 'History view rendered with the poimandres theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme poimandres',
+  },
+  {
+    name: 'ui-history-theme-vitesse-dark',
+    description: 'History view rendered with the vitesse-dark theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme vitesse-dark',
+  },
+  {
+    name: 'ui-history-theme-vesper',
+    description: 'History view rendered with the vesper theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme vesper',
+  },
+  {
+    name: 'ui-history-theme-flexoki',
+    description: 'History view rendered with the flexoki theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme flexoki',
+  },
+  {
+    name: 'ui-history-theme-mellow',
+    description: 'History view rendered with the mellow theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme mellow',
+  },
 
   // Theme variants across different views — shows how each theme
   // adapts to status, diff, and branches surfaces
