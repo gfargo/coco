@@ -549,6 +549,48 @@ export const RECIPES: ScreenshotRecipe[] = [
     command: 'ui --view history --theme mellow',
     dimensions: { cols: 140, rows: 32 },
   },
+  {
+    name: 'ui-history-theme-night-owl',
+    description: 'History view rendered with the night-owl theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme night-owl',
+    dimensions: { cols: 140, rows: 32 },
+  },
+  {
+    name: 'ui-history-theme-cobalt2',
+    description: 'History view rendered with the cobalt2 theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme cobalt2',
+    dimensions: { cols: 140, rows: 32 },
+  },
+  {
+    name: 'ui-history-theme-oceanic-next',
+    description: 'History view rendered with the oceanic-next theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme oceanic-next',
+    dimensions: { cols: 140, rows: 32 },
+  },
+  {
+    name: 'ui-history-theme-catppuccin-macchiato',
+    description: 'History view rendered with the catppuccin-macchiato theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme catppuccin-macchiato',
+    dimensions: { cols: 140, rows: 32 },
+  },
+  {
+    name: 'ui-history-theme-gruvbox-light',
+    description: 'History view rendered with the gruvbox-light theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme gruvbox-light',
+    dimensions: { cols: 140, rows: 32 },
+  },
+  {
+    name: 'ui-history-theme-tokyo-night-day',
+    description: 'History view rendered with the tokyo-night-day theme preset',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --theme tokyo-night-day',
+    dimensions: { cols: 140, rows: 32 },
+  },
 
   // Theme variants across different views — shows how each theme
   // adapts to status, diff, and branches surfaces
@@ -674,32 +716,42 @@ export const RECIPES: ScreenshotRecipe[] = [
   // ─────────────────────────────────────────────────────────────────
   {
     name: 'demo-workstation-tour',
-    description: 'Workspace: browse repos, enter one, navigate history, exit back',
+    description: 'Workspace → enter a repo → drill into a commit → open its diff → back out',
     scenario: '_workspace',
     command: 'workspace --root . --maxDepth 1',
     emitGif: true,
     actions: [
-      { kind: 'sleep', ms: 1500 },
+      // Browse the workspace and pick a repo
+      { kind: 'sleep', ms: 1800 },
       { kind: 'key', key: 'Down' },
-      { kind: 'sleep', ms: 600 },
+      { kind: 'sleep', ms: 650 },
       { kind: 'key', key: 'Down' },
-      { kind: 'sleep', ms: 600 },
+      { kind: 'sleep', ms: 800 },
+      // Enter it — drops into the repo's history view
       { kind: 'key', key: 'Enter' },
-      { kind: 'sleep', ms: 3000 },
+      { kind: 'sleep', ms: 3200 },
+      // Walk down to a target commit
       { kind: 'key', key: 'Down' },
-      { kind: 'sleep', ms: 400 },
+      { kind: 'sleep', ms: 450 },
       { kind: 'key', key: 'Down' },
-      { kind: 'sleep', ms: 400 },
+      { kind: 'sleep', ms: 450 },
       { kind: 'key', key: 'Down' },
-      { kind: 'sleep', ms: 400 },
+      { kind: 'sleep', ms: 800 },
+      // Enter on the commit opens its diff
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 2400 },
+      // Scroll through the diff
       { kind: 'key', key: 'Down' },
-      { kind: 'sleep', ms: 600 },
-      { kind: 'key', key: 'Up' },
-      { kind: 'sleep', ms: 400 },
-      { kind: 'key', key: 'Up' },
+      { kind: 'sleep', ms: 380 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 380 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 1600 },
+      // Back out of the diff, then quit to the workspace (clean loop)
+      { kind: 'type', text: '<' },
       { kind: 'sleep', ms: 1000 },
       { kind: 'type', text: 'q' },
-      { kind: 'sleep', ms: 1500 },
+      { kind: 'sleep', ms: 1600 },
     ],
   },
   {
@@ -840,13 +892,18 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
   {
     name: 'demo-commit-flow',
-    description: 'coco commit: show AI generating a commit message from staged changes',
+    description: 'coco commit: AI drafts a Conventional Commit message from staged changes',
     scenario: 'single-staged-file',
     command: 'commit --dry-run --conventional',
     emitGif: true,
-    dimensions: { cols: 100, rows: 24 },
+    dimensions: { cols: 100, rows: 28 },
     actions: [
-      { kind: 'sleep', ms: 3000 },
+      // The scenario has no commitlint config, so coco asks how to proceed —
+      // accept the default ("continue without validation") and let the model
+      // draft the message.
+      { kind: 'sleep', ms: 3500 },
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 6000 },
     ],
   },
   {
@@ -858,6 +915,17 @@ export const RECIPES: ScreenshotRecipe[] = [
     dimensions: { cols: 100, rows: 24 },
     actions: [
       { kind: 'sleep', ms: 3000 },
+    ],
+  },
+  {
+    name: 'demo-commit-split',
+    description: 'coco commit --split: AI groups a messy staging area into a multi-commit plan',
+    scenario: 'dirty-many-files',
+    command: 'commit --split --plan --conventional',
+    emitGif: true,
+    dimensions: { cols: 100, rows: 30 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
     ],
   },
 ]

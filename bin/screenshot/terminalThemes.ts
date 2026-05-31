@@ -70,6 +70,12 @@ const TERMINAL_SURFACES: Record<string, Surface> = {
   vesper: { bg: '#101010', fg: '#ffffff', cursor: '#ffc799', selection: '#232323' },
   flexoki: { bg: '#100f0f', fg: '#cecdc3', cursor: '#cecdc3', selection: '#282726' },
   mellow: { bg: '#161617', fg: '#c9c7cd', cursor: '#c9c7cd', selection: '#2a2a2d' },
+  'night-owl': { bg: '#011627', fg: '#d6deeb', cursor: '#80a4c2', selection: '#1d3b53' },
+  cobalt2: { bg: '#193549', fg: '#ffffff', cursor: '#ffc600', selection: '#0d3a58' },
+  'oceanic-next': { bg: '#1b2b34', fg: '#cdd3de', cursor: '#c0c5ce', selection: '#4f5b66' },
+  'catppuccin-macchiato': { bg: '#24273a', fg: '#cad3f5', cursor: '#f4dbd6', selection: '#494d64' },
+  'gruvbox-light': { bg: '#fbf1c7', fg: '#3c3836', cursor: '#3c3836', selection: '#ebdbb2' },
+  'tokyo-night-day': { bg: '#e1e2e7', fg: '#3760bf', cursor: '#3760bf', selection: '#b7c1e3' },
 }
 
 /**
