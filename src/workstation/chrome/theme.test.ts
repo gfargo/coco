@@ -76,5 +76,22 @@ describe('log Ink theme', () => {
       expect(lowColor.colors.accent).toBe('cyan')
       expect(highColor.colors.accent).toBe('cyan')
     })
+
+    it('preserves a light preset selection through the downgrade (no dark bar on light themes)', () => {
+      // Regression: on a non-truecolor terminal a light theme used to inherit
+      // the default preset's dark selection (#1a3a4a), rendering the selected
+      // row as a dark bar on a light background. The downgrade must keep the
+      // requested theme's own (light) selection.
+      const downgraded = createLogInkTheme({ env: { TERM: 'xterm-256color' }, preset: 'one-light' })
+      expect(downgraded.colors.accent).toBe('cyan') // syntax still downgrades…
+      expect(downgraded.colors.selection).toBe('#e5e5e6') // …but the selection stays light
+      const truecolor = createLogInkTheme({ env: { COLORTERM: 'truecolor' }, preset: 'one-light' })
+      expect(truecolor.colors.selection).toBe('#e5e5e6')
+    })
+
+    it('preserves a dark preset selection through the downgrade too', () => {
+      const downgraded = createLogInkTheme({ env: { TERM: 'xterm' }, preset: 'catppuccin' })
+      expect(downgraded.colors.selection).toBe('#45475a')
+    })
   })
 })

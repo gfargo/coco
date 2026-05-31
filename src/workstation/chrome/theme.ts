@@ -757,6 +757,14 @@ export function createLogInkTheme(options: CreateLogInkThemeOptions = {}): LogIn
     ? {}
     : {
       ...THEME_PRESET_COLORS[preset],
+      // Preserve the requested theme's selection background even when the
+      // rest of the palette downgrades to `default`. The selection is a
+      // single background color the terminal can approximate; without this,
+      // a light theme inherits `default`'s dark selection (#1a3a4a) and the
+      // selected row renders as a dark bar on a light background.
+      ...(preset !== requestedPreset && THEME_PRESET_COLORS[requestedPreset]?.selection
+        ? { selection: THEME_PRESET_COLORS[requestedPreset]!.selection }
+        : {}),
       ...options.colors,
     }
 
