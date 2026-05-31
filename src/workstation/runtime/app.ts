@@ -4414,7 +4414,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           if (group.body) lines += group.body.split('\n').length + 1
           if (group.rationale) lines += 2
           lines += (group.files?.length || 0) + 1
-          if ((group.hunks?.length || 0) > 0) lines += group.hunks.length + 1
+          const hunkCount = group.hunks?.length || 0
+          if (hunkCount > 0) lines += hunkCount + 1
           return sum + lines
         }, 0)
         : undefined,
