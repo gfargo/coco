@@ -93,6 +93,7 @@ exports[`renderStatusSurface structural snapshot — mixed staged + unstaged + u
   </Text>
   <Text
     backgroundColor="#1a3a4a"
+    color="#ffffff"
     dimColor={false}
   >
       &gt; 

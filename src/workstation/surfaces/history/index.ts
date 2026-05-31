@@ -326,12 +326,14 @@ function renderCommitHistoryRow(
   const message = truncateCells(commit.message, messageRoom)
 
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
-  // Don't use inverse — it makes child colors unreadable. Instead,
-  // use backgroundColor only. The selection color in each theme is
-  // chosen to contrast with the default foreground (light text).
-  // Suppress accent/muted colors on selected rows so all text renders
-  // in the default foreground for maximum contrast against the
-  // selection background.
+  // Don't use inverse — it makes child colors unreadable. Instead, set a
+  // background on the row AND an explicit, contrast-guaranteed foreground
+  // (`selectionForeground`, derived from the selection bg) on the outer
+  // span. Suppressing each child's own color to `undefined` then lets it
+  // inherit that readable foreground — so the whole selected row stays
+  // legible regardless of the user's terminal default foreground, which
+  // is what the old "rely on the default fg" approach got wrong.
+  const selectedFg = selected && !theme.noColor ? theme.colors.selectionForeground : undefined
   const accent = selected ? undefined : (theme.noColor ? undefined : theme.colors.accent)
   const muted = selected ? undefined : (theme.noColor ? undefined : theme.colors.muted)
 
@@ -346,7 +348,7 @@ function renderCommitHistoryRow(
   return h(Text, {
     key: `${commit.hash}-${index}`,
     backgroundColor: selectedBg,
-
+    color: selectedFg,
   },
   ...graphChildren,
   ' ',
@@ -410,11 +412,13 @@ function renderStackedCommitHistoryRow(
   remoteNames?: string[]
 ): ReactTypes.ReactElement {
   const totalWidth = Math.max(20, panelWidth - 4)
-  // Suppress child colors on selected rows so all text renders in
-  // the default foreground for contrast against the selection bg.
+  // Suppress child colors on selected rows so each span inherits the
+  // contrast-guaranteed `selectionForeground` set on the line-1 span,
+  // keeping the selected row readable against the selection bg.
   const accent = selected ? undefined : (theme.noColor ? undefined : theme.colors.accent)
   const muted = selected ? undefined : (theme.noColor ? undefined : theme.colors.muted)
   const selectedBg = selected && !theme.noColor ? theme.colors.selection : undefined
+  const selectedFg = selected && !theme.noColor ? theme.colors.selectionForeground : undefined
 
   // Line 1 — subject row. Mostly mirrors the single-line layout but
   // skips the date and refs so the message has the whole tail to
@@ -436,7 +440,7 @@ function renderStackedCommitHistoryRow(
   const lineOne = h(Text, {
     key: `${commit.hash}-${index}-l1`,
     backgroundColor: selectedBg,
-
+    color: selectedFg,
   },
   ...graphChildren,
   ' ',
@@ -510,8 +514,11 @@ function renderPendingCommitRow(
   return h(Text, {
     key: 'pending-commit-row',
     bold: true,
-    color: theme.noColor ? undefined : theme.colors.accent,
-
+    // On selection, swap to the contrast-guaranteed foreground so the
+    // accent label doesn't wash out against the selection bar.
+    color: selected && !theme.noColor
+      ? theme.colors.selectionForeground
+      : (theme.noColor ? undefined : theme.colors.accent),
     backgroundColor: selected && !theme.noColor ? theme.colors.selection : undefined,
   }, truncateCells(label, 140))
 }

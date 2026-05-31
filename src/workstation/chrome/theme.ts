@@ -1,4 +1,4 @@
-import { ColorEnv, getColorLevel, presetUsesTrueColor } from './colorSupport'
+import { ColorEnv, getColorLevel, presetUsesTrueColor, readableForegroundFor } from './colorSupport'
 
 export type LogInkBorderStyle = 'round' | 'single' | 'classic'
 export type LogInkThemePreset = 'default' | 'monochrome' | 'catppuccin' | 'gruvbox' | 'dracula' | 'nord' | 'solarized-dark' | 'tokyo-night' | 'one-dark' | 'rose-pine' | 'kanagawa' | 'everforest' | 'monokai' | 'synthwave' | 'ayu-dark' | 'palenight' | 'github-dark' | 'horizon' | 'nightfox' | 'carbonfox' | 'tokyonight-storm' | 'catppuccin-latte' | 'solarized-light' | 'github-light' | 'iceberg' | 'material-ocean' | 'moonlight' | 'poimandres' | 'vitesse-dark' | 'vesper' | 'flexoki' | 'mellow' | 'night-owl' | 'cobalt2' | 'oceanic-next' | 'catppuccin-macchiato' | 'gruvbox-light' | 'tokyo-night-day' | 'one-light' | 'ayu-light' | 'rose-pine-dawn' | 'everforest-light' | 'vitesse-light' | 'dayfox' | 'night-owl-light' | 'flexoki-light' | 'material-lighter' | 'papercolor-light' | 'modus-operandi' | 'quiet-light'
@@ -14,6 +14,13 @@ export type LogInkThemeColors = {
   info?: string
   muted?: string
   selection?: string
+  /**
+   * Foreground for text sitting on the `selection` background. Derived
+   * automatically from `selection` (black on light, white on dark) so the
+   * selected row stays readable regardless of the user's terminal default
+   * foreground — but can be overridden per theme via `options.colors`.
+   */
+  selectionForeground?: string
   success?: string
   warning?: string
 }
@@ -767,6 +774,19 @@ export function createLogInkTheme(options: CreateLogInkThemeOptions = {}): LogIn
         : {}),
       ...options.colors,
     }
+
+  // Derive a contrasting foreground for the selected row from its own
+  // selection background, unless the caller supplied one explicitly. coco
+  // owns the selection background but not the terminal's default foreground,
+  // so without this the selected row's text falls back to whatever the
+  // user's terminal foreground is — which may not contrast with the bar at
+  // all (the bug behind unreadable selected rows on many themes).
+  if (!noColor && colors.selection && !colors.selectionForeground) {
+    const selectionForeground = readableForegroundFor(colors.selection)
+    if (selectionForeground) {
+      colors.selectionForeground = selectionForeground
+    }
+  }
 
   return {
     noColor,

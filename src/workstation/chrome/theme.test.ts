@@ -94,4 +94,50 @@ describe('log Ink theme', () => {
       expect(downgraded.colors.selection).toBe('#45475a')
     })
   })
+
+  describe('selection foreground', () => {
+    it('derives a white foreground for dark-selection themes', () => {
+      const theme = createLogInkTheme({
+        env: { COLORTERM: 'truecolor' },
+        preset: 'catppuccin',
+      })
+      expect(theme.colors.selection).toBe('#45475a')
+      expect(theme.colors.selectionForeground).toBe('#ffffff')
+    })
+
+    it('derives a black foreground for light-selection themes', () => {
+      const theme = createLogInkTheme({
+        env: { COLORTERM: 'truecolor' },
+        preset: 'solarized-light',
+      })
+      expect(theme.colors.selection).toBe('#eee8d5')
+      expect(theme.colors.selectionForeground).toBe('#000000')
+    })
+
+    it('keeps a readable selection foreground through the non-truecolor downgrade', () => {
+      // A light theme on a 16-color terminal downgrades its palette to
+      // `default` but preserves its own light selection bg — the derived
+      // foreground must follow the *preserved* bg, not default's dark one.
+      const theme = createLogInkTheme({
+        env: { TERM: 'xterm' },
+        preset: 'solarized-light',
+      })
+      expect(theme.colors.selection).toBe('#eee8d5')
+      expect(theme.colors.selectionForeground).toBe('#000000')
+    })
+
+    it('honors an explicit selectionForeground override', () => {
+      const theme = createLogInkTheme({
+        colors: { selectionForeground: '#abcdef' },
+        env: { COLORTERM: 'truecolor' },
+        preset: 'catppuccin',
+      })
+      expect(theme.colors.selectionForeground).toBe('#abcdef')
+    })
+
+    it('sets no selection foreground for no-color themes', () => {
+      const theme = createLogInkTheme({ noColor: true, preset: 'catppuccin' })
+      expect(theme.colors.selectionForeground).toBeUndefined()
+    })
+  })
 })

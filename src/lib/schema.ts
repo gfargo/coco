@@ -1125,6 +1125,10 @@ export const schema = {
         "selection": {
           "type": "string"
         },
+        "selectionForeground": {
+          "type": "string",
+          "description": "Foreground for text sitting on the `selection` background. Derived automatically from `selection` (black on light, white on dark) so the selected row stays readable regardless of the user's terminal default foreground — but can be overridden per theme via `options.colors`."
+        },
         "success": {
           "type": "string"
         },

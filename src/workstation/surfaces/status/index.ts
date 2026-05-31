@@ -135,7 +135,7 @@ export function renderStatusSurface(
           bold: true,
           dimColor: !headerSelected && rowIndex > cursorRowIndex,
           backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
-
+          color: headerSelected && !theme.noColor ? theme.colors.selectionForeground : undefined,
         }, truncateCells(text, 140))
       }
       const isSelected = !headerFocused && row.flatIndex === selectedIndex
@@ -155,11 +155,11 @@ export function renderStatusSurface(
         key: `status-file-${row.flatIndex}-${rowIndex}`,
         dimColor: !isSelected && rowIndex > cursorRowIndex,
         backgroundColor: isSelected && focused && !theme.noColor ? theme.colors.selection : undefined,
-
+        color: isSelected && focused && !theme.noColor ? theme.colors.selectionForeground : undefined,
       },
       `  ${cursorPart}`,
-      // Suppress dot color on selected rows — inverse makes colored
-      // text unreadable against the light background.
+      // Suppress the dot's own color on selected rows so it inherits the
+      // contrast-guaranteed selection foreground set on the row span.
       ...(useDot ? [h(Text, { color: (isSelected && focused) ? undefined : dotColor }, STAGE_STATUS_DOT), ' '] : []),
       tailTrunc)
     })

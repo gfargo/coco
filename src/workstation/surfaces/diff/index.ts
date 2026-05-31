@@ -144,12 +144,19 @@ export function renderDiffSurface(
             // sees at a glance which file the cursor is inside.
             const isActive = absoluteIndex === activeStartLine
             const arrow = theme.ascii ? '> ' : '▾ '
+            const activeHeader = isActive && focused && !theme.noColor
             return h(Text, {
               key: `stash-diff-line-${absoluteIndex}`,
               bold: true,
-              color: theme.noColor ? undefined : theme.colors.accent,
-              backgroundColor: isActive && focused && !theme.noColor ? theme.colors.selection : undefined,
-              inverse: isActive && focused,
+              // Active header sits on the selection bar with a
+              // contrast-guaranteed foreground (matches history/status).
+              // The old `inverse` swap turned the accent into the bar and
+              // left the path in the selection color — low-contrast on
+              // light themes (e.g. accent blue bar + light-gray text).
+              color: activeHeader
+                ? theme.colors.selectionForeground
+                : (theme.noColor ? undefined : theme.colors.accent),
+              backgroundColor: activeHeader ? theme.colors.selection : undefined,
             }, (() => {
               // Smart path truncation for the diff file header: keep
               // the leading arrow glyph and elide middle path

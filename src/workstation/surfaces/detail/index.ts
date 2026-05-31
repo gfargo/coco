@@ -120,12 +120,17 @@ function renderInspectorActionsSection(
     h(Text, { key: 'actions-title' }, cursorActive ? '[Actions]' : 'Actions:'),
     ...actions.map((action: InspectorAction, index) => {
       const isSelected = cursorActive && index === cursorIndex
+      // On the selected row, swap every span to the contrast-guaranteed
+      // selection foreground so the key glyph / destructive marker don't
+      // wash out against the selection bar; the row is already highlighted,
+      // and the label text still conveys which actions are destructive.
+      const selectedFg = isSelected && !theme.noColor ? theme.colors.selectionForeground : undefined
       const keyCell = action.key.padEnd(KEY_COLUMN)
       const label = truncateCells(action.label, labelBudget)
       const children: Array<string | ReactTypes.ReactElement> = [
         h(Text, {
           key: `actions-${index}-key`,
-          color: action.destructive ? theme.colors.danger : theme.colors.accent,
+          color: selectedFg ?? (action.destructive ? theme.colors.danger : theme.colors.accent),
         }, keyCell),
         GAP,
         label,
@@ -133,14 +138,14 @@ function renderInspectorActionsSection(
       if (action.destructive) {
         children.push(h(Text, {
           key: `actions-${index}-mark`,
-          color: theme.colors.danger,
+          color: selectedFg ?? theme.colors.danger,
           dimColor: false,
         }, DESTRUCTIVE_SUFFIX))
       }
       return h(Text, {
         key: `actions-${index}`,
         backgroundColor: isSelected && !theme.noColor ? theme.colors.selection : undefined,
-
+        color: selectedFg,
       }, ...children)
     }),
   ]
