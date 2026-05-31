@@ -1,14 +1,14 @@
 import { WorkspaceOverview, WorkspaceRepoSummary } from '../../../git/workspaceData'
 
 import {
-  assignWorkspaceColumnWidths,
-  buildWorkspaceFooter,
-  buildWorkspaceHeader,
-  buildWorkspaceHelpRows,
-  buildWorkspaceListRows,
-  buildWorkspaceListWindow,
-  buildWorkspaceOnboarding,
-  buildWorkspaceSidebar,
+    assignWorkspaceColumnWidths,
+    buildWorkspaceFooter,
+    buildWorkspaceHeader,
+    buildWorkspaceHelpRows,
+    buildWorkspaceListRows,
+    buildWorkspaceListWindow,
+    buildWorkspaceOnboarding,
+    buildWorkspaceSidebar,
 } from './render'
 import { applyWorkspaceAction, createWorkspaceState } from './state'
 
@@ -251,7 +251,7 @@ describe('workspace render builders', () => {
       type: 'request-delete',
       path: state.overview.repos[0].path,
     })
-    expect(buildWorkspaceFooter(requested).hint).toContain('press y')
+    expect(buildWorkspaceFooter(requested).hint).toContain('y confirm')
   })
 
   it('onboarding model returns show=false unless the flag is set', () => {

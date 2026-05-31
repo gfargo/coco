@@ -16,18 +16,18 @@ import { focusBorderColor, panelTitle } from '../../runtime/utils'
 import type { WorkspaceComponents } from './runtime'
 import { type PathCompletionResult } from './pathCompletion'
 import {
-  buildWorkspaceColumnHeaders,
-  buildWorkspaceFooter,
-  buildWorkspaceHeaderChips,
-  buildWorkspaceHelpSections,
-  buildWorkspaceListWindow,
-  buildWorkspaceOnboarding,
-  buildWorkspaceSidebar,
-  shouldRailWorkspaceSidebar,
-  type WorkspaceHeaderChip,
-  type WorkspaceHelpRow,
-  type WorkspaceListColumn,
-  type WorkspaceListRow,
+    buildWorkspaceColumnHeaders,
+    buildWorkspaceFooter,
+    buildWorkspaceHeaderChips,
+    buildWorkspaceHelpSections,
+    buildWorkspaceListWindow,
+    buildWorkspaceOnboarding,
+    buildWorkspaceSidebar,
+    shouldRailWorkspaceSidebar,
+    type WorkspaceHeaderChip,
+    type WorkspaceHelpRow,
+    type WorkspaceListColumn,
+    type WorkspaceListRow,
 } from './render'
 import { selectVisibleRepos, type WorkspaceState } from './state'
 
@@ -718,6 +718,8 @@ function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   // height shifted by a row every time a status banner came and went,
   // forcing the panel chrome to reflow.
   const statusContent = model.status ?? ''
+  const contextualText = model.contextual.join('   ')
+  const globalText = model.global.join(' · ')
   return React.createElement(
     Box,
     {
@@ -727,7 +729,15 @@ function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
       flexDirection: 'column',
       height: FOOTER_HEIGHT,
     },
-    React.createElement(Text, { dimColor: true }, model.hint),
+    // Row 1: contextual ↔ global hints. justifyContent pushes them
+    // to opposite edges so the eye scans each cluster as one block —
+    // same shape as `coco ui`'s footer post-0.54.2 redesign.
+    React.createElement(
+      Box,
+      { flexDirection: 'row', justifyContent: 'space-between' },
+      React.createElement(Text, { dimColor: true }, contextualText),
+      React.createElement(Text, { dimColor: true }, globalText)
+    ),
     React.createElement(
       Text,
       {

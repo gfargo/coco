@@ -520,11 +520,21 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -912,11 +922,21 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -1450,11 +1470,21 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -1876,11 +1906,21 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -2410,11 +2450,21 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       color="yellow"
       dimColor={false}
@@ -2797,11 +2847,21 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -3331,11 +3391,21 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -3656,11 +3726,21 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -4190,11 +4270,19 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      type to filter · enter apply · esc cancel
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        type to filter   enter apply   esc cancel
+      </Text>
+      <Text
+        dimColor={true}
+      />
+    </Box>
     <Text
       dimColor={true}
     >
@@ -4746,11 +4834,19 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      type path · tab to complete · enter to add · esc to cancel
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        type path   tab to complete   enter to add   esc to cancel
+      </Text>
+      <Text
+        dimColor={true}
+      />
+    </Box>
     <Text
       dimColor={true}
     >
@@ -5125,11 +5221,21 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -5681,11 +5787,19 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      press y to remove · any other key to cancel
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        y confirm   any other key cancels
+      </Text>
+      <Text
+        dimColor={true}
+      />
+    </Box>
     <Text
       dimColor={true}
     >
@@ -6060,11 +6174,21 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -6614,11 +6738,21 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -6740,6 +6874,134 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     <Text
       dimColor={true}
     />
+    <Text
+      bold={true}
+      color="gray"
+    >
+      ESSENTIALS
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       The keys you reach for most often.
+    </Text>
+    <Box
+      flexDirection="row"
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ? 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          ?
+        </Text>
+      </Box>
+      <Text>
+        Toggle this help overlay
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ⎋ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          esc
+        </Text>
+      </Box>
+      <Text>
+        Clear filter / close overlay / cancel prompt
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ◴ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          q · ctrl+c
+        </Text>
+      </Box>
+      <Text>
+        Quit the workspace surface
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ↵ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          enter
+        </Text>
+      </Box>
+      <Text>
+        Drill into the cursored repo (coco ui)
+      </Text>
+    </Box>
+    <Text />
     <Text
       bold={true}
       color="gray"
@@ -6894,35 +7156,6 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
       </Box>
       <Text>
         Jump to top / bottom of the list
-      </Text>
-    </Box>
-    <Box
-      flexDirection="row"
-    >
-      <Box
-        flexShrink={0}
-        width={4}
-      >
-        <Text
-          bold={true}
-          color="cyan"
-        >
-           ↵ 
-        </Text>
-      </Box>
-      <Box
-        flexShrink={0}
-        width={19}
-      >
-        <Text
-          bold={true}
-          color="green"
-        >
-          enter
-        </Text>
-      </Box>
-      <Text>
-        Drill into the cursored repo (coco ui)
       </Text>
     </Box>
     <Text />
@@ -7118,100 +7351,6 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
         Remove the cursored repo from the known-repos store
       </Text>
     </Box>
-    <Text />
-    <Text
-      bold={true}
-      color="gray"
-    >
-      GENERAL
-    </Text>
-    <Box
-      flexDirection="row"
-    >
-      <Box
-        flexShrink={0}
-        width={4}
-      >
-        <Text
-          bold={true}
-          color="cyan"
-        >
-           ? 
-        </Text>
-      </Box>
-      <Box
-        flexShrink={0}
-        width={19}
-      >
-        <Text
-          bold={true}
-          color="green"
-        >
-          ?
-        </Text>
-      </Box>
-      <Text>
-        Toggle this help overlay
-      </Text>
-    </Box>
-    <Box
-      flexDirection="row"
-    >
-      <Box
-        flexShrink={0}
-        width={4}
-      >
-        <Text
-          bold={true}
-          color="cyan"
-        >
-           ⎋ 
-        </Text>
-      </Box>
-      <Box
-        flexShrink={0}
-        width={19}
-      >
-        <Text
-          bold={true}
-          color="green"
-        >
-          esc
-        </Text>
-      </Box>
-      <Text>
-        Clear filter / close overlay / cancel prompt
-      </Text>
-    </Box>
-    <Box
-      flexDirection="row"
-    >
-      <Box
-        flexShrink={0}
-        width={4}
-      >
-        <Text
-          bold={true}
-          color="cyan"
-        >
-           ◴ 
-        </Text>
-      </Box>
-      <Box
-        flexShrink={0}
-        width={19}
-      >
-        <Text
-          bold={true}
-          color="green"
-        >
-          q · ctrl+c
-        </Text>
-      </Box>
-      <Text>
-        Quit the workspace surface
-      </Text>
-    </Box>
   </Box>
   <Box
     borderColor="gray"
@@ -7220,11 +7359,21 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -7550,11 +7699,21 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
@@ -8084,11 +8243,21 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
     height={4}
     paddingX={1}
   >
-    <Text
-      dimColor={true}
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
     >
-      s sort · / filter · r/R refresh · a add · d remove · ? help · q quit
-    </Text>
+      <Text
+        dimColor={true}
+      >
+        s sort   / filter   r/R refresh   a add   d remove
+      </Text>
+      <Text
+        dimColor={true}
+      >
+        ? help · q quit
+      </Text>
+    </Box>
     <Text
       dimColor={true}
     >
