@@ -1168,7 +1168,13 @@ export const schema = {
         "vitesse-dark",
         "vesper",
         "flexoki",
-        "mellow"
+        "mellow",
+        "night-owl",
+        "cobalt2",
+        "oceanic-next",
+        "catppuccin-macchiato",
+        "gruvbox-light",
+        "tokyo-night-day"
       ]
     }
   }
