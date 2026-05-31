@@ -11,7 +11,7 @@ describe('buildScenarioFixtures', () => {
     // the feature-pr-ready scenario, then walks the log calling
     // `git show --numstat` + per-file `git show` for each commit.
     // Under load (parallel jest workers) the shell-out cost adds
-    // up. The 15s budget is comfortably under any reasonable CI
+    // up. The 30s budget is comfortably under any reasonable CI
     // run-time and avoids the periodic flake we saw under default.
     const { repo, fixtures } = await buildScenarioFixtures('feature-pr-ready')
     try {
@@ -35,10 +35,10 @@ describe('buildScenarioFixtures', () => {
     } finally {
       await repo.cleanup()
     }
-  }, 15_000)
+  }, 30_000)
 
   it('extracts the same byte-identical fixture set across runs (determinism)', async () => {
-    // Same 15s budget as the sibling test — this one spins up
+    // Same 30s budget as the sibling test — this one spins up
     // TWO temp git repos serially (to verify determinism), so the
     // cost is roughly double. Same rationale as the other test:
     // shell-out cost under parallel jest load can exceed 5s.
@@ -58,5 +58,5 @@ describe('buildScenarioFixtures', () => {
       await a.repo.cleanup()
       await b.repo.cleanup()
     }
-  }, 15_000)
+  }, 30_000)
 })

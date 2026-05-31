@@ -20,6 +20,13 @@ import {
 } from './data'
 import { LogOptions } from './config'
 
+// Several tests here spin up a real temp git repo (mkdtemp + git init +
+// many commits) and shell out to walk the log. The default 5s budget is
+// too tight for that I/O once the full suite runs all workers in parallel
+// (e.g. during `npm run release`), producing flaky timeouts that aren't
+// real failures. Give the whole file a generous budget instead.
+jest.setTimeout(30_000)
+
 function argv(overrides: Partial<LogOptions> = {}): Arguments<LogOptions> {
   return {
     $0: 'coco',
