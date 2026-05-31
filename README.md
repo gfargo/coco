@@ -18,7 +18,7 @@ An AI-powered git assistant that generates meaningful commit messages, creates c
 - 📋 **Conventional Commits** - Full support with automatic validation and formatting (extends to `coco commit --split` too — every group's title respects the spec)
 - 🔧 **Commitlint Integration** - Seamless integration with your existing commitlint configuration
 - 🏠 **Local AI Support** - Run completely offline with Ollama (no API costs, full privacy)
-- 🖥️ **Coco UI Git Workstation** - Thirteen top-level views (history, status, diff, compose, branches, tags, stash, worktrees, pull-request, conflicts, reflog, bisect, changelog) reachable via `g`-prefixed chords, with an interactive command palette (`:`), global search (`/`), and one-keystroke workflows: `S` split staged changes, `L` generate a changelog, `C` create a PR seeded from changelog, `E` open the commit draft in `$EDITOR`
+- 🖥️ **Coco UI Git Workstation** - Sixteen top-level views (history, status, diff, compose, branches, tags, stash, worktrees, pull-request, PR triage, issues, conflicts, reflog, bisect, submodules, changelog) reachable via `g`-prefixed chords, with an interactive command palette (`:`), global search (`/`), and one-keystroke workflows: `S` split staged changes, `L` generate a changelog, `C` create a PR seeded from changelog, `E` open the commit draft in `$EDITOR`
 - 🎯 **`--repo <dir>` global flag** - Drive any coco command against any repository without `cd`-ing first
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
 - 👥 **Team Ready** - Shared configurations and enterprise deployment
