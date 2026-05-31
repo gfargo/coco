@@ -58,11 +58,17 @@ export function getDefaultServiceApiKey(config: Config): string {
 
   if (service.authentication.type === 'APIKey') {
     const apiKey = service.authentication.credentials?.apiKey
-    
+    // `endpoint` is optional on some service variants (Ollama / OpenAI-
+    // compatible) and absent on others (managed OpenAI / Anthropic).
+    // Read defensively so we still attach it when present.
+    const endpoint = (service as { endpoint?: string }).endpoint
+
     if (requiresAuth && (!apiKey || apiKey.trim() === '')) {
       throw new LangChainAuthenticationError(
         `getDefaultServiceApiKey: API key is required for ${provider} provider but not provided`,
-        { provider, authenticationType: service.authentication.type }
+        provider,
+        endpoint,
+        { authenticationType: service.authentication.type }
       )
     }
     
@@ -71,11 +77,14 @@ export function getDefaultServiceApiKey(config: Config): string {
   
   if (service.authentication.type === 'OAuth') {
     const token = service.authentication.credentials?.token
-    
+    const endpoint = (service as { endpoint?: string }).endpoint
+
     if (requiresAuth && (!token || token.trim() === '')) {
       throw new LangChainAuthenticationError(
         `getDefaultServiceApiKey: OAuth token is required for ${provider} provider but not provided`,
-        { provider, authenticationType: service.authentication.type }
+        provider,
+        endpoint,
+        { authenticationType: service.authentication.type }
       )
     }
     
@@ -84,9 +93,12 @@ export function getDefaultServiceApiKey(config: Config): string {
 
   if (service.authentication.type === 'None') {
     if (requiresAuth) {
+      const endpoint = (service as { endpoint?: string }).endpoint
       throw new LangChainAuthenticationError(
         `getDefaultServiceApiKey: ${provider} provider requires authentication but 'None' was configured`,
-        { provider, authenticationType: service.authentication.type }
+        provider,
+        endpoint,
+        { authenticationType: service.authentication.type }
       )
     }
     
