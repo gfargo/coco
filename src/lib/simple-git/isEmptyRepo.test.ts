@@ -4,6 +4,12 @@ import { join } from 'path'
 import { simpleGit, type SimpleGit } from 'simple-git'
 import { isEmptyRepo } from './isEmptyRepo'
 
+// Every test spins up a real temp git repo (mkdtemp + git init + config +
+// branch). The default 5s budget is too tight for that subprocess I/O once
+// the full suite saturates all jest workers in parallel (e.g. during
+// `npm run release`), producing flaky timeouts that aren't real failures.
+jest.setTimeout(30_000)
+
 async function makeFreshRepo(): Promise<{ git: SimpleGit; path: string }> {
   const path = await mkdtemp(join(tmpdir(), 'coco-empty-repo-test-'))
   const git = simpleGit(path)
