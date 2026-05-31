@@ -1174,7 +1174,19 @@ export const schema = {
         "oceanic-next",
         "catppuccin-macchiato",
         "gruvbox-light",
-        "tokyo-night-day"
+        "tokyo-night-day",
+        "one-light",
+        "ayu-light",
+        "rose-pine-dawn",
+        "everforest-light",
+        "vitesse-light",
+        "dayfox",
+        "night-owl-light",
+        "flexoki-light",
+        "material-lighter",
+        "papercolor-light",
+        "modus-operandi",
+        "quiet-light"
       ]
     }
   }
