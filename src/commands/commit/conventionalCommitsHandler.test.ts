@@ -181,7 +181,12 @@ describe('Conventional Commits Handler', () => {
       await expect(handler(argv, logger)).rejects.toMatchObject({
         code: 1,
       } satisfies Partial<CommandExitError>)
-      expect(logger.log).toHaveBeenCalledWith('No API Key found. 🗝️🚪', { color: 'red' })
+      // The new helper prints a multi-line structured error pointing
+      // at coco init / coco doctor / the env var. Loose-match the
+      // headline so we don't tie the test to copy tweaks but still
+      // catch a regression that would silently print nothing.
+      const printedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0]).join('\n')
+      expect(printedLines).toContain('Missing API key')
     })
 
     it('should warn about Ollama model limitations', async () => {

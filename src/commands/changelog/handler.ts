@@ -20,6 +20,7 @@ import { getChangesByCommit } from '../../lib/simple-git/getChangesByCommit'
 import { CommandHandler, FileChange } from '../../lib/types'
 import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
+import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
@@ -83,8 +84,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   }
 
   if (config.service.authentication.type !== 'None' && !key) {
-    logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
-    commandExit(1)
+    handleMissingApiKey(logger, config, { command: 'changelog' })
   }
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: changelogService })
