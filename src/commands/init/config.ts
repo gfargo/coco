@@ -1,15 +1,15 @@
-import { Argv, Options } from 'yargs'
+import { Argv, Arguments, Options } from 'yargs'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
-import { BaseArgvOptions } from '../types'
+import { BaseCommandOptions } from '../types'
 
 export type InstallationScope = 'global' | 'project'
 
-export interface InitOptions extends BaseArgvOptions {
+export interface InitOptions extends BaseCommandOptions {
   scope?: InstallationScope
   dryRun?: boolean
 }
 
-export type InitArgv = Argv<InitOptions>['argv']
+export type InitArgv = Arguments<InitOptions>
 
 export const command = 'init'
 

@@ -1,5 +1,5 @@
 import commandExecutor from '../../lib/utils/commandExecutor'
-import { builder, command } from './config'
+import { builder, command, options } from './config'
 import { handler } from './handler'
 
 export default {
@@ -7,4 +7,5 @@ export default {
   desc: 'List GitHub pull requests for the current repository (read-only triage)',
   builder,
   handler: commandExecutor(handler),
+  options,
 }

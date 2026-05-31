@@ -1,7 +1,9 @@
 import { appendToEnvFile } from '../../lib/config/services/env'
 import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToProjectJsonConfig } from '../../lib/config/services/project'
+import chalk from 'chalk'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
+import { FAIL, PASS, WARN } from '../../lib/ui/glyphs'
 import { LOGO } from '../../lib/ui/helpers'
 import { confirmPrompt } from '../../lib/ui/inquirerPrompts'
 import { logResult } from '../../lib/ui/logResult'
@@ -15,6 +17,7 @@ import { CommandHandler } from '../../lib/types'
 import { Logger } from '../../lib/utils/logger'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
 import { getProjectConfigFilePath } from '../../lib/utils/getProjectConfigFilePath'
+import { runDiagnostics } from '../doctor/checks'
 import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { InitArgv, InitOptions } from './config'
 import { questions } from './questions'
@@ -24,11 +27,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // writes the project config to X, not the launcher's cwd. The
   // chdir has to happen before getProjectConfigFilePath resolves
   // its target path (it reads process.cwd).
-  //
-  // `InitArgv` is `Argv<InitOptions>['argv']` which yargs types as a
-  // union including Promise — pass just the `repo` field as a plain
-  // object so the helper's narrow signature stays clean.
-  applyRepoCwd({ repo: (argv as { repo?: string }).repo })
+  applyRepoCwd(argv)
 
   const options = loadConfig<InitOptions, InitArgv>(argv)
 
@@ -196,6 +195,47 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     }
 
     logger.log(`\ninit successful! 🦾🤖🎉`, { color: 'green' })
+
+    // Post-write verification — run the same check `coco doctor` runs
+    // so the user finds out about typos / structural issues now,
+    // before their first `coco commit`. Re-load from disk so we
+    // verify the persisted config (not the in-memory shape we just
+    // built), which catches transcription bugs in the appenders.
+    try {
+      const persistedConfig = loadConfig({})
+      const diagnostics = runDiagnostics(persistedConfig)
+      const errors = diagnostics.filter((d) => d.severity === 'error')
+      const warnings = diagnostics.filter((d) => d.severity === 'warn')
+
+      if (errors.length === 0 && warnings.length === 0) {
+        logger.log(`${PASS()} Verified: no issues found in your new config.`, { color: 'green' })
+      } else {
+        if (errors.length > 0) {
+          logger.log(`${FAIL()} ${errors.length} error(s) found in the persisted config:`, { color: 'red' })
+          for (const diagnostic of errors) {
+            logger.log(`  ${chalk.red(diagnostic.message)}`)
+          }
+        }
+        if (warnings.length > 0) {
+          logger.log(`${WARN()} ${warnings.length} warning(s) found in the persisted config:`, { color: 'yellow' })
+          for (const diagnostic of warnings) {
+            logger.log(`  ${chalk.yellow(diagnostic.message)}`)
+          }
+        }
+        logger.log(`${chalk.dim('Run')} ${chalk.cyan('coco doctor')} ${chalk.dim('for the full diagnostic report.')}`)
+      }
+    } catch (verifyError) {
+      // Verification is a polish step, not a blocker. If it crashes
+      // (e.g. config file written to a path the loader can't reach
+      // from the current cwd), fall through to a hint instead of
+      // failing the whole init flow — the config is on disk and
+      // the user can run `coco doctor` themselves.
+      logger.log(
+        `${chalk.dim('Skipped post-init verification:')} ${(verifyError as Error).message}`,
+        { color: 'gray' }
+      )
+      logger.log(`${chalk.dim('Run')} ${chalk.cyan('coco doctor')} ${chalk.dim('to verify your config manually.')}`)
+    }
   } else {
     logger.log('\ninit cancelled.', { color: 'yellow' })
   }
