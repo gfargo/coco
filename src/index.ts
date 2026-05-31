@@ -16,6 +16,7 @@ import workspace from './commands/workspace'
 import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
+import { defaultRouteHandler, type DefaultRouteArgv } from './commands/defaultRouter'
 import { DoctorOptions } from './commands/doctor/config'
 import { InitOptions } from './commands/init/config'
 import { IssuesOptions } from './commands/issues/config'
@@ -27,6 +28,7 @@ import { UiOptions } from './commands/ui/config'
 import { WorkspaceOptions } from './commands/workspace/config'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
+import commandExecutor from './lib/utils/commandExecutor'
 
 const y = yargs()
 
@@ -45,8 +47,44 @@ y.option('repo', {
   global: true,
 })
 
+// Global `--verbose` (alias `-v`) — every subcommand inherits it.
+// Flips `argv.verbose: true` so `commandExecutor` and `Logger` print
+// stack traces / debug spans. Previously only settable via the
+// `COCO_VERBOSE=true` env var or `coco.verbose` git/json config —
+// `BaseArgvOptions.verbose` was typed but never declared as a yargs
+// option, so passing `--verbose` from the CLI was a silent no-op.
+y.option('verbose', {
+  type: 'boolean',
+  alias: 'v',
+  description: 'Print verbose diagnostic output (stack traces on errors, debug spans).',
+  default: false,
+  global: true,
+})
+
+// `$0` (no positional args) routes through the smart default router
+// rather than aliasing directly to `coco commit`. The router probes
+// the user's environment (config presence, git-repo presence) and
+// forwards to `init` / `ui` / `workspace` / `commit` based on which
+// of those is most likely to be helpful. Mirrors what other modern
+// git-aware CLIs do (lazygit / tig / gitui) — fresh installs land in
+// a setup wizard, configured users land in the TUI, scripts that
+// rely on `coco commit` keep their dedicated subcommand entry.
+y.command<DefaultRouteArgv>(
+  '$0',
+  'Smart entry point — routes to init / ui / workspace / commit based on your environment.',
+  (yargs) => yargs.option('commit', {
+    type: 'boolean',
+    description: 'Force the legacy default — run `coco commit` regardless of routing.',
+    default: false,
+  }),
+  // `commandExecutor` wraps every command with config loading, error
+  // formatting, and exit-code handling. The router is a regular
+  // command so it lights up the same plumbing for free.
+  commandExecutor(defaultRouteHandler)
+)
+
 y.command<CommitOptions>(
-  [commit.command, '$0'],
+  commit.command,
   commit.desc,
   commit.builder,
   commit.handler

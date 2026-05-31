@@ -76,6 +76,18 @@ const TERMINAL_SURFACES: Record<string, Surface> = {
   'catppuccin-macchiato': { bg: '#24273a', fg: '#cad3f5', cursor: '#f4dbd6', selection: '#494d64' },
   'gruvbox-light': { bg: '#fbf1c7', fg: '#3c3836', cursor: '#3c3836', selection: '#ebdbb2' },
   'tokyo-night-day': { bg: '#e1e2e7', fg: '#3760bf', cursor: '#3760bf', selection: '#b7c1e3' },
+  'one-light': { bg: '#fafafa', fg: '#383a42', cursor: '#383a42', selection: '#e5e5e6' },
+  'ayu-light': { bg: '#fafafa', fg: '#5c6166', cursor: '#ff9940', selection: '#d1e4f4' },
+  'rose-pine-dawn': { bg: '#faf4ed', fg: '#575279', cursor: '#575279', selection: '#dfdad9' },
+  'everforest-light': { bg: '#fdf6e3', fg: '#5c6a72', cursor: '#5c6a72', selection: '#edeada' },
+  'vitesse-light': { bg: '#ffffff', fg: '#393a34', cursor: '#393a34', selection: '#eaeaeb' },
+  dayfox: { bg: '#f6f2ee', fg: '#352c24', cursor: '#352c24', selection: '#e7d2be' },
+  'night-owl-light': { bg: '#fbfbfb', fg: '#403f53', cursor: '#403f53', selection: '#e4e8f0' },
+  'flexoki-light': { bg: '#fffcf0', fg: '#100f0f', cursor: '#100f0f', selection: '#e6e4d9' },
+  'material-lighter': { bg: '#fafafa', fg: '#546e7a', cursor: '#272727', selection: '#d3e1e8' },
+  'papercolor-light': { bg: '#eeeeee', fg: '#444444', cursor: '#444444', selection: '#d0d0d0' },
+  'modus-operandi': { bg: '#ffffff', fg: '#000000', cursor: '#000000', selection: '#c0deff' },
+  'quiet-light': { bg: '#f5f5f5', fg: '#333333', cursor: '#333333', selection: '#c9d0d9' },
 }
 
 /**
