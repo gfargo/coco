@@ -25,6 +25,7 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
   </Box>
   <Text
     backgroundColor="#1a3a4a"
+    color="#ffffff"
   >
     <Text
       dimColor={false}
@@ -209,6 +210,7 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
   </Box>
   <Text
     backgroundColor="#1a3a4a"
+    color="#ffffff"
   >
     <Text
       dimColor={false}

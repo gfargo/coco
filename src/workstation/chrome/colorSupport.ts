@@ -78,3 +78,41 @@ const TRUECOLOR_PRESETS = new Set<string>(['catppuccin', 'gruvbox', 'dracula', '
 export function presetUsesTrueColor(preset: string | undefined): boolean {
   return preset !== undefined && TRUECOLOR_PRESETS.has(preset)
 }
+
+/**
+ * WCAG 2.x relative luminance of a `#rrggbb` color, 0 (black) … 1 (white).
+ * Returns `null` for anything that isn't a 6-digit hex (e.g. ANSI-named
+ * colors), so callers can fall back rather than guess.
+ */
+function relativeLuminance(hex: string): number | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!match) return null
+  const int = parseInt(match[1]!, 16)
+  const channel = (c: number): number => {
+    const x = c / 255
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4
+  }
+  const r = channel((int >> 16) & 0xff)
+  const g = channel((int >> 8) & 0xff)
+  const b = channel(int & 0xff)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/**
+ * Pick a foreground guaranteed to stay readable on `bg` — black for light
+ * backgrounds, white for dark ones. The 0.179 threshold is the luminance
+ * crossover where black and white yield identical contrast, so the choice
+ * always maximizes it; every background clears WCAG AA (≥ 4.5:1).
+ *
+ * This is how the selected-row text stays legible across every theme:
+ * coco controls the selection *background* but not the user's terminal
+ * default foreground, so it must supply its own contrasting foreground
+ * instead of hoping the terminal's happens to contrast. Returns
+ * `undefined` for non-hex backgrounds (let the caller leave color alone).
+ */
+export function readableForegroundFor(bg: string | undefined): string | undefined {
+  if (!bg) return undefined
+  const luminance = relativeLuminance(bg)
+  if (luminance === null) return undefined
+  return luminance > 0.179 ? '#000000' : '#ffffff'
+}
