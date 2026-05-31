@@ -178,6 +178,11 @@ export function renderStatusSurface(
           ? [cleanHint]
           : ['Worktree clean']
 
+  // Scroll indicators for the status file list — same pattern as
+  // branches and the sidebar so the user knows there's more content.
+  const statusHasMoreAbove = windowStart > 0 && surfaceRows.length > 0
+  const statusHasMoreBelow = windowStart + listRows < surfaceRows.length
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -199,7 +204,13 @@ export function renderStatusSurface(
     ? [h(Text, { key: 'status-mask-indicator', dimColor: true },
         `filter: ${formatStatusFilterMask(state.statusFilterMask)}  (1/2/3 to toggle)`)]
     : []),
+  ...(statusHasMoreAbove
+    ? [h(Text, { key: 'status-more-above', dimColor: true }, `  ↑ ${windowStart} more above`)]
+    : []),
   ...renderedRows,
+  ...(statusHasMoreBelow
+    ? [h(Text, { key: 'status-more-below', dimColor: true }, `  ↓ ${surfaceRows.length - (windowStart + listRows)} more below`)]
+    : []),
   ...fallbackLines.map((line, index) => h(Text, {
     key: `status-surface-fallback-${index}`,
     dimColor: index > 0,

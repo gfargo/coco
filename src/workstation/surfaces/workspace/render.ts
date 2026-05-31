@@ -1,10 +1,10 @@
 import type { WorkspaceRepoSummary } from '../../../git/workspaceData'
 import { truncateCells, truncatePathCells } from '../../chrome/text'
 import {
-  workspaceTabGlyph,
-  workspaceTabLabel,
-  WORKSPACE_TABS,
-  type WorkspaceTab,
+    workspaceTabGlyph,
+    workspaceTabLabel,
+    WORKSPACE_TABS,
+    type WorkspaceTab,
 } from './filter'
 import { workspaceSortLabel } from './sort'
 import { selectVisibleRepos, type WorkspaceState } from './state'
@@ -589,40 +589,61 @@ export function buildWorkspaceHeaderChips(
 }
 
 export type WorkspaceFooterModel = {
+  /** Backwards-compat: full hint string. Kept for tests + simple consumers. */
   hint: string
+  /** Per-mode contextual hints (left-aligned in the chrome). */
+  contextual: string[]
+  /** Always-on global hints (right-aligned in the chrome). */
+  global: string[]
   status?: string
   filterMode: boolean
 }
 
-// Footer hints prioritize discoverable / forgettable actions and
-// drop the bindings users can find on their own (arrow keys, Enter
-// for "open", Tab for "switch panels"). The full keymap lives behind
-// `?` so nothing is hidden, just decluttered.
-const LIST_HINT = 's sort · / filter · r/R refresh · a add · d remove · ? help · q quit'
-const SIDEBAR_HINT = '? help · q quit'
-const FILTER_HINT = 'type to filter · enter apply · esc cancel'
-const ADD_REPO_HINT = 'type path · tab to complete · enter to add · esc to cancel'
-const CONFIRM_DELETE_HINT = 'press y to remove · any other key to cancel'
+// Footer hints are split into two slots — same pattern as `coco ui`:
+//   - contextual : per-mode actions (sort, filter, refresh, add/remove)
+//   - global     : always-on essentials (help, quit) — never crowded out
+//
+// The contextual slot drops bindings users can find via the help
+// overlay (arrow keys, tab); the global slot is the safety net so
+// `? help` and `q quit` never disappear.
+const LIST_CONTEXTUAL = ['s sort', '/ filter', 'r/R refresh', 'a add', 'd remove']
+const SIDEBAR_CONTEXTUAL = ['↑/↓ cycle tab', 'enter open']
+const FILTER_CONTEXTUAL = ['type to filter', 'enter apply', 'esc cancel']
+const ADD_REPO_CONTEXTUAL = ['type path', 'tab to complete', 'enter to add', 'esc to cancel']
+const CONFIRM_DELETE_CONTEXTUAL = ['y confirm', 'any other key cancels']
+const GLOBAL_HINTS = ['? help', 'q quit']
 
-function hintFor(focus: WorkspaceState['focus']): string {
+function contextualHintsFor(focus: WorkspaceState['focus']): string[] {
   switch (focus) {
     case 'sidebar':
-      return SIDEBAR_HINT
+      return SIDEBAR_CONTEXTUAL
     case 'filter':
-      return FILTER_HINT
+      return FILTER_CONTEXTUAL
     case 'add-repo':
-      return ADD_REPO_HINT
+      return ADD_REPO_CONTEXTUAL
     case 'confirm-delete':
-      return CONFIRM_DELETE_HINT
+      return CONFIRM_DELETE_CONTEXTUAL
     case 'list':
     default:
-      return LIST_HINT
+      return LIST_CONTEXTUAL
   }
 }
 
 export function buildWorkspaceFooter(state: WorkspaceState): WorkspaceFooterModel {
+  const contextual = contextualHintsFor(state.focus)
+  // Modal modes (filter / add-repo / confirm-delete) suppress the
+  // global hints — those bindings are not reachable while a prompt
+  // is open and showing them would be misleading.
+  const isModal =
+    state.focus === 'filter' ||
+    state.focus === 'add-repo' ||
+    state.focus === 'confirm-delete'
+  const global = isModal ? [] : GLOBAL_HINTS
+  const allHints = [...contextual, ...global]
   return {
-    hint: hintFor(state.focus),
+    hint: allHints.join(' · '),
+    contextual,
+    global,
     status: state.status,
     filterMode: state.focus === 'filter',
   }
@@ -647,11 +668,25 @@ export type WorkspaceHelpSection = {
  * sections so users can scan by intent ("how do I navigate?" "how
  * do I act?") rather than reading a flat alphabetized list.
  *
+ * Section order mirrors `coco ui`'s help convention — Essentials
+ * first so newcomers see `?`/`esc`/`q` immediately, then move outward
+ * to navigation, modification, and the destructive verbs last.
+ *
  * The view layer composes these into a panel with section titles,
  * a leading app/title bar, and a closing hint at the bottom.
  */
 export function buildWorkspaceHelpSections(): WorkspaceHelpSection[] {
   return [
+    {
+      title: 'Essentials',
+      subtitle: 'The keys you reach for most often.',
+      rows: [
+        { glyph: '?', keys: '?', description: 'Toggle this help overlay' },
+        { glyph: '⎋', keys: 'esc', description: 'Clear filter / close overlay / cancel prompt' },
+        { glyph: '◴', keys: 'q · ctrl+c', description: 'Quit the workspace surface' },
+        { glyph: '↵', keys: 'enter', description: 'Drill into the cursored repo (coco ui)' },
+      ],
+    },
     {
       title: 'Navigate',
       subtitle: 'Move the cursor and switch focus between panels.',
@@ -661,7 +696,6 @@ export function buildWorkspaceHelpSections(): WorkspaceHelpSection[] {
         { glyph: '←', keys: 'h', description: 'Jump focus to the sidebar' },
         { glyph: '→', keys: 'l', description: 'Jump focus to the list' },
         { glyph: '⤒', keys: 'g / G', description: 'Jump to top / bottom of the list' },
-        { glyph: '↵', keys: 'enter', description: 'Drill into the cursored repo (coco ui)' },
       ],
     },
     {
@@ -679,14 +713,6 @@ export function buildWorkspaceHelpSections(): WorkspaceHelpSection[] {
         { glyph: '⟲', keys: 'R', description: 'Refresh just the cursored repo (faster)' },
         { glyph: '＋', keys: 'a', description: 'Add a repo via path prompt (tab-completes)' },
         { glyph: '✕', keys: 'd', description: 'Remove the cursored repo from the known-repos store' },
-      ],
-    },
-    {
-      title: 'General',
-      rows: [
-        { glyph: '?', keys: '?', description: 'Toggle this help overlay' },
-        { glyph: '⎋', keys: 'esc', description: 'Clear filter / close overlay / cancel prompt' },
-        { glyph: '◴', keys: 'q · ctrl+c', description: 'Quit the workspace surface' },
       ],
     },
   ]

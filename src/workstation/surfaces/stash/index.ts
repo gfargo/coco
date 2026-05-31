@@ -15,8 +15,8 @@ import { truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { LogInkState } from '../../../commands/log/inkViewModel'
 import {
-  matchesPromotedFilter,
-  renderPromotedFilterAffordance,
+    matchesPromotedFilter,
+    renderPromotedFilterAffordance,
 } from '../../runtime/promotedFilter'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -65,6 +65,9 @@ export function renderStashSurface(
         }, truncateCells(`${cursor} ${stash.ref.padEnd(12)} ${stash.message}`, 140))
       })
 
+  const stashHasMoreAbove = startIndex > 0 && stashes.length > 0
+  const stashHasMoreBelow = startIndex + listRows < stashes.length
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -78,5 +81,11 @@ export function renderStashSurface(
     h(Text, { dimColor: true }, headerRight)
   ),
   ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
+  ...(stashHasMoreAbove
+    ? [h(Text, { key: 'stash-more-above', dimColor: true }, `  ↑ ${startIndex} more above`)]
+    : []),
+  ...lines,
+  ...(stashHasMoreBelow
+    ? [h(Text, { key: 'stash-more-below', dimColor: true }, `  ↓ ${stashes.length - (startIndex + listRows)} more below`)]
+    : []))
 }

@@ -369,6 +369,11 @@ export function renderCommandPalette(
       }, truncateCells(line, width - 4))
     })
 
+  // Scroll indicators for the palette list — same pattern as the
+  // sidebar and help overlay so the user knows there's more content.
+  const paletteHasMoreAbove = startIndex > 0 && filtered.length > 0
+  const paletteHasMoreBelow = startIndex + listRows < filtered.length
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -386,7 +391,13 @@ export function renderCommandPalette(
   ...(showingRecent
     ? [h(Text, { key: 'palette-recent-hint', dimColor: true }, '· marks recently-used')]
     : []),
-  ...itemLines)
+  ...(paletteHasMoreAbove
+    ? [h(Text, { key: 'palette-more-above', dimColor: true }, `  ↑ ${startIndex} more above`)]
+    : []),
+  ...itemLines,
+  ...(paletteHasMoreBelow
+    ? [h(Text, { key: 'palette-more-below', dimColor: true }, `  ↓ ${filtered.length - (startIndex + listRows)} more below`)]
+    : []))
 }
 
 /**

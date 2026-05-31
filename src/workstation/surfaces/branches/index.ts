@@ -129,6 +129,11 @@ export function renderBranchesSurface(
         )
       })
 
+  // Scroll indicators — same "N more above/below" pattern as the
+  // sidebar and help overlay so the user knows the list continues.
+  const branchesHasMoreAbove = startIndex > 0 && localBranches.length > 0
+  const branchesHasMoreBelow = startIndex + listRows < localBranches.length
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -142,5 +147,11 @@ export function renderBranchesSurface(
     h(Text, { dimColor: true }, headerRight)
   ),
   ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
+  ...(branchesHasMoreAbove
+    ? [h(Text, { key: 'branches-more-above', dimColor: true }, `  ↑ ${startIndex} more above`)]
+    : []),
+  ...lines,
+  ...(branchesHasMoreBelow
+    ? [h(Text, { key: 'branches-more-below', dimColor: true }, `  ↓ ${localBranches.length - (startIndex + listRows)} more below`)]
+    : []))
 }

@@ -14,15 +14,15 @@ import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatHyperlink } from '../../chrome/hyperlinks'
 import { formatSortIndicator, sortTags } from '../../chrome/sorting'
 import {
-  formatLogInkLoading,
-  formatLogInkTagsEmpty,
+    formatLogInkLoading,
+    formatLogInkTagsEmpty,
 } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { LogInkState } from '../../../commands/log/inkViewModel'
 import {
-  matchesPromotedFilter,
-  renderPromotedFilterAffordance,
+    matchesPromotedFilter,
+    renderPromotedFilterAffordance,
 } from '../../runtime/promotedFilter'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { buildRefUrl, focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -97,6 +97,9 @@ export function renderTagsSurface(
         }, before, formatHyperlink(namePadded, url), after)
       })
 
+  const tagsHasMoreAbove = startIndex > 0 && tags.length > 0
+  const tagsHasMoreBelow = startIndex + listRows < tags.length
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -110,5 +113,11 @@ export function renderTagsSurface(
     h(Text, { dimColor: true }, headerRight)
   ),
   ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
+  ...(tagsHasMoreAbove
+    ? [h(Text, { key: 'tags-more-above', dimColor: true }, `  ↑ ${startIndex} more above`)]
+    : []),
+  ...lines,
+  ...(tagsHasMoreBelow
+    ? [h(Text, { key: 'tags-more-below', dimColor: true }, `  ↓ ${tags.length - (startIndex + listRows)} more below`)]
+    : []))
 }
