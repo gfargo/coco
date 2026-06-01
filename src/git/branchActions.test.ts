@@ -107,21 +107,12 @@ describe('log branch actions', () => {
     await deleteBranch(git as never, localBranch())
     await fetchRemotes(git as never)
     await pullCurrentBranch(git as never)
-    await pushCurrentBranch(git as never)
-    await setUpstream(git as never, 'feature/new', 'origin/feature/new')
 
     expect(git.raw).toHaveBeenNthCalledWith(1, ['switch', '-c', 'feature/new', 'abc1234'])
     expect(git.raw).toHaveBeenNthCalledWith(2, ['branch', '-m', 'feature/old', 'feature/new'])
     expect(git.raw).toHaveBeenNthCalledWith(3, ['branch', '-d', 'feature/test'])
     expect(git.raw).toHaveBeenNthCalledWith(4, ['fetch', '--all', '--prune'])
     expect(git.raw).toHaveBeenNthCalledWith(5, ['pull', '--ff-only'])
-    expect(git.raw).toHaveBeenNthCalledWith(6, ['push'])
-    expect(git.raw).toHaveBeenNthCalledWith(7, [
-      'branch',
-      '--set-upstream-to',
-      'origin/feature/new',
-      'feature/new',
-    ])
   })
 
   describe('pushBranch', () => {
@@ -140,14 +131,28 @@ describe('log branch actions', () => {
       expect(git.raw).toHaveBeenCalledWith(['push', 'origin', 'feat/widgets'])
     })
 
-    it('refuses when the branch has no upstream', async () => {
-      const git = { raw: jest.fn() }
+    it('pushes with -u to create+track when the branch has no upstream', async () => {
+      const git = {
+        raw: jest.fn().mockResolvedValue(''),
+        getRemotes: jest.fn().mockResolvedValue([{ name: 'origin' }]),
+      }
+      const branch = localBranch({ shortName: 'local-only' })
+
+      const result = await pushBranch(git as never, branch)
+
+      expect(result.ok).toBe(true)
+      expect(result.message).toContain('set upstream to origin/local-only')
+      expect(git.raw).toHaveBeenCalledWith(['push', '-u', 'origin', 'local-only'])
+    })
+
+    it('refuses when there is no upstream and no remote configured', async () => {
+      const git = { raw: jest.fn(), getRemotes: jest.fn().mockResolvedValue([]) }
       const branch = localBranch({ shortName: 'local-only' })
 
       const result = await pushBranch(git as never, branch)
 
       expect(result.ok).toBe(false)
-      expect(result.message).toContain('no upstream')
+      expect(result.message).toContain('no remote is configured')
       expect(git.raw).not.toHaveBeenCalled()
     })
 
@@ -157,6 +162,81 @@ describe('log branch actions', () => {
 
       expect(result.ok).toBe(false)
       expect(result.message).toContain('Only local branches')
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('pushCurrentBranch', () => {
+    it('pushes plainly when the current branch already has an upstream', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+
+      const result = await pushCurrentBranch(git as never)
+
+      expect(result.ok).toBe(true)
+      expect(git.raw).toHaveBeenCalledWith(['push'])
+    })
+
+    it('pushes with -u when the current branch has no upstream yet', async () => {
+      const git = {
+        raw: jest
+          .fn()
+          .mockRejectedValueOnce(new Error('no upstream configured')) // rev-parse @{upstream}
+          .mockResolvedValueOnce('feat/new\n') // rev-parse HEAD
+          .mockResolvedValue(''), // push -u
+        getRemotes: jest.fn().mockResolvedValue([{ name: 'origin' }]),
+      }
+
+      const result = await pushCurrentBranch(git as never)
+
+      expect(result.ok).toBe(true)
+      expect(result.message).toContain('set upstream to origin/feat/new')
+      expect(git.raw).toHaveBeenCalledWith(['push', '-u', 'origin', 'feat/new'])
+    })
+  })
+
+  describe('setUpstream', () => {
+    it('links to an existing remote-tracking branch', async () => {
+      const git = {
+        raw: jest.fn().mockResolvedValue(''), // show-ref (exists) + set-upstream-to
+        getRemotes: jest.fn().mockResolvedValue([{ name: 'origin' }]),
+      }
+
+      const result = await setUpstream(git as never, 'feature/x', 'origin/feature/x')
+
+      expect(result.ok).toBe(true)
+      expect(git.raw).toHaveBeenCalledWith([
+        'branch',
+        '--set-upstream-to',
+        'origin/feature/x',
+        'feature/x',
+      ])
+    })
+
+    it('pushes -u to create the remote branch when it does not exist yet', async () => {
+      const git = {
+        raw: jest
+          .fn()
+          .mockRejectedValueOnce(new Error('not a valid ref')) // show-ref (missing)
+          .mockResolvedValue(''), // push -u
+        getRemotes: jest.fn().mockResolvedValue([{ name: 'origin' }]),
+      }
+
+      // Bare `main` defaults to origin/main; the remote branch is absent
+      // so we push -u rather than silently mis-setting the local ref.
+      const result = await setUpstream(git as never, 'main', 'main')
+
+      expect(result.ok).toBe(true)
+      expect(result.message).toContain('set upstream')
+      expect(git.raw).toHaveBeenCalledWith(['push', '-u', 'origin', 'main:main'])
+    })
+
+    it('refuses when no remote is configured', async () => {
+      const git = { raw: jest.fn(), getRemotes: jest.fn().mockResolvedValue([]) }
+
+      const result = await setUpstream(git as never, 'main', 'main')
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('No remote configured')
       expect(git.raw).not.toHaveBeenCalled()
     })
   })

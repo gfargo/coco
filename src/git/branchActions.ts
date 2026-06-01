@@ -45,6 +45,35 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
   }
 }
 
+/** Configured remote names (best-effort; `[]` if the call fails). */
+async function listRemotes(git: SimpleGit): Promise<string[]> {
+  try {
+    return (await git.getRemotes()).map((remote) => remote.name).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Remote to push a not-yet-tracked branch to: `origin` when it exists,
+ * else the first configured remote, else `undefined` (no remotes).
+ */
+async function resolveDefaultRemote(git: SimpleGit): Promise<string | undefined> {
+  const remotes = await listRemotes(git)
+  if (remotes.length === 0) return undefined
+  return remotes.includes('origin') ? 'origin' : remotes[0]
+}
+
+/** Whether the remote-tracking ref `refs/remotes/<remote>/<branch>` exists locally. */
+async function remoteBranchExists(git: SimpleGit, remote: string, branch: string): Promise<boolean> {
+  try {
+    await git.raw(['show-ref', '--verify', '--quiet', `refs/remotes/${remote}/${branch}`])
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function checkoutBranch(git: SimpleGit, branch: BranchRef): Promise<BranchActionResult> {
   const refs = getBranchActionRefs(branch)
 
@@ -118,21 +147,71 @@ export function pullCurrentBranch(git: SimpleGit): Promise<BranchActionResult> {
   )
 }
 
-export function pushCurrentBranch(git: SimpleGit): Promise<BranchActionResult> {
+export async function pushCurrentBranch(git: SimpleGit): Promise<BranchActionResult> {
+  const hasUpstream = await git
+    .raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+    .then(() => true)
+    .catch(() => false)
+  if (hasUpstream) {
+    return runAction(() => git.raw(['push']), 'Pushed current branch')
+  }
+  // No upstream yet — push with `-u` to create the remote branch AND set
+  // tracking, instead of failing with git's bare "has no upstream" error.
+  const remote = await resolveDefaultRemote(git)
+  if (!remote) {
+    return { ok: false, message: 'No upstream and no remote configured — add one with `git remote add origin <url>`.' }
+  }
+  const current = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
   return runAction(
-    () => git.raw(['push']),
-    'Pushed current branch'
+    () => git.raw(['push', '-u', remote, current]),
+    `Pushed ${current} and set upstream to ${remote}/${current}`
   )
 }
 
-export function setUpstream(
+/**
+ * Set (or create) the upstream for a local branch from a user-typed target.
+ *
+ * The target may be a bare branch name (`main` → `<default-remote>/main`) or
+ * a `remote/branch` ref (`origin/main`). If that remote-tracking branch
+ * already exists, we just link to it (`git branch --set-upstream-to`). If it
+ * does NOT exist yet — the common "I just created this branch" case — we
+ * `git push -u` to create the remote branch and set tracking in one step.
+ * The old behavior ran `--set-upstream-to <bare-name>`, which silently
+ * resolved `main` to the *local* branch and left push still complaining.
+ */
+export async function setUpstream(
   git: SimpleGit,
   localBranch: string,
-  upstreamBranch: string
+  target: string
 ): Promise<BranchActionResult> {
+  const cleaned = target.trim()
+  if (!cleaned) return { ok: false, message: 'Upstream ref required' }
+
+  const remotes = await listRemotes(git)
+  const slash = cleaned.indexOf('/')
+  let remote: string | undefined
+  let remoteBranch: string
+  if (slash > 0 && remotes.includes(cleaned.slice(0, slash))) {
+    remote = cleaned.slice(0, slash)
+    remoteBranch = cleaned.slice(slash + 1)
+  } else {
+    remote = remotes.includes('origin') ? 'origin' : remotes[0]
+    remoteBranch = cleaned
+  }
+  if (!remote) {
+    return { ok: false, message: 'No remote configured — add one with `git remote add origin <url>` first.' }
+  }
+
+  if (await remoteBranchExists(git, remote, remoteBranch)) {
+    return runAction(
+      () => git.raw(['branch', '--set-upstream-to', `${remote}/${remoteBranch}`, localBranch]),
+      `Set ${localBranch} to track ${remote}/${remoteBranch}`
+    )
+  }
+  // Remote branch doesn't exist yet — push it and set upstream in one step.
   return runAction(
-    () => git.raw(['branch', '--set-upstream-to', upstreamBranch, localBranch]),
-    `Set ${localBranch} upstream to ${upstreamBranch}`
+    () => git.raw(['push', '-u', remote, `${localBranch}:${remoteBranch}`]),
+    `Pushed ${localBranch} → ${remote}/${remoteBranch} and set upstream`
   )
 }
 
@@ -145,22 +224,28 @@ export function setUpstream(
  * Pairs with `pushCurrentBranch` (no-arg variant); the workstation
  * dispatcher picks one or the other based on where the cursor is.
  */
-export function pushBranch(
+export async function pushBranch(
   git: SimpleGit,
   branch: BranchRef
 ): Promise<BranchActionResult> {
   if (branch.type !== 'local') {
-    return Promise.resolve({
-      ok: false,
-      message: 'Only local branches can be pushed.',
-    })
+    return { ok: false, message: 'Only local branches can be pushed.' }
   }
 
   if (!branch.upstream || !branch.remote) {
-    return Promise.resolve({
-      ok: false,
-      message: `${branch.shortName} has no upstream — checkout the branch and run \`git push -u <remote> ${branch.shortName}\` first.`,
-    })
+    // No upstream yet — push with `-u` to create the remote branch AND set
+    // tracking, rather than refusing and sending the user to the shell.
+    const remote = await resolveDefaultRemote(git)
+    if (!remote) {
+      return {
+        ok: false,
+        message: `${branch.shortName} has no upstream and no remote is configured — add one with \`git remote add origin <url>\`.`,
+      }
+    }
+    return runAction(
+      () => git.raw(['push', '-u', remote, branch.shortName]),
+      `Pushed ${branch.shortName} and set upstream to ${remote}/${branch.shortName}`
+    )
   }
 
   return runAction(
