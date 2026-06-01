@@ -143,9 +143,7 @@ export function renderDiffSurface(
             // active file's header gets selection styling so the user
             // sees at a glance which file the cursor is inside.
             const isActive = absoluteIndex === activeStartLine
-            // `❯` (ascii `> `) marks the active file header — unified with
-            // the history / status active-row caret for a consistent cue.
-            const arrow = isActive ? (theme.ascii ? '> ' : '❯ ') : (theme.ascii ? '> ' : '▾ ')
+            const arrow = theme.ascii ? '> ' : '▾ '
             const activeHeader = isActive && focused && !theme.noColor
             return h(Text, {
               key: `stash-diff-line-${absoluteIndex}`,

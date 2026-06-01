@@ -106,7 +106,7 @@ export function renderConflictsSurface(
     : visible.map((file, offset) => {
       const index = startIndex + offset
       const isSelected = index === selected
-      const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
+      const cursor = isSelected ? '>' : ' '
       const code = `${file.indexStatus}${file.worktreeStatus}`
       const label = statusLabel(file)
       return h(Text, {

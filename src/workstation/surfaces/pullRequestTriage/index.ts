@@ -189,7 +189,7 @@ export function renderPullRequestTriageSurface(
       bodyLines = windowed.map((pr, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
-        const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
+        const cursor = isSelected ? '>' : ' '
         const numStr = `#${pr.number}`.padEnd(numberColWidth)
         const stateLabel = pr.isDraft ? 'draft' : pr.state.toLowerCase()
         const stateStr = stateLabel.padEnd(6)

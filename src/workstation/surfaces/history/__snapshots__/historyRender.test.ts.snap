@@ -28,11 +28,6 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
     color="#ffffff"
   >
     <Text
-      bold={true}
-    >
-      ❯ 
-    </Text>
-    <Text
       dimColor={false}
     >
       ◉
@@ -76,11 +71,6 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
   </Text>
   <Text>
     <Text
-      bold={false}
-    >
-        
-    </Text>
-    <Text
       color="cyan"
       dimColor={false}
     >
@@ -121,11 +111,6 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
     </Text>
   </Text>
   <Text>
-    <Text
-      bold={false}
-    >
-        
-    </Text>
     <Text
       color="cyan"
       dimColor={false}
@@ -228,11 +213,6 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
     color="#ffffff"
   >
     <Text
-      bold={true}
-    >
-      ❯ 
-    </Text>
-    <Text
       dimColor={false}
     >
       ◉
@@ -270,11 +250,6 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
   </Text>
   <Text>
     <Text
-      bold={false}
-    >
-        
-    </Text>
-    <Text
       color="cyan"
       dimColor={false}
     >
@@ -309,11 +284,6 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
     </Text>
   </Text>
   <Text>
-    <Text
-      bold={false}
-    >
-        
-    </Text>
     <Text
       color="cyan"
       dimColor={false}
