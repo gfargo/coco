@@ -130,7 +130,7 @@ export function renderDiffSurface(
       ? []
       : splitActive
         ? renderSplitDiffBody(
-          h, components, visibleLines, state.diffPreviewOffset, width, theme,
+          h, components, lines, state.diffPreviewOffset, visibleRows, width, theme,
           'stash-diff-split'
         )
         : visibleLines.map((line, index) => {
@@ -226,7 +226,7 @@ export function renderDiffSurface(
       ? []
       : splitActive
         ? renderSplitDiffBody(
-          h, components, visibleLines, state.diffPreviewOffset, width, theme,
+          h, components, lines, state.diffPreviewOffset, visibleRows, width, theme,
           'compare-diff-split'
         )
         : visibleLines.map((line, index) => h(Text, {
@@ -297,7 +297,7 @@ export function renderDiffSurface(
       ? []
       : splitActive
         ? renderSplitDiffBody(
-          h, components, visiblePreviewHunks, state.diffPreviewOffset, width, theme,
+          h, components, previewHunks, state.diffPreviewOffset, visibleRows, width, theme,
           'commit-diff-split'
         )
         : visiblePreviewHunks.map((line, index) => h(Text, {
