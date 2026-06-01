@@ -267,13 +267,38 @@ function renderLaneSegmentSpans(
 }
 
 /**
+ * Width of the leading active-row caret gutter (`❯ ` / ascii `> `). A
+ * non-color cue so the selected row is identifiable under `NO_COLOR` and
+ * for colorblind users — complements (and is redundant with) the selection
+ * background + bold. Reserved on every row so the graph column stays
+ * aligned whether or not a row is selected.
+ */
+const ACTIVE_ROW_CARET_WIDTH = 2
+
+/**
+ * The leading caret span: `❯ ` (bold) on the active row, two spaces
+ * otherwise. Inherits the row's foreground (so it reads correctly on the
+ * selection bar and in `NO_COLOR`).
+ */
+function renderActiveRowCaret(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  selected: boolean,
+  ascii: boolean,
+  key: string
+): ReactTypes.ReactElement {
+  return h(Text, { key, bold: selected }, selected ? (ascii ? '> ' : '❯ ') : '  ')
+}
+
+/**
  * Render a single commit row with each segment in its own colored span.
  * Graph chars render in `theme.colors.muted` so the topology visually
  * recedes; shortHash takes the accent so the eye lands on the commit
  * identifier first; date is dimmed; message is normal; ref labels
  * (`[HEAD -> main]`) trail in accent. Selection styling is applied at
  * the outer span via `backgroundColor` / `inverse` so the highlight
- * fills the whole row regardless of inner-span coloring.
+ * fills the whole row regardless of inner-span coloring; a leading caret
+ * gutter gives a redundant non-color cue.
  *
  * Truncation is per-segment so the variable-length message field gets
  * the leftover budget after fixed segments are accounted for.
@@ -302,7 +327,9 @@ function renderCommitHistoryRow(
   // line and the next commit's graph indicator landed against the wrap
   // continuation rather than its own commit (#830). Subtracting 4
   // accounts for the panel's left + right border + 1-cell padding.
-  const totalWidth = Math.max(20, panelWidth - 4)
+  // ACTIVE_ROW_CARET_WIDTH reserves the leading active-row caret gutter so
+  // content sizing matches the actual rendered width.
+  const totalWidth = Math.max(20, panelWidth - 4 - ACTIVE_ROW_CARET_WIDTH)
   const dateText = pickDateText(commit, density, fullGraph, bucketed, now)
   const dateSegmentWidth = dateText ? dateText.length + 1 : 0
   // Branch chip prefix — only renders in full-graph mode so compact
@@ -350,6 +377,7 @@ function renderCommitHistoryRow(
     backgroundColor: selectedBg,
     color: selectedFg,
   },
+  renderActiveRowCaret(h, Text, selected, theme.ascii, `${commit.hash}-${index}-caret`),
   ...graphChildren,
   ' ',
   // "Just landed" marker — a single thick vertical bar in the
@@ -411,7 +439,12 @@ function renderStackedCommitHistoryRow(
   isRecent: boolean = false,
   remoteNames?: string[]
 ): ReactTypes.ReactElement {
-  const totalWidth = Math.max(20, panelWidth - 4)
+  // `lineWidth` is the full content width per line; `totalWidth` excludes
+  // the leading caret gutter (used to size line 1's subject after the
+  // caret is prepended). Line 2 aligns under line 1's shortHash by
+  // indenting past the caret + graph, so it uses `lineWidth`.
+  const lineWidth = Math.max(20, panelWidth - 4)
+  const totalWidth = Math.max(20, lineWidth - ACTIVE_ROW_CARET_WIDTH)
   // Suppress child colors on selected rows so each span inherits the
   // contrast-guaranteed `selectionForeground` set on the line-1 span,
   // keeping the selected row readable against the selection bg.
@@ -442,6 +475,7 @@ function renderStackedCommitHistoryRow(
     backgroundColor: selectedBg,
     color: selectedFg,
   },
+  renderActiveRowCaret(h, Text, selected, theme.ascii, `${commit.hash}-${index}-stk-caret`),
   ...graphChildren,
   ' ',
   isRecent
@@ -458,10 +492,12 @@ function renderStackedCommitHistoryRow(
   // double-row highlight on a tight terminal. Trailing refs are
   // filtered against the chip so we don't repeat the branch tip both
   // as a leading chip and a trailing label.
-  const indent = ' '.repeat(graphWidth + 1)
+  // Indent past the caret gutter + graph so line 2 starts under line 1's
+  // shortHash. Uses `lineWidth` (full) since line 2 has no separate caret.
+  const indent = ' '.repeat(ACTIVE_ROW_CARET_WIDTH + graphWidth + 1)
   const dateText = formatCompactRelativeDate(commit.date, now)
   const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip))
-  const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
+  const metaRoom = Math.max(8, lineWidth - indent.length - (dateText ? dateText.length + 1 : 0))
   const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
   // If both pieces are empty (date unparseable + no refs), show a
   // bullet so the row's structure still reads as two-line and the
@@ -520,7 +556,9 @@ function renderPendingCommitRow(
       ? theme.colors.selectionForeground
       : (theme.noColor ? undefined : theme.colors.accent),
     backgroundColor: selected && !theme.noColor ? theme.colors.selection : undefined,
-  }, truncateCells(label, 140))
+  },
+  renderActiveRowCaret(h, Text, selected, theme.ascii, 'pending-commit-caret'),
+  truncateCells(label, 140 - ACTIVE_ROW_CARET_WIDTH))
 }
 
 export function renderHistoryPanel(
