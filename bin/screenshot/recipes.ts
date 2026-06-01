@@ -746,6 +746,22 @@ export const RECIPES: ScreenshotRecipe[] = [
     ],
   },
   {
+    name: 'ui-theme-picker',
+    description: 'Theme picker overlay (gC) — browse, filter & live-preview color themes',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      // `gC` chord opens the picker; the workstation live-previews the
+      // cursored theme underneath while the overlay lists every preset.
+      { kind: 'type', text: 'gC' },
+      { kind: 'sleep', ms: 500 },
+      // Type a filter to show the fuzzy/substring narrowing in action.
+      { kind: 'type', text: 'gruv' },
+      { kind: 'sleep', ms: 500 },
+    ],
+  },
+  {
     name: 'ui-search-filter',
     description: 'History view with an active search filter narrowing commits',
     scenario: 'multi-commit-branch',

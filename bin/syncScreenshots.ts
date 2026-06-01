@@ -99,6 +99,7 @@ const SITE_RECIPES = [
   // Utility
   'workspace-multi-repo',
   'ui-command-palette',
+  'ui-theme-picker',
   'ui-search-filter',
   'ui-inspector-focused',
 ]
@@ -175,6 +176,7 @@ const FILENAME_MAP: Record<string, string[]> = {
   'ui-history-theme-quiet-light': ['theme-quiet-light.png'],
   'workspace-multi-repo': ['workspace-multi-repo.png'],
   'ui-command-palette': ['feature-palette.png'],
+  'ui-theme-picker': ['theme-picker.png'],
   'ui-search-filter': ['docs-search.png'],
   'ui-inspector-focused': ['workstation-history.png'],
   'demo-workstation-tour': ['demo-workstation-tour.gif'],
