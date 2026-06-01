@@ -80,7 +80,7 @@ export function renderBranchesSurface(
       : visible.map((branch, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
+        const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
         const marker = branchRowMarker(branch, { ascii: theme.ascii })
         const markerColor = getBranchRowMarkerColor(marker.kind, theme)
         const divergence = formatBranchDivergence(branch, { ascii: theme.ascii })

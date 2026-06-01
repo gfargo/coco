@@ -90,7 +90,7 @@ export function renderSubmodulesSurface(
       : visible.map((entry, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
+        const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
         const sha = entry.pinnedSha ? entry.pinnedSha.slice(0, 8) : '--------'
         const namePadded = truncateCells(entry.name, nameColWidth).padEnd(nameColWidth)
         const pathPadded = truncateCells(entry.path, pathColWidth).padEnd(pathColWidth)

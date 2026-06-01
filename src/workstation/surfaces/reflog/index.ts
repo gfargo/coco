@@ -78,7 +78,7 @@ export function renderReflogSurface(
       : splitVisible.map(({ entry, parts }, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
+        const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
         const datePadded = truncateCells(entry.relativeDate, dateColWidth).padEnd(dateColWidth)
         const actionPadded = truncateCells(parts.action, actionColWidth).padEnd(actionColWidth)
         const hashPadded = truncateCells(entry.hash, hashColWidth).padEnd(hashColWidth)
