@@ -12,11 +12,23 @@ import type { UiArgv } from '../ui/config'
 
 import { WorkspaceArgv } from './config'
 
-const DEFAULT_ROOTS = ['~/code']
-
+/**
+ * Resolve the directories the workspace scans for git repos, in
+ * precedence order:
+ *   1. `--root` CLI flag(s)
+ *   2. `workspace.roots` from config
+ *   3. the current working directory (`cwd`)
+ *
+ * Falling back to `cwd` (rather than a hardcoded `~/code`) means a bare
+ * `coco` / `coco ws` discovers repos wherever you launched it — the
+ * handler chdir's to honor `--repo` / `--cwd` before this runs, so `cwd`
+ * already reflects the targeted directory. `cwd` is a parameter (not a
+ * direct `process.cwd()` call) so the resolver stays a pure unit.
+ */
 export function resolveWorkspaceRoots(
   argv: WorkspaceArgv,
-  config: Pick<Config, 'workspace'>
+  config: Pick<Config, 'workspace'>,
+  cwd: string = process.cwd()
 ): string[] {
   const raw = argv.root
   if (Array.isArray(raw) && raw.length > 0) {
@@ -28,7 +40,7 @@ export function resolveWorkspaceRoots(
   if (config.workspace?.roots && config.workspace.roots.length > 0) {
     return [...config.workspace.roots]
   }
-  return [...DEFAULT_ROOTS]
+  return [cwd]
 }
 
 export function resolveWorkspaceKnownRepos(
