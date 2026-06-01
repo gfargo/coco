@@ -118,7 +118,7 @@ export function renderDetailPanel(
   }
 
   if (state.showThemePicker) {
-    return renderThemePickerOverlay(h, components, state, width, theme, focused)
+    return renderThemePickerOverlay(h, components, state.themePickerFilter, state.themePickerIndex, width, theme, focused)
   }
 
   if (state.inputPrompt) {

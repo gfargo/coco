@@ -2437,10 +2437,21 @@ export function filterThemePresets(filter: string): LogInkThemePreset[] {
  * filtered list). `undefined` when the filter matches nothing.
  */
 export function getThemePickerSelection(state: LogInkState): LogInkThemePreset | undefined {
-  const filtered = filterThemePresets(state.themePickerFilter)
+  return getThemePickerSelectionFor(state.themePickerFilter, state.themePickerIndex)
+}
+
+/**
+ * State-model-agnostic variant: the preset under the picker cursor for a
+ * raw `filter` + `index`. Used by the workspace top-level surface, which
+ * keeps its own state shape but shares the picker filtering.
+ */
+export function getThemePickerSelectionFor(
+  filter: string,
+  index: number
+): LogInkThemePreset | undefined {
+  const filtered = filterThemePresets(filter)
   if (filtered.length === 0) {
     return undefined
   }
-  const index = clampIndex(state.themePickerIndex, filtered.length)
-  return filtered[index]
+  return filtered[clampIndex(index, filtered.length)]
 }

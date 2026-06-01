@@ -11,6 +11,7 @@ import type * as ReactTypes from 'react'
 import type { TextProps } from 'ink'
 
 import type { LogInkTheme } from '../../chrome/theme'
+import { renderThemePickerOverlay } from '../../runtime/overlays'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 import type { WorkspaceComponents } from './runtime'
@@ -784,6 +785,25 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
       { flexDirection: 'column', height: rootHeight },
       renderHeader(deps),
       renderHelpOverlay(deps),
+      renderFooter(deps)
+    )
+  }
+  // Theme picker is modal too — the chrome live-previews underneath via
+  // the reactive `deps.theme`, while the overlay replaces the body.
+  if (deps.state.showThemePicker) {
+    return React.createElement(
+      Box,
+      { flexDirection: 'column', height: rootHeight },
+      renderHeader(deps),
+      renderThemePickerOverlay(
+        React.createElement,
+        { Box: ink.Box, Text: ink.Text },
+        deps.state.themePickerFilter,
+        deps.state.themePickerIndex,
+        bodyWidth,
+        deps.theme,
+        true
+      ),
       renderFooter(deps)
     )
   }

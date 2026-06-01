@@ -403,31 +403,33 @@ export function renderCommandPalette(
 }
 
 /**
- * Theme picker overlay (`gC`). Renders in the detail column like the
- * command palette so the rest of the workstation live-previews the
- * cursored theme underneath. Type to filter, ↑/↓ to move, Enter applies
- * (and persists), Esc cancels (reverting the preview).
+ * Theme picker overlay (`gC`). Renders like the command palette so the
+ * rest of the surface live-previews the cursored theme underneath. Type to
+ * filter, ↑/↓ to move, Enter applies (and persists), Esc cancels. Takes the
+ * raw `filter` + `index` rather than a `LogInkState` so it's reusable by
+ * the workspace top-level surface, which has its own state model.
  */
 export function renderThemePickerOverlay(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
-  state: LogInkState,
+  filter: string,
+  index: number,
   width: number,
   theme: LogInkTheme,
   focused: boolean
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
-  const filtered = filterThemePresets(state.themePickerFilter)
+  const filtered = filterThemePresets(filter)
 
   const selectedIndex = filtered.length === 0
     ? 0
-    : Math.max(0, Math.min(state.themePickerIndex, filtered.length - 1))
+    : Math.max(0, Math.min(index, filtered.length - 1))
 
   const listRows = 14
   const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
   const visible = filtered.slice(startIndex, startIndex + listRows)
 
-  const inputLine = `> ${state.themePickerFilter}_`
+  const inputLine = `> ${filter}_`
   const matchSummary = filtered.length === 0
     ? 'no matches'
     : `${filtered.length} ${filtered.length === 1 ? 'theme' : 'themes'}`
