@@ -1893,12 +1893,26 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
       expect(state.showThemePicker).toBe(false)
     })
 
-    it('filters presets by case-insensitive substring', () => {
+    it('fuzzy-filters presets case-insensitively', () => {
       expect(filterThemePresets('')).toContain('catppuccin')
-      const tokyo = filterThemePresets('TOKYO')
-      expect(tokyo.length).toBeGreaterThan(0)
-      expect(tokyo.every((p) => p.includes('tokyo'))).toBe(true)
+      // Exact substring still matches…
+      expect(filterThemePresets('TOKYO')).toContain('tokyo-night')
+      // …and a non-contiguous subsequence matches too.
+      const gl = filterThemePresets('gl')
+      expect(gl).toContain('gruvbox-light')
+      expect(gl).toContain('github-light')
+      // Nonsense query that can't appear as a subsequence → no matches.
       expect(filterThemePresets('definitely-not-a-theme')).toHaveLength(0)
+    })
+
+    it('ranks the best fuzzy match first', () => {
+      // Exact preset id outranks the longer one that merely contains it.
+      const gruvbox = filterThemePresets('gruvbox')
+      expect(gruvbox[0]).toBe('gruvbox')
+      expect(gruvbox).toContain('gruvbox-light')
+      // Word-segment matches (after `-`) rank ahead of incidental ones.
+      const cm = filterThemePresets('cm')
+      expect(cm[0]).toBe('catppuccin-macchiato')
     })
 
     it('moveThemePicker clamps the cursor to the filtered list', () => {

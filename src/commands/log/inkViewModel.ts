@@ -2418,10 +2418,36 @@ export function intentOpenComposeForFile(
 }
 
 /**
- * Filter the full preset list by a case-insensitive substring query. An
- * empty query returns every preset in catalog order. Shared by the theme
- * picker overlay renderer, the input handler (for cursor bounds), and the
- * live-preview selector so all three agree on the same filtered list.
+ * Fuzzy (subsequence) score for a preset id against a lowercase query.
+ * Returns `null` when the query chars don't appear in order; otherwise a
+ * score where contiguous runs, a start-of-string match, and matches right
+ * after a `-` separator are rewarded — so `gl` ranks `gruvbox-light` /
+ * `github-light` above incidental matches, and `tn` finds `tokyo-night`.
+ */
+function fuzzyScoreThemePreset(preset: string, query: string): number | null {
+  const target = preset.toLowerCase()
+  let qi = 0
+  let score = 0
+  let lastMatch = -2
+  for (let i = 0; i < target.length && qi < query.length; i += 1) {
+    if (target[i] === query[qi]) {
+      score += 1
+      if (i === lastMatch + 1) score += 4 // contiguous run
+      if (i === 0) score += 8 // matches the very start
+      else if (target[i - 1] === '-') score += 4 // start of a word segment
+      lastMatch = i
+      qi += 1
+    }
+  }
+  return qi === query.length ? score : null
+}
+
+/**
+ * Filter the full preset list by a fuzzy (subsequence) query, ranked best
+ * match first (ties broken by catalog order). An empty query returns every
+ * preset in catalog order. Shared by the theme picker overlay renderer, the
+ * input handler (for cursor bounds), and the live-preview selector so all
+ * three agree on the same filtered list.
  */
 export function filterThemePresets(filter: string): LogInkThemePreset[] {
   const query = filter.trim().toLowerCase()
@@ -2429,7 +2455,11 @@ export function filterThemePresets(filter: string): LogInkThemePreset[] {
   if (!query) {
     return all
   }
-  return all.filter((preset) => preset.toLowerCase().includes(query))
+  return all
+    .map((preset, index) => ({ preset, index, score: fuzzyScoreThemePreset(preset, query) }))
+    .filter((entry): entry is { preset: LogInkThemePreset; index: number; score: number } => entry.score !== null)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.preset)
 }
 
 /**
