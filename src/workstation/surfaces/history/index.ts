@@ -275,6 +275,12 @@ function renderLaneSegmentSpans(
  */
 const ACTIVE_ROW_CARET_WIDTH = 2
 
+/** The blank gutter (no caret) — `ACTIVE_ROW_CARET_WIDTH` spaces. Prepended
+ *  to non-commit history lines (bucket headers, graph-only connector lines)
+ *  so they shift in lockstep with the commit rows' caret gutter and the
+ *  graph column stays vertically aligned. */
+const ACTIVE_ROW_GUTTER = ' '.repeat(ACTIVE_ROW_CARET_WIDTH)
+
 /**
  * The leading caret span: `❯ ` (bold) on the active row, two spaces
  * otherwise. Inherits the row's foreground (so it reads correctly on the
@@ -696,13 +702,16 @@ export function renderHistoryPanel(
         // the divider reads as chrome rather than competing with
         // commit content. Rule fills the panel's interior width
         // (minus border + padding); the label rides inside it.
-        const contentWidth = Math.max(10, width - 4)
+        // Reserve the active-row caret gutter so the divider lines up with
+        // the (gutter-shifted) commit rows below it.
+        const contentWidth = Math.max(10, width - 4 - ACTIVE_ROW_CARET_WIDTH)
         const labelCells = cellWidth(item.label) + 2 // pad the label with surrounding spaces
         const ruleAfter = Math.max(0, contentWidth - 3 - labelCells)
         return h(Text, {
           key: `bucket-${index}-${item.label}`,
           dimColor: true,
         },
+          h(Text, undefined, ACTIVE_ROW_GUTTER),
           h(Text, undefined, '── '),
           h(Text, { bold: true }, item.label),
           h(Text, undefined, ' '),
@@ -730,6 +739,8 @@ export function renderHistoryPanel(
             key: `graph-${index}-${item.graph}`,
             dimColor: !isSpacer,
           },
+            // Blank caret gutter so connector lanes align with commit rows.
+            ACTIVE_ROW_GUTTER,
             ...renderLaneSegmentSpans(
               h, Text, item.laneSegments, theme, visible.graphWidth, `g${index}`,
               { forceDim: !isSpacer }
@@ -739,10 +750,10 @@ export function renderHistoryPanel(
           key: `graph-${index}-${item.graph}`,
           color: theme.noColor ? undefined : theme.colors.muted,
           dimColor: !isSpacer,
-        }, truncateCells(substituteGraphChars(
+        }, `${ACTIVE_ROW_GUTTER}${truncateCells(substituteGraphChars(
           item.graph.padEnd(visible.graphWidth),
           { ascii: theme.ascii }
-        ), Math.max(8, width - 4)))
+        ), Math.max(8, width - 4 - ACTIVE_ROW_CARET_WIDTH))}`)
       }
 
       if (rowMode === 'stacked') {

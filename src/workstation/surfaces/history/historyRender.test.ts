@@ -236,5 +236,16 @@ describe('renderHistoryPanel', () => {
       )
       expect(flattenText(tree)).toContain('❯ ')
     })
+
+    it('reserves the gutter on bucket dividers so they align with commit rows', () => {
+      // Regression: the caret gutter was first added to commit rows only,
+      // shifting them right of the (un-shifted) "── <bucket> ──" dividers
+      // and graph-connector lines — the graph column no longer lined up.
+      // Every history line now reserves the gutter, so the divider's
+      // leading em-dash sits in the same column as the commit graph.
+      const flat = flattenText(render(makeState(), { dateBucketingEnabled: true }))
+      expect(flat).toContain(`${'  '}── `) // 2-space gutter, then the divider rule
+      expect(flat).not.toContain('\n── ') // never a divider flush against the left edge
+    })
   })
 })
