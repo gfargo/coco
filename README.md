@@ -19,6 +19,8 @@ An AI-powered git assistant that generates meaningful commit messages, creates c
 - 🔧 **Commitlint Integration** - Seamless integration with your existing commitlint configuration
 - 🏠 **Local AI Support** - Run completely offline with Ollama (no API costs, full privacy)
 - 🖥️ **Coco UI Git Workstation** - Sixteen top-level views (history, status, diff, compose, branches, tags, stash, worktrees, pull-request, PR triage, issues, conflicts, reflog, bisect, submodules, changelog) reachable via `g`-prefixed chords, with an interactive command palette (`:`), global search (`/`), and one-keystroke workflows: `S` split staged changes, `L` generate a changelog, `C` create a PR seeded from changelog, `E` open the commit draft in `$EDITOR`
+- 🗂️ **Multi-Repo Workspace** - `coco workspace` (alias `ws`) scans your current directory for git repos and gives you a sortable, filterable overview — branch, dirty count, ahead/behind, open PR count — then `Enter` drills into any one as a full `coco ui` session
+- 🎨 **49 Color Themes** - Catppuccin, Gruvbox, Dracula, Tokyo Night, Solarized, and more (17 light) — browse and **live-preview** them with the in-app theme picker (`gC`), then apply with one keystroke; or set one via `coco ui --theme <name>` / config. `NO_COLOR` honored
 - 🎯 **`--repo <dir>` global flag** - Drive any coco command against any repository without `cd`-ing first
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
 - 👥 **Team Ready** - Shared configurations and enterprise deployment
@@ -48,6 +50,9 @@ coco commit -i
 - **`coco review`** - AI-powered code review of your changes
 - **`coco log`** - Explore commit history with graph, filters, JSON output, and commit details
 - **`coco ui`** - Open the full-screen Git workstation TUI
+- **`coco workspace`** (alias `ws`) - Multi-repo overview TUI; drill into any repo as a `coco ui` session
+- **`coco issues`** / **`coco prs`** - List GitHub issues / pull requests (stdout or interactive triage)
+- **`coco doctor`** - Diagnose your environment, config, and provider setup
 - **`coco init`** - Interactive setup wizard
 
 > **Smart default (0.57.0+):** running `coco` with **no subcommand** routes by environment — `coco ui` inside a git repo, `coco workspace` outside one, or `coco init` on a fresh install. It no longer defaults to `commit`; use `coco commit` for messages (or `--commit` / `COCO_DEFAULT=commit` to restore the old default).
@@ -111,10 +116,11 @@ coco log --format json
 ```text
 g h   history          g c   compose         g x   conflicts
 g s   status           g b   branches        g r   reflog
-g d   diff             g t   tags            <     back
-                       g z   stash           Esc   back / close modal
-                       g w   worktrees       ?     help overlay
-                       g p   pull request    :     command palette
+g d   diff             g t   tags            g C   theme picker
+g w   worktrees        g z   stash           <     back
+g p   pull request                           Esc   back / close modal
+                                              ?     help overlay
+                                              :     command palette
 ```
 
 The command palette (`:`) is an interactive launcher with fuzzy filter and recently-used at the top — every keybinding and workflow action is reachable from there. `/` searches the active view (history, branches, tags, stash, or reflog). On branches, tags, and history, press `m` to mark a ref as the compare base — then `Enter` on a second ref opens a `git diff <base>..<head>` view. See the [Coco UI](https://github.com/gfargo/coco/wiki/Coco-UI) and [TUI Navigation](https://github.com/gfargo/coco/wiki/TUI-Navigation) wiki pages for the full keymap.
