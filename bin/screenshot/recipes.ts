@@ -128,9 +128,19 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
   {
     name: 'ui-diff-feature-branch',
-    description: 'Diff view showing a commit diff on a feature branch',
+    description: 'Side-by-side (split) diff view of a commit on a feature branch',
     scenario: 'feature-pr-ready',
     command: 'ui --view diff',
+    // Press `d` once to switch unified → side-by-side. Split needs the diff
+    // panel ≥ MIN_SPLIT_DIFF_WIDTH (120) — and the diff view also shows the
+    // sidebar + commit inspector, so the terminal has to be wide enough to
+    // leave the diff column ≥ 120 after both.
+    dimensions: { cols: 230, rows: 42 },
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'd' },
+      { kind: 'sleep', ms: 500 },
+    ],
   },
   {
     name: 'ui-merge-conflict',
