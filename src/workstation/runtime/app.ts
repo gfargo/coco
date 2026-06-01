@@ -128,6 +128,7 @@ import { sortBranches, sortTags } from '../chrome/sorting'
 import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../chrome/idleTips'
 import {
     LogInkState,
+    RemoteOpState,
     applyLogInkAction,
     createLogInkState,
     getSelectedInkCommit,
@@ -366,6 +367,19 @@ import { renderDetailPanel } from '../runtime/detailPanel'
 import { renderOnboardingOverlay } from '../runtime/overlays'
 
 
+
+// Workflow action ids that hit the network (fetch / pull / push) →
+// the loader copy shown over the history surface while they run. Any
+// id NOT in this map runs without the full-screen loader (local-only
+// mutations repaint fast enough that a loader would just flicker).
+const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
+  'fetch-remotes': { kind: 'fetch', label: 'Fetching all remotes…' },
+  'pull-current-branch': { kind: 'pull', label: 'Pulling from origin…' },
+  'push-current-branch': { kind: 'push', label: 'Pushing to origin…' },
+  'fetch-selected-branch': { kind: 'fetch', label: 'Fetching branch from remote…' },
+  'pull-selected-branch': { kind: 'pull', label: 'Pulling branch from remote…' },
+  'push-selected-branch': { kind: 'push', label: 'Pushing branch to remote…' },
+}
 
 function predictNextFilter(
   action: Parameters<typeof applyLogInkAction>[1],
@@ -728,6 +742,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.splitPlan?.status === 'applying' ||
     state.changelogView.status === 'loading' ||
     state.commitCompose.loading ||
+    Boolean(state.remoteOp) ||
     Boolean(state.statusLoading)
   React.useEffect(() => {
     if (!anyLoading) {
@@ -3649,6 +3664,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({ type: 'setStatus', value: `Workflow action ${id} not yet wired`, kind: 'warning' })
       return
     }
+    // Remote network ops (fetch / pull / push) get a full-screen
+    // history loader while in flight so the commit list doesn't sit
+    // frozen and then abruptly repaint when the call returns. Cleared
+    // in `finally` *after* the post-op refresh below so the loader
+    // hands straight off to the freshly-fetched rows instead of
+    // flashing the stale list for a frame in between.
+    const remoteOp = REMOTE_OP_LOADERS[id]
+    if (remoteOp) {
+      dispatch({ type: 'setRemoteOp', value: remoteOp })
+    }
+    try {
     const result = await handler()
     dispatch({ type: 'setStatus', value: result?.message || 'Workflow action complete' })
     // Refresh history rows AS WELL when the workflow could have
@@ -3720,6 +3746,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // capture the pre-refresh value. Status message stays generic
       // ("Dropped stash@{N}") — the visible list shrinking is the
       // unambiguous signal that the operation landed.
+    }
+    } finally {
+      // Always clear the loader — even if a refresh threw — so a
+      // failed fetch/pull can't leave the history surface stuck behind
+      // the spinner.
+      if (remoteOp) {
+        dispatch({ type: 'setRemoteOp', value: undefined })
+      }
     }
   }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
     state.branchSort, state.filter, state.selectedBranchIndex,
