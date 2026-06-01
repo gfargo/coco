@@ -195,4 +195,53 @@ describe('resolveWorkspaceInput', () => {
     expect(resolveWorkspaceInput('', key({ tab: true }), addRepoState()).kind).toBe('noop')
     expect(resolveWorkspaceInput('a', key(), addRepoState()).kind).toBe('noop')
   })
+
+  describe('theme picker', () => {
+    function pickerState(overrides: Partial<WorkspaceState> = {}): WorkspaceState {
+      return {
+        ...createWorkspaceState({ overview: emptyOverview, roots: ['~/code'] }),
+        showThemePicker: true,
+        ...overrides,
+      }
+    }
+
+    it('opens the picker on T', () => {
+      expect(resolveWorkspaceInput('T', key(), listState())).toEqual({
+        kind: 'action',
+        action: { type: 'toggle-theme-picker' },
+      })
+    })
+
+    it('is modal: arrows move, printable filters, backspace edits', () => {
+      expect(resolveWorkspaceInput('', key({ downArrow: true }), pickerState()).kind).toBe('action')
+      expect(resolveWorkspaceInput('', key({ upArrow: true }), pickerState())).toMatchObject({
+        action: { type: 'move-theme-picker', delta: -1 },
+      })
+      expect(resolveWorkspaceInput('g', key(), pickerState())).toEqual({
+        kind: 'action',
+        action: { type: 'append-theme-picker-filter', value: 'g' },
+      })
+      expect(resolveWorkspaceInput('', key({ backspace: true }), pickerState({ themePickerFilter: 'gr' }))).toEqual({
+        kind: 'action',
+        action: { type: 'backspace-theme-picker-filter' },
+      })
+    })
+
+    it('Enter applies the cursored preset', () => {
+      // Filtering to "gruvbox" puts it at index 0 (best match).
+      const intent = resolveWorkspaceInput('', key({ return: true }), pickerState({ themePickerFilter: 'gruvbox' }))
+      expect(intent).toEqual({ kind: 'apply-theme', preset: 'gruvbox' })
+    })
+
+    it('Esc clears a non-empty filter first, then closes', () => {
+      expect(resolveWorkspaceInput('', key({ escape: true }), pickerState({ themePickerFilter: 'x' }))).toEqual({
+        kind: 'action',
+        action: { type: 'clear-theme-picker-filter' },
+      })
+      expect(resolveWorkspaceInput('', key({ escape: true }), pickerState())).toEqual({
+        kind: 'action',
+        action: { type: 'toggle-theme-picker' },
+      })
+    })
+  })
 })

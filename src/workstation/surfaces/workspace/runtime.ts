@@ -55,7 +55,10 @@ import {
   createLogInkTheme,
   type LogInkTheme,
   type LogInkThemeConfig,
+  type LogInkThemePreset,
 } from '../../chrome/theme'
+import { saveThemePreset } from '../../chrome/themePersistence'
+import { getThemePickerSelectionFor } from '../../../commands/log/inkViewModel'
 import {
   readCachedWorkspace,
   writeCachedWorkspace,
@@ -269,6 +272,7 @@ export async function startWorkspace(
     ink,
     React,
     theme,
+    themeConfig: options.theme,
     resumeRef,
   })
 
@@ -437,6 +441,9 @@ type WorkspaceInkAppProps = {
   ink: WorkspaceInkRuntime['ink']
   React: typeof ReactTypes
   theme: LogInkTheme
+  /** Theme config the built `theme` came from — lets the picker rebuild a
+   *  live preview preserving ascii/border/noColor semantics. */
+  themeConfig?: LogInkThemeConfig
   resumeRef: { current: (() => void) | null }
 }
 
@@ -470,6 +477,22 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   // (see effect below) so idle workspaces don't burn CPU on animation
   // frames.
   const [spinnerTick, setSpinnerTick] = React.useState(0)
+
+  // Theme picker (`T`) — reactive theme so the chrome live-previews the
+  // cursored theme. `themePreviewPreset` follows the picker cursor while
+  // open; `themeSessionPreset` is the applied choice. The effective theme
+  // rebuilds from the original config; when neither is set we use the
+  // static `props.theme` unchanged (mirrors `coco ui`).
+  const [themePreviewPreset, setThemePreviewPreset] = React.useState<LogInkThemePreset | undefined>(undefined)
+  const [themeSessionPreset, setThemeSessionPreset] = React.useState<LogInkThemePreset | undefined>(undefined)
+  const effectiveThemePreset = themePreviewPreset ?? themeSessionPreset
+  const theme = React.useMemo(
+    () =>
+      effectiveThemePreset
+        ? createLogInkTheme({ ...props.themeConfig, preset: effectiveThemePreset })
+        : props.theme,
+    [effectiveThemePreset, props.themeConfig, props.theme]
+  )
 
   const dispatch = React.useCallback((action: WorkspaceAction) => {
     setState((prev) => applyWorkspaceAction(prev, action))
@@ -848,6 +871,13 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       case 'action':
         dispatch(intent.action)
         break
+      case 'apply-theme':
+        // Apply for the session + persist to the global config (best-effort),
+        // then close the picker (clearing the preview via the sync effect).
+        setThemeSessionPreset(intent.preset as LogInkThemePreset)
+        saveThemePreset(intent.preset as LogInkThemePreset)
+        dispatch({ type: 'toggle-theme-picker' })
+        break
       case 'quit':
         workspaceDebug('→ exit() called from quit intent')
         exitRefHolder.current.current = { kind: 'quit' }
@@ -904,11 +934,21 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     })
   }, [props.roots, state.sortMode, state.tab, state.filter])
 
+  // Keep the live preview in sync with the preset under the picker cursor
+  // while the overlay is open; clear it on close so the theme reverts to
+  // the applied session preset (or the original config theme).
+  const themePickerSelection = state.showThemePicker
+    ? getThemePickerSelectionFor(state.themePickerFilter, state.themePickerIndex)
+    : undefined
+  React.useEffect(() => {
+    setThemePreviewPreset(state.showThemePicker ? themePickerSelection : undefined)
+  }, [state.showThemePicker, themePickerSelection])
+
   return renderWorkspaceApp({
     React,
     ink: { Box: ink.Box, Text: ink.Text },
     state,
-    theme: props.theme,
+    theme,
     appLabel: props.appLabel,
     filterDraft,
     addRepoDraft,

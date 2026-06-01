@@ -685,6 +685,7 @@ export function buildWorkspaceHelpSections(): WorkspaceHelpSection[] {
         { glyph: '⎋', keys: 'esc', description: 'Clear filter / close overlay / cancel prompt' },
         { glyph: '◴', keys: 'q · ctrl+c', description: 'Quit the workspace surface' },
         { glyph: '↵', keys: 'enter', description: 'Drill into the cursored repo (coco ui)' },
+        { glyph: '◧', keys: 'T', description: 'Theme picker — browse, live-preview & apply a color theme' },
       ],
     },
     {

@@ -296,4 +296,32 @@ describe('workspace state reducer', () => {
     const t = applyWorkspaceAction(s, { type: 'mark-pull-request-fetched', path: '/tmp/zzz' })
     expect(t.pullRequestFetching).toEqual(['/tmp/alpha'])
   })
+
+  describe('theme picker', () => {
+    const base = createWorkspaceState({ overview: overview([]), roots: ['~/code'] })
+
+    it('toggles open/closed and closes help/onboarding', () => {
+      let s = applyWorkspaceAction({ ...base, showHelp: true, showOnboarding: true }, { type: 'toggle-theme-picker' })
+      expect(s.showThemePicker).toBe(true)
+      expect(s.showHelp).toBe(false)
+      expect(s.showOnboarding).toBe(false)
+      s = applyWorkspaceAction(s, { type: 'toggle-theme-picker' })
+      expect(s.showThemePicker).toBe(false)
+    })
+
+    it('moves the cursor clamped to the preset count and resets it on filter edits', () => {
+      let s = applyWorkspaceAction(base, { type: 'toggle-theme-picker' })
+      s = applyWorkspaceAction(s, { type: 'move-theme-picker', delta: -1, presetCount: 50 })
+      expect(s.themePickerIndex).toBe(0)
+      s = applyWorkspaceAction(s, { type: 'move-theme-picker', delta: 999, presetCount: 50 })
+      expect(s.themePickerIndex).toBe(49)
+      s = applyWorkspaceAction(s, { type: 'append-theme-picker-filter', value: 'gr' })
+      expect(s.themePickerFilter).toBe('gr')
+      expect(s.themePickerIndex).toBe(0)
+      s = applyWorkspaceAction(s, { type: 'backspace-theme-picker-filter' })
+      expect(s.themePickerFilter).toBe('g')
+      s = applyWorkspaceAction(s, { type: 'clear-theme-picker-filter' })
+      expect(s.themePickerFilter).toBe('')
+    })
+  })
 })

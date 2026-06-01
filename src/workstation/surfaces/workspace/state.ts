@@ -77,6 +77,14 @@ export type WorkspaceState = {
   /** First-run onboarding overlay toggle. Self-dismisses on first user action. */
   showOnboarding: boolean
   /**
+   * Theme picker (`gC`) overlay state — mirrors `coco ui`. While open the
+   * workspace chrome live-previews the cursored theme; Enter persists it to
+   * the global config so every surface (and the next launch) picks it up.
+   */
+  showThemePicker: boolean
+  themePickerFilter: string
+  themePickerIndex: number
+  /**
    * Paths added through the add-repo prompt. Only entries in this set
    * can be removed via the delete affordance — repos discovered via
    * configured roots would just come back on the next refresh.
@@ -118,6 +126,11 @@ export type WorkspaceAction =
   | { type: 'set-status'; status?: string }
   | { type: 'toggle-help' }
   | { type: 'close-help' }
+  | { type: 'toggle-theme-picker' }
+  | { type: 'move-theme-picker'; delta: number; presetCount: number }
+  | { type: 'append-theme-picker-filter'; value: string }
+  | { type: 'backspace-theme-picker-filter' }
+  | { type: 'clear-theme-picker-filter' }
   | { type: 'dismiss-onboarding' }
   | { type: 'replace-known-repos'; paths: ReadonlyArray<string> }
   | { type: 'request-delete'; path: string }
@@ -158,6 +171,9 @@ export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
     roots: init.roots,
     showHelp: false,
     showOnboarding: Boolean(init.showOnboarding),
+    showThemePicker: false,
+    themePickerFilter: '',
+    themePickerIndex: 0,
     knownRepoPaths: init.knownRepoPaths ?? [],
     pullRequestFetching: [],
   }
@@ -335,6 +351,39 @@ export function applyWorkspaceAction(
     }
     case 'close-help': {
       return { ...state, showHelp: false }
+    }
+    case 'toggle-theme-picker': {
+      return {
+        ...state,
+        showThemePicker: !state.showThemePicker,
+        showHelp: false,
+        showOnboarding: false,
+        themePickerFilter: '',
+        themePickerIndex: 0,
+      }
+    }
+    case 'move-theme-picker': {
+      return {
+        ...state,
+        themePickerIndex: clampCursor(state.themePickerIndex + action.delta, action.presetCount),
+      }
+    }
+    case 'append-theme-picker-filter': {
+      return {
+        ...state,
+        themePickerFilter: `${state.themePickerFilter}${action.value}`,
+        themePickerIndex: 0,
+      }
+    }
+    case 'backspace-theme-picker-filter': {
+      return {
+        ...state,
+        themePickerFilter: state.themePickerFilter.slice(0, -1),
+        themePickerIndex: 0,
+      }
+    }
+    case 'clear-theme-picker-filter': {
+      return { ...state, themePickerFilter: '', themePickerIndex: 0 }
     }
     case 'dismiss-onboarding': {
       return { ...state, showOnboarding: false }

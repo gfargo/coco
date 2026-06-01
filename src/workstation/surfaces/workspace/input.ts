@@ -1,5 +1,6 @@
 import type { Key as InkKey } from 'ink'
 
+import { filterThemePresets, getThemePickerSelectionFor } from '../../../commands/log/inkViewModel'
 import type { WorkspaceAction, WorkspaceState } from './state'
 
 /**
@@ -24,6 +25,7 @@ export type WorkspaceInputIntent =
   | { kind: 'add-repo' }
   | { kind: 'request-delete' }
   | { kind: 'confirm-delete' }
+  | { kind: 'apply-theme'; preset: string }
   | { kind: 'noop' }
 
 /**
@@ -63,6 +65,38 @@ export function resolveWorkspaceInput(
   if (state.showHelp) {
     if (key.escape || input === '?' || input === 'q') {
       return { kind: 'action', action: { type: 'close-help' } }
+    }
+    return { kind: 'noop' }
+  }
+
+  // Theme picker is modal (like `coco ui`'s gC): type to filter, ↑/↓ to
+  // move, Enter applies + persists, Esc clears the filter then closes.
+  if (state.showThemePicker) {
+    const filtered = filterThemePresets(state.themePickerFilter)
+    if (key.escape) {
+      if (state.themePickerFilter.length > 0) {
+        return { kind: 'action', action: { type: 'clear-theme-picker-filter' } }
+      }
+      return { kind: 'action', action: { type: 'toggle-theme-picker' } }
+    }
+    if (key.return) {
+      const selected = getThemePickerSelectionFor(state.themePickerFilter, state.themePickerIndex)
+      if (!selected) {
+        return { kind: 'action', action: { type: 'toggle-theme-picker' } }
+      }
+      return { kind: 'apply-theme', preset: selected }
+    }
+    if (key.upArrow || (key.ctrl && input === 'p')) {
+      return { kind: 'action', action: { type: 'move-theme-picker', delta: -1, presetCount: filtered.length } }
+    }
+    if (key.downArrow || (key.ctrl && input === 'n')) {
+      return { kind: 'action', action: { type: 'move-theme-picker', delta: 1, presetCount: filtered.length } }
+    }
+    if (key.backspace || key.delete) {
+      return { kind: 'action', action: { type: 'backspace-theme-picker-filter' } }
+    }
+    if (input && !key.ctrl && !key.meta) {
+      return { kind: 'action', action: { type: 'append-theme-picker-filter', value: input } }
     }
     return { kind: 'noop' }
   }
@@ -191,6 +225,13 @@ export function resolveWorkspaceInput(
   }
   if (input === '?') {
     return { kind: 'action', action: { type: 'toggle-help' } }
+  }
+
+  // `T` opens the theme picker (browse + live-preview + apply a color
+  // theme). Single key here rather than `coco ui`'s gC chord since the
+  // workspace keymap is flat (no g-prefix continuations).
+  if (input === 'T') {
+    return { kind: 'action', action: { type: 'toggle-theme-picker' } }
   }
 
   return { kind: 'noop' }

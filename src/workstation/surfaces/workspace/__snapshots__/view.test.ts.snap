@@ -6862,7 +6862,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
         <Text
           dimColor={true}
         >
-          15 bindings
+          16 bindings
         </Text>
       </Box>
       <Text
@@ -6999,6 +6999,35 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
       </Box>
       <Text>
         Drill into the cursored repo (coco ui)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ◧ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          T
+        </Text>
+      </Box>
+      <Text>
+        Theme picker — browse, live-preview & apply a color theme
       </Text>
     </Box>
     <Text />
