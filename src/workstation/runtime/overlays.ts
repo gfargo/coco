@@ -20,6 +20,7 @@ import type * as ReactTypes from 'react'
 import { pickSpinnerFrame } from '../chrome/spinner'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
+import { THEME_PRESET_COLORS } from '../chrome/theme'
 import {
     filterLogInkPaletteCommands,
     formatBindingKeys,
@@ -28,6 +29,7 @@ import {
     getLogInkPaletteCommands,
 } from '../../commands/log/inkKeymap'
 import type { LogInkState } from '../../commands/log/inkViewModel'
+import { filterThemePresets } from '../../commands/log/inkViewModel'
 import { getLogInkWorkflowActionById } from '../../commands/log/inkWorkflows'
 import type { LogInkComponents } from './types'
 import { focusBorderColor, panelTitle } from './utils'
@@ -397,6 +399,84 @@ export function renderCommandPalette(
   ...itemLines,
   ...(paletteHasMoreBelow
     ? [h(Text, { key: 'palette-more-below', dimColor: true }, `  ↓ ${filtered.length - (startIndex + listRows)} more below`)]
+    : []))
+}
+
+/**
+ * Theme picker overlay (`gC`). Renders in the detail column like the
+ * command palette so the rest of the workstation live-previews the
+ * cursored theme underneath. Type to filter, ↑/↓ to move, Enter applies
+ * (and persists), Esc cancels (reverting the preview).
+ */
+export function renderThemePickerOverlay(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const filtered = filterThemePresets(state.themePickerFilter)
+
+  const selectedIndex = filtered.length === 0
+    ? 0
+    : Math.max(0, Math.min(state.themePickerIndex, filtered.length - 1))
+
+  const listRows = 14
+  const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
+  const visible = filtered.slice(startIndex, startIndex + listRows)
+
+  const inputLine = `> ${state.themePickerFilter}_`
+  const matchSummary = filtered.length === 0
+    ? 'no matches'
+    : `${filtered.length} ${filtered.length === 1 ? 'theme' : 'themes'}`
+  const hint = '↑/↓ select · type to filter · enter apply · esc close'
+
+  const itemLines = filtered.length === 0
+    ? [h(Text, { key: 'theme-empty', dimColor: true }, 'No themes match the current filter.')]
+    : visible.map((preset, offset) => {
+      const index = startIndex + offset
+      const isSelected = index === selectedIndex
+      const cursor = isSelected ? '>' : ' '
+      // Accent swatch per theme (no swatch for the monochrome baseline or
+      // when color is off). `default` is the only ANSI-named accent.
+      const accent = preset === 'monochrome'
+        ? undefined
+        : THEME_PRESET_COLORS[preset]?.accent
+      const swatch = accent && !theme.noColor
+        ? h(Text, { key: `theme-swatch-${preset}`, color: accent }, '● ')
+        : h(Text, { key: `theme-swatch-${preset}`, dimColor: true }, '· ')
+      return h(Text, {
+        key: `theme-${preset}`,
+        bold: isSelected,
+        dimColor: !isSelected,
+      }, `${cursor} `, swatch, truncateCells(preset, width - 8))
+    })
+
+  const hasMoreAbove = startIndex > 0 && filtered.length > 0
+  const hasMoreBelow = startIndex + listRows < filtered.length
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Theme picker', focused)),
+    h(Text, { dimColor: true }, matchSummary)
+  ),
+  h(Text, { color: theme.colors.accent }, truncateCells(inputLine, width - 4)),
+  h(Text, { dimColor: true }, truncateCells(hint, width - 4)),
+  h(Text, undefined, ''),
+  ...(hasMoreAbove
+    ? [h(Text, { key: 'theme-more-above', dimColor: true }, `  ↑ ${startIndex} more above`)]
+    : []),
+  ...itemLines,
+  ...(hasMoreBelow
+    ? [h(Text, { key: 'theme-more-below', dimColor: true }, `  ↓ ${filtered.length - (startIndex + listRows)} more below`)]
     : []))
 }
 

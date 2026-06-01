@@ -8,6 +8,7 @@ import {
 export type LogInkCommandId =
   | 'clearSearch'
   | 'commandPalette'
+  | 'themePicker'
   | 'commit'
   | 'cycleSort'
   | 'editCommit'
@@ -534,6 +535,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['history'],
   },
   {
+    id: 'themePicker',
+    keys: ['gC'],
+    label: 'theme picker',
+    description: 'Browse, live-preview, and apply a color theme.',
+    contexts: ['normal'],
+  },
+  {
     id: 'viewChangelog',
     keys: ['L'],
     label: 'changelog',
@@ -689,6 +697,7 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   //    them above everything else.
   help: 'essentials',
   commandPalette: 'essentials',
+  themePicker: 'view',
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',

@@ -1,5 +1,6 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from './data'
 import { hashesMatchAny } from '../../git/hashes'
+import { getLogInkThemePresets, type LogInkThemePreset } from '../../workstation/chrome/theme'
 import {
     CommitComposeAction,
     CommitComposeState,
@@ -287,6 +288,15 @@ export type LogInkState = {
   paletteFilter: string
   paletteSelectedIndex: number
   paletteRecent: string[]
+  /**
+   * Theme picker (`gC`) interaction state. `themePickerFilter` is the
+   * typed substring query; `themePickerIndex` is a cursor into the
+   * filtered preset list. While open, the workstation live-previews the
+   * cursored theme (wired in `app.ts`).
+   */
+  showThemePicker: boolean
+  themePickerFilter: string
+  themePickerIndex: number
   workflowActionId?: string
   pendingConfirmationId?: string
   /**
@@ -759,6 +769,11 @@ export type LogInkAction =
   | { type: 'toggleHelp' }
   | { type: 'scrollHelp'; delta: number }
   | { type: 'toggleCommandPalette' }
+  | { type: 'toggleThemePicker' }
+  | { type: 'moveThemePicker'; delta: number; presetCount: number }
+  | { type: 'appendThemePickerFilter'; value: string }
+  | { type: 'backspaceThemePickerFilter' }
+  | { type: 'clearThemePickerFilter' }
   | { type: 'cycleBranchSort' }
   | { type: 'cycleTagSort' }
   | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string; multiline?: boolean }
@@ -1259,6 +1274,9 @@ export function createLogInkState(
     paletteFilter: '',
     paletteSelectedIndex: 0,
     paletteRecent: [],
+    showThemePicker: false,
+    themePickerFilter: '',
+    themePickerIndex: 0,
     commitCompose: createCommitComposeState(),
     diffPreviewOffset: 0,
     worktreeDiffOffset: 0,
@@ -2072,6 +2090,49 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingKey: undefined,
       }
     }
+    case 'toggleThemePicker': {
+      const opening = !state.showThemePicker
+      return {
+        ...state,
+        showThemePicker: opening,
+        // Only one overlay at a time — close help / palette on open.
+        showHelp: false,
+        showCommandPalette: false,
+        themePickerFilter: '',
+        themePickerIndex: 0,
+        pendingKey: undefined,
+      }
+    }
+    case 'moveThemePicker':
+      return {
+        ...state,
+        themePickerIndex: clampIndex(
+          state.themePickerIndex + action.delta,
+          action.presetCount
+        ),
+        pendingKey: undefined,
+      }
+    case 'appendThemePickerFilter':
+      return {
+        ...state,
+        themePickerFilter: `${state.themePickerFilter}${action.value}`,
+        themePickerIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'backspaceThemePickerFilter':
+      return {
+        ...state,
+        themePickerFilter: state.themePickerFilter.slice(0, -1),
+        themePickerIndex: 0,
+        pendingKey: undefined,
+      }
+    case 'clearThemePickerFilter':
+      return {
+        ...state,
+        themePickerFilter: '',
+        themePickerIndex: 0,
+        pendingKey: undefined,
+      }
     case 'setChangelogLoading':
       return {
         ...state,
@@ -2354,4 +2415,32 @@ export function intentOpenComposeForFile(
   }
 
   return { type: 'navigateOpenComposeForFile', fileIndex: idx }
+}
+
+/**
+ * Filter the full preset list by a case-insensitive substring query. An
+ * empty query returns every preset in catalog order. Shared by the theme
+ * picker overlay renderer, the input handler (for cursor bounds), and the
+ * live-preview selector so all three agree on the same filtered list.
+ */
+export function filterThemePresets(filter: string): LogInkThemePreset[] {
+  const query = filter.trim().toLowerCase()
+  const all = getLogInkThemePresets()
+  if (!query) {
+    return all
+  }
+  return all.filter((preset) => preset.toLowerCase().includes(query))
+}
+
+/**
+ * The preset currently under the theme-picker cursor (clamped to the
+ * filtered list). `undefined` when the filter matches nothing.
+ */
+export function getThemePickerSelection(state: LogInkState): LogInkThemePreset | undefined {
+  const filtered = filterThemePresets(state.themePickerFilter)
+  if (filtered.length === 0) {
+    return undefined
+  }
+  const index = clampIndex(state.themePickerIndex, filtered.length)
+  return filtered[index]
 }

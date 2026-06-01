@@ -91,6 +91,8 @@ import {
     getLogInkInputEvents,
 } from '../../commands/log/inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
+import { createLogInkTheme, type LogInkThemePreset } from '../chrome/theme'
+import { saveThemePreset } from '../chrome/themePersistence'
 import { formatSplitApplySuccess } from '../chrome/postApplyHints'
 import { SPINNER_TICK_MS } from '../chrome/spinner'
 import { createInitialContextStatus, createRepoFrameRuntime } from './repoFrameFactory'
@@ -129,6 +131,7 @@ import {
     applyLogInkAction,
     createLogInkState,
     getSelectedInkCommit,
+    getThemePickerSelection,
 } from '../../commands/log/inkViewModel'
 import { getGitOperationOverview } from '../../git/operationData'
 import { openProviderUrl } from '../../git/providerActions'
@@ -463,9 +466,26 @@ function enrichFilterActionWithRectification(
 }
 
 export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, theme } = deps
+  const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, theme: baseTheme, themeConfig } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
+
+  // Theme picker (gC) — live preview + apply. `themePreviewPreset` follows
+  // the picker cursor while the overlay is open; `themeSessionPreset` is the
+  // applied choice that survives close. The effective theme is rebuilt from
+  // the original `themeConfig` so ascii/border/noColor + truecolor-downgrade
+  // semantics are preserved; when neither override is set we use the static
+  // `baseTheme` unchanged (so behavior is identical until the picker is used).
+  const [themePreviewPreset, setThemePreviewPreset] = React.useState<LogInkThemePreset | undefined>(undefined)
+  const [themeSessionPreset, setThemeSessionPreset] = React.useState<LogInkThemePreset | undefined>(undefined)
+  const effectiveThemePreset = themePreviewPreset ?? themeSessionPreset
+  const theme = React.useMemo(
+    () =>
+      effectiveThemePreset
+        ? createLogInkTheme({ ...themeConfig, preset: effectiveThemePreset })
+        : baseTheme,
+    [effectiveThemePreset, themeConfig, baseTheme]
+  )
   const { exit } = useApp()
   const windowSize = useWindowSize()
   // Bumping this on SIGCONT forces the existing tree to repaint so users
@@ -496,6 +516,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       bootLoading: Boolean(loadRows),
     })
   )
+
+  // Theme picker live preview: keep `themePreviewPreset` in sync with the
+  // preset under the picker cursor while the overlay is open; clear it when
+  // the overlay closes so the theme reverts to the applied session preset
+  // (or the original config theme). The derived-theme `useMemo` above does
+  // the actual re-render from this state.
+  const themePickerSelection = state.showThemePicker
+    ? getThemePickerSelection(state)
+    : undefined
+  React.useEffect(() => {
+    setThemePreviewPreset(state.showThemePicker ? themePickerSelection : undefined)
+  }, [state.showThemePicker, themePickerSelection])
+
   // Nested-repo runtime stack (#931). Each frame holds the live
   // `SimpleGit`, the loaded `LogInkContext`, and the per-key load
   // status the chrome reads. The active (top-of-stack) entry drives
@@ -4466,6 +4499,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         openInEditor(event.path)
       } else if (event.type === 'yankFromActiveView') {
         void yankFromActiveView(event.short)
+      } else if (event.type === 'applyThemePreset') {
+        // Apply for the session immediately, and best-effort persist to the
+        // global config so it sticks across launches. The picker has already
+        // dispatched `toggleThemePicker` (closing it), which clears the
+        // preview via the sync effect below — the session preset takes over.
+        const preset = event.preset as LogInkThemePreset
+        setThemeSessionPreset(preset)
+        saveThemePreset(preset)
       } else {
         // P4.5: enrich filter-mutating actions with a precomputed
         // selection snapshot so the reducer can preserve the cursor on

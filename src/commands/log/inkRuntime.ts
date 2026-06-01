@@ -126,6 +126,7 @@ export async function startInkInteractiveLog(
     React,
     rows,
     theme: createLogInkTheme(options.theme),
+    themeConfig: options.theme,
     resumeRef,
   })
   const instance = ink.render(app, getLogInkRenderOptions({ input, output, error }))

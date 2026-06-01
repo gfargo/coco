@@ -35,7 +35,7 @@ import type { LogArgv } from '../../commands/log/config'
 import type { GitLogRow } from '../../commands/log/data'
 import type { LogInkView } from '../../commands/log/inkViewModel'
 import type { LogInkInputKey } from '../../commands/log/inkInput'
-import type { LogInkTheme } from '../chrome/theme'
+import type { LogInkTheme, LogInkThemeConfig } from '../chrome/theme'
 
 export type LogInkContext = {
   bisect?: BisectStatus
@@ -151,6 +151,14 @@ export type LogInkComponentDeps = LogInkRuntime & {
    */
   loadRows?: () => Promise<GitLogRow[]>
   theme: LogInkTheme
+  /**
+   * The original theme *config* (preset + ascii/borderStyle/colors) the
+   * built `theme` was derived from. The theme picker rebuilds the live
+   * theme from this (`createLogInkTheme({ ...themeConfig, preset })`) so a
+   * preview preserves ascii/border/noColor semantics. Optional — absent in
+   * older callers, in which case the picker just falls back to `theme`.
+   */
+  themeConfig?: LogInkThemeConfig
   /**
    * Mutable ref the runtime fills with a force-render callback. The
    * terminal-lifecycle module invokes it on `SIGCONT` so users land on a

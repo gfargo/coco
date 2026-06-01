@@ -739,6 +739,21 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
   },
 }
 
+/**
+ * Ordered list of every selectable theme preset, for the `coco ui` theme
+ * picker and any UI that enumerates themes. `monochrome` isn't a key in
+ * `THEME_PRESET_COLORS` (it's handled via `noColor`), so it's spliced in
+ * right after `default` — the two non-color baselines sit together at the
+ * top, followed by the color themes in catalog order.
+ */
+export function getLogInkThemePresets(): LogInkThemePreset[] {
+  const keys = Object.keys(THEME_PRESET_COLORS) as Exclude<LogInkThemePreset, 'monochrome'>[]
+  const [first, ...rest] = keys
+  return first === 'default'
+    ? ['default', 'monochrome', ...rest]
+    : ['monochrome', ...keys]
+}
+
 function shouldUseAscii(term: string | undefined): boolean {
   if (!term) {
     return false
