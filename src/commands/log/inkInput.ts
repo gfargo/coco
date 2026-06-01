@@ -14,6 +14,8 @@ import {
     LogInkCompareRef,
     LogInkSidebarTab,
     LogInkState,
+    filterThemePresets,
+    getThemePickerSelection,
     isLogInkNestedRepo,
     parseLogInkHistoryFetchPrefix,
 } from './inkViewModel'
@@ -65,6 +67,7 @@ export type LogInkInputEvent =
   | { type: 'openFileInEditor'; path: string }
   | { type: 'yankFromActiveView'; short?: boolean }
   | { type: 'yankText'; value: string; label: string }
+  | { type: 'applyThemePreset'; preset: string }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -667,6 +670,10 @@ export function getLogInkPaletteExecuteEvents(
     case 'commandPalette':
       // Re-toggling closes; the dispatcher will close after execute anyway.
       return []
+    case 'themePicker':
+      // Palette closes on execute (toggleCommandPalette runs first), then
+      // this opens the theme picker.
+      return [action({ type: 'toggleThemePicker' })]
     case 'workflowDeleteBranch':
     case 'workflowDeleteTag':
     case 'workflowDropStash':
@@ -1241,6 +1248,49 @@ export function getLogInkInputEvents(
     return []
   }
 
+  if (state.showThemePicker) {
+    const filtered = filterThemePresets(state.themePickerFilter)
+
+    if (key.escape) {
+      // Two-stage Esc: clear a non-empty filter first, then close (and
+      // revert the live preview to the previously-active theme).
+      if (state.themePickerFilter.length > 0) {
+        return [action({ type: 'clearThemePickerFilter' })]
+      }
+      return [action({ type: 'toggleThemePicker' })]
+    }
+
+    if (key.return) {
+      const selected = getThemePickerSelection(state)
+      if (!selected) {
+        return [action({ type: 'toggleThemePicker' })]
+      }
+      return [
+        action({ type: 'toggleThemePicker' }),
+        { type: 'applyThemePreset', preset: selected },
+      ]
+    }
+
+    if (key.upArrow || (key.ctrl && inputValue === 'p')) {
+      return [action({ type: 'moveThemePicker', delta: -1, presetCount: filtered.length })]
+    }
+    if (key.downArrow || (key.ctrl && inputValue === 'n')) {
+      return [action({ type: 'moveThemePicker', delta: 1, presetCount: filtered.length })]
+    }
+    if (key.backspace || key.delete) {
+      return [action({ type: 'backspaceThemePickerFilter' })]
+    }
+    if (key.ctrl && inputValue === 'u') {
+      return [action({ type: 'clearThemePickerFilter' })]
+    }
+    // All other printable input filters the list (so `j`/`k` type into the
+    // filter rather than navigating — matching the command palette).
+    if (inputValue && !key.ctrl && !key.meta) {
+      return [action({ type: 'appendThemePickerFilter', value: inputValue })]
+    }
+    return []
+  }
+
   if (state.showCommandPalette) {
     const filtered = filterLogInkPaletteCommands(
       getLogInkPaletteCommands(),
@@ -1547,6 +1597,14 @@ export function getLogInkInputEvents(
     return [
       action({ type: 'setPendingKey', value: undefined }),
       action({ type: 'setStatus', value: 'gT creates a tag at the cursored commit on the history view', kind: 'warning' }),
+    ]
+  }
+
+  // gC — open the theme picker (browse + live-preview + apply a color theme).
+  if (state.pendingKey === 'g' && inputValue === 'C') {
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      action({ type: 'toggleThemePicker' }),
     ]
   }
 

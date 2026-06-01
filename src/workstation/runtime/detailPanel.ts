@@ -41,6 +41,7 @@ import {
     renderConfirmationPanel,
     renderHelpPanel,
     renderInputPromptPanel,
+    renderThemePickerOverlay,
 } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
@@ -114,6 +115,10 @@ export function renderDetailPanel(
 
   if (state.showCommandPalette) {
     return renderCommandPalette(h, components, state, width, theme, focused)
+  }
+
+  if (state.showThemePicker) {
+    return renderThemePickerOverlay(h, components, state, width, theme, focused)
   }
 
   if (state.inputPrompt) {

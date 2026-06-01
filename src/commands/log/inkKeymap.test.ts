@@ -603,4 +603,28 @@ describe('log Ink keymap', () => {
       expect(binding!.keys).toContain('gx')
     })
   })
+
+  describe('theme picker binding (gC)', () => {
+    it('registers themePicker on the gC chord', () => {
+      const binding = LOG_INK_KEY_BINDINGS.find((b) => b.id === 'themePicker')
+      expect(binding).toBeDefined()
+      expect(binding!.keys).toContain('gC')
+    })
+
+    it('surfaces in the g-chord which-key continuations', () => {
+      const continuations = getLogInkChordContinuations('g')
+      expect(continuations.some((c) => c.key === 'C' && c.label === 'theme picker')).toBe(true)
+    })
+
+    it('is reachable from the command palette', () => {
+      const ids = getLogInkPaletteCommands().map((command) => command.id)
+      expect(ids).toContain('themePicker')
+    })
+
+    it('does not collide with any other binding', () => {
+      const withGc = LOG_INK_KEY_BINDINGS.filter((b) => b.keys.includes('gC'))
+      expect(withGc).toHaveLength(1)
+      expect(withGc[0].id).toBe('themePicker')
+    })
+  })
 })
