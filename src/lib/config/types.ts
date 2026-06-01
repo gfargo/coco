@@ -129,10 +129,13 @@ type BaseConfig = {
   workspace?: {
     /**
      * Directories to scan for git repositories. Each entry may use a
-     * `~` prefix; resolved against the user's home directory. Defaults
-     * to `['~/code']` when omitted.
+     * `~` prefix; resolved against the user's home directory. When
+     * omitted (and no `--root` flag is passed), the workspace scans the
+     * current working directory — so a bare `coco` / `coco ws` discovers
+     * repos wherever you launched it. Set this to pin a fixed tree (e.g.
+     * `["~/code"]`) regardless of where you run from.
      *
-     * @default ['~/code']
+     * (No static `@default` — the effective default is the runtime cwd.)
      */
     roots?: string[]
 

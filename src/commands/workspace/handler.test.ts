@@ -36,8 +36,18 @@ describe('workspace handler argv resolution', () => {
     ).toEqual(['~/work', '~/oss'])
   })
 
-  it('defaults to [~/code] when no config and no flag are present', () => {
-    expect(resolveWorkspaceRoots(argv(), {})).toEqual(['~/code'])
+  it('defaults to the current working directory when no config and no flag are present', () => {
+    // The third arg is the cwd (injected for determinism — the handler
+    // passes process.cwd() after honoring --repo/--cwd).
+    expect(resolveWorkspaceRoots(argv(), {}, '/Users/dev/projects')).toEqual(['/Users/dev/projects'])
+    // Defaults to process.cwd() when the cwd arg is omitted.
+    expect(resolveWorkspaceRoots(argv(), {})).toEqual([process.cwd()])
+  })
+
+  it('still prefers config.workspace.roots over the cwd fallback', () => {
+    expect(
+      resolveWorkspaceRoots(argv(), { workspace: { roots: ['~/code'] } }, '/somewhere/else')
+    ).toEqual(['~/code'])
   })
 
   it('passes through known repos from config', () => {
