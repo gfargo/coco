@@ -176,6 +176,33 @@ describe('renderHistoryPanel', () => {
     expect(tree).toBeDefined()
   })
 
+  it('swaps the commit list for a loader while a remote op is in flight', () => {
+    // Collect every string rendered anywhere in the tree.
+    const collectText = (node: unknown, out: string[]): string[] => {
+      if (typeof node === 'string') {
+        out.push(node)
+      } else if (Array.isArray(node)) {
+        node.forEach((child) => collectText(child, out))
+      } else if (node && typeof node === 'object' && 'props' in node) {
+        collectText((node as { props: { children?: unknown } }).props.children, out)
+      }
+      return out
+    }
+
+    const loading = render(makeState({ remoteOp: { kind: 'fetch', label: 'Fetching all remotes…' } }))
+    const normal = render(makeState())
+
+    const loadingText = collectText(loading, []).join(' ')
+    const normalText = collectText(normal, []).join(' ')
+
+    // The loader surfaces its label and hint…
+    expect(loadingText).toContain('Fetching all remotes…')
+    expect(loadingText).toContain('history refreshes automatically')
+    // …and suppresses the actual commit rows that the normal view shows.
+    expect(normalText).toContain('add something')
+    expect(loadingText).not.toContain('add something')
+  })
+
   it('structural snapshot — default 3-commit history', () => {
     expect(render(makeState())).toMatchSnapshot()
   })

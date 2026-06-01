@@ -182,6 +182,19 @@ export type CreateLogInkStateOptions = {
   fullGraph?: boolean
 }
 
+/** Kind of remote network operation currently in flight. */
+export type RemoteOpKind = 'fetch' | 'pull' | 'push'
+
+/**
+ * Describes an in-flight remote operation so the history surface can
+ * render a full-screen loader while it runs. `label` is the human
+ * phrase shown under the spinner (e.g. "Fetching all remotes…").
+ */
+export type RemoteOpState = {
+  kind: RemoteOpKind
+  label: string
+}
+
 export type LogInkState = {
   /**
    * Top of `viewStack`. Maintained as a denormalized field so existing call
@@ -488,6 +501,16 @@ export type LogInkState = {
    */
   bootLoading: boolean
   /**
+   * In-flight remote operation (fetch / pull / push). When defined,
+   * the history surface swaps its commit list for a centered, animated
+   * loader so the user gets a clear "talking to origin…" beat instead
+   * of a frozen list that abruptly repaints once the network call
+   * returns. Set by the workflow dispatcher before the git call and
+   * cleared in a `finally` once the subsequent history/context refresh
+   * has landed — so the loader hands straight off to the fresh rows.
+   */
+  remoteOp?: RemoteOpState
+  /**
    * Split-plan overlay state (#907). When defined, the overlay is
    * open. Three phases:
    *   - 'loading'  : plan generation in flight, overlay shows a
@@ -714,6 +737,7 @@ export type LogInkAction =
   | { type: 'moveInspectorAction'; delta: number; actionCount: number }
   | { type: 'resetInspectorActionIndex' }
   | { type: 'setBootLoading'; value: boolean }
+  | { type: 'setRemoteOp'; value: RemoteOpState | undefined }
   | { type: 'moveTag'; delta: number; count: number }
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveReflog'; delta: number; count: number }
@@ -1572,6 +1596,11 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         bootLoading: action.value,
         pendingKey: undefined,
+      }
+    case 'setRemoteOp':
+      return {
+        ...state,
+        remoteOp: action.value,
       }
     case 'moveTag':
       return {

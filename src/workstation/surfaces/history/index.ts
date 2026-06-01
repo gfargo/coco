@@ -45,6 +45,7 @@ import type {
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 import { getRenderNow } from '../../chrome/snapshotMode'
+import { pickSpinnerFrame } from '../../chrome/spinner'
 
 /**
  * How the date column should render for a given density tier:
@@ -523,6 +524,65 @@ function renderPendingCommitRow(
   }, truncateCells(label, 140))
 }
 
+/**
+ * Full-panel loader shown over the history surface while a remote
+ * operation (fetch / pull / push) is in flight. Same bordered frame
+ * and `Commits` title row as the real panel so the swap in/out is
+ * seamless: a centered spinner + label + a travelling arrow track
+ * give the user an unmistakable "we're talking to the remote" beat in
+ * place of a frozen, soon-to-abruptly-repaint commit list.
+ */
+function renderRemoteOpLoader(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  bodyRows: number,
+  theme: LogInkTheme,
+  focused: boolean,
+  spinnerFrame: number
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const op = state.remoteOp
+  if (!op) {
+    return h(Box, { width })
+  }
+  const spinner = pickSpinnerFrame(spinnerFrame)
+  // Directional glyph hints which way the bits are flowing.
+  const glyph = op.kind === 'push' ? '↑' : op.kind === 'pull' ? '↓' : '↕'
+  // A single glyph "travels" along a dotted track each tick so the
+  // motion reads even on terminals that render braille spinners poorly.
+  const trackWidth = 9
+  const pos = Math.max(0, spinnerFrame) % trackWidth
+  const track = Array.from({ length: trackWidth }, (_, i) => (i === pos ? glyph : '·')).join(' ')
+  const accent = theme.noColor ? undefined : theme.colors.accent
+  const innerHeight = Math.max(3, bodyRows - 2)
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    flexShrink: 0,
+    paddingX: 1,
+    width,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Commits', focused)),
+    h(Text, { dimColor: true }, `${op.kind} in progress`)
+  ),
+  h(Box, {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: innerHeight,
+  },
+    h(Text, { color: accent, bold: true }, `${spinner}  ${op.label}`),
+    h(Text, undefined, ''),
+    h(Text, { color: accent }, track),
+    h(Text, undefined, ''),
+    h(Text, { dimColor: true }, 'Talking to the remote — history refreshes automatically.')))
+}
+
 export function renderHistoryPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -536,10 +596,20 @@ export function renderHistoryPanel(
   density: LogInkLayoutDensity,
   rowMode: 'single' | 'stacked',
   dateBucketingEnabled: boolean = false,
-  now: Date = getRenderNow()
+  now: Date = getRenderNow(),
+  spinnerFrame: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'commits'
+
+  // Remote op in flight (fetch / pull / push) → swap the commit list
+  // for a centered, animated loader. Keeping the same bordered panel
+  // (same width, same title row) means that when the op completes and
+  // `remoteOp` clears, the fresh rows paint in place without the panel
+  // jumping — smoothing over the "frozen list → sudden repaint" feel.
+  if (state.remoteOp) {
+    return renderRemoteOpLoader(h, components, state, width, bodyRows, theme, focused, spinnerFrame)
+  }
   const worktree = context.worktree
   // Distinct remote names seen across the repo's remote-tracking
   // branches — `['origin']` for a typical fork, `['origin', 'upstream']`

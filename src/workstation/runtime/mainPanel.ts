@@ -172,6 +172,8 @@ export function renderMainPanel(
     loadingMoreCommits,
     density,
     rowMode,
-    dateBucketingEnabled
+    dateBucketingEnabled,
+    undefined,
+    spinnerFrame
   )
 }
