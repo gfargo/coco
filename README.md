@@ -37,7 +37,7 @@ coco init
 
 # Generate your first commit
 git add .
-coco -i
+coco commit -i
 ```
 
 ## Commands
@@ -50,6 +50,8 @@ coco -i
 - **`coco ui`** - Open the full-screen Git workstation TUI
 - **`coco init`** - Interactive setup wizard
 
+> **Smart default (0.57.0+):** running `coco` with **no subcommand** routes by environment — `coco ui` inside a git repo, `coco workspace` outside one, or `coco init` on a fresh install. It no longer defaults to `commit`; use `coco commit` for messages (or `--commit` / `COCO_DEFAULT=commit` to restore the old default).
+
 ## Usage Examples
 
 ### Basic Workflow
@@ -59,23 +61,23 @@ coco -i
 git add .
 
 # Generate commit message (interactive mode recommended)
-coco -i
+coco commit -i
 
 # Or use stdout mode
-git commit -m "$(coco)"
+git commit -m "$(coco commit)"
 ```
 
 ### Conventional Commits
 
 ```bash
 # Enable conventional commits format
-coco --conventional
+coco commit --conventional
 
 # With additional context
-coco -a "Fixes login timeout" --conventional
+coco commit -a "Fixes login timeout" --conventional
 
 # Include ticket from branch name
-coco --append-ticket --conventional
+coco commit --append-ticket --conventional
 ```
 
 ### Team Workflows
