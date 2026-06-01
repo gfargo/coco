@@ -107,9 +107,12 @@ function renderInspectorActionsSection(
   const KEY_COLUMN = 5
   const GAP = '  '
   const DESTRUCTIVE_SUFFIX = '  [!]'
+  // Leading `❯ ` / `  ` active-row caret gutter — unified with the history /
+  // status / diff active-row cue (and the only signal under NO_COLOR).
+  const CARET_GUTTER = 2
   const labelBudget = Math.max(
     4,
-    width - 4 /* border + padX */ - KEY_COLUMN - GAP.length - DESTRUCTIVE_SUFFIX.length
+    width - 4 /* border + padX */ - CARET_GUTTER - KEY_COLUMN - GAP.length - DESTRUCTIVE_SUFFIX.length
   )
 
   const cursorIndex = options.cursorIndex ?? 0
@@ -128,6 +131,10 @@ function renderInspectorActionsSection(
       const keyCell = action.key.padEnd(KEY_COLUMN)
       const label = truncateCells(action.label, labelBudget)
       const children: Array<string | ReactTypes.ReactElement> = [
+        h(Text, {
+          key: `actions-${index}-caret`,
+          bold: isSelected,
+        }, isSelected ? (theme.ascii ? '> ' : '❯ ') : '  '),
         h(Text, {
           key: `actions-${index}-key`,
           color: selectedFg ?? (action.destructive ? theme.colors.danger : theme.colors.accent),
@@ -222,7 +229,7 @@ function renderCommitFileList(
   return visible.map((file, offset) => {
     const index = startIndex + offset
     const isSelected = index === clamped
-    const cursor = isSelected ? '>' : ' '
+    const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
     const stats = formatChangedFileStats(file)
     const renamed = file.oldPath ? ` (was ${file.oldPath})` : ''
     const statusCode = file.status.padEnd(3)

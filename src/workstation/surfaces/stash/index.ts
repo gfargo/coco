@@ -57,7 +57,7 @@ export function renderStashSurface(
       : visible.map((stash, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
+        const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
         return h(Text, {
           key: `stash-${index}`,
           bold: isSelected,
