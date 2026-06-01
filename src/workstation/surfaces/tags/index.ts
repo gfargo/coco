@@ -69,7 +69,7 @@ export function renderTagsSurface(
       : visible.map((tag, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
-        const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
+        const cursor = isSelected ? '>' : ' '
         // P5.1 — link the tag name to its GitHub tree page when we know
         // the remote. Truncation runs on the visible (pre-OSC) text;
         // formatHyperlink wraps just the tag name, leaving width math

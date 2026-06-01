@@ -139,10 +139,7 @@ export function renderStatusSurface(
         }, truncateCells(text, 140))
       }
       const isSelected = !headerFocused && row.flatIndex === selectedIndex
-      // `❯` (ascii `>`) active-row caret — unified with the history view so
-      // the selected row reads the same way across surfaces (and survives
-      // NO_COLOR, where the selection background is suppressed).
-      const cursorPart = `${isSelected ? (theme.ascii ? '>' : '❯') : ' '} `
+      const cursorPart = `${isSelected ? '>' : ' '} `
       const dotColor = getStageStatusDotColor(row.file.state, theme)
       const useDot = dotColor !== undefined
       const dotCells = useDot ? cellWidth(STAGE_STATUS_DOT) + 1 : 0

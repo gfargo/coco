@@ -67,7 +67,7 @@ export function renderWorktreesSurface(
       : visible.map((entry, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
-        const cursor = isSelected ? (theme.ascii ? '>' : '❯') : ' '
+        const cursor = isSelected ? '>' : ' '
         const marker = entry.current ? '*' : ' '
         const branchLabel = entry.branch ? entry.branch : entry.head || '<detached>'
         const stateLabel = entry.dirty ? 'dirty' : 'clean'
