@@ -3771,6 +3771,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       'checkout-branch',
       'continue-operation',
       'pull-current-branch',
+      // Fetch / pull / push bring in new commits and move
+      // remote-tracking refs (origin/main, ahead/behind) — refresh the
+      // graph so they appear instead of staying pinned to the pre-sync
+      // state. (A successful push advances the local origin/<branch>
+      // ref, so the chip should hop to the pushed commit.)
+      'fetch-remotes',
+      'fetch-selected-branch',
+      'pull-selected-branch',
+      'push-current-branch',
+      'push-selected-branch',
       'cherry-pick-commit',
       'revert-commit',
       'reset-hard-to-commit',
@@ -4579,7 +4589,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       if (event.type === 'exit') {
         exit()
       } else if (event.type === 'refreshContext') {
+        // The user-initiated refresh (`r`) refreshes BOTH the metadata
+        // context (branches/tags/worktree) AND the commit rows. Without
+        // the row re-fetch the history graph stays pinned to whatever
+        // commits existed at boot — new commits (made in another
+        // terminal, or remote commits brought in by a fetch) never
+        // appear until relaunch, which reads as "the history is stuck."
         void refreshContext()
+        void refreshHistoryRows()
       } else if (event.type === 'toggleSelectedFileStage') {
         void toggleSelectedFileStage()
       } else if (event.type === 'toggleSelectedHunkStage') {
