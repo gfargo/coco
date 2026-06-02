@@ -9,6 +9,8 @@ export type LogInkCommandId =
   | 'clearSearch'
   | 'commandPalette'
   | 'themePicker'
+  | 'openProjectConfig'
+  | 'openGlobalConfig'
   | 'commit'
   | 'cycleSort'
   | 'editCommit'
@@ -542,6 +544,20 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'openProjectConfig',
+    keys: ['gk'],
+    label: 'project config',
+    description: 'Open this repo’s .coco.json in $EDITOR (creates a starter file if missing).',
+    contexts: ['normal'],
+  },
+  {
+    id: 'openGlobalConfig',
+    keys: ['gK'],
+    label: 'global config',
+    description: 'Open ~/.config/coco/config.json in $EDITOR (creates a starter file if missing).',
+    contexts: ['normal'],
+  },
+  {
     id: 'viewChangelog',
     keys: ['L'],
     label: 'changelog',
@@ -698,6 +714,8 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   help: 'essentials',
   commandPalette: 'essentials',
   themePicker: 'view',
+  openProjectConfig: 'view',
+  openGlobalConfig: 'view',
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',
