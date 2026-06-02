@@ -150,6 +150,7 @@ import {
     renameBranch,
     setUpstream,
 } from '../../git/branchActions'
+import { addToGitignore } from '../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
 import {
     ClipboardRunner,
@@ -3375,6 +3376,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!branch) return { ok: false, message: 'No branch selected' }
         return pushBranch(git, branch)
       },
+      'add-to-gitignore': async () => addToGitignore(git, payload || ''),
       'rename-branch': async () => {
         const newName = payload?.trim()
         if (!newName) return { ok: false, message: 'New branch name required' }
@@ -3735,6 +3737,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // unambiguous feedback that the drop landed and the list shrank.
     if (result?.ok && (id === 'apply-stash' || id === 'pop-stash')) {
       dispatch({ type: 'pushView', value: 'history' })
+      await refreshWorktreeContext()
+    }
+    // Refresh the worktree so a now-ignored untracked file drops out of
+    // the status list immediately (the silent context refresh above
+    // doesn't always re-read the worktree file set).
+    if (result?.ok && id === 'add-to-gitignore') {
       await refreshWorktreeContext()
     }
     if (result?.ok && id === 'drop-stash') {
@@ -4533,6 +4541,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         openInEditor(event.path)
       } else if (event.type === 'yankFromActiveView') {
         void yankFromActiveView(event.short)
+      } else if (event.type === 'openGitignorePicker') {
+        // Resolve the cursored worktree file here (the runtime owns the
+        // selection→file mapping) and open the picker over its path.
+        if (selectedWorktreeFile?.path) {
+          dispatch({ type: 'openGitignorePicker', file: selectedWorktreeFile.path })
+        } else {
+          dispatch({ type: 'setStatus', value: 'No file under the cursor to ignore.', kind: 'warning' })
+        }
       } else if (event.type === 'applyThemePreset') {
         // Apply for the session immediately, and best-effort persist to the
         // global config so it sticks across launches. The picker has already

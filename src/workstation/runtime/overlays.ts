@@ -17,6 +17,7 @@
  */
 
 import type * as ReactTypes from 'react'
+import { deriveGitignoreOptions } from '../chrome/gitignore'
 import { pickSpinnerFrame } from '../chrome/spinner'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
@@ -480,6 +481,56 @@ export function renderThemePickerOverlay(
   ...(hasMoreBelow
     ? [h(Text, { key: 'theme-more-below', dimColor: true }, `  ↓ ${filtered.length - (startIndex + listRows)} more below`)]
     : []))
+}
+
+/**
+ * "Add to .gitignore" quick-pick overlay (`i` on the status view).
+ * Modeled on the theme picker but with a fixed, file-derived option list
+ * (no fuzzy filter — the menu is short): pick exact / by-extension /
+ * by-folder / by-name, or the `Custom pattern…` escape hatch which opens
+ * a free-text prompt. ↑/↓ to move, Enter to choose, Esc to cancel.
+ */
+export function renderGitignorePickerOverlay(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  file: string,
+  index: number,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const options = deriveGitignoreOptions(file)
+  const selectedIndex = Math.max(0, Math.min(index, options.length - 1))
+  const hint = '↑/↓ select · enter add · esc cancel'
+
+  const itemLines = options.map((option, offset) => {
+    const isSelected = offset === selectedIndex
+    const cursor = isSelected ? '>' : ' '
+    const glyph = option.custom ? '✎ ' : '+ '
+    return h(Text, {
+      key: `gitignore-opt-${offset}`,
+      bold: isSelected,
+      dimColor: !isSelected,
+      color: isSelected && !theme.noColor ? theme.colors.accent : undefined,
+    }, `${cursor} ${glyph}`, truncateCells(option.label, width - 8))
+  })
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Box, { justifyContent: 'space-between' },
+    h(Text, { bold: true }, panelTitle('Add to .gitignore', focused)),
+    h(Text, { dimColor: true }, `${options.length} options`)
+  ),
+  h(Text, { color: theme.colors.accent }, truncateCells(file || '(no file)', width - 4)),
+  h(Text, { dimColor: true }, truncateCells(hint, width - 4)),
+  h(Text, undefined, ''),
+  ...itemLines)
 }
 
 /**
