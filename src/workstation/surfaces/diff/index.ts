@@ -133,7 +133,7 @@ export function renderDiffSurface(
       : splitActive
         ? renderSplitDiffBody(
           h, components, lines, state.diffPreviewOffset, visibleRows, width, theme,
-          'stash-diff-split'
+          'stash-diff-split', syntaxSpans
         )
         : visibleLines.map((line, index) => {
           const absoluteIndex = state.diffPreviewOffset + index
@@ -229,7 +229,7 @@ export function renderDiffSurface(
       : splitActive
         ? renderSplitDiffBody(
           h, components, lines, state.diffPreviewOffset, visibleRows, width, theme,
-          'compare-diff-split'
+          'compare-diff-split', syntaxSpans
         )
         : visibleLines.map((line, index) => renderDiffLine(
           h, Text, line, theme, syntaxSpans, width - 4,
@@ -300,7 +300,7 @@ export function renderDiffSurface(
       : splitActive
         ? renderSplitDiffBody(
           h, components, previewHunks, state.diffPreviewOffset, visibleRows, width, theme,
-          'commit-diff-split'
+          'commit-diff-split', syntaxSpans
         )
         : visiblePreviewHunks.map((line, index) => renderDiffLine(
           h, Text, line, theme, syntaxSpans, 140,

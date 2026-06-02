@@ -12,8 +12,10 @@
 
 import type * as ReactTypes from 'react'
 import { SplitDiffRow, buildSplitDiffRows, computeDiffContext } from '../chrome/splitDiff'
-import { truncateCells } from '../chrome/text'
+import { cellWidth, truncateCells } from '../chrome/text'
+import { resolveSyntaxColor } from '../chrome/syntaxColors'
 import type { LogInkTheme } from '../chrome/theme'
+import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
 import type { LogInkState } from '../../commands/log/inkViewModel'
 import type { LogInkComponents } from './types'
 
@@ -84,6 +86,63 @@ export function formatSplitDiffCell(
 }
 
 /**
+ * Render one split-diff column as an Ink node — syntax-highlighted when
+ * spans are available for the line, plain otherwise.
+ *
+ * Highlighted cells keep the 4-digit line-number gutter but color IT
+ * with the add/remove cue (green/red, dim for context) so the code body
+ * is free to carry its syntax colors — the split layout's position
+ * (old | new) plus the colored gutter still tells you what changed.
+ * Width is budgeted exactly like `formatSplitDiffCell` (gutter + 1 space
+ * + truncated code) so columns never drift.
+ */
+function renderSplitDiffCell(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  side: SplitDiffRow['left'] | SplitDiffRow['right'],
+  columnWidth: number,
+  theme: LogInkTheme,
+  syntaxSpans: Map<string, SyntaxSpan[]> | undefined,
+  key: string
+): ReactTypes.ReactElement {
+  const text = side.text.replace(/\n$/, '')
+  const spans =
+    side.kind === 'add' || side.kind === 'remove' || side.kind === 'context'
+      ? syntaxSpans?.get(text)
+      : undefined
+  if (!spans || spans.length === 0) {
+    return h(Text, { key, ...splitDiffSideProps(side.kind, theme) }, formatSplitDiffCell(side, columnWidth))
+  }
+
+  const lineNo = side.lineNumber !== undefined ? String(side.lineNumber).padStart(4) : '    '
+  const textRoom = Math.max(1, columnWidth - 5)
+  const gutterColor =
+    side.kind === 'add'
+      ? theme.colors.gitAdded
+      : side.kind === 'remove'
+        ? theme.colors.gitDeleted
+        : undefined
+
+  const children: ReactTypes.ReactElement[] = []
+  let used = 0
+  for (const span of spans) {
+    if (used >= textRoom) break
+    const segment = truncateCells(text.slice(span.start, span.end), textRoom - used)
+    if (!segment) continue
+    used += cellWidth(segment)
+    children.push(
+      h(Text, { key: `${key}-s${span.start}`, color: resolveSyntaxColor(span.token, theme) }, segment)
+    )
+  }
+  return h(
+    Text,
+    { key },
+    h(Text, { key: `${key}-g`, color: gutterColor, dimColor: !gutterColor }, `${lineNo} `),
+    ...children
+  )
+}
+
+/**
  * Render the split-diff body as a list of two-column rows.
  *
  * Takes the FULL unified-line array plus the scroll offset + visible
@@ -103,7 +162,8 @@ export function renderSplitDiffBody(
   visibleRows: number,
   width: number,
   theme: LogInkTheme,
-  keyPrefix: string
+  keyPrefix: string,
+  syntaxSpans?: Map<string, SyntaxSpan[]>
 ): ReactTypes.ReactElement[] {
   const { Box, Text } = components
   const seed = computeDiffContext(unifiedLines, startOffset)
@@ -115,20 +175,17 @@ export function renderSplitDiffBody(
   const gutter = 1
   const half = Math.max(10, Math.floor((usable - gutter) / 2))
   return rows.map((row, index) => {
-    const leftProps = splitDiffSideProps(row.left.kind, theme)
-    const rightProps = splitDiffSideProps(row.right.kind, theme)
-    const leftText = formatSplitDiffCell(row.left, half)
-    const rightText = formatSplitDiffCell(row.right, half)
+    const rowKey = `${keyPrefix}-${startOffset + index}`
     return h(Box, {
-      key: `${keyPrefix}-${startOffset + index}`,
+      key: rowKey,
       flexDirection: 'row',
     },
     h(Box, { width: half, flexShrink: 0 },
-      h(Text, leftProps, leftText)
+      renderSplitDiffCell(h, Text, row.left, half, theme, syntaxSpans, `${rowKey}-l`)
     ),
     h(Box, { width: gutter, flexShrink: 0 }, h(Text, { dimColor: true }, ' ')),
     h(Box, { width: half, flexShrink: 0 },
-      h(Text, rightProps, rightText)
+      renderSplitDiffCell(h, Text, row.right, half, theme, syntaxSpans, `${rowKey}-r`)
     )
     )
   })
