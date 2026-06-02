@@ -26,7 +26,27 @@ function addRepoState(): WorkspaceState {
   return { ...createWorkspaceState({ overview: emptyOverview, roots: ['~/code'] }), focus: 'add-repo' }
 }
 
+function cloneState(): WorkspaceState {
+  return { ...createWorkspaceState({ overview: emptyOverview, roots: ['~/code'] }), focus: 'clone-repo' }
+}
+
 describe('resolveWorkspaceInput', () => {
+  it('list focus: `c` opens the clone-repo prompt', () => {
+    expect(resolveWorkspaceInput('c', key(), listState()).kind).toBe('clone-repo')
+  })
+
+  it('clone-repo focus: Esc cancels back to the list', () => {
+    expect(resolveWorkspaceInput('', key({ escape: true }), cloneState())).toEqual({
+      kind: 'action',
+      action: { type: 'set-focus', focus: 'list' },
+    })
+  })
+
+  it('clone-repo focus: printable keys are no-ops in the resolver (runtime owns them)', () => {
+    expect(resolveWorkspaceInput('h', key(), cloneState()).kind).toBe('noop')
+    expect(resolveWorkspaceInput('', key({ return: true }), cloneState()).kind).toBe('noop')
+  })
+
   it('quits on q only — escape never quits because terminals can deliver bare ESC on arrow keys', () => {
     expect(resolveWorkspaceInput('q', key(), listState()).kind).toBe('quit')
     // Bare ESC must NOT quit; it would crash the app every time the
