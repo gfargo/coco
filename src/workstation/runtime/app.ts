@@ -150,6 +150,7 @@ import {
     renameBranch,
     setUpstream,
 } from '../../git/branchActions'
+import { addToGitignore } from '../../git/gitignore'
 import { highlightDiffCode, type SyntaxSpan } from '../../lib/syntax/highlightEngine'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
 import {
@@ -366,6 +367,7 @@ import { renderSidebar } from '../runtime/sidebar'
 import { renderMainPanel } from '../runtime/mainPanel'
 import { renderDetailPanel } from '../runtime/detailPanel'
 import { renderOnboardingOverlay } from '../runtime/overlays'
+import { ensureConfigFile, resolveConfigPath, type CocoConfigScope } from './configFiles'
 
 
 
@@ -2590,6 +2592,28 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     void refreshWorktreeContext({ silent: true })
   }, [dispatch, refreshWorktreeContext, resumeRef])
 
+  // Open the global or project coco config in $EDITOR (gk / gK + their
+  // command-palette entries). Scaffolds a templated starter when the file
+  // doesn't exist yet so the user never lands in an empty buffer or hits
+  // a "no such file" error.
+  const openConfigInEditor = React.useCallback((scope: CocoConfigScope) => {
+    // `repoRootRef` is populated async from `git rev-parse --show-toplevel`;
+    // fall back to cwd so a freshly-launched session can still scaffold +
+    // open the project config before that resolves.
+    const repoRoot = repoRootRef.current || process.cwd()
+    const filePath = resolveConfigPath(scope, repoRoot)
+    try {
+      const { created } = ensureConfigFile(filePath)
+      if (created) {
+        dispatch({ type: 'setStatus', value: `Created ${scope} config at ${filePath}`, kind: 'success' })
+      }
+    } catch (error) {
+      dispatch({ type: 'setStatus', value: `Could not create config: ${(error as Error).message}`, kind: 'error' })
+      return
+    }
+    openInEditor(filePath)
+  }, [dispatch, openInEditor])
+
   // `E` keystroke handler — open the current commit draft in $EDITOR
   // (or $VISUAL), then read the file back and update the compose state
   // with the saved content. Mirrors the suspend → spawn → resume
@@ -3428,6 +3452,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!branch) return { ok: false, message: 'No branch selected' }
         return pushBranch(git, branch)
       },
+      'add-to-gitignore': async () => addToGitignore(git, payload || ''),
       'rename-branch': async () => {
         const newName = payload?.trim()
         if (!newName) return { ok: false, message: 'New branch name required' }
@@ -3788,6 +3813,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // unambiguous feedback that the drop landed and the list shrank.
     if (result?.ok && (id === 'apply-stash' || id === 'pop-stash')) {
       dispatch({ type: 'pushView', value: 'history' })
+      await refreshWorktreeContext()
+    }
+    // Refresh the worktree so a now-ignored untracked file drops out of
+    // the status list immediately (the silent context refresh above
+    // doesn't always re-read the worktree file set).
+    if (result?.ok && id === 'add-to-gitignore') {
       await refreshWorktreeContext()
     }
     if (result?.ok && id === 'drop-stash') {
@@ -4584,8 +4615,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         void runWorkflowAction(event.id, event.payload)
       } else if (event.type === 'openFileInEditor') {
         openInEditor(event.path)
+      } else if (event.type === 'openConfigInEditor') {
+        openConfigInEditor(event.scope)
       } else if (event.type === 'yankFromActiveView') {
         void yankFromActiveView(event.short)
+      } else if (event.type === 'openGitignorePicker') {
+        // Resolve the cursored worktree file here (the runtime owns the
+        // selection→file mapping) and open the picker over its path.
+        if (selectedWorktreeFile?.path) {
+          dispatch({ type: 'openGitignorePicker', file: selectedWorktreeFile.path })
+        } else {
+          dispatch({ type: 'setStatus', value: 'No file under the cursor to ignore.', kind: 'warning' })
+        }
       } else if (event.type === 'applyThemePreset') {
         // Apply for the session immediately, and best-effort persist to the
         // global config so it sticks across launches. The picker has already

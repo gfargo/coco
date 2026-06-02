@@ -9,6 +9,9 @@ export type LogInkCommandId =
   | 'clearSearch'
   | 'commandPalette'
   | 'themePicker'
+  | 'openProjectConfig'
+  | 'openGlobalConfig'
+  | 'gitignoreFile'
   | 'commit'
   | 'cycleSort'
   | 'editCommit'
@@ -542,6 +545,27 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['normal'],
   },
   {
+    id: 'openProjectConfig',
+    keys: ['gk'],
+    label: 'project config',
+    description: 'Open this repo’s .coco.json in $EDITOR (creates a starter file if missing).',
+    contexts: ['normal'],
+  },
+  {
+    id: 'openGlobalConfig',
+    keys: ['gK'],
+    label: 'global config',
+    description: 'Open ~/.config/coco/config.json in $EDITOR (creates a starter file if missing).',
+    contexts: ['normal'],
+  },
+  {
+    id: 'gitignoreFile',
+    keys: ['i'],
+    label: 'gitignore',
+    description: 'Add the cursored file or folder to .gitignore (pick a pattern).',
+    contexts: ['status'],
+  },
+  {
     id: 'viewChangelog',
     keys: ['L'],
     label: 'changelog',
@@ -698,6 +722,9 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   help: 'essentials',
   commandPalette: 'essentials',
   themePicker: 'view',
+  openProjectConfig: 'view',
+  openGlobalConfig: 'view',
+  gitignoreFile: 'mutate',
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',
@@ -1044,7 +1071,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'status') {
     return {
-      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'e/c compose', 'y yank'],
+      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'i ignore', 'e/c compose', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

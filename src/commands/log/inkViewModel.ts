@@ -310,6 +310,13 @@ export type LogInkState = {
   showThemePicker: boolean
   themePickerFilter: string
   themePickerIndex: number
+  /**
+   * "Add to .gitignore" quick-pick (`i` on the status view). When
+   * defined, the overlay is open over the cursored worktree file:
+   * `file` is the repo-relative path the pattern options are derived
+   * from, `index` is the cursor into that derived option list.
+   */
+  gitignorePicker?: { file: string; index: number }
   workflowActionId?: string
   pendingConfirmationId?: string
   /**
@@ -670,6 +677,7 @@ export type LogInkInputPromptKind =
   | 'rename-branch'
   | 'set-upstream'
   | 'create-stash'
+  | 'gitignore-pattern'
   | 'reset-mode'
   | 'pr-merge-strategy'
   | 'pr-comment'
@@ -798,6 +806,9 @@ export type LogInkAction =
   | { type: 'appendThemePickerFilter'; value: string }
   | { type: 'backspaceThemePickerFilter' }
   | { type: 'clearThemePickerFilter' }
+  | { type: 'openGitignorePicker'; file: string }
+  | { type: 'closeGitignorePicker' }
+  | { type: 'moveGitignorePicker'; delta: number; count: number }
   | { type: 'cycleBranchSort' }
   | { type: 'cycleTagSort' }
   | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string; multiline?: boolean }
@@ -2162,6 +2173,29 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         themePickerIndex: 0,
         pendingKey: undefined,
       }
+    case 'openGitignorePicker':
+      return {
+        ...state,
+        gitignorePicker: { file: action.file, index: 0 },
+        pendingKey: undefined,
+      }
+    case 'closeGitignorePicker':
+      return {
+        ...state,
+        gitignorePicker: undefined,
+        pendingKey: undefined,
+      }
+    case 'moveGitignorePicker':
+      return state.gitignorePicker
+        ? {
+          ...state,
+          gitignorePicker: {
+            ...state.gitignorePicker,
+            index: clampIndex(state.gitignorePicker.index + action.delta, action.count),
+          },
+          pendingKey: undefined,
+        }
+        : state
     case 'setChangelogLoading':
       return {
         ...state,

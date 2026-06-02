@@ -11,7 +11,7 @@
  */
 
 import type * as ReactTypes from 'react'
-import { SplitDiffRow, buildSplitDiffRows } from '../chrome/splitDiff'
+import { SplitDiffRow, buildSplitDiffRows, computeDiffContext } from '../chrome/splitDiff'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import type { LogInkState } from '../../commands/log/inkViewModel'
@@ -84,21 +84,31 @@ export function formatSplitDiffCell(
 }
 
 /**
- * Render the split-diff body as a list of two-column rows. The caller
- * is responsible for slicing the unified-line array to the visible
- * window — the helper just transforms that slice into Ink nodes.
+ * Render the split-diff body as a list of two-column rows.
+ *
+ * Takes the FULL unified-line array plus the scroll offset + visible
+ * row budget, and windows it internally. The windowing has to live
+ * here (not the caller) because the parser is stateful: a window that
+ * starts partway through a hunk needs the hunk context (in-hunk flag +
+ * line-number cursors) that precedes it, or every visible line gets
+ * misclassified as a header and painted in the accent color (#1114).
+ * We compute that context from the lines before the window and seed
+ * the parser with it.
  */
 export function renderSplitDiffBody(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
-  unifiedSlice: string[],
+  unifiedLines: string[],
   startOffset: number,
+  visibleRows: number,
   width: number,
   theme: LogInkTheme,
   keyPrefix: string
 ): ReactTypes.ReactElement[] {
   const { Box, Text } = components
-  const rows = buildSplitDiffRows(unifiedSlice)
+  const seed = computeDiffContext(unifiedLines, startOffset)
+  const unifiedSlice = unifiedLines.slice(startOffset, startOffset + visibleRows)
+  const rows = buildSplitDiffRows(unifiedSlice, seed)
   // Reserve 3 columns of gutter (1 left padding from the Box + 1 column
   // separator + 1 right padding) so neither side touches the border.
   const usable = Math.max(20, width - 4)

@@ -1,4 +1,4 @@
-import { buildSplitDiffRows } from './splitDiff'
+import { buildSplitDiffRows, computeDiffContext } from './splitDiff'
 
 describe('buildSplitDiffRows', () => {
   it('returns an empty array for empty input', () => {
@@ -218,5 +218,66 @@ describe('buildSplitDiffRows', () => {
     expect(rows[2].left.kind).toBe('context')
     expect(rows[2].right.kind).toBe('context')
     expect(rows[2].left.text).toBe('\\ No newline at end of file')
+  })
+
+  // Regression for #1114: when the split renderer windows the diff to a
+  // scroll offset that lands PAST the `@@` header, the lines handed to
+  // buildSplitDiffRows have no hunk header. Without a seed, `inHunk`
+  // starts false and every visible line is misclassified as a header —
+  // which painted the whole window in the accent color when scrolling.
+  describe('windowed (seeded) parsing', () => {
+    const fullDiff = [
+      '@@ -1,4 +1,4 @@',
+      ' context a',
+      ' context b',
+      '-removed c',
+      '+added c',
+      ' context d',
+      ' context e',
+    ]
+
+    it('misclassifies a mid-hunk window as all-header WITHOUT a seed (the bug)', () => {
+      // Slice starting after the @@ header — the unfixed path.
+      const slice = fullDiff.slice(3) // ['-removed c', '+added c', ' context d', ' context e']
+      const rows = buildSplitDiffRows(slice)
+      // Every row collapses to a header (accent color) — the reported bug.
+      expect(rows.every((row) => row.left.kind === 'header')).toBe(true)
+    })
+
+    it('classifies a mid-hunk window correctly WHEN seeded with the hunk context', () => {
+      const offset = 3
+      const seed = computeDiffContext(fullDiff, offset)
+      expect(seed.inHunk).toBe(true)
+
+      const slice = fullDiff.slice(offset)
+      const rows = buildSplitDiffRows(slice, seed)
+
+      // No header rows — real change + context, just like the full parse.
+      expect(rows.some((row) => row.left.kind === 'header')).toBe(false)
+      const change = rows.find((row) => row.right.kind === 'add')
+      expect(change?.right.text).toBe('added c')
+      expect(change?.left.text).toBe('removed c')
+    })
+
+    it('seeds continuous line numbers across the cut', () => {
+      // Full parse line numbers for the trailing context rows…
+      const full = buildSplitDiffRows(fullDiff)
+      const lastContext = full[full.length - 1]
+      expect(lastContext.left.kind).toBe('context')
+
+      // …match what the windowed+seeded parse produces for the same row.
+      const offset = 5 // start at ' context d'
+      const seed = computeDiffContext(fullDiff, offset)
+      const windowed = buildSplitDiffRows(fullDiff.slice(offset), seed)
+      const windowedLast = windowed[windowed.length - 1]
+      expect(windowedLast.left.lineNumber).toBe(lastContext.left.lineNumber)
+      expect(windowedLast.right.lineNumber).toBe(lastContext.right.lineNumber)
+    })
+
+    it('computeDiffContext reports not-in-hunk before the first header', () => {
+      const lines = ['diff --git a/f b/f', '@@ -1,1 +1,1 @@', '-x', '+y']
+      expect(computeDiffContext(lines, 1)).toMatchObject({ inHunk: false })
+      expect(computeDiffContext(lines, 2)).toMatchObject({ inHunk: true })
+    })
   })
 })
