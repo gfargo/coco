@@ -66,6 +66,7 @@ export type LogInkInputEvent =
   | { type: 'cancelCommitSplit' }
   | { type: 'runWorkflowAction'; id: string; payload?: string }
   | { type: 'openFileInEditor'; path: string }
+  | { type: 'openConfigInEditor'; scope: 'global' | 'project' }
   | { type: 'yankFromActiveView'; short?: boolean }
   | { type: 'yankText'; value: string; label: string }
   | { type: 'applyThemePreset'; preset: string }
@@ -680,6 +681,10 @@ export function getLogInkPaletteExecuteEvents(
       // Palette closes on execute (toggleCommandPalette runs first), then
       // this opens the theme picker.
       return [action({ type: 'toggleThemePicker' })]
+    case 'openProjectConfig':
+      return [{ type: 'openConfigInEditor', scope: 'project' }]
+    case 'openGlobalConfig':
+      return [{ type: 'openConfigInEditor', scope: 'global' }]
     case 'gitignoreFile':
       // Runtime resolves the cursored worktree file and opens the picker
       // (no-ops with a warning when there's no file under the cursor).
@@ -1661,6 +1666,22 @@ export function getLogInkInputEvents(
     return [
       action({ type: 'setPendingKey', value: undefined }),
       action({ type: 'toggleThemePicker' }),
+    ]
+  }
+
+  // gk — open this repo's project config (.coco.json) in $EDITOR.
+  if (state.pendingKey === 'g' && inputValue === 'k') {
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      { type: 'openConfigInEditor', scope: 'project' },
+    ]
+  }
+
+  // gK — open the global config (~/.config/coco/config.json) in $EDITOR.
+  if (state.pendingKey === 'g' && inputValue === 'K') {
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      { type: 'openConfigInEditor', scope: 'global' },
     ]
   }
 
