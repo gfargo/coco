@@ -75,6 +75,14 @@ export type WorkspaceState = {
   roots: ReadonlyArray<string>
   /** Keymap help overlay toggle. */
   showHelp: boolean
+  /**
+   * Scroll offset (in body rows) for the keymap help overlay. The
+   * keymap is taller than the panel on short terminals, so the
+   * renderer windows the body against the available height and pins
+   * the title; this is the top of that window. Mirrors `coco ui`'s
+   * `helpScrollOffset`.
+   */
+  helpScrollOffset: number
   /** First-run onboarding overlay toggle. Self-dismisses on first user action. */
   showOnboarding: boolean
   /**
@@ -127,6 +135,7 @@ export type WorkspaceAction =
   | { type: 'set-status'; status?: string }
   | { type: 'toggle-help' }
   | { type: 'close-help' }
+  | { type: 'scroll-help'; delta: number }
   | { type: 'toggle-theme-picker' }
   | { type: 'move-theme-picker'; delta: number; presetCount: number }
   | { type: 'append-theme-picker-filter'; value: string }
@@ -175,6 +184,7 @@ export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
     showThemePicker: false,
     themePickerFilter: '',
     themePickerIndex: 0,
+    helpScrollOffset: 0,
     knownRepoPaths: init.knownRepoPaths ?? [],
     pullRequestFetching: [],
   }
@@ -348,10 +358,17 @@ export function applyWorkspaceAction(
       return { ...state, status: action.status }
     }
     case 'toggle-help': {
-      return { ...state, showHelp: !state.showHelp, showOnboarding: false }
+      // Always reopen at the top — picking up the last scroll position
+      // is more surprising than predictable for a reference overlay.
+      return { ...state, showHelp: !state.showHelp, helpScrollOffset: 0, showOnboarding: false }
     }
     case 'close-help': {
-      return { ...state, showHelp: false }
+      return { ...state, showHelp: false, helpScrollOffset: 0 }
+    }
+    case 'scroll-help': {
+      // Floor-clamp at 0 only; the renderer ceiling-clamps against the
+      // real content height so `j` past the end sticks at the last row.
+      return { ...state, helpScrollOffset: Math.max(0, state.helpScrollOffset + action.delta) }
     }
     case 'toggle-theme-picker': {
       return {

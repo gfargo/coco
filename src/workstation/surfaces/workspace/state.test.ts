@@ -186,10 +186,30 @@ describe('workspace state reducer', () => {
     expect(closed.showHelp).toBe(false)
   })
 
-  it('close-help only clears the help flag', () => {
+  it('close-help clears the help flag and resets the scroll offset', () => {
     const opened = applyWorkspaceAction(baseState, { type: 'toggle-help' })
-    const closed = applyWorkspaceAction(opened, { type: 'close-help' })
+    const scrolled = applyWorkspaceAction(opened, { type: 'scroll-help', delta: 5 })
+    const closed = applyWorkspaceAction(scrolled, { type: 'close-help' })
     expect(closed.showHelp).toBe(false)
+    expect(closed.helpScrollOffset).toBe(0)
+  })
+
+  it('scroll-help accumulates the offset and floor-clamps at zero', () => {
+    const opened = applyWorkspaceAction(baseState, { type: 'toggle-help' })
+    expect(opened.helpScrollOffset).toBe(0)
+    const down = applyWorkspaceAction(opened, { type: 'scroll-help', delta: 3 })
+    expect(down.helpScrollOffset).toBe(3)
+    const up = applyWorkspaceAction(down, { type: 'scroll-help', delta: -10 })
+    expect(up.helpScrollOffset).toBe(0)
+  })
+
+  it('reopening the help overlay resets the scroll offset to the top', () => {
+    const opened = applyWorkspaceAction(baseState, { type: 'toggle-help' })
+    const scrolled = applyWorkspaceAction(opened, { type: 'scroll-help', delta: 6 })
+    const closed = applyWorkspaceAction(scrolled, { type: 'toggle-help' })
+    const reopened = applyWorkspaceAction(closed, { type: 'toggle-help' })
+    expect(reopened.showHelp).toBe(true)
+    expect(reopened.helpScrollOffset).toBe(0)
   })
 
   it('dismiss-onboarding clears just the banner flag', () => {
