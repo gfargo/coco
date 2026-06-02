@@ -102,6 +102,27 @@ const SITE_RECIPES = [
   'ui-theme-picker',
   'ui-search-filter',
   'ui-inspector-focused',
+  // Workspace demos (add a repo by path, clone a remote)
+  'demo-workspace-add-repo',
+  'demo-workspace-clone',
+  'demo-workstation-using',
+  // Themed-view showcase — diff + status across a curated theme set
+  'ui-diff-theme-catppuccin',
+  'ui-diff-theme-gruvbox',
+  'ui-diff-theme-dracula',
+  'ui-diff-theme-tokyo-night',
+  'ui-diff-theme-nord',
+  'ui-diff-theme-rose-pine',
+  'ui-diff-theme-github-light',
+  'ui-diff-theme-catppuccin-latte',
+  'ui-status-theme-catppuccin',
+  'ui-status-theme-gruvbox',
+  'ui-status-theme-dracula',
+  'ui-status-theme-tokyo-night',
+  'ui-status-theme-nord',
+  'ui-status-theme-rose-pine',
+  'ui-status-theme-github-light',
+  'ui-status-theme-catppuccin-latte',
 ]
 
 /**
@@ -183,6 +204,25 @@ const FILENAME_MAP: Record<string, string[]> = {
   'demo-ui-view-switching': ['demo-ui-view-switching.gif'],
   'demo-hunk-staging': ['demo-hunk-staging.gif'],
   'demo-search-filter': ['demo-search-filter.gif'],
+  'demo-workspace-add-repo': ['demo-workspace-add-repo.gif'],
+  'demo-workspace-clone': ['demo-workspace-clone.gif'],
+  'demo-workstation-using': ['demo-workstation-using.gif'],
+  'ui-diff-theme-catppuccin': ['diff-theme-catppuccin.png'],
+  'ui-diff-theme-gruvbox': ['diff-theme-gruvbox.png'],
+  'ui-diff-theme-dracula': ['diff-theme-dracula.png'],
+  'ui-diff-theme-tokyo-night': ['diff-theme-tokyo-night.png'],
+  'ui-diff-theme-nord': ['diff-theme-nord.png'],
+  'ui-diff-theme-rose-pine': ['diff-theme-rose-pine.png'],
+  'ui-diff-theme-github-light': ['diff-theme-github-light.png'],
+  'ui-diff-theme-catppuccin-latte': ['diff-theme-catppuccin-latte.png'],
+  'ui-status-theme-catppuccin': ['status-theme-catppuccin.png'],
+  'ui-status-theme-gruvbox': ['status-theme-gruvbox.png'],
+  'ui-status-theme-dracula': ['status-theme-dracula.png'],
+  'ui-status-theme-tokyo-night': ['status-theme-tokyo-night.png'],
+  'ui-status-theme-nord': ['status-theme-nord.png'],
+  'ui-status-theme-rose-pine': ['status-theme-rose-pine.png'],
+  'ui-status-theme-github-light': ['status-theme-github-light.png'],
+  'ui-status-theme-catppuccin-latte': ['status-theme-catppuccin-latte.png'],
 }
 
 function main() {
