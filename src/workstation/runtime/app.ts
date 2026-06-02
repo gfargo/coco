@@ -215,8 +215,10 @@ import {
 } from '../../git/stashData'
 import {
     revertFile,
+    stageAll,
     stageAllFiles,
     stageFile,
+    stagePathspec,
     unstageAllFiles,
     unstageFile,
 } from '../../git/statusActions'
@@ -3741,6 +3743,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         ).filter((file) => file.state === 'untracked')
         return stageAllFiles(git, files)
       },
+      'stage-all': async () => stageAll(git),
+      'stage-pathspec': async () => stagePathspec(git, payload || ''),
     }
     const handler = handlers[id]
     if (!handler) {
@@ -3834,6 +3838,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // the status list immediately (the silent context refresh above
     // doesn't always re-read the worktree file set).
     if (result?.ok && id === 'add-to-gitignore') {
+      await refreshWorktreeContext()
+    }
+    // Stage-all / stage-pathspec change staged/unstaged counts — refresh
+    // the worktree so the status list + compose summary reflect it.
+    if (result?.ok && (id === 'stage-all' || id === 'stage-pathspec')) {
       await refreshWorktreeContext()
     }
     if (result?.ok && id === 'drop-stash') {

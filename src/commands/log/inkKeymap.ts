@@ -12,6 +12,8 @@ export type LogInkCommandId =
   | 'openProjectConfig'
   | 'openGlobalConfig'
   | 'gitignoreFile'
+  | 'stageAll'
+  | 'stagePathspec'
   | 'commit'
   | 'cycleSort'
   | 'editCommit'
@@ -566,6 +568,20 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['status'],
   },
   {
+    id: 'stageAll',
+    keys: ['A'],
+    label: 'stage all',
+    description: 'Stage every change in the worktree (git add -A).',
+    contexts: ['status', 'compose'],
+  },
+  {
+    id: 'stagePathspec',
+    keys: ['+'],
+    label: 'stage paths',
+    description: 'Stage files matching a typed pathspec (. / src/ / *.ts / a list).',
+    contexts: ['status', 'compose'],
+  },
+  {
     id: 'viewChangelog',
     keys: ['L'],
     label: 'changelog',
@@ -725,6 +741,8 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   openProjectConfig: 'view',
   openGlobalConfig: 'view',
   gitignoreFile: 'mutate',
+  stageAll: 'mutate',
+  stagePathspec: 'mutate',
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',
@@ -1071,7 +1089,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'status') {
     return {
-      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'z revert', 'i ignore', 'e/c compose', 'y yank'],
+      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'A stage all', 'z revert', 'i ignore', 'e/c compose'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1114,7 +1132,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'compose') {
     return {
-      contextual: ['e edit', 'E $EDITOR', 'c commit', 'S split', 'I AI draft', 'gs hunks', 'esc back'],
+      contextual: ['e edit', 'c commit', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

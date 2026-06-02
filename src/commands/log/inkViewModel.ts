@@ -678,6 +678,7 @@ export type LogInkInputPromptKind =
   | 'set-upstream'
   | 'create-stash'
   | 'gitignore-pattern'
+  | 'stage-pathspec'
   | 'reset-mode'
   | 'pr-merge-strategy'
   | 'pr-comment'
