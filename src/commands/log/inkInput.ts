@@ -1,3 +1,4 @@
+import { deriveGitignoreOptions } from '../../workstation/chrome/gitignore'
 import { extractDiffHunk } from '../../workstation/chrome/hunkExtraction'
 import {
     InspectorAction,
@@ -69,6 +70,11 @@ export type LogInkInputEvent =
   | { type: 'yankFromActiveView'; short?: boolean }
   | { type: 'yankText'; value: string; label: string }
   | { type: 'applyThemePreset'; preset: string }
+  // Open the "add to .gitignore" picker over the cursored worktree
+  // file. Carries no path — the runtime resolves the cursored file (it
+  // owns the selection→file mapping) and dispatches `openGitignorePicker`
+  // with the resolved path, same pattern as `revertSelectedFile`.
+  | { type: 'openGitignorePicker' }
 
 export type LogInkInputContext = {
   detailFileCount?: number
@@ -679,6 +685,10 @@ export function getLogInkPaletteExecuteEvents(
       return [{ type: 'openConfigInEditor', scope: 'project' }]
     case 'openGlobalConfig':
       return [{ type: 'openConfigInEditor', scope: 'global' }]
+    case 'gitignoreFile':
+      // Runtime resolves the cursored worktree file and opens the picker
+      // (no-ops with a warning when there's no file under the cursor).
+      return [{ type: 'openGitignorePicker' }]
     case 'workflowDeleteBranch':
     case 'workflowDeleteTag':
     case 'workflowDropStash':
@@ -773,6 +783,12 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   const value = state.inputPrompt.value.trim()
   if (!value) {
     return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel', kind: 'warning' })]
+  }
+  if (state.inputPrompt.kind === 'gitignore-pattern') {
+    return [
+      { type: 'runWorkflowAction', id: 'add-to-gitignore', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
   }
   if (state.inputPrompt.kind === 'reset-mode') {
     const mode = value.toLowerCase()
@@ -1293,6 +1309,46 @@ export function getLogInkInputEvents(
     if (inputValue && !key.ctrl && !key.meta) {
       return [action({ type: 'appendThemePickerFilter', value: inputValue })]
     }
+    return []
+  }
+
+  if (state.gitignorePicker) {
+    const options = deriveGitignoreOptions(state.gitignorePicker.file)
+    if (key.escape) {
+      return [action({ type: 'closeGitignorePicker' })]
+    }
+    if (key.upArrow || (key.ctrl && inputValue === 'p')) {
+      return [action({ type: 'moveGitignorePicker', delta: -1, count: options.length })]
+    }
+    if (key.downArrow || (key.ctrl && inputValue === 'n')) {
+      return [action({ type: 'moveGitignorePicker', delta: 1, count: options.length })]
+    }
+    if (key.return) {
+      const selected = options[Math.max(0, Math.min(state.gitignorePicker.index, options.length - 1))]
+      if (!selected) {
+        return [action({ type: 'closeGitignorePicker' })]
+      }
+      if (selected.custom) {
+        // Hand off to a free-text prompt seeded with the file path so
+        // the user can type any valid gitignore pattern (negations,
+        // globs, anchored paths) the derived options don't cover.
+        return [
+          action({ type: 'closeGitignorePicker' }),
+          action({
+            type: 'openInputPrompt',
+            kind: 'gitignore-pattern',
+            label: `.gitignore pattern (e.g. ${selected.pattern || '*.log'})`,
+            initial: selected.pattern,
+          }),
+        ]
+      }
+      return [
+        action({ type: 'closeGitignorePicker' }),
+        { type: 'runWorkflowAction', id: 'add-to-gitignore', payload: selected.pattern },
+      ]
+    }
+    // Consume everything else so the underlying status view keys don't
+    // leak through while the picker owns the screen.
     return []
   }
 
@@ -2831,6 +2887,13 @@ export function getLogInkInputEvents(
   // re-renders.
   if (inputValue === 'o' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
+  }
+  // `i` opens the "add to .gitignore" picker for the cursored worktree
+  // file. The runtime resolves the path + opens the picker (the bare
+  // event carries no path — same selection-resolution pattern as the
+  // revert / stage events).
+  if (inputValue === 'i' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
+    return [{ type: 'openGitignorePicker' }]
   }
   if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'worktree' && context.worktreeSelectedPath) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]

@@ -42,6 +42,25 @@ export type SplitDiffRow = {
   right: SplitDiffSide
 }
 
+/**
+ * Hunk-parse state at a given point in a unified diff: whether we're
+ * inside a hunk body and the next old/new line numbers to emit.
+ *
+ * The split renderer windows the diff by slicing the unified-line
+ * array BEFORE parsing (so it only builds rows for the visible rows).
+ * That slice can start partway through a hunk — past the `@@` header
+ * that seeds `inHunk` and the line-number cursors. Without this seed,
+ * `buildSplitDiffRows` starts with `inHunk = false` and classifies
+ * every line in the window as a header (#1114) — which paints the
+ * whole visible diff in the accent color. Callers compute the context
+ * for the slice start with `computeDiffContext` and pass it in.
+ */
+export type DiffHunkContext = {
+  inHunk: boolean
+  oldLineNo: number
+  newLineNo: number
+}
+
 const EMPTY_LEFT: SplitDiffSide = { text: '', kind: 'empty' }
 const EMPTY_RIGHT: SplitDiffSide = { text: '', kind: 'empty' }
 
@@ -95,11 +114,54 @@ function flushChangeBlock(
   additions.length = 0
 }
 
-export function buildSplitDiffRows(unifiedLines: string[]): SplitDiffRow[] {
-  const rows: SplitDiffRow[] = []
+/**
+ * Replay the hunk parser over `unifiedLines[0..upTo)` (exclusive) and
+ * return the parse state at that boundary. Used by the split renderer
+ * to seed `buildSplitDiffRows` with the correct in-hunk flag and
+ * line-number cursors when it windows the diff to a scroll offset that
+ * starts partway through a hunk. Counting mirrors `buildSplitDiffRows`
+ * exactly so the seeded line numbers stay continuous across the cut.
+ */
+export function computeDiffContext(unifiedLines: string[], upTo: number): DiffHunkContext {
   let oldLineNo = 0
   let newLineNo = 0
   let inHunk = false
+  const bound = Math.max(0, Math.min(upTo, unifiedLines.length))
+  for (let i = 0; i < bound; i++) {
+    const raw = unifiedLines[i]
+    if (raw.startsWith('@@')) {
+      const [oldStart, newStart] = parseHunkHeader(raw)
+      oldLineNo = oldStart
+      newLineNo = newStart
+      inHunk = true
+      continue
+    }
+    if (!inHunk || isDiffHeader(raw)) {
+      continue
+    }
+    if (raw.startsWith('-')) {
+      oldLineNo += 1
+      continue
+    }
+    if (raw.startsWith('+')) {
+      newLineNo += 1
+      continue
+    }
+    // Context line (or `\ No newline` marker) advances both cursors.
+    oldLineNo += 1
+    newLineNo += 1
+  }
+  return { inHunk, oldLineNo, newLineNo }
+}
+
+export function buildSplitDiffRows(
+  unifiedLines: string[],
+  seed?: DiffHunkContext
+): SplitDiffRow[] {
+  const rows: SplitDiffRow[] = []
+  let oldLineNo = seed?.oldLineNo ?? 0
+  let newLineNo = seed?.newLineNo ?? 0
+  let inHunk = seed?.inHunk ?? false
   const removals: SplitDiffSide[] = []
   const additions: SplitDiffSide[] = []
 
