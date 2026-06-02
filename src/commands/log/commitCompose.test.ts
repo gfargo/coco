@@ -251,7 +251,7 @@ describe('log commit compose state', () => {
       // AI draft is staged.
       expect(state.pendingAiDraft).toBe('feat: AI version\n\nAI generated body')
       // Confirmation message surfaces.
-      expect(state.message).toMatch(/Press R to replace/)
+      expect(state.message).toMatch(/Press Enter \(or R\) to replace/)
     })
 
     it('routes setDraft to summary/body directly when fields are empty (no clobber risk)', () => {

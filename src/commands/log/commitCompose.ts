@@ -155,7 +155,7 @@ export function applyCommitComposeAction(
           streamingPreview: undefined,
           pendingAiDraft: action.value,
           message:
-            'AI draft ready. Press R to replace your text, or Esc to keep what you have.',
+            'AI draft ready. Press Enter (or R) to replace your text, or Esc to keep what you have.',
           details: undefined,
         }
       }
@@ -204,7 +204,7 @@ export function applyCommitComposeAction(
         loading: false,
         streamingPreview: undefined,
         pendingAiDraft: action.value,
-        message: 'AI draft ready. Press R to replace your text, or Esc to keep what you have.',
+        message: 'AI draft ready. Press Enter (or R) to replace your text, or Esc to keep what you have.',
         details: undefined,
       }
     case 'acceptPendingAiDraft':
