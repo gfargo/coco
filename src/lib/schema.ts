@@ -133,6 +133,11 @@ export const schema = {
               "type": "boolean",
               "description": "Group adjacent commits in the history surface under shared section headers (`── Today ──`, `── Yesterday ──`, `── April 2026 ──`) and drop the per-row date column in favor of the headers. On by default because the bucketed view gives stronger temporal orientation at a glance and the freed cells go to the commit subject. Flip off if you prefer a date column on every row.\n\nBucketing automatically suppresses itself while a search filter is active (results aren't chronological), regardless of this setting.",
               "default": true
+            },
+            "syntaxHighlight": {
+              "type": "boolean",
+              "description": "Syntax-highlight code in the diff view using tree-sitter (TypeScript / TSX / JavaScript today). On by default. Highlighting degrades gracefully — unsupported languages, non-ASCII lines, and parse failures fall back to the plain add/remove coloring — so the only reason to disable it is preference or a very low-color terminal. Set to `false` to opt out.",
+              "default": true
             }
           },
           "additionalProperties": false,
@@ -1130,6 +1135,31 @@ export const schema = {
           "type": "string"
         },
         "warning": {
+          "type": "string"
+        },
+        "syntaxKeyword": {
+          "type": "string",
+          "description": "Optional syntax-highlight token colors for the diff view (#1117 follow-up). All optional: when a slot is unset the resolver (`resolveSyntaxColor`) falls back to a sensible ANSI default, so themes get highlighting for free and only need to define these to customize. `noColor` themes skip syntax coloring entirely."
+        },
+        "syntaxString": {
+          "type": "string"
+        },
+        "syntaxComment": {
+          "type": "string"
+        },
+        "syntaxNumber": {
+          "type": "string"
+        },
+        "syntaxType": {
+          "type": "string"
+        },
+        "syntaxFunction": {
+          "type": "string"
+        },
+        "syntaxConstant": {
+          "type": "string"
+        },
+        "syntaxProperty": {
           "type": "string"
         }
       },

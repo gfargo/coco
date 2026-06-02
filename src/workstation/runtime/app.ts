@@ -151,6 +151,7 @@ import {
     setUpstream,
 } from '../../git/branchActions'
 import { addToGitignore } from '../../git/gitignore'
+import { highlightDiffCode, type SyntaxSpan } from '../../lib/syntax/highlightEngine'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
 import {
     ClipboardRunner,
@@ -482,7 +483,7 @@ function enrichFilterActionWithRectification(
 }
 
 export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, theme: baseTheme, themeConfig } = deps
+  const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, syntaxHighlightEnabled, theme: baseTheme, themeConfig } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
 
@@ -677,6 +678,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     undefined
   )
   const [worktreeHunksLoading, setWorktreeHunksLoading] = React.useState(false)
+  // Syntax-highlight spans for the diff currently in view (#1117
+  // follow-up). Computed off the render path by the effect below;
+  // keyed by marker-stripped code line so the diff renderer looks
+  // spans up directly. `undefined` = no highlighting (renders plain).
+  const [diffSyntaxSpans, setDiffSyntaxSpans] = React.useState<
+    Map<string, SyntaxSpan[]> | undefined
+  >(undefined)
   // Stash diff explorer (Enter on a stash row): the runtime fetches
   // `git stash show -p <ref>` lazily once the diff view becomes active
   // with diffSource='stash'. Lines are stored as a flat string[] —
@@ -1838,6 +1846,51 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     selectedWorktreeFile?.path,
     selectedWorktreeFile?.worktreeStatus,
     state.activeView,
+  ])
+
+  // Syntax-highlight the diff currently in view, off the render path
+  // (#1117 follow-up). Mirrors the worktree-diff effect: detect the
+  // active file + its diff lines (worktree or commit source), tokenize
+  // via tree-sitter, and store the per-line spans for the renderer.
+  // Stash / compare sources aren't highlighted yet (multi-file patch /
+  // no single path). Gated on the config flag + a color terminal.
+  React.useEffect(() => {
+    if (!syntaxHighlightEnabled || theme.noColor || state.activeView !== 'diff') {
+      setDiffSyntaxSpans(undefined)
+      return
+    }
+    let filePath: string | undefined
+    let lines: string[] | undefined
+    if (state.diffSource === 'commit') {
+      filePath = selectedDetailFile?.path
+      lines = filePreview?.hunks
+    } else if (worktreeDiff && !worktreeDiff.untracked) {
+      filePath = worktreeDiff.filePath
+      lines = worktreeDiff.lines
+    }
+    if (!filePath || !lines || lines.length === 0) {
+      setDiffSyntaxSpans(undefined)
+      return
+    }
+    let active = true
+    void highlightDiffCode(filePath, lines)
+      .then((map) => {
+        if (active) setDiffSyntaxSpans(map.size > 0 ? map : undefined)
+      })
+      .catch(() => {
+        if (active) setDiffSyntaxSpans(undefined)
+      })
+    return () => {
+      active = false
+    }
+  }, [
+    syntaxHighlightEnabled,
+    theme.noColor,
+    state.activeView,
+    state.diffSource,
+    selectedDetailFile?.path,
+    filePreview,
+    worktreeDiff,
   ])
 
   const toggleSelectedFileStage = React.useCallback(async () => {
@@ -4656,7 +4709,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         spinnerFrame,
         layout.density,
         layout.historyRowMode,
-        Boolean(dateBucketingEnabled)
+        Boolean(dateBucketingEnabled),
+        diffSyntaxSpans
       ),
       renderDetailPanel(
         h,

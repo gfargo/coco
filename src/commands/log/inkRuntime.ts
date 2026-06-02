@@ -52,6 +52,12 @@ type LogInkOptions = {
    * is active regardless of this flag.
    */
   dateBucketing?: boolean
+  /**
+   * Toggle tree-sitter syntax highlighting in the diff view. Forwarded
+   * from `logTui.syntaxHighlight`. `undefined` → the runtime resolves to
+   * `true` (on by default); pass an explicit `false` to opt out.
+   */
+  syntaxHighlight?: boolean
   initialView?: LogInkView
   logArgv?: LogArgv
   /**
@@ -119,6 +125,8 @@ export async function startInkInteractiveLog(
     // Resolve undefined → true so the default flips on automatically.
     // An explicit `false` from config opts out.
     dateBucketingEnabled: options.dateBucketing !== false,
+    // Undefined → on; explicit `false` opts out.
+    syntaxHighlightEnabled: options.syntaxHighlight !== false,
     ink,
     initialView: options.initialView || 'history',
     logArgv: options.logArgv,

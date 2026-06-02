@@ -23,6 +23,21 @@ export type LogInkThemeColors = {
   selectionForeground?: string
   success?: string
   warning?: string
+  /**
+   * Optional syntax-highlight token colors for the diff view (#1117
+   * follow-up). All optional: when a slot is unset the resolver
+   * (`resolveSyntaxColor`) falls back to a sensible ANSI default, so
+   * themes get highlighting for free and only need to define these to
+   * customize. `noColor` themes skip syntax coloring entirely.
+   */
+  syntaxKeyword?: string
+  syntaxString?: string
+  syntaxComment?: string
+  syntaxNumber?: string
+  syntaxType?: string
+  syntaxFunction?: string
+  syntaxConstant?: string
+  syntaxProperty?: string
 }
 
 export type LogInkThemeConfig = {

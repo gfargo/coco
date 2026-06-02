@@ -138,6 +138,13 @@ export type LogInkComponentDeps = LogInkRuntime & {
    * default since tests rarely care about bucket rendering).
    */
   dateBucketingEnabled?: boolean
+  /**
+   * Enable tree-sitter syntax highlighting in the diff view (#1117
+   * follow-up). Optional; defaults to ON upstream in `inkRuntime.ts`
+   * unless `logTui.syntaxHighlight` is `false`. Highlighting degrades
+   * gracefully (no grammar / non-ASCII / parse error → plain line).
+   */
+  syntaxHighlightEnabled?: boolean
   initialView: LogInkView
   logArgv?: LogArgv
   rows: GitLogRow[]

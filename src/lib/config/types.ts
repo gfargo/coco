@@ -121,6 +121,18 @@ type BaseConfig = {
      * @default true
      */
     dateBucketing?: boolean
+
+    /**
+     * Syntax-highlight code in the diff view using tree-sitter
+     * (TypeScript / TSX / JavaScript today). On by default. Highlighting
+     * degrades gracefully — unsupported languages, non-ASCII lines, and
+     * parse failures fall back to the plain add/remove coloring — so the
+     * only reason to disable it is preference or a very low-color
+     * terminal. Set to `false` to opt out.
+     *
+     * @default true
+     */
+    syntaxHighlight?: boolean
   }
 
   /**
