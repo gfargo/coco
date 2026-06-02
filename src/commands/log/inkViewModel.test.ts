@@ -73,6 +73,29 @@ describe('log Ink view model', () => {
     expect(state.pendingMutationConfirmation).toBeUndefined()
   })
 
+  it('opens, moves, and closes the gitignore picker', () => {
+    let state = createLogInkState(rows, { activeView: 'status' })
+    expect(state.gitignorePicker).toBeUndefined()
+
+    state = applyLogInkAction(state, { type: 'openGitignorePicker', file: '.www/' })
+    expect(state.gitignorePicker).toEqual({ file: '.www/', index: 0 })
+
+    // Move down within a 3-option list (anchored, bare, custom).
+    state = applyLogInkAction(state, { type: 'moveGitignorePicker', delta: 1, count: 3 })
+    expect(state.gitignorePicker?.index).toBe(1)
+
+    // Clamps at the bottom bound.
+    state = applyLogInkAction(state, { type: 'moveGitignorePicker', delta: 5, count: 3 })
+    expect(state.gitignorePicker?.index).toBe(2)
+
+    // Clamps at the top bound.
+    state = applyLogInkAction(state, { type: 'moveGitignorePicker', delta: -10, count: 3 })
+    expect(state.gitignorePicker?.index).toBe(0)
+
+    state = applyLogInkAction(state, { type: 'closeGitignorePicker' })
+    expect(state.gitignorePicker).toBeUndefined()
+  })
+
   it('supports workstation surface selection', () => {
     let state = createLogInkState(rows, { activeView: 'status' })
 

@@ -41,6 +41,7 @@ import {
     renderConfirmationPanel,
     renderHelpPanel,
     renderInputPromptPanel,
+    renderGitignorePickerOverlay,
     renderThemePickerOverlay,
 } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
@@ -119,6 +120,10 @@ export function renderDetailPanel(
 
   if (state.showThemePicker) {
     return renderThemePickerOverlay(h, components, state.themePickerFilter, state.themePickerIndex, width, theme, focused)
+  }
+
+  if (state.gitignorePicker) {
+    return renderGitignorePickerOverlay(h, components, state.gitignorePicker.file, state.gitignorePicker.index, width, theme, focused)
   }
 
   if (state.inputPrompt) {
