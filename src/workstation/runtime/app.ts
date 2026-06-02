@@ -152,6 +152,7 @@ import {
 } from '../../git/branchActions'
 import { addToGitignore } from '../../git/gitignore'
 import { highlightDiffCode, type SyntaxSpan } from '../../lib/syntax/highlightEngine'
+import { humanizeAiError } from '../chrome/aiErrors'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
 import {
     ClipboardRunner,
@@ -2094,11 +2095,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         return
       }
 
+      // Humanize provider errors (rate limit / auth / context / network)
+      // into a short actionable line; success-but-no-draft keeps its
+      // message as-is.
+      const composeMessage = result.ok ? result.message : humanizeAiError(result.message)
       dispatch({
         type: 'commitCompose',
-        action: { type: 'setResult', message: result.message, details: result.details },
+        action: { type: 'setResult', message: composeMessage, details: result.details },
       })
-      dispatch({ type: 'setStatus', value: result.message })
+      dispatch({ type: 'setStatus', value: composeMessage, kind: result.ok ? undefined : 'error' })
     } catch (error) {
       // Audit finding #3: defensive recovery for unexpected throws
       // from the workflow. The workflow catches its own errors

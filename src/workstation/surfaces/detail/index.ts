@@ -818,21 +818,16 @@ export function renderCommitPanel(
   const bodyVisualLines: string[] = bodyHasContent
     ? compose.body.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth)).slice(0, 12)
     : ['<empty>']
-  const summaryWrapped = wrapCells(`${compose.summary || '<empty>'}${summaryCursor}`, bodyTextWidth)
-  const summaryFirst = `${compose.field === 'summary' && compose.editing ? '>' : ' '} Summary: ${summaryWrapped[0] || ''}`
-  const summaryRest = summaryWrapped.slice(1).map((line) => `           ${line}`)
-  const headerLines = [
-    statusLine,
-    '',
-    summaryFirst,
-    ...summaryRest,
-    `${compose.field === 'body' && compose.editing ? '>' : ' '} Body:`,
-    ...bodyVisualLines.map((line, index) => {
-      const isLast = index === bodyVisualLines.length - 1
-      return `  ${line}${bodyCursor && isLast ? bodyCursor : ''}`
-    }),
-    '',
-  ]
+  const hasSummary = Boolean(compose.summary)
+  const summaryMarker = compose.field === 'summary' && compose.editing ? '>' : ' '
+  const bodyMarker = compose.field === 'body' && compose.editing ? '>' : ' '
+  // The generated subject is the thing the user is looking for — render
+  // it bold + accent so it pops out of the inspector instead of blending
+  // into the dim label/body text. The `Summary:` label stays dim.
+  const summaryLabel = `${summaryMarker} Summary: `
+  const summaryColor = hasSummary && !theme.noColor ? theme.colors.accent : undefined
+  const summaryValueWidth = Math.max(4, width - 4 - cellWidth(summaryLabel))
+  const summaryWrapped = wrapCells(`${compose.summary || '<empty>'}${summaryCursor}`, summaryValueWidth)
   const trailerLines = [
     ...(compose.message ? ['', compose.message] : []),
     ...(compose.details || []).map((line) => `  ${line}`),
@@ -849,10 +844,34 @@ export function renderCommitPanel(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Commit', focused)),
-  ...headerLines.map((line, index) => h(Text, {
-    key: `commit-header-${index}`,
-    dimColor: index < 2 || line.startsWith('  ') || line === '<empty>',
-  }, truncateCells(line, width - 4))),
+  h(Text, { key: 'commit-status', dimColor: true }, truncateCells(statusLine, width - 4)),
+  h(Text, { key: 'commit-spacer-1' }, ''),
+  // Summary: dim label + the subject value emphasized so it's easy to spot.
+  h(Text, { key: 'commit-summary' },
+    h(Text, { dimColor: true }, summaryLabel),
+    h(Text, {
+      bold: hasSummary,
+      color: summaryColor,
+      dimColor: !hasSummary,
+    }, summaryWrapped[0] || '<empty>')
+  ),
+  ...summaryWrapped.slice(1).map((line, index) => h(Text, {
+    key: `commit-summary-rest-${index}`,
+    bold: true,
+    color: summaryColor,
+  }, truncateCells(`${' '.repeat(cellWidth(summaryLabel))}${line}`, width - 4))),
+  h(Text, {
+    key: 'commit-body-label',
+    dimColor: !(compose.field === 'body' && compose.editing),
+  }, truncateCells(`${bodyMarker} Body:`, width - 4)),
+  ...bodyVisualLines.map((line, index) => {
+    const isLast = index === bodyVisualLines.length - 1
+    return h(Text, {
+      key: `commit-body-${index}`,
+      dimColor: true,
+    }, truncateCells(`  ${line}${bodyCursor && isLast ? bodyCursor : ''}`, width - 4))
+  }),
+  h(Text, { key: 'commit-spacer-2' }, ''),
   // Loading indicator + commit result/details stay inline with the body
   // (they describe what just happened to the fields above). The action
   // hint ("e edit | c commit | I AI draft") moves to the bottom of the

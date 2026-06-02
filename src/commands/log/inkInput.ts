@@ -1027,7 +1027,9 @@ export function getLogInkInputEvents(
   // draft was pending should see the original `R` / Esc semantics of
   // wherever they are now.
   if (state.activeView === 'compose' && state.commitCompose.pendingAiDraft) {
-    if (inputValue === 'R' && !key.ctrl && !key.meta) {
+    // `R` or `Enter` accept the swap (the AI draft becomes the new
+    // content); `Enter` is the natural "yes, use it" confirmation.
+    if ((inputValue === 'R' && !key.ctrl && !key.meta) || key.return) {
       return [action({ type: 'commitCompose', action: { type: 'acceptPendingAiDraft' } })]
     }
     if (key.escape) {
