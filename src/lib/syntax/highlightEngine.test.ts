@@ -26,6 +26,13 @@ describe('detectSyntaxLanguage', () => {
     expect(detectSyntaxLanguage('src/app.js')).toBe('tsx')
   })
 
+  it('maps Python / Rust / Go extensions to their grammars', () => {
+    expect(detectSyntaxLanguage('app/main.py')).toBe('python')
+    expect(detectSyntaxLanguage('app/types.pyi')).toBe('python')
+    expect(detectSyntaxLanguage('src/lib.rs')).toBe('rust')
+    expect(detectSyntaxLanguage('cmd/main.go')).toBe('go')
+  })
+
   it('returns undefined for unsupported files', () => {
     expect(detectSyntaxLanguage('README.md')).toBeUndefined()
     expect(detectSyntaxLanguage('data.json')).toBeUndefined()
