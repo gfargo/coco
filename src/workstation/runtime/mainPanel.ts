@@ -19,6 +19,7 @@ import type {
 import type { LogInkState } from '../../commands/log/inkViewModel'
 import type { WorktreeHunkOverview } from '../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../git/worktreeDiffData'
+import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
 import { renderBisectSurface } from '../surfaces/bisect'
 import { renderBranchesSurface } from '../surfaces/branches'
 import { renderChangelogSurface } from '../surfaces/changelog'
@@ -66,7 +67,8 @@ export function renderMainPanel(
   spinnerFrame: number,
   density: LogInkLayoutDensity,
   rowMode: 'single' | 'stacked',
-  dateBucketingEnabled: boolean
+  dateBucketingEnabled: boolean,
+  syntaxSpans?: Map<string, SyntaxSpan[]>
 ): ReactTypes.ReactElement {
   // Split-plan overlay (#907 polish): renders in the MAIN panel (not
   // detail) when active, because the content — multiple commit groups
@@ -104,7 +106,8 @@ export function renderMainPanel(
       compareDiffLoading,
       bodyRows,
       width,
-      theme
+      theme,
+      syntaxSpans
     )
   }
 

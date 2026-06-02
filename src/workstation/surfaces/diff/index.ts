@@ -42,9 +42,10 @@ import {
   isSplitDiffViable,
   renderSplitDiffBody,
 } from '../../runtime/splitDiff'
+import { renderDiffLine } from '../../runtime/diffLineRender'
+import type { SyntaxSpan } from '../../../lib/syntax/highlightEngine'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import {
-  diffLineProps,
   focusBorderColor,
   panelTitle,
 } from '../../runtime/utils'
@@ -69,7 +70,8 @@ export function renderDiffSurface(
   compareDiffLoading: boolean,
   bodyRows: number,
   width: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  syntaxSpans?: Map<string, SyntaxSpan[]>
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'commits'
@@ -169,10 +171,10 @@ export function renderDiffSurface(
                 : truncateCells(`${arrow}${headerFile.path}`, width - 4)
             })())
           }
-          return h(Text, {
-            key: `stash-diff-line-${absoluteIndex}`,
-            ...diffLineProps(line, theme),
-          }, truncateCells(line, width - 4))
+          return renderDiffLine(
+            h, Text, line, theme, syntaxSpans, width - 4,
+            `stash-diff-line-${absoluteIndex}`
+          )
         })
 
     return h(Box, {
@@ -229,10 +231,10 @@ export function renderDiffSurface(
           h, components, visibleLines, state.diffPreviewOffset, width, theme,
           'compare-diff-split'
         )
-        : visibleLines.map((line, index) => h(Text, {
-          key: `compare-diff-line-${state.diffPreviewOffset + index}`,
-          ...diffLineProps(line, theme),
-        }, truncateCells(line, width - 4)))
+        : visibleLines.map((line, index) => renderDiffLine(
+          h, Text, line, theme, syntaxSpans, width - 4,
+          `compare-diff-line-${state.diffPreviewOffset + index}`
+        ))
 
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
@@ -300,10 +302,10 @@ export function renderDiffSurface(
           h, components, visiblePreviewHunks, state.diffPreviewOffset, width, theme,
           'commit-diff-split'
         )
-        : visiblePreviewHunks.map((line, index) => h(Text, {
-          key: `diff-surface-line-${state.diffPreviewOffset + index}`,
-          ...diffLineProps(line, theme),
-        }, truncateCells(line, 140)))
+        : visiblePreviewHunks.map((line, index) => renderDiffLine(
+          h, Text, line, theme, syntaxSpans, 140,
+          `diff-surface-line-${state.diffPreviewOffset + index}`
+        ))
 
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
@@ -368,9 +370,9 @@ export function renderDiffSurface(
     dimColor: index > 0,
   }, truncateCells(line, 140))),
   ...(showDiffLines
-    ? visibleDiffLines.map((line, index) => h(Text, {
-      key: `diff-surface-line-${state.worktreeDiffOffset + index}`,
-      ...diffLineProps(line, theme),
-    }, truncateCells(line, 140)))
+    ? visibleDiffLines.map((line, index) => renderDiffLine(
+      h, Text, line, theme, syntaxSpans, 140,
+      `diff-surface-line-${state.worktreeDiffOffset + index}`
+    ))
     : []))
 }
