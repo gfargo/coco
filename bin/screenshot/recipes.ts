@@ -741,6 +741,95 @@ export const RECIPES: ScreenshotRecipe[] = [
     theme: 'gruvbox',
   },
 
+  // Themed showcase set (#workstation marketing) — the diff and status
+  // surfaces across a curated set of dark + light themes. The diff view
+  // is the most color-rich surface (now syntax-highlighted), so it shows
+  // off how a theme recolors code, additions, removals, and chrome.
+  {
+    name: 'ui-diff-theme-dracula',
+    description: 'Diff view with dracula theme',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff --theme dracula',
+    theme: 'dracula',
+  },
+  {
+    name: 'ui-diff-theme-tokyo-night',
+    description: 'Diff view with tokyo-night theme',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff --theme tokyo-night',
+    theme: 'tokyo-night',
+  },
+  {
+    name: 'ui-diff-theme-nord',
+    description: 'Diff view with nord theme',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff --theme nord',
+    theme: 'nord',
+  },
+  {
+    name: 'ui-diff-theme-rose-pine',
+    description: 'Diff view with rose-pine theme',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff --theme rose-pine',
+    theme: 'rose-pine',
+  },
+  {
+    name: 'ui-diff-theme-github-light',
+    description: 'Diff view with github-light theme',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff --theme github-light',
+    theme: 'github-light',
+  },
+  {
+    name: 'ui-diff-theme-catppuccin-latte',
+    description: 'Diff view with catppuccin-latte (light) theme',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view diff --theme catppuccin-latte',
+    theme: 'catppuccin-latte',
+  },
+  {
+    name: 'ui-status-theme-dracula',
+    description: 'Status view with dracula theme',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status --theme dracula',
+    theme: 'dracula',
+  },
+  {
+    name: 'ui-status-theme-tokyo-night',
+    description: 'Status view with tokyo-night theme',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status --theme tokyo-night',
+    theme: 'tokyo-night',
+  },
+  {
+    name: 'ui-status-theme-nord',
+    description: 'Status view with nord theme',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status --theme nord',
+    theme: 'nord',
+  },
+  {
+    name: 'ui-status-theme-rose-pine',
+    description: 'Status view with rose-pine theme',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status --theme rose-pine',
+    theme: 'rose-pine',
+  },
+  {
+    name: 'ui-status-theme-github-light',
+    description: 'Status view with github-light theme',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status --theme github-light',
+    theme: 'github-light',
+  },
+  {
+    name: 'ui-status-theme-catppuccin-latte',
+    description: 'Status view with catppuccin-latte (light) theme',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status --theme catppuccin-latte',
+    theme: 'catppuccin-latte',
+  },
+
   // ─────────────────────────────────────────────────────────────────
   // `coco ui` — interactive overlays and focus states
   // ─────────────────────────────────────────────────────────────────
@@ -1036,6 +1125,86 @@ export const RECIPES: ScreenshotRecipe[] = [
     dimensions: { cols: 100, rows: 30 },
     actions: [
       { kind: 'sleep', ms: 4000 },
+    ],
+  },
+  {
+    name: 'demo-workspace-add-repo',
+    description: 'Workspace → `a` add-a-repo prompt with tab path-completion',
+    scenario: '_workspace',
+    command: 'workspace --root . --maxDepth 1',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 2000 },
+      // Open the add-repo prompt (draft starts at `~/`).
+      { kind: 'type', text: 'a' },
+      { kind: 'sleep', ms: 900 },
+      // Tab-complete the home directory to reveal the completion list.
+      { kind: 'key', key: 'Tab' },
+      { kind: 'sleep', ms: 1400 },
+      // Type a fragment, then complete again to show it narrowing.
+      { kind: 'type', text: 'd' },
+      { kind: 'sleep', ms: 700 },
+      { kind: 'key', key: 'Tab' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 700 },
+      { kind: 'type', text: 'q' },
+      { kind: 'sleep', ms: 1500 },
+    ],
+  },
+  {
+    name: 'demo-workspace-clone',
+    description: 'Workspace → `c` clone a remote → URL prompt auto-derives the destination',
+    scenario: '_workspace',
+    command: 'workspace --root . --maxDepth 1',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 2000 },
+      // Open the clone prompt.
+      { kind: 'type', text: 'c' },
+      { kind: 'sleep', ms: 900 },
+      // Type a remote URL — the destination derives as you type.
+      { kind: 'type', text: 'git@github.com:gfargo/coco.git' },
+      { kind: 'sleep', ms: 1600 },
+      // Enter advances to the (auto-filled, editable) destination field.
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 1800 },
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 700 },
+      { kind: 'type', text: 'q' },
+      { kind: 'sleep', ms: 1500 },
+    ],
+  },
+  {
+    name: 'demo-workstation-using',
+    description: 'Using the workstation: history → open a syntax-highlighted diff → status → branches → help',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 40 },
+    actions: [
+      { kind: 'sleep', ms: 3200 },
+      // Walk the history, then open a commit's (syntax-highlighted) diff.
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 600 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 600 },
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 2200 },
+      // Back to history, then tour a couple of other surfaces.
+      { kind: 'type', text: '<' },
+      { kind: 'sleep', ms: 900 },
+      { kind: 'type', text: 'gs' },
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 1500 },
+      // Help overlay, then close + quit.
+      { kind: 'type', text: '?' },
+      { kind: 'sleep', ms: 1800 },
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 500 },
+      { kind: 'type', text: 'q' },
+      { kind: 'sleep', ms: 1200 },
     ],
   },
 ]
