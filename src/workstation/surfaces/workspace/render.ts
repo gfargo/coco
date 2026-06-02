@@ -606,10 +606,11 @@ export type WorkspaceFooterModel = {
 // The contextual slot drops bindings users can find via the help
 // overlay (arrow keys, tab); the global slot is the safety net so
 // `? help` and `q quit` never disappear.
-const LIST_CONTEXTUAL = ['s sort', '/ filter', 'r/R refresh', 'a add', 'd remove']
+const LIST_CONTEXTUAL = ['s sort', '/ filter', 'r/R refresh', 'a add', 'c clone', 'd remove']
 const SIDEBAR_CONTEXTUAL = ['↑/↓ cycle tab', 'enter open']
 const FILTER_CONTEXTUAL = ['type to filter', 'enter apply', 'esc cancel']
 const ADD_REPO_CONTEXTUAL = ['type path', 'tab to complete', 'enter to add', 'esc to cancel']
+const CLONE_REPO_CONTEXTUAL = ['enter URL', 'enter → destination', 'enter to clone', 'esc to cancel']
 const CONFIRM_DELETE_CONTEXTUAL = ['y confirm', 'any other key cancels']
 const GLOBAL_HINTS = ['? help', 'q quit']
 
@@ -621,6 +622,8 @@ function contextualHintsFor(focus: WorkspaceState['focus']): string[] {
       return FILTER_CONTEXTUAL
     case 'add-repo':
       return ADD_REPO_CONTEXTUAL
+    case 'clone-repo':
+      return CLONE_REPO_CONTEXTUAL
     case 'confirm-delete':
       return CONFIRM_DELETE_CONTEXTUAL
     case 'list':
@@ -637,6 +640,7 @@ export function buildWorkspaceFooter(state: WorkspaceState): WorkspaceFooterMode
   const isModal =
     state.focus === 'filter' ||
     state.focus === 'add-repo' ||
+    state.focus === 'clone-repo' ||
     state.focus === 'confirm-delete'
   const global = isModal ? [] : GLOBAL_HINTS
   const allHints = [...contextual, ...global]
@@ -713,6 +717,7 @@ export function buildWorkspaceHelpSections(): WorkspaceHelpSection[] {
         { glyph: '⟳', keys: 'r', description: 'Refresh all repos (discovery + PR counts)' },
         { glyph: '⟲', keys: 'R', description: 'Refresh just the cursored repo (faster)' },
         { glyph: '＋', keys: 'a', description: 'Add a repo via path prompt (tab-completes)' },
+        { glyph: '⬇', keys: 'c', description: 'Clone a remote repo (defaults into the launch directory)' },
         { glyph: '✕', keys: 'd', description: 'Remove the cursored repo from the known-repos store' },
       ],
     },
@@ -747,6 +752,6 @@ export function buildWorkspaceOnboarding(state: WorkspaceState): WorkspaceOnboar
       : undefined,
     populatedHint: empty
       ? undefined
-      : 'Press `enter` to open a repo · `?` for the full keymap · `a` to add a repo by path.',
+      : 'Press `enter` to open a repo · `a` to add by path · `c` to clone · `?` for the full keymap.',
   }
 }

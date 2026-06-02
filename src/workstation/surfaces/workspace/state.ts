@@ -33,13 +33,14 @@ import {
  * - `list`:    j/k moves the cursor through repos
  * - `filter`:  modal text-input for the search filter
  * - `add-repo`: modal path-prompt
+ * - `clone-repo`: modal URL + destination prompt (git clone)
  * - `confirm-delete`: modal y-confirm before removing a repo
  *
  * Tab / Shift+Tab cycles between `sidebar` and `list`. Modal focuses
- * are entered/exited via their own keys (`/`, `a`, `d`) and ignore
+ * are entered/exited via their own keys (`/`, `a`, `c`, `d`) and ignore
  * Tab while open.
  */
-export type WorkspaceFocus = 'sidebar' | 'list' | 'filter' | 'add-repo' | 'confirm-delete'
+export type WorkspaceFocus = 'sidebar' | 'list' | 'filter' | 'add-repo' | 'clone-repo' | 'confirm-delete'
 
 export type WorkspaceState = {
   overview: WorkspaceOverview

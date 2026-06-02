@@ -47,6 +47,7 @@ import {
   getWorkspacePullRequestCounts,
   type WorkspacePullRequestCounts,
 } from '../../../git/workspacePullRequestData'
+import { cloneRepo, deriveRepoName } from '../../../git/cloneRepo'
 import {
   canStartLogInkTui,
   getLogInkRenderOptions,
@@ -472,6 +473,21 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   const [addRepoCompletion, setAddRepoCompletion] = React.useState<PathCompletionResult>(() =>
     completePath('~/')
   )
+  // Clone-repo modal (`c`). Two fields: the remote URL and the
+  // destination path. `cloneField` tracks which is active; `cloneTarget`
+  // auto-derives `<cwd>/<repo-name>` from the URL until the user edits it
+  // (`cloneTargetEdited`). `cloning` blocks input + shows a spinner while
+  // `git clone` runs. The boot cwd is captured once at mount so it stays
+  // the directory the workspace launched in even after drill-in.
+  const bootCwdRef = React.useRef<string>(process.cwd())
+  const [cloneUrl, setCloneUrl] = React.useState<string>('')
+  const [cloneTarget, setCloneTarget] = React.useState<string>('')
+  const [cloneField, setCloneField] = React.useState<'url' | 'target'>('url')
+  const [cloneTargetEdited, setCloneTargetEdited] = React.useState<boolean>(false)
+  const [cloneCompletion, setCloneCompletion] = React.useState<PathCompletionResult>(() =>
+    completePath('~/')
+  )
+  const [cloning, setCloning] = React.useState<boolean>(false)
   // Tick counter for the per-row PR-fetch spinner. Bumped on a
   // setInterval that only runs while at least one row is mid-fetch
   // (see effect below) so idle workspaces don't burn CPU on animation
@@ -529,6 +545,18 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   addRepoDraftRef.current = addRepoDraft
   const addRepoCompletionRef = React.useRef(addRepoCompletion)
   addRepoCompletionRef.current = addRepoCompletion
+  const cloneUrlRef = React.useRef(cloneUrl)
+  cloneUrlRef.current = cloneUrl
+  const cloneTargetRef = React.useRef(cloneTarget)
+  cloneTargetRef.current = cloneTarget
+  const cloneFieldRef = React.useRef(cloneField)
+  cloneFieldRef.current = cloneField
+  const cloneTargetEditedRef = React.useRef(cloneTargetEdited)
+  cloneTargetEditedRef.current = cloneTargetEdited
+  const cloneCompletionRef = React.useRef(cloneCompletion)
+  cloneCompletionRef.current = cloneCompletion
+  const cloningRef = React.useRef(cloning)
+  cloningRef.current = cloning
 
   // Background discovery + PR-count refresh on mount.
   React.useEffect(() => {
@@ -752,6 +780,61 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     }
   }, [addRepoDraft, dispatch, props])
 
+  // Default destination for a clone URL: `<bootCwd>/<repo-name>`.
+  const cloneTargetFor = React.useCallback((url: string): string => {
+    return nodePath.join(bootCwdRef.current, deriveRepoName(url))
+  }, [])
+
+  const openClone = React.useCallback(() => {
+    setCloneUrl('')
+    setCloneTarget('')
+    setCloneField('url')
+    setCloneTargetEdited(false)
+    setCloneCompletion(completePath(`${bootCwdRef.current}/`))
+    dispatch({ type: 'set-focus', focus: 'clone-repo' })
+  }, [dispatch])
+
+  const commitClone = React.useCallback(async () => {
+    const url = cloneUrlRef.current.trim()
+    const target = expandHomePrefix(cloneTargetRef.current.trim().replace(/\/+$/, ''))
+    if (!url) {
+      dispatch({ type: 'set-status', status: 'Enter a remote URL.' })
+      return
+    }
+    if (!target) {
+      dispatch({ type: 'set-status', status: 'Enter a destination path.' })
+      return
+    }
+    setCloning(true)
+    dispatch({ type: 'set-status', status: `Cloning ${deriveRepoName(url)}…` })
+    const result = await cloneRepo(url, target)
+    if (unmountedRef.current) return
+    setCloning(false)
+    if (!result.ok) {
+      // Keep the modal open so the user can fix the URL / path and retry.
+      dispatch({ type: 'set-status', status: result.message })
+      return
+    }
+    const updated = appendKnownRepo(target)
+    dispatch({ type: 'replace-known-repos', paths: updated })
+    dispatch({ type: 'set-focus', focus: 'list' })
+    dispatch({ type: 'set-status', status: result.message })
+    dispatch({ type: 'set-loading', loading: true })
+    try {
+      const merged = mergeKnownRepos(props.knownRepos, readKnownRepos())
+      const overview = await props.loadOverview(props.roots, merged)
+      writeCachedWorkspace(props.roots, overview)
+      dispatch({ type: 'replace-overview', overview })
+      dispatch({ type: 'anchor-cursor-by-path', path: target })
+    } catch (err) {
+      dispatch({ type: 'set-loading', loading: false })
+      dispatch({
+        type: 'set-status',
+        status: err instanceof Error ? err.message : 'Refresh failed.',
+      })
+    }
+  }, [dispatch, props])
+
   // Callback refs so the stable input handler can reach the latest
   // closure without taking them in deps.
   const commitAddRepoRef = React.useRef(commitAddRepo)
@@ -764,6 +847,10 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   refreshRowRef.current = refreshRow
   const openAddRepoRef = React.useRef(openAddRepo)
   openAddRepoRef.current = openAddRepo
+  const openCloneRef = React.useRef(openClone)
+  openCloneRef.current = openClone
+  const commitCloneRef = React.useRef(commitClone)
+  commitCloneRef.current = commitClone
   const requestDeleteRef = React.useRef(requestDelete)
   requestDeleteRef.current = requestDelete
   const confirmDeleteRef = React.useRef(confirmDelete)
@@ -853,6 +940,70 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       return
     }
 
+    if (state.focus === 'clone-repo') {
+      // While the clone is running, swallow everything except Esc
+      // (which is a no-op here — the clone is already in flight).
+      if (cloningRef.current) return
+      if (key.escape) {
+        dispatch({ type: 'set-focus', focus: 'list' })
+        return
+      }
+      const field = cloneFieldRef.current
+      const url = cloneUrlRef.current
+      const target = cloneTargetRef.current
+      const targetEdited = cloneTargetEditedRef.current
+
+      if (key.return) {
+        if (field === 'url') {
+          if (!url.trim()) {
+            dispatch({ type: 'set-status', status: 'Enter a remote URL.' })
+            return
+          }
+          // Advance to the (pre-filled, editable) destination field.
+          const derived = targetEdited ? target : cloneTargetFor(url)
+          setCloneTarget(derived)
+          setCloneCompletion(completePath(derived))
+          setCloneField('target')
+          return
+        }
+        void commitCloneRef.current()
+        return
+      }
+      if (key.tab && field === 'target') {
+        const next = applyTabCompletion(target, cloneCompletionRef.current)
+        setCloneTarget(next)
+        setCloneTargetEdited(true)
+        setCloneCompletion(completePath(next))
+        return
+      }
+      if (key.backspace || key.delete) {
+        if (field === 'url') {
+          const next = url.slice(0, -1)
+          setCloneUrl(next)
+          if (!targetEdited) setCloneTarget(next ? cloneTargetFor(next) : '')
+        } else {
+          const next = target.slice(0, -1)
+          setCloneTarget(next)
+          setCloneTargetEdited(true)
+          setCloneCompletion(completePath(next || '~/'))
+        }
+        return
+      }
+      if (rawInput && !key.ctrl && !key.meta) {
+        if (field === 'url') {
+          const next = url + rawInput
+          setCloneUrl(next)
+          if (!targetEdited) setCloneTarget(cloneTargetFor(next))
+        } else {
+          const next = target + rawInput
+          setCloneTarget(next)
+          setCloneTargetEdited(true)
+          setCloneCompletion(completePath(next))
+        }
+      }
+      return
+    }
+
     // Ctrl+C → quit, since we disabled Ink's built-in ctrl+c exit.
     // Handled here (rather than in the pure resolver) because the
     // resolver doesn't have a notion of "raw key with ctrl flag" for
@@ -895,6 +1046,9 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         break
       case 'add-repo':
         openAddRepoRef.current()
+        break
+      case 'clone-repo':
+        openCloneRef.current()
         break
       case 'request-delete':
         requestDeleteRef.current()
@@ -953,6 +1107,11 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     filterDraft,
     addRepoDraft,
     addRepoCompletion,
+    cloneUrl,
+    cloneTarget,
+    cloneField,
+    cloneCompletion,
+    cloning,
     columns,
     rows,
     spinnerTick,

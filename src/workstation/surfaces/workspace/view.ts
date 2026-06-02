@@ -41,6 +41,12 @@ type RenderWorkspaceAppDeps = {
   filterDraft: string
   addRepoDraft: string
   addRepoCompletion: PathCompletionResult
+  /** Clone-repo modal (`c`) state. */
+  cloneUrl: string
+  cloneTarget: string
+  cloneField: 'url' | 'target'
+  cloneCompletion: PathCompletionResult
+  cloning: boolean
   /** Terminal width in cells. Caller resolves via Ink's useWindowSize. */
   columns: number
   /** Terminal height in rows. Caller resolves via Ink's useWindowSize. */
@@ -708,6 +714,46 @@ function renderAddRepoPrompt(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElem
   )
 }
 
+function renderCloneRepoPrompt(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
+  if (deps.state.focus !== 'clone-repo') {
+    return null
+  }
+  const { React, ink, theme, cloneUrl, cloneTarget, cloneField, cloneCompletion, cloning } = deps
+  const { Box, Text } = ink
+  const urlActive = cloneField === 'url' && !cloning
+  const targetActive = cloneField === 'target' && !cloning
+  const completionLine = cloneCompletion.completions.slice(0, 8).join('  ')
+  const hint = cloning
+    ? 'Cloning… this can take a moment for large repos.'
+    : cloneField === 'url'
+      ? 'Paste a remote URL (https or git@…), then enter for the destination.'
+      : 'Edit the destination · tab to complete · enter to clone · esc to cancel'
+  return React.createElement(
+    Box,
+    {
+      borderColor: focusBorderColor(theme, true),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      paddingX: 1,
+    },
+    React.createElement(Text, { bold: true }, 'Clone a repository'),
+    React.createElement(
+      Text,
+      { color: urlActive ? undefined : toneColor('dim', theme) },
+      `  URL:  ${cloneUrl}${urlActive ? '_' : ''}`
+    ),
+    React.createElement(
+      Text,
+      { color: targetActive ? undefined : toneColor('dim', theme) },
+      `  Into: ${cloneTarget}${targetActive ? '_' : ''}`
+    ),
+    React.createElement(Text, { dimColor: true }, hint),
+    completionLine && targetActive
+      ? React.createElement(Text, { color: toneColor('dim', theme) }, completionLine)
+      : null
+  )
+}
+
 const FOOTER_HEIGHT = 4 // 2 borders + hint row + status row
 
 function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
@@ -764,8 +810,10 @@ function computeBodyHeight(deps: RenderWorkspaceAppDeps): number {
   const FOOTER_ROWS = FOOTER_HEIGHT
   const onboardingRows = buildWorkspaceOnboarding(deps.state).show ? 5 : 0
   const addRepoRows = deps.state.focus === 'add-repo' ? 5 : 0
+  // Clone modal is one row taller (URL + Into + hint + completion).
+  const cloneRows = deps.state.focus === 'clone-repo' ? 6 : 0
   const confirmRows = deps.state.focus === 'confirm-delete' ? 5 : 0
-  const reserved = HEADER_ROWS + FOOTER_ROWS + onboardingRows + addRepoRows + confirmRows
+  const reserved = HEADER_ROWS + FOOTER_ROWS + onboardingRows + addRepoRows + cloneRows + confirmRows
   return Math.max(8, deps.rows - reserved)
 }
 
@@ -820,6 +868,7 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
     ),
     renderOnboardingBanner(deps),
     renderAddRepoPrompt(deps),
+    renderCloneRepoPrompt(deps),
     renderConfirmDelete(deps),
     renderFooter(deps)
   )

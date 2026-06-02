@@ -527,7 +527,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -929,7 +929,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -1477,7 +1477,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -1913,7 +1913,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -2457,7 +2457,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -2854,7 +2854,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -3398,7 +3398,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -3733,7 +3733,7 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -5228,13 +5228,1152 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
       >
         ? help · q quit
       </Text>
+    </Box>
+    <Text
+      dimColor={true}
+    >
+       
+    </Text>
+  </Box>
+</Box>
+`;
+
+exports[`renderWorkspaceApp snapshots the clone prompt on the URL field 1`] = `
+<Box
+  flexDirection="column"
+  height={40}
+>
+  <Box
+    borderColor="cyan"
+    borderStyle="classic"
+    paddingX={1}
+  >
+    <Text
+      bold={true}
+      color="cyan"
+      dimColor={false}
+    >
+      coco
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      bold={true}
+      dimColor={false}
+    >
+      workspace
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      ~/code
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      dimColor={false}
+    >
+      3/3 repos
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      sort: Recent
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      bold={true}
+      color="cyan"
+      dimColor={false}
+    >
+      [List]
+    </Text>
+  </Box>
+  <Box
+    flexDirection="row"
+    height={27}
+  >
+    <Box
+      borderColor="gray"
+      borderStyle="classic"
+      flexDirection="column"
+      flexShrink={0}
+      height={27}
+      paddingX={1}
+      width={22}
+    >
+      <Text
+        bold={true}
+      >
+        Tabs
+      </Text>
+      <Box
+        flexDirection="row"
+      >
+        <Text
+          bold={true}
+        >
+          › 
+        </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+          ◯ 
+        </Text>
+        <Text
+          bold={true}
+        >
+          All      
+        </Text>
+        <Text
+          color="cyan"
+          dimColor={false}
+        >
+           3
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text>
+            
+        </Text>
+        <Text
+          color="gray"
+        >
+          ● 
+        </Text>
+        <Text>
+          Dirty    
+        </Text>
+        <Text
+          dimColor={true}
+        >
+           1
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text>
+            
+        </Text>
+        <Text
+          color="gray"
+        >
+          ↓ 
+        </Text>
+        <Text>
+          Behind   
+        </Text>
+        <Text
+          dimColor={true}
+        >
+           1
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text>
+            
+        </Text>
+        <Text
+          color="gray"
+        >
+          ⊙ 
+        </Text>
+        <Text>
+          PRs      
+        </Text>
+        <Text
+          dimColor={true}
+        >
+           ·
+        </Text>
+      </Box>
+    </Box>
+    <Box
+      borderColor="cyan"
+      borderStyle="classic"
+      flexDirection="column"
+      flexGrow={1}
+      height={27}
+      paddingX={1}
+    >
+      <Box
+        justifyContent="space-between"
+      >
+        <Text
+          bold={true}
+        >
+          Workspace *
+        </Text>
+        <Text
+          dimColor={true}
+        >
+          3 visible
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Box
+          flexShrink={0}
+          width={2}
+        />
+        <Box
+          flexShrink={0}
+          width={19}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            REPO
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={13}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            BRANCH
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={9}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            STATUS
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={11}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            LAST
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={20}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            SUBJECT
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={18}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            PATH
+          </Text>
+        </Box>
+      </Box>
+      <Text
+        dimColor={true}
+      >
+         
+      </Text>
+      <Box
+        flexDirection="row"
+      >
+        <Box
+          flexShrink={0}
+          width={2}
+        >
+          <Text
+            bold={true}
+            color="cyan"
+          >
+            › 
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={19}
+        >
+          <Text
+            bold={true}
+            color="cyan"
+          >
+            coco
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={13}
+        >
+          <Text>
+            main
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={9}
+        >
+          <Text
+            color="yellow"
+          >
+            ●2 ↑1
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={11}
+        >
+          <Text
+            color="gray"
+          >
+            4w
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={20}
+        >
+          <Text>
+            feat: thing
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={18}
+        >
+          <Text
+            color="gray"
+          >
+            /tmp/coco
+          </Text>
+        </Box>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Box
+          flexShrink={0}
+          width={2}
+        >
+          <Text
+            bold={false}
+          >
+              
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={19}
+        >
+          <Text
+            dimColor={false}
+          >
+            docs
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={13}
+        >
+          <Text
+            dimColor={false}
+          >
+            feature/l...
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={9}
+        >
+          <Text
+            color="yellow"
+            dimColor={false}
+          >
+            ↓3
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={11}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            6w
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={20}
+        >
+          <Text
+            dimColor={false}
+          >
+            wip
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={18}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            /tmp/docs
+          </Text>
+        </Box>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Box
+          flexShrink={0}
+          width={2}
+        >
+          <Text
+            bold={false}
+          >
+              
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={19}
+        >
+          <Text
+            dimColor={false}
+          >
+            lib
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={13}
+        >
+          <Text
+            dimColor={false}
+          >
+            main
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={9}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            ·
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={11}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            —
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={20}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            —
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={18}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            /tmp/lib
+          </Text>
+        </Box>
+      </Box>
+      <Text
+        dimColor={true}
+      >
+         
+      </Text>
+    </Box>
+  </Box>
+  <Box
+    borderColor="cyan"
+    borderStyle="classic"
+    flexDirection="column"
+    paddingX={1}
+  >
+    <Text
+      bold={true}
+    >
+      Clone a repository
+    </Text>
+    <Text>
+        URL:  git@github.com:gfargo/coco.git_
+    </Text>
+    <Text
+      color="gray"
+    >
+        Into: /home/dev/coco
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      Paste a remote URL (https or git@…), then enter for the destination.
+    </Text>
+  </Box>
+  <Box
+    borderColor="gray"
+    borderStyle="classic"
+    flexDirection="column"
+    height={4}
+    paddingX={1}
+  >
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
+    >
+      <Text
+        dimColor={true}
+      >
+        enter URL   enter → destination   enter to clone   esc to cancel
+      </Text>
+      <Text
+        dimColor={true}
+      />
+    </Box>
+    <Text
+      dimColor={true}
+    >
+       
+    </Text>
+  </Box>
+</Box>
+`;
+
+exports[`renderWorkspaceApp snapshots the clone prompt on the destination field 1`] = `
+<Box
+  flexDirection="column"
+  height={40}
+>
+  <Box
+    borderColor="cyan"
+    borderStyle="classic"
+    paddingX={1}
+  >
+    <Text
+      bold={true}
+      color="cyan"
+      dimColor={false}
+    >
+      coco
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      bold={true}
+      dimColor={false}
+    >
+      workspace
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      ~/code
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      dimColor={false}
+    >
+      3/3 repos
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      color="gray"
+      dimColor={true}
+    >
+      sort: Recent
+    </Text>
+    <Text
+      dimColor={true}
+    >
+       · 
+    </Text>
+    <Text
+      bold={true}
+      color="cyan"
+      dimColor={false}
+    >
+      [List]
+    </Text>
+  </Box>
+  <Box
+    flexDirection="row"
+    height={27}
+  >
+    <Box
+      borderColor="gray"
+      borderStyle="classic"
+      flexDirection="column"
+      flexShrink={0}
+      height={27}
+      paddingX={1}
+      width={22}
+    >
+      <Text
+        bold={true}
+      >
+        Tabs
+      </Text>
+      <Box
+        flexDirection="row"
+      >
+        <Text
+          bold={true}
+        >
+          › 
+        </Text>
+        <Text
+          bold={true}
+          color="cyan"
+        >
+          ◯ 
+        </Text>
+        <Text
+          bold={true}
+        >
+          All      
+        </Text>
+        <Text
+          color="cyan"
+          dimColor={false}
+        >
+           3
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text>
+            
+        </Text>
+        <Text
+          color="gray"
+        >
+          ● 
+        </Text>
+        <Text>
+          Dirty    
+        </Text>
+        <Text
+          dimColor={true}
+        >
+           1
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text>
+            
+        </Text>
+        <Text
+          color="gray"
+        >
+          ↓ 
+        </Text>
+        <Text>
+          Behind   
+        </Text>
+        <Text
+          dimColor={true}
+        >
+           1
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Text>
+            
+        </Text>
+        <Text
+          color="gray"
+        >
+          ⊙ 
+        </Text>
+        <Text>
+          PRs      
+        </Text>
+        <Text
+          dimColor={true}
+        >
+           ·
+        </Text>
+      </Box>
+    </Box>
+    <Box
+      borderColor="cyan"
+      borderStyle="classic"
+      flexDirection="column"
+      flexGrow={1}
+      height={27}
+      paddingX={1}
+    >
+      <Box
+        justifyContent="space-between"
+      >
+        <Text
+          bold={true}
+        >
+          Workspace *
+        </Text>
+        <Text
+          dimColor={true}
+        >
+          3 visible
+        </Text>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Box
+          flexShrink={0}
+          width={2}
+        />
+        <Box
+          flexShrink={0}
+          width={19}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            REPO
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={13}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            BRANCH
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={9}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            STATUS
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={11}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            LAST
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={20}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            SUBJECT
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={18}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            PATH
+          </Text>
+        </Box>
+      </Box>
+      <Text
+        dimColor={true}
+      >
+         
+      </Text>
+      <Box
+        flexDirection="row"
+      >
+        <Box
+          flexShrink={0}
+          width={2}
+        >
+          <Text
+            bold={true}
+            color="cyan"
+          >
+            › 
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={19}
+        >
+          <Text
+            bold={true}
+            color="cyan"
+          >
+            coco
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={13}
+        >
+          <Text>
+            main
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={9}
+        >
+          <Text
+            color="yellow"
+          >
+            ●2 ↑1
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={11}
+        >
+          <Text
+            color="gray"
+          >
+            4w
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={20}
+        >
+          <Text>
+            feat: thing
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={18}
+        >
+          <Text
+            color="gray"
+          >
+            /tmp/coco
+          </Text>
+        </Box>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Box
+          flexShrink={0}
+          width={2}
+        >
+          <Text
+            bold={false}
+          >
+              
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={19}
+        >
+          <Text
+            dimColor={false}
+          >
+            docs
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={13}
+        >
+          <Text
+            dimColor={false}
+          >
+            feature/l...
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={9}
+        >
+          <Text
+            color="yellow"
+            dimColor={false}
+          >
+            ↓3
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={11}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            6w
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={20}
+        >
+          <Text
+            dimColor={false}
+          >
+            wip
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={18}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            /tmp/docs
+          </Text>
+        </Box>
+      </Box>
+      <Box
+        flexDirection="row"
+      >
+        <Box
+          flexShrink={0}
+          width={2}
+        >
+          <Text
+            bold={false}
+          >
+              
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={19}
+        >
+          <Text
+            dimColor={false}
+          >
+            lib
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={13}
+        >
+          <Text
+            dimColor={false}
+          >
+            main
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={9}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            ·
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={11}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            —
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={20}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            —
+          </Text>
+        </Box>
+        <Box
+          flexShrink={0}
+          width={18}
+        >
+          <Text
+            color="gray"
+            dimColor={true}
+          >
+            /tmp/lib
+          </Text>
+        </Box>
+      </Box>
+      <Text
+        dimColor={true}
+      >
+         
+      </Text>
+    </Box>
+  </Box>
+  <Box
+    borderColor="cyan"
+    borderStyle="classic"
+    flexDirection="column"
+    paddingX={1}
+  >
+    <Text
+      bold={true}
+    >
+      Clone a repository
+    </Text>
+    <Text
+      color="gray"
+    >
+        URL:  git@github.com:gfargo/coco.git
+    </Text>
+    <Text>
+        Into: /home/dev/coco_
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      Edit the destination · tab to complete · enter to clone · esc to cancel
+    </Text>
+    <Text
+      color="gray"
+    >
+      coco/
+    </Text>
+  </Box>
+  <Box
+    borderColor="gray"
+    borderStyle="classic"
+    flexDirection="column"
+    height={4}
+    paddingX={1}
+  >
+    <Box
+      flexDirection="row"
+      justifyContent="space-between"
+    >
+      <Text
+        dimColor={true}
+      >
+        enter URL   enter → destination   enter to clone   esc to cancel
+      </Text>
+      <Text
+        dimColor={true}
+      />
     </Box>
     <Text
       dimColor={true}
@@ -6181,7 +7320,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -6723,7 +7862,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       Welcome to \`coco workspace\`
     </Text>
     <Text>
-      Press \`enter\` to open a repo · \`?\` for the full keymap · \`a\` to add a repo by path.
+      Press \`enter\` to open a repo · \`a\` to add by path · \`c\` to clone · \`?\` for the full keymap.
     </Text>
     <Text
       dimColor={true}
@@ -6745,7 +7884,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -6862,7 +8001,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
         <Text
           dimColor={true}
         >
-          16 bindings
+          17 bindings
         </Text>
       </Box>
       <Text
@@ -7362,6 +8501,35 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
           bold={true}
           color="cyan"
         >
+           ⬇ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          c
+        </Text>
+      </Box>
+      <Text>
+        Clone a remote repo (defaults into the launch directory)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
            ✕ 
         </Text>
       </Box>
@@ -7395,7 +8563,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -7735,7 +8903,7 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}
@@ -8279,7 +9447,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       <Text
         dimColor={true}
       >
-        s sort   / filter   r/R refresh   a add   d remove
+        s sort   / filter   r/R refresh   a add   c clone   d remove
       </Text>
       <Text
         dimColor={true}

@@ -23,6 +23,7 @@ export type WorkspaceInputIntent =
   | { kind: 'refresh' }
   | { kind: 'refresh-row' }
   | { kind: 'add-repo' }
+  | { kind: 'clone-repo' }
   | { kind: 'request-delete' }
   | { kind: 'confirm-delete' }
   | { kind: 'apply-theme'; preset: string }
@@ -117,6 +118,15 @@ export function resolveWorkspaceInput(
     }
     // Enter, Tab, and printable keys are owned by the runtime so it
     // can drive the path-completion prompt.
+    return { kind: 'noop' }
+  }
+
+  if (state.focus === 'clone-repo') {
+    if (key.escape) {
+      return { kind: 'action', action: { type: 'set-focus', focus: 'list' } }
+    }
+    // Enter/Tab/printable keys drive the URL + destination prompt in the
+    // runtime (it owns the two-field state + path completion).
     return { kind: 'noop' }
   }
 
@@ -219,6 +229,9 @@ export function resolveWorkspaceInput(
   }
   if (input === 'a') {
     return { kind: 'add-repo' }
+  }
+  if (input === 'c') {
+    return { kind: 'clone-repo' }
   }
   if (input === 'd') {
     return { kind: 'request-delete' }

@@ -94,6 +94,11 @@ function render(
     filterDraft?: string
     addRepoDraft?: string
     addRepoCompletion?: ReturnType<typeof completePath>
+    cloneUrl?: string
+    cloneTarget?: string
+    cloneField?: 'url' | 'target'
+    cloneCompletion?: ReturnType<typeof completePath>
+    cloning?: boolean
     columns?: number
     rows?: number
   } = {}
@@ -116,6 +121,19 @@ function render(
         commonPrefix: '',
         isDirectory: false,
       } as ReturnType<typeof completePath>),
+    cloneUrl: options.cloneUrl ?? '',
+    cloneTarget: options.cloneTarget ?? '',
+    cloneField: options.cloneField ?? 'url',
+    cloneCompletion:
+      options.cloneCompletion ??
+      ({
+        baseDir: '~/',
+        prefix: '',
+        completions: [],
+        commonPrefix: '',
+        isDirectory: false,
+      } as ReturnType<typeof completePath>),
+    cloning: options.cloning ?? false,
     columns: options.columns ?? 120,
     rows: options.rows ?? 40,
     spinnerTick: 0,
@@ -208,6 +226,33 @@ describe('renderWorkspaceApp', () => {
         prefix: 'co',
         completions: ['coco/*', 'code/', 'coffee/'],
         commonPrefix: 'co',
+        isDirectory: false,
+      } as ReturnType<typeof completePath>,
+    })
+    expect(tree).toMatchSnapshot()
+  })
+
+  it('snapshots the clone prompt on the URL field', () => {
+    const state = applyWorkspaceAction(baseState(), { type: 'set-focus', focus: 'clone-repo' })
+    const tree = render(state, {
+      cloneUrl: 'git@github.com:gfargo/coco.git',
+      cloneTarget: '/home/dev/coco',
+      cloneField: 'url',
+    })
+    expect(tree).toMatchSnapshot()
+  })
+
+  it('snapshots the clone prompt on the destination field', () => {
+    const state = applyWorkspaceAction(baseState(), { type: 'set-focus', focus: 'clone-repo' })
+    const tree = render(state, {
+      cloneUrl: 'git@github.com:gfargo/coco.git',
+      cloneTarget: '/home/dev/coco',
+      cloneField: 'target',
+      cloneCompletion: {
+        baseDir: '/home/dev/',
+        prefix: 'co',
+        completions: ['coco/'],
+        commonPrefix: 'coco',
         isDirectory: false,
       } as ReturnType<typeof completePath>,
     })
