@@ -285,7 +285,8 @@ export function renderDiffSurface(
       ? [`Loading diff for ${selectedDetailFile?.path || 'selected file'}...`]
       : previewHunks.length
         ? [
-          `Selected file: ${selectedDetailFile?.path || ''}`,
+          // File path is already shown in the panel title bar (right) —
+          // no redundant "Selected file:" line here.
           currentHunkLabel,
           `Lines ${Math.min(state.diffPreviewOffset + 1, previewHunks.length || 1)}-${Math.min(state.diffPreviewOffset + visiblePreviewHunks.length, previewHunks.length)}/${previewHunks.length}`,
           '',
@@ -338,7 +339,8 @@ export function renderDiffSurface(
       ? [`Loading diff for ${worktreeFile?.path || 'selected file'}...`]
       : worktreeFile
       ? [
-        `Selected file: ${worktreeFile.path}`,
+        // File path is already shown in the panel title bar (right) —
+        // no redundant "Selected file:" line here.
         worktreeHunksLoading
           ? 'Hunks loading...'
           : worktreeHunks?.hunks.length
