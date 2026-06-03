@@ -1,4 +1,4 @@
-import { revertFile, stageFile, unstageFile } from './statusActions'
+import { revertFile, stageAll, stageFile, stagePathspec, unstageFile } from './statusActions'
 import { WorktreeFile } from './statusData'
 
 const file: WorktreeFile = {
@@ -38,5 +38,44 @@ describe('log status actions', () => {
       message: 'Untracked files are not reverted automatically.',
     })
     expect(git.raw).not.toHaveBeenCalled()
+  })
+
+  describe('stageAll', () => {
+    it('runs git add -A', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await stageAll(git as never)
+      expect(result.ok).toBe(true)
+      expect(result.message).toBe('Staged all changes')
+      expect(git.raw).toHaveBeenCalledWith(['add', '-A'])
+    })
+  })
+
+  describe('stagePathspec', () => {
+    it('stages a single pathspec', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await stagePathspec(git as never, 'src/')
+      expect(result.ok).toBe(true)
+      expect(git.raw).toHaveBeenCalledWith(['add', '--', 'src/'])
+    })
+
+    it('splits a space-separated list into multiple pathspecs', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      await stagePathspec(git as never, '  src/  *.ts  ')
+      expect(git.raw).toHaveBeenCalledWith(['add', '--', 'src/', '*.ts'])
+    })
+
+    it('passes globs through to git unquoted (no shell)', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      await stagePathspec(git as never, '*.json')
+      expect(git.raw).toHaveBeenCalledWith(['add', '--', '*.json'])
+    })
+
+    it('refuses an empty pathspec', async () => {
+      const git = { raw: jest.fn() }
+      const result = await stagePathspec(git as never, '   ')
+      expect(result.ok).toBe(false)
+      expect(result.message).toMatch(/Enter a pathspec/)
+      expect(git.raw).not.toHaveBeenCalled()
+    })
   })
 })

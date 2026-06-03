@@ -82,3 +82,33 @@ export function unstageAllFiles(
     `Unstaged ${files.length} ${files.length === 1 ? 'file' : 'files'}`
   )
 }
+
+/**
+ * Stage everything in the worktree — modifications, new files, and
+ * deletions — in one shot (`git add -A`). The `A` hotkey + the `:`
+ * palette's "stage all" both route here.
+ */
+export function stageAll(git: SimpleGit): Promise<StatusActionResult> {
+  return runAction(
+    () => git.raw(['add', '-A']),
+    'Staged all changes'
+  )
+}
+
+/**
+ * Stage files matching one or more git pathspecs (`git add -- <spec…>`).
+ * Powers the typed "stage…" prompt (`+`): the user types a path, a
+ * directory, a glob like `*.ts`, or a space-separated list, and git's
+ * own pathspec matching does the rest. Args are passed directly (no
+ * shell), so the globs are interpreted by git, not the shell.
+ */
+export function stagePathspec(git: SimpleGit, pathspec: string): Promise<StatusActionResult> {
+  const specs = pathspec.trim().split(/\s+/).filter(Boolean)
+  if (specs.length === 0) {
+    return Promise.resolve({ ok: false, message: 'Enter a pathspec to stage (e.g. . or src/ or *.ts).' })
+  }
+  return runAction(
+    () => git.raw(['add', '--', ...specs]),
+    `Staged ${specs.join(' ')}`
+  )
+}

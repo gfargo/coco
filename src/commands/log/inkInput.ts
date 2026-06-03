@@ -689,6 +689,14 @@ export function getLogInkPaletteExecuteEvents(
       // Runtime resolves the cursored worktree file and opens the picker
       // (no-ops with a warning when there's no file under the cursor).
       return [{ type: 'openGitignorePicker' }]
+    case 'stageAll':
+      return [{ type: 'runWorkflowAction', id: 'stage-all' }]
+    case 'stagePathspec':
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'stage-pathspec',
+        label: 'Stage pathspec (e.g. `.`, `src/`, `*.ts`, or a space-separated list)',
+      })]
     case 'workflowDeleteBranch':
     case 'workflowDeleteTag':
     case 'workflowDropStash':
@@ -787,6 +795,12 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   if (state.inputPrompt.kind === 'gitignore-pattern') {
     return [
       { type: 'runWorkflowAction', id: 'add-to-gitignore', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'stage-pathspec') {
+    return [
+      { type: 'runWorkflowAction', id: 'stage-pathspec', payload: value },
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -3178,6 +3192,20 @@ export function getLogInkInputEvents(
 
   if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {
     return [{ type: 'toggleSelectedFileStage' }]
+  }
+
+  // `A` — stage everything (git add -A); `+` — stage by typed pathspec.
+  // Both available from the status AND compose views so you can stage
+  // without leaving the message editor.
+  if (inputValue === 'A' && (state.activeView === 'status' || state.activeView === 'compose')) {
+    return [{ type: 'runWorkflowAction', id: 'stage-all' }]
+  }
+  if (inputValue === '+' && (state.activeView === 'status' || state.activeView === 'compose')) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'stage-pathspec',
+      label: 'Stage pathspec (e.g. `.`, `src/`, `*.ts`, or a space-separated list)',
+    })]
   }
 
   if (inputValue === ' ' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
