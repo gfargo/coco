@@ -22,7 +22,7 @@ import { renderBranchesSurface } from '../surfaces/branches'
 import { renderChangelogSurface } from '../surfaces/changelog'
 import { renderComposeSurface } from '../surfaces/compose'
 import { renderConflictsSurface } from '../surfaces/conflicts'
-import { renderDiffSurface } from '../surfaces/diff'
+import { renderDiffSurface, type DiffSurfaceData } from '../surfaces/diff'
 import { renderHistoryPanel } from '../surfaces/history'
 import { renderSplitPlanOverlay } from './overlays'
 import { renderIssuesTriageSurface } from '../surfaces/issuesTriage'
@@ -82,8 +82,7 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'diff') {
-    return renderDiffSurface(
-      surface,
+    const diffData: DiffSurfaceData = {
       worktreeDiff,
       worktreeDiffLoading,
       worktreeHunks,
@@ -96,8 +95,9 @@ export function renderMainPanel(
       stashDiffLoading,
       compareDiffLines,
       compareDiffLoading,
-      syntaxSpans
-    )
+      syntaxSpans,
+    }
+    return renderDiffSurface(surface, diffData)
   }
 
   if (state.activeView === 'compose') {
