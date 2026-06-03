@@ -165,11 +165,21 @@ Once phases 5–7 of [#890](https://github.com/gfargo/coco/issues/890) land, ste
 
 ## Adding a new key binding
 
+**Read [`KEYMAP.md`](./KEYMAP.md) first** — it's the deliberate map of every
+key, the overload table (which letters already mean different things in
+different views), and the dispatch-precedence rules that keep those overloads
+safe. Single keys are dense here; check the map before claiming one.
+
 For an inline keypress on an existing view, you only need:
 
 1. The handler in the per-view branch of `inkInput.ts`.
-2. The footer hint in `inkKeymap.ts`.
-3. (If the action needs y-confirm) a workflow registration in `inkWorkflows.ts` with `requiresConfirmation`.
+2. The footer hint in `inkKeymap.ts` — it must name what the handler actually
+   does (a footer that lies about a key is a bug).
+3. The declarative entry in `LOG_INK_KEY_BINDINGS` (so it shows in `?` help and
+   the `:` palette). `inkKeymap.collisions.test.ts` fails the build if your
+   `(key, context)` pair is already taken.
+4. (If the action needs y-confirm) a workflow registration in `inkWorkflows.ts` with `requiresConfirmation`.
+5. Update `KEYMAP.md` in the same PR.
 
 For a global chord (e.g. a new `g <letter>` view selector), the chord goes in `inkKeymap.ts` plus the route into the action / view-switch in the reducer.
 
