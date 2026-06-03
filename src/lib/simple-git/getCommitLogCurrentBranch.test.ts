@@ -30,7 +30,15 @@ function getLogCalls(logger: ReturnType<typeof createLogger>): string[] {
 }
 
 describe('getCommitLogCurrentBranch — edge states', () => {
-  jest.setTimeout(20000)
+  // The mid-bisect fixture is the heaviest in the suite: it builds 20
+  // sequential commits (~40+ git subprocesses, serialized by simple-git's
+  // own queue) and runs `git bisect start`. Uncontended that's ~14s; under
+  // the full parallel suite (jest spreads workers all forking git at once)
+  // CPU/IO contention pushed it past the old 20s budget and jest aborted
+  // with a timeout — the one true parallel-only flake in the suite (no
+  // assertion ever fails; temp dirs are already unique per test). 60s gives
+  // ample headroom under load without serializing anything.
+  jest.setTimeout(60000)
 
   let repo: TempGitRepo
 
