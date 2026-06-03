@@ -48,23 +48,49 @@ import {
   panelTitle,
 } from '../../runtime/utils'
 
+/**
+ * The diff surface's own data slices (#1136 polish). Grouped into one
+ * object so the signature stays `(ctx, diff)` instead of trailing 13
+ * positional params — these are the worktree / commit / stash / compare
+ * diff bodies the renderer chooses between based on `state`, plus the
+ * optional syntax-highlight spans.
+ */
+export type DiffSurfaceData = {
+  worktreeDiff: WorktreeFileDiff | undefined
+  worktreeDiffLoading: boolean
+  worktreeHunks: WorktreeHunkOverview | undefined
+  worktreeHunksLoading: boolean
+  filePreview: GitCommitFilePreview | undefined
+  filePreviewLoading: boolean
+  commitDiffHunkOffsets: number[] | undefined
+  selectedDetailFile: GitCommitDetail['files'][number] | undefined
+  stashDiffLines: string[] | undefined
+  stashDiffLoading: boolean
+  compareDiffLines: string[] | undefined
+  compareDiffLoading: boolean
+  syntaxSpans?: Map<string, SyntaxSpan[]>
+}
+
 export function renderDiffSurface(
   ctx: SurfaceRenderContext,
-  worktreeDiff: WorktreeFileDiff | undefined,
-  worktreeDiffLoading: boolean,
-  worktreeHunks: WorktreeHunkOverview | undefined,
-  worktreeHunksLoading: boolean,
-  filePreview: GitCommitFilePreview | undefined,
-  filePreviewLoading: boolean,
-  commitDiffHunkOffsets: number[] | undefined,
-  selectedDetailFile: GitCommitDetail['files'][number] | undefined,
-  stashDiffLines: string[] | undefined,
-  stashDiffLoading: boolean,
-  compareDiffLines: string[] | undefined,
-  compareDiffLoading: boolean,
-  syntaxSpans?: Map<string, SyntaxSpan[]>
+  diff: DiffSurfaceData
 ): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
+  const {
+    worktreeDiff,
+    worktreeDiffLoading,
+    worktreeHunks,
+    worktreeHunksLoading,
+    filePreview,
+    filePreviewLoading,
+    commitDiffHunkOffsets,
+    selectedDetailFile,
+    stashDiffLines,
+    stashDiffLoading,
+    compareDiffLines,
+    compareDiffLoading,
+    syntaxSpans,
+  } = diff
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree
