@@ -735,6 +735,20 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
 const NORMAL_GLOBAL_HINTS = ['g jump', '< back', '? help', ': cmds', 'q quit']
 
 /**
+ * Narrow single-pane footer budget (#1135). On terminals below the
+ * single-pane breakpoint the pane switcher (`tab: …`, ~29 cells) plus
+ * the snap-back / peek affordance already claim most of an 80-cell row,
+ * so the per-view hint tail and the global cluster are trimmed to what
+ * fits without clipping — the switcher is the orientation anchor and
+ * must stay whole. The dropped bindings remain one `?` (help) away.
+ *
+ *   - keep only the first view hint (the most actionable for the view)
+ *   - shrink the global cluster to the two recovery essentials
+ */
+const SINGLE_PANE_GLOBAL_HINTS = ['? help', 'q quit']
+const SINGLE_PANE_VIEW_HINT_LIMIT = 1
+
+/**
  * Per-binding category mapping. Used to subdivide the help overlay's
  * Global and view sections into named clusters so users don't face a
  * 30-row wall of keys with no visual structure.
@@ -998,11 +1012,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   const hints = computeLogInkFooterHints(options)
   // While peeking the sidebar (#1135 v2) the footer shows the snap-back
   // affordance instead of the switcher — the user is mid-glance, not
-  // navigating, so `v`/Esc returning to main is the relevant action.
+  // navigating, so `v`/Esc returning to main is the relevant action. The
+  // view-hint tail + globals are trimmed to fit the narrow row (see
+  // SINGLE_PANE_GLOBAL_HINTS).
   if (options.peeking) {
     return {
-      contextual: ['v/esc → main', ...hints.contextual],
-      global: hints.global,
+      contextual: ['v/esc → main', ...hints.contextual.slice(0, SINGLE_PANE_VIEW_HINT_LIMIT)],
+      global: SINGLE_PANE_GLOBAL_HINTS,
     }
   }
   // On narrow terminals only one pane is on screen, so prepend a Tab
@@ -1012,15 +1028,17 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   // captured) and Tab does something else, so the switcher is
   // suppressed there to avoid showing a pane that isn't active. From the
   // main / inspector pane we also surface `v peek` so the momentary
-  // sidebar glance is discoverable.
+  // sidebar glance is discoverable. The full per-view hint cluster +
+  // global cluster don't fit alongside the switcher at the 80-col floor,
+  // so both are trimmed (the dropped keys stay reachable via `?`).
   if (options.singlePane) {
     const lead =
       options.focus === 'sidebar'
         ? [singlePaneSwitcherHint(options.focus)]
         : [singlePaneSwitcherHint(options.focus), 'v peek']
     return {
-      contextual: [...lead, ...hints.contextual],
-      global: hints.global,
+      contextual: [...lead, ...hints.contextual.slice(0, SINGLE_PANE_VIEW_HINT_LIMIT)],
+      global: SINGLE_PANE_GLOBAL_HINTS,
     }
   }
   return hints
