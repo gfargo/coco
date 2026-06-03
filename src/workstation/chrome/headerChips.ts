@@ -2,7 +2,10 @@
  * Header chip builder. Turns the workstation's title-bar state into an
  * ordered list of small visually-distinct chips:
  *
- *   coco · gfargo/coco · ⎇ main · ✓ clean · ⊘ no PR · [NORMAL]
+ *   coco · gfargo/coco · ⎇ main · ✓ clean · [NORMAL]
+ *
+ * The PR chip is appended only when a pull request exists (#1133); there
+ * is no "no PR" placeholder chip.
  *
  * Pre-refactor the title bar concatenated every segment into a single
  * Text span, which made the eye read the whole thing as one run of
