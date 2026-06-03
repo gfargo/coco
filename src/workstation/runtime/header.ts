@@ -2,7 +2,10 @@
  * Title-bar renderer. Surfaces the workstation's identity + navigation
  * state as a row of small visually-distinct chips:
  *
- *   coco · gfargo/coco · ⎇ main · ✓ clean · ⊘ no PR · [NORMAL]
+ *   coco · gfargo/coco · ⎇ main · ✓ clean · [NORMAL]
+ *
+ * The PR chip is appended only when a pull request exists (e.g.
+ * `· ⊠ PR #1234 OPEN`); there's no "no PR" placeholder chip.
  *
  * Per-chip color/glyph treatment lets the user scan in chunks ("what
  * app, what repo, what branch, how clean, what PR state, what mode")

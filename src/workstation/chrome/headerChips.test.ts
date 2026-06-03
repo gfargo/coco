@@ -36,14 +36,14 @@ describe('buildHeaderChips', () => {
     // Default state: clean repo, no PR, no breadcrumb, NORMAL mode.
     // The chip order is load-bearing for scan-ability — identity chips
     // (app/repo/branch) come first, then state (dirty/PR), then
-    // navigation (breadcrumb/loading), then mode.
+    // navigation (breadcrumb/loading), then mode. With no PR loaded the
+    // PR chip is omitted entirely (no "no PR" placeholder).
     const chips = buildHeaderChips(makeInput())
     expect(chips.map((c) => c.id)).toEqual([
       'app',
       'repo',
       'branch',
       'dirty',
-      'pr',
       'mode',
     ])
   })
@@ -75,11 +75,9 @@ describe('buildHeaderChips', () => {
     expect(chips.find((c) => c.id === 'bisecting')).toBeUndefined()
   })
 
-  it('renders a muted "no PR" chip when no pull request is loaded', () => {
+  it('omits the PR chip entirely when no pull request is loaded', () => {
     const chips = buildHeaderChips(makeInput({ pullRequest: undefined }))
-    const pr = chips.find((c) => c.id === 'pr')!
-    expect(pr.label).toBe('⊘ no PR')
-    expect(pr.dim).toBe(true)
+    expect(chips.find((c) => c.id === 'pr')).toBeUndefined()
   })
 
   it('renders the PR chip with state and glyph when a pull request is loaded', () => {
@@ -107,7 +105,10 @@ describe('buildHeaderChips', () => {
   })
 
   it('inserts the breadcrumb chip after PR when a view is pushed', () => {
-    const chips = buildHeaderChips(makeInput({ breadcrumb: 'diff · stash' }))
+    const chips = buildHeaderChips(makeInput({
+      breadcrumb: 'diff · stash',
+      pullRequest: { number: 1, state: 'open' },
+    }))
     const ids = chips.map((c) => c.id)
     expect(ids.indexOf('view')).toBe(ids.indexOf('pr') + 1)
     expect(chips.find((c) => c.id === 'view')!.label).toBe('diff · stash')
@@ -150,16 +151,14 @@ describe('buildHeaderChips', () => {
   })
 
   describe('ASCII mode', () => {
-    it('substitutes printable single-char glyphs for the dirty / clean / bisect / no-PR / branch chips', () => {
+    it('substitutes printable single-char glyphs for the dirty / clean / bisect / branch chips', () => {
       const theme = createLogInkTheme({ noColor: false, ascii: true })
       // Clean + no PR + no bisect — the most common state.
       const baseline = buildHeaderChips(makeInput({ theme }))
       const branch = baseline.find((c) => c.id === 'branch')!
       const dirty = baseline.find((c) => c.id === 'dirty')!
-      const pr = baseline.find((c) => c.id === 'pr')!
       expect(branch.label).toBe('git: main')
       expect(dirty.label).toBe('+ clean')
-      expect(pr.label).toBe('- no PR')
 
       // Dirty branch ASCII fallback.
       const dirtyChips = buildHeaderChips(makeInput({ theme, dirty: true }))
@@ -189,9 +188,9 @@ describe('measureHeaderChipsWidth', () => {
       theme: createLogInkTheme({ noColor: false, ascii: true }),
     }))
     // 'AB' (2) + ' · ' (3) + 'CD' (2) + ' · ' (3) + 'git: EF' (7) +
-    // ' · ' (3) + '+ clean' (7) + ' · ' (3) + '- no PR' (7) +
-    // ' · ' (3) + '[NORMAL]' (8) = 48
-    expect(measureHeaderChipsWidth(chips)).toBe(48)
+    // ' · ' (3) + '+ clean' (7) + ' · ' (3) + '[NORMAL]' (8) = 38.
+    // No PR loaded → no PR chip (and no extra separator).
+    expect(measureHeaderChipsWidth(chips)).toBe(38)
   })
 })
 

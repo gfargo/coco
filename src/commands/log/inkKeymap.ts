@@ -908,9 +908,10 @@ export function formatLogInkBreadcrumb(viewStack: LogInkView[]): string {
     return ''
   }
 
-  // Trailing back-hint (P2.5) reminds the user how to walk back when
-  // they're nested deeper than the root view.
-  return `${viewStack.join(' › ')}   ← <`
+  // Pure location breadcrumb — no trailing back-hint. The footer's
+  // global `< back` hint already names the walk-back key, so repeating
+  // `← <` on every nested view was redundant header chrome (TUI audit).
+  return viewStack.join(' › ')
 }
 
 /**
@@ -918,9 +919,10 @@ export function formatLogInkBreadcrumb(viewStack: LogInkView[]): string {
  * for the chrome header. Returns an empty string for a root-only stack
  * so the header stays compact when nothing has been pushed.
  *
- * The trailing `← esc` reminds the user that Esc is the way out — same
- * shape as the view breadcrumb's `← <` so the two read consistently.
- * The repo breadcrumb shows in addition to the view breadcrumb when
+ * The trailing `← esc` reminds the user that Esc (not `<`) pops the
+ * repo stack — a distinct key from the footer's global `< back`, so
+ * unlike the view breadcrumb (pure location) the repo crumb keeps its
+ * hint. The repo breadcrumb shows in addition to the view breadcrumb when
  * both stacks are non-trivial; the chrome layer is responsible for
  * laying them out side by side.
  *
