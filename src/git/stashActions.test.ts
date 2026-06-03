@@ -83,15 +83,17 @@ describe('log stash actions', () => {
     expect(git.raw).not.toHaveBeenCalled()
   })
 
-  it('renames a stash: store the same commit, then drop the shifted old ref', async () => {
+  it('renames a stash: drop the original entry first, then re-store the commit under the new message', async () => {
     const git = { raw: jest.fn().mockResolvedValue('') }
     const at2: StashEntry = { ...stash, ref: 'stash@{2}', hash: 'deadbeef' }
 
     await expect(renameStash(git as never, at2, ' better name ')).resolves.toMatchObject({ ok: true })
-    // store the same commit under the new message first…
-    expect(git.raw).toHaveBeenNthCalledWith(1, ['stash', 'store', '-m', 'better name', 'deadbeef'])
-    // …then drop the original, whose index shifted +1 after the store.
-    expect(git.raw).toHaveBeenNthCalledWith(2, ['stash', 'drop', 'stash@{3}'])
+    // Drop FIRST — `git stash store` no-ops while the commit is still in
+    // the reflog, so storing first would do nothing and this drop would
+    // hit the wrong entry. Dropping frees the reflog ref…
+    expect(git.raw).toHaveBeenNthCalledWith(1, ['stash', 'drop', 'stash@{2}'])
+    // …then store re-adds the same commit under the new message.
+    expect(git.raw).toHaveBeenNthCalledWith(2, ['stash', 'store', '-m', 'better name', 'deadbeef'])
   })
 
   it('refuses to rename with an empty message or missing hash', async () => {
