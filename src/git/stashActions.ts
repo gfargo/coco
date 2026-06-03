@@ -98,13 +98,17 @@ export function stashBranch(git: SimpleGit, stash: StashEntry, branchName: strin
 }
 
 /**
- * Rename a stash. Git has no native rename, so re-store the SAME commit
- * under a new message (`git stash store`), then drop the original entry.
+ * Rename a stash. Git has no native rename, so: drop the original entry,
+ * then re-store the SAME commit under the new message.
  *
- * Order matters: `store` prepends a fresh `stash@{0}` and shifts every
- * existing index down by one, so the original `stash@{N}` becomes
- * `stash@{N+1}` — that shifted ref is what we drop. Storing first keeps
- * the commit reachable throughout.
+ * Order matters — and it's the OPPOSITE of what you'd guess. `git stash
+ * store` SILENTLY NO-OPS when the commit is already referenced in the
+ * stash reflog (verified empirically), so storing first does nothing and
+ * a follow-up drop removes the wrong entry. Dropping first removes the
+ * reflog reference (the commit object survives), so the subsequent
+ * `store` actually re-adds it — landing at `stash@{0}` with the new
+ * message. The commit is captured by hash beforehand, so the drop→store
+ * window can't lose it.
  */
 export function renameStash(git: SimpleGit, stash: StashEntry, newMessage: string): Promise<BranchActionResult> {
   const trimmed = newMessage.trim()
@@ -114,15 +118,10 @@ export function renameStash(git: SimpleGit, stash: StashEntry, newMessage: strin
   if (!stash.hash) {
     return Promise.resolve({ ok: false, message: 'Cannot rename: stash commit hash unavailable.' })
   }
-  const match = /stash@\{(\d+)\}/.exec(stash.ref)
-  if (!match) {
-    return Promise.resolve({ ok: false, message: `Cannot rename: unrecognized stash ref ${stash.ref}.` })
-  }
-  const shiftedOldRef = `stash@{${Number(match[1]) + 1}}`
 
   return runAction(async () => {
+    await git.raw(['stash', 'drop', stash.ref])
     await git.raw(['stash', 'store', '-m', trimmed, stash.hash])
-    await git.raw(['stash', 'drop', shiftedOldRef])
   }, `Renamed ${stash.ref} → ${trimmed}`)
 }
 
