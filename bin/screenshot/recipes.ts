@@ -694,6 +694,9 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'dirty-many-files',
     command: 'ui --view status --theme catppuccin',
     theme: 'catppuccin',
+    // Status loads worktree + branches async; give it room past the
+    // launch settle so the capture isn't of the loading placeholder.
+    actions: [{ kind: 'sleep', ms: 3000 }],
   },
   {
     name: 'ui-status-theme-gruvbox',
@@ -701,6 +704,9 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'dirty-many-files',
     command: 'ui --view status --theme gruvbox',
     theme: 'gruvbox',
+    // Status loads worktree + branches async; give it room past the
+    // launch settle so the capture isn't of the loading placeholder.
+    actions: [{ kind: 'sleep', ms: 3000 }],
   },
   {
     name: 'ui-branches-theme-catppuccin',
@@ -793,6 +799,9 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'dirty-many-files',
     command: 'ui --view status --theme dracula',
     theme: 'dracula',
+    // Status loads worktree + branches async; give it room past the
+    // launch settle so the capture isn't of the loading placeholder.
+    actions: [{ kind: 'sleep', ms: 3000 }],
   },
   {
     name: 'ui-status-theme-tokyo-night',
@@ -800,6 +809,9 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'dirty-many-files',
     command: 'ui --view status --theme tokyo-night',
     theme: 'tokyo-night',
+    // Status loads worktree + branches async; give it room past the
+    // launch settle so the capture isn't of the loading placeholder.
+    actions: [{ kind: 'sleep', ms: 3000 }],
   },
   {
     name: 'ui-status-theme-nord',
@@ -807,6 +819,9 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'dirty-many-files',
     command: 'ui --view status --theme nord',
     theme: 'nord',
+    // Status loads worktree + branches async; give it room past the
+    // launch settle so the capture isn't of the loading placeholder.
+    actions: [{ kind: 'sleep', ms: 3000 }],
   },
   {
     name: 'ui-status-theme-rose-pine',
@@ -814,6 +829,9 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'dirty-many-files',
     command: 'ui --view status --theme rose-pine',
     theme: 'rose-pine',
+    // Status loads worktree + branches async; give it room past the
+    // launch settle so the capture isn't of the loading placeholder.
+    actions: [{ kind: 'sleep', ms: 3000 }],
   },
   {
     name: 'ui-status-theme-github-light',
@@ -821,6 +839,9 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'dirty-many-files',
     command: 'ui --view status --theme github-light',
     theme: 'github-light',
+    // Status loads worktree + branches async; give it room past the
+    // launch settle so the capture isn't of the loading placeholder.
+    actions: [{ kind: 'sleep', ms: 3000 }],
   },
   {
     name: 'ui-status-theme-catppuccin-latte',
@@ -828,6 +849,9 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'dirty-many-files',
     command: 'ui --view status --theme catppuccin-latte',
     theme: 'catppuccin-latte',
+    // Status loads worktree + branches async; give it room past the
+    // launch settle so the capture isn't of the loading placeholder.
+    actions: [{ kind: 'sleep', ms: 3000 }],
   },
 
   // ─────────────────────────────────────────────────────────────────
