@@ -366,14 +366,14 @@ describe('log Ink keymap', () => {
     expect(helpText).toContain('tab Move focus to the next panel.')
   })
 
-  it('formats the navigation breadcrumb with a back-hint cue when nested', () => {
+  it('formats the navigation breadcrumb as pure location (no back-hint)', () => {
     expect(formatLogInkBreadcrumb([])).toBe('')
     expect(formatLogInkBreadcrumb(['history'])).toBe('')
-    expect(formatLogInkBreadcrumb(['status'])).toBe('status   ← <')
-    expect(formatLogInkBreadcrumb(['history', 'diff'])).toBe('history › diff   ← <')
+    expect(formatLogInkBreadcrumb(['status'])).toBe('status')
+    expect(formatLogInkBreadcrumb(['history', 'diff'])).toBe('history › diff')
     expect(formatLogInkBreadcrumb(['history', 'status', 'diff']))
-      .toBe('history › status › diff   ← <')
-    expect(formatLogInkBreadcrumb(['history', 'compose'])).toBe('history › compose   ← <')
+      .toBe('history › status › diff')
+    expect(formatLogInkBreadcrumb(['history', 'compose'])).toBe('history › compose')
   })
 
   describe('formatLogInkRepoBreadcrumb (#931)', () => {
@@ -422,15 +422,15 @@ describe('log Ink keymap', () => {
     })
 
     it('renders only the view crumb when the repo crumb is empty', () => {
-      expect(combineLogInkBreadcrumbSegments('', 'history › diff   ← <'))
-        .toBe('  history › diff   ← <')
+      expect(combineLogInkBreadcrumbSegments('', 'history › diff'))
+        .toBe('  history › diff')
     })
 
     it('joins repo + view with extra spacing when both are present', () => {
       expect(combineLogInkBreadcrumbSegments(
         'coco › vendor/lib   ← esc',
-        'history › diff   ← <',
-      )).toBe('  coco › vendor/lib   ← esc    history › diff   ← <')
+        'history › diff',
+      )).toBe('  coco › vendor/lib   ← esc    history › diff')
     })
 
     it('matches the leading-spaces convention the existing view-only path used', () => {
@@ -438,8 +438,8 @@ describe('log Ink keymap', () => {
       // stack was nested. This contract assertion locks in the legacy
       // behavior so the visible header doesn't shift for non-nested
       // sessions.
-      const viewOnly = combineLogInkBreadcrumbSegments('', 'status   ← <')
-      expect(viewOnly).toBe('  status   ← <')
+      const viewOnly = combineLogInkBreadcrumbSegments('', 'status')
+      expect(viewOnly).toBe('  status')
     })
   })
 

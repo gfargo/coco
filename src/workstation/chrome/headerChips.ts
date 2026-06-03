@@ -76,7 +76,7 @@ export type BuildHeaderChipsInput = {
   bisecting: boolean
   /**
    * Pull request state for the current branch, if any. `undefined`
-   * renders the muted "no PR" chip instead.
+   * omits the PR chip entirely (no "no PR" placeholder).
    */
   pullRequest: { number: number; state: string; isDraft?: boolean } | undefined
   /**
@@ -175,10 +175,11 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
     })
   }
 
-  // PR state. When present, the chip uses the PR-state glyph + a short
-  // label ("PR #1234 OPEN" / "PR #1234 DRAFT"). When absent, a muted
-  // "no PR" chip so users know the system DID look (vs. the bar just
-  // being blank).
+  // PR state. Shown only when a PR actually exists — the chip uses the
+  // PR-state glyph + a short label ("PR #1234 OPEN" / "PR #1234 DRAFT").
+  // The old always-on "no PR" chip spent a permanent header segment to
+  // report a negative default state on every screen; dropping it keeps
+  // the state cluster about what *is* true (TUI audit).
   if (input.pullRequest) {
     const prGlyph = getPullRequestStateGlyph(
       { ...input.pullRequest, isDraft: Boolean(input.pullRequest.isDraft) },
@@ -195,14 +196,6 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       label,
       color: prGlyph.color,
       dim: prGlyph.dim,
-      bold: false,
-    })
-  } else {
-    chips.push({
-      id: 'pr',
-      label: theme.ascii ? '- no PR' : '⊘ no PR',
-      color: theme.colors.muted,
-      dim: true,
       bold: false,
     })
   }
