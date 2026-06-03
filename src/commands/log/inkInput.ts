@@ -2050,10 +2050,17 @@ export function getLogInkInputEvents(
       })]
     }
 
-    // Diff view: j/k scrolls the visible diff one line. Hunk navigation
-    // moved to ]/[ so single-hunk files (longer than the preview pane)
-    // can scroll bidirectionally instead of getting pinned to a hunk
-    // anchor.
+    // Worktree (staging) diff: ↑/↓ move between hunks — the hunk is the
+    // unit you stage, so the cursor walks hunks (auto-scrolling to the
+    // selected one). Single-hunk files fall through to line-scroll so a
+    // long lone hunk stays readable; `[`/`]` remain hunk-jump aliases.
+    if (state.activeView === 'diff' && (context.worktreeHunkOffsets?.length ?? 0) > 1) {
+      return [action({
+        type: 'jumpWorktreeHunk',
+        delta: -1,
+        hunkOffsets: context.worktreeHunkOffsets as number[],
+      })]
+    }
     if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
@@ -2188,6 +2195,15 @@ export function getLogInkInputEvents(
       })]
     }
 
+    // Worktree (staging) diff: ↓ walks to the next hunk (see the ↑
+    // handler). Multi-hunk only; single-hunk files line-scroll.
+    if (state.activeView === 'diff' && (context.worktreeHunkOffsets?.length ?? 0) > 1) {
+      return [action({
+        type: 'jumpWorktreeHunk',
+        delta: 1,
+        hunkOffsets: context.worktreeHunkOffsets as number[],
+      })]
+    }
     if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
@@ -3210,6 +3226,23 @@ export function getLogInkInputEvents(
 
   if (inputValue === ' ' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
     return [{ type: 'toggleSelectedHunkStage' }]
+  }
+
+  // Worktree diff with no hunks (a new/untracked file) — `space` stages
+  // the whole file, since there's nothing to partial-stage.
+  if (
+    inputValue === ' ' &&
+    state.activeView === 'diff' &&
+    state.diffSource === 'worktree' &&
+    !context.worktreeHunkOffsets?.length
+  ) {
+    return [{ type: 'toggleSelectedFileStage' }]
+  }
+
+  // `a` stages/unstages the WHOLE current file from the staging diff —
+  // an escape hatch out of hunk-by-hunk back to all-or-nothing.
+  if (inputValue === 'a' && state.activeView === 'diff' && state.diffSource === 'worktree') {
+    return [{ type: 'toggleSelectedFileStage' }]
   }
 
   if (inputValue === 'z' && state.activeView === 'status' && context.worktreeFileCount) {

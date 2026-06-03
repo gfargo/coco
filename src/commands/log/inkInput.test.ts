@@ -295,21 +295,22 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, '', { pageDown: true }, { worktreeDiffLineCount: 30 })
     expect(state.worktreeDiffOffset).toBe(8)
 
-    // j now scrolls the diff one line at a time (line-level scroll), so
-    // after pageDown(+8) a single j advances to offset 9. Hunk navigation
-    // moved to ]/[.
+    // In the worktree (staging) diff, j/↓ navigate HUNKS (the unit you
+    // stage) when there's more than one — auto-scrolling to the selected
+    // hunk, like `]`. (Single-hunk files fall back to line scroll.)
     state = applyInput(state, 'j', {}, {
       worktreeDiffLineCount: 30,
       worktreeHunkOffsets: [2, 12, 20],
     })
-    expect(state.worktreeDiffOffset).toBe(9)
+    expect(state.selectedWorktreeHunkIndex).toBe(1)
+    expect(state.worktreeDiffOffset).toBe(12)
 
     state = applyInput(state, ']', {}, {
       worktreeDiffLineCount: 30,
       worktreeHunkOffsets: [2, 12, 20],
     })
-    expect(state.worktreeDiffOffset).toBe(12)
-    expect(state.selectedWorktreeHunkIndex).toBe(1)
+    expect(state.worktreeDiffOffset).toBe(20)
+    expect(state.selectedWorktreeHunkIndex).toBe(2)
 
     state = applyInput(state, '', { escape: true })
     expect(state.activeView).toBe('status')

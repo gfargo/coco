@@ -43,6 +43,7 @@ import {
   renderSplitDiffBody,
 } from '../../runtime/splitDiff'
 import { renderDiffLine } from '../../runtime/diffLineRender'
+import { renderWorktreeDiffBody } from '../../runtime/worktreeDiffBody'
 import type { SyntaxSpan } from '../../../lib/syntax/highlightEngine'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import {
@@ -329,10 +330,27 @@ export function renderDiffSurface(
 
   const diffLines = worktreeDiff?.lines || []
   const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
+  const totalHunks = worktreeHunks?.hunks.length ?? 0
+  const stagedHunks = worktreeHunks?.hunks.filter((hunk) => hunk.state === 'staged').length ?? 0
   const visibleDiffLines = diffLines.slice(
     state.worktreeDiffOffset,
     state.worktreeDiffOffset + visibleRows
   )
+  // Hunk-position line: badge + selected hunk's state + a staged/total
+  // progress count, so the user always sees how far through staging they
+  // are. Untracked/new files have no hunks — point them at whole-file
+  // staging instead of a dead-end "no hunks" message.
+  const hunkHeaderLine = worktreeHunksLoading
+    ? 'Hunks loading…'
+    : worktreeDiff?.untracked
+      ? (theme.ascii ? 'New file — press space to stage it whole.' : '✚ New file — press space to stage it whole.')
+      : totalHunks
+        ? `Hunk ${state.selectedWorktreeHunkIndex + 1}/${totalHunks} · ${
+          selectedHunk?.state === 'staged'
+            ? (theme.ascii ? '[x] staged' : '● staged')
+            : (theme.ascii ? '[ ] unstaged' : '○ unstaged')
+        } · ${stagedHunks}/${totalHunks} staged`
+        : 'No stageable hunks for this file.'
   const headerLines: string[] = isLogInkContextKeyLoading(contextStatus, 'worktree')
     ? ['Loading file context...']
     : worktreeDiffLoading
@@ -341,11 +359,7 @@ export function renderDiffSurface(
       ? [
         // File path is already shown in the panel title bar (right) —
         // no redundant "Selected file:" line here.
-        worktreeHunksLoading
-          ? 'Hunks loading...'
-          : worktreeHunks?.hunks.length
-            ? `Hunk ${state.selectedWorktreeHunkIndex + 1}/${worktreeHunks.hunks.length} ${selectedHunk?.state || ''}`
-            : 'No stageable hunks for this file.',
+        hunkHeaderLine,
         `Lines ${Math.min(state.worktreeDiffOffset + 1, diffLines.length || 1)}-${Math.min(state.worktreeDiffOffset + visibleDiffLines.length, diffLines.length)}/${diffLines.length}`,
         '',
       ]
@@ -372,9 +386,17 @@ export function renderDiffSurface(
     dimColor: index > 0,
   }, truncateCells(line, 140))),
   ...(showDiffLines
-    ? visibleDiffLines.map((line, index) => renderDiffLine(
-      h, Text, line, theme, syntaxSpans, 140,
-      `diff-surface-line-${state.worktreeDiffOffset + index}`
-    ))
+    ? renderWorktreeDiffBody(h, components, {
+      lines: diffLines,
+      offset: state.worktreeDiffOffset,
+      visibleRows,
+      width,
+      theme,
+      syntaxSpans,
+      hunkOffsets: worktreeDiff?.hunkOffsets || [],
+      hunks: worktreeHunks?.hunks || [],
+      selectedIndex: state.selectedWorktreeHunkIndex,
+      keyPrefix: 'diff-surface-line',
+    })
     : []))
 }

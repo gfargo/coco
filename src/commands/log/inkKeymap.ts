@@ -1089,7 +1089,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'status') {
     return {
-      contextual: ['↑/↓ files', 'enter diff', 'space stage', 'A stage all', 'z revert', 'i ignore', 'e/c compose'],
+      contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'i ignore', 'e/c compose'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1124,8 +1124,11 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
         global: NORMAL_GLOBAL_HINTS,
       }
     }
+    // Worktree (staging) diff. The hunk is the unit of action: ↑/↓ walk
+    // hunks, space stages/unstages the selected one, a stages the whole
+    // file, z discards the hunk.
     return {
-      contextual: ['j/k hunks', 'space stage', 'z revert', 'o edit', 'e/c compose', 'y yank'],
+      contextual: ['↑/↓ hunk', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
