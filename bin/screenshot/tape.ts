@@ -142,8 +142,15 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     ``,
     `Set Shell "bash"`,
     `Set FontSize 14`,
-    `Set Width ${dims.cols * 9}`,
-    `Set Height ${dims.rows * 20}`,
+    // Explicit padding + measured per-cell size (≈9.35w × 16.55h at
+    // FontSize 14) so the terminal renders EXACTLY `dims.cols × dims.rows`.
+    // vhs's default padding (~65px/side) otherwise ate ~14 cols / ~8 rows,
+    // which silently shrank the 80×24 single-pane recipes below the
+    // "terminal too small" floor (they captured the fallback message
+    // instead of the UI). Calibrated empirically against Padding 0.
+    `Set Padding 30`,
+    `Set Width ${Math.round(dims.cols * 9.35 + 60)}`,
+    `Set Height ${Math.round(dims.rows * 16.55 + 60)}`,
     `Set TypingSpeed 50ms`,
     `Set CursorBlink false`,
     // Pin the *terminal's* palette to match coco's --theme. coco presets
