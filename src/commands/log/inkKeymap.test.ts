@@ -32,7 +32,7 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
     })).toEqual({
-      contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'i ignore', 'e/c compose'],
+      contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'e/c compose'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
