@@ -22,11 +22,14 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
 export function createStash(git: SimpleGit, message: string): Promise<BranchActionResult> {
   const trimmedMessage = message.trim()
 
+  // Empty message → a quick WIP stash. Naming is optional: git generates
+  // its own `WIP on <branch>: <sha> <subject>` message, same as a bare
+  // `git stash`. Both paths pass `-u` so untracked files come along.
   if (!trimmedMessage) {
-    return Promise.resolve({
-      ok: false,
-      message: 'Stash cancelled: empty message.',
-    })
+    return runAction(
+      () => git.raw(['stash', 'push', '-u']),
+      'Created WIP stash'
+    )
   }
 
   return runAction(

@@ -15,6 +15,7 @@ export type LogInkCommandId =
   | 'gitignoreFile'
   | 'stageAll'
   | 'stagePathspec'
+  | 'createStash'
   | 'commit'
   | 'cycleSort'
   | 'editCommit'
@@ -294,6 +295,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['gz'],
     label: 'stash',
     description: 'Push the stash view (gz; gs is reserved for status).',
+    contexts: ['normal'],
+  },
+  {
+    id: 'createStash',
+    keys: ['gZ'],
+    label: 'stash changes',
+    description: 'Stash all changes (tracked + untracked) with an optional message — works from any view, including status/diff/compose. Empty message creates a quick WIP stash.',
     contexts: ['normal'],
   },
   {
@@ -770,6 +778,7 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   gitignoreFile: 'mutate',
   stageAll: 'mutate',
   stagePathspec: 'mutate',
+  createStash: 'mutate',
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',

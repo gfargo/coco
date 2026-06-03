@@ -3495,9 +3495,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         return deleteRemoteTag(git, tag.name)
       },
       'create-stash': async () => {
-        const message = payload?.trim()
-        if (!message) return { ok: false, message: 'Stash message required' }
-        return createStash(git, message)
+        // Empty is allowed — createStash turns it into a quick WIP stash
+        // (git's own `WIP on <branch>` subject). Naming is optional.
+        return createStash(git, payload ?? '')
       },
       // #783 — full PR action panel handlers. Each wraps the matching
       // pullRequestActions verb. Strategy / body arrives via `payload`

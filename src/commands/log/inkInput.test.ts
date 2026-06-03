@@ -756,6 +756,32 @@ describe('log Ink input interactions', () => {
     expect(state.statusMessage).toBe('jumped to stash')
   })
 
+  it('stashes all changes with the gZ chord — even from status, where bare S is the split flow', () => {
+    let state = createLogInkState(rows)
+    // status is one of the views where `S` is claimed by commit-split, so
+    // the chord is the only single-gesture stash-create path here.
+    state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+    state = applyInput(state, 'g')
+
+    const events = getLogInkInputEvents(state, 'Z')
+    expect(events[0]).toMatchObject({
+      type: 'action',
+      action: { type: 'openInputPrompt', kind: 'create-stash' },
+    })
+  })
+
+  it('opens the stash prompt from the createStash palette command', () => {
+    const state = createLogInkState(rows)
+    const command = getLogInkPaletteCommands().find((c) => c.id === 'createStash')
+    if (!command) throw new Error('createStash palette command missing')
+
+    const events = getLogInkPaletteExecuteEvents(command, state)
+    expect(events[0]).toMatchObject({
+      type: 'action',
+      action: { type: 'openInputPrompt', kind: 'create-stash' },
+    })
+  })
+
   it('moves the selected branch with arrow keys when in branches view', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })

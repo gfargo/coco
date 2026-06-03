@@ -9,6 +9,8 @@
 
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { formatCompactRelativeDate } from '../../chrome/dateFormat'
+import { getRenderNow } from '../../chrome/snapshotMode'
 import { formatLogInkLoading, formatLogInkStashEmpty } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import {
@@ -39,6 +41,11 @@ export function renderStashSurface(ctx: SurfaceRenderContext): ReactTypes.ReactE
     : `${stashes.length}/${allStashes.length} stashes${filterLabel}`
   const emptyLabel = formatLogInkStashEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'stashes' })
+  const now = getRenderNow()
+  // Available width for a row: box width minus the 2-cell horizontal
+  // padding. Truncate to it (with a small floor) instead of a magic 140
+  // so the richer meta degrades gracefully on narrow terminals.
+  const rowWidth = Math.max(20, width - 2)
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'stash-loading', dimColor: true }, loadingLabel)]
     : stashes.length === 0
@@ -47,11 +54,25 @@ export function renderStashSurface(ctx: SurfaceRenderContext): ReactTypes.ReactE
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
+        // Surface the metadata the StashEntry already carries — origin
+        // branch, file count, and relative age — between the ref and the
+        // message, so the list answers "which stash is this?" without an
+        // Enter→diff round trip.
+        const age = formatCompactRelativeDate(stash.date, now)
+        const fileCount = stash.files.length
+        const meta = [
+          stash.branch ? `on ${stash.branch}` : '',
+          fileCount > 0 ? `${fileCount} file${fileCount === 1 ? '' : 's'}` : '',
+          age,
+        ].filter(Boolean).join(' · ')
+        const rowText = meta
+          ? `${cursor} ${stash.ref.padEnd(11)} ${meta}  ${stash.message}`
+          : `${cursor} ${stash.ref.padEnd(11)} ${stash.message}`
         return h(Text, {
           key: `stash-${index}`,
           bold: isSelected,
           dimColor: !isSelected,
-        }, truncateCells(`${cursor} ${stash.ref.padEnd(12)} ${stash.message}`, 140))
+        }, truncateCells(rowText, rowWidth))
       })
 
   const stashHasMoreAbove = startIndex > 0 && stashes.length > 0
