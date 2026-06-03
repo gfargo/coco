@@ -11,7 +11,6 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import {
   formatLogInkLoading,
@@ -19,13 +18,12 @@ import {
 } from '../../chrome/surfaceStates'
 import { cellWidth, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
-import type { LogInkState } from '../../../commands/log/inkViewModel'
 import type { SubmoduleEntry } from '../../../git/submoduleData'
 import {
   matchesPromotedFilter,
   renderPromotedFilterAffordance,
 } from '../../runtime/promotedFilter'
-import type { LogInkComponents, LogInkContext } from '../../runtime/types'
+import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 const FLAG_LABEL: Record<SubmoduleEntry['flag'], string> = {
@@ -43,16 +41,8 @@ function flagColor(flag: SubmoduleEntry['flag'], theme: LogInkTheme): string | u
   return undefined
 }
 
-export function renderSubmodulesSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme,
-): ReactTypes.ReactElement {
+export function renderSubmodulesSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+  const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const loading = isLogInkContextKeyLoading(contextStatus, 'submodules')

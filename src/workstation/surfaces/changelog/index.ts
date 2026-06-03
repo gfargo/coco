@@ -29,11 +29,8 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkContextStatus } from '../../chrome/context'
 import { truncateCells } from '../../chrome/text'
-import type { LogInkTheme } from '../../chrome/theme'
-import type { LogInkState } from '../../../commands/log/inkViewModel'
-import type { LogInkComponents, LogInkContext } from '../../runtime/types'
+import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 /**
@@ -54,16 +51,8 @@ function formatCacheAge(generatedAt: number, now: number): string {
   return `${day}d ago`
 }
 
-export function renderChangelogSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  _context: LogInkContext,
-  _contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
+export function renderChangelogSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+  const { h, components, state, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const view = state.changelogView

@@ -16,7 +16,6 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { STAGE_STATUS_DOT, getStageStatusDotColor } from '../../chrome/iconography'
 import {
@@ -24,15 +23,11 @@ import {
     formatLogInkStatusEmpty,
 } from '../../chrome/surfaceStates'
 import { cellWidth, truncateCells } from '../../chrome/text'
-import type { LogInkTheme } from '../../chrome/theme'
 import { isPathLfsTracked } from '../../../git/lfsAttributes'
 import type { WorktreeFile, WorktreeFileGroup } from '../../../git/statusData'
 import { applyStatusFilterMask, groupWorktreeFiles } from '../../../git/statusData'
-import type {
-    LogInkState,
-    LogInkStatusFilterMask,
-} from '../../../commands/log/inkViewModel'
-import type { LogInkComponents, LogInkContext } from '../../runtime/types'
+import type { LogInkStatusFilterMask } from '../../../commands/log/inkViewModel'
+import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 // Each rendered row is either a group header (e.g. "▾ Unstaged (3)") or a
@@ -68,16 +63,8 @@ function formatStatusFilterMask(mask: LogInkStatusFilterMask): string {
   return active.join(' + ') || 'none'
 }
 
-export function renderStatusSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
+export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+  const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree

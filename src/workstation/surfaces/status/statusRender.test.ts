@@ -76,16 +76,16 @@ function render(
   const theme = createLogInkTheme({ ascii: options.ascii })
   const context: LogInkContext = options.worktree ? { worktree: options.worktree } : {}
   const contextStatus = options.contextStatus || createLogInkContextStatus('ready')
-  return renderStatusSurface(
-    createElement,
+  return renderStatusSurface({
+    h: createElement,
     components,
     state,
     context,
     contextStatus,
-    options.bodyRows ?? 30,
-    options.width ?? 120,
-    theme
-  )
+    bodyRows: options.bodyRows ?? 30,
+    width: options.width ?? 120,
+    theme,
+  })
 }
 
 describe('renderStatusSurface', () => {

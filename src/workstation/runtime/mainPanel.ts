@@ -37,7 +37,7 @@ import { renderStatusSurface } from '../surfaces/status'
 import { renderSubmodulesSurface } from '../surfaces/submodules'
 import { renderTagsSurface } from '../surfaces/tags'
 import { renderWorktreesSurface } from '../surfaces/worktrees'
-import type { LogInkComponents, LogInkContext } from './types'
+import type { LogInkComponents, LogInkContext, SurfaceRenderContext } from './types'
 
 export function renderMainPanel(
   h: typeof ReactTypes.createElement,
@@ -81,8 +81,23 @@ export function renderMainPanel(
     return renderSplitPlanOverlay(h, components, state, width, bodyRows, theme, true, spinnerFrame)
   }
 
+  // Shared render bundle (#1136). The simple list/detail surfaces below
+  // consume exactly these eight values, so they take the bundle instead
+  // of eight positional props. Surfaces with extra needs (diff, compose,
+  // bisect, history) still receive their explicit params alongside.
+  const surface: SurfaceRenderContext = {
+    h,
+    components,
+    state,
+    context,
+    contextStatus,
+    bodyRows,
+    width,
+    theme,
+  }
+
   if (state.activeView === 'status') {
-    return renderStatusSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderStatusSurface(surface)
   }
 
   if (state.activeView === 'diff') {
@@ -116,15 +131,15 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'branches') {
-    return renderBranchesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderBranchesSurface(surface)
   }
 
   if (state.activeView === 'tags') {
-    return renderTagsSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderTagsSurface(surface)
   }
 
   if (state.activeView === 'reflog') {
-    return renderReflogSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderReflogSurface(surface)
   }
 
   if (state.activeView === 'bisect') {
@@ -132,15 +147,15 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'stash') {
-    return renderStashSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderStashSurface(surface)
   }
 
   if (state.activeView === 'worktrees') {
-    return renderWorktreesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderWorktreesSurface(surface)
   }
 
   if (state.activeView === 'submodules') {
-    return renderSubmodulesSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderSubmodulesSurface(surface)
   }
 
   if (state.activeView === 'pull-request') {
@@ -156,11 +171,11 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'conflicts') {
-    return renderConflictsSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderConflictsSurface(surface)
   }
 
   if (state.activeView === 'changelog') {
-    return renderChangelogSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderChangelogSurface(surface)
   }
 
   return renderHistoryPanel(

@@ -33,8 +33,9 @@ import type { WorktreeOverview as WorktreeListOverview } from '../../git/worktre
 import type { ClipboardRunner } from '../../git/historyActions'
 import type { LogArgv } from '../../commands/log/config'
 import type { GitLogRow } from '../../commands/log/data'
-import type { LogInkView } from '../../commands/log/inkViewModel'
+import type { LogInkState, LogInkView } from '../../commands/log/inkViewModel'
 import type { LogInkInputKey } from '../../commands/log/inkInput'
+import type { LogInkContextStatus } from '../chrome/context'
 import type { LogInkTheme, LogInkThemeConfig } from '../chrome/theme'
 
 export type LogInkContext = {
@@ -124,6 +125,31 @@ export type LogInkRuntime = {
 }
 
 export type LogInkComponents = Pick<LogInkRuntime['ink'], 'Box' | 'Text'>
+
+/**
+ * The bundle every `render*Surface` helper needs (#1136). Collapses the
+ * eight values that were threaded as positional props through
+ * `app → mainPanel → render<View>Surface` into one object so adding a
+ * surface-wide value stops meaning "thread one more arg through every
+ * signature".
+ *
+ * This is the render-side sibling of `LogInkRuntimeContextValue`: it
+ * carries the render primitives (`h` / `components`) and the
+ * layout-derived `bodyRows` / `width` the surfaces actually consume,
+ * rather than the whole `layout` / `dispatch` the React Context holds.
+ * Surfaces with extra needs (diff hunks, file previews, spinner frames)
+ * take this bundle plus their own explicit params.
+ */
+export type SurfaceRenderContext = {
+  h: typeof ReactTypes.createElement
+  components: LogInkComponents
+  state: LogInkState
+  context: LogInkContext
+  contextStatus: LogInkContextStatus
+  bodyRows: number
+  width: number
+  theme: LogInkTheme
+}
 
 export type LogInkComponentDeps = LogInkRuntime & {
   appLabel: string

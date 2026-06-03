@@ -9,29 +9,18 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
-import type { LogInkTheme } from '../../chrome/theme'
-import type { LogInkState } from '../../../commands/log/inkViewModel'
 import {
   matchesPromotedFilter,
   renderPromotedFilterAffordance,
 } from '../../runtime/promotedFilter'
-import type { LogInkComponents, LogInkContext } from '../../runtime/types'
+import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
-export function renderWorktreesSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
+export function renderWorktreesSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+  const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const loading = isLogInkContextKeyLoading(contextStatus, 'worktreeList')
