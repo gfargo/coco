@@ -20,9 +20,7 @@ import type {
     GitCommitDetail,
     GitCommitFilePreview,
 } from '../../commands/log/data'
-import { getSelectedInkCommit } from '../../commands/log/inkViewModel'
 import type { LogInkState } from '../../commands/log/inkViewModel'
-import { focusBorderColor, panelTitle } from './utils'
 import {
     renderBranchPreviewPanel,
     renderCommitDiffDetail,
@@ -46,48 +44,6 @@ import {
 } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
-/**
- * Rail-mode inspector — shown on terminals < 100 columns when the
- * detail panel does not hold focus. The full inspector (commit body,
- * file list, actions) does not survive truncation to ~4 content cells
- * so we collapse to a stack with the panel label and the selected
- * commit's shortHash. Focus pops the panel back to its expanded
- * widths via the layout, so this renderer is only reached at rest.
- *
- * Help / overlay states are still handled by their own renderers
- * above; this short-circuit only kicks in for the regular "view the
- * commit" cases.
- */
-function renderInspectorRail(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  detail: GitCommitDetail | undefined,
-  width: number,
-  theme: LogInkTheme,
-  focused: boolean
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-  // Prefer the loaded detail's hash (canonical) but fall back to the
-  // selected list row's shortHash so the rail isn't blank on the
-  // first render before getCommitDetail resolves.
-  const selectedRow = getSelectedInkCommit(state)
-  const hashText = detail?.hash.slice(0, 4)
-    ?? selectedRow?.shortHash.slice(0, 4)
-    ?? '····'
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    width,
-    paddingX: 1,
-  },
-  h(Text, { bold: true, dimColor: !focused }, panelTitle('Insp', focused)),
-  h(Text, { dimColor: true }, '────'),
-  h(Text, { color: theme.noColor ? undefined : theme.colors.accent }, hashText))
-}
-
 export function renderDetailPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -101,15 +57,13 @@ export function renderDetailPanel(
   width: number,
   tabbed: boolean,
   theme: LogInkTheme,
-  railed: boolean = false,
   bodyRows: number = 0
 ): ReactTypes.ReactElement {
   const focused = state.focus === 'detail'
 
   // Overlays (help / palette / input / confirmation / chord) take
-  // precedence over rail because they always claim the panel's width
-  // via the help-overlay layout branch — and railing those would
-  // defeat their whole purpose (the user is reading them).
+  // precedence over every per-view surface because they claim the
+  // panel's full width via the help-overlay layout branch.
   if (state.showHelp) {
     return renderHelpPanel(h, components, state, width, theme, focused, bodyRows)
   }
@@ -146,16 +100,6 @@ export function renderDetailPanel(
   // navigation. The overlay's footer hint already documents `g/G top/bot`.
   if (state.pendingKey && !state.splitPlan) {
     return renderChordOverlay(h, components, state, width, theme, focused)
-  }
-
-  // Rail mode applies only after every overlay above has had its say
-  // — those would all be unreadable at 4 cells of content. The layout
-  // also clears `railed` whenever the inspector takes focus, so we
-  // can safely short-circuit the per-view dispatch here without
-  // worrying about hiding the panel from a user who's actively
-  // reading it.
-  if (railed) {
-    return renderInspectorRail(h, components, state, detail, width, theme, focused)
   }
 
   // The synthetic "(+) new commit" row routes the inspector through the

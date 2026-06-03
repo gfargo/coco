@@ -116,6 +116,23 @@ export const RECIPES: ScreenshotRecipe[] = [
   // `coco ui` — additional views and scenarios
   // ─────────────────────────────────────────────────────────────────
   {
+    name: 'ui-single-pane-narrow',
+    description: 'Single-pane fallback at the 80×24 floor — sidebar pane full-width, Tab-cycled',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    // 80×24 is the supported floor and a common tmux-split / SSH size.
+    // Below 100 cols the three-panel layout drops to a single full-width
+    // pane (no 8-cell rails). Tab twice (commits → inspector → sidebar)
+    // to land on the sidebar so the shot shows the full-width accordion
+    // that replaced the rail, plus the footer's `tab: [sidebar] …` switcher.
+    dimensions: { cols: 80, rows: 24 },
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'key', key: 'Tab', count: 2 },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
     name: 'ui-branches-sync-showcase',
     description: 'Branches view showing 5 branches in different upstream sync states',
     scenario: 'branch-sync-showcase',

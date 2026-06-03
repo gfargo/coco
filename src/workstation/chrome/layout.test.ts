@@ -1,5 +1,5 @@
 import {
-  LAYOUT_RAIL_PANEL_WIDTH,
+  LAYOUT_SINGLE_PANE_BELOW,
   LOG_INK_MIN_COLUMNS,
   LOG_INK_MIN_ROWS,
   getLogInkLayout,
@@ -14,12 +14,16 @@ describe('log Ink layout', () => {
 
     expect(layout.tooSmall).toBe(false)
     expect(layout.bodyRows).toBe(19)
-    // 80 columns falls into the rail tier (< 100), so both side
-    // panels collapse to the fixed rail width and the history panel
-    // takes everything they gave up.
+    // 80 columns falls below the single-pane breakpoint (< 100), so
+    // exactly one full-width pane renders. With no focus flags set the
+    // main pane is visible and takes the whole terminal; the side panes
+    // are hidden (width 0), not railed.
     expect(layout.density).toBe('rail')
-    expect(layout.sidebarWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
-    expect(layout.detailWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
+    expect(layout.singlePane).toBe(true)
+    expect(layout.visiblePane).toBe('main')
+    expect(layout.mainPanelWidth).toBe(80)
+    expect(layout.sidebarWidth).toBe(0)
+    expect(layout.detailWidth).toBe(0)
   })
 
   it('uses a balanced layout at the default terminal size', () => {
@@ -112,11 +116,14 @@ describe('log Ink layout', () => {
     expect(expanded.mainPanelWidth).toBe(120 - expanded.sidebarWidth - expanded.detailWidth)
   })
 
-  it('clamps the focused inspector to its 36-60 cell range', () => {
-    const narrow = getLogInkLayout({ columns: 80, rows: 24, inspectorFocused: true })
+  it('clamps the focused inspector to its 36-60 cell range in three-pane tiers', () => {
+    // The 36-cell floor is only reachable below the single-pane
+    // breakpoint, where the inspector instead takes the full width, so
+    // the lowest three-pane focused width is floor(100 × 0.40) = 40.
+    const narrow = getLogInkLayout({ columns: 100, rows: 24, inspectorFocused: true })
     const wide = getLogInkLayout({ columns: 200, rows: 60, inspectorFocused: true })
 
-    expect(narrow.detailWidth).toBe(36)
+    expect(narrow.detailWidth).toBe(40)
     expect(wide.detailWidth).toBe(60)
   })
 
@@ -149,11 +156,14 @@ describe('log Ink layout', () => {
     expect(expanded.mainPanelWidth).toBe(120 - expanded.sidebarWidth - expanded.detailWidth)
   })
 
-  it('clamps the focused sidebar to its 32–50 cell range', () => {
-    const narrow = getLogInkLayout({ columns: 80, rows: 24, sidebarFocused: true })
+  it('clamps the focused sidebar to its 32–50 cell range in three-pane tiers', () => {
+    // The 32-cell floor is only reachable below the single-pane
+    // breakpoint, where the sidebar instead takes the full width, so
+    // the lowest three-pane focused width is floor(100 × 0.36) = 36.
+    const narrow = getLogInkLayout({ columns: 100, rows: 24, sidebarFocused: true })
     const wide = getLogInkLayout({ columns: 200, rows: 60, sidebarFocused: true })
 
-    expect(narrow.sidebarWidth).toBe(32)
+    expect(narrow.sidebarWidth).toBe(36)
     expect(wide.sidebarWidth).toBe(50)
   })
 
@@ -174,7 +184,9 @@ describe('log Ink layout', () => {
     })
 
     it('clamps the help-overlay detail width to its 60-100 cell range', () => {
-      const narrow = getLogInkLayout({ columns: 80, rows: 24, helpOverlayActive: true })
+      // 100 cols is the narrowest three-pane terminal; below it the
+      // single-pane override gives the inspector the full width instead.
+      const narrow = getLogInkLayout({ columns: 100, rows: 24, helpOverlayActive: true })
       const wide = getLogInkLayout({ columns: 240, rows: 60, helpOverlayActive: true })
       expect(narrow.detailWidth).toBe(60)
       expect(wide.detailWidth).toBe(100)
@@ -216,51 +228,39 @@ describe('log Ink layout', () => {
       expect(getLogInkLayout({ columns: 90, rows: 40 }).historyRowMode).toBe('stacked')
     })
 
-    it('rails the sidebar and inspector at rail tier when unfocused', () => {
+    it('drops to single-pane mode below the rail breakpoint', () => {
       const layout = getLogInkLayout({ columns: 90, rows: 40 })
 
-      expect(layout.sidebarRailed).toBe(true)
-      expect(layout.inspectorRailed).toBe(true)
-      expect(layout.sidebarWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
-      expect(layout.detailWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
-      // History gets everything the side panels gave up.
-      expect(layout.mainPanelWidth).toBe(90 - LAYOUT_RAIL_PANEL_WIDTH * 2)
+      expect(layout.singlePane).toBe(true)
+      // With no focus flags the main pane is visible, full-width; the
+      // side panes are hidden (width 0), not railed.
+      expect(layout.visiblePane).toBe('main')
+      expect(layout.mainPanelWidth).toBe(90)
+      expect(layout.sidebarWidth).toBe(0)
+      expect(layout.detailWidth).toBe(0)
     })
 
-    it('un-rails a panel when it takes focus, even on a narrow terminal', () => {
+    it('shows the focused pane full-width in single-pane mode', () => {
       const sidebarFocused = getLogInkLayout({ columns: 90, rows: 40, sidebarFocused: true })
-      expect(sidebarFocused.sidebarRailed).toBe(false)
-      // 90 * 0.36 = 32.4 → floor 32; clamps stay 32-50 so this lands at 32.
-      expect(sidebarFocused.sidebarWidth).toBe(32)
-      // Inspector stays railed since the user isn't reading it.
-      expect(sidebarFocused.inspectorRailed).toBe(true)
-      expect(sidebarFocused.detailWidth).toBe(LAYOUT_RAIL_PANEL_WIDTH)
+      expect(sidebarFocused.visiblePane).toBe('sidebar')
+      expect(sidebarFocused.sidebarWidth).toBe(90)
+      expect(sidebarFocused.mainPanelWidth).toBe(0)
+      expect(sidebarFocused.detailWidth).toBe(0)
 
       const inspectorFocused = getLogInkLayout({ columns: 90, rows: 40, inspectorFocused: true })
-      expect(inspectorFocused.inspectorRailed).toBe(false)
-      // 90 * 0.40 = 36 → clamps to 36-60 lower bound.
-      expect(inspectorFocused.detailWidth).toBe(36)
-      expect(inspectorFocused.sidebarRailed).toBe(true)
+      expect(inspectorFocused.visiblePane).toBe('inspector')
+      expect(inspectorFocused.detailWidth).toBe(90)
+      expect(inspectorFocused.sidebarWidth).toBe(0)
+      expect(inspectorFocused.mainPanelWidth).toBe(0)
     })
 
-    it('keeps panels at normal widths above the rail breakpoint', () => {
+    it('keeps the three-pane layout above the rail breakpoint', () => {
       const tight = getLogInkLayout({ columns: 110, rows: 40 })
-      expect(tight.sidebarRailed).toBe(false)
-      expect(tight.inspectorRailed).toBe(false)
-      // 110 * 0.24 = 26.4 → floor 26 (in the 22-34 unfocused range)
+      expect(tight.singlePane).toBe(false)
+      // 110 * 0.24 = 26.4 → floor 26 (in the 22-28 unfocused range)
       expect(tight.sidebarWidth).toBe(26)
-    })
-
-    it('lets the help overlay override inspector rail', () => {
-      const railedHelp = getLogInkLayout({
-        columns: 90,
-        rows: 40,
-        helpOverlayActive: true,
-      })
-      // Help wants room for hotkey descriptions; rail collapse would
-      // defeat that purpose. 60-cell minimum kicks in here.
-      expect(railedHelp.detailWidth).toBe(60)
-      expect(railedHelp.inspectorRailed).toBe(false)
+      // All three panes tile flush.
+      expect(tight.sidebarWidth + tight.mainPanelWidth + tight.detailWidth).toBe(110)
     })
   })
 
@@ -378,6 +378,66 @@ describe('log Ink layout', () => {
         expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(cols)
         expect(layout.mainPanelWidth).toBeGreaterThan(0)
       }
+    })
+  })
+
+  // Single-pane fallback (#1135) — below LAYOUT_SINGLE_PANE_BELOW the
+  // three-panel layout retires in favour of one full-width pane, the
+  // focused one, Tab-cycled. Replaces the old 8-cell icon rails.
+  describe('single-pane mode', () => {
+    it('flips singlePane exactly at the breakpoint', () => {
+      expect(getLogInkLayout({ columns: LAYOUT_SINGLE_PANE_BELOW, rows: 40 }).singlePane).toBe(false)
+      expect(getLogInkLayout({ columns: LAYOUT_SINGLE_PANE_BELOW - 1, rows: 40 }).singlePane).toBe(true)
+      expect(getLogInkLayout({ columns: 80, rows: 24 }).singlePane).toBe(true)
+    })
+
+    it('derives visiblePane from focus', () => {
+      const base = { columns: 80, rows: 24 }
+      expect(getLogInkLayout(base).visiblePane).toBe('main')
+      expect(getLogInkLayout({ ...base, sidebarFocused: true }).visiblePane).toBe('sidebar')
+      expect(getLogInkLayout({ ...base, inspectorFocused: true }).visiblePane).toBe('inspector')
+    })
+
+    it('only ever shows one pane — the visible one is full-width, the rest are zero', () => {
+      for (const focus of [{}, { sidebarFocused: true }, { inspectorFocused: true }] as const) {
+        const layout = getLogInkLayout({ columns: 80, rows: 24, ...focus })
+        const widths = [layout.sidebarWidth, layout.mainPanelWidth, layout.detailWidth]
+        // Exactly one pane is full-width (80); the other two are hidden.
+        expect(widths.filter((w) => w === 80)).toHaveLength(1)
+        expect(widths.filter((w) => w === 0)).toHaveLength(2)
+      }
+    })
+
+    it('lets an overlay forcedPane override the focus-derived pane', () => {
+      // The split-plan overlay lives in the main panel; while focus is
+      // on the sidebar the runtime forces 'main' so the overlay shows.
+      const splitPlan = getLogInkLayout({
+        columns: 80,
+        rows: 24,
+        sidebarFocused: true,
+        forcedPane: 'main',
+      })
+      expect(splitPlan.visiblePane).toBe('main')
+      expect(splitPlan.mainPanelWidth).toBe(80)
+
+      // Help / palette / confirmation overlays force the inspector.
+      const help = getLogInkLayout({
+        columns: 80,
+        rows: 24,
+        helpOverlayActive: true,
+        forcedPane: 'inspector',
+      })
+      expect(help.visiblePane).toBe('inspector')
+      expect(help.detailWidth).toBe(80)
+    })
+
+    it('ignores forcedPane above the breakpoint (all panes render)', () => {
+      const layout = getLogInkLayout({ columns: 140, rows: 40, forcedPane: 'inspector' })
+      expect(layout.singlePane).toBe(false)
+      // forcedPane only applies in single-pane mode; visiblePane falls
+      // back to the focus-derived default (main) and all three tile.
+      expect(layout.visiblePane).toBe('main')
+      expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(140)
     })
   })
 })

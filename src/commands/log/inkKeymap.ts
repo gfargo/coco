@@ -1,4 +1,5 @@
 import { LogInkFocus, LogInkView } from './inkViewModel'
+import type { LogInkVisiblePane } from '../../workstation/chrome/layout'
 import {
     LogInkWorkflowAction,
     LogInkWorkflowActionKind,
@@ -640,6 +641,12 @@ export type GetLogInkFooterHintsOptions = {
    * separate cancel key.
    */
   compareBaseSet?: boolean
+  /**
+   * True on narrow terminals where only one pane renders at a time
+   * (sidebar / main / inspector, Tab-cycled). When set, the footer
+   * prepends a pane switcher showing which pane is active so the user
+   * keeps their orientation without the other two panes on screen. */
+  singlePane?: boolean
 }
 
 export type LogInkChordContinuation = {
@@ -967,7 +974,38 @@ export function combineLogInkBreadcrumbSegments(repoCrumb: string, viewCrumb: st
   return ''
 }
 
+/**
+ * Single-pane pane switcher hint, e.g. `tab: [sidebar] main inspector`.
+ * The active pane (derived from focus: sidebar → sidebar, detail →
+ * inspector, otherwise main) is bracketed so the user can see which of
+ * the three panes Tab will move them away from. Surfaced only on narrow
+ * terminals where the other two panes aren't on screen.
+ */
+function singlePaneSwitcherHint(focus: LogInkFocus): string {
+  const active: LogInkVisiblePane =
+    focus === 'sidebar' ? 'sidebar' : focus === 'detail' ? 'inspector' : 'main'
+  const label = (pane: LogInkVisiblePane) => (pane === active ? `[${pane}]` : pane)
+  return `tab: ${label('sidebar')} ${label('main')} ${label('inspector')}`
+}
+
 export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
+  const hints = computeLogInkFooterHints(options)
+  // On narrow terminals only one pane is on screen, so prepend a Tab
+  // pane switcher for orientation. The caller (footer) only sets
+  // `singlePane` in the plain per-pane states — while an overlay or
+  // filter owns the screen the visible pane is forced (or input is
+  // captured) and Tab does something else, so the switcher is
+  // suppressed there to avoid showing a pane that isn't active.
+  if (options.singlePane) {
+    return {
+      contextual: [singlePaneSwitcherHint(options.focus), ...hints.contextual],
+      global: hints.global,
+    }
+  }
+  return hints
+}
+
+function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   if (options.pendingKey) {
     const continuations = getLogInkChordContinuations(options.pendingKey)
     if (continuations.length > 0) {

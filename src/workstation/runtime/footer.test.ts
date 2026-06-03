@@ -238,6 +238,46 @@ describe('renderFooter', () => {
     expect(global.props.dimColor).toBe(true)
   })
 
+  // Single-pane fallback (#1135) — narrow terminals show one pane at a
+  // time, so the footer prepends a Tab pane switcher for orientation.
+  describe('single-pane pane switcher', () => {
+    const renderSinglePane = (state: LogInkState) =>
+      asNode(
+        renderFooter(
+          createElement,
+          { Box, Text },
+          state,
+          baseContext,
+          createLogInkTheme({ noColor: false }),
+          undefined,
+          0,
+          true
+        )
+      )
+    const contextualText = (tree: Node): string => {
+      const contextual = childAt(childAt(tree, 0), 0)
+      return String(contextual.props.children)
+    }
+
+    it('prepends the switcher with the focused pane bracketed', () => {
+      // Default focus is the commit list ('commits') → main is active.
+      expect(contextualText(renderSinglePane(makeState()))).toContain('tab: sidebar [main] inspector')
+      expect(contextualText(renderSinglePane(makeState({ focus: 'sidebar' })))).toContain('tab: [sidebar] main inspector')
+      expect(contextualText(renderSinglePane(makeState({ focus: 'detail' })))).toContain('tab: sidebar main [inspector]')
+    })
+
+    it('omits the switcher when not in single-pane mode', () => {
+      const tree = asNode(render(makeState()))
+      expect(contextualText(tree)).not.toContain('tab:')
+    })
+
+    it('omits the switcher while an overlay owns the footer', () => {
+      // The help overlay returns its own bindings; the switcher would
+      // be misleading since Tab moves help focus, not the pane.
+      expect(contextualText(renderSinglePane(makeState({ showHelp: true })))).not.toContain('tab:')
+    })
+  })
+
   // Snapshot covers the no-status default — the layout most users see
   // most of the time — to catch incidental structural drift.
   it('structural snapshot — default no-status footer', () => {

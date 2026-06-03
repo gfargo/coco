@@ -2,6 +2,7 @@ import { GitLogRow } from './data'
 import { getLogInkInputEvents, getLogInkPaletteExecuteEvents } from './inkInput'
 import { getLogInkPaletteCommands } from './inkKeymap'
 import { LogInkState, applyLogInkAction, createLogInkState } from './inkViewModel'
+import { getLogInkLayout } from '../../workstation/chrome/layout'
 
 const rows: GitLogRow[] = [
   {
@@ -189,6 +190,36 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     expect(state.selectedIndex).toBe(0)
     expect(state.statusMessage).toBe('jumped to first commit')
+  })
+
+  it('Tab/Shift+Tab cycles the visible pane in single-pane mode', () => {
+    // On narrow terminals the visible pane is derived from focus, so
+    // the existing focus-cycle binding drives the pane switch with no
+    // new key. Cycle order (FOCUS_ORDER): sidebar → main → inspector.
+    const paneFor = (state: LogInkState) =>
+      getLogInkLayout({
+        columns: 80,
+        rows: 24,
+        sidebarFocused: state.focus === 'sidebar',
+        inspectorFocused: state.focus === 'detail',
+      }).visiblePane
+
+    let state = createLogInkState(rows)
+    expect(state.focus).toBe('commits')
+    expect(paneFor(state)).toBe('main')
+
+    state = applyInput(state, '', { tab: true })
+    expect(paneFor(state)).toBe('inspector')
+
+    state = applyInput(state, '', { tab: true })
+    expect(paneFor(state)).toBe('sidebar')
+
+    state = applyInput(state, '', { tab: true })
+    expect(paneFor(state)).toBe('main')
+
+    // Shift+Tab walks the cycle the other way.
+    state = applyInput(state, '', { tab: true, shift: true })
+    expect(paneFor(state)).toBe('sidebar')
   })
 
   it('moves commits and sidebar tabs with arrows, vim keys, and direct jumps', () => {

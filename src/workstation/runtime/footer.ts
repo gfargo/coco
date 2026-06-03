@@ -62,7 +62,8 @@ export function renderFooter(
   context: LogInkContext,
   theme: LogInkTheme,
   idleTip?: string,
-  spinnerFrame: number = 0
+  spinnerFrame: number = 0,
+  singlePane: boolean = false
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   // Sidebar item count drives the per-tab footer hints — when items are
@@ -77,6 +78,25 @@ export function renderFooter(
       default: return undefined
     }
   })()
+  // The single-pane pane switcher only makes sense in the plain
+  // per-pane states. While an overlay or filter owns the screen the
+  // visible pane is forced (split-plan → main; help / palette / theme /
+  // gitignore / input prompt / confirmation / chord → inspector) or
+  // input is captured, and Tab does something else — so the switcher
+  // would point at a pane that isn't on screen. Suppress it then. Mirror
+  // of the runtime's `forcedPane` derivation in `app.ts`.
+  const overlayForcesPane = Boolean(
+    state.splitPlan ||
+      state.showHelp ||
+      state.showCommandPalette ||
+      state.showThemePicker ||
+      state.gitignorePicker ||
+      state.inputPrompt ||
+      state.pendingConfirmationId ||
+      state.pendingMutationConfirmation ||
+      state.pendingKey ||
+      state.filterMode
+  )
   const hints = getLogInkFooterHints({
     activeView: state.activeView,
     diffSource: state.diffSource,
@@ -90,6 +110,7 @@ export function renderFooter(
     sidebarItemCount,
     compareBaseSet: Boolean(state.compareBase),
     splitPlanStatus: state.splitPlan?.status,
+    singlePane: singlePane && !overlayForcesPane,
   })
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.
