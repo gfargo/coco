@@ -862,8 +862,10 @@ export const RECIPES: ScreenshotRecipe[] = [
     dimensions: { cols: 150, rows: 38 },
     actions: [
       { kind: 'sleep', ms: 3200 },
-      { kind: 'key', key: 'Down' },
-      { kind: 'sleep', ms: 400 },
+      // Open an unstaged (modified) file so the ○ badge + bar read as
+      // "ready to stage" rather than already-staged.
+      { kind: 'key', key: 'Down', count: 14 },
+      { kind: 'sleep', ms: 600 },
       { kind: 'key', key: 'Enter' },
       { kind: 'sleep', ms: 2200 },
     ],
@@ -1244,6 +1246,29 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 500 },
       { kind: 'type', text: 'q' },
       { kind: 'sleep', ms: 1200 },
+    ],
+  },
+  {
+    name: 'demo-staging-hunks',
+    description: 'Tactile hunk staging: open a changed file, see the ○ badge + selected-hunk bar, stage it (badge flips ●), file moves to Staged',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 3200 },
+      // Drop into the Unstaged group (past the staged files + headers).
+      { kind: 'key', key: 'Down', count: 14 },
+      { kind: 'sleep', ms: 800 },
+      // Open the file's staging diff — ○ unstaged badge + accent hunk bar.
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 2400 },
+      // Stage the cursored hunk — the ○ badge flips to ● and "0/1" → "1/1".
+      { kind: 'type', text: ' ' },
+      { kind: 'sleep', ms: 2000 },
+      // Back out — the file has moved into the Staged group.
+      { kind: 'type', text: '<' },
+      { kind: 'sleep', ms: 1800 },
     ],
   },
 ]
