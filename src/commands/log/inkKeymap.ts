@@ -647,6 +647,12 @@ export type GetLogInkFooterHintsOptions = {
    * prepends a pane switcher showing which pane is active so the user
    * keeps their orientation without the other two panes on screen. */
   singlePane?: boolean
+  /**
+   * True while the user is peeking the sidebar (#1135 v2) — a momentary
+   * single-pane glance. The footer swaps the switcher for the snap-back
+   * affordance (`v/esc → main`) since the user is mid-glance, not
+   * navigating. */
+  peeking?: boolean
 }
 
 export type LogInkChordContinuation = {
@@ -990,15 +996,30 @@ function singlePaneSwitcherHint(focus: LogInkFocus): string {
 
 export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   const hints = computeLogInkFooterHints(options)
+  // While peeking the sidebar (#1135 v2) the footer shows the snap-back
+  // affordance instead of the switcher — the user is mid-glance, not
+  // navigating, so `v`/Esc returning to main is the relevant action.
+  if (options.peeking) {
+    return {
+      contextual: ['v/esc → main', ...hints.contextual],
+      global: hints.global,
+    }
+  }
   // On narrow terminals only one pane is on screen, so prepend a Tab
   // pane switcher for orientation. The caller (footer) only sets
   // `singlePane` in the plain per-pane states — while an overlay or
   // filter owns the screen the visible pane is forced (or input is
   // captured) and Tab does something else, so the switcher is
-  // suppressed there to avoid showing a pane that isn't active.
+  // suppressed there to avoid showing a pane that isn't active. From the
+  // main / inspector pane we also surface `v peek` so the momentary
+  // sidebar glance is discoverable.
   if (options.singlePane) {
+    const lead =
+      options.focus === 'sidebar'
+        ? [singlePaneSwitcherHint(options.focus)]
+        : [singlePaneSwitcherHint(options.focus), 'v peek']
     return {
-      contextual: [singlePaneSwitcherHint(options.focus), ...hints.contextual],
+      contextual: [...lead, ...hints.contextual],
       global: hints.global,
     }
   }

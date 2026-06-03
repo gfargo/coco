@@ -1977,3 +1977,55 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
     })
   })
 })
+
+// #1135 v2 — peek is "focus the sidebar with a return ticket." The
+// reducer holds the prior focus in `peekReturnFocus`; the toggle
+// restores it, and any deliberate navigation (focus change or view
+// push/pop) cancels the ticket so the user is never snapped back
+// somewhere unexpected.
+describe('sidebar peek (#1135 v2)', () => {
+  it('togglePeek from a non-sidebar pane jumps to the sidebar and stores the return focus', () => {
+    let state = createLogInkState(rows)
+    expect(state.focus).toBe('commits')
+
+    state = applyLogInkAction(state, { type: 'togglePeek' })
+    expect(state.focus).toBe('sidebar')
+    expect(state.peekReturnFocus).toBe('commits')
+  })
+
+  it('togglePeek again restores the stashed focus and clears the ticket', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setFocus', value: 'detail' })
+    state = applyLogInkAction(state, { type: 'togglePeek' })
+    expect(state.focus).toBe('sidebar')
+    expect(state.peekReturnFocus).toBe('detail')
+
+    state = applyLogInkAction(state, { type: 'togglePeek' })
+    expect(state.focus).toBe('detail')
+    expect(state.peekReturnFocus).toBeUndefined()
+  })
+
+  it('togglePeek is a no-op when already focused on the sidebar', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setFocus', value: 'sidebar' })
+    state = applyLogInkAction(state, { type: 'togglePeek' })
+    expect(state.focus).toBe('sidebar')
+    expect(state.peekReturnFocus).toBeUndefined()
+  })
+
+  it('drilling into a view cancels a pending peek', () => {
+    let state = applyLogInkAction(createLogInkState(rows), { type: 'togglePeek' })
+    expect(state.peekReturnFocus).toBe('commits')
+
+    state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+    expect(state.peekReturnFocus).toBeUndefined()
+  })
+
+  it('Tab (focusNext) cancels a pending peek', () => {
+    let state = applyLogInkAction(createLogInkState(rows), { type: 'togglePeek' })
+    expect(state.peekReturnFocus).toBe('commits')
+
+    state = applyLogInkAction(state, { type: 'focusNext' })
+    expect(state.peekReturnFocus).toBeUndefined()
+  })
+})

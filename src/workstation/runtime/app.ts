@@ -121,6 +121,7 @@ import {
     LOG_INK_DEFAULT_COLUMNS,
     LOG_INK_DEFAULT_ROWS,
     LOG_INK_MIN_COLUMNS,
+    LAYOUT_SINGLE_PANE_BELOW,
     LOG_INK_MIN_ROWS,
     getLogInkLayout,
 } from '../chrome/layout'
@@ -4480,6 +4481,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       : undefined
 
     getLogInkInputEvents(state, inputValue, key, {
+      // Narrow terminals show one pane at a time (#1135) — gates the `v`
+      // peek key. Derived the same way the layout does, since `layout`
+      // is computed later in the render path (not in this callback).
+      singlePane:
+        (windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS) <
+        LAYOUT_SINGLE_PANE_BELOW,
       detailFileCount: detail?.files.length,
       previewLineCount: diffPreviewLineCount,
       worktreeDiffLineCount: worktreeDiff?.lines.length,
