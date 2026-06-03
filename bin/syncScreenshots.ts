@@ -109,6 +109,8 @@ const SITE_RECIPES = [
   // Hunk staging
   'demo-staging-hunks',
   'ui-staging-hunks',
+  // Stash workflow (rich rows + rename)
+  'demo-stash-workflow',
   // Themed-view showcase — diff + status across a curated theme set
   'ui-diff-theme-catppuccin',
   'ui-diff-theme-gruvbox',
@@ -211,6 +213,7 @@ const FILENAME_MAP: Record<string, string[]> = {
   'demo-workspace-clone': ['demo-workspace-clone.gif'],
   'demo-workstation-using': ['demo-workstation-using.gif'],
   'demo-staging-hunks': ['demo-staging-hunks.gif'],
+  'demo-stash-workflow': ['demo-stash-workflow.gif'],
   'ui-staging-hunks': ['staging-hunks.png'],
   'ui-diff-theme-catppuccin': ['diff-theme-catppuccin.png'],
   'ui-diff-theme-gruvbox': ['diff-theme-gruvbox.png'],
