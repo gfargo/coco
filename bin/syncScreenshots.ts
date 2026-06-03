@@ -106,6 +106,9 @@ const SITE_RECIPES = [
   'demo-workspace-add-repo',
   'demo-workspace-clone',
   'demo-workstation-using',
+  // Hunk staging
+  'demo-staging-hunks',
+  'ui-staging-hunks',
   // Themed-view showcase — diff + status across a curated theme set
   'ui-diff-theme-catppuccin',
   'ui-diff-theme-gruvbox',
@@ -207,6 +210,8 @@ const FILENAME_MAP: Record<string, string[]> = {
   'demo-workspace-add-repo': ['demo-workspace-add-repo.gif'],
   'demo-workspace-clone': ['demo-workspace-clone.gif'],
   'demo-workstation-using': ['demo-workstation-using.gif'],
+  'demo-staging-hunks': ['demo-staging-hunks.gif'],
+  'ui-staging-hunks': ['staging-hunks.png'],
   'ui-diff-theme-catppuccin': ['diff-theme-catppuccin.png'],
   'ui-diff-theme-gruvbox': ['diff-theme-gruvbox.png'],
   'ui-diff-theme-dracula': ['diff-theme-dracula.png'],

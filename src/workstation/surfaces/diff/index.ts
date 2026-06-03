@@ -379,7 +379,10 @@ export function renderDiffSurface(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Diff', focused)),
-    h(Text, { dimColor: true }, worktreeFile ? worktreeFile.path : 'no file')
+    // Use the path of the file actually being diffed (the grouped/visible
+    // selection feeds the loaded diff) — `worktreeFile` indexes the raw,
+    // ungrouped file list and can name a different file than the diff body.
+    h(Text, { dimColor: true }, worktreeDiff?.filePath || worktreeFile?.path || 'no file')
   ),
   ...headerLines.map((line, index) => h(Text, {
     key: `diff-surface-header-${index}`,
