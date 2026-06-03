@@ -1305,6 +1305,30 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 1800 },
     ],
   },
+  {
+    name: 'demo-stash-workflow',
+    description: 'Stash like a pro: open the Stashes view (rich rows — on <branch> · N files · age), rename one (R), see the row update + inspector preview',
+    scenario: 'stashed-changes',
+    command: 'ui',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 3200 },
+      // Jump to the Stashes view — rows now read "stash@{0}  on main ·
+      // 3 files · 2w  <message>" with the inspector previewing contents.
+      { kind: 'type', text: 'gz' },
+      { kind: 'sleep', ms: 2600 },
+      // Rename the cursored stash — git has no native rename, so coco
+      // re-stores the commit under a new message and drops the old entry.
+      { kind: 'type', text: 'R' },
+      { kind: 'sleep', ms: 900 },
+      { kind: 'type', text: 'auth refactor — wip' },
+      { kind: 'sleep', ms: 900 },
+      { kind: 'key', key: 'Enter' },
+      // The row's message updates in place; the rest of the list is intact.
+      { kind: 'sleep', ms: 2600 },
+    ],
+  },
 ]
 
 export function findRecipe(name: string): ScreenshotRecipe | undefined {
