@@ -56,13 +56,14 @@ src/
     │   ├── app.ts            ← `LogInkApp` component: state, effects, async dispatchers, top-level render tree
     │   ├── header.ts         ← Header / breadcrumb renderer
     │   ├── sidebar.ts        ← Repository sidebar (accordion tabs)
-    │   ├── mainPanel.ts      ← Main-panel dispatcher → per-view surface
-    │   ├── detailPanel.ts    ← Inspector-panel dispatcher → per-view detail / overlay
+    │   ├── mainPanel.ts      ← Main-panel dispatcher → per-view surface (builds the `SurfaceRenderContext` bundle)
+    │   ├── detailPanel.ts    ← Inspector-panel dispatcher → per-view detail / overlay (still positional args)
     │   ├── footer.ts         ← Two-row status + hint footer
     │   ├── overlays.ts       ← Help / palette / confirmation / chord / onboarding overlays
-    │   └── …                 ← repo-stack runtime, diff line render, drill-in resolvers, types
+    │   ├── types.ts          ← `SurfaceRenderContext` (#1136 — the render bundle every main surface takes) + runtime types
+    │   └── …                 ← repo-stack runtime, diff line render, drill-in resolvers
     │
-    ├── surfaces/<view>/      ← Per-view render modules (history, status, diff, branches, tags, stash, compose, conflicts, reflog, bisect, …)
+    ├── surfaces/<view>/      ← Per-view render modules — each `render<View>Surface(ctx: SurfaceRenderContext, …extras)` (history, status, diff, branches, tags, stash, compose, conflicts, reflog, bisect, …)
     │
     └── chrome/               ← Cross-cutting visual + state + lifecycle utilities (this directory's reason for existing)
         ├── theme.ts          ← `LogInkTheme` resolver, color preset registry, `NO_COLOR` honoring
@@ -172,7 +173,7 @@ The bisect view (`g B`) is the most recent worked example — see PRs [#868, #88
 4. **Keymap** (`src/commands/log/inkKeymap.ts`) — add the chord binding (`g <letter>`) and the per-view footer hint.
 5. **Workflows** (`src/commands/log/inkWorkflows.ts`) — register any palette-reachable workflows (mutations, multi-step flows). Inline keypress handlers don't need a registration.
 6. **Input dispatch** (`src/commands/log/inkInput.ts`) — add the per-view branch in the `onKey` switch.
-7. **Render** (`src/workstation/surfaces/<view>/`) — write the view's render module and wire it into `workstation/runtime/mainPanel.ts` (and `detailPanel.ts` for the inspector surface). Use `chrome/surfaceStates.ts` for empty / loading copy.
+7. **Render** (`src/workstation/surfaces/<view>/`) — write `renderXxxSurface(ctx: SurfaceRenderContext, …extras)`. The `SurfaceRenderContext` bundle (#1136, defined in `runtime/types.ts`) carries the universal render values — `h`, `components`, `state`, `context`, `contextStatus`, `bodyRows`, `width`, `theme` — so you destructure what you need instead of accepting eight positional props; pass any surface-specific values (diff hunks, spinner frame, loading flags) as your own explicit params after it. Add the `activeView` branch in `workstation/runtime/mainPanel.ts` that calls your surface with the `surface` bundle (the inspector half still wires through `detailPanel.ts` with positional args). Use `chrome/surfaceStates.ts` for empty / loading copy.
 8. **Tests** — at minimum: data parser fixtures, reducer state transitions, a render snapshot of empty / populated / error states.
 
 Phase 5 of [#890](https://github.com/gfargo/coco/issues/890) has landed, so step 7 already lives under `workstation/surfaces/<view>/`. Once phases 6–7 land, steps 3 and 6 will likewise move into per-surface modules under `workstation/state/` and `workstation/state/input/`.
@@ -245,6 +246,7 @@ Scenarios match common workstation states: feature branch ready to PR, dirty wor
 - **Chord prefix.** `g` is the global view-selector prefix. Inside a view, the prefix is bypassed for view-local single-key bindings (`g`, `b`, `s`, `x` on the bisect view fire bisect actions, not chord entry). Path back out is always `<` or `Esc`, never a chord.
 - **Theme.** Don't hardcode colors. Resolve through `chrome/theme.ts` so `NO_COLOR`, the configured preset, and 8-color fallbacks all work. `focusBorderColor` returns undefined under `NO_COLOR` so layout doesn't shift.
 - **Layout.** Width budgets come from `chrome/layout.ts`. Don't compute terminal columns at the leaf — receive a width and respect it. Use `chrome/text.ts` for truncation.
+- **Render bundle.** Main-panel surfaces take the `SurfaceRenderContext` bundle (`runtime/types.ts`) — `h` / `components` / `state` / `context` / `contextStatus` / `bodyRows` / `width` / `theme` — not a parade of positional props (#1136). When a surface needs a new *universal* value, add it to the bundle rather than threading one more arg through `app → mainPanel → every surface`; pass surface-*specific* values as explicit params after the bundle.
 - **Hyperlinks.** Wrap with `chrome/hyperlinks.ts` — it gates on terminal capability and falls back to plain text. Never emit raw OSC-8.
 - **Empty / loading copy.** `chrome/surfaceStates.ts` — every surface has a tailored empty-state hint pointing at the next sensible action.
 - **Persistence.** Anything user-facing that survives between runs (sidebar tab, diff view mode, onboarding marker) goes through a `chrome/*Persistence.ts` module. Best-effort, XDG-friendly, no PII in cache filenames.
