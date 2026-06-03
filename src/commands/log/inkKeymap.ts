@@ -1089,7 +1089,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 
   if (options.activeView === 'status') {
     return {
-      contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'i ignore', 'e/c compose'],
+      contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'e/c compose'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1102,16 +1102,19 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     const splitToggleHint = options.diffViewMode === 'split' ? 'd unified' : 'd split'
     if (options.diffSource === 'stash') {
       return {
-        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'H apply hunk', 'o edit', splitToggleHint, 'y yank', 'esc back'],
+        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
     if (options.diffSource === 'commit') {
       // Commit-diff explore: read-only diff, but `c` cherry-picks the
       // cursored file from the commit into the worktree, and `H`
-      // (or `gH` for index) applies just the cursored hunk.
+      // (or `gH` for index) applies just the cursored hunk. `j/k`
+      // line-scroll the diff body; `[`/`]` jump between hunks — the
+      // footer labels match the actual handlers (commit diff has no
+      // per-file `[/]` jump; that's the stash diff).
       return {
-        contextual: ['j/k hunks', '[/] file', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'y/Y yank', 'esc back'],
+        contextual: ['j/k lines', '[/] hunk', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'esc back'],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
