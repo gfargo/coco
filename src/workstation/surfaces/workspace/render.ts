@@ -397,11 +397,12 @@ export type WorkspaceListWindow = {
  */
 export function buildWorkspaceListWindow(
   state: WorkspaceState,
-  options: { width?: number; rows: number; spinnerTick?: number } = { rows: 20 }
+  options: { width?: number; rows: number; spinnerTick?: number; now?: Date } = { rows: 20 }
 ): WorkspaceListWindow {
   const all = buildWorkspaceListRows(state, {
     width: options.width,
     spinnerTick: options.spinnerTick,
+    now: options.now,
   })
   const visibleCount = Math.max(1, options.rows)
   if (all.length <= visibleCount) {

@@ -56,6 +56,12 @@ type RenderWorkspaceAppDeps = {
    * this on a setInterval while any row is mid-fetch.
    */
   spinnerTick: number
+  /**
+   * Reference timestamp for the list's relative-date column. The view
+   * layer omits it (defaults to `new Date()`); tests pin it so the
+   * "Xw ago" snapshots don't drift with real calendar time.
+   */
+  now?: Date
 }
 
 function toneColor(tone: WorkspaceListColumn['tone'], theme: LogInkTheme): string | undefined {
@@ -457,6 +463,7 @@ function renderListBody(
     width,
     rows: listRows,
     spinnerTick: deps.spinnerTick,
+    now: deps.now,
   })
   const visibleRepos = selectVisibleRepos(state)
 

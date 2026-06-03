@@ -137,6 +137,10 @@ function render(
     columns: options.columns ?? 120,
     rows: options.rows ?? 40,
     spinnerTick: 0,
+    // Pin the clock so the list's relative-date column ("Xw ago") is
+    // deterministic — otherwise the snapshots drift with real calendar
+    // time (the recurring 3w→4w→…→6w→7w churn). Matches render.test.ts.
+    now: new Date('2026-05-30T00:00:00Z'),
   })
 }
 
