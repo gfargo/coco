@@ -854,6 +854,21 @@ export const RECIPES: ScreenshotRecipe[] = [
     actions: [{ kind: 'sleep', ms: 3000 }],
   },
 
+  {
+    name: 'ui-staging-hunks',
+    description: 'Worktree staging diff — per-hunk badges, selected-hunk bar, staged progress',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status',
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 3200 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 400 },
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 2200 },
+    ],
+  },
+
   // ─────────────────────────────────────────────────────────────────
   // `coco ui` — interactive overlays and focus states
   // ─────────────────────────────────────────────────────────────────
