@@ -258,6 +258,10 @@ describe('renderFooter', () => {
       const contextual = childAt(childAt(tree, 0), 0)
       return String(contextual.props.children)
     }
+    const globalText = (tree: Node): string => {
+      const global = childAt(childAt(tree, 0), 1)
+      return String(global.props.children)
+    }
 
     it('prepends the switcher with the focused pane bracketed', () => {
       // Default focus is the commit list ('commits') → main is active.
@@ -292,6 +296,47 @@ describe('renderFooter', () => {
       // Mid-glance: the switcher / peek-open hint step aside.
       expect(text).not.toContain('tab:')
       expect(text).not.toContain('v peek')
+    })
+
+    // #1135 — the switcher (~29 cells) + peek affordance already claim
+    // most of an 80-cell row, so the per-view hint tail and globals are
+    // trimmed to fit the narrow floor without clipping.
+    it('trims the global cluster to the recovery essentials', () => {
+      // Drops g jump / < back / : cmds — those stay reachable via `?`.
+      expect(globalText(renderSinglePane(makeState()))).toBe('? help · q quit')
+      expect(globalText(renderSinglePane(makeState({ activeView: 'status' })))).toBe('? help · q quit')
+    })
+
+    it('keeps the single-pane footer within the 80-col floor', () => {
+      const FLOOR = 80
+      const cases: Array<Partial<LogInkState>> = [
+        {}, // history / main
+        { activeView: 'status' },
+        { activeView: 'compose' },
+        { activeView: 'diff', diffSource: 'worktree' },
+        { focus: 'detail' }, // inspector visible
+        { focus: 'sidebar' }, // sidebar via Tab
+        { focus: 'sidebar', peekReturnFocus: 'commits' }, // peeking
+      ]
+      for (const overrides of cases) {
+        const tree = renderSinglePane(makeState(overrides))
+        const ctx = contextualText(tree)
+        const glob = globalText(tree)
+        // Row 1 width = contextual (joined) + global (joined) + paddingX(2)
+        // + at least one cell of space-between gap. Arrow / dot glyphs are
+        // single-width, so string length is a faithful column proxy here.
+        expect(ctx.length + glob.length + 2 + 1).toBeLessThanOrEqual(FLOOR)
+        // …and the orientation anchor is never the thing that gets cut.
+        expect(ctx).toContain(overrides.peekReturnFocus ? 'v/esc → main' : 'tab:')
+      }
+    })
+
+    it('keeps only the leading per-view hint in single-pane', () => {
+      // Full three-pane history footer leads with `↑/↓ move`, `enter
+      // diff`, … — single-pane keeps the first and drops the tail.
+      const text = contextualText(renderSinglePane(makeState()))
+      expect(text).toContain('↑/↓ move')
+      expect(text).not.toContain('enter diff')
     })
   })
 
