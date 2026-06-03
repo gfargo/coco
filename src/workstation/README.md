@@ -129,7 +129,8 @@ A few invariants worth knowing before changing any of those modules:
 - **The reducer is pure.** `applyLogInkAction(state, action)` never throws, never reads the file system, never calls git, never calls `Date.now()`. Side effects (and time, treated as a side effect) belong in workflows; timestamps arrive on action payloads.
 - **Workflows return actions.** A workflow that succeeds dispatches a `LogInkAction` via the runtime; failures dispatch a status-message action. The reducer is the only place state changes.
 - **Confirmation gating is data, not control flow.** Workflows declare `requiresConfirmation: 'y' | 'enter'` in `inkWorkflows.ts`; the runtime intercepts and routes through the y-confirm overlay.
-- **Re-renders are cheap.** Ink reconciles the React tree on every state change; render helpers are pure functions of `(state, theme, layout)`.
+- **Re-renders are cheap.** Ink reconciles the React tree on every state change; render helpers are pure functions of their inputs — main-panel surfaces take the `SurfaceRenderContext` bundle (see the *Render bundle* convention below) plus their own slices, not `(state, theme, layout)` threaded positionally (#1136).
+- **A runtime Context provider is installed but not yet consumed.** `LogInkApp` wraps its tree in a `LogInkRuntimeContext` provider (`runtime/runtimeContext.ts`) carrying `{ state, dispatch, theme, layout, context }`. Surfaces today read from the `SurfaceRenderContext` bundle (an explicit param), not `useContext` — the surfaces are pure render *functions*, not components. The provider is there so a surface can later become a thin component and read ambiently with zero body changes; until then it renders transparently. The factory exists because the workstation never statically imports React (ink/react load via dynamicImport at boot), so the Context is built from the runtime React instance.
 
 ## Async LLM calls + cancellation (#881)
 
