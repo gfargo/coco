@@ -276,6 +276,23 @@ describe('renderFooter', () => {
       // be misleading since Tab moves help focus, not the pane.
       expect(contextualText(renderSinglePane(makeState({ showHelp: true })))).not.toContain('tab:')
     })
+
+    // #1135 v2 — peek discoverability + the in-peek snap-back affordance.
+    it('surfaces "v peek" from the main / inspector pane', () => {
+      expect(contextualText(renderSinglePane(makeState()))).toContain('v peek')
+      expect(contextualText(renderSinglePane(makeState({ focus: 'detail' })))).toContain('v peek')
+      // Not from the sidebar itself — you're already there.
+      expect(contextualText(renderSinglePane(makeState({ focus: 'sidebar' })))).not.toContain('v peek')
+    })
+
+    it('swaps the switcher for the snap-back hint while peeking', () => {
+      const peeking = makeState({ focus: 'sidebar', peekReturnFocus: 'commits' })
+      const text = contextualText(renderSinglePane(peeking))
+      expect(text).toContain('v/esc → main')
+      // Mid-glance: the switcher / peek-open hint step aside.
+      expect(text).not.toContain('tab:')
+      expect(text).not.toContain('v peek')
+    })
   })
 
   // Snapshot covers the no-status default — the layout most users see

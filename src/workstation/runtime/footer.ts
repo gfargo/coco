@@ -111,6 +111,11 @@ export function renderFooter(
     compareBaseSet: Boolean(state.compareBase),
     splitPlanStatus: state.splitPlan?.status,
     singlePane: singlePane && !overlayForcesPane,
+    // Peeking (#1135 v2) is a single-pane glance with focus on the
+    // sidebar; the footer shows `v/esc → main` instead of the switcher.
+    // Suppressed under an overlay (which owns the footer) just like the
+    // switcher.
+    peeking: Boolean(state.peekReturnFocus) && singlePane && !overlayForcesPane,
   })
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.

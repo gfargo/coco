@@ -330,6 +330,17 @@ export type LogInkState = {
   pendingMutationConfirmation?: LogInkMutationConfirmation
   pendingKey?: string
   focus: LogInkFocus
+  /**
+   * Set while the user is "peeking" the sidebar (#1135 v2) — a momentary
+   * single-pane glance that snaps back to where they were. Holds the
+   * focus to restore when the peek ends; `undefined` when not peeking.
+   * Peek is just "focus the sidebar with a return ticket": opening sets
+   * `focus = 'sidebar'` and stashes the prior focus here; the toggle key
+   * or Esc restores it. Any explicit focus change (Tab) or view drill-in
+   * cancels the ticket so the user isn't snapped back unexpectedly.
+   * Single-pane only — above the breakpoint all panes are already visible.
+   */
+  peekReturnFocus?: LogInkFocus
   sidebarTab: LogInkSidebarTab
   /**
    * The user's last *explicit* sidebar tab choice. Only changes when
@@ -784,6 +795,7 @@ export type LogInkAction =
   | { type: 'focusPendingCommit' }
   | { type: 'unfocusPendingCommit' }
   | { type: 'setFocus'; value: LogInkFocus }
+  | { type: 'togglePeek' }
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
@@ -964,7 +976,7 @@ function topOfStack(stack: LogInkView[]): LogInkView {
 
 function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
   if (topOfStack(state.viewStack) === value) {
-    return { ...state, pendingKey: undefined }
+    return { ...state, peekReturnFocus: undefined, pendingKey: undefined }
   }
 
   const viewStack = [...state.viewStack, value]
@@ -988,13 +1000,16 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     compareHead: value === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: value === 'status' ? state.statusGroupHeaderFocused : false,
+    // Changing the view is a deliberate destination — cancel any pending
+    // peek return so the user isn't snapped back afterward.
+    peekReturnFocus: undefined,
     pendingKey: undefined,
   }
 }
 
 function withPoppedView(state: LogInkState): LogInkState {
   if (state.viewStack.length <= 1) {
-    return { ...state, pendingKey: undefined }
+    return { ...state, peekReturnFocus: undefined, pendingKey: undefined }
   }
 
   const viewStack = state.viewStack.slice(0, -1)
@@ -1022,6 +1037,8 @@ function withPoppedView(state: LogInkState): LogInkState {
     compareHead: next === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: next === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: next === 'status' ? state.statusGroupHeaderFocused : false,
+    // Backing out is a deliberate navigation — cancel any peek return.
+    peekReturnFocus: undefined,
     pendingKey: undefined,
   }
 }
@@ -1140,7 +1157,7 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
 
 function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
   if (topOfStack(state.viewStack) === value) {
-    return { ...state, pendingKey: undefined }
+    return { ...state, peekReturnFocus: undefined, pendingKey: undefined }
   }
 
   const viewStack = [...state.viewStack.slice(0, -1), value]
@@ -1155,6 +1172,9 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     compareHead: value === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: value === 'status' ? state.statusGroupHeaderFocused : false,
+    // Changing the view is a deliberate destination — cancel any pending
+    // peek return so the user isn't snapped back afterward.
+    peekReturnFocus: undefined,
     pendingKey: undefined,
   }
 }
@@ -1432,6 +1452,9 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // from 'commits' should always land back on a real file when
         // the user returns.
         statusGroupHeaderFocused: false,
+        // Explicit focus cycle cancels a pending peek return — the
+        // user has taken manual control of the focus.
+        peekReturnFocus: undefined,
         pendingKey: undefined,
       }
     case 'focusPrevious':
@@ -1440,6 +1463,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         focus: cycleValue(FOCUS_ORDER, state.focus, -1),
         sidebarHeaderFocused: false,
         statusGroupHeaderFocused: false,
+        peekReturnFocus: undefined,
         pendingKey: undefined,
       }
     case 'move':
@@ -1963,8 +1987,35 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // the status view — clear when focus moves away so a
         // re-entry starts on a real file.
         statusGroupHeaderFocused: action.value === 'commits' ? state.statusGroupHeaderFocused : false,
+        // An explicit focus set cancels a pending peek return.
+        peekReturnFocus: undefined,
         pendingKey: undefined,
       }
+    case 'togglePeek': {
+      // Peek = "focus the sidebar with a return ticket." Closing returns
+      // to the stashed focus; opening (only from a non-sidebar pane)
+      // stashes the current focus and jumps to the sidebar. The render
+      // layer needs no special case — `focus: 'sidebar'` already drives
+      // the single-pane layout to show the sidebar full-width.
+      if (state.peekReturnFocus !== undefined) {
+        return {
+          ...state,
+          focus: state.peekReturnFocus,
+          peekReturnFocus: undefined,
+          sidebarHeaderFocused: false,
+          pendingKey: undefined,
+        }
+      }
+      if (state.focus === 'sidebar') {
+        return state
+      }
+      return {
+        ...state,
+        focus: 'sidebar',
+        peekReturnFocus: state.focus,
+        pendingKey: undefined,
+      }
+    }
     case 'setPendingKey':
       return {
         ...state,

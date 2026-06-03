@@ -4475,4 +4475,63 @@ describe('triage filter cycling (#882 phase 6)', () => {
     expect(state.selectedIssueFilter).toBe('open')
     expect(state.selectedPullRequestFilter).toBe('open')
   })
+
+  // #1135 v2 — momentary sidebar "peek" on narrow (single-pane)
+  // terminals: `v` jumps to the sidebar with a return ticket; `v`/Esc
+  // snaps back to where you were; browsing the sidebar keeps it open;
+  // any explicit focus change or drill-in cancels the ticket.
+  describe('peek (single-pane sidebar glance)', () => {
+    const singlePane = { singlePane: true }
+
+    it('v opens a sidebar peek from the main pane and stores the return focus', () => {
+      let state = createLogInkState(rows)
+      expect(state.focus).toBe('commits')
+
+      state = applyInput(state, 'v', {}, singlePane)
+      expect(state.focus).toBe('sidebar')
+      expect(state.peekReturnFocus).toBe('commits')
+    })
+
+    it('v again snaps back to the original pane and clears the ticket', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'v', {}, singlePane)
+      state = applyInput(state, 'v', {}, singlePane)
+      expect(state.focus).toBe('commits')
+      expect(state.peekReturnFocus).toBeUndefined()
+    })
+
+    it('Esc closes a peek back to the original pane', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'v', {}, singlePane)
+      state = applyInput(state, '', { escape: true }, singlePane)
+      expect(state.focus).toBe('commits')
+      expect(state.peekReturnFocus).toBeUndefined()
+    })
+
+    it('keeps the peek open while browsing the sidebar (←/→ tab switch)', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'v', {}, singlePane)
+      expect(state.sidebarTab).toBe('branches')
+
+      state = applyInput(state, '', { rightArrow: true }, singlePane)
+      expect(state.sidebarTab).not.toBe('branches')
+      // Still peeking — the glance survives sidebar navigation.
+      expect(state.focus).toBe('sidebar')
+      expect(state.peekReturnFocus).toBe('commits')
+    })
+
+    it('Tab cancels the peek ticket (explicit focus change)', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'v', {}, singlePane)
+      state = applyInput(state, '', { tab: true }, singlePane)
+      expect(state.peekReturnFocus).toBeUndefined()
+    })
+
+    it('v is a no-op in the three-pane layout (not single-pane)', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'v', {}, { singlePane: false })
+      expect(state.focus).toBe('commits')
+      expect(state.peekReturnFocus).toBeUndefined()
+    })
+  })
 })

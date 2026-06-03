@@ -133,6 +133,23 @@ export const RECIPES: ScreenshotRecipe[] = [
     ],
   },
   {
+    name: 'ui-single-pane-peek',
+    description: 'Single-pane sidebar "peek" (v) at the 80×24 floor — momentary glance with v/esc → main',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    // `v` momentarily peeks the sidebar from the main pane without
+    // losing your place — one key out, one key (v/esc) back. The shot
+    // captures the full-width sidebar mid-glance plus the footer's
+    // `v/esc → main` snap-back affordance that distinguishes a peek from
+    // a Tab-cycle focus move.
+    dimensions: { cols: 80, rows: 24 },
+    actions: [
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'v' },
+      { kind: 'sleep', ms: 400 },
+    ],
+  },
+  {
     name: 'ui-branches-sync-showcase',
     description: 'Branches view showing 5 branches in different upstream sync states',
     scenario: 'branch-sync-showcase',

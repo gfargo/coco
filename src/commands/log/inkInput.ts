@@ -77,6 +77,12 @@ export type LogInkInputEvent =
   | { type: 'openGitignorePicker' }
 
 export type LogInkInputContext = {
+  /**
+   * True on narrow terminals where only one pane renders at a time
+   * (#1135). Gates the `v` peek key — peeking the sidebar is meaningless
+   * in the three-pane layout where every pane is already visible.
+   */
+  singlePane?: boolean
   detailFileCount?: number
   worktreeHunkOffsets?: number[]
   previewLineCount?: number
@@ -1478,6 +1484,16 @@ export function getLogInkInputEvents(
     return events
   }
 
+  // #1135 v2 — while peeking the sidebar, Esc or the peek key (`v`)
+  // snaps back to the pane the user came from. Placed before the
+  // generic Esc → popView so a peek glance returns to main rather than
+  // walking the view stack. Every other key falls through to normal
+  // handling (focus is on the sidebar during a peek), so ←/→ and ↑/↓
+  // browse the sidebar and keep the peek open until an explicit exit.
+  if (state.peekReturnFocus !== undefined && (key.escape || inputValue === 'v')) {
+    return [action({ type: 'togglePeek' })]
+  }
+
   if (key.escape && state.viewStack.length > 1) {
     return [action({ type: 'popView' })]
   }
@@ -1951,6 +1967,14 @@ export function getLogInkInputEvents(
 
   if (key.tab) {
     return [action({ type: key.shift ? 'focusPrevious' : 'focusNext' })]
+  }
+
+  // #1135 v2 — `v` peeks the sidebar from the main / inspector pane on
+  // narrow (single-pane) terminals: a momentary glance that snaps back
+  // with `v` / Esc (handled above once peeking). No-op in the three-pane
+  // layout (every pane is already on screen) and from the sidebar itself.
+  if (inputValue === 'v' && context.singlePane && state.focus !== 'sidebar') {
+    return [action({ type: 'togglePeek' })]
   }
 
   // ←/→ on the sidebar switch tabs (Status ↔ Branches ↔ Tags ↔

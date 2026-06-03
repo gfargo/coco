@@ -84,6 +84,7 @@ Available in every view (unless an overlay/mode has claimed the keyboard):
 | `<` | Pop view / go back |
 | `Esc` | Pop view; pop nested-repo frame; close overlay |
 | `Tab` / `Shift+Tab` | Focus next / previous pane |
+| `v` | Peek the sidebar (narrow / single-pane terminals only) — momentary glance, `v`/`Esc` snaps back to where you were |
 | `↑`/`k`, `↓`/`j` | Move selection / scroll |
 | `←`/`→` | Switch sidebar or inspector tab (focus-dependent) |
 | `PageUp` / `PageDown` | Page scroll |
