@@ -370,6 +370,7 @@ import { renderSidebar } from '../runtime/sidebar'
 import { renderMainPanel } from '../runtime/mainPanel'
 import { renderDetailPanel } from '../runtime/detailPanel'
 import { renderOnboardingOverlay } from '../runtime/overlays'
+import { getLogInkRuntimeContext, type LogInkRuntimeContextValue } from '../runtime/runtimeContext'
 import { ensureConfigFile, resolveConfigPath, type CocoConfigScope } from './configFiles'
 
 
@@ -4689,6 +4690,21 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     helpOverlayActive: state.showHelp,
   })
 
+  // Runtime Context provider (#1136). Bundles the five most-drilled
+  // values so surfaces can read them from context instead of receiving
+  // them as positional props. No consumers yet — this PR only installs
+  // the provider at the root; the surface families migrate in later PRs.
+  // A Context.Provider renders its children transparently (no host
+  // output), so wrapping the tree is behavior-preserving.
+  const RuntimeContext = getLogInkRuntimeContext(React)
+  const runtimeContextValue: LogInkRuntimeContextValue = {
+    state,
+    dispatch,
+    theme,
+    layout,
+    context,
+  }
+
   if (layout.tooSmall) {
     return h(Box, {
       flexDirection: 'column',
@@ -4708,7 +4724,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     return renderOnboardingOverlay(h, { Box, Text }, layout.rows, layout.columns, theme, appLabel)
   }
 
-  return h(Box, { flexDirection: 'column', height: layout.rows },
+  return h(RuntimeContext.Provider, { value: runtimeContextValue },
+    h(Box, { flexDirection: 'column', height: layout.rows },
     renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme, appLabel),
     h(Box, { flexDirection: 'row', height: layout.bodyRows },
       renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme, layout.sidebarRailed),
@@ -4761,6 +4778,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       )
     ),
     renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame)
+    )
   )
 }
 
