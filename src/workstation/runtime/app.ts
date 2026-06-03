@@ -351,7 +351,7 @@ function loadLogInkContextEntries(git: SimpleGit): Array<{
 // types (DynamicImport, LogInkRuntime) stay in inkRuntime.ts since they're
 // only needed by startInkInteractiveLog.
 
-import type { LogInkComponentDeps, LogInkContext } from './types'
+import type { LogInkComponentDeps, LogInkContext, SurfaceRenderContext } from './types'
 import type { LogArgv } from '../../commands/log/config'
 
 // Promoted-list filter helpers shared by every promoted surface. Live in
@@ -4757,13 +4757,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // we don't want to invoke the two hidden ones just to drop them.
   const sidebarPanel = () =>
     renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme)
+  const mainSurface: SurfaceRenderContext = {
+    h,
+    components: { Box, Text },
+    state,
+    context,
+    contextStatus,
+    bodyRows: layout.bodyRows,
+    width: layout.mainPanelWidth,
+    theme,
+  }
   const mainPanel = () =>
     renderMainPanel(
-      h,
-      { Box, Text },
-      state,
-      context,
-      contextStatus,
+      mainSurface,
       worktreeDiff,
       worktreeDiffLoading,
       worktreeHunks,
@@ -4778,9 +4784,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       compareDiffLoading,
       bisectCandidateDetail,
       bisectCandidateLoading,
-      layout.bodyRows,
-      layout.mainPanelWidth,
-      theme,
       hasMoreCommits,
       loadingMoreCommits,
       spinnerFrame,

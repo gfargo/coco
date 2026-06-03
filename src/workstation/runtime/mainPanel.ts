@@ -9,14 +9,11 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkContextStatus } from '../chrome/context'
 import type { LogInkLayoutDensity } from '../chrome/layout'
-import type { LogInkTheme } from '../chrome/theme'
 import type {
   GitCommitDetail,
   GitCommitFilePreview,
 } from '../../commands/log/data'
-import type { LogInkState } from '../../commands/log/inkViewModel'
 import type { WorktreeHunkOverview } from '../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../git/worktreeDiffData'
 import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
@@ -37,14 +34,10 @@ import { renderStatusSurface } from '../surfaces/status'
 import { renderSubmodulesSurface } from '../surfaces/submodules'
 import { renderTagsSurface } from '../surfaces/tags'
 import { renderWorktreesSurface } from '../surfaces/worktrees'
-import type { LogInkComponents, LogInkContext, SurfaceRenderContext } from './types'
+import type { SurfaceRenderContext } from './types'
 
 export function renderMainPanel(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
+  surface: SurfaceRenderContext,
   worktreeDiff: WorktreeFileDiff | undefined,
   worktreeDiffLoading: boolean,
   worktreeHunks: WorktreeHunkOverview | undefined,
@@ -59,9 +52,6 @@ export function renderMainPanel(
   compareDiffLoading: boolean,
   bisectCandidateDetail: GitCommitDetail | undefined,
   bisectCandidateLoading: boolean,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme,
   hasMoreCommits: boolean,
   loadingMoreCommits: boolean,
   spinnerFrame: number,
@@ -70,6 +60,12 @@ export function renderMainPanel(
   dateBucketingEnabled: boolean,
   syntaxSpans?: Map<string, SyntaxSpan[]>
 ): ReactTypes.ReactElement {
+  // The universal render values now arrive bundled (#1136); only the
+  // few raw values the dispatcher itself touches (split-plan overlay,
+  // activeView switch) are destructured here. Surfaces receive `surface`
+  // directly plus their own slices.
+  const { h, components, state, bodyRows, width, theme } = surface
+
   // Split-plan overlay (#907 polish): renders in the MAIN panel (not
   // detail) when active, because the content — multiple commit groups
   // with file lists, rationale, hunks — needs the full center width
@@ -79,21 +75,6 @@ export function renderMainPanel(
   // `state.splitPlan` is set, so the underlying view is dormant.
   if (state.splitPlan) {
     return renderSplitPlanOverlay(h, components, state, width, bodyRows, theme, true, spinnerFrame)
-  }
-
-  // Shared render bundle (#1136). The simple list/detail surfaces below
-  // consume exactly these eight values, so they take the bundle instead
-  // of eight positional props. Surfaces with extra needs (diff, compose,
-  // bisect, history) still receive their explicit params alongside.
-  const surface: SurfaceRenderContext = {
-    h,
-    components,
-    state,
-    context,
-    contextStatus,
-    bodyRows,
-    width,
-    theme,
   }
 
   if (state.activeView === 'status') {
