@@ -11,7 +11,6 @@
 
 import type * as ReactTypes from 'react'
 import type { IssueListItem } from '../../../git/issuesListData'
-import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import {
   formatLogInkGitHubNoRemote,
@@ -21,10 +20,9 @@ import {
 } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
-import type { LogInkState } from '../../../commands/log/inkViewModel'
 import { ISSUE_FILTER_LABELS } from '../../../git/triageFilterPresets'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
-import type { LogInkComponents, LogInkContext } from '../../runtime/types'
+import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 function stateColor(theme: LogInkTheme, state: string): string | undefined {
@@ -53,16 +51,8 @@ function matchesIssueFilter(issue: IssueListItem, filter: string): boolean {
   )
 }
 
-export function renderIssuesTriageSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme
-): ReactTypes.ReactElement {
+export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+  const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const overview = context.issueList

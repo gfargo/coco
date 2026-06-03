@@ -9,7 +9,6 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { pickSpinnerFrame } from '../../chrome/spinner'
 import {
@@ -19,8 +18,7 @@ import {
 import { formatLogInkComposeEmpty } from '../../chrome/surfaceStates'
 import { truncateCells, wrapCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
-import type { LogInkState } from '../../../commands/log/inkViewModel'
-import type { LogInkComponents, LogInkContext } from '../../runtime/types'
+import type { LogInkComponents, SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
 /**
@@ -56,17 +54,8 @@ function renderStreamingPreviewLines(
   })
 }
 
-export function renderComposeSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme,
-  spinnerFrame: number = 0
-): ReactTypes.ReactElement {
+export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
+  const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const compose = state.commitCompose
   const focused = state.focus === 'commits'

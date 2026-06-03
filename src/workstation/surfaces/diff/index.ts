@@ -22,16 +22,13 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatStashHeaderIdentity } from '../../chrome/stashHeader'
 import { cellWidth, truncateCells, truncatePathCells } from '../../chrome/text'
-import type { LogInkTheme } from '../../chrome/theme'
 import type {
   GitCommitDetail,
   GitCommitFilePreview,
 } from '../../../commands/log/data'
-import type { LogInkState } from '../../../commands/log/inkViewModel'
 import {
   findStashFileForOffset,
   parseStashDiffFiles,
@@ -45,18 +42,14 @@ import {
 import { renderDiffLine } from '../../runtime/diffLineRender'
 import { renderWorktreeDiffBody } from '../../runtime/worktreeDiffBody'
 import type { SyntaxSpan } from '../../../lib/syntax/highlightEngine'
-import type { LogInkComponents, LogInkContext } from '../../runtime/types'
+import type { SurfaceRenderContext } from '../../runtime/types'
 import {
   focusBorderColor,
   panelTitle,
 } from '../../runtime/utils'
 
 export function renderDiffSurface(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
+  ctx: SurfaceRenderContext,
   worktreeDiff: WorktreeFileDiff | undefined,
   worktreeDiffLoading: boolean,
   worktreeHunks: WorktreeHunkOverview | undefined,
@@ -69,11 +62,9 @@ export function renderDiffSurface(
   stashDiffLoading: boolean,
   compareDiffLines: string[] | undefined,
   compareDiffLoading: boolean,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme,
   syntaxSpans?: Map<string, SyntaxSpan[]>
 ): ReactTypes.ReactElement {
+  const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree

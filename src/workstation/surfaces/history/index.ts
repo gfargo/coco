@@ -42,7 +42,7 @@ import type {
     LogInkHistoryFetchArgs,
     LogInkState,
 } from '../../../commands/log/inkViewModel'
-import type { LogInkComponents, LogInkContext } from '../../runtime/types'
+import type { LogInkComponents, LogInkContext, SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 import { getRenderNow } from '../../chrome/snapshotMode'
 import { pickSpinnerFrame } from '../../chrome/spinner'
@@ -584,13 +584,7 @@ function renderRemoteOpLoader(
 }
 
 export function renderHistoryPanel(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  bodyRows: number,
-  width: number,
-  theme: LogInkTheme,
+  ctx: SurfaceRenderContext,
   hasMoreCommits: boolean,
   loadingMoreCommits: boolean,
   density: LogInkLayoutDensity,
@@ -599,6 +593,7 @@ export function renderHistoryPanel(
   now: Date = getRenderNow(),
   spinnerFrame: number = 0
 ): ReactTypes.ReactElement {
+  const { h, components, state, context, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
 

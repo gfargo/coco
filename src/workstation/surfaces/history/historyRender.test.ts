@@ -18,6 +18,7 @@ import {
     createLogInkState,
     type LogInkState,
 } from '../../../commands/log/inkViewModel'
+import { createLogInkContextStatus } from '../../chrome/context'
 import { createLogInkTheme } from '../../chrome/theme'
 import type { GitLogRow } from '../../../commands/log/data'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
@@ -82,13 +83,16 @@ function render(
 ): ReactElement {
   const theme = createLogInkTheme({ ascii: options.ascii })
   return renderHistoryPanel(
-    createElement,
-    components,
-    state,
-    options.context || baseContext,
-    options.bodyRows ?? 30,
-    options.width ?? 120,
-    theme,
+    {
+      h: createElement,
+      components,
+      state,
+      context: options.context || baseContext,
+      contextStatus: createLogInkContextStatus('ready'),
+      bodyRows: options.bodyRows ?? 30,
+      width: options.width ?? 120,
+      theme,
+    },
     options.hasMoreCommits ?? false,
     options.loadingMoreCommits ?? false,
     options.density || 'normal',

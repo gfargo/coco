@@ -102,11 +102,7 @@ export function renderMainPanel(
 
   if (state.activeView === 'diff') {
     return renderDiffSurface(
-      h,
-      components,
-      state,
-      context,
-      contextStatus,
+      surface,
       worktreeDiff,
       worktreeDiffLoading,
       worktreeHunks,
@@ -119,15 +115,12 @@ export function renderMainPanel(
       stashDiffLoading,
       compareDiffLines,
       compareDiffLoading,
-      bodyRows,
-      width,
-      theme,
       syntaxSpans
     )
   }
 
   if (state.activeView === 'compose') {
-    return renderComposeSurface(h, components, state, context, contextStatus, bodyRows, width, theme, spinnerFrame)
+    return renderComposeSurface(surface, spinnerFrame)
   }
 
   if (state.activeView === 'branches') {
@@ -143,7 +136,7 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'bisect') {
-    return renderBisectSurface(h, components, state, context, contextStatus, bisectCandidateDetail, bisectCandidateLoading, bodyRows, width, theme)
+    return renderBisectSurface(surface, bisectCandidateDetail, bisectCandidateLoading)
   }
 
   if (state.activeView === 'stash') {
@@ -159,15 +152,15 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'pull-request') {
-    return renderPullRequestSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderPullRequestSurface(surface)
   }
 
   if (state.activeView === 'pull-request-triage') {
-    return renderPullRequestTriageSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderPullRequestTriageSurface(surface)
   }
 
   if (state.activeView === 'issues') {
-    return renderIssuesTriageSurface(h, components, state, context, contextStatus, bodyRows, width, theme)
+    return renderIssuesTriageSurface(surface)
   }
 
   if (state.activeView === 'conflicts') {
@@ -179,13 +172,7 @@ export function renderMainPanel(
   }
 
   return renderHistoryPanel(
-    h,
-    components,
-    state,
-    context,
-    bodyRows,
-    width,
-    theme,
+    surface,
     hasMoreCommits,
     loadingMoreCommits,
     density,
