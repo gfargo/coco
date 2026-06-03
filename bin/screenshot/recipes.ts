@@ -102,13 +102,16 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
   {
     name: 'ui-stash-list',
-    description: 'Workstation sidebar Stashes tab with multiple stashes',
+    description: 'Workstation Stashes view — rich rows (on <branch> · N files · age) + inspector preview',
     scenario: 'stashed-changes',
     command: 'ui',
     actions: [
-      { kind: 'sleep', ms: 800 },
+      // Cold-cache first paint shows "loading context" for a beat; wait it
+      // out so `gz` lands after the stash context is ready and the promoted
+      // view actually opens (otherwise the capture catches the history view).
+      { kind: 'sleep', ms: 3500 },
       { kind: 'type', text: 'gz' },
-      { kind: 'sleep', ms: 400 },
+      { kind: 'sleep', ms: 1200 },
     ],
   },
 
@@ -1313,7 +1316,8 @@ export const RECIPES: ScreenshotRecipe[] = [
     emitGif: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 3200 },
+      // Wait out the cold-cache "loading context" beat before the gz chord.
+      { kind: 'sleep', ms: 4000 },
       // Jump to the Stashes view — rows now read "stash@{0}  on main ·
       // 3 files · 2w  <message>" with the inspector previewing contents.
       { kind: 'type', text: 'gz' },

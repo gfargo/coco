@@ -108,10 +108,18 @@ export async function getStashOverview(git: SimpleGit): Promise<StashOverview> {
   //   %gd  — stash reflog selector (stash@{N})
   //   %H   — stash commit hash
   //   %P   — space-separated parent hashes (first = base, see StashEntry.baseHash)
-  //   %ci  — committer date, ISO format
+  //   %cI  — committer date, strict ISO 8601
   //   %gs  — reflog subject ("WIP on main: <subject>")
+  //
+  // NOTE: we deliberately do NOT pass `--date=iso`. That flag rewrites the
+  // `%gd` selector from the index form (`stash@{0}`) into a timestamp
+  // (`stash@{2026-06-03 17:29:23 -0400}`), which is noisy in the list, eats
+  // row width, and — critically — breaks `renameStash`, which parses the
+  // `stash@{N}` index out of the ref. `%cI` gives a strict-ISO date that's
+  // independent of `--date`, so we get both a clean index ref and a
+  // parseable date.
   const stashes = parseStashList(
-    await git.raw(['stash', 'list', '--date=iso', '--format=%gd%x1f%H%x1f%P%x1f%ci%x1f%gs'])
+    await git.raw(['stash', 'list', '--format=%gd%x1f%H%x1f%P%x1f%cI%x1f%gs'])
   )
 
   return {
