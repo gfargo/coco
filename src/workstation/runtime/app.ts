@@ -124,6 +124,7 @@ import {
     LOG_INK_MIN_ROWS,
     getLogInkLayout,
 } from '../chrome/layout'
+import type { LogInkVisiblePane } from '../chrome/layout'
 import { sortBranches, sortTags } from '../chrome/sorting'
 import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../chrome/idleTips'
 import {
@@ -4680,6 +4681,25 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     })
   })
 
+  // In single-pane mode (narrow terminals) only one pane renders, so an
+  // active overlay must pull its own pane into view rather than stay
+  // hidden behind whatever pane focus points at. The split-plan overlay
+  // lives in the main panel; every other overlay (help / palette / theme
+  // / gitignore / input prompt / confirmation / chord) renders in the
+  // inspector. Ignored above the single-pane breakpoint (all panes show).
+  const forcedPane: LogInkVisiblePane | undefined = state.splitPlan
+    ? 'main'
+    : state.showHelp ||
+        state.showCommandPalette ||
+        state.showThemePicker ||
+        state.gitignorePicker ||
+        state.inputPrompt ||
+        state.pendingConfirmationId ||
+        state.pendingMutationConfirmation ||
+        state.pendingKey
+      ? 'inspector'
+      : undefined
+
   // Layout depends on focus (sidebar grows when focused), so it's
   // computed here — after state is in scope but before the render path.
   const layout = getLogInkLayout({
@@ -4688,6 +4708,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     sidebarFocused: state.focus === 'sidebar',
     inspectorFocused: state.focus === 'detail',
     helpOverlayActive: state.showHelp,
+    forcedPane,
   })
 
   // Runtime Context provider (#1136). Bundles the five most-drilled
@@ -4724,60 +4745,78 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     return renderOnboardingOverlay(h, { Box, Text }, layout.rows, layout.columns, theme, appLabel)
   }
 
+  // Panel renderers are thunks so single-pane mode can build only the
+  // visible pane — the main-panel render in particular is expensive, so
+  // we don't want to invoke the two hidden ones just to drop them.
+  const sidebarPanel = () =>
+    renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme)
+  const mainPanel = () =>
+    renderMainPanel(
+      h,
+      { Box, Text },
+      state,
+      context,
+      contextStatus,
+      worktreeDiff,
+      worktreeDiffLoading,
+      worktreeHunks,
+      worktreeHunksLoading,
+      filePreview,
+      filePreviewLoading,
+      commitDiffHunkOffsets,
+      selectedDetailFile,
+      stashDiffLines,
+      stashDiffLoading,
+      compareDiffLines,
+      compareDiffLoading,
+      bisectCandidateDetail,
+      bisectCandidateLoading,
+      layout.bodyRows,
+      layout.mainPanelWidth,
+      theme,
+      hasMoreCommits,
+      loadingMoreCommits,
+      spinnerFrame,
+      layout.density,
+      layout.historyRowMode,
+      Boolean(dateBucketingEnabled),
+      diffSyntaxSpans
+    )
+  const detailPanel = () =>
+    renderDetailPanel(
+      h,
+      { Box, Text },
+      state,
+      context,
+      contextStatus,
+      detail,
+      detailLoading,
+      filePreview,
+      filePreviewLoading,
+      layout.detailWidth,
+      layout.inspectorTabbed,
+      theme,
+      layout.bodyRows
+    )
+
+  // Single-pane mode (narrow terminals): exactly one full-width pane,
+  // chosen by `layout.visiblePane`; Tab cycles which one. Above the
+  // breakpoint all three tile side by side as before.
+  const bodyPanels = layout.singlePane
+    ? [
+        layout.visiblePane === 'sidebar'
+          ? sidebarPanel()
+          : layout.visiblePane === 'inspector'
+            ? detailPanel()
+            : mainPanel(),
+      ]
+    : [sidebarPanel(), mainPanel(), detailPanel()]
+
   return h(RuntimeContext.Provider, { value: runtimeContextValue },
     h(Box, { flexDirection: 'column', height: layout.rows },
     renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme, appLabel),
-    h(Box, { flexDirection: 'row', height: layout.bodyRows },
-      renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme, layout.sidebarRailed),
-      renderMainPanel(
-        h,
-        { Box, Text },
-        state,
-        context,
-        contextStatus,
-        worktreeDiff,
-        worktreeDiffLoading,
-        worktreeHunks,
-        worktreeHunksLoading,
-        filePreview,
-        filePreviewLoading,
-        commitDiffHunkOffsets,
-        selectedDetailFile,
-        stashDiffLines,
-        stashDiffLoading,
-        compareDiffLines,
-        compareDiffLoading,
-        bisectCandidateDetail,
-        bisectCandidateLoading,
-        layout.bodyRows,
-        layout.mainPanelWidth,
-        theme,
-        hasMoreCommits,
-        loadingMoreCommits,
-        spinnerFrame,
-        layout.density,
-        layout.historyRowMode,
-        Boolean(dateBucketingEnabled),
-        diffSyntaxSpans
-      ),
-      renderDetailPanel(
-        h,
-        { Box, Text },
-        state,
-        context,
-        contextStatus,
-        detail,
-        detailLoading,
-        filePreview,
-        filePreviewLoading,
-        layout.detailWidth,
-        layout.inspectorTabbed,
-        theme,
-        layout.inspectorRailed,
-        layout.bodyRows
-      )
-    ),
-    renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame)
+    h(Box, { flexDirection: 'row', height: layout.bodyRows }, ...bodyPanels),
+    renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame, layout.singlePane)
     )
   )
 }

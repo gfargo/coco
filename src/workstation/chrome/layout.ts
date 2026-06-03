@@ -23,7 +23,24 @@ export type LogInkLayoutInput = {
    * open is fine — the user is paused on the help, not navigating.
    */
   helpOverlayActive?: boolean
+  /**
+   * Single-pane only. When an overlay needs a specific pane visible the
+   * runtime passes it here so single-pane mode surfaces the overlay
+   * instead of hiding it behind whatever pane focus points at:
+   * split-plan renders in the main panel; help / palette / confirmation
+   * / input-prompt / chord overlays all render in the inspector. Ignored
+   * at or above `LAYOUT_SINGLE_PANE_BELOW` (every pane is visible there).
+   */
+  forcedPane?: LogInkVisiblePane
 }
+
+/**
+ * Which of the three panes renders below `LAYOUT_SINGLE_PANE_BELOW`,
+ * where only one shows at a time. Derived from focus (`sidebar` →
+ * sidebar, `commits` → main, `detail` → inspector) so the existing Tab
+ * focus cycle drives the pane switch with no new binding.
+ */
+export type LogInkVisiblePane = 'sidebar' | 'main' | 'inspector'
 
 /**
  * Responsive tier for the whole UI, derived from terminal width. Higher
@@ -33,8 +50,8 @@ export type LogInkLayoutInput = {
  *   - wide   (>= 160 cols) — absolute `YYYY-MM-DD` dates, full chrome
  *   - normal (120–159)     — compact relative dates (`2d`, `3w`)
  *   - tight  (100–119)     — date column dropped entirely
- *   - rail   (< 100)       — history rows stack on two lines; sidebar
- *     and inspector collapse to a thin icon rail when not focused
+ *   - rail   (< 100)       — history rows stack on two lines; the UI
+ *     drops to single-pane mode (one full-width pane, Tab-cycled)
  */
 export type LogInkLayoutDensity = 'rail' | 'tight' | 'normal' | 'wide'
 
@@ -63,24 +80,23 @@ export type LogInkLayout = {
   inspectorTabbed: boolean
   /**
    * Width-derived tier that gates date formatting and row stacking in
-   * the history surface; also drives panel rail collapse below.
+   * the history surface. Below the `rail` breakpoint the UI also drops
+   * to single-pane mode (see `singlePane`).
    */
   density: LogInkLayoutDensity
   /**
-   * True when the sidebar should render as a thin icon rail (tab
-   * glyph + count, no expanded tab content). Held to `density === 'rail'
-   * && !sidebarFocused` so focusing the sidebar always pops it back
-   * to its normal expanded form — same affordance as the existing
-   * focus-grow pattern, just starting from a much smaller resting
-   * state on narrow terminals.
+   * True when the terminal is too narrow to tile three panes, so the UI
+   * shows exactly one full-width pane (`visiblePane`) and Tab cycles
+   * which one. Replaces the retired 8-cell icon rails — an 8-cell stub
+   * was worse than no panel. Gated on `columns < LAYOUT_SINGLE_PANE_BELOW`.
    */
-  sidebarRailed: boolean
+  singlePane: boolean
   /**
-   * True when the inspector should render as a thin rail (selected
-   * shortHash + a focus hint, no commit body / file list / actions).
-   * Same focus-rescue contract as `sidebarRailed`.
+   * In single-pane mode, which pane renders. Derived from focus (and an
+   * active overlay's `forcedPane`); meaningless when `singlePane` is
+   * false (all three panes render).
    */
-  inspectorRailed: boolean
+  visiblePane: LogInkVisiblePane
   /**
    * `single` — each commit takes one row (current behavior).
    * `stacked` — each commit takes two rows: graph + hash + message on
@@ -113,20 +129,21 @@ export const INSPECTOR_TABBED_BELOW_ROWS = 28
  *   wide   >= 160 — plenty of room; keep absolute dates
  *   normal >= 120 — relative dates save 8-ish cells without hiding info
  *   tight  >= 100 — drop date entirely; subject + refs are the priority
- *   rail   <  100 — even with side panels collapsed the row is tight;
- *                   stack to two lines and rail the side panels at rest
+ *   rail   <  100 — history rows stack to two lines; the UI also drops
+ *                   to single-pane mode (see `LAYOUT_SINGLE_PANE_BELOW`)
  */
 export const LAYOUT_TIGHT_BELOW = 120
 export const LAYOUT_NORMAL_BELOW = 160
 export const LAYOUT_RAIL_BELOW = 100
 
 /**
- * Fixed cell width for a railed side panel. Just wide enough for a
- * 1-cell icon + a 2-3 digit count after subtracting border (2) and
- * padding (2). Going narrower clips the count; going wider defeats
- * the purpose of railing in the first place.
+ * Width below which the three-panel layout can't tile without starving
+ * every pane, so the UI shows exactly one full-width pane (the focused
+ * one) and Tab cycles which pane is visible. Coincides with the `rail`
+ * density breakpoint — single-pane mode replaces the old 8-cell icon
+ * rails that used to render at this width.
  */
-export const LAYOUT_RAIL_PANEL_WIDTH = 8
+export const LAYOUT_SINGLE_PANE_BELOW = LAYOUT_RAIL_BELOW
 
 /**
  * Sidebar at-rest size targets, tier-aware. The sidebar's purpose at
@@ -160,7 +177,7 @@ export const LAYOUT_RAIL_PANEL_WIDTH = 8
  */
 type SidebarAtRestConfig = { min: number; max: number; fraction: number }
 const SIDEBAR_AT_REST_BY_TIER: Record<LogInkLayoutDensity, SidebarAtRestConfig> = {
-  rail: { min: 22, max: 28, fraction: 0.24 }, // unused — rail collapses to LAYOUT_RAIL_PANEL_WIDTH
+  rail: { min: 22, max: 28, fraction: 0.24 }, // unused at rest — single-pane mode overrides the width
   tight: { min: 22, max: 28, fraction: 0.24 },
   normal: { min: 22, max: 30, fraction: 0.22 },
   wide: { min: 28, max: 32, fraction: 0.20 },
@@ -183,15 +200,26 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
           ? 'tight'
           : 'rail'
 
-  // Rail collapse: only happens at the narrowest tier, and only for
-  // the panel that does NOT currently hold focus AND is not being
-  // commandeered by the help overlay. Focus always wins — pressing
-  // tab to the sidebar pops it back open even on an 80-cell terminal
-  // so the user can actually use it. The help overlay also wins for
-  // the inspector since that's where its descriptions render.
-  const sidebarRailed = density === 'rail' && !input.sidebarFocused
-  const inspectorRailed =
-    density === 'rail' && !input.inspectorFocused && !input.helpOverlayActive
+  // Below the single-pane breakpoint the three-panel layout can't tile
+  // without starving every pane, so we show exactly one full-width pane
+  // — the focused one — and Tab cycles which pane is visible. This
+  // replaces the retired 8-cell icon rails (an 8-cell stub showed a tab
+  // glyph + count and nothing actionable).
+  const singlePane = columns < LAYOUT_SINGLE_PANE_BELOW
+
+  // Which pane shows in single-pane mode. Defaults to the focused pane
+  // (focus and visibility coalesce, so the existing Tab focus cycle
+  // drives it). An active overlay can force a specific pane via
+  // `forcedPane` so its surface isn't hidden behind whatever pane focus
+  // points at.
+  const focusPane: LogInkVisiblePane = input.sidebarFocused
+    ? 'sidebar'
+    : input.inspectorFocused
+      ? 'inspector'
+      : 'main'
+  const visiblePane: LogInkVisiblePane = singlePane
+    ? input.forcedPane ?? focusPane
+    : focusPane
 
   // Inspector width — at rest 20-32 cells (~22% of width), focused
   // 36-60 cells (~40% of width). Narrow rest state keeps the commit
@@ -204,42 +232,49 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   // "Move focus...". Capped at 100 cells so a wide terminal doesn't
   // waste an absurd amount of horizontal space on the cheat sheet.
   //
-  // Rail collapse wins over the at-rest range but loses to focus and
-  // to the help overlay — both of those represent deliberate user
-  // intent to read the panel.
+  // (In single-pane mode these three-panel widths are recomputed below
+  // so the visible pane gets the full terminal.)
   const detailWidth = input.helpOverlayActive
     ? Math.max(60, Math.min(100, Math.floor(columns * 0.50)))
     : input.inspectorFocused
       ? Math.max(36, Math.min(60, Math.floor(columns * 0.40)))
-      : inspectorRailed
-        ? LAYOUT_RAIL_PANEL_WIDTH
-        : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
+      : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
   // Sidebar at rest is tier-aware (see `SIDEBAR_AT_REST_BY_TIER`):
   // tight stays compact (22-28), normal shrinks slightly (22-30),
   // wide grows naturally (28-48) so the side panel doesn't get pinned
   // at an arbitrary cap on big terminals while the main panel hogs
   // 80% of the width. Focused: 32-50 cells (~36% of width),
   // regardless of tier — deliberate user intent to read the sidebar
-  // deserves the extra width. Rail mode (narrow terminal, unfocused)
-  // collapses to a fixed 8-cell strip with tab glyphs only.
+  // deserves the extra width.
   const sidebarWidth = input.sidebarFocused
     ? Math.max(32, Math.min(50, Math.floor(columns * 0.36)))
-    : sidebarRailed
-      ? LAYOUT_RAIL_PANEL_WIDTH
-      : calcSidebarAtRestWidth(columns, density)
+    : calcSidebarAtRestWidth(columns, density)
+
+  // Single-pane mode: exactly one pane renders, full-width; the other
+  // two are hidden (width 0), not railed. Above the breakpoint the
+  // three panels tile flush across the terminal.
+  const paneWidths = singlePane
+    ? {
+        sidebarWidth: visiblePane === 'sidebar' ? columns : 0,
+        mainPanelWidth: visiblePane === 'main' ? columns : 0,
+        detailWidth: visiblePane === 'inspector' ? columns : 0,
+      }
+    : {
+        sidebarWidth,
+        mainPanelWidth: Math.max(20, columns - sidebarWidth - detailWidth),
+        detailWidth,
+      }
 
   return {
     bodyRows: Math.max(8, rows - 5),
     columns,
-    detailWidth,
-    mainPanelWidth: Math.max(20, columns - sidebarWidth - detailWidth),
     rows,
-    sidebarWidth,
     tooSmall: columns < LOG_INK_MIN_COLUMNS || rows < LOG_INK_MIN_ROWS,
     inspectorTabbed: rows < INSPECTOR_TABBED_BELOW_ROWS,
     density,
-    sidebarRailed,
-    inspectorRailed,
+    singlePane,
+    visiblePane,
     historyRowMode: density === 'rail' ? 'stacked' : 'single',
+    ...paneWidths,
   }
 }

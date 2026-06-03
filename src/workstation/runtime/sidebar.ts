@@ -248,78 +248,6 @@ function renderActiveSidebarContent(
   )
 }
 
-/**
- * Single-letter glyph for a sidebar tab in rail mode. Letters always
- * carry the meaning so this stays useful under ASCII; the rail is too
- * narrow to fit the full tab label. Pairs with `sidebarTabCount` for
- * the trailing count.
- */
-function sidebarTabRailGlyph(tab: LogInkSidebarTab): string {
-  switch (tab) {
-    case 'status':
-      return 'S'
-    case 'branches':
-      return 'B'
-    case 'tags':
-      return 'T'
-    case 'stashes':
-      return '$'
-    case 'worktrees':
-      return 'W'
-    default:
-      return '·'
-  }
-}
-
-/**
- * Rail-mode sidebar — shown on terminals < 100 columns when the
- * sidebar does not hold focus. Five vertically stacked tab glyphs
- * with optional counts; the active tab is bracketed. Pressing Tab to
- * focus the sidebar pops it back to the full accordion (the layout
- * un-rails it on focus, this renderer is never called in that case).
- */
-function renderSidebarRail(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  width: number,
-  theme: LogInkTheme,
-  focused: boolean,
-  tabs: LogInkSidebarTab[]
-): ReactTypes.ReactElement {
-  const { Box, Text } = components
-
-  return h(Box, {
-    borderColor: focusBorderColor(theme, focused),
-    borderStyle: theme.borderStyle,
-    flexDirection: 'column',
-    width,
-    paddingX: 1,
-  },
-  h(Text, { bold: true, dimColor: !focused }, 'Repo'),
-  h(Text, { dimColor: true }, '────'),
-  ...tabs.map((tab) => {
-    const isActive = tab === state.sidebarTab
-    const glyph = sidebarTabRailGlyph(tab)
-    const count = sidebarTabCount(tab, context)
-    // Count fits in 2 cells (rail content area is ~4 cells); 99+
-    // collapses to `+` so we never overflow.
-    const countText = count === undefined
-      ? ''
-      : count > 99
-        ? '+'
-        : String(count)
-    const body = isActive ? `[${glyph}]` : ` ${glyph} `
-    const text = countText ? `${body}${countText}` : body
-    return h(Text, {
-      key: `rail-${tab}`,
-      bold: isActive,
-      dimColor: !isActive,
-    }, text)
-  }))
-}
-
 export function renderSidebar(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -328,16 +256,11 @@ export function renderSidebar(
   contextStatus: LogInkContextStatus,
   width: number,
   bodyRows: number,
-  theme: LogInkTheme,
-  railed: boolean = false
+  theme: LogInkTheme
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
   const tabs = getLogInkSidebarTabs()
-
-  if (railed) {
-    return renderSidebarRail(h, components, state, context, width, theme, focused, tabs)
-  }
 
   // Accordion layout — every tab's title is visible on its own line, but
   // only the active tab expands its content underneath. Switching tabs
