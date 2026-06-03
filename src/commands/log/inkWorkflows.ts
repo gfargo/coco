@@ -337,6 +337,25 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // Palette-only create variants (empty `key`): no global hotkey to
+      // collide with `S` / `gZ`, reachable from `:`. Both stash a quick
+      // WIP entry with the requested scope.
+      id: 'stash-staged',
+      key: '',
+      label: 'Stash staged only',
+      description: 'Stash just the staged (index) changes — `git stash push --staged`.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'stash-keep-index',
+      key: '',
+      label: 'Stash keeping index',
+      description: 'Stash everything but leave the index intact for an immediate commit — `git stash push --keep-index`.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       id: 'remove-worktree',
       key: 'W',
       label: 'Remove worktree',

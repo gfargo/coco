@@ -239,8 +239,17 @@ The hunk is the unit of action here.
 |-----|--------|
 | `Enter` | Open the stash diff |
 | `a` | Apply (keep) |
+| `A` | Apply restoring the staged/unstaged split (`git stash apply --index`) |
 | `p` | Pop (apply + drop) |
+| `R` | Rename the stash (re-store under a new message, drop the old) |
+| `b` | Create a branch from the stash (`git stash branch`) |
 | `X` | Drop (confirm) |
+| `u` | Undo the last drop (re-store by commit hash) |
+| `y` | Yank the stash ref |
+
+Create a stash with `gZ` (any view) or `S` (outside the staging triad). The
+`:` palette also carries **stash staged only** and **stash keeping index**
+variants.
 
 ### Conflicts
 

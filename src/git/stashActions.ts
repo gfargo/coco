@@ -19,22 +19,125 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
   }
 }
 
-export function createStash(git: SimpleGit, message: string): Promise<BranchActionResult> {
-  const trimmedMessage = message.trim()
+export type CreateStashOptions = {
+  /** `--keep-index`: stash everything but leave the index intact. */
+  keepIndex?: boolean
+  /** `--staged`: stash only the staged (index) changes. */
+  stagedOnly?: boolean
+  /** `-- <paths>`: stash only the matching paths (partial stash). */
+  pathspec?: string
+}
 
-  // Empty message → a quick WIP stash. Naming is optional: git generates
-  // its own `WIP on <branch>: <sha> <subject>` message, same as a bare
-  // `git stash`. Both paths pass `-u` so untracked files come along.
-  if (!trimmedMessage) {
-    return runAction(
-      () => git.raw(['stash', 'push', '-u']),
-      'Created WIP stash'
-    )
+export function createStash(
+  git: SimpleGit,
+  message: string,
+  options: CreateStashOptions = {}
+): Promise<BranchActionResult> {
+  const trimmedMessage = message.trim()
+  const args = ['stash', 'push']
+
+  // `--staged` is index-only, so untracked / `--keep-index` don't apply;
+  // every other mode includes untracked (`-u`). `--keep-index` leaves the
+  // index populated for an immediate follow-up commit.
+  if (options.stagedOnly) {
+    args.push('--staged')
+  } else {
+    args.push('-u')
+    if (options.keepIndex) args.push('--keep-index')
   }
 
+  if (trimmedMessage) args.push('-m', trimmedMessage)
+
+  const paths = options.pathspec?.trim()
+  if (paths) args.push('--', ...paths.split(/\s+/))
+
+  const what = options.stagedOnly
+    ? 'staged changes'
+    : paths
+      ? `“${paths}”`
+      : options.keepIndex
+        ? 'changes (index kept)'
+        : ''
+  const success = trimmedMessage
+    ? `Created stash: ${trimmedMessage}`
+    : what
+      ? `Stashed ${what}`
+      : 'Created WIP stash'
+
+  return runAction(() => git.raw(args), success)
+}
+
+/**
+ * Apply a stash while restoring the original staged/unstaged split via
+ * `--index`. Faithfully reinstates what was staged at stash time; git
+ * errors (surfaced to the user) if the index can no longer be replayed,
+ * in which case plain `applyStash` is the fallback.
+ */
+export function applyStashKeepIndex(git: SimpleGit, stash: StashEntry): Promise<BranchActionResult> {
   return runAction(
-    () => git.raw(['stash', 'push', '-u', '-m', trimmedMessage]),
-    `Created stash: ${trimmedMessage}`
+    () => git.raw(['stash', 'apply', '--index', stash.ref]),
+    `Applied ${stash.ref} (index restored)`
+  )
+}
+
+/**
+ * Create a new branch from a stash's base commit, apply the stash onto
+ * it, and drop the stash on success — `git stash branch`. The canonical
+ * recovery when a stash no longer applies cleanly onto the current
+ * branch (the branch starts at the exact commit the stash was made on).
+ */
+export function stashBranch(git: SimpleGit, stash: StashEntry, branchName: string): Promise<BranchActionResult> {
+  const trimmed = branchName.trim()
+  if (!trimmed) {
+    return Promise.resolve({ ok: false, message: 'Cancelled: empty branch name.' })
+  }
+  return runAction(
+    () => git.raw(['stash', 'branch', trimmed, stash.ref]),
+    `Created branch ${trimmed} from ${stash.ref}`
+  )
+}
+
+/**
+ * Rename a stash. Git has no native rename, so re-store the SAME commit
+ * under a new message (`git stash store`), then drop the original entry.
+ *
+ * Order matters: `store` prepends a fresh `stash@{0}` and shifts every
+ * existing index down by one, so the original `stash@{N}` becomes
+ * `stash@{N+1}` — that shifted ref is what we drop. Storing first keeps
+ * the commit reachable throughout.
+ */
+export function renameStash(git: SimpleGit, stash: StashEntry, newMessage: string): Promise<BranchActionResult> {
+  const trimmed = newMessage.trim()
+  if (!trimmed) {
+    return Promise.resolve({ ok: false, message: 'Rename cancelled: empty message.' })
+  }
+  if (!stash.hash) {
+    return Promise.resolve({ ok: false, message: 'Cannot rename: stash commit hash unavailable.' })
+  }
+  const match = /stash@\{(\d+)\}/.exec(stash.ref)
+  if (!match) {
+    return Promise.resolve({ ok: false, message: `Cannot rename: unrecognized stash ref ${stash.ref}.` })
+  }
+  const shiftedOldRef = `stash@{${Number(match[1]) + 1}}`
+
+  return runAction(async () => {
+    await git.raw(['stash', 'store', '-m', trimmed, stash.hash])
+    await git.raw(['stash', 'drop', shiftedOldRef])
+  }, `Renamed ${stash.ref} → ${trimmed}`)
+}
+
+/**
+ * Re-store a previously dropped stash by its commit hash — the undo for
+ * a `dropStash`. The dropped stash's commit stays in the object database
+ * until git gc, so storing it back recreates the entry (at `stash@{0}`).
+ */
+export function restoreStash(git: SimpleGit, hash: string, message: string): Promise<BranchActionResult> {
+  if (!hash) {
+    return Promise.resolve({ ok: false, message: 'Nothing to restore.' })
+  }
+  return runAction(
+    () => git.raw(['stash', 'store', '-m', message || 'restored stash', hash]),
+    'Restored dropped stash'
   )
 }
 

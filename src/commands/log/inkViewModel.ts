@@ -688,6 +688,8 @@ export type LogInkInputPromptKind =
   | 'rename-branch'
   | 'set-upstream'
   | 'create-stash'
+  | 'rename-stash'
+  | 'stash-branch'
   | 'gitignore-pattern'
   | 'stage-pathspec'
   | 'reset-mode'
