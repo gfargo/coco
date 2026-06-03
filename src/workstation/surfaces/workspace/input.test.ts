@@ -188,10 +188,8 @@ describe('resolveWorkspaceInput', () => {
     })
   })
 
-  it('drops every keystroke while the help overlay is up except esc/?/q', () => {
+  it('closes the help overlay on esc/?/q', () => {
     const state = { ...listState(), showHelp: true }
-    expect(resolveWorkspaceInput('j', key(), state).kind).toBe('noop')
-    expect(resolveWorkspaceInput('', key({ return: true }), state).kind).toBe('noop')
     expect(resolveWorkspaceInput('', key({ escape: true }), state)).toEqual({
       kind: 'action',
       action: { type: 'close-help' },
@@ -204,6 +202,40 @@ describe('resolveWorkspaceInput', () => {
       kind: 'action',
       action: { type: 'close-help' },
     })
+  })
+
+  it('scrolls the help overlay with j/k/↑/↓ and ctrl+d/u', () => {
+    const state = { ...listState(), showHelp: true }
+    expect(resolveWorkspaceInput('j', key(), state)).toEqual({
+      kind: 'action',
+      action: { type: 'scroll-help', delta: 1 },
+    })
+    expect(resolveWorkspaceInput('', key({ downArrow: true }), state)).toEqual({
+      kind: 'action',
+      action: { type: 'scroll-help', delta: 1 },
+    })
+    expect(resolveWorkspaceInput('k', key(), state)).toEqual({
+      kind: 'action',
+      action: { type: 'scroll-help', delta: -1 },
+    })
+    expect(resolveWorkspaceInput('', key({ upArrow: true }), state)).toEqual({
+      kind: 'action',
+      action: { type: 'scroll-help', delta: -1 },
+    })
+    expect(resolveWorkspaceInput('d', key({ ctrl: true }), state)).toEqual({
+      kind: 'action',
+      action: { type: 'scroll-help', delta: 10 },
+    })
+    expect(resolveWorkspaceInput('u', key({ ctrl: true }), state)).toEqual({
+      kind: 'action',
+      action: { type: 'scroll-help', delta: -10 },
+    })
+  })
+
+  it('drops other keystrokes while the help overlay is up', () => {
+    const state = { ...listState(), showHelp: true }
+    expect(resolveWorkspaceInput('', key({ return: true }), state).kind).toBe('noop')
+    expect(resolveWorkspaceInput('a', key(), state).kind).toBe('noop')
   })
 
   it('routes escape out of the add-repo prompt and lets the runtime own other keys', () => {

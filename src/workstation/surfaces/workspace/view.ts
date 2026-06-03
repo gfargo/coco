@@ -527,7 +527,7 @@ function renderHelpRow(
   const { Box, Text } = ink
   return React.createElement(
     Box,
-    { key, flexDirection: 'row' },
+    { key, flexShrink: 0, flexDirection: 'row' },
     React.createElement(
       Box,
       { width: glyphWidth, flexShrink: 0 },
@@ -565,15 +565,69 @@ function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElemen
     allRows.reduce((acc, row) => Math.max(acc, row.keys.length), 0) + 4
   )
 
+  // Body lines — every scrollable row below the pinned title. Built as
+  // a flat list (section title → optional subtitle → rows → inter-section
+  // spacer) so we can window it against the available height. Each entry
+  // is `flexShrink: 0` so Ink never crushes rows on top of each other
+  // when the keymap is taller than the panel (which used to collapse the
+  // title and the first category onto the same line).
+  const body: ReactTypes.ReactNode[] = []
+  sections.forEach((section, sIndex) => {
+    body.push(
+      React.createElement(
+        Text,
+        {
+          key: `section-${sIndex}-title`,
+          bold: true,
+          color: theme.noColor ? undefined : theme.colors.muted,
+        },
+        section.title.toUpperCase()
+      )
+    )
+    if (section.subtitle) {
+      body.push(
+        React.createElement(
+          Text,
+          { key: `section-${sIndex}-subtitle`, dimColor: true },
+          ` ${section.subtitle}`
+        )
+      )
+    }
+    section.rows.forEach((row, rIndex) => {
+      body.push(
+        renderHelpRow(deps, row, glyphWidth, keysWidth, `row-${sIndex}-${rIndex}`)
+      )
+    })
+    if (sIndex < sections.length - 1) {
+      body.push(React.createElement(Text, { key: `section-${sIndex}-spacer` }, ''))
+    }
+  })
+
+  // Vertical budget: the overlay shares the column with the header
+  // (3 rows) and footer (FOOTER_HEIGHT). Its own chrome eats the border
+  // (2), the pinned title (1) and the title/body separator (1). Whatever
+  // is left is the window we slide the body through.
+  const HEADER_ROWS = 3
+  const overlayChromeRows = 4
+  const visibleRows = Math.max(
+    4,
+    deps.rows - HEADER_ROWS - FOOTER_HEIGHT - overlayChromeRows
+  )
+  // Ceiling-clamp the offset here (the reducer only floors at 0) so
+  // scrolling past the end sticks at the last row instead of revealing
+  // blank space.
+  const maxOffset = Math.max(0, body.length - visibleRows)
+  const offset = Math.min(deps.state.helpScrollOffset, maxOffset)
+
   const children: ReactTypes.ReactNode[] = []
 
   // Title bar — accent-tinged, matches the chip-style header on the
   // main surface so the help reads as the same app, just a different
-  // panel.
+  // panel. Pinned above the scrolling body.
   children.push(
     React.createElement(
       Box,
-      { key: 'title', flexDirection: 'row', justifyContent: 'space-between' },
+      { key: 'title', flexShrink: 0, flexDirection: 'row', justifyContent: 'space-between' },
       React.createElement(
         Box,
         { key: 'title-left', flexDirection: 'row' },
@@ -594,38 +648,36 @@ function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElemen
   )
   children.push(React.createElement(Text, { key: 'title-sep', dimColor: true }, ''))
 
-  // Sections — each gets a title in accent, optional subtitle dim,
-  // then its rows, then a blank line.
-  sections.forEach((section, sIndex) => {
+  // "more above" / "more below" hints each consume a window row so they
+  // don't push body content off-screen. Mirrors the `coco ui` overlay.
+  let windowSize = visibleRows
+  const hasMoreAbove = offset > 0
+  if (hasMoreAbove) {
+    windowSize -= 1
     children.push(
       React.createElement(
         Text,
-        {
-          key: `section-${sIndex}-title`,
-          bold: true,
-          color: theme.noColor ? undefined : theme.colors.muted,
-        },
-        section.title.toUpperCase()
+        { key: 'more-above', dimColor: true },
+        ' ↑ more above (j/k or ↑/↓ to scroll)'
       )
     )
-    if (section.subtitle) {
-      children.push(
-        React.createElement(
-          Text,
-          { key: `section-${sIndex}-subtitle`, dimColor: true },
-          ` ${section.subtitle}`
-        )
+  }
+  const hasMoreBelow = offset + windowSize < body.length
+  if (hasMoreBelow) {
+    windowSize -= 1
+  }
+
+  children.push(...body.slice(offset, offset + windowSize))
+
+  if (hasMoreBelow) {
+    children.push(
+      React.createElement(
+        Text,
+        { key: 'more-below', dimColor: true },
+        ' ↓ more below (j/k or ↑/↓ to scroll)'
       )
-    }
-    section.rows.forEach((row, rIndex) => {
-      children.push(
-        renderHelpRow(deps, row, glyphWidth, keysWidth, `row-${sIndex}-${rIndex}`)
-      )
-    })
-    if (sIndex < sections.length - 1) {
-      children.push(React.createElement(Text, { key: `section-${sIndex}-spacer` }, ''))
-    }
-  })
+    )
+  }
 
   return React.createElement(
     Box,
@@ -633,6 +685,7 @@ function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElemen
       borderColor: focusBorderColor(theme, true),
       borderStyle: theme.borderStyle,
       flexDirection: 'column',
+      flexShrink: 0,
       paddingX: 1,
     },
     ...children

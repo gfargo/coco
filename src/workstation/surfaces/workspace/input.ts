@@ -67,6 +67,21 @@ export function resolveWorkspaceInput(
     if (key.escape || input === '?' || input === 'q') {
       return { kind: 'action', action: { type: 'close-help' } }
     }
+    // The keymap is taller than the panel on short terminals — let
+    // j/k/↑/↓ and ctrl+d/u scroll the windowed body. Mirrors the
+    // `coco ui` help overlay.
+    if (key.downArrow || input === 'j') {
+      return { kind: 'action', action: { type: 'scroll-help', delta: 1 } }
+    }
+    if (key.upArrow || input === 'k') {
+      return { kind: 'action', action: { type: 'scroll-help', delta: -1 } }
+    }
+    if (key.ctrl && input === 'd') {
+      return { kind: 'action', action: { type: 'scroll-help', delta: 10 } }
+    }
+    if (key.ctrl && input === 'u') {
+      return { kind: 'action', action: { type: 'scroll-help', delta: -10 } }
+    }
     return { kind: 'noop' }
   }
 
