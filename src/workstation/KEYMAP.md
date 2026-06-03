@@ -110,7 +110,8 @@ the which-key overlay lists them live when you press `g`.
 | `g c` | Compose (commit message) |
 | `g b` | Branches |
 | `g t` | Tags |
-| `g z` | Stashes |
+| `g z` | Stashes (the view) |
+| `g Z` | **Stash all changes** (action, not nav) — opens the message prompt; works from *any* view incl. status/diff/compose. Empty message = quick WIP stash. |
 | `g w` | Worktrees |
 | `g p` | Pull request |
 | `g P` | PR triage |
@@ -307,7 +308,7 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve |
 | `m` | branches/tags/history (compare flow) → mark compare base · PR/PR-triage → merge |
 | `i` | status → open `.gitignore` picker · history → interactive rebase |
-| `S` | status/diff/compose → commit-split flow · elsewhere → create stash |
+| `S` | status/diff/compose → commit-split flow · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
 | `P` | branches → push branch · tags → push tag (takes precedence over the global push) |
 | `D` | worktrees → remove worktree + branch · branches → delete branch |
 | `x` / `X` | PR → close · issues → close / reopen · stashes → drop (`X`) |

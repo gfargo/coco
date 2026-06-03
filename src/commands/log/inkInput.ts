@@ -590,6 +590,12 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'toggleGraph' })]
     case 'navigateHome':
       return [action({ type: 'navigateHome' })]
+    case 'createStash':
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'create-stash',
+        label: 'Stash message (empty = WIP)',
+      })]
     case 'navigateStatus':
       return [action({ type: 'pushView', value: 'status' })]
     case 'navigateDiff':
@@ -1570,6 +1576,18 @@ export function getLogInkInputEvents(
       action({ type: 'pushView', value: 'stash' }),
       action({ type: 'setStatus', value: 'jumped to stash' }),
     ]
+  }
+
+  // `gZ` chord: stash all changes from ANY view — including status / diff /
+  // compose, where bare `S` is claimed by the commit-split flow. Mnemonic
+  // pair with `gz` (jump to the stash *view*). Opens the same message
+  // prompt; an empty message creates a quick WIP stash.
+  if (state.pendingKey === 'g' && inputValue === 'Z') {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-stash',
+      label: 'Stash message (empty = WIP)',
+    })]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'w') {
@@ -2932,7 +2950,7 @@ export function getLogInkInputEvents(
     return [action({
       type: 'openInputPrompt',
       kind: 'create-stash',
-      label: 'Stash message',
+      label: 'Stash message (empty = WIP)',
     })]
   }
 

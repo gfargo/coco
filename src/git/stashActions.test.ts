@@ -28,15 +28,17 @@ describe('log stash actions', () => {
     expect(git.raw).toHaveBeenNthCalledWith(4, ['stash', 'drop', 'stash@{0}'])
   })
 
-  it('rejects empty stash messages before invoking git', async () => {
+  it('creates a quick WIP stash (no -m) when the message is empty', async () => {
     const git = {
-      raw: jest.fn(),
+      raw: jest.fn().mockResolvedValue(''),
     }
 
     await expect(createStash(git as never, '   ')).resolves.toEqual({
-      ok: false,
-      message: 'Stash cancelled: empty message.',
+      ok: true,
+      message: 'Created WIP stash',
     })
-    expect(git.raw).not.toHaveBeenCalled()
+    // Empty message → bare `git stash push -u`; git supplies its own
+    // "WIP on <branch>" subject. Naming is optional, not required.
+    expect(git.raw).toHaveBeenCalledWith(['stash', 'push', '-u'])
   })
 })
