@@ -801,6 +801,15 @@ function hasUnsavedComposeDraft(state: LogInkState): boolean {
 function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   if (!state.inputPrompt) return []
   const value = state.inputPrompt.value.trim()
+  // create-stash allows an EMPTY value → quick WIP stash (git supplies its
+  // own "WIP on <branch>" subject). Handled before the generic empty guard
+  // so an empty stash prompt commits a WIP stash instead of bouncing.
+  if (state.inputPrompt.kind === 'create-stash') {
+    return [
+      { type: 'runWorkflowAction', id: 'create-stash', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
   if (!value) {
     return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel', kind: 'warning' })]
   }
@@ -2710,6 +2719,25 @@ export function getLogInkInputEvents(
   }
   if (inputValue === 'p' && isStashActionTarget(state) && context.stashCount) {
     return [{ type: 'runWorkflowAction', id: 'pop-stash' }]
+  }
+  // `A` applies restoring the staged/unstaged split (`git stash apply
+  // --index`) — distinct from `a` (plain apply).
+  if (inputValue === 'A' && isStashActionTarget(state) && context.stashCount) {
+    return [{ type: 'runWorkflowAction', id: 'apply-stash-index' }]
+  }
+  // `b` turns the cursored stash into a new branch (`git stash branch`).
+  if (inputValue === 'b' && isStashActionTarget(state) && context.stashCount) {
+    return [action({ type: 'openInputPrompt', kind: 'stash-branch', label: 'New branch from stash' })]
+  }
+  // `R` renames the cursored stash (store-under-new-message + drop old).
+  if (inputValue === 'R' && isStashActionTarget(state) && context.stashCount) {
+    return [action({ type: 'openInputPrompt', kind: 'rename-stash', label: 'Rename stash' })]
+  }
+  // `u` undoes the last drop. Gated on the view, NOT the count, so it
+  // still works right after you drop your only stash (the list is empty
+  // but the dropped commit is recoverable by hash).
+  if (inputValue === 'u' && isStashActionTarget(state)) {
+    return [{ type: 'runWorkflowAction', id: 'undo-drop-stash' }]
   }
   // Per-view tag action: `P` pushes the selected tag to origin. Letter
   // is scoped to the tags target so it doesn't collide with `p` for

@@ -170,7 +170,7 @@ import {
     revertCommit,
     startInteractiveRebase,
 } from '../../git/historyActions'
-import { applyStash, checkoutFileFromStash, createStash, dropStash, popStash } from '../../git/stashActions'
+import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStash, popStash, renameStash, restoreStash, stashBranch } from '../../git/stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
@@ -710,6 +710,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const loadingMoreCommitsRef = React.useRef(false)
   const loadMoreRequestRef = React.useRef(0)
   const mountedRef = React.useRef(true)
+  // Last dropped stash {hash, message}, captured before `drop-stash` runs
+  // so `undo-drop-stash` can re-store it. The dropped commit survives in
+  // the object DB until gc, so the hash is enough to bring it back.
+  const lastDroppedStashRef = React.useRef<{ hash: string; message: string } | null>(null)
 
   // P4.3 — idle tip rotation. tickIndex 0 ⇒ no tip; the hook bumps it after
   // a grace window of empty statusMessage and then on a steady cadence, so
@@ -3100,7 +3104,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           : all
         const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
         if (!stash) return { ok: false, message: 'No stash selected' }
+        // Remember the dropped commit so `u` can undo it.
+        if (stash.hash) lastDroppedStashRef.current = { hash: stash.hash, message: stash.message }
         return dropStash(git, stash)
+      },
+      'undo-drop-stash': async () => {
+        const dropped = lastDroppedStashRef.current
+        if (!dropped) return { ok: false, message: 'Nothing to undo — no stash dropped this session' }
+        const result = await restoreStash(git, dropped.hash, dropped.message)
+        if (result.ok) lastDroppedStashRef.current = null
+        return result
       },
       'apply-stash': async () => {
         const all = context.stashes?.stashes || []
@@ -3111,6 +3124,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!stash) return { ok: false, message: 'No stash selected' }
         return applyStash(git, stash)
       },
+      'apply-stash-index': async () => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        if (!stash) return { ok: false, message: 'No stash selected' }
+        return applyStashKeepIndex(git, stash)
+      },
       'pop-stash': async () => {
         const all = context.stashes?.stashes || []
         const visible = state.filter
@@ -3119,6 +3141,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
         if (!stash) return { ok: false, message: 'No stash selected' }
         return popStash(git, stash)
+      },
+      'rename-stash': async () => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        if (!stash) return { ok: false, message: 'No stash selected' }
+        return renameStash(git, stash, payload ?? '')
+      },
+      'stash-branch': async () => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        if (!stash) return { ok: false, message: 'No stash selected' }
+        return stashBranch(git, stash, payload ?? '')
       },
       'bisect-good': async () => {
         if (!context.bisect?.active) return { ok: false, message: 'No bisect in progress' }
@@ -3499,6 +3539,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         // (git's own `WIP on <branch>` subject). Naming is optional.
         return createStash(git, payload ?? '')
       },
+      'stash-staged': async () => createStash(git, payload ?? '', { stagedOnly: true }),
+      'stash-keep-index': async () => createStash(git, payload ?? '', { keepIndex: true }),
       // #783 — full PR action panel handlers. Each wraps the matching
       // pullRequestActions verb. Strategy / body arrives via `payload`
       // — input prompts validate before they reach here, but the

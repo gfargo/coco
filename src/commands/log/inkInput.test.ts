@@ -782,6 +782,46 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('stash view power actions', () => {
+    function stashViewState() {
+      return applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'stash' })
+    }
+
+    it('R opens the rename-stash prompt', () => {
+      const events = getLogInkInputEvents(stashViewState(), 'R', {}, { stashCount: 2 })
+      expect(events[0]).toMatchObject({ type: 'action', action: { type: 'openInputPrompt', kind: 'rename-stash' } })
+    })
+
+    it('b opens the stash-branch prompt', () => {
+      const events = getLogInkInputEvents(stashViewState(), 'b', {}, { stashCount: 2 })
+      expect(events[0]).toMatchObject({ type: 'action', action: { type: 'openInputPrompt', kind: 'stash-branch' } })
+    })
+
+    it('A applies restoring the index', () => {
+      const events = getLogInkInputEvents(stashViewState(), 'A', {}, { stashCount: 2 })
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'apply-stash-index' }])
+    })
+
+    it('u undoes the last drop — available even when the list is now empty', () => {
+      const events = getLogInkInputEvents(stashViewState(), 'u', {}, { stashCount: 0 })
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'undo-drop-stash' }])
+    })
+
+    it('submitting an EMPTY create-stash prompt fires a WIP stash (does not bounce)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'openInputPrompt',
+        kind: 'create-stash',
+        label: 'Stash message (empty = WIP)',
+      })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'create-stash', payload: '' },
+        { type: 'action', action: { type: 'closeInputPrompt' } },
+      ])
+    })
+  })
+
   it('moves the selected branch with arrow keys when in branches view', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
