@@ -1142,6 +1142,31 @@ export const RECIPES: ScreenshotRecipe[] = [
     ],
   },
   {
+    name: 'demo-view-keys',
+    description: 'UI: g? surfaces the single-key actions for the current view; the list changes per view (#1137)',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    emitGif: true,
+    actions: [
+      { kind: 'sleep', ms: 1500 },
+      // g? opens the per-view strip on the history view (cherry-pick c,
+      // revert R, reset Z, …). The brief g-chord flash shows the relationship.
+      { kind: 'type', text: 'g?' },
+      { kind: 'sleep', ms: 2600 },
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 600 },
+      // Jump to the branches view, then g? again — the strip now lists a
+      // different set (mark-compare m, sort s, yank y, …), proving it's
+      // sourced live from the active view's bindings.
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 1300 },
+      { kind: 'type', text: 'g?' },
+      { kind: 'sleep', ms: 2600 },
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 700 },
+    ],
+  },
+  {
     name: 'demo-search-filter',
     description: 'UI: open search, type query, see results filter live, clear',
     scenario: 'multi-commit-branch',
@@ -1362,6 +1387,20 @@ export const RECIPES: ScreenshotRecipe[] = [
       // `g` enters chord-pending mode and pops the which-key overlay
       // listing every g-continuation (the discoverability surface).
       { kind: 'type', text: 'g' },
+      { kind: 'sleep', ms: 900 },
+    ],
+  },
+  {
+    name: 'ui-view-keys',
+    description: 'View-keys which-key strip (g?) — the single-key actions available in the current view (#1137)',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 3500 },
+      // `g?` opens the per-view strip listing the bare single keys
+      // (cherry-pick c, revert R, …) live for the current view.
+      { kind: 'type', text: 'g?' },
       { kind: 'sleep', ms: 900 },
     ],
   },

@@ -693,6 +693,10 @@ export function getLogInkPaletteExecuteEvents(
       // Palette closes on execute (toggleCommandPalette runs first), then
       // this opens the theme picker.
       return [action({ type: 'toggleThemePicker' })]
+    case 'viewKeys':
+      // Palette closes on execute (toggleCommandPalette runs first), then
+      // this opens the per-view which-key strip (#1137).
+      return [action({ type: 'toggleViewKeys' })]
     case 'openProjectConfig':
       return [{ type: 'openConfigInEditor', scope: 'project' }]
     case 'openGlobalConfig':
@@ -1482,6 +1486,27 @@ export function getLogInkInputEvents(
     return []
   }
 
+  // #1137 — the `g?` which-key strip. While it's open the keyboard is
+  // claimed (mirrors the help overlay) so a stray keystroke can't drop
+  // the user into a per-view action they didn't mean to trigger. Esc
+  // closes; `?` is the progressive-disclosure step up to the full
+  // categorized help; `q` still quits. Everything else is swallowed —
+  // the user peeks, dismisses, then presses the key they came for.
+  if (state.showViewKeys) {
+    if (key.escape) {
+      return [action({ type: 'toggleViewKeys' })]
+    }
+    if (inputValue === '?') {
+      // Expand the compact strip into the full help overlay. `toggleHelp`
+      // clears `showViewKeys` so the two never render at once.
+      return [action({ type: 'toggleHelp' })]
+    }
+    if (inputValue === 'q') {
+      return [{ type: 'exit' }]
+    }
+    return []
+  }
+
   // #879 item 4 — Esc cancels an in-flight bisect-start wizard. Runs
   // BEFORE the generic `popView` so we both clear the wizard state
   // and walk back to the bisect view in one keystroke. Without this
@@ -1528,6 +1553,18 @@ export function getLogInkInputEvents(
       return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
     }
     return [{ type: 'exit' }]
+  }
+
+  // `g?` chord (#1137) — open the per-view which-key strip. Placed
+  // BEFORE the bare `?` (full help) check below so the chord is read as
+  // a unit: with `g` pending, `?` opens the view-keys strip rather than
+  // toggling full help. Surfaces automatically in the `g` which-key menu
+  // because its key is a two-char `g`-prefixed binding.
+  if (state.pendingKey === 'g' && inputValue === '?') {
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      action({ type: 'toggleViewKeys' }),
+    ]
   }
 
   if (inputValue === '?') {

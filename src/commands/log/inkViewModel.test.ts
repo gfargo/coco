@@ -502,6 +502,37 @@ describe('log Ink view model', () => {
     expect(state.helpScrollOffset).toBe(0)
   })
 
+  it('toggles the view-keys strip and keeps it mutually exclusive with other overlays (#1137)', () => {
+    let state = createLogInkState(rows)
+    expect(state.showViewKeys).toBe(false)
+
+    // g? opens the strip.
+    state = applyLogInkAction(state, { type: 'toggleViewKeys' })
+    expect(state.showViewKeys).toBe(true)
+
+    // Toggling again closes it.
+    state = applyLogInkAction(state, { type: 'toggleViewKeys' })
+    expect(state.showViewKeys).toBe(false)
+
+    // Opening full help supersedes the strip (the progressive-disclosure step).
+    state = applyLogInkAction(state, { type: 'toggleViewKeys' })
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    expect(state.showViewKeys).toBe(false)
+    expect(state.showHelp).toBe(true)
+
+    // Opening the strip closes help.
+    state = applyLogInkAction(state, { type: 'toggleViewKeys' })
+    expect(state.showHelp).toBe(false)
+    expect(state.showViewKeys).toBe(true)
+
+    // And the palette / filter mode also supersede the strip.
+    state = applyLogInkAction(state, { type: 'toggleCommandPalette' })
+    expect(state.showViewKeys).toBe(false)
+    state = applyLogInkAction(state, { type: 'toggleViewKeys' })
+    state = applyLogInkAction(state, { type: 'toggleFilterMode' })
+    expect(state.showViewKeys).toBe(false)
+  })
+
   it('scrollHelp floor-clamps at 0 (no negative offsets)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'toggleHelp' })

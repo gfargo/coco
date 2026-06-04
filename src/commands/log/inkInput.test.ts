@@ -151,6 +151,72 @@ describe('log Ink input interactions', () => {
     expect(state.filterMode).toBe(true)
   })
 
+  describe('view-keys which-key strip (g?, #1137)', () => {
+    it('opens the strip from the g? chord, leaving bare ? as full help', () => {
+      let state = createLogInkState(rows)
+
+      // Bare ? still toggles full help.
+      state = applyInput(state, '?')
+      expect(state.showHelp).toBe(true)
+      expect(state.showViewKeys).toBe(false)
+      state = applyInput(state, '?')
+      expect(state.showHelp).toBe(false)
+
+      // g then ? opens the per-view strip (not full help).
+      state = applyInput(state, 'g')
+      expect(state.pendingKey).toBe('g')
+      state = applyInput(state, '?')
+      expect(state.showViewKeys).toBe(true)
+      expect(state.showHelp).toBe(false)
+      expect(state.pendingKey).toBeUndefined()
+    })
+
+    it('Esc closes the strip; ? steps up to full help', () => {
+      let state = createLogInkState(rows)
+
+      state = applyInput(state, 'g')
+      state = applyInput(state, '?')
+      expect(state.showViewKeys).toBe(true)
+
+      // Esc closes.
+      state = applyInput(state, '', { escape: true })
+      expect(state.showViewKeys).toBe(false)
+
+      // Reopen, then ? expands to the full categorized help.
+      state = applyInput(state, 'g')
+      state = applyInput(state, '?')
+      expect(state.showViewKeys).toBe(true)
+      state = applyInput(state, '?')
+      expect(state.showViewKeys).toBe(false)
+      expect(state.showHelp).toBe(true)
+    })
+
+    it('swallows other keys while the strip is open and still quits on q', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'g')
+      state = applyInput(state, '?')
+      expect(state.showViewKeys).toBe(true)
+
+      // A per-view action key is swallowed — the strip stays open and no
+      // selection moves (the user peeks, then dismisses).
+      const before = state.selectedIndex
+      state = applyInput(state, 'j')
+      expect(state.showViewKeys).toBe(true)
+      expect(state.selectedIndex).toBe(before)
+
+      // q still quits (emits a non-action exit event).
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).toEqual([{ type: 'exit' }])
+    })
+
+    it('opens the strip from the command palette entry', () => {
+      const command = getLogInkPaletteCommands().find((c) => c.id === 'viewKeys')
+      expect(command).toBeDefined()
+      const events = getLogInkPaletteExecuteEvents(command!, createLogInkState(rows))
+      expect(events).toEqual([{ type: 'action', action: { type: 'toggleViewKeys' } }])
+    })
+  })
+
   it('toggles help, command palette, focus, and graph interactions', () => {
     let state = createLogInkState(rows)
 
@@ -676,8 +742,11 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     expect(state.pendingKey).toBe('g')
 
-    state = applyInput(state, '?')
-    expect(state.showHelp).toBe(true)
+    // `/` is not a `g`-continuation, so it resolves as the global filter
+    // toggle and clears the stale chord. (`?` is no longer "unrelated" — it
+    // forms the `g?` view-keys chord, covered separately below.)
+    state = applyInput(state, '/')
+    expect(state.filterMode).toBe(true)
     expect(state.pendingKey).toBeUndefined()
   })
 

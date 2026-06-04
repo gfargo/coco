@@ -19,7 +19,7 @@
  *   brew install vhs
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
@@ -129,6 +129,36 @@ Requires: vhs on PATH (https://github.com/charmbracelet/vhs).`)
 function checkVhsAvailable(): boolean {
   const result = spawnSync('vhs', ['--version'], { stdio: 'pipe' })
   return result.status === 0
+}
+
+/**
+ * Lossless GIF shrink. VHS writes full, undeduplicated frames, so a
+ * short terminal demo lands at 10–20 MB even though almost nothing
+ * changes between frames. `gifsicle -O3` rewrites the file with
+ * inter-frame transparency optimization — typically a 20–30× reduction
+ * with ZERO pixel changes (no `--lossy`, no colour quantization), which
+ * is what keeps marketing-site GIFs viable.
+ *
+ * Best-effort: if `gifsicle` isn't on PATH we leave the raw GIF in place
+ * and print an install hint rather than failing the capture. Optimizing
+ * in the pipeline (not by hand) means `screenshot:sync` regenerations
+ * stay small without anyone remembering a post-step.
+ */
+function optimizeGif(gifPath: string): void {
+  const probe = spawnSync('gifsicle', ['--version'], { stdio: 'pipe' })
+  if (probe.status !== 0) {
+    console.log('  · gifsicle not found — GIF left unoptimized (brew install gifsicle)')
+    return
+  }
+  const before = existsSync(gifPath) ? statSync(gifPath).size : 0
+  const result = spawnSync('gifsicle', ['-O3', '--batch', gifPath], { stdio: 'pipe' })
+  if (result.status !== 0) {
+    console.log('  · gifsicle optimization failed — GIF left unoptimized')
+    return
+  }
+  const after = statSync(gifPath).size
+  const mb = (n: number) => (n / 1048576).toFixed(1)
+  console.log(`  · gifsicle -O3 (lossless): ${mb(before)} MB → ${mb(after)} MB`)
 }
 
 /**
@@ -274,7 +304,10 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
     }
 
     console.log(`  ✓ ${pngPath}`)
-    if (gifPath) console.log(`  ✓ ${gifPath}`)
+    if (gifPath && existsSync(gifPath)) {
+      optimizeGif(gifPath)
+      console.log(`  ✓ ${gifPath}`)
+    }
   } finally {
     if (!options.keepTape && existsSync(tapePath)) {
       rmSync(tapePath, { force: true })

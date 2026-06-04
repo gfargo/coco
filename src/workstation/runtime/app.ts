@@ -4752,6 +4752,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const forcedPane: LogInkVisiblePane | undefined = state.splitPlan
     ? 'main'
     : state.showHelp ||
+        state.showViewKeys ||
         state.showCommandPalette ||
         state.showThemePicker ||
         state.gitignorePicker ||

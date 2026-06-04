@@ -69,6 +69,34 @@ Append to `RECIPES` in `bin/screenshot/recipes.ts`:
 
 Then run `npm run screenshot -- --recipe ui-something-new` to capture. If the rendered image looks wrong, pass `--keep-tape` to inspect the generated tape file under `.screenshots/`.
 
+## Authoring motion (GIF) demos
+
+Animated demos are the same recipe shape with `emitGif: true`. They reward a different mindset than stills — a still freezes one moment, a GIF tells a short story — and they have one sharp gotcha (raw file size) that's easy to miss until a 19 MB asset lands in a PR. The conventions and lessons below come from building the demo catalog.
+
+**Conventions**
+
+- **Name them `demo-*`** (motion) vs `ui-*` (stills). The `demo-` prefix is how the catalog, the sync list, and reviewers tell the two apart at a glance.
+- **One story per demo.** A demo should make a single point and end. `demo-view-keys` opens the `g?` strip on history, then on branches — the whole story is "the list is per-view." Resist tacking on extra beats; each one costs both attention and bytes.
+- **Show contrast, not completeness.** Two views proving a behavior changes beats six views enumerating it. The `?` help overlay, theme pickers, and other full-pane takeovers are tempting but dilute the point (and balloon the file — see below).
+- **Register it** in `bin/syncScreenshots.ts` (`SITE_RECIPES` + `FILENAME_MAP`) only if it's used on the marketing site, then `npm run screenshot:sync`.
+
+**Timing**
+
+- GIFs don't need the long PNG settle. Stills use ~3500ms so the single frame is crisp and fully loaded; GIFs record from boot, so a 1200–1500ms lead-in is fine — the early "loading commits" frames read as natural startup, not a bug.
+- Budget **read time** after each action: ~2400–2600ms to let a viewer actually read an overlay, ~1200–1300ms for a view switch, ~500–800ms between quick keystrokes. Too fast and the demo is unreadable; too slow and it drags (and grows).
+- Chords type as one `type` action (`{ kind: 'type', text: 'g?' }`). The brief chord-pending flash that produces is a feature — it shows the relationship between the keys.
+- Don't bake a trailing `q` to quit — the tape builder strips it for GIFs so the recording ends on the last rendered UI frame, not an empty shell prompt.
+
+**File size — the one that bites**
+
+VHS writes **full, undeduplicated frames**, so size scales with `duration × framerate × changing-pixel area`. A short demo routinely lands at 10–20 MB raw — far too heavy for a web page. Three levers, in order of impact:
+
+1. **Optimize losslessly (automatic).** The driver runs `gifsicle -O3 --batch` on every emitted GIF as a final step: **lossless** inter-frame transparency optimization (no `--lossy`, no colour quantization), typically a **20–30× reduction with zero pixel changes** (`demo-view-keys`: 15 MB → 0.4 MB). This is in the pipeline — not a manual post-step — so `screenshot:sync` regenerations stay small. `gifsicle` is best-effort: if it isn't on PATH the raw GIF is kept and you'll see an install hint (`brew install gifsicle`). This single step is why recent demos are ~300 KB while older, pre-optimization ones in the asset history are still 18 MB.
+2. **Trim the story.** Less duration and fewer full-pane redraws = fewer/cheaper frames *before* optimization even runs. Dropping a full-help-overlay beat from `demo-view-keys` took it 19 MB → 13 MB raw on its own; gifsicle then finished the job.
+3. **Shrink dimensions** only as a last resort — it costs legibility and breaks visual consistency with the other demos on the site (keep `150×38` / the `140×40` default unless there's a reason).
+
+Rule of thumb: author for the *story* and timing; let the lossless pass handle the bytes. If a synced GIF is still multi-MB after optimization, the recipe is doing too much — tighten the story rather than reaching for `--lossy`.
+
 ## Scenarios
 
 The list of named scenarios comes from `@gfargo/git-scenarios`. Run `npm run scenario list` to see them. Common picks for screenshot recipes:
@@ -116,6 +144,8 @@ Run `npm run screenshot -- --list` for the live list. Current catalog:
 | `ui-command-palette` | `:` command palette |
 | `ui-search-filter` | `/feat` live filter |
 | `ui-inspector-focused` | Tab-focused inspector |
+| `ui-which-key` | `g`-chord which-key overlay |
+| `ui-view-keys` | `g?` per-view single-key strip (#1137) |
 
 ### Workspace (1 screenshot)
 | Recipe | What it shows |
@@ -156,6 +186,7 @@ preset (both on the Catppuccin Mocha terminal palette).
 | `demo-workspace-to-ui` | Workspace → repo → ui → quit back | ~12s |
 | `demo-commit-flow` | `coco commit --dry-run` | ~5s |
 | `demo-changelog` | `coco changelog --branch main` | ~5s |
+| `demo-view-keys` | `g?` per-view key strip, list changes per view (#1137) | ~9s |
 
 ## Environment variables
 
@@ -182,7 +213,7 @@ Keys already in your shell environment take precedence over `.env` values.
 
 The `.www/` Next.js site previously used hand-drawn artistic terminal mockups. Replace those with real captures from this pipeline. The PNGs are pixel-accurate, work in light + dark themes (different recipes), and update with the workstation rather than drifting out of sync.
 
-For animated demos (e.g. workflow walk-throughs), set `emitGif: true` on the recipe — VHS produces both the still PNG and a GIF in one pass.
+For animated demos (e.g. workflow walk-throughs), set `emitGif: true` on the recipe — VHS produces both the still PNG and a GIF in one pass. The driver then optimizes every GIF losslessly so synced assets stay web-ready (typically 20–30× smaller, zero quality loss); see [Authoring motion (GIF) demos](#authoring-motion-gif-demos) for that and the recipe-design rules that keep demos small and on-point.
 
 ## Visual regression checks (future)
 

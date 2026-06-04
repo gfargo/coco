@@ -60,6 +60,7 @@ export type LogInkCommandId =
   | 'search'
   | 'toggleDiffViewMode'
   | 'toggleGraph'
+  | 'viewKeys'
   | 'workflowDeleteBranch'
   | 'workflowDeleteTag'
   | 'workflowDropStash'
@@ -547,6 +548,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     label: 'create tag here',
     description: 'Create a lightweight tag at the cursored commit.',
     contexts: ['history'],
+  },
+  {
+    id: 'viewKeys',
+    keys: ['g?'],
+    label: 'keys',
+    description: 'Show the single-key actions available in the current view (which-key strip).',
+    contexts: ['normal'],
   },
   {
     id: 'themePicker',
@@ -1419,6 +1427,55 @@ export function getLogInkHelpSections(
       subgroups: buildSubgroups(viewBindings, false),
     },
   ]
+}
+
+/**
+ * True when a key string is a single, bare printable key (e.g. `c`, `R`,
+ * `[`) rather than a chord (`gh`, `gg`) or a named special key (`up`,
+ * `page down`). Used by the which-key view-keys strip, which surfaces only
+ * the single-key overloads — the chord set already has its own overlay.
+ */
+function isBareSingleKey(key: string): boolean {
+  return key.length === 1 && key !== ' '
+}
+
+/**
+ * Single-key bindings available in the current view (#1137). Powers the
+ * `g?` which-key strip: the per-view counterpart to the `g`-chord overlay.
+ *
+ * Sourced entirely from `LOG_INK_KEY_BINDINGS` (no duplicated key data) and
+ * filtered the same way the help overlay's "This view" section is — by
+ * `contexts` against the active view + focus — then narrowed to bindings
+ * that expose at least one bare single key. Globals (`q`, `?`, `/`, `:`, …)
+ * are excluded: they're always available and already live in the footer and
+ * onboarding tour, so the strip stays focused on the deliberate per-view
+ * overloads (`c`, `R`, `a`, `m`, `S`, `[`/`]`, …) the keymap guard protects.
+ *
+ * Sorted by the first bare key for stable, scannable output.
+ */
+export function getLogInkViewKeyBindings(
+  options: GetLogInkHelpSectionsOptions
+): LogInkKeyBinding[] {
+  return LOG_INK_KEY_BINDINGS
+    .filter((binding) =>
+      !GLOBAL_BINDING_IDS.includes(binding.id) &&
+      bindingMatchesViewContext(binding, options) &&
+      binding.keys.some(isBareSingleKey)
+    )
+    .sort((a, b) => {
+      const aKey = a.keys.find(isBareSingleKey) ?? ''
+      const bKey = b.keys.find(isBareSingleKey) ?? ''
+      return aKey.localeCompare(bKey)
+    })
+}
+
+/**
+ * Format only the bare single keys of a binding for the view-keys strip
+ * (e.g. `['up', 'k']` → `k`). Named/chord keys are dropped — the strip is
+ * about the single-key affordance, and the full key list lives in `?` help.
+ */
+export function formatBindingBareKeys(binding: LogInkKeyBinding): string {
+  return binding.keys.filter(isBareSingleKey).join(' / ')
 }
 
 export function getLogInkCommandPaletteItems(): LogInkCommandPaletteItem[] {

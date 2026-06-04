@@ -120,6 +120,8 @@ const SITE_RECIPES = [
   'ui-single-pane-peek',
   // Feature shots that previously had no recipe
   'ui-which-key',
+  'ui-view-keys',
+  'demo-view-keys',
   'ui-compare-refs',
   'ui-stage-pathspec',
   // GitHub-integration views (mock-gh) — real data, no longer stubbed
@@ -240,6 +242,8 @@ const FILENAME_MAP: Record<string, string[]> = {
   'ui-single-pane-narrow': ['single-pane-narrow.png'],
   'ui-single-pane-peek': ['single-pane-peek.png'],
   'ui-which-key': ['which-key.png'],
+  'ui-view-keys': ['view-keys.png'],
+  'demo-view-keys': ['demo-view-keys.gif'],
   'ui-compare-refs': ['view-compare.png'],
   'ui-stage-pathspec': ['stage-pathspec.png'],
   'ui-staging-hunks': ['staging-hunks.png'],

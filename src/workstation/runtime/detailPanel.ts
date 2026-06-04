@@ -41,6 +41,7 @@ import {
     renderInputPromptPanel,
     renderGitignorePickerOverlay,
     renderThemePickerOverlay,
+    renderViewKeysOverlay,
 } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
@@ -66,6 +67,13 @@ export function renderDetailPanel(
   // panel's full width via the help-overlay layout branch.
   if (state.showHelp) {
     return renderHelpPanel(h, components, state, width, theme, focused, bodyRows)
+  }
+
+  // #1137 — the `g?` which-key strip lists the current view's single-key
+  // actions. Checked alongside the other overlays; the reducer keeps it
+  // mutually exclusive with help / palette / pickers.
+  if (state.showViewKeys) {
+    return renderViewKeysOverlay(h, components, state, width, theme, focused)
   }
 
   if (state.showCommandPalette) {
