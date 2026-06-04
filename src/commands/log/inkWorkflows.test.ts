@@ -73,6 +73,18 @@ describe('log Ink workflows', () => {
     expect(getLogInkWorkflowActionById('checkout-file-from-commit')?.key).toBe('')
   })
 
+  it('registers force-delete-branch as a keyless, confirmation-gated escalation', () => {
+    // Raised by the runtime as a second confirm when `git branch -d`
+    // rejects an unmerged branch; keyless so no keystroke fires it.
+    const force = getLogInkWorkflowActionById('force-delete-branch')
+    expect(force).toMatchObject({
+      key: '',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    })
+    expect(getLogInkWorkflowActionByKey('')).toBeUndefined()
+  })
+
   // Issue #777 — revert / reset / interactive-rebase wired through the
   // workflow registry as palette-only entries (key: ''). Real keystroke
   // dispatch is per-view scoped in inkInput.ts so they only fire on

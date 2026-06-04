@@ -112,7 +112,11 @@ export function renameBranch(
   )
 }
 
-export function deleteBranch(git: SimpleGit, branch: BranchRef): Promise<BranchActionResult> {
+export function deleteBranch(
+  git: SimpleGit,
+  branch: BranchRef,
+  force = false
+): Promise<BranchActionResult> {
   if (branch.type !== 'local') {
     return Promise.resolve({
       ok: false,
@@ -127,10 +131,22 @@ export function deleteBranch(git: SimpleGit, branch: BranchRef): Promise<BranchA
     })
   }
 
+  // `-d` is the safe delete (refuses unmerged branches); `-D` forces it.
+  // The TUI starts with `-d` and only escalates to `-D` after the user
+  // confirms a second time on the "not fully merged" error.
   return runAction(
-    () => git.raw(['branch', '-d', branch.shortName]),
-    `Deleted branch ${branch.shortName}`
+    () => git.raw(['branch', force ? '-D' : '-d', branch.shortName]),
+    force ? `Force-deleted branch ${branch.shortName}` : `Deleted branch ${branch.shortName}`
   )
+}
+
+/**
+ * True when a failed `git branch -d` was rejected specifically because the
+ * branch isn't fully merged (the one case worth offering a force-delete
+ * for). Matches git's wording across versions ("not fully merged").
+ */
+export function isBranchNotFullyMergedError(message: string | undefined): boolean {
+  return /not fully merged/i.test(message || '')
 }
 
 export function fetchRemotes(git: SimpleGit): Promise<BranchActionResult> {

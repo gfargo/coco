@@ -110,6 +110,10 @@ export function renderConfirmationPanel(
     ? 'You have an unsaved commit draft. Press y to discard it and quit.'
     : state.pendingMutationConfirmation
     ? 'This discards local changes and cannot be undone by Coco.'
+    // Second-stage confirm raised when a safe delete hit an unmerged
+    // branch — name the reason so the force isn't a blind "y again".
+    : state.pendingConfirmationId === 'force-delete-branch'
+    ? 'Not fully merged. Force-delete (git branch -D) is irreversible.'
     : action?.kind === 'ai'
     ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`
     : 'Destructive Git action requires confirmation.'
