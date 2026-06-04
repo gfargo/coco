@@ -129,6 +129,7 @@ import type { LogInkVisiblePane } from '../chrome/layout'
 import { sortBranches, sortTags } from '../chrome/sorting'
 import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../chrome/idleTips'
 import {
+    LogInkDeletableKind,
     LogInkState,
     RemoteOpState,
     applyLogInkAction,
@@ -388,6 +389,58 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'fetch-selected-branch': { kind: 'fetch', label: 'Fetching branch from remote…' },
   'pull-selected-branch': { kind: 'pull', label: 'Pulling branch from remote…' },
   'push-selected-branch': { kind: 'push', label: 'Pushing branch to remote…' },
+}
+
+/**
+ * Resolve which list row a delete workflow is about to act on, so the
+ * runner can mark it pending (inline spinner) for the duration of the
+ * git call. Mirrors the cursored-target resolution inside each delete
+ * handler exactly — same sort, same promoted-filter, same selection
+ * index — so the spinner lands on the row that actually gets deleted.
+ * Returns `undefined` for non-delete workflows (and when nothing is
+ * selected), which the runner treats as "no pending marker".
+ */
+function resolvePendingDeletion(
+  id: string,
+  state: LogInkState,
+  context: LogInkContext
+): { kind: LogInkDeletableKind; id: string } | undefined {
+  const { filter } = state
+  if (id === 'delete-branch') {
+    const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+    const visible = filter
+      ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], filter))
+      : all
+    const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+    return branch ? { kind: 'branch', id: branch.shortName } : undefined
+  }
+  if (id === 'delete-tag') {
+    const all = sortTags(context.tags?.tags || [], state.tagSort)
+    const visible = filter
+      ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], filter))
+      : all
+    const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+    return tag ? { kind: 'tag', id: tag.name } : undefined
+  }
+  if (id === 'drop-stash') {
+    const all = context.stashes?.stashes || []
+    const visible = filter
+      ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], filter))
+      : all
+    const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+    return stash ? { kind: 'stash', id: stash.ref } : undefined
+  }
+  if (id === 'remove-worktree') {
+    const all = context.worktreeList?.worktrees || []
+    const visible = filter
+      ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], filter))
+      : all
+    const wt = visible.length
+      ? visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
+      : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
+    return wt ? { kind: 'worktree', id: wt.path } : undefined
+  }
+  return undefined
 }
 
 function predictNextFilter(
@@ -763,7 +816,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.changelogView.status === 'loading' ||
     state.commitCompose.loading ||
     Boolean(state.remoteOp) ||
-    Boolean(state.statusLoading)
+    Boolean(state.statusLoading) ||
+    // Keep the shared spinner ticking while a list-item delete is in
+    // flight so its inline pending glyph animates instead of freezing.
+    Boolean(state.pendingDeletion)
   React.useEffect(() => {
     if (!anyLoading) {
       // Reset to 0 so the next loading state starts from a known
@@ -3819,6 +3875,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     if (remoteOp) {
       dispatch({ type: 'setRemoteOp', value: remoteOp })
     }
+    // Mark the cursored row as deleting so it shows an inline pending
+    // spinner while the git call runs. Cleared in `finally` after the
+    // refresh, so a successful delete hands straight off to the row
+    // vanishing, and a failed one (e.g. an unmerged branch) restores
+    // the row's normal icon alongside the error status.
+    const pendingDeletion = resolvePendingDeletion(id, state, context)
+    if (pendingDeletion) {
+      dispatch({ type: 'setPendingDeletion', value: pendingDeletion })
+    }
     try {
     const result = await handler()
     dispatch({ type: 'setStatus', value: result?.message || 'Workflow action complete' })
@@ -3919,6 +3984,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // the spinner.
       if (remoteOp) {
         dispatch({ type: 'setRemoteOp', value: undefined })
+      }
+      // Same guarantee for the per-row delete spinner: clear it whether
+      // the delete succeeded, failed, or the refresh threw, so no row is
+      // left spinning forever.
+      if (pendingDeletion) {
+        dispatch({ type: 'setPendingDeletion', value: undefined })
       }
     }
   }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
@@ -4812,7 +4883,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // visible pane — the main-panel render in particular is expensive, so
   // we don't want to invoke the two hidden ones just to drop them.
   const sidebarPanel = () =>
-    renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme)
+    renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme, spinnerFrame)
   const mainSurface: SurfaceRenderContext = {
     h,
     components: { Box, Text },

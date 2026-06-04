@@ -11,6 +11,7 @@ import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatCompactRelativeDate } from '../../chrome/dateFormat'
 import { getRenderNow } from '../../chrome/snapshotMode'
+import { inlineSpinnerGlyph } from '../../chrome/spinner'
 import { formatLogInkLoading, formatLogInkStashEmpty } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import {
@@ -19,8 +20,9 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+import { isPendingDeletion } from '../../../commands/log/inkViewModel'
 
-export function renderStashSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
@@ -68,11 +70,19 @@ export function renderStashSurface(ctx: SurfaceRenderContext): ReactTypes.ReactE
         const rowText = meta
           ? `${cursor} ${stash.ref.padEnd(11)} ${meta}  ${stash.message}`
           : `${cursor} ${stash.ref.padEnd(11)} ${stash.message}`
+        // The `stash@{N}` ref is an identifier, not a status icon, so a
+        // delete-in-flight appends an accent spinner at the row's end
+        // (2 cells reserved from the width budget).
+        const deleting = isPendingDeletion(state.pendingDeletion, 'stash', stash.ref)
+        const spinnerSpan = deleting
+          ? h(Text, { color: theme.noColor ? undefined : theme.colors.accent, dimColor: false },
+            ` ${inlineSpinnerGlyph(spinnerFrame, theme.ascii)}`)
+          : null
         return h(Text, {
           key: `stash-${index}`,
           bold: isSelected,
           dimColor: !isSelected,
-        }, truncateCells(rowText, rowWidth))
+        }, truncateCells(rowText, rowWidth - (deleting ? 2 : 0)), spinnerSpan)
       })
 
   const stashHasMoreAbove = startIndex > 0 && stashes.length > 0

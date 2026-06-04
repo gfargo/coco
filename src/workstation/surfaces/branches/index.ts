@@ -18,6 +18,7 @@ import {
     getBranchRowMarkerColor,
 } from '../../chrome/iconography'
 import { formatSortIndicator, sortBranches } from '../../chrome/sorting'
+import { inlineSpinnerGlyph } from '../../chrome/spinner'
 import {
     formatLogInkBranchesEmpty,
     formatLogInkLoading,
@@ -29,8 +30,9 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+import { isPendingDeletion } from '../../../commands/log/inkViewModel'
 
-export function renderBranchesSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
@@ -71,7 +73,14 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext): ReactTypes.Rea
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
         const marker = branchRowMarker(branch, { ascii: theme.ascii })
-        const markerColor = getBranchRowMarkerColor(marker.kind, theme)
+        // While this branch's delete is in flight, its sync-state marker
+        // is replaced by an inline spinner (accent-coloured) so the row
+        // reads as "deleting" until it vanishes on refresh.
+        const deleting = isPendingDeletion(state.pendingDeletion, 'branch', branch.shortName)
+        const glyph = deleting ? inlineSpinnerGlyph(spinnerFrame, theme.ascii) : marker.glyph
+        const glyphColor = deleting
+          ? (theme.noColor ? undefined : theme.colors.accent)
+          : getBranchRowMarkerColor(marker.kind, theme)
         const divergence = formatBranchDivergence(branch, { ascii: theme.ascii })
         const lastTouched = formatBranchLastTouched(branch.date, getRenderNow())
         // Split the row into spans so the timestamp stays dim even on the
@@ -86,7 +95,7 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext): ReactTypes.Rea
         // Truncate the assembled line to the actual panel width so a
         // narrow inspector / sidebar focus doesn't push branch rows
         // onto a second visual line (#830).
-        const fullText = `${cursorAndPad}${marker.glyph}${trailingName}${timestampPadded}${trailingDivergence}`
+        const fullText = `${cursorAndPad}${glyph}${trailingName}${timestampPadded}${trailingDivergence}`
         const truncated = truncateCells(fullText, Math.max(20, width - 4))
         // If truncation chopped into the timestamp/divergence portion,
         // fall back to a single Text to keep the visible width honest.
@@ -110,8 +119,8 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext): ReactTypes.Rea
         // no-upstream kinds return undefined from
         // `getBranchRowMarkerColor`, so those markers inherit the
         // row's dim and read as quiet chrome.
-        h(Text, { color: markerColor, dimColor: markerColor ? false : undefined },
-          marker.glyph),
+        h(Text, { color: glyphColor, dimColor: glyphColor ? false : undefined },
+          glyph),
         trailingName,
         h(Text, { dimColor: true }, timestampPadded),
         trailingDivergence

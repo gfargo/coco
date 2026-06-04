@@ -31,6 +31,27 @@ export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' 
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 
 /**
+ * Kinds of list item that support deletion (and therefore an inline
+ * pending-spinner while the delete runs). Each maps to a surface + a
+ * stable per-row id used by `pendingDeletion`.
+ */
+export type LogInkDeletableKind = 'branch' | 'tag' | 'stash' | 'worktree'
+
+/**
+ * True when `pending` (a `state.pendingDeletion`) targets this exact row.
+ * Shared by every deletable surface + the sidebar so the spinner-swap
+ * test is identical everywhere. Takes the field value (not the whole
+ * state) so it can live next to the type without a forward reference.
+ */
+export function isPendingDeletion(
+  pending: { kind: LogInkDeletableKind; id: string } | undefined,
+  kind: LogInkDeletableKind,
+  id: string
+): boolean {
+  return pending?.kind === kind && pending.id === id
+}
+
+/**
  * One level in the nested-repo navigation stack (#931). Pushing a
  * frame is the mental equivalent of spawning another `coco ui`
  * instance scoped to a submodule's working directory; popping
@@ -337,6 +358,18 @@ export type LogInkState = {
   pendingConfirmationPayload?: string
   pendingMutationConfirmation?: LogInkMutationConfirmation
   pendingKey?: string
+  /**
+   * The list item whose deletion is currently in flight, if any. Set by
+   * the runtime workflow runner the moment a delete starts (after the
+   * y-confirm) and cleared once the command resolves and the list
+   * refreshes. While set, that row renders an inline pending spinner in
+   * place of its status icon (or appended, for rows without one) — the
+   * generalized "this item is being deleted" affordance. Keyed by
+   * `kind` + a stable id (`branch.shortName`, `tag.name`, `stash.ref`,
+   * `worktree.path`) so it can't accidentally match a same-named row in
+   * a different list rendering at the same time.
+   */
+  pendingDeletion?: { kind: LogInkDeletableKind; id: string }
   focus: LogInkFocus
   /**
    * Set while the user is "peeking" the sidebar (#1135 v2) — a momentary
@@ -815,6 +848,7 @@ export type LogInkAction =
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
+  | { type: 'setPendingDeletion'; value?: { kind: LogInkDeletableKind; id: string } }
   | { type: 'appendPaletteFilter'; value: string }
   | { type: 'backspacePaletteFilter' }
   | { type: 'clearPaletteFilter' }
@@ -2157,6 +2191,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         workflowActionId: action.value ? undefined : state.workflowActionId,
         pendingKey: undefined,
       }
+    case 'setPendingDeletion':
+      // Pure marker for the in-flight delete; touches nothing else so the
+      // list keeps rendering normally underneath the one spinner'd row.
+      return { ...state, pendingDeletion: action.value }
     case 'toggleFilterMode':
       return {
         ...state,

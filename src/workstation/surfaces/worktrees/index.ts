@@ -10,6 +10,7 @@
 
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { inlineSpinnerGlyph } from '../../chrome/spinner'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import {
@@ -18,8 +19,9 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+import { isPendingDeletion } from '../../../commands/log/inkViewModel'
 
-export function renderWorktreesSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
@@ -57,7 +59,9 @@ export function renderWorktreesSurface(ctx: SurfaceRenderContext): ReactTypes.Re
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
-        const marker = entry.current ? '*' : ' '
+        const marker = isPendingDeletion(state.pendingDeletion, 'worktree', entry.path)
+          ? inlineSpinnerGlyph(spinnerFrame, theme.ascii)
+          : entry.current ? '*' : ' '
         const branchLabel = entry.branch ? entry.branch : entry.head || '<detached>'
         const stateLabel = entry.dirty ? 'dirty' : 'clean'
         const branchPadded = truncateCells(branchLabel, branchColWidth).padEnd(branchColWidth)
