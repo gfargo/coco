@@ -28,3 +28,23 @@ export const SPINNER_TICK_MS = 80
 export function pickSpinnerFrame(tick: number): string {
   return SPINNER_FRAMES[Math.max(0, tick) % SPINNER_FRAMES.length]
 }
+
+/**
+ * ASCII-safe spinner frames for `NO_COLOR` / ASCII terminals where the
+ * braille dots either don't render or look like noise. The four-frame
+ * `|/-\` cycle is the classic terminal spinner and reads as motion in
+ * any encoding.
+ */
+export const ASCII_SPINNER_FRAMES = ['|', '/', '-', '\\']
+
+/**
+ * Inline per-item pending glyph — used in place of (or appended to) a
+ * list row's status icon while that row's mutation (a delete) is in
+ * flight. Braille spinner normally; the ASCII cycle under `ascii`
+ * themes so the indicator survives `NO_COLOR` / dumb terminals.
+ */
+export function inlineSpinnerGlyph(tick: number, ascii: boolean): string {
+  return ascii
+    ? ASCII_SPINNER_FRAMES[Math.max(0, tick) % ASCII_SPINNER_FRAMES.length]
+    : pickSpinnerFrame(tick)
+}

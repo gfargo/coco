@@ -20,13 +20,14 @@ import { isLogInkContextKeyLoading } from '../chrome/context'
 import { branchRowMarker, sidebarTabCount } from '../chrome/iconography'
 import { getSidebarVisibleWindow } from '../chrome/sidebarSelection'
 import { sortBranches, sortTags } from '../chrome/sorting'
+import { inlineSpinnerGlyph } from '../chrome/spinner'
 import { cellWidth, truncateCells, truncatePathCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import type {
   LogInkSidebarTab,
   LogInkState,
 } from '../../commands/log/inkViewModel'
-import { getLogInkSidebarTabs } from '../../commands/log/inkViewModel'
+import { getLogInkSidebarTabs, isPendingDeletion } from '../../commands/log/inkViewModel'
 import type { LogInkComponents, LogInkContext } from './types'
 import { focusBorderColor, panelTitle, sidebarTabLabel } from './utils'
 
@@ -149,8 +150,15 @@ function renderActiveSidebarContent(
   contextStatus: LogInkContextStatus,
   width: number,
   bodyRows: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  spinnerFrame: number
 ): ReactTypes.ReactElement[] {
+  // Inline pending-delete glyph: while a row's delete is in flight it
+  // shows this spinner in place of its leading marker (branches /
+  // worktrees) or appended to the row (tags / stashes, which have no
+  // leading status icon). `pending` is the single in-flight target.
+  const pending = state.pendingDeletion
+  const spin = inlineSpinnerGlyph(spinnerFrame, theme.ascii)
   // Available rows for the active tab's list. The sidebar chrome
   // takes ~10 rows (panel title + spacer + 5 tab headers + 4 inter-tab
   // spacers); the branches tab eats 3 more for its summary header
@@ -193,7 +201,12 @@ function renderActiveSidebarContent(
       ...headerRows,
       ...renderSelectableSidebarRows(
         h, Text, sortedBranches, state.selectedBranchIndex, focused, width, theme,
-        (branch) => `${branchRowMarker(branch, { ascii: theme.ascii }).glyph} ${branch.shortName}`,
+        (branch) => {
+          const glyph = isPendingDeletion(pending, 'branch', branch.shortName)
+            ? spin
+            : branchRowMarker(branch, { ascii: theme.ascii }).glyph
+          return `${glyph} ${branch.shortName}`
+        },
         'tab-branches', visibleListCount,
       ),
     ]
@@ -209,7 +222,12 @@ function renderActiveSidebarContent(
     }
     return renderSelectableSidebarRows(
       h, Text, tags, state.selectedTagIndex, focused, width, theme,
-      (tag) => `${truncateCells(tag.name, 16)} ${tag.subject}`,
+      (tag) => {
+        const base = `${truncateCells(tag.name, 16)} ${tag.subject}`
+        // Tags have no leading status icon, so the pending spinner is
+        // appended to the row instead of replacing a glyph.
+        return isPendingDeletion(pending, 'tag', tag.name) ? `${base} ${spin}` : base
+      },
       'tab-tags', visibleListCount,
     )
   }
@@ -224,7 +242,12 @@ function renderActiveSidebarContent(
     }
     return renderSelectableSidebarRows(
       h, Text, stashes, state.selectedStashIndex, focused, width, theme,
-      (stash, index) => `@{${index}} ${stash.message || '(no message)'}`,
+      (stash, index) => {
+        const base = `@{${index}} ${stash.message || '(no message)'}`
+        // `@{N}` is the stash ref, not a status icon, so append the
+        // spinner rather than replacing it.
+        return isPendingDeletion(pending, 'stash', stash.ref) ? `${base} ${spin}` : base
+      },
       'tab-stashes', visibleListCount,
     )
   }
@@ -240,7 +263,9 @@ function renderActiveSidebarContent(
   return renderSelectableSidebarRows(
     h, Text, worktrees, state.selectedWorktreeListIndex, focused, width, theme,
     (worktree) => {
-      const marker = worktree.current ? '*' : ' '
+      const marker = isPendingDeletion(pending, 'worktree', worktree.path)
+        ? spin
+        : worktree.current ? '*' : ' '
       const wstate = worktree.dirty ? 'dirty' : 'clean'
       return `${marker} ${worktree.branch || worktree.path} ${wstate}`
     },
@@ -256,7 +281,8 @@ export function renderSidebar(
   contextStatus: LogInkContextStatus,
   width: number,
   bodyRows: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  spinnerFrame: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
@@ -294,7 +320,7 @@ export function renderSidebar(
       inverse: headerSelected,
     }, headerText))
     if (isActive) {
-      blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, bodyRows, theme))
+      blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, bodyRows, theme, spinnerFrame))
     }
     return blocks
   })

@@ -105,11 +105,11 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'branches') {
-    return renderBranchesSurface(surface)
+    return renderBranchesSurface(surface, spinnerFrame)
   }
 
   if (state.activeView === 'tags') {
-    return renderTagsSurface(surface)
+    return renderTagsSurface(surface, spinnerFrame)
   }
 
   if (state.activeView === 'reflog') {
@@ -121,11 +121,11 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'stash') {
-    return renderStashSurface(surface)
+    return renderStashSurface(surface, spinnerFrame)
   }
 
   if (state.activeView === 'worktrees') {
-    return renderWorktreesSurface(surface)
+    return renderWorktreesSurface(surface, spinnerFrame)
   }
 
   if (state.activeView === 'submodules') {

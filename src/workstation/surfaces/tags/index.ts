@@ -12,6 +12,7 @@ import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatHyperlink } from '../../chrome/hyperlinks'
 import { formatSortIndicator, sortTags } from '../../chrome/sorting'
+import { inlineSpinnerGlyph } from '../../chrome/spinner'
 import {
     formatLogInkLoading,
     formatLogInkTagsEmpty,
@@ -23,8 +24,9 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { buildRefUrl, focusBorderColor, panelTitle } from '../../runtime/utils'
+import { isPendingDeletion } from '../../../commands/log/inkViewModel'
 
-export function renderTagsSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
@@ -65,16 +67,24 @@ export function renderTagsSurface(ctx: SurfaceRenderContext): ReactTypes.ReactEl
         // intact.
         const url = buildRefUrl(context.provider?.repository, tag.name)
         const namePadded = truncateCells(tag.name, tagNameColWidth).padEnd(tagNameColWidth)
+        // Tags have no leading status icon, so a delete-in-flight appends
+        // an accent spinner at the row's end. Reserve its 2 cells from the
+        // truncation budget so it never pushes the row past the panel.
+        const deleting = isPendingDeletion(state.pendingDeletion, 'tag', tag.name)
+        const spinnerSpan = deleting
+          ? h(Text, { color: theme.noColor ? undefined : theme.colors.accent, dimColor: false },
+            ` ${inlineSpinnerGlyph(spinnerFrame, theme.ascii)}`)
+          : null
         const lineText = truncateCells(
           `${cursor} ${namePadded} ${tag.subject}`,
-          Math.max(20, width - 4)
+          Math.max(20, width - 4 - (deleting ? 2 : 0))
         )
         if (!url || lineText.indexOf(namePadded) < 0) {
           return h(Text, {
             key: `tag-${index}`,
             bold: isSelected,
             dimColor: !isSelected,
-          }, lineText)
+          }, lineText, spinnerSpan)
         }
         const linkStart = lineText.indexOf(namePadded)
         const before = lineText.slice(0, linkStart)
@@ -83,7 +93,7 @@ export function renderTagsSurface(ctx: SurfaceRenderContext): ReactTypes.ReactEl
           key: `tag-${index}`,
           bold: isSelected,
           dimColor: !isSelected,
-        }, before, formatHyperlink(namePadded, url), after)
+        }, before, formatHyperlink(namePadded, url), after, spinnerSpan)
       })
 
   const tagsHasMoreAbove = startIndex > 0 && tags.length > 0
