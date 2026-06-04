@@ -1337,6 +1337,52 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 2600 },
     ],
   },
+  {
+    name: 'ui-which-key',
+    description: 'Which-key chord overlay — press g to see the live menu of g-chord view selectors',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 3500 },
+      // `g` enters chord-pending mode and pops the which-key overlay
+      // listing every g-continuation (the discoverability surface).
+      { kind: 'type', text: 'g' },
+      { kind: 'sleep', ms: 900 },
+    ],
+  },
+  {
+    name: 'ui-compare-refs',
+    description: 'Compare two refs — mark a branch with m, Enter on another to diff base..head (#779)',
+    scenario: 'branch-sync-showcase',
+    command: 'ui',
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 3500 },
+      { kind: 'type', text: 'gb' },           // branches view
+      { kind: 'sleep', ms: 1200 },
+      { kind: 'type', text: 'm' },            // mark the cursored branch as compare base
+      { kind: 'sleep', ms: 1000 },
+      { kind: 'key', key: 'Down', count: 2 }, // move to another branch
+      { kind: 'sleep', ms: 600 },
+      { kind: 'key', key: 'Enter' },          // open the compare diff (git diff base..head)
+      { kind: 'sleep', ms: 1800 },
+    ],
+  },
+  {
+    name: 'ui-stage-pathspec',
+    description: 'Bulk staging — + opens a pathspec prompt to stage matching files at once (A stages everything)',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status',
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 3500 },
+      { kind: 'type', text: '+' },          // open the stage-by-pathspec prompt
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'src/*.ts' },   // a glob — goes straight to git, no shell
+      { kind: 'sleep', ms: 1200 },
+    ],
+  },
 ]
 
 export function findRecipe(name: string): ScreenshotRecipe | undefined {

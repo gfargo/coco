@@ -114,6 +114,10 @@ const SITE_RECIPES = [
   // Single-pane fallback (narrow terminals)
   'ui-single-pane-narrow',
   'ui-single-pane-peek',
+  // Feature shots that previously had no recipe
+  'ui-which-key',
+  'ui-compare-refs',
+  'ui-stage-pathspec',
   // Themed-view showcase — diff + status across a curated theme set
   'ui-diff-theme-catppuccin',
   'ui-diff-theme-gruvbox',
@@ -219,6 +223,9 @@ const FILENAME_MAP: Record<string, string[]> = {
   'demo-stash-workflow': ['demo-stash-workflow.gif'],
   'ui-single-pane-narrow': ['single-pane-narrow.png'],
   'ui-single-pane-peek': ['single-pane-peek.png'],
+  'ui-which-key': ['which-key.png'],
+  'ui-compare-refs': ['view-compare.png'],
+  'ui-stage-pathspec': ['stage-pathspec.png'],
   'ui-staging-hunks': ['staging-hunks.png'],
   'ui-diff-theme-catppuccin': ['diff-theme-catppuccin.png'],
   'ui-diff-theme-gruvbox': ['diff-theme-gruvbox.png'],
