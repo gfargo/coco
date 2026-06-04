@@ -1439,6 +1439,63 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 2000 },
     ],
   },
+  {
+    name: 'demo-single-pane',
+    description: 'Narrow terminal in motion: at 80×24 the panes fold to one — Tab cycles sidebar→main→inspector, v peeks the sidebar',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    emitGif: true,
+    dimensions: { cols: 80, rows: 24 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'key', key: 'Tab' },     // main → inspector
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'key', key: 'Tab' },     // inspector → sidebar
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'key', key: 'Tab' },     // sidebar → main
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'type', text: 'v' },     // peek the sidebar
+      { kind: 'sleep', ms: 1700 },
+      { kind: 'type', text: 'v' },     // snap back to main
+      { kind: 'sleep', ms: 1200 },
+    ],
+  },
+  {
+    name: 'demo-conflicts',
+    description: 'Resolve a merge conflict: keep theirs (u) on one file, keep ours (U) on the next, from the conflicts view',
+    scenario: 'mid-merge-conflict',
+    command: 'ui',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gx' },    // conflicts view
+      { kind: 'sleep', ms: 2000 },
+      { kind: 'type', text: 'u' },     // keep theirs (incoming) on the cursored file
+      { kind: 'sleep', ms: 1600 },
+      { kind: 'key', key: 'Down' },    // next conflicted file
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'U' },     // keep ours (current branch) on this one
+      { kind: 'sleep', ms: 1800 },
+    ],
+  },
+  {
+    name: 'demo-bisect',
+    description: 'Bisect in motion: mark a commit bad (b) then good (g) and watch the range narrow',
+    scenario: 'mid-bisect',
+    command: 'ui',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gB' },    // bisect view
+      { kind: 'sleep', ms: 2000 },
+      { kind: 'type', text: 'b' },     // mark the current candidate bad
+      { kind: 'sleep', ms: 1900 },
+      { kind: 'type', text: 'g' },     // mark the next candidate good
+      { kind: 'sleep', ms: 1900 },
+    ],
+  },
 ]
 
 export function findRecipe(name: string): ScreenshotRecipe | undefined {

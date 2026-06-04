@@ -111,6 +111,10 @@ const SITE_RECIPES = [
   'ui-staging-hunks',
   // Stash workflow (rich rows + rename)
   'demo-stash-workflow',
+  // Motion demos for features that only had static shots
+  'demo-single-pane',
+  'demo-conflicts',
+  'demo-bisect',
   // Single-pane fallback (narrow terminals)
   'ui-single-pane-narrow',
   'ui-single-pane-peek',
@@ -230,6 +234,9 @@ const FILENAME_MAP: Record<string, string[]> = {
   'demo-workstation-using': ['demo-workstation-using.gif'],
   'demo-staging-hunks': ['demo-staging-hunks.gif'],
   'demo-stash-workflow': ['demo-stash-workflow.gif'],
+  'demo-single-pane': ['demo-single-pane.gif'],
+  'demo-conflicts': ['demo-conflicts.gif'],
+  'demo-bisect': ['demo-bisect.gif'],
   'ui-single-pane-narrow': ['single-pane-narrow.png'],
   'ui-single-pane-peek': ['single-pane-peek.png'],
   'ui-which-key': ['which-key.png'],
