@@ -54,6 +54,12 @@ type TapeOptions = {
    * at runtime inside the VHS shell.
    */
   nodeBinDir: string
+  /**
+   * Optional directory holding a mock `gh`. Prepended to PATH (ahead of
+   * everything) so the pull-request / triage / issues views render
+   * canned data instead of the real GitHub CLI.
+   */
+  ghMockDir?: string
 }
 
 const DEFAULT_DIMENSIONS = { cols: 140, rows: 40 } as const
@@ -180,7 +186,7 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // Ensure the VHS shell can find node + tsx + git + gh + system utils.
     // Include /usr/local/bin and /opt/homebrew/bin for tools like gh.
     // $PATH expands to the shell's existing PATH (includes /usr/bin etc).
-    `Type "export PATH=${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
+    `Type "export PATH=${options.ghMockDir ? `${quoteTapeString(options.ghMockDir)}:` : ''}${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
     `Enter`,
     `Sleep 300ms`,
     // Snapshot mode pin — freezes wall-clock `now` for relative

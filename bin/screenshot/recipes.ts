@@ -62,6 +62,20 @@ export type ScreenshotRecipe = {
    * the main candidates.
    */
   emitGif?: boolean
+  /**
+   * Add an `origin` remote with this URL to the scenario repo before
+   * coco launches. Needed for GitHub-integration views — coco's
+   * `getGitHubRepository` parses `github.com/<owner>/<repo>` out of the
+   * origin URL. Use `git@github.com:owner/repo.git`.
+   */
+  githubRemote?: string
+  /**
+   * When true, prepend a deterministic mock `gh` (bin/screenshot/mock-gh)
+   * to PATH so the pull-request / PR-triage / issues views render canned
+   * data instead of shelling out to the real GitHub CLI. Pair with
+   * `githubRemote`.
+   */
+  ghMock?: boolean
 }
 
 /**
@@ -1359,13 +1373,13 @@ export const RECIPES: ScreenshotRecipe[] = [
     dimensions: { cols: 150, rows: 38 },
     actions: [
       { kind: 'sleep', ms: 3500 },
-      { kind: 'type', text: 'gb' },           // branches view
+      { kind: 'type', text: 'gb' },         // branches view
       { kind: 'sleep', ms: 1200 },
-      { kind: 'type', text: 'm' },            // mark the cursored branch as compare base
+      { kind: 'type', text: 'm' },          // mark the cursored branch as compare base
       { kind: 'sleep', ms: 1000 },
       { kind: 'key', key: 'Down', count: 2 }, // move to another branch
       { kind: 'sleep', ms: 600 },
-      { kind: 'key', key: 'Enter' },          // open the compare diff (git diff base..head)
+      { kind: 'key', key: 'Enter' },        // open the compare diff (git diff base..head)
       { kind: 'sleep', ms: 1800 },
     ],
   },
@@ -1381,6 +1395,48 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 800 },
       { kind: 'type', text: 'src/*.ts' },   // a glob — goes straight to git, no shell
       { kind: 'sleep', ms: 1200 },
+    ],
+  },
+  {
+    name: 'ui-pull-request',
+    description: 'Pull-request view (g p) — the current branch\'s PR with checks, reviews, and actions (mock gh)',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    githubRemote: 'git@github.com:gfargo/coco.git',
+    ghMock: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gp' },
+      { kind: 'sleep', ms: 2000 },
+    ],
+  },
+  {
+    name: 'ui-pr-triage',
+    description: 'PR triage view (g P) — multi-PR list with state/draft/review badges + filter cycling (mock gh)',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    githubRemote: 'git@github.com:gfargo/coco.git',
+    ghMock: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gP' },
+      { kind: 'sleep', ms: 2000 },
+    ],
+  },
+  {
+    name: 'ui-issues',
+    description: 'Issues view (g i) — open issues with labels/assignees + inspector body preview (mock gh)',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    githubRemote: 'git@github.com:gfargo/coco.git',
+    ghMock: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gi' },
+      { kind: 'sleep', ms: 2000 },
     ],
   },
 ]

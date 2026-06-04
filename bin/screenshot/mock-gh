@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Deterministic mock of the GitHub CLI (`gh`) for the screenshot pipeline.
+#
+# coco's pull-request / PR-triage / issues views shell out to real `gh`
+# (see src/git/githubCli.ts → execFile('gh', …)), which can't be captured
+# in a temp-repo screenshot. Recipes that set `ghMock: true` get this
+# script prepended to PATH so those views render canned, stable data.
+#
+# It switches on `$1 $2` and echoes JSON matching the `--json` field lists
+# coco requests (a superset is fine — gh would return only the requested
+# fields, but coco just reads the ones it needs). Dates are fixed near the
+# COCO_SNAPSHOT_NOW the pipeline pins, so relative ages don't drift.
+
+set -euo pipefail
+cmd="${1:-} ${2:-}"
+
+case "$cmd" in
+  "auth status")
+    # coco only checks the exit code; real gh writes to stderr.
+    echo "github.com: logged in to github.com as octocat (oauth_token)" >&2
+    exit 0
+    ;;
+
+  "pr list")
+    # Workspace per-repo count call: `pr list -R <repo> --state open --json number`.
+    if [[ "$*" == *"--json number"* && "$*" != *"title"* ]]; then
+      echo '[{"number":1234},{"number":1230},{"number":1228}]'
+      exit 0
+    fi
+    cat <<'JSON'
+[
+  {"number":1234,"title":"feat(ui): tactile hunk staging — badges + ↑/↓ nav","url":"https://github.com/gfargo/coco/pull/1234","state":"OPEN","isDraft":false,"headRefName":"feat/hunk-staging","baseRefName":"main","author":{"login":"octocat"},"assignees":[{"login":"gfargo"}],"labels":[{"name":"enhancement"},{"name":"workstation"}],"reviewDecision":"APPROVED","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","createdAt":"2026-05-28T14:10:00Z","updatedAt":"2026-06-02T09:30:00Z"},
+  {"number":1230,"title":"feat(ui): stash power actions — rename, branch, undo-drop","url":"https://github.com/gfargo/coco/pull/1230","state":"OPEN","isDraft":true,"headRefName":"feat/stash-power","baseRefName":"main","author":{"login":"gfargo"},"assignees":[],"labels":[{"name":"workstation"}],"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED","createdAt":"2026-05-30T11:00:00Z","updatedAt":"2026-06-03T08:00:00Z"},
+  {"number":1228,"title":"fix(stash): show stash@{N} index refs","url":"https://github.com/gfargo/coco/pull/1228","state":"OPEN","isDraft":false,"headRefName":"fix/stash-refs","baseRefName":"main","author":{"login":"contrib-dev"},"assignees":[{"login":"octocat"}],"labels":[{"name":"bug"}],"reviewDecision":"CHANGES_REQUESTED","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY","createdAt":"2026-05-29T16:20:00Z","updatedAt":"2026-06-01T13:45:00Z"}
+]
+JSON
+    ;;
+
+  "pr view")
+    if [[ "${3:-}" =~ ^[0-9]+$ ]]; then
+      # PR detail (inspector): `pr view <#> --json number,body,comments,reviews,statusCheckRollup`.
+      cat <<'JSON'
+{"number":1234,"body":"Makes per-hunk staging deliberate and visible: an accent gutter bar on the selected hunk, ●/○ staged badges on each @@ header, and ↑/↓ to walk hunks.","comments":[{"author":{"login":"gfargo"},"body":"Love the badges — ship it.","createdAt":"2026-06-02T09:00:00Z"}],"reviews":[{"author":{"login":"gfargo"},"state":"APPROVED","body":"Clean. Footer hints match the keys now.","submittedAt":"2026-06-02T09:25:00Z"}],"statusCheckRollup":[{"name":"Test (Node 22)","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"Test (Node 24)","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"Lint","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"Build & package","status":"COMPLETED","conclusion":"SUCCESS"}]}
+JSON
+    else
+      # Current-branch PR (g p): `pr view --json <view fields>`.
+      cat <<'JSON'
+{"number":1234,"title":"feat(ui): tactile hunk staging — badges + ↑/↓ nav","url":"https://github.com/gfargo/coco/pull/1234","state":"OPEN","isDraft":false,"headRefName":"feat/hunk-staging","baseRefName":"main","body":"Makes per-hunk staging deliberate and visible: an accent gutter bar on the selected hunk, ●/○ staged badges on each @@ header, and ↑/↓ to walk hunks.","author":{"login":"octocat"},"reviewDecision":"APPROVED","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","statusCheckRollup":[{"name":"Test (Node 22)","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"Test (Node 24)","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"Lint","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"Build & package","status":"COMPLETED","conclusion":"SUCCESS"}],"reviews":[{"author":{"login":"gfargo"},"state":"APPROVED"}]}
+JSON
+    fi
+    ;;
+
+  "issue list")
+    cat <<'JSON'
+[
+  {"number":312,"title":"Single-pane fallback for narrow terminals (<100 cols)","url":"https://github.com/gfargo/coco/issues/312","state":"OPEN","author":{"login":"gfargo"},"assignees":[{"login":"gfargo"}],"labels":[{"name":"enhancement"},{"name":"workstation"}],"comments":4,"createdAt":"2026-05-22T10:00:00Z","updatedAt":"2026-06-02T18:00:00Z"},
+  {"number":308,"title":"Renamed stash loses its origin branch (shows <unknown>)","url":"https://github.com/gfargo/coco/issues/308","state":"OPEN","author":{"login":"contrib-dev"},"assignees":[],"labels":[{"name":"bug"}],"comments":2,"createdAt":"2026-05-31T09:15:00Z","updatedAt":"2026-06-03T07:40:00Z"},
+  {"number":301,"title":"Document the deliberate keymap + overload table","url":"https://github.com/gfargo/coco/issues/301","state":"OPEN","author":{"login":"octocat"},"assignees":[{"login":"gfargo"}],"labels":[{"name":"documentation"}],"comments":1,"createdAt":"2026-05-18T12:00:00Z","updatedAt":"2026-05-29T15:00:00Z"},
+  {"number":295,"title":"Stash from any view (gZ) — proposal","url":"https://github.com/gfargo/coco/issues/295","state":"OPEN","author":{"login":"gfargo"},"assignees":[],"labels":[{"name":"enhancement"}],"comments":6,"createdAt":"2026-05-15T08:30:00Z","updatedAt":"2026-05-30T20:10:00Z"}
+]
+JSON
+    ;;
+
+  "issue view")
+    cat <<'JSON'
+{"number":312,"body":"Below ~100 columns the three-pane layout collapses the sidebar and inspector into 8-cell icon rails that waste ~16-20 of 80 columns. At the 80×24 floor that's worse than no panel. Proposal: fold to a single full-width pane, Tab-cycled, with a v peek.","comments":[{"author":{"login":"octocat"},"body":"Yes — an 80×24 tmux split should be first-class.","createdAt":"2026-05-23T11:00:00Z"},{"author":{"login":"gfargo"},"body":"Shipped in 0.60.0 — Tab cycles panes, v peeks the sidebar.","createdAt":"2026-06-02T18:00:00Z"}]}
+JSON
+    ;;
+
+  *)
+    exit 0
+    ;;
+esac
