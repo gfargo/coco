@@ -116,6 +116,8 @@ Run `npm run screenshot -- --list` for the live list. Current catalog:
 | `ui-command-palette` | `:` command palette |
 | `ui-search-filter` | `/feat` live filter |
 | `ui-inspector-focused` | Tab-focused inspector |
+| `ui-which-key` | `g`-chord which-key overlay |
+| `ui-view-keys` | `g?` per-view single-key strip (#1137) |
 
 ### Workspace (1 screenshot)
 | Recipe | What it shows |
@@ -156,6 +158,7 @@ preset (both on the Catppuccin Mocha terminal palette).
 | `demo-workspace-to-ui` | Workspace → repo → ui → quit back | ~12s |
 | `demo-commit-flow` | `coco commit --dry-run` | ~5s |
 | `demo-changelog` | `coco changelog --branch main` | ~5s |
+| `demo-view-keys` | `g?` per-view key strip, list changes per view (#1137) | ~9s |
 
 ## Environment variables
 
@@ -183,6 +186,10 @@ Keys already in your shell environment take precedence over `.env` values.
 The `.www/` Next.js site previously used hand-drawn artistic terminal mockups. Replace those with real captures from this pipeline. The PNGs are pixel-accurate, work in light + dark themes (different recipes), and update with the workstation rather than drifting out of sync.
 
 For animated demos (e.g. workflow walk-throughs), set `emitGif: true` on the recipe — VHS produces both the still PNG and a GIF in one pass.
+
+### GIF optimization (lossless)
+
+VHS writes full, undeduplicated frames, so even a short demo lands at 10–20 MB — far too heavy for a web page. The driver runs `gifsicle -O3 --batch` on every emitted GIF as a final step: this is **lossless** inter-frame transparency optimization (no `--lossy`, no colour quantization), typically a 20–30× reduction with zero pixel changes (e.g. `demo-view-keys`: 15 MB → 0.4 MB). It's part of the pipeline so `screenshot:sync` regenerations stay small without a manual post-step. `gifsicle` is best-effort — if it isn't on PATH the raw GIF is kept and you'll see an install hint (`brew install gifsicle`).
 
 ## Visual regression checks (future)
 
