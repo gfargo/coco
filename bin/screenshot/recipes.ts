@@ -130,9 +130,11 @@ export const RECIPES: ScreenshotRecipe[] = [
     // that replaced the rail, plus the footer's `tab: [sidebar] …` switcher.
     dimensions: { cols: 80, rows: 24 },
     actions: [
-      { kind: 'sleep', ms: 800 },
+      // Wait out the cold-cache "loading context" beat before Tab-cycling,
+      // else the capture lands on an empty/loading pane.
+      { kind: 'sleep', ms: 3500 },
       { kind: 'key', key: 'Tab', count: 2 },
-      { kind: 'sleep', ms: 400 },
+      { kind: 'sleep', ms: 800 },
     ],
   },
   {
@@ -147,9 +149,11 @@ export const RECIPES: ScreenshotRecipe[] = [
     // a Tab-cycle focus move.
     dimensions: { cols: 80, rows: 24 },
     actions: [
-      { kind: 'sleep', ms: 800 },
+      // Wait out the cold-cache "loading context" beat before peeking,
+      // else the capture lands on an empty/loading pane.
+      { kind: 'sleep', ms: 3500 },
       { kind: 'type', text: 'v' },
-      { kind: 'sleep', ms: 400 },
+      { kind: 'sleep', ms: 800 },
     ],
   },
   {
