@@ -9,7 +9,10 @@ dist/**/*
 dist/stats.html
 
 # Dependency directories
-node_modules/
+# No trailing slash: ignore a node_modules *directory* AND a stray
+# node_modules *symlink* (a symlink is a file, so `node_modules/` alone
+# misses it — that's how a machine-specific symlink got committed; #1152).
+node_modules
 
 # Logs
 logs
