@@ -106,6 +106,53 @@ describe('log Ink view model', () => {
     expect(state.activeView).toBe('diff')
   })
 
+  describe('returnFromCommit navigation', () => {
+    it('returns to status when the tree is still dirty after committing from status', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+      state = applyLogInkAction(state, { type: 'returnFromCommit', stillDirty: true })
+
+      expect(state.activeView).toBe('status')
+      expect(state.viewStack).toEqual(['history', 'status'])
+    })
+
+    it('returns to history when the tree is clean even if it came from status', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+      state = applyLogInkAction(state, { type: 'returnFromCommit', stillDirty: false })
+
+      expect(state.activeView).toBe('history')
+      expect(state.viewStack).toEqual(['history'])
+    })
+
+    it('returns to history when composing straight from history', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+      // Dirty, but there is no status frame to return to.
+      state = applyLogInkAction(state, { type: 'returnFromCommit', stillDirty: true })
+
+      expect(state.activeView).toBe('history')
+      expect(state.viewStack).toEqual(['history'])
+    })
+
+    it('unwinds an intermediate diff frame back to status when still dirty', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'diff' })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+
+      state = applyLogInkAction(state, { type: 'returnFromCommit', stillDirty: true })
+
+      expect(state.activeView).toBe('status')
+      expect(state.viewStack).toEqual(['history', 'status'])
+    })
+  })
+
   it('moves selected commits and clamps at list bounds', () => {
     let state = createLogInkState(rows)
 
