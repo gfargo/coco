@@ -118,6 +118,10 @@ const SITE_RECIPES = [
   'ui-which-key',
   'ui-compare-refs',
   'ui-stage-pathspec',
+  // GitHub-integration views (mock-gh) — real data, no longer stubbed
+  'ui-pull-request',
+  'ui-pr-triage',
+  'ui-issues',
   // Themed-view showcase — diff + status across a curated theme set
   'ui-diff-theme-catppuccin',
   'ui-diff-theme-gruvbox',
@@ -151,7 +155,12 @@ const FILENAME_MAP: Record<string, string[]> = {
   'ui-tags': ['view-tags.png'],
   'ui-stash-list': ['view-stash.png'],
   'ui-worktrees': ['view-worktrees.png'],
-  'ui-history-pr-ready': ['workstation-history.png', 'view-pull-request.png', 'view-pr-triage.png', 'view-issues.png'],
+  'ui-history-pr-ready': ['workstation-history.png'],
+  // The PR / triage / issues views render real (mock-gh) data now, so they
+  // back their own marketing images instead of stubbing to the history shot.
+  'ui-pull-request': ['view-pull-request.png'],
+  'ui-pr-triage': ['view-pr-triage.png'],
+  'ui-issues': ['view-issues.png'],
   'ui-conflicts-merge': ['view-conflicts.png'],
   'ui-reflog': ['view-reflog.png'],
   'ui-bisect-view': ['view-bisect.png'],

@@ -203,6 +203,28 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
   const pngPath = join(SCREENSHOTS_DIR, `${recipe.name}.png`)
   const gifPath = recipe.emitGif ? join(SCREENSHOTS_DIR, `${recipe.name}.gif`) : undefined
 
+  // GitHub-integration recipes: give the scenario repo an `origin` that
+  // coco recognizes as a GitHub remote, and stage a deterministic mock
+  // `gh` on a temp dir we prepend to PATH (so the PR / triage / issues
+  // views render canned data instead of hitting the real CLI).
+  let ghMockDir: string | undefined
+  if (recipe.githubRemote || recipe.ghMock) {
+    const { execSync } = await import('child_process')
+    if (recipe.githubRemote) {
+      execSync(
+        `git -C "${repo.path}" remote add origin "${recipe.githubRemote}" 2>/dev/null || git -C "${repo.path}" remote set-url origin "${recipe.githubRemote}"`,
+        { stdio: 'ignore' }
+      )
+    }
+    if (recipe.ghMock) {
+      const { copyFileSync, chmodSync } = await import('fs')
+      ghMockDir = mkdtempSync(join(tmpdir(), 'coco-gh-mock-'))
+      const dest = join(ghMockDir, 'gh')
+      copyFileSync(join(REPO_ROOT, 'bin', 'screenshot', 'mock-gh'), dest)
+      chmodSync(dest, 0o755)
+    }
+  }
+
   try {
     const tape = buildTape(recipe, {
       cwd: repo.path,
@@ -211,6 +233,7 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
       cocoCommand: COCO_CLI,
       repoRoot: REPO_ROOT,
       nodeBinDir: NODE_BIN_DIR,
+      ghMockDir,
     })
     writeFileSync(tapePath, tape, 'utf8')
 
@@ -255,6 +278,9 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
   } finally {
     if (!options.keepTape && existsSync(tapePath)) {
       rmSync(tapePath, { force: true })
+    }
+    if (ghMockDir) {
+      rmSync(ghMockDir, { recursive: true, force: true })
     }
     await repo.cleanup()
   }
