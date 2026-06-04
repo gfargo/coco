@@ -220,7 +220,23 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     ...(recipe.emitGif ? [`Show`, `Sleep 500ms`, `Output "${options.outputGif}"`, ``] : []),
   ]
 
-  const actionLines = (recipe.actions || []).flatMap((action) => renderAction(action))
+  // For GIF recipes, strip any trailing quit (`q`) the recipe baked into
+  // its actions — plus everything after it. Quitting coco mid-recording
+  // drops to the shell, and that post-exit prompt gets captured as the
+  // GIF's final frame. The recording should end on the last rendered UI
+  // frame; VHS terminates the PTY cleanly when the tape ends, so coco
+  // doesn't need an explicit quit. Screenshot-only recipes keep the quit
+  // (it runs after the PNG is captured and promptly releases the PTY).
+  let actions = recipe.actions || []
+  if (recipe.emitGif) {
+    const lastQuit = actions.reduce(
+      (acc, action, i) =>
+        action.kind === 'type' && action.text.trim() === 'q' ? i : acc,
+      -1,
+    )
+    if (lastQuit !== -1) actions = actions.slice(0, lastQuit)
+  }
+  const actionLines = actions.flatMap((action) => renderAction(action))
 
   // Final settle before VHS captures the closing frame — gives any
   // late-arriving render (e.g. async scenario context loaders) time
@@ -233,12 +249,11 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // a bare filename; the driver moves it to the final location.
     `Screenshot screenshot.png`,
     `Sleep 200ms`,
-    // For GIF recipes: Hide before quitting so the recording ends
-    // on the last rendered UI frame, not the shell prompt after exit.
-    ...(recipe.emitGif ? [`Hide`] : []),
-    // Quit the workstation cleanly so VHS doesn't hold the PTY open.
-    `Type "q"`,
-    `Sleep 200ms`,
+    // GIF recipes end the recording HERE, on the last rendered UI frame —
+    // their trailing quit is stripped from the actions above, and VHS
+    // terminates the PTY cleanly at tape end. Screenshot-only recipes quit
+    // now (the PNG is already captured, so this just releases the PTY).
+    ...(recipe.emitGif ? [] : [`Type "q"`, `Sleep 200ms`]),
   ]
 
   return [
