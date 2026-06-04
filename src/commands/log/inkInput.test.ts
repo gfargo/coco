@@ -742,8 +742,11 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     expect(state.pendingKey).toBe('g')
 
-    state = applyInput(state, '?')
-    expect(state.showHelp).toBe(true)
+    // `/` is not a `g`-continuation, so it resolves as the global filter
+    // toggle and clears the stale chord. (`?` is no longer "unrelated" — it
+    // forms the `g?` view-keys chord, covered separately below.)
+    state = applyInput(state, '/')
+    expect(state.filterMode).toBe(true)
     expect(state.pendingKey).toBeUndefined()
   })
 
