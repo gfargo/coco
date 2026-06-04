@@ -119,9 +119,17 @@ export function renameStash(git: SimpleGit, stash: StashEntry, newMessage: strin
     return Promise.resolve({ ok: false, message: 'Cannot rename: stash commit hash unavailable.' })
   }
 
+  // Preserve git's `On <branch>: <subject>` convention so the renamed
+  // stash keeps its origin-branch context. The list + inspector parse the
+  // branch out of that prefix (`parseStashSubject`); a bare message would
+  // render `on <unknown>`. Falls back to the bare message when the branch
+  // is unknown so we never store a misleading `On <unknown>:`.
+  const branch = stash.branch && stash.branch !== '<unknown>' ? stash.branch : ''
+  const storedMessage = branch ? `On ${branch}: ${trimmed}` : trimmed
+
   return runAction(async () => {
     await git.raw(['stash', 'drop', stash.ref])
-    await git.raw(['stash', 'store', '-m', trimmed, stash.hash])
+    await git.raw(['stash', 'store', '-m', storedMessage, stash.hash])
   }, `Renamed ${stash.ref} → ${trimmed}`)
 }
 

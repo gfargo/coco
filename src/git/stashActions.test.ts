@@ -92,8 +92,18 @@ describe('log stash actions', () => {
     // the reflog, so storing first would do nothing and this drop would
     // hit the wrong entry. Dropping frees the reflog ref…
     expect(git.raw).toHaveBeenNthCalledWith(1, ['stash', 'drop', 'stash@{2}'])
-    // …then store re-adds the same commit under the new message.
-    expect(git.raw).toHaveBeenNthCalledWith(2, ['stash', 'store', '-m', 'better name', 'deadbeef'])
+    // …then store re-adds the same commit under the new message, keeping
+    // git's `On <branch>:` prefix so the renamed stash retains its origin
+    // branch (fixture branch = 'main') instead of rendering `on <unknown>`.
+    expect(git.raw).toHaveBeenNthCalledWith(2, ['stash', 'store', '-m', 'On main: better name', 'deadbeef'])
+  })
+
+  it('renames without a branch prefix when the origin branch is unknown', async () => {
+    const git = { raw: jest.fn().mockResolvedValue('') }
+    const orphan: StashEntry = { ...stash, ref: 'stash@{0}', hash: 'cafef00d', branch: '<unknown>' }
+
+    await expect(renameStash(git as never, orphan, 'just a name')).resolves.toMatchObject({ ok: true })
+    expect(git.raw).toHaveBeenNthCalledWith(2, ['stash', 'store', '-m', 'just a name', 'cafef00d'])
   })
 
   it('refuses to rename with an empty message or missing hash', async () => {
