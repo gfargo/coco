@@ -1247,7 +1247,41 @@ function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
 
 function appendRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
   const selected = getSelectedInkCommit(state)
-  const nextRows = [...state.rows, ...rows]
+
+  // Dedup the merged row list by commit hash so the graph renderer —
+  // which windows directly over `state.rows` (toFullGraphItems →
+  // expandRowsWithSpacers) — and the selection list (deduped commits)
+  // agree on one canonical, duplicate-free row order. Overlapping
+  // appends, notably the anchored `loadCommitContext` page that
+  // re-walks history from the tip, otherwise stack the newest commits
+  // below the oldest ones already loaded. The renderer then shows the
+  // initial commit directly above HEAD and the cursor can scroll
+  // forever through the duplicated tail — the history graph "looping
+  // back on itself". Drop graph-only topology rows that trail a dropped
+  // duplicate commit too, since they describe that duplicate's lanes
+  // and would otherwise dangle.
+  const seenHashes = new Set<string>()
+  const nextRows: GitLogRow[] = []
+  let droppingTrailingGraph = false
+  for (const row of [...state.rows, ...rows]) {
+    if (row.type === 'commit') {
+      if (seenHashes.has(row.hash)) {
+        droppingTrailingGraph = true
+        continue
+      }
+      seenHashes.add(row.hash)
+      droppingTrailingGraph = false
+      nextRows.push(row)
+      continue
+    }
+    // Graph-only topology row: keep it unless it trails a just-dropped
+    // duplicate commit (then it belongs to the duplicate page's lanes).
+    if (droppingTrailingGraph) {
+      continue
+    }
+    nextRows.push(row)
+  }
+
   const seen = new Set<string>()
   const commits = getCommitRows(nextRows).filter((commit) => {
     if (seen.has(commit.hash)) {

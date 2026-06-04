@@ -1,4 +1,4 @@
-import { GitLogRow } from './data'
+import { GitLogRow, getCommitRows } from './data'
 import {
     DEFAULT_LOG_INK_STATUS_FILTER_MASK,
     applyLogInkAction,
@@ -259,6 +259,41 @@ describe('log Ink view model', () => {
 
     expect(state.commits).toHaveLength(4)
     expect(getSelectedInkCommit(state)?.shortHash).toBe('def5678')
+  })
+
+  it('dedups overlapping appended rows so the history graph cannot loop', () => {
+    let state = createLogInkState(rows)
+
+    // Simulate the anchored `loadCommitContext` page: it re-walks
+    // history from the tip, so its rows OVERLAP everything already
+    // loaded (plus one new older commit on the end). Before the fix
+    // these duplicates accumulated in `state.rows` — which the graph
+    // renderer windows over — stacking the newest commit directly
+    // below the oldest and letting the cursor scroll forever.
+    state = applyLogInkAction(state, {
+      type: 'appendRows',
+      rows: [
+        ...rows,
+        {
+          type: 'commit',
+          graph: '*',
+          shortHash: '9999999',
+          hash: '999999900000',
+          parents: [],
+          date: '2026-04-25',
+          author: 'Coco Test',
+          refs: [],
+          message: 'chore: older commit',
+        },
+      ],
+    })
+
+    // The rows the graph renders over carry no duplicate commit hashes.
+    const commitHashes = getCommitRows(state.rows).map((row) => row.hash)
+    expect(new Set(commitHashes).size).toBe(commitHashes.length)
+    // Three originals + the one genuinely-new older commit.
+    expect(state.commits).toHaveLength(4)
+    expect(commitHashes).toHaveLength(4)
   })
 
   it('tracks selected changed files and diff preview paging', () => {
