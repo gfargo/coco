@@ -321,6 +321,18 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // No key binding — this is raised by the runtime as a second
+      // confirmation when a safe `delete-branch` (`git branch -d`) is
+      // rejected for an unmerged branch. Reachable from the `:` palette
+      // too, as an explicit force-delete that still gates on y-confirm.
+      id: 'force-delete-branch',
+      key: '',
+      label: 'Force-delete branch',
+      description: 'Force-delete the selected branch even if it is not fully merged (git branch -D).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'delete-tag',
       key: 'T',
       label: 'Delete tag',

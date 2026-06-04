@@ -2,6 +2,7 @@ import {
   checkoutBranch,
   createBranch,
   deleteBranch,
+  isBranchNotFullyMergedError,
   fetchBranch,
   fetchRemotes,
   getBranchActionRefs,
@@ -113,6 +114,44 @@ describe('log branch actions', () => {
     expect(git.raw).toHaveBeenNthCalledWith(3, ['branch', '-d', 'feature/test'])
     expect(git.raw).toHaveBeenNthCalledWith(4, ['fetch', '--all', '--prune'])
     expect(git.raw).toHaveBeenNthCalledWith(5, ['pull', '--ff-only'])
+  })
+
+  describe('deleteBranch force', () => {
+    it('uses -d (safe) by default and -D when forced', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+
+      await expect(deleteBranch(git as never, localBranch())).resolves.toEqual({
+        ok: true,
+        message: 'Deleted branch feature/test',
+      })
+      expect(git.raw).toHaveBeenLastCalledWith(['branch', '-d', 'feature/test'])
+
+      await expect(deleteBranch(git as never, localBranch(), true)).resolves.toEqual({
+        ok: true,
+        message: 'Force-deleted branch feature/test',
+      })
+      expect(git.raw).toHaveBeenLastCalledWith(['branch', '-D', 'feature/test'])
+    })
+
+    it('surfaces the not-fully-merged failure as a recoverable result', async () => {
+      const git = {
+        raw: jest.fn().mockRejectedValue(
+          new Error("error: the branch 'feature/test' is not fully merged.")
+        ),
+      }
+      const result = await deleteBranch(git as never, localBranch())
+      expect(result.ok).toBe(false)
+      expect(isBranchNotFullyMergedError(result.message)).toBe(true)
+    })
+  })
+
+  describe('isBranchNotFullyMergedError', () => {
+    it('matches git\'s unmerged wording and nothing unrelated', () => {
+      expect(isBranchNotFullyMergedError("error: the branch 'x' is not fully merged.")).toBe(true)
+      expect(isBranchNotFullyMergedError('Not Fully Merged')).toBe(true)
+      expect(isBranchNotFullyMergedError('Cannot delete the current branch.')).toBe(false)
+      expect(isBranchNotFullyMergedError(undefined)).toBe(false)
+    })
   })
 
   describe('pushBranch', () => {

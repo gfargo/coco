@@ -144,6 +144,7 @@ import {
     checkoutBranch,
     createBranch,
     deleteBranch,
+    isBranchNotFullyMergedError,
     fetchBranch,
     fetchRemotes,
     pullBranch,
@@ -406,7 +407,7 @@ function resolvePendingDeletion(
   context: LogInkContext
 ): { kind: LogInkDeletableKind; id: string } | undefined {
   const { filter } = state
-  if (id === 'delete-branch') {
+  if (id === 'delete-branch' || id === 'force-delete-branch') {
     const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
     const visible = filter
       ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], filter))
@@ -3148,6 +3149,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!branch) return { ok: false, message: 'No branch selected' }
         return deleteBranch(git, branch)
       },
+      'force-delete-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return deleteBranch(git, branch, true)
+      },
       'delete-tag': async () => {
         const all = sortTags(context.tags?.tags || [], state.tagSort)
         const visible = state.filter
@@ -3887,6 +3897,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     try {
     const result = await handler()
     dispatch({ type: 'setStatus', value: result?.message || 'Workflow action complete' })
+    // A safe `delete-branch` (`git branch -d`) refuses branches that
+    // aren't fully merged. Rather than dead-end on git's raw error, raise
+    // a second y-confirm offering the force-delete (`git branch -D`). The
+    // cursor hasn't moved (the delete failed), so the force handler
+    // re-resolves the same branch.
+    if (id === 'delete-branch' && !result?.ok && isBranchNotFullyMergedError(result?.message)) {
+      dispatch({ type: 'setPendingConfirmation', value: 'force-delete-branch' })
+    }
     // Refresh history rows AS WELL when the workflow could have
     // changed the commits the user sees (#945 follow-up). The
     // workflow IDs below all either create/rewrite local commits or
