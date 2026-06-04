@@ -277,7 +277,7 @@ export function fetchBranch(
   if (!branch.upstream || !branch.remote) {
     return Promise.resolve({
       ok: false,
-      message: `${branch.shortName} has no upstream — nothing to fetch.`,
+      message: `${branch.shortName} has no upstream — set one with \`git push -u <remote> ${branch.shortName}\` to enable fetch.`,
     })
   }
 
@@ -326,7 +326,7 @@ export function pullBranch(
   if (!branch.upstream || !branch.remote) {
     return Promise.resolve({
       ok: false,
-      message: `${branch.shortName} has no upstream — nothing to pull.`,
+      message: `${branch.shortName} has no upstream — set one with \`git push -u <remote> ${branch.shortName}\` to enable pull.`,
     })
   }
 

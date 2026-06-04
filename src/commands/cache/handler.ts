@@ -3,25 +3,26 @@ import * as fs from 'node:fs'
 import chalk from 'chalk'
 
 import {
-  clearCachedParser,
-  getCachedParserStatus,
-  type LazyTreeSitterLanguageId,
+    clearCachedParser,
+    getCachedParserStatus,
+    type LazyTreeSitterLanguageId,
 } from '../../lib/parsers/default/__tree_sitter__/cache'
 import {
-  listManifestLanguages,
-  TREE_SITTER_MANIFEST,
+    listManifestLanguages,
+    TREE_SITTER_MANIFEST,
 } from '../../lib/parsers/default/__tree_sitter__/manifest'
 import {
-  parsePrefetchEnv,
-  prefetchTreeSitterParsers,
+    parsePrefetchEnv,
+    prefetchTreeSitterParsers,
 } from '../../lib/parsers/default/__tree_sitter__/prefetch'
 import {
-  clearDiffSummaryCache,
-  getDiffSummaryCachePath,
+    clearDiffSummaryCache,
+    getDiffSummaryCachePath,
 } from '../../lib/parsers/default/utils/diffSummaryCache'
 import { clearGitHubListCache } from '../../git/githubListCache'
 import { checkboxPrompt } from '../../lib/ui/inquirerPrompts'
 import { CommandHandler } from '../../lib/types'
+import { commandExit } from '../../lib/utils/commandExit'
 import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { CacheArgv } from './config'
 
@@ -172,8 +173,7 @@ export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
     const result = clearDiffSummaryCache(repoPath)
     if (!result.ok) {
       logger.log(chalk.red(`Failed to clear diff-summary cache at ${cachePath}`))
-      process.exitCode = 1
-      return
+      commandExit(1, 'cache clear failed')
     }
     if (result.removed) {
       logger.log(chalk.green(`Cleared diff-summary cache at ${cachePath}`))
@@ -221,8 +221,7 @@ export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
     if (interactive) {
       const picked = await promptLanguageSelection(logger)
       if (!picked) {
-        process.exitCode = 1
-        return
+        commandExit(1, 'cache prefetch cancelled')
       }
       resolved = picked
     }
@@ -241,7 +240,7 @@ export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
       `${chalk.red(`${result.failed.length} failed`)}`,
     )
     if (result.failed.length > 0) {
-      process.exitCode = 1
+      commandExit(1, `cache prefetch failed for ${result.failed.length} language(s)`)
     }
     return
   }
@@ -277,5 +276,5 @@ export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
 
   logger.log(chalk.red(`Unknown cache subcommand: ${subcommand}`))
   logger.log(chalk.dim('Use one of: clear, info, parsers, prefetch, clear-parsers, clear-github'))
-  process.exitCode = 1
+  commandExit(1, `unknown cache subcommand: ${subcommand}`)
 }

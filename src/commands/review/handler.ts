@@ -18,6 +18,7 @@ import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { CommandHandler } from '../../lib/types'
 import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
+import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
 import { commandExit } from '../../lib/utils/commandExit'
@@ -44,8 +45,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const model = reviewService.model
 
   if (config.service.authentication.type !== 'None' && !key) {
-    logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
-    commandExit(1)
+    handleMissingApiKey(logger, config, { command: 'review' })
   }
 
   const tokenizer = await getTokenCounter(

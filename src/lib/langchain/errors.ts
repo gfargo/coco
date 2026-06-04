@@ -40,10 +40,22 @@ export class LangChainExecutionError extends LangChainError {
 
 /**
  * Authentication-related errors (missing API keys, invalid credentials, etc.)
+ *
+ * Carries `provider` + `endpoint` context so the formatter (in
+ * `commandExecutor`) can render provider-specific recovery hints
+ * ("set OPENAI_API_KEY", "run `gh auth login`", etc.) instead of the
+ * generic "verify your API key" copy. Mirrors the shape of
+ * `LangChainNetworkError` so call sites can hand the same fields to
+ * either constructor depending on which condition fired.
  */
 export class LangChainAuthenticationError extends LangChainError {
-  constructor(message: string, context?: Record<string, unknown>) {
-    super(message, context)
+  constructor(
+    message: string,
+    public readonly provider?: string,
+    public readonly endpoint?: string,
+    context?: Record<string, unknown>
+  ) {
+    super(message, { ...context, provider, endpoint })
   }
 }
 

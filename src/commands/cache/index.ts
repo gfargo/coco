@@ -4,7 +4,7 @@ import { handler } from './handler'
 
 export default {
   command,
-  desc: 'Manage the diff-summary cache (clear, info)',
+  desc: 'Manage coco caches (clear, info, parsers, prefetch, github)',
   builder,
   handler: commandExecutor(handler),
 }

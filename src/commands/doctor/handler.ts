@@ -4,15 +4,17 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getConfigSources, ConfigSourceInfo } from '../../lib/config/utils/loadConfig'
 import { SCHEMA_PUBLIC_URL } from '../../lib/schema'
 import { CommandHandler } from '../../lib/types'
+import { FAIL, INFO, PASS, WARN } from '../../lib/ui/glyphs'
 import { LOGO } from '../../lib/ui/helpers'
+import { commandExit } from '../../lib/utils/commandExit'
 import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { DoctorArgv, DoctorOptions } from './config'
 import { DiagnosticSeverity, runDiagnostics } from './checks'
 
 const SEVERITY_ICON: Record<DiagnosticSeverity, string> = {
-  error: chalk.red('✖'),
-  warn: chalk.yellow('⚠'),
-  info: chalk.blue('ℹ'),
+  error: FAIL(),
+  warn: WARN(),
+  info: INFO(),
 }
 
 const SEVERITY_LABEL: Record<DiagnosticSeverity, string> = {
@@ -34,9 +36,9 @@ function formatSourceInfo(sources: ConfigSourceInfo[]): string[] {
   for (const source of sources) {
     const label = SOURCE_LABELS[source.source] || source.source
     if (source.path) {
-      lines.push(`  ${chalk.green('✓')} ${label} ${chalk.dim(`(${source.path})`)}`)
+      lines.push(`  ${PASS()} ${label} ${chalk.dim(`(${source.path})`)}`)
     } else {
-      lines.push(`  ${chalk.green('✓')} ${label}`)
+      lines.push(`  ${PASS()} ${label}`)
     }
   }
   return lines
@@ -81,7 +83,7 @@ export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
   const diagnostics = runDiagnostics(config)
 
   if (diagnostics.length === 0) {
-    logger.log(chalk.green('✓ No issues found. Your configuration looks good!'))
+    logger.log(chalk.green(`${PASS()} No issues found. Your configuration looks good!`))
     return
   }
 
@@ -153,7 +155,7 @@ export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
 
       for (const diagnostic of fixable) {
         diagnostic.autoFix!(raw)
-        logger.log(chalk.green(`  ✓ Fixed: ${diagnostic.message}`))
+        logger.log(chalk.green(`  ${PASS()} Fixed: ${diagnostic.message}`))
       }
 
       // Ensure $schema is present
@@ -171,5 +173,15 @@ export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
     if (fixable.length > 0) {
       logger.log(chalk.dim(`${fixable.length} issue(s) can be auto-fixed. Run \`coco doctor --fix\` to apply.`))
     }
+  }
+
+  // Exit non-zero when error-severity diagnostics were surfaced so CI
+  // pipelines can gate on `coco doctor` without parsing its stdout.
+  // Warnings + infos still exit clean — they're informational, not
+  // blockers. Auto-fixed errors keep the non-zero exit so the CI run
+  // surfaces "we patched something for you, please commit it" rather
+  // than masquerading as a passing check.
+  if (errors.length > 0) {
+    commandExit(1, `${errors.length} doctor error(s)`)
   }
 }

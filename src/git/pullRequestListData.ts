@@ -1,10 +1,10 @@
 import { SimpleGit } from 'simple-git'
 import {
-  defaultGhRunner,
-  getGitHubRepository,
-  isGhAuthenticated,
-  type GhRunner,
-  type GitHubRepository,
+    defaultGhRunner,
+    describeGhStatus,
+    getGhStatus,
+    getGitHubRepository, type GhRunner,
+    type GitHubRepository
 } from './githubCli'
 
 export type PullRequestState = 'open' | 'closed' | 'merged' | 'all'
@@ -164,13 +164,14 @@ export async function getPullRequestList(
     }
   }
 
-  if (!(await isGhAuthenticated(runner))) {
+  const ghStatus = await getGhStatus(runner)
+  if (ghStatus.kind !== 'ok') {
     return {
       available: true,
       authenticated: false,
       repository,
       filter,
-      message: 'GitHub CLI is missing or not authenticated.',
+      message: describeGhStatus(ghStatus),
     }
   }
 

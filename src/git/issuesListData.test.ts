@@ -25,11 +25,19 @@ describe('issuesListData', () => {
   })
 
   it('returns unauthenticated when `gh auth status` throws', async () => {
-    const runner = jest.fn().mockRejectedValueOnce(new Error('not installed'))
+    // The MEDIUM-7 refactor (#TBD) tags gh failures with a structured
+    // status (`not-installed` / `not-authenticated` / `unknown`).
+    // ENOENT collapses to `not-installed`; other errors collapse to
+    // `unknown`. Either way the overview's `authenticated` flag is
+    // false — that's the contract the data layer ships.
+    const enoentError = Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' })
+    const runner = jest.fn().mockRejectedValueOnce(enoentError)
     const overview = await getIssueList(githubRemoteGit(), {}, runner)
     expect(overview.authenticated).toBe(false)
     expect(overview.repository).toEqual({ owner: 'gfargo', name: 'coco' })
-    expect(overview.message).toMatch(/missing or not authenticated/)
+    // Match either the ENOENT-specific copy or the generic
+    // unauthenticated message — both are valid for "gh isn't usable".
+    expect(overview.message).toMatch(/not installed|not authenticated/)
   })
 
   it('parses a populated issue list', async () => {

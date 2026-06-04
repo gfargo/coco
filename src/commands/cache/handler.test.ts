@@ -3,9 +3,9 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 
 import {
-  diffSummaryKey,
-  getDiffSummaryCachePath,
-  writeDiffSummary,
+    diffSummaryKey,
+    getDiffSummaryCachePath,
+    writeDiffSummary,
 } from '../../lib/parsers/default/utils/diffSummaryCache'
 import { handler } from './handler'
 
@@ -63,12 +63,18 @@ describe('coco cache <subcommand>', () => {
     expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('No diff-summary cache'))
   })
 
-  it('rejects unknown subcommands and sets exit code', async () => {
-    const previousExit = process.exitCode
-    await handler({ subcommand: 'panic' } as never, logger as never)
+  it('rejects unknown subcommands and exits non-zero', async () => {
+    // Switched to `commandExit(1)` (throws CommandExitError) so the
+    // wrapping `commandExecutor` can route exit codes uniformly. The
+    // pre-MEDIUM-6 path used a raw `process.exitCode = 1` which the
+    // test asserted directly; now we assert the throw instead.
+    await expect(
+      handler({ subcommand: 'panic' } as never, logger as never)
+    ).rejects.toMatchObject({
+      name: 'CommandExitError',
+      code: 1,
+    })
     expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Unknown cache subcommand'))
-    expect(process.exitCode).toBe(1)
-    process.exitCode = previousExit
   })
 
   describe('tree-sitter subcommands (#933 phase 7)', () => {

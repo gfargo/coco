@@ -40,20 +40,51 @@ function formatNetworkError(error: LangChainNetworkError, logger: Logger): void 
     logger.log('  • Ensure the LLM service is running and accessible', { color: 'white' })
   }
 
+  logger.log('  • Run `coco doctor` to verify your configured provider + endpoint', { color: 'white' })
+
   logger.verbose(`\nOriginal error: ${error.message}`, { color: 'gray' })
 }
 
 /**
- * Formats an authentication error with helpful information
+ * Formats an authentication error with provider-aware troubleshooting.
+ *
+ * Pre-MEDIUM-8 the formatter was generic — "verify your API key,
+ * check it hasn't expired" — because the error class didn't carry
+ * any provider context. Now that `LangChainAuthenticationError`
+ * carries `provider` + `endpoint` (mirroring `LangChainNetworkError`),
+ * we can name the env var the user actually needs to set and route
+ * Ollama / OpenAI-compatible / managed-provider users through the
+ * right next step.
  */
 function formatAuthenticationError(error: LangChainAuthenticationError, logger: Logger): void {
+  const provider = error.provider || 'LLM service'
+  const endpoint = error.endpoint
+
   logger.log('\nFailed to execute command', { color: 'yellow' })
-  logger.log('\nError: Authentication failed', { color: 'red' })
+  logger.log(`\nError: Authentication failed${error.provider ? ` for ${provider}` : ''}`, { color: 'red' })
+
+  if (endpoint) {
+    logger.log(`       Endpoint: ${endpoint}`, { color: 'red' })
+  }
 
   logger.log('\nTroubleshooting:', { color: 'cyan' })
-  logger.log('  • Verify your API key is correct', { color: 'white' })
-  logger.log('  • Check that your API key has not expired', { color: 'white' })
-  logger.log('  • Ensure the API key is set in your environment or config', { color: 'white' })
+  logger.log('  • Verify your API key is correct and has not expired', { color: 'white' })
+
+  // Provider-specific env var hint when we know the provider.
+  if (provider === 'openai' || provider === 'OpenAI') {
+    logger.log('  • Set `OPENAI_API_KEY` in your shell or `service.authentication.credentials.apiKey` in config', { color: 'white' })
+  } else if (provider === 'anthropic' || provider === 'Anthropic') {
+    logger.log('  • Set `ANTHROPIC_API_KEY` in your shell or `service.authentication.credentials.apiKey` in config', { color: 'white' })
+  } else if (provider === 'ollama' || provider === 'Ollama') {
+    logger.log('  • Ollama usually does not need a key — check `service.endpoint` and that `ollama serve` is running', { color: 'white' })
+  } else if (provider === 'openai-compatible') {
+    logger.log('  • OpenAI-compatible endpoints need both `service.endpoint` and a valid API key', { color: 'white' })
+  } else {
+    logger.log('  • Ensure the API key is set in your environment or config', { color: 'white' })
+  }
+
+  logger.log('  • Run `coco init` to (re)configure your provider + key', { color: 'white' })
+  logger.log('  • Run `coco doctor` to inspect the active config sources', { color: 'white' })
 
   logger.verbose(`\nOriginal error: ${error.message}`, { color: 'gray' })
 }

@@ -17,6 +17,7 @@ import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
+import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { handleResult } from '../../lib/ui/handleResult'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
@@ -38,8 +39,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const model = recapService.model
 
   if (config.service.authentication.type !== 'None' && !key) {
-    logger.log(`No API Key found. 🗝️🚪`, { color: 'red' })
-    commandExit(1)
+    handleMissingApiKey(logger, config, { command: 'recap' })
   }
 
   const tokenizer = await getTokenCounter(
