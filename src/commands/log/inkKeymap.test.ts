@@ -2,6 +2,7 @@ import {
     LOG_INK_KEY_BINDINGS,
     combineLogInkBreadcrumbSegments,
     filterLogInkPaletteCommands,
+    formatBindingBareKeys,
     formatLogInkBreadcrumb,
     formatLogInkRepoBreadcrumb,
     getLogInkChordContinuations,
@@ -9,6 +10,7 @@ import {
     getLogInkFooterHints,
     getLogInkHelpSections,
     getLogInkPaletteCommands,
+    getLogInkViewKeyBindings,
 } from './inkKeymap'
 
 describe('log Ink keymap', () => {
@@ -601,6 +603,75 @@ describe('log Ink keymap', () => {
       const binding = LOG_INK_KEY_BINDINGS.find((b) => b.id === 'navigateConflicts')
       expect(binding).toBeDefined()
       expect(binding!.keys).toContain('gx')
+    })
+  })
+
+  describe('view-keys which-key strip (g?, #1137)', () => {
+    it('registers viewKeys on the g? chord', () => {
+      const binding = LOG_INK_KEY_BINDINGS.find((b) => b.id === 'viewKeys')
+      expect(binding).toBeDefined()
+      expect(binding!.keys).toEqual(['g?'])
+    })
+
+    it('surfaces in the g-chord which-key continuations', () => {
+      const continuations = getLogInkChordContinuations('g')
+      expect(continuations.some((c) => c.key === '?' && c.label === 'keys')).toBe(true)
+    })
+
+    it('is reachable from the command palette', () => {
+      const ids = getLogInkPaletteCommands().map((command) => command.id)
+      expect(ids).toContain('viewKeys')
+    })
+
+    it('lists single-key view actions sourced from the binding table', () => {
+      const bindings = getLogInkViewKeyBindings({ activeView: 'history', focus: 'commits' })
+      const ids = bindings.map((b) => b.id)
+      // History overloads the issue calls out: cherry-pick (c), revert (R), etc.
+      expect(ids).toContain('viewCherryPick')
+      expect(ids).toContain('revertSelection')
+      // Every entry exposes at least one bare single key.
+      expect(bindings.every((b) => b.keys.some((k) => k.length === 1))).toBe(true)
+    })
+
+    it('excludes chord-only and global bindings', () => {
+      const bindings = getLogInkViewKeyBindings({ activeView: 'history', focus: 'commits' })
+      const ids = bindings.map((b) => b.id)
+      // Globals (help/quit) and chord-only nav (gh/gs/…) are not single-key
+      // per-view actions and stay out of the strip.
+      expect(ids).not.toContain('help')
+      expect(ids).not.toContain('quit')
+      expect(ids).not.toContain('navigateHome')
+      expect(ids).not.toContain('viewKeys')
+    })
+
+    it('changes with the active view context', () => {
+      const branches = getLogInkViewKeyBindings({ activeView: 'branches', focus: 'commits' })
+        .map((b) => b.id)
+      // markForCompare (m) is a branches/tags/history action.
+      expect(branches).toContain('markForCompare')
+      // Sidebar-only tab cycling shouldn't appear when focus is on commits.
+      const sidebar = getLogInkViewKeyBindings({ activeView: 'history', focus: 'sidebar' })
+        .map((b) => b.id)
+      expect(sidebar).toContain('nextSidebarTab')
+    })
+
+    it('sorts entries by their first bare key', () => {
+      const bindings = getLogInkViewKeyBindings({ activeView: 'history', focus: 'commits' })
+      const keys = bindings.map((b) => formatBindingBareKeys(b).charAt(0))
+      expect(keys).toEqual([...keys].sort((a, b) => a.localeCompare(b)))
+    })
+  })
+
+  describe('formatBindingBareKeys', () => {
+    it('keeps only bare single keys, dropping named and chord keys', () => {
+      const moveUp = LOG_INK_KEY_BINDINGS.find((b) => b.id === 'moveUp')!
+      // keys: ['up', 'k'] → only 'k' is bare.
+      expect(formatBindingBareKeys(moveUp)).toBe('k')
+    })
+
+    it('joins multiple bare keys with a slash', () => {
+      const binding = { id: 'x', keys: ['a', 'A'], label: '', description: '', contexts: [] } as never
+      expect(formatBindingBareKeys(binding)).toBe('a / A')
     })
   })
 

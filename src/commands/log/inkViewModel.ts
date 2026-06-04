@@ -291,6 +291,14 @@ export type LogInkState = {
    * field — the rendered panel does the clamp.
    */
   helpScrollOffset: number
+  /**
+   * Which-key view-keys strip (#1137). When true, the detail panel shows a
+   * compact list of the single-key actions available in the current view,
+   * sourced from `LOG_INK_KEY_BINDINGS`. Opened by the `g?` chord; the
+   * per-view counterpart to the `g`-chord continuation overlay. Mutually
+   * exclusive with the other overlays.
+   */
+  showViewKeys: boolean
   showCommandPalette: boolean
   /**
    * Command-palette interaction state. `paletteFilter` is the user-typed
@@ -815,6 +823,7 @@ export type LogInkAction =
   | { type: 'toggleGraph' }
   | { type: 'toggleHelp' }
   | { type: 'scrollHelp'; delta: number }
+  | { type: 'toggleViewKeys' }
   | { type: 'toggleCommandPalette' }
   | { type: 'toggleThemePicker' }
   | { type: 'moveThemePicker'; delta: number; presetCount: number }
@@ -1386,6 +1395,7 @@ export function createLogInkState(
     fullGraph: options.fullGraph ?? true,
     showHelp: false,
     helpScrollOffset: 0,
+    showViewKeys: false,
     showCommandPalette: false,
     workflowActionId: undefined,
     pendingConfirmationId: undefined,
@@ -2136,6 +2146,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         showCommandPalette: false,
         showHelp: false,
         helpScrollOffset: 0,
+        showViewKeys: false,
         pendingKey: undefined,
       }
     case 'toggleGraph':
@@ -2154,9 +2165,24 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // than picking up where the user last scrolled.
         helpScrollOffset: 0,
         showCommandPalette: false,
+        // Opening full help supersedes the compact view-keys strip — this
+        // is the progressive-disclosure step (`?` from the strip expands
+        // to the full categorized help, #1137).
+        showViewKeys: false,
         pendingKey: undefined,
       }
     }
+    case 'toggleViewKeys':
+      return {
+        ...state,
+        showViewKeys: !state.showViewKeys,
+        // The view-keys strip is mutually exclusive with the other
+        // overlays; opening it closes anything else that was showing.
+        showHelp: false,
+        helpScrollOffset: 0,
+        showCommandPalette: false,
+        pendingKey: undefined,
+      }
     case 'scrollHelp':
       // No upper-bound clamp here — the renderer caps the offset
       // against the actual content height at render time. The
@@ -2173,6 +2199,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         showCommandPalette: opening,
         showHelp: false,
         helpScrollOffset: 0,
+        showViewKeys: false,
         // Reset palette interaction state on every open/close so the next
         // session starts from a clean slate.
         paletteFilter: '',
@@ -2223,8 +2250,9 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         showThemePicker: opening,
-        // Only one overlay at a time — close help / palette on open.
+        // Only one overlay at a time — close help / palette / view-keys on open.
         showHelp: false,
+        showViewKeys: false,
         showCommandPalette: false,
         themePickerFilter: '',
         themePickerIndex: 0,

@@ -77,7 +77,7 @@ Available in every view (unless an overlay/mode has claimed the keyboard):
 |-----|--------|
 | `q` | Quit |
 | `Ctrl+C` | Quit (hard) |
-| `?` | Toggle help overlay |
+| `?` | Toggle help overlay (full categorized help) |
 | `:` | Command palette |
 | `/` | Enter filter mode |
 | `g` | Chord prefix (see below) |
@@ -122,6 +122,7 @@ the which-key overlay lists them live when you press `g`.
 | `g M` | Submodules |
 | `g T` | Changelog |
 | `g H` | Apply cursored hunk to index (`git apply --cached`) |
+| `g ?` | **Which-key strip** (overlay, not nav) — surfaces the *single-key* actions available in the current view (the deliberate overloads below), sourced live from `LOG_INK_KEY_BINDINGS`. `?` from the strip expands to the full help; `Esc` closes. The per-view counterpart to this very `g`-chord menu. |
 
 ---
 

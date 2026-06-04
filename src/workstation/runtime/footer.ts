@@ -88,6 +88,7 @@ export function renderFooter(
   const overlayForcesPane = Boolean(
     state.splitPlan ||
       state.showHelp ||
+      state.showViewKeys ||
       state.showCommandPalette ||
       state.showThemePicker ||
       state.gitignorePicker ||

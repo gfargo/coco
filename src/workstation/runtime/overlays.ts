@@ -24,10 +24,12 @@ import type { LogInkTheme } from '../chrome/theme'
 import { THEME_PRESET_COLORS } from '../chrome/theme'
 import {
     filterLogInkPaletteCommands,
+    formatBindingBareKeys,
     formatBindingKeys,
     getLogInkChordContinuations,
     getLogInkHelpSections,
     getLogInkPaletteCommands,
+    getLogInkViewKeyBindings,
 } from '../../commands/log/inkKeymap'
 import type { LogInkState } from '../../commands/log/inkViewModel'
 import { filterThemePresets } from '../../commands/log/inkViewModel'
@@ -219,6 +221,71 @@ export function renderChordOverlay(
     key: 'chord-hint',
     dimColor: true,
   }, truncateCells('press the second key to jump · esc cancels', width - 4)))
+
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  }, ...lines)
+}
+
+/**
+ * Which-key view-keys strip (#1137). The per-view counterpart to the
+ * `g`-chord overlay: opened by `g?`, it lists the single-key actions
+ * available in the current view (the deliberate overloads — `c`, `R`,
+ * `a`, `m`, `S`, `[`/`]`, …) with their labels, sourced from
+ * `LOG_INK_KEY_BINDINGS` filtered by the active view + focus.
+ *
+ * Renders in the detail panel slot like the chord overlay. `?` steps up
+ * to the full categorized help; Esc closes.
+ */
+export function renderViewKeysOverlay(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  state: LogInkState,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  const bindings = getLogInkViewKeyBindings({
+    activeView: state.activeView,
+    focus: state.focus,
+  })
+  const accent = theme.noColor ? undefined : theme.colors.accent
+
+  const lines: ReactTypes.ReactNode[] = [
+    h(Text, { key: 'view-keys-title', bold: true }, panelTitle(`keys · ${state.activeView}`, focused)),
+    h(Text, { key: 'view-keys-spacer' }, ''),
+  ]
+
+  if (bindings.length === 0) {
+    lines.push(h(Text, {
+      key: 'view-keys-empty',
+      dimColor: true,
+    }, truncateCells('No single-key actions in this view — use ? for the full help.', width - 4)))
+  } else {
+    // Pad keys to the widest entry so labels align into a scannable column.
+    const keyColumn = bindings.reduce(
+      (max, binding) => Math.max(max, formatBindingBareKeys(binding).length),
+      0
+    )
+    for (const binding of bindings) {
+      const keys = formatBindingBareKeys(binding)
+      lines.push(h(Text, { key: `view-keys-${binding.id}` },
+        h(Text, { color: accent, bold: true }, `  ${keys.padEnd(keyColumn)}  `),
+        h(Text, undefined, truncateCells(`${binding.label.padEnd(14)} ${binding.description}`, width - keyColumn - 7))
+      ))
+    }
+  }
+
+  lines.push(h(Text, { key: 'view-keys-foot-spacer' }, ''))
+  lines.push(h(Text, {
+    key: 'view-keys-hint',
+    dimColor: true,
+  }, truncateCells('? full help · esc closes', width - 4)))
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
