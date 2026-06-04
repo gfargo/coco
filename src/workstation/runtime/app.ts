@@ -1065,6 +1065,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       (current) => updateLogInkContextStatus(current, 'worktree', 'ready'),
       issuedAtDepth,
     )
+    // Returned so callers needing the *fresh* overview (e.g. post-commit
+    // navigation) can read it directly instead of racing the async
+    // `setContext` update, which won't be visible in their closure.
+    return worktree
   }, [git, runtimes.length, setContext, setContextStatus])
 
   // Live refresh: watch .git metadata + the working tree root and reload
@@ -2022,7 +2026,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // and see the pre-commit log (same silent-failure shape as
       // the split-apply case caught in this PR).
       await refreshHistoryRows()
-      await refreshWorktreeContext()
+      const worktree = await refreshWorktreeContext()
+      // Leave the compose view automatically: a still-dirty tree returns
+      // to Status (so the user can keep staging), an otherwise-complete
+      // commit returns to History (where the new commit now shows). The
+      // reducer inspects the live viewStack to pick the destination.
+      const stillDirty = Boolean(
+        worktree &&
+          worktree.stagedCount + worktree.unstagedCount + worktree.untrackedCount > 0,
+      )
+      dispatch({ type: 'returnFromCommit', stillDirty })
     }
   }, [
     context.worktree?.stagedCount,

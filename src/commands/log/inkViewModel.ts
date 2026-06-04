@@ -793,6 +793,7 @@ export type LogInkAction =
   | { type: 'pushRepoFrame'; label: string; workdir?: string; entryRange?: LogInkRepoFrameEntryRange }
   | { type: 'popRepoFrame' }
   | { type: 'navigateHome' }
+  | { type: 'returnFromCommit'; stillDirty: boolean }
   | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
   | { type: 'navigateOpenDiffForStash'; ref: string; stashIndex?: number }
@@ -1949,6 +1950,23 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingCommitFocused: false,
         pendingKey: undefined,
       }
+    }
+    case 'returnFromCommit': {
+      // After a successful commit we leave the compose view automatically.
+      // Where to: a still-dirty tree the user was staging from returns to
+      // the Status view so they can finish the rest; an otherwise-complete
+      // commit returns to the History view, where the new commit now shows.
+      // We pop frames one at a time (reusing withPoppedView) so sidebar-tab
+      // and diff-state restoration stays identical to manual Esc/back —
+      // this also unwinds an intermediate `diff` frame (status → diff →
+      // compose) back to the status frame it sits under.
+      const target: LogInkView =
+        action.stillDirty && state.viewStack.includes('status') ? 'status' : HOME_VIEW
+      let next = state
+      while (next.viewStack.length > 1 && topOfStack(next.viewStack) !== target) {
+        next = withPoppedView(next)
+      }
+      return { ...next, pendingKey: undefined }
     }
     case 'navigateOpenDiffForCommit': {
       const next = withPushedView(state, 'diff')

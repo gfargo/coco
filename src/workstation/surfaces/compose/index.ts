@@ -76,10 +76,16 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
   const bodyVisualLines = compose.body
     ? compose.body.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth)).slice(0, bodyRowsAvailable)
     : ['<empty>']
-  const summaryVisualLines = wrapCells(
-    `${compose.summary || '<empty>'}${summaryCursor}`,
-    Math.max(8, width - 11) // "Summary  " (9) + 2 chrome = 11
-  )
+  // Summary now renders on its own indented line under the label (like the
+  // body), so it wraps at the full content width instead of the cramped
+  // "Summary  " (9) + chrome budget it had when label and value shared a row.
+  const summaryVisualLines = compose.summary
+    ? compose.summary.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth))
+    : ['<empty>']
+  // Subject length drives a subtle counter on the Summary label: dim under
+  // 50, warning past the conventional 50-char soft limit, danger past 72.
+  // Counted in code points so multibyte subjects aren't over-counted.
+  const summaryLength = [...compose.summary].length
   // State-line cycles through three modes (#881 phase 3 added the
   // loading variant): editing copy when the user is typing, cancel
   // hint when an AI draft is generating, default guidance otherwise.
@@ -100,6 +106,63 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
     ? formatLogInkComposeEmpty({ hasStaged: hasStagedFiles })
     : undefined
 
+  // Section header for a field (Summary / Body). The active field's label
+  // carries an arrow marker + the repo's selection highlight (matching the
+  // status surface, see status/index.ts) so the user can see which field
+  // their keystrokes target — even before entering edit mode, and even
+  // under NO_COLOR where the marker + bold/dim carry the signal alone. An
+  // optional length counter (Summary only) trails the label outside the
+  // highlight so its own warning/danger color stays legible.
+  const renderSectionHeader = (
+    name: string,
+    field: typeof compose.field,
+    count?: number,
+  ): ReactTypes.ReactElement => {
+    const active = compose.field === field
+    const highlight = active && focused && !theme.noColor
+    const marker = active ? (theme.ascii ? '> ' : '▸ ') : '  '
+    const badge = active && compose.editing ? '  EDITING' : ''
+    const children: ReactTypes.ReactElement[] = [
+      h(Text, {
+        key: `compose-${field}-label`,
+        bold: active,
+        dimColor: !active,
+        backgroundColor: highlight ? theme.colors.selection : undefined,
+        color: highlight ? theme.colors.selectionForeground : undefined,
+      }, `${marker}${name}${badge}`),
+    ]
+    if (count !== undefined) {
+      const countColor = theme.noColor
+        ? undefined
+        : count > 72
+          ? theme.colors.danger
+          : count > 50
+            ? theme.colors.warning
+            : undefined
+      children.push(h(Text, {
+        key: `compose-${field}-count`,
+        color: countColor,
+        dimColor: countColor === undefined,
+      }, ` ${count}`))
+    }
+    return h(Box, { key: `compose-${field}-header` }, ...children)
+  }
+
+  // Content lines for a field — indented two cells under the header, with
+  // the edit cursor parked on the final line when this field is active.
+  const renderSectionContent = (
+    lines: string[],
+    field: string,
+    cursor: string,
+  ): ReactTypes.ReactElement[] =>
+    lines.map((line, index) => {
+      const isLast = index === lines.length - 1
+      return h(Text, {
+        key: `compose-${field}-${index}`,
+        dimColor: line === '<empty>',
+      }, `  ${line}${cursor && isLast ? cursor : ''}`)
+    })
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -113,24 +176,11 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
     h(Text, { dimColor: true }, statusLine)
   ),
   h(Text, undefined, ''),
-  h(Text, {
-    bold: compose.field === 'summary' && compose.editing,
-  }, `Summary  ${summaryVisualLines[0] || ''}`),
-  ...summaryVisualLines.slice(1).map((line, index) => h(Text, {
-    key: `compose-summary-${index}`,
-    bold: compose.field === 'summary' && compose.editing,
-  }, `         ${line}`)),
+  renderSectionHeader('Summary', 'summary', summaryLength > 0 ? summaryLength : undefined),
+  ...renderSectionContent(summaryVisualLines, 'summary', summaryCursor),
   h(Text, undefined, ''),
-  h(Text, {
-    bold: compose.field === 'body' && compose.editing,
-  }, 'Body'),
-  ...bodyVisualLines.map((line, index) => {
-    const isLast = index === bodyVisualLines.length - 1
-    return h(Text, {
-      key: `compose-body-${index}`,
-      dimColor: line === '<empty>',
-    }, `  ${line}${bodyCursor && isLast ? bodyCursor : ''}`)
-  }),
+  renderSectionHeader('Body', 'body'),
+  ...renderSectionContent(bodyVisualLines, 'body', bodyCursor),
   // Loading indicator + post-action message belong inline with the draft
   // (they describe what just happened to the fields above). The state-
   // line ("Editing — Enter switches summary↔body…" / "Press e to edit
