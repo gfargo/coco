@@ -93,7 +93,7 @@ Output:
   Aggregate summary printed to stdout.
 
 Inputs:
-  - Scenarios: deterministic git states from `@gfargo/git-scenarios`
+  - Scenarios: deterministic git states from \`@gfargo/git-scenarios\`
     (these mostly trigger the lossless trivial-shape path; useful for
     "what does the natural distribution look like").
   - Fixtures: hand-crafted modification diffs in __evals__/fixtures.ts
