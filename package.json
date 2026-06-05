@@ -36,7 +36,7 @@
     "build:info": "tsx bin/generateBuildInfo.ts",
     "build:watch": "rollup -c -w",
     "clean": "npx rimraf dist && npx rimraf coverage",
-    "lint": "eslint src",
+    "lint": "eslint src bin",
     "lint:fix": "eslint --fix src",
     "test": "npm run test:jest && npm run test:publish",
     "test:publish": "npm run lint && npm run build && npm run test:cli && npm pack --dry-run",

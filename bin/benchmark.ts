@@ -27,7 +27,6 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
-import { loadSummarizationChain } from '@langchain/classic/chains'
 import type { Document } from '@langchain/classic/document'
 
 import { fileChangeParser } from '../src/lib/parsers/default'
