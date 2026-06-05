@@ -141,8 +141,13 @@ async function probeIsGitRepo(): Promise<boolean> {
  * `InitArgv`, `UiArgv`, `WorkspaceArgv`) so we can't just spread the
  * raw default argv — we have to project the shared fields and let
  * the handler fill in command-specific defaults.
+ *
+ * Exported for testing: this is the path bare `coco` takes to the
+ * workstation, and it intentionally does NOT set `all` — yargs's
+ * `default: true` for `coco ui` never runs here, so the ui→log argv
+ * mapping has to re-assert that default (#1169).
  */
-function buildSyntheticArgv<T>(argv: DefaultRouteArgv): T {
+export function buildSyntheticArgv<T>(argv: DefaultRouteArgv): T {
   return ({
     _: ['$0'],
     $0: argv.$0,
