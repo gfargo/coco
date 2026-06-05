@@ -4715,5 +4715,21 @@ describe('triage filter cycling (#882 phase 6)', () => {
       expect(after.repoStack.length).toBe(state.repoStack.length)
       expect(after.worktreeCheckoutConflict).toBeUndefined()
     })
+
+    it('r runs the remove-worktree-&-checkout workflow and closes the prompt', () => {
+      const state = conflictState()
+      const events = getLogInkInputEvents(state, 'r')
+      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'conflict-remove-worktree-checkout' })
+      // The runtime owns clearing the conflict (it reads it first), so
+      // the input layer only closes the confirm prompt.
+      const after = applyInput(state, 'r')
+      expect(after.pendingConfirmationId).toBeUndefined()
+    })
+
+    it('x runs the remove-worktree-&-branch workflow and closes the prompt', () => {
+      const state = conflictState()
+      const events = getLogInkInputEvents(state, 'x')
+      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'conflict-remove-worktree-branch' })
+    })
   })
 })

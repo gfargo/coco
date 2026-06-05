@@ -115,4 +115,25 @@ describe('worktree-checkout-conflict confirmation panel (#1175)', () => {
     // Not the generic destructive copy — switching is non-destructive.
     expect(text).not.toContain('Destructive Git action requires confirmation')
   })
+
+  it('enumerates the switch / remove keys', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'switch-to-conflicting-worktree',
+      worktreeCheckoutConflict: { branch: 'feat/x', worktreePath: '/repo/.wt/foo', dirty: false },
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, 120, theme, false))
+    expect(text).toContain('remove worktree & check out here')
+    expect(text).toContain('remove worktree & delete branch')
+  })
+
+  it('warns when the conflicting worktree is dirty', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'switch-to-conflicting-worktree',
+      worktreeCheckoutConflict: { branch: 'feat/x', worktreePath: '/repo/.wt/foo', dirty: true },
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, 120, theme, false))
+    expect(text).toContain('uncommitted changes')
+  })
 })
