@@ -63,6 +63,16 @@ export type ScreenshotRecipe = {
    */
   emitGif?: boolean
   /**
+   * GIF-only: record the workstation *booting up* rather than starting
+   * on the already-painted UI. Normal demo GIFs hide the launch and
+   * start recording after the view has fully settled; a `recordFromBoot`
+   * recipe instead captures the "loading commits" → fully-rendered
+   * transition, for an authentic cold-start "boot" story (used by the
+   * install/get-started section). Only meaningful when `emitGif` is true.
+   * See BOOT_HIDDEN_MS / BOOT_VISIBLE_SETTLE_MS in tape.ts for timing.
+   */
+  recordFromBoot?: boolean
+  /**
    * Add an `origin` remote with this URL to the scenario repo before
    * coco launches. Needed for GitHub-integration views — coco's
    * `getGitHubRepository` parses `github.com/<owner>/<repo>` out of the
@@ -1533,6 +1543,34 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 1900 },
       { kind: 'type', text: 'g' },     // mark the next candidate good
       { kind: 'sleep', ms: 1900 },
+    ],
+  },
+  {
+    name: 'demo-boot-workstation',
+    description:
+      'Cold boot: `coco ui` comes to life on a real repo — loading commits → the full three-pane workstation paints in, then a live cursor walks the rich graph history (install/get-started hero)',
+    scenario: 'rich-history-graph',
+    command: 'ui --view history',
+    emitGif: true,
+    recordFromBoot: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      // The recording opens mid-boot (loading → painted) via recordFromBoot;
+      // by the time the first action fires the workstation is live. Let the
+      // freshly-painted view breathe before touching anything.
+      { kind: 'sleep', ms: 1100 },
+      // Walk the rich multi-branch graph so it reads as a real, interactive
+      // session — not a static screenshot. Unhurried so each row is legible.
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 700 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 700 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 900 },
+      // Open the cursored commit's diff — proof the workstation is doing real
+      // work the instant it boots, then settle on it as the closing frame.
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 2400 },
     ],
   },
 ]

@@ -25,6 +25,7 @@ const WWW_PUBLIC = join(REPO_ROOT, '.www', 'public', 'screenshots')
  */
 const SITE_RECIPES = [
   // Hero GIFs
+  'demo-boot-workstation',
   'demo-workstation-tour',
   'demo-ui-view-switching',
   // Workflow GIFs
@@ -227,6 +228,7 @@ const FILENAME_MAP: Record<string, string[]> = {
   'ui-theme-picker': ['theme-picker.png'],
   'ui-search-filter': ['docs-search.png'],
   'ui-inspector-focused': ['workstation-history.png'],
+  'demo-boot-workstation': ['demo-boot-workstation.gif'],
   'demo-workstation-tour': ['demo-workstation-tour.gif'],
   'demo-ui-view-switching': ['demo-ui-view-switching.gif'],
   'demo-hunk-staging': ['demo-hunk-staging.gif'],

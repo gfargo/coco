@@ -87,6 +87,12 @@ Animated demos are the same recipe shape with `emitGif: true`. They reward a dif
 - Chords type as one `type` action (`{ kind: 'type', text: 'g?' }`). The brief chord-pending flash that produces is a feature — it shows the relationship between the keys.
 - Don't bake a trailing `q` to quit — the tape builder strips it for GIFs so the recording ends on the last rendered UI frame, not an empty shell prompt.
 
+**Recording the boot-up (`recordFromBoot`)**
+
+By default a GIF hides the *entire* launch and starts recording on the already-painted UI — boot is dead air you don't want. Set `recordFromBoot: true` (GIF-only) to instead capture the workstation *coming to life*: the tape stays hidden just long enough to skip the tsx cold-start, then Shows + starts recording while coco is still painting its loading state, so the recording opens on `⎇ <branch> · loading commits` and fills in on camera. This is the install/get-started story (`demo-boot-workstation`).
+
+The timing is sensitive — see `BOOT_HIDDEN_MS` / `BOOT_VISIBLE_SETTLE_MS` in `tape.ts`. Too short and the recording opens on the raw `tsx …/index.ts` shell line (ugly absolute paths); too long and the data has already loaded (no boot reveal). If a regenerated boot GIF opens on the shell command line, your local tsx cold-start is slower than when it was tuned — nudge `BOOT_HIDDEN_MS` up until frame-0 is coco's loading screen again.
+
 **File size — the one that bites**
 
 VHS writes **full, undeduplicated frames**, so size scales with `duration × framerate × changing-pixel area`. A short demo routinely lands at 10–20 MB raw — far too heavy for a web page. Three levers, in order of impact:
@@ -175,9 +181,10 @@ preset (both on the Catppuccin Mocha terminal palette).
 | `cmd-doctor` | `coco doctor` |
 | `cmd-init-dry-run` | `coco init --dry-run` |
 
-### GIF demos (8 animated recordings)
+### GIF demos (animated recordings)
 | Recipe | What it shows | Duration |
 |--------|--------------|----------|
+| `demo-boot-workstation` | Cold boot: `coco ui` comes to life (`⎇ main · loading commits` → rich graph → walk history → open a diff). Install/get-started hero — the only `recordFromBoot` recipe. | ~9s |
 | `demo-workstation-tour` | Workspace multi-repo browsing | ~8s |
 | `demo-ui-view-switching` | Chord navigation between views | ~8s |
 | `demo-hunk-staging` | Stage files from status view | ~7s |

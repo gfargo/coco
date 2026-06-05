@@ -99,3 +99,62 @@ describe('buildTape theme integration', () => {
     }
   })
 })
+
+describe('buildTape launch-settle modes', () => {
+  const opts = {
+    cwd: '/tmp/scenario',
+    outputPng: '/tmp/out.png',
+    outputGif: '/tmp/out.gif',
+    cocoCommand: 'tsx src/index.ts',
+    repoRoot: '/repo',
+    nodeBinDir: '/node',
+  }
+
+  function tapeLines(recipeName: string): string[] {
+    const recipe = findRecipe(recipeName)
+    if (!recipe) throw new Error(`missing recipe ${recipeName}`)
+    return buildTape(recipe, opts).split('\n')
+  }
+
+  // The launch line is the same in every mode; the settle that follows it is
+  // what differs. These helpers locate the boundaries we assert against.
+  const launchIdx = (lines: string[]) =>
+    lines.findIndex((l) => l.includes('--repo') && l.startsWith('Type'))
+  const outputIdx = (lines: string[]) => lines.findIndex((l) => l.startsWith('Output '))
+
+  it('recordFromBoot GIFs start recording on the boot, not after the full settle', () => {
+    // demo-boot-workstation is the only recordFromBoot recipe: it Shows and
+    // starts Output right after a short hidden pre-roll, so the loading→loaded
+    // paint is captured. Crucially it must NOT wait the full 5000ms settle
+    // before recording (that would skip the boot entirely).
+    const lines = tapeLines('demo-boot-workstation')
+    const launch = launchIdx(lines)
+    const output = outputIdx(lines)
+    const between = lines.slice(launch + 1, output)
+
+    expect(output).toBeGreaterThan(launch)
+    expect(between).toContain('Show')
+    // Hidden pre-roll skips the tsx cold-start (~2.2s), never the 5s settle.
+    expect(between).toContain('Sleep 2200ms')
+    expect(between).not.toContain('Sleep 5000ms')
+  })
+
+  it('normal GIFs hide the whole boot and record on the settled UI', () => {
+    // demo-bisect is a plain emitGif recipe: it waits the full POST_LAUNCH
+    // settle (5000ms) before Show + Output, so frame-0 is the finished view.
+    const lines = tapeLines('demo-bisect')
+    const launch = launchIdx(lines)
+    const output = outputIdx(lines)
+    const between = lines.slice(launch + 1, output)
+
+    expect(output).toBeGreaterThan(launch)
+    expect(between).toContain('Sleep 5000ms')
+    expect(between).toContain('Show')
+  })
+
+  it('screenshot recipes never emit an Output (frame-grab only)', () => {
+    const lines = tapeLines('ui-history-pr-ready')
+    expect(outputIdx(lines)).toBe(-1)
+    expect(lines.some((l) => l.startsWith('Screenshot '))).toBe(true)
+  })
+})

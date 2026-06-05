@@ -73,6 +73,63 @@ const DEFAULT_DIMENSIONS = { cols: 140, rows: 40 } as const
 const POST_LAUNCH_SETTLE_MS = 5000
 
 /**
+ * Boot-recording timings (`recordFromBoot` GIFs only). Most demo GIFs
+ * hide the entire launch and start recording on the already-painted UI
+ * (POST_LAUNCH_SETTLE_MS above). A `recordFromBoot` recipe instead wants
+ * to *show* the workstation coming to life: the goal frame-0 is coco's
+ * full-screen chrome already mounted but still "Loading commits…", which
+ * then fills in with real data on camera.
+ *
+ * The timing here is sensitive and was tuned empirically against
+ * `demo-boot-workstation` (warm tsx cache):
+ *   - < ~1700ms: tsx hasn't mounted coco yet, so Show reveals the raw
+ *     `tsx …/index.ts ui …` launch line on the shell — ugly absolute
+ *     paths, looks broken.
+ *   - ~2000ms:   alt-screen mounted, but coco still shows its `<detached>`
+ *     branch placeholder while it resolves HEAD — usable, but off-message.
+ *   - ~2200ms:   the sweet spot — sidebar + header resolved (`⎇ main ·
+ *     loading commits`), only the commit graph still spinning. The clean
+ *     "coming to life" frame we want.
+ *   - > ~2600ms: data has already loaded; frame-0 is the finished UI and
+ *     the boot reveal is lost (degrades to a normal demo GIF).
+ * If a regenerated boot GIF opens on the shell command line, the local
+ * tsx cold-start is slower than when this was tuned — nudge BOOT_HIDDEN_MS
+ * up (toward 2500) until frame-0 is coco's loading screen again.
+ */
+const BOOT_HIDDEN_MS = 2200
+const BOOT_VISIBLE_SETTLE_MS = 2800
+
+/**
+ * The launch-to-capture settle lines, which differ by recipe mode:
+ *  - recordFromBoot GIF: hide the cold-start, then Show + Output so the
+ *    loading→loaded paint is recorded (the authentic boot-up).
+ *  - normal GIF: stay hidden through the full settle, then Show + Output
+ *    on the finished UI (no boot/loading frames).
+ *  - screenshot: just settle (Show already happened before the launch).
+ */
+function buildLaunchSettle(recipe: ScreenshotRecipe, options: TapeOptions): string[] {
+  if (recipe.emitGif && recipe.recordFromBoot) {
+    return [
+      `Sleep ${BOOT_HIDDEN_MS}ms`,
+      `Show`,
+      `Output "${options.outputGif}"`,
+      `Sleep ${BOOT_VISIBLE_SETTLE_MS}ms`,
+      ``,
+    ]
+  }
+  if (recipe.emitGif) {
+    return [
+      `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
+      `Show`,
+      `Sleep 500ms`,
+      `Output "${options.outputGif}"`,
+      ``,
+    ]
+  }
+  return [`Sleep ${POST_LAUNCH_SETTLE_MS}ms`]
+}
+
+/**
  * Quote a string for safe inclusion in a VHS `Type "..."` directive.
  * VHS uses double-quoted strings; backslashes and double-quotes need
  * escaping. Newlines aren't supported inside Type — callers should
@@ -213,11 +270,10 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // TypingSpeed at 0 so the command executes immediately.
     `Type "${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
     `Enter`,
-    `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
-    // For GIF recipes: Show first so the terminal renders the UI,
-    // then start Output recording. The extra Sleep ensures the
-    // first captured frame is the fully-painted UI, not a transition.
-    ...(recipe.emitGif ? [`Show`, `Sleep 500ms`, `Output "${options.outputGif}"`, ``] : []),
+    // Settle + (for GIFs) start recording. See buildLaunchSettle for the
+    // three modes — normal GIFs start on the finished UI, recordFromBoot
+    // GIFs start on the boot-up, screenshots just settle.
+    ...buildLaunchSettle(recipe, options),
   ]
 
   // For GIF recipes, strip any trailing quit (`q`) the recipe baked into
