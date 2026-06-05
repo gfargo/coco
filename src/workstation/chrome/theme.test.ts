@@ -1,4 +1,52 @@
-import { createLogInkTheme } from './theme'
+import { presetUsesTrueColor } from './colorSupport'
+import { createLogInkTheme, getLogInkThemePresets, LogInkThemePreset, THEME_PRESET_COLORS } from './theme'
+
+describe('theme preset catalog', () => {
+  // The 12 semantic tokens every color preset must define. `default` is the
+  // ANSI-named baseline (cyan / red / …); every other preset is hand-authored
+  // in hex. With ~90 presets, a single dropped or mistyped token is easy to
+  // miss by eye — this guards the whole registry at once.
+  const REQUIRED_TOKENS = [
+    'accent', 'border', 'danger', 'focusBorder', 'gitAdded', 'gitDeleted',
+    'gitModified', 'info', 'muted', 'selection', 'success', 'warning',
+  ] as const
+
+  const colorPresets = Object.entries(THEME_PRESET_COLORS)
+
+  it.each(colorPresets)('preset "%s" defines every required semantic token', (_name, colors) => {
+    for (const token of REQUIRED_TOKENS) {
+      expect(colors[token]).toBeTruthy()
+    }
+  })
+
+  it.each(colorPresets.filter(([name]) => name !== 'default'))(
+    'preset "%s" uses 6-digit hex for every token',
+    (_name, colors) => {
+      for (const token of REQUIRED_TOKENS) {
+        expect(colors[token]).toMatch(/^#[0-9a-f]{6}$/i)
+      }
+    }
+  )
+
+  it('exposes every preset through getLogInkThemePresets without duplicates', () => {
+    const presets = getLogInkThemePresets()
+    expect(new Set(presets).size).toBe(presets.length)
+    // default + monochrome baselines first, then every THEME_PRESET_COLORS key.
+    expect(presets).toContain('default')
+    expect(presets).toContain('monochrome')
+    for (const key of Object.keys(THEME_PRESET_COLORS)) {
+      expect(presets).toContain(key as LogInkThemePreset)
+    }
+    expect(presets.length).toBe(Object.keys(THEME_PRESET_COLORS).length + 1) // +1 for monochrome
+  })
+
+  it('classifies every preset except the ANSI baselines as truecolor', () => {
+    for (const preset of getLogInkThemePresets()) {
+      const expected = preset !== 'default' && preset !== 'monochrome'
+      expect(presetUsesTrueColor(preset)).toBe(expected)
+    }
+  })
+})
 
 describe('log Ink theme', () => {
   it('creates semantic color tokens for normal terminals', () => {

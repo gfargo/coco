@@ -20,7 +20,7 @@ An AI-powered git assistant that generates meaningful commit messages, creates c
 - 🏠 **Local AI Support** - Run completely offline with Ollama (no API costs, full privacy)
 - 🖥️ **Coco UI Git Workstation** - Sixteen top-level views (history, status, diff, compose, branches, tags, stash, worktrees, pull-request, PR triage, issues, conflicts, reflog, bisect, submodules, changelog) reachable via `g`-prefixed chords, with an interactive command palette (`:`), global search (`/`), and one-keystroke workflows: `S` split staged changes, `L` generate a changelog, `C` create a PR seeded from changelog, `E` open the commit draft in `$EDITOR`
 - 🗂️ **Multi-Repo Workspace** - `coco workspace` (alias `ws`) scans your current directory for git repos and gives you a sortable, filterable overview — branch, dirty count, ahead/behind, open PR count — then `Enter` drills into any one as a full `coco ui` session
-- 🎨 **49 Color Themes** - Catppuccin, Gruvbox, Dracula, Tokyo Night, Solarized, and more (17 light) — browse and **live-preview** them with the in-app theme picker (`gC`), then apply with one keystroke; or set one via `coco ui --theme <name>` / config. `NO_COLOR` honored
+- 🎨 **108 Color Themes** - Catppuccin, Gruvbox, Dracula, Tokyo Night, Monokai Pro, Rosé Pine, Selenized, Solarized, and many more (29 light) — browse and **live-preview** them with the in-app theme picker (`gC`), then apply with one keystroke; or set one via `coco ui --theme <name>` / config. `NO_COLOR` honored
 - 🎯 **`--repo <dir>` global flag** - Drive any coco command against any repository without `cd`-ing first
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
 - 👥 **Team Ready** - Shared configurations and enterprise deployment

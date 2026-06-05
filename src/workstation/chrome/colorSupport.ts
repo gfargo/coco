@@ -68,15 +68,24 @@ export function getColorLevel(env: ColorEnv = process.env): ColorLevel {
   return '16'
 }
 
-const TRUECOLOR_PRESETS = new Set<string>(['catppuccin', 'gruvbox', 'dracula', 'nord', 'solarized-dark', 'tokyo-night', 'one-dark', 'rose-pine', 'kanagawa', 'everforest', 'monokai', 'synthwave', 'ayu-dark', 'palenight', 'github-dark', 'horizon', 'nightfox', 'carbonfox', 'tokyonight-storm', 'catppuccin-latte', 'solarized-light', 'github-light', 'iceberg', 'material-ocean', 'moonlight', 'poimandres', 'vitesse-dark', 'vesper', 'flexoki', 'mellow', 'night-owl', 'cobalt2', 'oceanic-next', 'catppuccin-macchiato', 'gruvbox-light', 'tokyo-night-day', 'one-light', 'ayu-light', 'rose-pine-dawn', 'everforest-light', 'vitesse-light', 'dayfox', 'night-owl-light', 'flexoki-light', 'material-lighter', 'papercolor-light', 'modus-operandi', 'quiet-light'])
+/**
+ * The only presets whose palettes are ANSI-named (not hex): `default`
+ * renders faithfully on 16-color terminals, and `monochrome` carries no
+ * color at all. Every other preset in `THEME_PRESET_COLORS` is hand-authored
+ * in hex, so it's treated as truecolor by definition — no list to keep in
+ * sync as themes are added.
+ */
+const ANSI_NATIVE_PRESETS = new Set<string>(['default', 'monochrome'])
 
 /**
  * `true` when the named preset relies on hex colors that look best under
  * 24-bit RGB. Used by `createLogInkTheme` to decide whether to downgrade
- * to the ANSI-named `default` palette on lower-capability terminals.
+ * to the ANSI-named `default` palette on lower-capability terminals. Every
+ * preset except the two ANSI-native baselines uses hex, so this is derived
+ * rather than enumerated — new themes are covered automatically.
  */
 export function presetUsesTrueColor(preset: string | undefined): boolean {
-  return preset !== undefined && TRUECOLOR_PRESETS.has(preset)
+  return preset !== undefined && !ANSI_NATIVE_PRESETS.has(preset)
 }
 
 /**
