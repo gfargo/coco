@@ -172,6 +172,21 @@ const FORWARDED_ENV_KEYS = [
   'GITHUB_TOKEN',
 ]
 
+/**
+ * The credential subset of FORWARDED_ENV_KEYS — API keys and tokens
+ * whose values must never reach the logs. Kept separate from the
+ * non-secret config keys (provider / model / host / URL) so redaction
+ * targets only real secrets and doesn't blank out, say, a model name or
+ * an Ollama host.
+ */
+const SECRET_ENV_KEYS = [
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'OPENROUTER_API_KEY',
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
+]
+
 function buildEnvExports(): string[] {
   const lines: string[] = []
   for (const key of FORWARDED_ENV_KEYS) {
@@ -185,6 +200,50 @@ function buildEnvExports(): string[] {
     }
   }
   return lines
+}
+
+// Minimum length for a forwarded value to be treated as a secret worth
+// masking. Guards against blanking out short, non-sensitive settings
+// (e.g. an `OLLAMA_HOST` of `localhost`) or empty strings — and against
+// a 1-2 char value matching incidental substrings of the log stream.
+const SECRET_MIN_LENGTH = 8
+
+/**
+ * True when any forwarded env var currently holds a secret-length value.
+ * Lets callers warn (e.g. `--keep-tape`) only when a written tape would
+ * actually contain credentials.
+ */
+export function hasForwardedSecrets(): boolean {
+  return SECRET_ENV_KEYS.some((key) => (process.env[key]?.length ?? 0) >= SECRET_MIN_LENGTH)
+}
+
+/**
+ * Build a function that masks forwarded secret values wherever they
+ * appear in a string. VHS echoes every tape command it runs — including
+ * the `Type "export OPENAI_API_KEY=…"` lines from `buildEnvExports()` —
+ * to its stdout, so without redaction the raw keys/tokens stream into
+ * the terminal and any captured logs.
+ *
+ * Snapshots `process.env` at call time, so call it after the driver has
+ * populated the env (e.g. the `gh auth token` → `GH_TOKEN` fallback).
+ * Returns an identity function when nothing sensitive is set, so callers
+ * can apply it unconditionally.
+ */
+export function createSecretRedactor(): (text: string) => string {
+  const secrets = SECRET_ENV_KEYS
+    .map((key) => process.env[key])
+    .filter((value): value is string => typeof value === 'string' && value.length >= SECRET_MIN_LENGTH)
+    // Longest first so a value that contains a shorter one as a
+    // substring is masked in full before the shorter pass runs.
+    .sort((a, b) => b.length - a.length)
+  if (secrets.length === 0) return (text) => text
+  return (text: string) => {
+    let masked = text
+    for (const secret of secrets) {
+      masked = masked.split(secret).join('[redacted]')
+    }
+    return masked
+  }
 }
 
 /**

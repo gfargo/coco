@@ -25,7 +25,7 @@ import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fromScenario, listRegistered } from '@gfargo/git-scenarios'
 import { findRecipe, listRecipeNames, RECIPES, type ScreenshotRecipe } from './screenshot/recipes'
-import { buildTape } from './screenshot/tape'
+import { buildTape, createSecretRedactor, hasForwardedSecrets } from './screenshot/tape'
 
 const REPO_ROOT = resolve(__dirname, '..')
 
@@ -267,8 +267,14 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
     })
     writeFileSync(tapePath, tape, 'utf8')
 
+    // Capture VHS output (rather than `stdio: 'inherit'`) so we can mask
+    // forwarded secrets before surfacing it: VHS echoes every tape
+    // command it runs, including the `export OPENAI_API_KEY=…` lines, so
+    // inheriting stdout would stream raw keys/tokens to the terminal.
+    const redact = createSecretRedactor()
     const result = spawnSync('vhs', [tapePath], {
-      stdio: 'inherit',
+      stdio: ['inherit', 'pipe', 'pipe'],
+      encoding: 'utf8',
       // Run VHS from the scenario dir so `Screenshot screenshot.png`
       // lands there (VHS resolves relative paths from its cwd).
       cwd: repo.path,
@@ -277,6 +283,8 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
         PATH: process.env.PATH,
       },
     })
+    if (result.stdout) process.stdout.write(redact(result.stdout))
+    if (result.stderr) process.stderr.write(redact(result.stderr))
 
     if (result.status !== 0) {
       throw new Error(`vhs exited with status ${result.status} for recipe ${recipe.name}`)
@@ -311,6 +319,12 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
   } finally {
     if (!options.keepTape && existsSync(tapePath)) {
       rmSync(tapePath, { force: true })
+    } else if (options.keepTape && existsSync(tapePath) && hasForwardedSecrets()) {
+      // The tape has to embed the literal `export KEY=value` lines for
+      // the in-VHS shell to pick them up, so a kept tape contains live
+      // credentials in plaintext. Warn loudly rather than silently
+      // leaving a secret-bearing file in `.screenshots/`.
+      console.log(`  ⚠ ${tapePath} contains forwarded credentials in plaintext — delete it when done debugging.`)
     }
     if (ghMockDir) {
       rmSync(ghMockDir, { recursive: true, force: true })
