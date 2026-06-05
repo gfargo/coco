@@ -118,7 +118,7 @@ export function renderConfirmationPanel(
     : state.pendingMutationConfirmation
     ? 'This discards local changes and cannot be undone by Coco.'
     : isWorktreeConflict && conflict
-    ? `'${conflict.branch}' is checked out at ${conflict.worktreePath}. Press y to switch there, n to cancel.`
+    ? `'${conflict.branch}' is checked out at ${conflict.worktreePath}.${conflict.dirty ? ' That worktree has uncommitted changes — removal will be refused until it is clean or stashed.' : ''}`
     // Second-stage confirm raised when a safe delete hit an unmerged
     // branch — name the reason so the force isn't a blind "y again".
     : state.pendingConfirmationId === 'force-delete-branch'
@@ -138,7 +138,12 @@ export function renderConfirmationPanel(
   h(Text, undefined, truncateCells(label, width - 4)),
   h(Text, { dimColor: true }, truncateCells(warning, width - 4)),
   h(Text, undefined, ''),
-  h(Text, undefined, 'Press y to confirm or n/Esc to cancel.'))
+  h(Text, undefined, truncateCells(
+    isWorktreeConflict
+      ? 'y switch · r remove worktree & check out here · x remove worktree & delete branch · n/Esc cancel'
+      : 'Press y to confirm or n/Esc to cancel.',
+    width - 4,
+  )))
 }
 
 /**

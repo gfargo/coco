@@ -1168,6 +1168,25 @@ export function getLogInkInputEvents(
   }
 
   if (state.pendingConfirmationId) {
+    // Worktree-conflict removal options (#1175): alongside the y-switch,
+    // `r` removes the conflicting worktree and checks the branch out
+    // here, `x` removes the worktree AND deletes the branch. Both defer
+    // to the runtime (it owns the git ops + the conflict context); the
+    // runtime clears the conflict state once it resolves.
+    if (state.pendingConfirmationId === 'switch-to-conflicting-worktree' && state.worktreeCheckoutConflict) {
+      if (inputValue === 'r') {
+        return [
+          { type: 'runWorkflowAction', id: 'conflict-remove-worktree-checkout' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+      if (inputValue === 'x') {
+        return [
+          { type: 'runWorkflowAction', id: 'conflict-remove-worktree-branch' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+    }
     if (inputValue === 'y') {
       // Worktree-conflict switch (#1175): the branch is already checked
       // out elsewhere, so "switch" just opens that worktree as a nested
