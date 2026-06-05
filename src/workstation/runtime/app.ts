@@ -3490,6 +3490,39 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           context.branches?.localBranches || []
         )
       },
+      // Worktree-checkout-conflict resolutions (#1175). Unlike the
+      // cursor-targeted handlers above, these act on the worktree
+      // captured in `state.worktreeCheckoutConflict` (the one git named
+      // when it refused the checkout), not the worktrees-view cursor.
+      'conflict-remove-worktree-checkout': async () => {
+        const conflict = state.worktreeCheckoutConflict
+        dispatch({ type: 'setWorktreeCheckoutConflict', value: undefined })
+        if (!conflict) return { ok: false, message: 'No worktree conflict to resolve.' }
+        const worktree = context.worktreeList?.worktrees?.find((w) => w.path === conflict.worktreePath)
+        if (!worktree) return { ok: false, message: `Worktree ${conflict.worktreePath} not found.` }
+        // removeWorktree refuses a dirty / current worktree and returns
+        // a clear message — surface it rather than forcing.
+        const removed = await removeWorktree(git, worktree)
+        if (!removed.ok) return removed
+        const branch = (context.branches?.localBranches || []).find(
+          (b) => b.type === 'local' && b.shortName === conflict.branch
+        )
+        if (!branch) {
+          return { ok: true, message: `Removed worktree ${worktree.path}; branch ${conflict.branch} not found to check out.` }
+        }
+        const checkout = await checkoutBranch(git, branch)
+        return checkout.ok
+          ? { ok: true, message: `Removed worktree ${worktree.path} and checked out ${conflict.branch}` }
+          : { ok: false, message: `Removed worktree ${worktree.path}, but checkout failed: ${checkout.message}` }
+      },
+      'conflict-remove-worktree-branch': async () => {
+        const conflict = state.worktreeCheckoutConflict
+        dispatch({ type: 'setWorktreeCheckoutConflict', value: undefined })
+        if (!conflict) return { ok: false, message: 'No worktree conflict to resolve.' }
+        const worktree = context.worktreeList?.worktrees?.find((w) => w.path === conflict.worktreePath)
+        if (!worktree) return { ok: false, message: `Worktree ${conflict.worktreePath} not found.` }
+        return removeWorktreeAndBranch(git, worktree, context.branches?.localBranches || [])
+      },
       'abort-operation': async () => {
         const operation = context.operation?.operation
         if (!operation) {
@@ -3974,6 +4007,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // metadata-only mutations (delete-tag, set-upstream, etc.).
     const historyMutatingIds = new Set([
       'checkout-branch',
+      // Resolving a checkout conflict changes HEAD (checkout) and/or the
+      // ref set (branch delete), so the graph needs a refresh.
+      'conflict-remove-worktree-checkout',
+      'conflict-remove-worktree-branch',
       'continue-operation',
       'pull-current-branch',
       // Fetch / pull / push bring in new commits and move
@@ -4010,7 +4047,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // (resolvePendingItemAction → action 'checkout'), so a silent
     // stale-while-revalidate swap keeps the list readable and just
     // repaints the current-branch marker once the new context lands.
-    if (id === 'checkout-branch' && result?.ok) {
+    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout') && result?.ok) {
       dispatch({ type: 'resetBranchSelection' })
       await refreshContext({ silent: true })
     } else {
@@ -4076,7 +4113,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
     state.branchSort, state.filter, state.selectedBranchIndex,
     state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
-    state.statusFilterMask, state.tagSort])
+    state.statusFilterMask, state.tagSort, state.worktreeCheckoutConflict])
 
   // Resolve the active view's "yank target" (commit hash / branch /
   // tag / stash ref / file path) against the live filtered+sorted list,
