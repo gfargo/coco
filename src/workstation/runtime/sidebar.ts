@@ -49,6 +49,12 @@ function renderSelectableSidebarRows<T>(
   toRowText: (item: T, index: number) => string,
   keyPrefix: string,
   visibleCount?: number,
+  // Optional per-row foreground colour (e.g. the current branch in
+  // green). Applied only when the row is NOT the active selection —
+  // the selection's inverse/background styling owns the row's colour in
+  // that case, and layering a foreground under `inverse` would swap it
+  // into an unexpected background tint.
+  rowColor?: (item: T, index: number) => string | undefined,
 ): ReactTypes.ReactElement[] {
   if (items.length === 0) return []
 
@@ -67,10 +73,12 @@ function renderSelectableSidebarRows<T>(
     if (index >= items.length) break
     const isSelected = focused && index === selectedIndex
     const text = toRowText(items[index], index)
+    const color = isSelected ? undefined : rowColor?.(items[index], index)
     elements.push(h(Text, {
       key: `${keyPrefix}-row-${index}`,
       backgroundColor: isSelected && !theme.noColor ? theme.colors.selection : undefined,
       inverse: isSelected,
+      color,
     }, truncateCells(`  ${text}`, width - 4)))
   }
 
@@ -208,6 +216,10 @@ function renderActiveSidebarContent(
           return `${glyph} ${branch.shortName}`
         },
         'tab-branches', visibleListCount,
+        // Paint the checked-out branch green so "where am I?" reads at a
+        // glance, matching the green HEAD marker the branches surface
+        // already uses. NO_COLOR themes fall back to the `*` glyph alone.
+        (branch) => (branch.current && !theme.noColor ? theme.colors.success : undefined),
       ),
     ]
   }

@@ -99,11 +99,16 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
         const truncated = truncateCells(fullText, Math.max(20, width - 4))
         // If truncation chopped into the timestamp/divergence portion,
         // fall back to a single Text to keep the visible width honest.
+        // The checked-out branch is painted green (matching its green
+        // HEAD marker) so "where am I?" reads at a glance. NO_COLOR
+        // themes fall back to the `*` glyph alone.
+        const currentColor = branch.current && !theme.noColor ? theme.colors.success : undefined
         if (truncated !== fullText) {
           return h(Text, {
             key: `branch-${index}`,
             bold: isSelected,
             dimColor: lineDim,
+            color: currentColor,
           }, truncated)
         }
         return h(Text, {
@@ -121,7 +126,11 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
         // row's dim and read as quiet chrome.
         h(Text, { color: glyphColor, dimColor: glyphColor ? false : undefined },
           glyph),
-        trailingName,
+        // Name span: green for the current branch (dimColor:false keeps
+        // it bright), otherwise it inherits the row's normal styling.
+        currentColor
+          ? h(Text, { color: currentColor, dimColor: false }, trailingName)
+          : trailingName,
         h(Text, { dimColor: true }, timestampPadded),
         trailingDivergence
         )
