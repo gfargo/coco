@@ -346,27 +346,34 @@ export function renderDiffSurface(
   }
 
   const diffLines = worktreeDiff?.lines || []
-  const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
   const totalHunks = worktreeHunks?.hunks.length ?? 0
   const stagedHunks = worktreeHunks?.hunks.filter((hunk) => hunk.state === 'staged').length ?? 0
   const visibleDiffLines = diffLines.slice(
     state.worktreeDiffOffset,
     state.worktreeDiffOffset + visibleRows
   )
-  // Hunk-position line: badge + selected hunk's state + a staged/total
-  // progress count, so the user always sees how far through staging they
-  // are. Untracked/new files have no hunks — point them at whole-file
-  // staging instead of a dead-end "no hunks" message.
+  // Hunk-position line: `Hunk n/N` + an at-a-glance staging rail + a
+  // staged/total count, so the user sees how far through staging they
+  // are without reading each hunk. The rail shows one marker per hunk —
+  // filled = staged, hollow = unstaged — with the current hunk bracketed
+  // (which also conveys whether the current hunk is staged, replacing
+  // the old standalone "● staged / ○ unstaged" badge). Untracked/new
+  // files have no hunks — point them at whole-file staging instead of a
+  // dead-end "no hunks" message.
+  const railMarker = (staged: boolean) =>
+    staged ? (theme.ascii ? 'x' : '●') : (theme.ascii ? '.' : '○')
+  const hunkRail = (worktreeHunks?.hunks ?? [])
+    .map((hunk, index) => {
+      const marker = railMarker(hunk.state === 'staged')
+      return index === state.selectedWorktreeHunkIndex ? `[${marker}]` : marker
+    })
+    .join('')
   const hunkHeaderLine = worktreeHunksLoading
     ? 'Hunks loading…'
     : worktreeDiff?.untracked
       ? (theme.ascii ? 'New file — press space to stage it whole.' : '✚ New file — press space to stage it whole.')
       : totalHunks
-        ? `Hunk ${state.selectedWorktreeHunkIndex + 1}/${totalHunks} · ${
-          selectedHunk?.state === 'staged'
-            ? (theme.ascii ? '[x] staged' : '● staged')
-            : (theme.ascii ? '[ ] unstaged' : '○ unstaged')
-        } · ${stagedHunks}/${totalHunks} staged`
+        ? `Hunk ${state.selectedWorktreeHunkIndex + 1}/${totalHunks}  ${hunkRail}  ${stagedHunks}/${totalHunks} staged`
         : 'No stageable hunks for this file.'
   const headerLines: string[] = isLogInkContextKeyLoading(contextStatus, 'worktree')
     ? ['Loading file context...']
