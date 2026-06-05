@@ -53,6 +53,18 @@ describe('ui command handler utilities', () => {
     expect(logArgv.all).toBe(false)
   })
 
+  it('defaults `all: true` when undefined — the synthetic-argv path (#1169)', () => {
+    // Bare `coco` routes through defaultRouteHandler → buildSyntheticArgv,
+    // which bypasses yargs and so never applies the `default: true` from
+    // ui/config.ts. That left `argv.all` undefined and booted the
+    // workstation in compact (`--first-parent --no-merges`) mode: fewer
+    // commits, branches ahead of HEAD hidden, and a looping graph when
+    // cursoring/checking-out a branch not in the compact window. The
+    // handler must re-assert the all-refs default for that path.
+    const logArgv = createLogArgvFromUiArgv(argv({ all: undefined }))
+    expect(logArgv.all).toBe(true)
+  })
+
   it('keeps --all true when --branch is passed alongside (highlight, not scope)', () => {
     // Deliberate UX call: `coco ui --branch feature/x` does NOT
     // narrow to that branch automatically. The all-refs default

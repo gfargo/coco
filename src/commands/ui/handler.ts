@@ -23,12 +23,23 @@ export function createLogArgvFromUiArgv(argv: UiArgv): LogArgv {
     // starting state. `coco ui --no-all` opts back to
     // current-branch-only.
     //
+    // `?? true` re-asserts that default for the synthetic-argv path:
+    // bare `coco` routes through defaultRouteHandler → buildSyntheticArgv,
+    // which bypasses yargs and so never applies the `default: true` from
+    // ui/config.ts — leaving `argv.all` undefined (#1169). Without the
+    // fallback the workstation booted in compact (`--first-parent
+    // --no-merges`) mode: fewer commits, branches "ahead" of HEAD hidden,
+    // and cursoring/checking-out a branch whose tip wasn't in the compact
+    // window triggered an anchored-context append that looped the graph
+    // back to the initial commit. Explicit `--no-all` (argv.all === false)
+    // is preserved because `false ?? true === false`.
+    //
     // Note: passing `--branch foo` does NOT automatically scope away
     // from --all. If the user wants strictly that branch, they pass
     // `coco ui --branch foo --no-all`. We considered the implicit
     // scope-narrowing but it surprises users who pass `--branch` as
     // a "highlight this branch in the all-refs view" hint.
-    all: argv.all,
+    all: argv.all ?? true,
     branch: argv.branch,
     format: 'table',
     interactive: true,
