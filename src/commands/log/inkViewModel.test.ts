@@ -9,6 +9,7 @@ import {
     getLogInkRepoStackLabels,
     getLogInkSidebarTabs,
     getSelectedInkCommit,
+    hunkIndexAtOffset,
     intentGoHome,
     intentOpenComposeForFile,
     intentOpenDiffForCommit,
@@ -2140,5 +2141,51 @@ describe('sidebar peek (#1135 v2)', () => {
 
     state = applyLogInkAction(state, { type: 'focusNext' })
     expect(state.peekReturnFocus).toBeUndefined()
+  })
+})
+
+describe('worktree hunk navigation — viewport-derived current hunk (#1179)', () => {
+  // @@ headers at line offsets 0, 10, 25, 40 → four hunks.
+  const offsets = [0, 10, 25, 40]
+
+  describe('hunkIndexAtOffset', () => {
+    it('returns the last hunk whose header is at or above the viewport top', () => {
+      expect(hunkIndexAtOffset(0, offsets)).toBe(0)
+      expect(hunkIndexAtOffset(5, offsets)).toBe(0)   // inside hunk 1
+      expect(hunkIndexAtOffset(10, offsets)).toBe(1)  // on hunk 2 header
+      expect(hunkIndexAtOffset(30, offsets)).toBe(2)  // inside hunk 3
+      expect(hunkIndexAtOffset(50, offsets)).toBe(3)  // past the last header
+    })
+
+    it('defaults to 0 with no hunks', () => {
+      expect(hunkIndexAtOffset(99, [])).toBe(0)
+    })
+  })
+
+  it('page-scrolling keeps the selected hunk in sync with the offset', () => {
+    let state = createLogInkState([])
+    // Scroll a full page down past hunk boundaries.
+    state = applyLogInkAction(state, { type: 'pageWorktreeDiff', delta: 30, lineCount: 53, hunkOffsets: offsets })
+    expect(state.worktreeDiffOffset).toBe(30)
+    // Old behavior left this stuck at 0 ("Hunk 1/4"); now it tracks the view.
+    expect(state.selectedWorktreeHunkIndex).toBe(2)
+  })
+
+  it('jumping hunks derives the index from where it lands (not a fragile indexOf)', () => {
+    let state = createLogInkState([])
+    state = applyLogInkAction(state, { type: 'jumpWorktreeHunk', delta: 1, hunkOffsets: offsets })
+    expect(state.worktreeDiffOffset).toBe(10)
+    expect(state.selectedWorktreeHunkIndex).toBe(1)
+    state = applyLogInkAction(state, { type: 'jumpWorktreeHunk', delta: 1, hunkOffsets: offsets })
+    expect(state.worktreeDiffOffset).toBe(25)
+    expect(state.selectedWorktreeHunkIndex).toBe(2)
+  })
+
+  it('page-scroll without hunk offsets leaves the selected hunk untouched', () => {
+    let state = createLogInkState([])
+    state = applyLogInkAction(state, { type: 'jumpWorktreeHunk', delta: 1, hunkOffsets: offsets })
+    expect(state.selectedWorktreeHunkIndex).toBe(1)
+    state = applyLogInkAction(state, { type: 'pageWorktreeDiff', delta: 5, lineCount: 53 })
+    expect(state.selectedWorktreeHunkIndex).toBe(1)
   })
 })
