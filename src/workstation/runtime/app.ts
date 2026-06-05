@@ -1022,7 +1022,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // use the status line as live feedback for the open task.
   React.useEffect(() => {
     if (!state.statusMessage) return
-    if (state.inputPrompt || state.pendingConfirmationId || state.pendingMutationConfirmation || state.showCommandPalette) {
+    if (state.inputPrompt || state.pendingConfirmationId || state.pendingChoice || state.pendingMutationConfirmation || state.showCommandPalette) {
       return
     }
     // The `setTimeout` callback is a literal arrow function (not a
@@ -1039,6 +1039,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch,
     state.inputPrompt,
     state.pendingConfirmationId,
+    state.pendingChoice,
     state.pendingMutationConfirmation,
     state.showCommandPalette,
     state.statusMessage,
@@ -3994,18 +3995,31 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // Checking out a branch that's already checked out in another
     // worktree is rejected by git ("already checked out at <path>").
     // Rather than dead-end on that, capture the conflict and raise a
-    // y-confirm offering to switch into that worktree — the branch IS
-    // checked out, just elsewhere (#1175).
+    // multi-option prompt: switch into that worktree, remove it and
+    // check out here, or remove it and delete the branch (#1175, #1181).
     if (id === 'checkout-branch' && !result?.ok && isBranchCheckedOutElsewhereError(result?.message)) {
       const worktreePath = parseCheckedOutWorktreePath(result?.message)
       const branchName = pendingItemAction?.id
       if (worktreePath && branchName) {
         const worktree = context.worktreeList?.worktrees?.find((w) => w.path === worktreePath)
+        const dirty = worktree?.dirty ?? false
         dispatch({
           type: 'setWorktreeCheckoutConflict',
-          value: { branch: branchName, worktreePath, dirty: worktree?.dirty ?? false },
+          value: { branch: branchName, worktreePath, dirty },
         })
-        dispatch({ type: 'setPendingConfirmation', value: 'switch-to-conflicting-worktree' })
+        dispatch({
+          type: 'setPendingChoice',
+          value: {
+            id: 'worktree-checkout-conflict',
+            title: `'${branchName}' is checked out in another worktree`,
+            warning: `Checked out at ${worktreePath}.${dirty ? ' That worktree has uncommitted changes — removal will be refused until it is clean or stashed.' : ''}`,
+            options: [
+              { key: 'y', label: 'Switch to that worktree', intent: 'switch-worktree' },
+              { key: 'r', label: 'Remove worktree & check out here', workflowId: 'conflict-remove-worktree-checkout', destructive: true },
+              { key: 'x', label: 'Remove worktree & delete branch', workflowId: 'conflict-remove-worktree-branch', destructive: true },
+            ],
+          },
+        })
       } else {
         dispatch({
           type: 'setStatus',
@@ -4963,6 +4977,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         state.gitignorePicker ||
         state.inputPrompt ||
         state.pendingConfirmationId ||
+        state.pendingChoice ||
         state.pendingMutationConfirmation ||
         state.pendingKey
       ? 'inspector'

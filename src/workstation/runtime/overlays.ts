@@ -31,7 +31,7 @@ import {
     getLogInkPaletteCommands,
     getLogInkViewKeyBindings,
 } from '../../commands/log/inkKeymap'
-import type { LogInkState } from '../../commands/log/inkViewModel'
+import type { LogInkChoicePrompt, LogInkState } from '../../commands/log/inkViewModel'
 import { filterThemePresets } from '../../commands/log/inkViewModel'
 import { getLogInkWorkflowActionById } from '../../commands/log/inkWorkflows'
 import type { LogInkComponents } from './types'
@@ -105,20 +105,11 @@ export function renderConfirmationPanel(
       : state.pendingMutationConfirmation === 'discard-draft'
         ? 'Quit and discard the in-progress commit draft'
         : undefined
-  // Worktree-conflict switch (#1175): a checkout was rejected because
-  // the branch is checked out elsewhere — name the branch + worktree so
-  // the prompt explains what "y" does (jump into that worktree).
-  const conflict = state.worktreeCheckoutConflict
-  const isWorktreeConflict = state.pendingConfirmationId === 'switch-to-conflicting-worktree'
-  const label = isWorktreeConflict && conflict
-    ? `Switch to the worktree where '${conflict.branch}' is checked out?`
-    : action?.label || mutationLabel || 'Workflow action'
+  const label = action?.label || mutationLabel || 'Workflow action'
   const warning = state.pendingMutationConfirmation === 'discard-draft'
     ? 'You have an unsaved commit draft. Press y to discard it and quit.'
     : state.pendingMutationConfirmation
     ? 'This discards local changes and cannot be undone by Coco.'
-    : isWorktreeConflict && conflict
-    ? `'${conflict.branch}' is checked out at ${conflict.worktreePath}.${conflict.dirty ? ' That worktree has uncommitted changes — removal will be refused until it is clean or stashed.' : ''}`
     // Second-stage confirm raised when a safe delete hit an unmerged
     // branch — name the reason so the force isn't a blind "y again".
     : state.pendingConfirmationId === 'force-delete-branch'
@@ -138,12 +129,41 @@ export function renderConfirmationPanel(
   h(Text, undefined, truncateCells(label, width - 4)),
   h(Text, { dimColor: true }, truncateCells(warning, width - 4)),
   h(Text, undefined, ''),
-  h(Text, undefined, truncateCells(
-    isWorktreeConflict
-      ? 'y switch · r remove worktree & check out here · x remove worktree & delete branch · n/Esc cancel'
-      : 'Press y to confirm or n/Esc to cancel.',
-    width - 4,
-  )))
+  h(Text, undefined, 'Press y to confirm or n/Esc to cancel.'))
+}
+
+/**
+ * Multi-option prompt panel (#1181) — the n-way generalization of the
+ * confirmation panel. Renders the prompt title, an optional warning, and
+ * one row per option (`<key>  <label>`, destructive options in the
+ * danger colour), plus a cancel hint. Resolution happens in the input
+ * layer by matching a keypress against the option keys.
+ */
+export function renderChoicePanel(
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents,
+  prompt: LogInkChoicePrompt,
+  width: number,
+  theme: LogInkTheme,
+  focused: boolean
+): ReactTypes.ReactElement {
+  const { Box, Text } = components
+  return h(Box, {
+    borderColor: focusBorderColor(theme, focused),
+    borderStyle: theme.borderStyle,
+    flexDirection: 'column',
+    width,
+    paddingX: 1,
+  },
+  h(Text, { bold: true }, panelTitle('Choose', focused)),
+  h(Text, undefined, truncateCells(prompt.title, width - 4)),
+  ...(prompt.warning ? [h(Text, { dimColor: true }, truncateCells(prompt.warning, width - 4))] : []),
+  h(Text, undefined, ''),
+  ...prompt.options.map((option) => h(Text, {
+    key: `choice-${prompt.id}-${option.key}`,
+    color: option.destructive && !theme.noColor ? theme.colors.danger : undefined,
+  }, truncateCells(`  ${option.key}  ${option.label}`, width - 4))),
+  h(Text, { dimColor: true }, '  n/Esc  cancel'))
 }
 
 /**

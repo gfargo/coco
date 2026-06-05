@@ -94,6 +94,7 @@ export function renderFooter(
       state.gitignorePicker ||
       state.inputPrompt ||
       state.pendingConfirmationId ||
+      state.pendingChoice ||
       state.pendingMutationConfirmation ||
       state.pendingKey ||
       state.filterMode

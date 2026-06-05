@@ -4670,7 +4670,7 @@ describe('triage filter cycling (#882 phase 6)', () => {
     })
   })
 
-  describe('worktree-checkout-conflict switch (#1175)', () => {
+  describe('worktree-checkout-conflict choice prompt (#1175, #1181)', () => {
     function conflictState() {
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, {
@@ -4678,13 +4678,21 @@ describe('triage filter cycling (#882 phase 6)', () => {
         value: { branch: 'feat/x', worktreePath: '/repo/.wt/foo', dirty: false },
       })
       state = applyLogInkAction(state, {
-        type: 'setPendingConfirmation',
-        value: 'switch-to-conflicting-worktree',
+        type: 'setPendingChoice',
+        value: {
+          id: 'worktree-checkout-conflict',
+          title: "'feat/x' is checked out in another worktree",
+          options: [
+            { key: 'y', label: 'Switch to that worktree', intent: 'switch-worktree' },
+            { key: 'r', label: 'Remove worktree & check out here', workflowId: 'conflict-remove-worktree-checkout', destructive: true },
+            { key: 'x', label: 'Remove worktree & delete branch', workflowId: 'conflict-remove-worktree-branch', destructive: true },
+          ],
+        },
       })
       return state
     }
 
-    it('y pushes a repo frame for the conflicting worktree and clears the prompt', () => {
+    it('y (switch intent) pushes a repo frame for the conflicting worktree and clears the prompt', () => {
       const state = conflictState()
       const events = getLogInkInputEvents(state, 'y')
       const pushFrame = events.find(
@@ -4697,7 +4705,7 @@ describe('triage filter cycling (#882 phase 6)', () => {
 
       const after = applyInput(state, 'y')
       expect(after.repoStack.length).toBe(state.repoStack.length + 1)
-      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.pendingChoice).toBeUndefined()
       expect(after.worktreeCheckoutConflict).toBeUndefined()
     })
 
@@ -4705,7 +4713,7 @@ describe('triage filter cycling (#882 phase 6)', () => {
       const state = conflictState()
       const after = applyInput(state, 'n')
       expect(after.repoStack.length).toBe(state.repoStack.length)
-      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.pendingChoice).toBeUndefined()
       expect(after.worktreeCheckoutConflict).toBeUndefined()
     })
 
@@ -4713,6 +4721,7 @@ describe('triage filter cycling (#882 phase 6)', () => {
       const state = conflictState()
       const after = applyInput(state, '', { escape: true })
       expect(after.repoStack.length).toBe(state.repoStack.length)
+      expect(after.pendingChoice).toBeUndefined()
       expect(after.worktreeCheckoutConflict).toBeUndefined()
     })
 
@@ -4721,15 +4730,23 @@ describe('triage filter cycling (#882 phase 6)', () => {
       const events = getLogInkInputEvents(state, 'r')
       expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'conflict-remove-worktree-checkout' })
       // The runtime owns clearing the conflict (it reads it first), so
-      // the input layer only closes the confirm prompt.
+      // the input layer only closes the choice prompt.
       const after = applyInput(state, 'r')
-      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.pendingChoice).toBeUndefined()
     })
 
     it('x runs the remove-worktree-&-branch workflow and closes the prompt', () => {
       const state = conflictState()
       const events = getLogInkInputEvents(state, 'x')
       expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'conflict-remove-worktree-branch' })
+    })
+
+    it('ignores keys that match no option', () => {
+      const state = conflictState()
+      const after = applyInput(state, 'q')
+      // Still showing the prompt; nothing fired.
+      expect(after.pendingChoice).toBeDefined()
+      expect(after.repoStack.length).toBe(state.repoStack.length)
     })
   })
 })
