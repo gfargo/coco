@@ -2975,9 +2975,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // navigateHome nukes the rest of the stack so `<` after apply
     // doesn't walk back into the now-empty compose / status state
     // the user just left behind.
+    // Did the plan leave files for the user (the `unclaimed` group the
+    // split couldn't confidently place)? They're now sitting unstaged in
+    // the worktree, so land on status — not history — so the user sees
+    // and handles them, rather than dropping them on a clean-looking
+    // history view (#1180).
+    const unclaimedGroup = splitPlan.plan.groups.find((group) => group.unclaimed)
+    const unclaimedFileCount = unclaimedGroup?.files?.length ?? 0
+
     dispatch({ type: 'clearSplitPlan' })
     dispatch({ type: 'commitCompose', action: { type: 'reset' } })
     dispatch({ type: 'navigateHome' })
+    if (unclaimedFileCount > 0) {
+      dispatch({ type: 'pushView', value: 'status' })
+    }
 
     // Refresh BEFORE setting the final status so we can peek at the
     // post-apply worktree state and craft a directive next-step hint
@@ -3037,12 +3048,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       untracked,
       result.fallback ? { reason: result.fallback.reason } : undefined
     )
+    // Name the files the split deliberately left behind so the jump to
+    // status reads as intentional, not a surprise (#1180).
+    const unclaimedNote = unclaimedFileCount > 0
+      ? ` · ${unclaimedFileCount} file${unclaimedFileCount === 1 ? '' : 's'} left for you on status`
+      : ''
     // Fallback path uses 'info' kind — apply technically succeeded
     // but the user should know it landed as a single combined commit
     // rather than a real LLM-driven multi-group split.
     dispatch({
       type: 'setStatus',
-      value: successMessage,
+      value: `${successMessage}${unclaimedNote}`,
       kind: result.fallback ? 'info' : 'success',
     })
   }, [dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext, state.splitPlan])

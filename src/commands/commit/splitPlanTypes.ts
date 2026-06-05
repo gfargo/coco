@@ -19,6 +19,14 @@ export const CommitSplitPlanSchema = z.object({
           // that.)
           files: z.array(z.string()).optional(),
           hunks: z.array(z.string()).optional(),
+          // Internal flag (not emitted by the model). Set by
+          // `rescueMissingFiles` on the catch-all group of files the
+          // plan didn't confidently place: the apply step skips
+          // committing these, leaving them in the worktree for the user
+          // to handle, and the review overlay renders them as a "will
+          // stay — not committed" note rather than a numbered commit
+          // (#1180).
+          unclaimed: z.boolean().optional(),
         })
         .refine(
           (group) =>

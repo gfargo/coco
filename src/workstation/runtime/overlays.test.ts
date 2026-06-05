@@ -10,7 +10,7 @@ import { createLogInkContextStatus } from '../chrome/context'
 import { createLogInkTheme } from '../chrome/theme'
 import { createLogInkState } from '../../commands/log/inkViewModel'
 import { renderDetailPanel } from './detailPanel'
-import { renderConfirmationPanel } from './overlays'
+import { renderConfirmationPanel, renderSplitPlanOverlay } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
 type StubProps = Record<string, unknown>
@@ -96,6 +96,41 @@ describe('force-delete-branch confirmation panel', () => {
     const state = { ...createLogInkState([]), pendingConfirmationId: 'delete-branch' }
     const text = flattenText(renderConfirmationPanel(createElement, components, state, 60, theme, false))
     expect(text).toContain('Destructive Git action requires confirmation')
+  })
+})
+
+describe('split-plan overlay — unclaimed group (#1180)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  function stateWithPlan() {
+    return {
+      ...createLogInkState([]),
+      splitPlan: {
+        status: 'ready' as const,
+        scrollOffset: 0,
+        plan: {
+          groups: [
+            { title: 'feat: real work', files: ['src/a.ts'], hunks: [] },
+            { title: 'Left for you — not committed', files: ['scratch.md'], hunks: [], unclaimed: true },
+          ],
+        },
+      },
+    }
+  }
+
+  it('renders the unclaimed group as a "stays in your worktree" note, not a numbered commit', () => {
+    const text = flattenText(renderSplitPlanOverlay(createElement, components, stateWithPlan(), 100, 40, theme, false))
+    // The confident group is commit #1…
+    expect(text).toContain('1. feat: real work')
+    // …and the unclaimed group is NOT numbered as commit #2.
+    expect(text).not.toContain('2. Left for you')
+    expect(text).toContain('stays in your worktree — not committed')
+  })
+
+  it('counts only committed groups in the header', () => {
+    const text = flattenText(renderSplitPlanOverlay(createElement, components, stateWithPlan(), 100, 40, theme, false))
+    expect(text).toContain('1 commit(s)')
+    expect(text).toContain('1 set stays staged')
   })
 })
 
