@@ -3942,6 +3942,29 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         kind: 'warning',
       })
     }
+    // Checking out a branch that's already checked out in another
+    // worktree is rejected by git ("already checked out at <path>").
+    // Rather than dead-end on that, capture the conflict and raise a
+    // y-confirm offering to switch into that worktree — the branch IS
+    // checked out, just elsewhere (#1175).
+    if (id === 'checkout-branch' && !result?.ok && isBranchCheckedOutElsewhereError(result?.message)) {
+      const worktreePath = parseCheckedOutWorktreePath(result?.message)
+      const branchName = pendingItemAction?.id
+      if (worktreePath && branchName) {
+        const worktree = context.worktreeList?.worktrees?.find((w) => w.path === worktreePath)
+        dispatch({
+          type: 'setWorktreeCheckoutConflict',
+          value: { branch: branchName, worktreePath, dirty: worktree?.dirty ?? false },
+        })
+        dispatch({ type: 'setPendingConfirmation', value: 'switch-to-conflicting-worktree' })
+      } else {
+        dispatch({
+          type: 'setStatus',
+          value: `'${branchName ?? 'branch'}' is already checked out in another worktree.`,
+          kind: 'warning',
+        })
+      }
+    }
     // Refresh history rows AS WELL when the workflow could have
     // changed the commits the user sees (#945 follow-up). The
     // workflow IDs below all either create/rewrite local commits or

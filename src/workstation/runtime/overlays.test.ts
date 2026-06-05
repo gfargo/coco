@@ -98,3 +98,21 @@ describe('force-delete-branch confirmation panel', () => {
     expect(text).toContain('Destructive Git action requires confirmation')
   })
 })
+
+describe('worktree-checkout-conflict confirmation panel (#1175)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  it('names the branch and worktree, and explains what y does', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'switch-to-conflicting-worktree',
+      worktreeCheckoutConflict: { branch: 'feat/x', worktreePath: '/repo/.wt/foo', dirty: false },
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, 100, theme, false))
+    expect(text).toContain('feat/x')
+    expect(text).toContain('/repo/.wt/foo')
+    expect(text).toContain('switch')
+    // Not the generic destructive copy — switching is non-destructive.
+    expect(text).not.toContain('Destructive Git action requires confirmation')
+  })
+})
