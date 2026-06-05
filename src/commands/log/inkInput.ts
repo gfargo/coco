@@ -2198,6 +2198,7 @@ export function getLogInkInputEvents(
         type: 'pageWorktreeDiff',
         delta: -1,
         lineCount: context.worktreeDiffLineCount,
+        hunkOffsets: context.worktreeHunkOffsets,
       })]
     }
 
@@ -2341,6 +2342,7 @@ export function getLogInkInputEvents(
         type: 'pageWorktreeDiff',
         delta: 1,
         lineCount: context.worktreeDiffLineCount,
+        hunkOffsets: context.worktreeHunkOffsets,
       })]
     }
 
@@ -2413,6 +2415,7 @@ export function getLogInkInputEvents(
         type: 'pageWorktreeDiff',
         delta: -8,
         lineCount: context.worktreeDiffLineCount,
+        hunkOffsets: context.worktreeHunkOffsets,
       })]
     }
 
@@ -2441,6 +2444,7 @@ export function getLogInkInputEvents(
         type: 'pageWorktreeDiff',
         delta: 8,
         lineCount: context.worktreeDiffLineCount,
+        hunkOffsets: context.worktreeHunkOffsets,
       })]
     }
 

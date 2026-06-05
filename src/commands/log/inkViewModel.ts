@@ -846,7 +846,7 @@ export type LogInkAction =
   | { type: 'nextSidebarTab' }
   | { type: 'page'; delta: number }
   | { type: 'pageDetailPreview'; delta: number; previewLineCount: number }
-  | { type: 'pageWorktreeDiff'; delta: number; lineCount: number }
+  | { type: 'pageWorktreeDiff'; delta: number; lineCount: number; hunkOffsets?: number[] }
   | { type: 'previousSidebarTab' }
   | { type: 'setFilter'; value: string; promotedSelections?: PromotedSelectionsSnapshot }
   | { type: 'setActiveView'; value: LogInkView }
@@ -1397,10 +1397,28 @@ function nextHunkOffset(currentOffset: number, hunkOffsets: number[], delta: num
   return previousOffset === undefined ? currentOffset : previousOffset
 }
 
-function nextHunkIndex(currentOffset: number, hunkOffsets: number[], delta: number): number {
-  const offset = nextHunkOffset(currentOffset, hunkOffsets, delta)
-
-  return Math.max(0, hunkOffsets.indexOf(offset))
+/**
+ * Which hunk the viewport is currently showing — the index of the last
+ * hunk whose `@@` header offset is at or above the viewport top
+ * (`offset`). This is the single source of truth for the worktree
+ * staging diff's "current hunk" (#1179): deriving it from the scroll
+ * position keeps the header, the in-body highlight, and `space`/`z`
+ * (stage / revert) all pointed at the hunk you're actually looking at,
+ * whether you got there by hunk-jump (↑/↓) or page-scroll (PgUp/PgDn).
+ * The old `indexOf(landedOffset)` approach reset to hunk 0 whenever the
+ * offset wasn't exactly on a boundary, and page-scroll never updated it
+ * at all — so the indicator stuck at "1/N".
+ */
+export function hunkIndexAtOffset(offset: number, hunkOffsets: number[]): number {
+  let index = 0
+  for (let i = 0; i < hunkOffsets.length; i += 1) {
+    if (hunkOffsets[i] <= offset) {
+      index = i
+    } else {
+      break
+    }
+  }
+  return index
 }
 
 export function getLogInkSidebarTabs(): LogInkSidebarTab[] {
@@ -1944,27 +1962,35 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ),
         pendingKey: undefined,
       }
-    case 'pageWorktreeDiff':
+    case 'pageWorktreeDiff': {
+      const worktreeDiffOffset = clampIndex(state.worktreeDiffOffset + action.delta, action.lineCount)
       return {
         ...state,
-        worktreeDiffOffset: clampIndex(state.worktreeDiffOffset + action.delta, action.lineCount),
+        worktreeDiffOffset,
+        // Keep the staging hunk in sync with the scroll position so the
+        // header / highlight / stage target track what's on screen even
+        // when paging past hunk boundaries (#1179).
+        selectedWorktreeHunkIndex: action.hunkOffsets?.length
+          ? hunkIndexAtOffset(worktreeDiffOffset, action.hunkOffsets)
+          : state.selectedWorktreeHunkIndex,
         pendingKey: undefined,
       }
-    case 'jumpWorktreeHunk':
+    }
+    case 'jumpWorktreeHunk': {
+      const worktreeDiffOffset = nextHunkOffset(
+        state.worktreeDiffOffset,
+        action.hunkOffsets,
+        action.delta
+      )
       return {
         ...state,
-        worktreeDiffOffset: nextHunkOffset(
-          state.worktreeDiffOffset,
-          action.hunkOffsets,
-          action.delta
-        ),
-        selectedWorktreeHunkIndex: nextHunkIndex(
-          state.worktreeDiffOffset,
-          action.hunkOffsets,
-          action.delta
-        ),
+        worktreeDiffOffset,
+        // Derive the current hunk from where we landed — robust whether
+        // or not the offset sits exactly on a boundary (#1179).
+        selectedWorktreeHunkIndex: hunkIndexAtOffset(worktreeDiffOffset, action.hunkOffsets),
         pendingKey: undefined,
       }
+    }
     case 'jumpCommitDiffHunk':
       return {
         ...state,
