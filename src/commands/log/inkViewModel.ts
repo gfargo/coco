@@ -378,6 +378,15 @@ export type LogInkState = {
    */
   pendingConfirmationPayload?: string
   pendingMutationConfirmation?: LogInkMutationConfirmation
+  /**
+   * Set when a `checkout-branch` was rejected because the branch is
+   * already checked out in another worktree (#1175). Carries the branch
+   * the user tried to check out and the worktree holding it (+ whether
+   * that worktree is dirty) so the conflict prompt can offer to switch
+   * into it or remove it. Lives alongside a
+   * `pendingConfirmationId === 'switch-to-conflicting-worktree'`.
+   */
+  worktreeCheckoutConflict?: { branch: string; worktreePath: string; dirty: boolean }
   pendingKey?: string
   /**
    * The list item whose deletion is currently in flight, if any. Set by
@@ -868,6 +877,7 @@ export type LogInkAction =
   | { type: 'setPendingPullRequestBodyDraft'; value: boolean }
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
+  | { type: 'setWorktreeCheckoutConflict'; value?: { branch: string; worktreePath: string; dirty: boolean } }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
   | { type: 'setPendingItemAction'; value?: LogInkPendingItemAction }
   | { type: 'appendPaletteFilter'; value: string }
@@ -2203,6 +2213,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingMutationConfirmation: action.value ? undefined : state.pendingMutationConfirmation,
         pendingKey: undefined,
       }
+    case 'setWorktreeCheckoutConflict':
+      return { ...state, worktreeCheckoutConflict: action.value, pendingKey: undefined }
     case 'setPendingMutationConfirmation':
       return {
         ...state,

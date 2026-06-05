@@ -105,11 +105,20 @@ export function renderConfirmationPanel(
       : state.pendingMutationConfirmation === 'discard-draft'
         ? 'Quit and discard the in-progress commit draft'
         : undefined
-  const label = action?.label || mutationLabel || 'Workflow action'
+  // Worktree-conflict switch (#1175): a checkout was rejected because
+  // the branch is checked out elsewhere — name the branch + worktree so
+  // the prompt explains what "y" does (jump into that worktree).
+  const conflict = state.worktreeCheckoutConflict
+  const isWorktreeConflict = state.pendingConfirmationId === 'switch-to-conflicting-worktree'
+  const label = isWorktreeConflict && conflict
+    ? `Switch to the worktree where '${conflict.branch}' is checked out?`
+    : action?.label || mutationLabel || 'Workflow action'
   const warning = state.pendingMutationConfirmation === 'discard-draft'
     ? 'You have an unsaved commit draft. Press y to discard it and quit.'
     : state.pendingMutationConfirmation
     ? 'This discards local changes and cannot be undone by Coco.'
+    : isWorktreeConflict && conflict
+    ? `'${conflict.branch}' is checked out at ${conflict.worktreePath}. Press y to switch there, n to cancel.`
     // Second-stage confirm raised when a safe delete hit an unmerged
     // branch — name the reason so the force isn't a blind "y again".
     : state.pendingConfirmationId === 'force-delete-branch'

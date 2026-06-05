@@ -4669,4 +4669,51 @@ describe('triage filter cycling (#882 phase 6)', () => {
       expect(state.peekReturnFocus).toBeUndefined()
     })
   })
+
+  describe('worktree-checkout-conflict switch (#1175)', () => {
+    function conflictState() {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setWorktreeCheckoutConflict',
+        value: { branch: 'feat/x', worktreePath: '/repo/.wt/foo', dirty: false },
+      })
+      state = applyLogInkAction(state, {
+        type: 'setPendingConfirmation',
+        value: 'switch-to-conflicting-worktree',
+      })
+      return state
+    }
+
+    it('y pushes a repo frame for the conflicting worktree and clears the prompt', () => {
+      const state = conflictState()
+      const events = getLogInkInputEvents(state, 'y')
+      const pushFrame = events.find(
+        (e): e is Extract<typeof e, { type: 'action' }> =>
+          e.type === 'action' && e.action.type === 'pushRepoFrame'
+      )
+      expect(pushFrame).toBeDefined()
+      expect((pushFrame as { action: { workdir?: string; label?: string } }).action.workdir).toBe('/repo/.wt/foo')
+      expect((pushFrame as { action: { workdir?: string; label?: string } }).action.label).toBe('feat/x')
+
+      const after = applyInput(state, 'y')
+      expect(after.repoStack.length).toBe(state.repoStack.length + 1)
+      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.worktreeCheckoutConflict).toBeUndefined()
+    })
+
+    it('n cancels without switching and clears the conflict', () => {
+      const state = conflictState()
+      const after = applyInput(state, 'n')
+      expect(after.repoStack.length).toBe(state.repoStack.length)
+      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.worktreeCheckoutConflict).toBeUndefined()
+    })
+
+    it('Esc also cancels and clears the conflict', () => {
+      const state = conflictState()
+      const after = applyInput(state, '', { escape: true })
+      expect(after.repoStack.length).toBe(state.repoStack.length)
+      expect(after.worktreeCheckoutConflict).toBeUndefined()
+    })
+  })
 })

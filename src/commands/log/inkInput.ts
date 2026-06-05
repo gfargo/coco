@@ -1169,6 +1169,26 @@ export function getLogInkInputEvents(
 
   if (state.pendingConfirmationId) {
     if (inputValue === 'y') {
+      // Worktree-conflict switch (#1175): the branch is already checked
+      // out elsewhere, so "switch" just opens that worktree as a nested
+      // repo frame (same mechanism as drilling into a submodule) — no
+      // git mutation, hence handled here rather than via the runtime.
+      if (state.pendingConfirmationId === 'switch-to-conflicting-worktree') {
+        const conflict = state.worktreeCheckoutConflict
+        if (conflict) {
+          return [
+            action({ type: 'pushRepoFrame', label: conflict.branch, workdir: conflict.worktreePath }),
+            action({ type: 'setStatus', value: `Switched to worktree ${conflict.worktreePath} (${conflict.branch})` }),
+            action({ type: 'setPendingConfirmation', value: undefined }),
+            action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
+          ]
+        }
+        return [
+          action({ type: 'setPendingConfirmation', value: undefined }),
+          action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
+        ]
+      }
+
       const workflowAction = getLogInkWorkflowActionById(state.pendingConfirmationId)
 
       if (workflowAction?.id === 'ai-commit-summary') {
@@ -1198,6 +1218,11 @@ export function getLogInkInputEvents(
     if (inputValue === 'n' || key.escape) {
       return [
         action({ type: 'setPendingConfirmation', value: undefined }),
+        // Drop any worktree-conflict context so the prompt doesn't
+        // linger after the user declines to switch.
+        ...(state.worktreeCheckoutConflict
+          ? [action({ type: 'setWorktreeCheckoutConflict', value: undefined })]
+          : []),
         action({ type: 'setStatus', value: 'workflow action cancelled' }),
       ]
     }
