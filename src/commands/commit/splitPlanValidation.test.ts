@@ -464,7 +464,9 @@ describe('splitPlanValidation', () => {
       const rescued = rescueMissingFiles(plan, staged, buildHunkInventory({}))
 
       expect(rescued.groups).toHaveLength(2)
-      expect(rescued.groups[1].title).toBe('chore: misc unclaimed changes')
+      // Tagged `unclaimed` so the apply skips committing it and the
+      // files are left in the worktree for the user (#1180).
+      expect(rescued.groups[1].unclaimed).toBe(true)
       expect(rescued.groups[1].files).toEqual(['scratch.md'])
       expect(rescued.groups[1].hunks).toEqual([])
       // First group passes through unchanged.

@@ -365,6 +365,15 @@ export async function applyCommitSplitPlan({
   // "git commit with nothing staged" failure mode mid-loop after
   // the up-front `git reset` has already wiped the index.
   const applicableGroups = plan.groups.filter((group) => {
+    // `unclaimed` groups are intentionally NOT committed (#1180): they
+    // hold the files the plan couldn't confidently place. The up-front
+    // `git reset` below unstages everything, and since these never get
+    // re-added they simply stay in the worktree for the user to handle.
+    // They still count as "claimed" for validatePlanForStagedFiles, so
+    // that check (run above) passes.
+    if (group.unclaimed) {
+      return false
+    }
     const fileCount = (group.files || []).length
     const hunkCount = (group.hunks || []).length
     return fileCount + hunkCount > 0

@@ -198,7 +198,9 @@ describe('generateValidatedCommitSplitPlan', () => {
     expect(result.attempts).toBe(1)
     expect(result.plan.groups).toHaveLength(2)
     expect(result.plan.groups[1].files).toEqual(['b.ts'])
-    expect(result.plan.groups[1].title).toContain('misc')
+    // The recovered files are tagged `unclaimed` — the apply leaves them
+    // in the worktree rather than committing a catch-all group (#1180).
+    expect(result.plan.groups[1].unclaimed).toBe(true)
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
   })
 

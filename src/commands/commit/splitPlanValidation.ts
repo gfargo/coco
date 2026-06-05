@@ -379,11 +379,16 @@ export function rescueMissingFiles(
     groups: [
       ...plan.groups,
       {
-        title: 'chore: misc unclaimed changes',
-        body: 'Files the split plan did not assign to any other commit. Review and re-roll (`r`) if these belong in a specific commit.',
-        rationale: 'Recovered by validator rescue — model omitted these from every group.',
+        // Tagged `unclaimed`: the apply step skips committing this group
+        // (the files are left in the worktree), and the review overlay
+        // renders it as a "will stay — not committed" note rather than a
+        // numbered commit. The confident commits land; these come back
+        // to you on the status screen to handle (#1180).
+        title: 'Left for you — not committed',
+        body: `${missing.length} file${missing.length === 1 ? '' : 's'} the split couldn't confidently place. They stay in your worktree (uncommitted) — you'll land on the status screen to handle them. Re-roll (\`r\`) if they belong in a specific commit.`,
         files: missing,
         hunks: [],
+        unclaimed: true,
       },
     ],
   }

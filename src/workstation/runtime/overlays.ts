@@ -697,9 +697,19 @@ export function renderSplitPlanOverlay(
       h(Text, { dimColor: true }, 'No plan data available.'))
   }
 
+  // Committed groups are numbered 1..N; an `unclaimed` group (the files
+  // the split couldn't place) renders as a distinct "will stay" note
+  // rather than a phantom commit (#1180).
+  const committedGroups = plan.groups.filter((group) => !group.unclaimed)
   const lines: string[] = []
-  plan.groups.forEach((group, index) => {
-    lines.push(`▎ ${index + 1}. ${group.title}`)
+  let commitNumber = 0
+  plan.groups.forEach((group) => {
+    if (group.unclaimed) {
+      lines.push(`⚠ ${group.title}  (stays in your worktree — not committed)`)
+    } else {
+      commitNumber += 1
+      lines.push(`▎ ${commitNumber}. ${group.title}`)
+    }
     if (group.body) {
       group.body.split('\n').forEach((bodyLine) => lines.push(`  ${bodyLine}`))
     }
@@ -726,9 +736,10 @@ export function renderSplitPlanOverlay(
   const scrollOffset = Math.min(overlay.scrollOffset, Math.max(0, totalLines - 1))
   const visible = lines.slice(scrollOffset, scrollOffset + listRows)
 
+  const unclaimedCount = plan.groups.length - committedGroups.length
   const headerRight = overlay.status === 'applying'
     ? `${spinner} applying…`
-    : `${plan.groups.length} commit(s) · ${scrollOffset + 1}–${Math.min(totalLines, scrollOffset + listRows)} / ${totalLines}`
+    : `${committedGroups.length} commit(s)${unclaimedCount ? ' · 1 set stays staged' : ''} · ${scrollOffset + 1}–${Math.min(totalLines, scrollOffset + listRows)} / ${totalLines}`
 
   // Apply errors get the full available width — long validator
   // messages (the failure path that surfaced in PR #916 testing was

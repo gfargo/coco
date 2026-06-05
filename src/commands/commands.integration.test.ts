@@ -412,6 +412,65 @@ describe('command integration with temp git repos', () => {
     expect(status.files).toHaveLength(0)
   })
 
+  it('leaves files the plan omitted uncommitted in the worktree (#1180)', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+    // The model groups README.md but omits scratch.md entirely.
+    // rescueMissingFiles tags scratch.md as an `unclaimed` group; the
+    // apply must commit README.md and leave scratch.md behind.
+    mockExecuteChainWithSchema.mockResolvedValueOnce({
+      groups: [
+        {
+          title: 'docs: update readme',
+          body: 'Document the temp repo.',
+          files: ['README.md'],
+        },
+      ],
+    })
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.writeFile('scratch.md', 'scratch notes\n')
+    await repo.git.add(['README.md', 'scratch.md'])
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit', 'split'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      split: true,
+      plan: false,
+      apply: true,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    const log = await repo.git.log()
+    const status = await repo.git.status()
+
+    // Exactly one commit landed — the confident README.md group; the
+    // unclaimed scratch.md group was NOT committed.
+    expect(stdout).toContain('Created 1 split commit(s).')
+    expect(log.all[0].message).toBe('docs: update readme')
+    expect(log.all.map((commit) => commit.message)).not.toContain('Left for you — not committed')
+    // scratch.md survives in the worktree for the user to handle.
+    expect(status.files.map((file) => file.path)).toContain('scratch.md')
+    // The README.md commit doesn't sneak scratch.md in.
+    const headFiles = (await repo.git.raw(['show', '--name-only', '--pretty=format:', 'HEAD'])).trim()
+    expect(headFiles).toContain('README.md')
+    expect(headFiles).not.toContain('scratch.md')
+  })
+
   it('applies a hunk-level commit split plan within a single file', async () => {
     mockLoadConfig.mockReturnValue(createConfig({
       mode: 'stdout',
