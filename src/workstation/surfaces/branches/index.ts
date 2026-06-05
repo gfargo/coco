@@ -30,7 +30,7 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
-import { isPendingDeletion } from '../../../commands/log/inkViewModel'
+import { isPendingItemAction } from '../../../commands/log/inkViewModel'
 
 export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
@@ -76,7 +76,7 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
         // While this branch's delete is in flight, its sync-state marker
         // is replaced by an inline spinner (accent-coloured) so the row
         // reads as "deleting" until it vanishes on refresh.
-        const deleting = isPendingDeletion(state.pendingDeletion, 'branch', branch.shortName)
+        const deleting = isPendingItemAction(state.pendingItemAction, 'branch', branch.shortName)
         const glyph = deleting ? inlineSpinnerGlyph(spinnerFrame, theme.ascii) : marker.glyph
         const glyphColor = deleting
           ? (theme.noColor ? undefined : theme.colors.accent)

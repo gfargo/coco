@@ -27,7 +27,7 @@ import type {
   LogInkSidebarTab,
   LogInkState,
 } from '../../commands/log/inkViewModel'
-import { getLogInkSidebarTabs, isPendingDeletion } from '../../commands/log/inkViewModel'
+import { getLogInkSidebarTabs, isPendingItemAction } from '../../commands/log/inkViewModel'
 import type { LogInkComponents, LogInkContext } from './types'
 import { focusBorderColor, panelTitle, sidebarTabLabel } from './utils'
 
@@ -157,7 +157,7 @@ function renderActiveSidebarContent(
   // shows this spinner in place of its leading marker (branches /
   // worktrees) or appended to the row (tags / stashes, which have no
   // leading status icon). `pending` is the single in-flight target.
-  const pending = state.pendingDeletion
+  const pending = state.pendingItemAction
   const spin = inlineSpinnerGlyph(spinnerFrame, theme.ascii)
   // Available rows for the active tab's list. The sidebar chrome
   // takes ~10 rows (panel title + spacer + 5 tab headers + 4 inter-tab
@@ -202,7 +202,7 @@ function renderActiveSidebarContent(
       ...renderSelectableSidebarRows(
         h, Text, sortedBranches, state.selectedBranchIndex, focused, width, theme,
         (branch) => {
-          const glyph = isPendingDeletion(pending, 'branch', branch.shortName)
+          const glyph = isPendingItemAction(pending, 'branch', branch.shortName)
             ? spin
             : branchRowMarker(branch, { ascii: theme.ascii }).glyph
           return `${glyph} ${branch.shortName}`
@@ -226,7 +226,7 @@ function renderActiveSidebarContent(
         const base = `${truncateCells(tag.name, 16)} ${tag.subject}`
         // Tags have no leading status icon, so the pending spinner is
         // appended to the row instead of replacing a glyph.
-        return isPendingDeletion(pending, 'tag', tag.name) ? `${base} ${spin}` : base
+        return isPendingItemAction(pending, 'tag', tag.name) ? `${base} ${spin}` : base
       },
       'tab-tags', visibleListCount,
     )
@@ -246,7 +246,7 @@ function renderActiveSidebarContent(
         const base = `@{${index}} ${stash.message || '(no message)'}`
         // `@{N}` is the stash ref, not a status icon, so append the
         // spinner rather than replacing it.
-        return isPendingDeletion(pending, 'stash', stash.ref) ? `${base} ${spin}` : base
+        return isPendingItemAction(pending, 'stash', stash.ref) ? `${base} ${spin}` : base
       },
       'tab-stashes', visibleListCount,
     )
@@ -263,7 +263,7 @@ function renderActiveSidebarContent(
   return renderSelectableSidebarRows(
     h, Text, worktrees, state.selectedWorktreeListIndex, focused, width, theme,
     (worktree) => {
-      const marker = isPendingDeletion(pending, 'worktree', worktree.path)
+      const marker = isPendingItemAction(pending, 'worktree', worktree.path)
         ? spin
         : worktree.current ? '*' : ' '
       const wstate = worktree.dirty ? 'dirty' : 'clean'

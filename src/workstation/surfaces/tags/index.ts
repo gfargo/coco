@@ -24,7 +24,7 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { buildRefUrl, focusBorderColor, panelTitle } from '../../runtime/utils'
-import { isPendingDeletion } from '../../../commands/log/inkViewModel'
+import { isPendingItemAction } from '../../../commands/log/inkViewModel'
 
 export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
@@ -70,7 +70,7 @@ export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: numbe
         // Tags have no leading status icon, so a delete-in-flight appends
         // an accent spinner at the row's end. Reserve its 2 cells from the
         // truncation budget so it never pushes the row past the panel.
-        const deleting = isPendingDeletion(state.pendingDeletion, 'tag', tag.name)
+        const deleting = isPendingItemAction(state.pendingItemAction, 'tag', tag.name)
         const spinnerSpan = deleting
           ? h(Text, { color: theme.noColor ? undefined : theme.colors.accent, dimColor: false },
             ` ${inlineSpinnerGlyph(spinnerFrame, theme.ascii)}`)

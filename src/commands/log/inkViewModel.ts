@@ -31,21 +31,42 @@ export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' 
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 
 /**
- * Kinds of list item that support deletion (and therefore an inline
- * pending-spinner while the delete runs). Each maps to a surface + a
- * stable per-row id used by `pendingDeletion`.
+ * Kinds of list item that can carry an inline pending-spinner while an
+ * async action runs against them. Each maps to a surface + a stable
+ * per-row id used by `pendingItemAction`.
  */
-export type LogInkDeletableKind = 'branch' | 'tag' | 'stash' | 'worktree'
+export type LogInkListItemKind = 'branch' | 'tag' | 'stash' | 'worktree'
 
 /**
- * True when `pending` (a `state.pendingDeletion`) targets this exact row.
- * Shared by every deletable surface + the sidebar so the spinner-swap
- * test is identical everywhere. Takes the field value (not the whole
- * state) so it can live next to the type without a forward reference.
+ * Which async action is in flight on the pending row. The inline
+ * spinner is identical across actions; the tag is carried so future
+ * code (and tests) can distinguish a delete-in-flight from a
+ * checkout-in-flight without a second piece of state.
  */
-export function isPendingDeletion(
-  pending: { kind: LogInkDeletableKind; id: string } | undefined,
-  kind: LogInkDeletableKind,
+export type LogInkPendingActionKind = 'delete' | 'checkout'
+
+/**
+ * One in-flight action against a specific list-item row. Keyed by
+ * `kind` + a stable id so it can't accidentally match a same-named row
+ * in a different list rendering at the same time.
+ */
+export type LogInkPendingItemAction = {
+  kind: LogInkListItemKind
+  id: string
+  action: LogInkPendingActionKind
+}
+
+/**
+ * True when `pending` (a `state.pendingItemAction`) targets this exact
+ * row. Action-agnostic on purpose — every surface + the sidebar render
+ * the same spinner whether the row is being deleted or checked out, so
+ * the spinner-swap test stays identical everywhere. Takes the field
+ * value (not the whole state) so it can live next to the type without a
+ * forward reference.
+ */
+export function isPendingItemAction(
+  pending: LogInkPendingItemAction | undefined,
+  kind: LogInkListItemKind,
   id: string
 ): boolean {
   return pending?.kind === kind && pending.id === id
@@ -369,7 +390,7 @@ export type LogInkState = {
    * `worktree.path`) so it can't accidentally match a same-named row in
    * a different list rendering at the same time.
    */
-  pendingDeletion?: { kind: LogInkDeletableKind; id: string }
+  pendingItemAction?: LogInkPendingItemAction
   focus: LogInkFocus
   /**
    * Set while the user is "peeking" the sidebar (#1135 v2) — a momentary
@@ -848,7 +869,7 @@ export type LogInkAction =
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
-  | { type: 'setPendingDeletion'; value?: { kind: LogInkDeletableKind; id: string } }
+  | { type: 'setPendingItemAction'; value?: LogInkPendingItemAction }
   | { type: 'appendPaletteFilter'; value: string }
   | { type: 'backspacePaletteFilter' }
   | { type: 'clearPaletteFilter' }
@@ -2191,10 +2212,11 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         workflowActionId: action.value ? undefined : state.workflowActionId,
         pendingKey: undefined,
       }
-    case 'setPendingDeletion':
-      // Pure marker for the in-flight delete; touches nothing else so the
-      // list keeps rendering normally underneath the one spinner'd row.
-      return { ...state, pendingDeletion: action.value }
+    case 'setPendingItemAction':
+      // Pure marker for the in-flight row action (delete / checkout);
+      // touches nothing else so the list keeps rendering normally
+      // underneath the one spinner'd row.
+      return { ...state, pendingItemAction: action.value }
     case 'toggleFilterMode':
       return {
         ...state,
