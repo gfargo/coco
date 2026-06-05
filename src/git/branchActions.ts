@@ -149,6 +149,31 @@ export function isBranchNotFullyMergedError(message: string | undefined): boolea
   return /not fully merged/i.test(message || '')
 }
 
+/**
+ * True when a branch delete was rejected because the branch is checked
+ * out in a worktree. Unlike "not fully merged" there's no force escape
+ * hatch — git refuses `git branch -D` on a worktree-checked-out branch
+ * too — so the UI should surface a clear "free up the worktree first"
+ * message rather than offering a force-delete that would fail the same
+ * way. Matches git's wording: `Cannot delete branch 'x' checked out at
+ * '<path>'` / `used by worktree at '<path>'`.
+ */
+export function isBranchCheckedOutElsewhereError(message: string | undefined): boolean {
+  return /checked out at|used by worktree/i.test(message || '')
+}
+
+/**
+ * Pull the worktree path out of git's "checked out at '<path>'" /
+ * "used by worktree at '<path>'" rejection so the UI can name where the
+ * branch is still in use. Returns undefined when the message doesn't
+ * carry a path (older git phrasings) so callers can fall back to a
+ * generic message.
+ */
+export function parseCheckedOutWorktreePath(message: string | undefined): string | undefined {
+  const match = /(?:checked out at|used by worktree at) '([^']+)'/i.exec(message || '')
+  return match?.[1]
+}
+
 export function fetchRemotes(git: SimpleGit): Promise<BranchActionResult> {
   return runAction(
     () => git.raw(['fetch', '--all', '--prune']),

@@ -2,7 +2,9 @@ import {
   checkoutBranch,
   createBranch,
   deleteBranch,
+  isBranchCheckedOutElsewhereError,
   isBranchNotFullyMergedError,
+  parseCheckedOutWorktreePath,
   fetchBranch,
   fetchRemotes,
   getBranchActionRefs,
@@ -151,6 +153,36 @@ describe('log branch actions', () => {
       expect(isBranchNotFullyMergedError('Not Fully Merged')).toBe(true)
       expect(isBranchNotFullyMergedError('Cannot delete the current branch.')).toBe(false)
       expect(isBranchNotFullyMergedError(undefined)).toBe(false)
+    })
+  })
+
+  describe('isBranchCheckedOutElsewhereError', () => {
+    it('matches git\'s worktree-checkout rejection wording', () => {
+      expect(
+        isBranchCheckedOutElsewhereError("error: Cannot delete branch 'feat/x' checked out at '/repo/.wt/foo'")
+      ).toBe(true)
+      expect(
+        isBranchCheckedOutElsewhereError("fatal: 'feat/x' is already used by worktree at '/repo/wt'")
+      ).toBe(true)
+      // Distinct from the unmerged case, which has its own force-delete path.
+      expect(isBranchCheckedOutElsewhereError("the branch 'x' is not fully merged.")).toBe(false)
+      expect(isBranchCheckedOutElsewhereError(undefined)).toBe(false)
+    })
+  })
+
+  describe('parseCheckedOutWorktreePath', () => {
+    it('extracts the worktree path from either git phrasing', () => {
+      expect(
+        parseCheckedOutWorktreePath("Cannot delete branch 'feat/x' checked out at '/repo/.wt/foo'")
+      ).toBe('/repo/.wt/foo')
+      expect(
+        parseCheckedOutWorktreePath("'feat/x' is already used by worktree at '/repo/wt'")
+      ).toBe('/repo/wt')
+    })
+
+    it('returns undefined when the message carries no path', () => {
+      expect(parseCheckedOutWorktreePath('checked out somewhere')).toBeUndefined()
+      expect(parseCheckedOutWorktreePath(undefined)).toBeUndefined()
     })
   })
 

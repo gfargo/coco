@@ -19,7 +19,7 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
-import { isPendingDeletion } from '../../../commands/log/inkViewModel'
+import { isPendingItemAction } from '../../../commands/log/inkViewModel'
 
 export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
@@ -59,7 +59,7 @@ export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: 
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
-        const marker = isPendingDeletion(state.pendingDeletion, 'worktree', entry.path)
+        const marker = isPendingItemAction(state.pendingItemAction, 'worktree', entry.path)
           ? inlineSpinnerGlyph(spinnerFrame, theme.ascii)
           : entry.current ? '*' : ' '
         const branchLabel = entry.branch ? entry.branch : entry.head || '<detached>'

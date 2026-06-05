@@ -20,7 +20,7 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
-import { isPendingDeletion } from '../../../commands/log/inkViewModel'
+import { isPendingItemAction } from '../../../commands/log/inkViewModel'
 
 export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
@@ -73,7 +73,7 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
         // The `stash@{N}` ref is an identifier, not a status icon, so a
         // delete-in-flight appends an accent spinner at the row's end
         // (2 cells reserved from the width budget).
-        const deleting = isPendingDeletion(state.pendingDeletion, 'stash', stash.ref)
+        const deleting = isPendingItemAction(state.pendingItemAction, 'stash', stash.ref)
         const spinnerSpan = deleting
           ? h(Text, { color: theme.noColor ? undefined : theme.colors.accent, dimColor: false },
             ` ${inlineSpinnerGlyph(spinnerFrame, theme.ascii)}`)

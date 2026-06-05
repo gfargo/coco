@@ -129,7 +129,7 @@ import type { LogInkVisiblePane } from '../chrome/layout'
 import { sortBranches, sortTags } from '../chrome/sorting'
 import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../chrome/idleTips'
 import {
-    LogInkDeletableKind,
+    LogInkPendingItemAction,
     LogInkState,
     RemoteOpState,
     applyLogInkAction,
@@ -144,7 +144,9 @@ import {
     checkoutBranch,
     createBranch,
     deleteBranch,
+    isBranchCheckedOutElsewhereError,
     isBranchNotFullyMergedError,
+    parseCheckedOutWorktreePath,
     fetchBranch,
     fetchRemotes,
     pullBranch,
@@ -401,19 +403,32 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
  * Returns `undefined` for non-delete workflows (and when nothing is
  * selected), which the runner treats as "no pending marker".
  */
-function resolvePendingDeletion(
+function resolvePendingItemAction(
   id: string,
   state: LogInkState,
   context: LogInkContext
-): { kind: LogInkDeletableKind; id: string } | undefined {
+): LogInkPendingItemAction | undefined {
   const { filter } = state
+  // Checking out a branch gets the same inline spinner on its row as a
+  // delete does — the action just runs `git checkout` instead of
+  // `git branch -d`. Resolved the same way as the delete branch case
+  // (and identically to the checkout-branch handler) so the spinner
+  // lands on exactly the row the user pressed enter on.
+  if (id === 'checkout-branch') {
+    const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+    const visible = filter
+      ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], filter))
+      : all
+    const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+    return branch ? { kind: 'branch', id: branch.shortName, action: 'checkout' } : undefined
+  }
   if (id === 'delete-branch' || id === 'force-delete-branch') {
     const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
     const visible = filter
       ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], filter))
       : all
     const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
-    return branch ? { kind: 'branch', id: branch.shortName } : undefined
+    return branch ? { kind: 'branch', id: branch.shortName, action: 'delete' } : undefined
   }
   if (id === 'delete-tag') {
     const all = sortTags(context.tags?.tags || [], state.tagSort)
@@ -421,7 +436,7 @@ function resolvePendingDeletion(
       ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], filter))
       : all
     const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
-    return tag ? { kind: 'tag', id: tag.name } : undefined
+    return tag ? { kind: 'tag', id: tag.name, action: 'delete' } : undefined
   }
   if (id === 'drop-stash') {
     const all = context.stashes?.stashes || []
@@ -429,7 +444,7 @@ function resolvePendingDeletion(
       ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], filter))
       : all
     const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
-    return stash ? { kind: 'stash', id: stash.ref } : undefined
+    return stash ? { kind: 'stash', id: stash.ref, action: 'delete' } : undefined
   }
   if (id === 'remove-worktree') {
     const all = context.worktreeList?.worktrees || []
@@ -439,7 +454,7 @@ function resolvePendingDeletion(
     const wt = visible.length
       ? visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
       : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
-    return wt ? { kind: 'worktree', id: wt.path } : undefined
+    return wt ? { kind: 'worktree', id: wt.path, action: 'delete' } : undefined
   }
   return undefined
 }
@@ -818,9 +833,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.commitCompose.loading ||
     Boolean(state.remoteOp) ||
     Boolean(state.statusLoading) ||
-    // Keep the shared spinner ticking while a list-item delete is in
-    // flight so its inline pending glyph animates instead of freezing.
-    Boolean(state.pendingDeletion)
+    // Keep the shared spinner ticking while a list-item action (delete
+    // or checkout) is in flight so its inline pending glyph animates
+    // instead of freezing.
+    Boolean(state.pendingItemAction)
   React.useEffect(() => {
     if (!anyLoading) {
       // Reset to 0 so the next loading state starts from a known
@@ -3885,14 +3901,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     if (remoteOp) {
       dispatch({ type: 'setRemoteOp', value: remoteOp })
     }
-    // Mark the cursored row as deleting so it shows an inline pending
-    // spinner while the git call runs. Cleared in `finally` after the
-    // refresh, so a successful delete hands straight off to the row
-    // vanishing, and a failed one (e.g. an unmerged branch) restores
-    // the row's normal icon alongside the error status.
-    const pendingDeletion = resolvePendingDeletion(id, state, context)
-    if (pendingDeletion) {
-      dispatch({ type: 'setPendingDeletion', value: pendingDeletion })
+    // Mark the cursored row as busy so it shows an inline pending
+    // spinner while the git call runs (delete or checkout). Cleared in
+    // `finally` after the refresh, so a successful delete hands straight
+    // off to the row vanishing, a checkout to the sidebar repainting
+    // with the new current branch, and a failure (e.g. an unmerged
+    // branch) restores the row's normal icon alongside the error status.
+    const pendingItemAction = resolvePendingItemAction(id, state, context)
+    if (pendingItemAction) {
+      dispatch({ type: 'setPendingItemAction', value: pendingItemAction })
     }
     try {
     const result = await handler()
@@ -3904,6 +3921,26 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // re-resolves the same branch.
     if (id === 'delete-branch' && !result?.ok && isBranchNotFullyMergedError(result?.message)) {
       dispatch({ type: 'setPendingConfirmation', value: 'force-delete-branch' })
+    }
+    // A branch checked out in a worktree can't be deleted — and unlike
+    // the unmerged case, `git branch -D` won't force it either, so we
+    // don't offer a confirmation. Replace git's raw rejection with a
+    // clear "free up the worktree first" message that names where the
+    // branch is still in use.
+    if (
+      (id === 'delete-branch' || id === 'force-delete-branch') &&
+      !result?.ok &&
+      isBranchCheckedOutElsewhereError(result?.message)
+    ) {
+      const worktreePath = parseCheckedOutWorktreePath(result?.message)
+      const branchName = pendingItemAction?.id
+      dispatch({
+        type: 'setStatus',
+        value: worktreePath
+          ? `Can't delete ${branchName ? `'${branchName}'` : 'branch'} — checked out in worktree ${worktreePath}. Switch that worktree off the branch or remove it first.`
+          : `Can't delete ${branchName ? `'${branchName}'` : 'branch'} — it's checked out in another worktree. Switch that worktree off the branch or remove it first.`,
+        kind: 'warning',
+      })
     }
     // Refresh history rows AS WELL when the workflow could have
     // changed the commits the user sees (#945 follow-up). The
@@ -3941,15 +3978,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       await refreshHistoryRows()
     }
 
-    // Checkout-branch is the one workflow where we want a *visible*
-    // refresh so the user sees the branches sidebar repaint with the
-    // new current branch (per #806 follow-up). Snap the cursor to
-    // position 0 first so when the refresh completes and the new
-    // current branch lands at the top (per #809's pin-current rule),
-    // the cursor is already there waiting.
+    // Checkout-branch snaps the cursor to position 0 first so when the
+    // refresh completes and the new current branch lands at the top
+    // (per #809's pin-current rule), the cursor is already there
+    // waiting. The refresh is *silent*: the loud refresh used to blank
+    // every branch name behind a "loading branches…" placeholder (#806),
+    // but the in-flight row now carries its own inline pending spinner
+    // (resolvePendingItemAction → action 'checkout'), so a silent
+    // stale-while-revalidate swap keeps the list readable and just
+    // repaints the current-branch marker once the new context lands.
     if (id === 'checkout-branch' && result?.ok) {
       dispatch({ type: 'resetBranchSelection' })
-      await refreshContext()
+      await refreshContext({ silent: true })
     } else {
       // Silent refresh so the deleted item disappears from the list
       // without flickering the surfaces through a 'loading' phase.
@@ -4003,11 +4043,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       if (remoteOp) {
         dispatch({ type: 'setRemoteOp', value: undefined })
       }
-      // Same guarantee for the per-row delete spinner: clear it whether
-      // the delete succeeded, failed, or the refresh threw, so no row is
-      // left spinning forever.
-      if (pendingDeletion) {
-        dispatch({ type: 'setPendingDeletion', value: undefined })
+      // Same guarantee for the per-row pending spinner (delete or
+      // checkout): clear it whether the action succeeded, failed, or the
+      // refresh threw, so no row is left spinning forever.
+      if (pendingItemAction) {
+        dispatch({ type: 'setPendingItemAction', value: undefined })
       }
     }
   }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
