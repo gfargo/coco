@@ -270,19 +270,48 @@ const FILENAME_MAP: Record<string, string[]> = {
   'ui-status-theme-catppuccin-latte': ['status-theme-catppuccin-latte.png'],
 }
 
-function main() {
-  console.log('🖼️  Regenerating marketing site screenshots...\n')
+/**
+ * Resolve which recipes to (re)generate + sync. With no CLI args we do
+ * the full site sweep (all of SITE_RECIPES). Passing recipe names syncs
+ * just those — handy after a change that only touches a view or two,
+ * instead of regenerating ~150 captures. Unknown names abort with the
+ * valid list so a typo doesn't silently sync nothing.
+ */
+function resolveTargetRecipes(argv: string[]): string[] {
+  const requested = argv.filter((arg) => !arg.startsWith('-'))
+  if (requested.length === 0) {
+    return SITE_RECIPES
+  }
+  const known = new Set(SITE_RECIPES)
+  const unknown = requested.filter((name) => !known.has(name))
+  if (unknown.length > 0) {
+    console.error(`Unknown recipe(s): ${unknown.join(', ')}`)
+    console.error('Recipes synced to the site are listed in SITE_RECIPES (bin/syncScreenshots.ts),')
+    console.error('or run `npm run screenshot -- --list` for the full catalog.')
+    process.exit(1)
+  }
+  // Preserve SITE_RECIPES order for deterministic, readable output.
+  return SITE_RECIPES.filter((name) => requested.includes(name))
+}
 
-  // Clean .screenshots/
-  if (existsSync(SCREENSHOTS_DIR)) {
+function main() {
+  const targetRecipes = resolveTargetRecipes(process.argv.slice(2))
+  const isSubset = targetRecipes.length !== SITE_RECIPES.length
+  console.log(isSubset
+    ? `🖼️  Regenerating ${targetRecipes.length} screenshot(s): ${targetRecipes.join(', ')}\n`
+    : '🖼️  Regenerating marketing site screenshots...\n')
+
+  // Full sync starts from a clean slate; a subset sync leaves the other
+  // captures in place and only refreshes the requested recipes' files.
+  if (!isSubset && existsSync(SCREENSHOTS_DIR)) {
     rmSync(SCREENSHOTS_DIR, { recursive: true })
   }
 
-  // Generate all site recipes
+  // Generate the target recipes
   let succeeded = 0
   let failed = 0
 
-  for (const recipe of SITE_RECIPES) {
+  for (const recipe of targetRecipes) {
     const result = spawnSync('npm', ['run', 'screenshot', '--', '--recipe', recipe], {
       cwd: REPO_ROOT,
       stdio: 'pipe',
@@ -314,7 +343,7 @@ function main() {
   }
 
   let synced = 0
-  for (const recipe of SITE_RECIPES) {
+  for (const recipe of targetRecipes) {
     const targets = FILENAME_MAP[recipe]
     if (!targets) continue
 

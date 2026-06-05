@@ -222,6 +222,22 @@ The `.www/` Next.js site previously used hand-drawn artistic terminal mockups. R
 
 For animated demos (e.g. workflow walk-throughs), set `emitGif: true` on the recipe — VHS produces both the still PNG and a GIF in one pass. The driver then optimizes every GIF losslessly so synced assets stay web-ready (typically 20–30× smaller, zero quality loss); see [Authoring motion (GIF) demos](#authoring-motion-gif-demos) for that and the recipe-design rules that keep demos small and on-point.
 
+### Syncing assets to `.www/`
+
+`bin/syncScreenshots.ts` regenerates the site recipes and copies them into `.www/public/screenshots/` under their site filenames (the `FILENAME_MAP`). Two modes:
+
+```bash
+# Full sweep — regenerate and sync every recipe in SITE_RECIPES (~150 captures).
+npm run screenshot:sync          # or the explicit alias: npm run screenshot:sync:all
+
+# Subset — regenerate and sync only the named recipes. Much faster after a
+# change that only touched a view or two. Leaves the other captures in place
+# (no clean of .screenshots/). Unknown names abort with a hint.
+npm run screenshot:sync -- ui-stash-list demo-stash-workflow
+```
+
+Pass recipe **names** (the `name` field from `recipes.ts`), not site filenames. Only recipes listed in `SITE_RECIPES` can be synced — others live in `.screenshots/` for local use but aren't part of the site. After a subset sync, `cd .www && yarn dev` to preview just the assets you refreshed.
+
 ## Visual regression checks (future)
 
 The pipeline output is well-suited to PR-level visual diffs (`pixelmatch` or `odiff`). When the recipe catalog matures, add a `npm run screenshot:check` step that compares current renders against `.screenshots/baseline/`. Run it as a manual-trigger CI job rather than on every push — too slow for the hot path, but invaluable for releases.
