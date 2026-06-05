@@ -283,7 +283,6 @@ export type LogInkState = {
   selectedIndex: number
   selectedFileIndex: number
   selectedWorktreeFileIndex: number
-  selectedWorktreeHunkIndex: number
   /**
    * Cursor positions for the promoted top-level views (branches/tags/stash).
    * Persisted on the root state so navigating away and back keeps the user's
@@ -1111,7 +1110,6 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     // persistence and pop-view restores the previous tab.
     sidebarTab: value === 'compose' || value === 'status' ? 'branches' : state.sidebarTab,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
-    selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     compareHead: value === 'diff' ? state.compareHead : undefined,
@@ -1147,7 +1145,6 @@ function withPoppedView(state: LogInkState): LogInkState {
     // returns the user to whatever they actually had open before.
     sidebarTab: state.userSidebarTab,
     worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
-    selectedWorktreeHunkIndex: next === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: next === 'diff' ? state.diffSource : undefined,
     stashDiffRef: next === 'diff' ? state.stashDiffRef : undefined,
     compareBase: wasOnDiff ? undefined : state.compareBase,
@@ -1283,7 +1280,6 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     activeView: value,
     viewStack,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
-    selectedWorktreeHunkIndex: value === 'diff' ? state.selectedWorktreeHunkIndex : 0,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     compareHead: value === 'diff' ? state.compareHead : undefined,
@@ -1481,7 +1477,6 @@ export function createLogInkState(
     selectedIndex: 0,
     selectedFileIndex: 0,
     selectedWorktreeFileIndex: 0,
-    selectedWorktreeHunkIndex: 0,
     selectedBranchIndex: 0,
     selectedTagIndex: 0,
     selectedStashIndex: 0,
@@ -1710,7 +1705,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           state.selectedWorktreeFileIndex + action.delta,
           action.fileCount
         ),
-        selectedWorktreeHunkIndex: 0,
         worktreeDiffOffset: 0,
         // Cursor moved to a real file row — drop header focus so the
         // file Enter handler (open diff) is what fires next.
@@ -1754,7 +1748,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedWorktreeFileIndex: Math.max(0, action.targetIndex),
-        selectedWorktreeHunkIndex: 0,
         worktreeDiffOffset: 0,
         statusGroupHeaderFocused: false,
         pendingKey: undefined,
@@ -2002,35 +1995,26 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ),
         pendingKey: undefined,
       }
-    case 'pageWorktreeDiff': {
-      const worktreeDiffOffset = clampIndex(state.worktreeDiffOffset + action.delta, action.lineCount)
+    case 'pageWorktreeDiff':
+      // The current staging hunk is derived from the scroll offset at
+      // the read sites (#1185), so paging only moves the offset.
       return {
         ...state,
-        worktreeDiffOffset,
-        // Keep the staging hunk in sync with the scroll position so the
-        // header / highlight / stage target track what's on screen even
-        // when paging past hunk boundaries (#1179).
-        selectedWorktreeHunkIndex: action.hunkOffsets?.length
-          ? hunkIndexAtOffset(worktreeDiffOffset, action.hunkOffsets)
-          : state.selectedWorktreeHunkIndex,
+        worktreeDiffOffset: clampIndex(state.worktreeDiffOffset + action.delta, action.lineCount),
         pendingKey: undefined,
       }
-    }
-    case 'jumpWorktreeHunk': {
-      const worktreeDiffOffset = nextHunkOffset(
-        state.worktreeDiffOffset,
-        action.hunkOffsets,
-        action.delta
-      )
+    case 'jumpWorktreeHunk':
+      // `[`/`]` move the offset onto the next/previous hunk header; the
+      // current hunk is derived from that offset at the read sites.
       return {
         ...state,
-        worktreeDiffOffset,
-        // Derive the current hunk from where we landed — robust whether
-        // or not the offset sits exactly on a boundary (#1179).
-        selectedWorktreeHunkIndex: hunkIndexAtOffset(worktreeDiffOffset, action.hunkOffsets),
+        worktreeDiffOffset: nextHunkOffset(
+          state.worktreeDiffOffset,
+          action.hunkOffsets,
+          action.delta
+        ),
         pendingKey: undefined,
       }
-    }
     case 'jumpCommitDiffHunk':
       return {
         ...state,
@@ -2077,7 +2061,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         activeView: HOME_VIEW,
         viewStack: [HOME_VIEW],
         worktreeDiffOffset: 0,
-        selectedWorktreeHunkIndex: 0,
         pendingCommitFocused: false,
         pendingKey: undefined,
       }
@@ -2117,7 +2100,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...next,
         selectedWorktreeFileIndex: Math.max(0, action.fileIndex),
-        selectedWorktreeHunkIndex: 0,
         worktreeDiffOffset: 0,
         diffSource: 'worktree',
       }
@@ -2167,7 +2149,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...next,
         selectedWorktreeFileIndex: Math.max(0, action.fileIndex),
-        selectedWorktreeHunkIndex: 0,
         worktreeDiffOffset: 0,
       }
     }

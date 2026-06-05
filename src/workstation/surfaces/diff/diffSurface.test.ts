@@ -38,7 +38,13 @@ function flattenText(node: unknown): string {
 // Four hunks: #1 staged, #2 unstaged, #3 staged, #4 unstaged.
 const hunkStates = ['staged', 'unstaged', 'staged', 'unstaged'] as const
 
-function render(selectedHunkIndex: number): string {
+// Hunk `@@` headers at line offsets 0/5/10/15 → the current hunk is
+// derived from the viewport's scroll offset (#1185): offset 0 → hunk 1,
+// 5 → hunk 2, 10 → hunk 3, 15 → hunk 4.
+const hunkOffsets = [0, 5, 10, 15]
+const diffLines = Array.from({ length: 20 }, (_, i) => (hunkOffsets.includes(i) ? `@@ hunk ${i} @@` : ` line ${i}`))
+
+function render(worktreeDiffOffset: number): string {
   const base = createLogInkState([])
   const ctx = {
     h: createElement,
@@ -49,8 +55,7 @@ function render(selectedHunkIndex: number): string {
       diffSource: 'worktree',
       focus: 'commits',
       selectedWorktreeFileIndex: 0,
-      selectedWorktreeHunkIndex: selectedHunkIndex,
-      worktreeDiffOffset: 0,
+      worktreeDiffOffset,
     },
     context: {
       worktree: {
@@ -70,8 +75,8 @@ function render(selectedHunkIndex: number): string {
     worktreeDiff: {
       filePath: 'src/a.ts',
       untracked: false,
-      lines: ['@@ -1 +1 @@', '-old', '+new'],
-      hunkOffsets: [0],
+      lines: diffLines,
+      hunkOffsets,
     },
     worktreeDiffLoading: false,
     worktreeHunks: { hunks: hunkStates.map((state) => ({ state })) },
@@ -90,17 +95,15 @@ function render(selectedHunkIndex: number): string {
   return flattenText(renderDiffSurface(ctx, diff))
 }
 
-describe('worktree diff — hunk staging rail (#1184)', () => {
-  it('renders a marker per hunk with the current one bracketed', () => {
-    // Cursor on hunk 2 (index 1, unstaged): ● [○] ● ○
-    const text = render(1)
-    expect(text).toContain('●[○]●○')
+describe('worktree diff — hunk staging rail (#1184, #1185)', () => {
+  it('renders a marker per hunk with the current one (by scroll offset) bracketed', () => {
+    // Scrolled to hunk 2 (offset 5, unstaged): ● [○] ● ○
+    expect(render(5)).toContain('●[○]●○')
   })
 
-  it('moves the bracket to the cursored hunk', () => {
-    // Cursor on hunk 3 (index 2, staged): ● ○ [●] ○
-    const text = render(2)
-    expect(text).toContain('●○[●]○')
+  it('moves the bracket to the hunk the viewport is on', () => {
+    // Scrolled to hunk 3 (offset 10, staged): ● ○ [●] ○
+    expect(render(10)).toContain('●○[●]○')
   })
 
   it('shows the staged/total count and hunk position', () => {

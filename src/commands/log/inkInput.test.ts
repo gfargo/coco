@@ -392,14 +392,19 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, '', { pageDown: true }, { worktreeDiffLineCount: 30 })
     expect(state.worktreeDiffOffset).toBe(8)
 
-    // In the worktree (staging) diff, j/↓ navigate HUNKS (the unit you
-    // stage) when there's more than one — auto-scrolling to the selected
-    // hunk, like `]`. (Single-hunk files fall back to line scroll.)
+    // In the worktree (staging) diff, j/↓ scroll LINES — consistent with
+    // the commit/stash diffs (#1185). `[`/`]` jump between hunks.
     state = applyInput(state, 'j', {}, {
       worktreeDiffLineCount: 30,
       worktreeHunkOffsets: [2, 12, 20],
     })
-    expect(state.selectedWorktreeHunkIndex).toBe(1)
+    expect(state.worktreeDiffOffset).toBe(9)
+
+    // `]` jumps the offset onto the next hunk header (12, then 20).
+    state = applyInput(state, ']', {}, {
+      worktreeDiffLineCount: 30,
+      worktreeHunkOffsets: [2, 12, 20],
+    })
     expect(state.worktreeDiffOffset).toBe(12)
 
     state = applyInput(state, ']', {}, {
@@ -407,7 +412,6 @@ describe('log Ink input interactions', () => {
       worktreeHunkOffsets: [2, 12, 20],
     })
     expect(state.worktreeDiffOffset).toBe(20)
-    expect(state.selectedWorktreeHunkIndex).toBe(2)
 
     state = applyInput(state, '', { escape: true })
     expect(state.activeView).toBe('status')

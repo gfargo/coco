@@ -378,11 +378,11 @@ describe('log Ink view model', () => {
       hunkOffsets: [3, 12],
     })
     expect(state.worktreeDiffOffset).toBe(12)
-    expect(state.selectedWorktreeHunkIndex).toBe(1)
+    expect(hunkIndexAtOffset(state.worktreeDiffOffset, [3, 12])).toBe(1)
 
     state = applyLogInkAction(state, { type: 'setActiveView', value: 'status' })
     expect(state.worktreeDiffOffset).toBe(0)
-    expect(state.selectedWorktreeHunkIndex).toBe(0)
+    expect(hunkIndexAtOffset(state.worktreeDiffOffset, [3, 12])).toBe(0)
   })
 
   it('jumps commit-diff hunks symmetrically and stays put past the last hunk', () => {
@@ -717,12 +717,12 @@ describe('log Ink view model', () => {
       })
 
       expect(state.worktreeDiffOffset).toBeGreaterThan(0)
-      expect(state.selectedWorktreeHunkIndex).toBeGreaterThan(0)
+      expect(hunkIndexAtOffset(state.worktreeDiffOffset, [10, 20, 30])).toBeGreaterThan(0)
 
       state = applyLogInkAction(state, { type: 'popView' })
       expect(state.activeView).toBe('history')
       expect(state.worktreeDiffOffset).toBe(0)
-      expect(state.selectedWorktreeHunkIndex).toBe(0)
+      expect(hunkIndexAtOffset(state.worktreeDiffOffset, [10, 20, 30])).toBe(0)
     })
 
     it('navigates home, resetting the stack to the history root', () => {
@@ -1268,7 +1268,6 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, { type: 'jumpToStatusGroup', targetIndex: 3 })
       expect(state.selectedWorktreeFileIndex).toBe(3)
       expect(state.statusGroupHeaderFocused).toBe(false)
-      expect(state.selectedWorktreeHunkIndex).toBe(0)
       expect(state.worktreeDiffOffset).toBe(0)
     })
 
@@ -2162,30 +2161,22 @@ describe('worktree hunk navigation — viewport-derived current hunk (#1179)', (
     })
   })
 
-  it('page-scrolling keeps the selected hunk in sync with the offset', () => {
+  it('page-scrolling tracks the current hunk via the offset (#1185)', () => {
     let state = createLogInkState([])
-    // Scroll a full page down past hunk boundaries.
-    state = applyLogInkAction(state, { type: 'pageWorktreeDiff', delta: 30, lineCount: 53, hunkOffsets: offsets })
+    // ↑/↓ scroll lines; the current hunk derives from the offset.
+    state = applyLogInkAction(state, { type: 'pageWorktreeDiff', delta: 30, lineCount: 53 })
     expect(state.worktreeDiffOffset).toBe(30)
-    // Old behavior left this stuck at 0 ("Hunk 1/4"); now it tracks the view.
-    expect(state.selectedWorktreeHunkIndex).toBe(2)
+    // Offset 30 sits inside hunk 3 (offsets 0/10/25/40) — derived, not stored.
+    expect(hunkIndexAtOffset(state.worktreeDiffOffset, offsets)).toBe(2)
   })
 
-  it('jumping hunks derives the index from where it lands (not a fragile indexOf)', () => {
+  it('[`/`] jumps the offset onto a hunk header; the index derives from it', () => {
     let state = createLogInkState([])
     state = applyLogInkAction(state, { type: 'jumpWorktreeHunk', delta: 1, hunkOffsets: offsets })
     expect(state.worktreeDiffOffset).toBe(10)
-    expect(state.selectedWorktreeHunkIndex).toBe(1)
+    expect(hunkIndexAtOffset(state.worktreeDiffOffset, offsets)).toBe(1)
     state = applyLogInkAction(state, { type: 'jumpWorktreeHunk', delta: 1, hunkOffsets: offsets })
     expect(state.worktreeDiffOffset).toBe(25)
-    expect(state.selectedWorktreeHunkIndex).toBe(2)
-  })
-
-  it('page-scroll without hunk offsets leaves the selected hunk untouched', () => {
-    let state = createLogInkState([])
-    state = applyLogInkAction(state, { type: 'jumpWorktreeHunk', delta: 1, hunkOffsets: offsets })
-    expect(state.selectedWorktreeHunkIndex).toBe(1)
-    state = applyLogInkAction(state, { type: 'pageWorktreeDiff', delta: 5, lineCount: 53 })
-    expect(state.selectedWorktreeHunkIndex).toBe(1)
+    expect(hunkIndexAtOffset(state.worktreeDiffOffset, offsets)).toBe(2)
   })
 })
