@@ -57,6 +57,35 @@ export type LogInkPendingItemAction = {
 }
 
 /**
+ * One selectable answer in a `LogInkChoicePrompt` (#1181). The user
+ * presses `key` to pick it. An option either runs a workflow
+ * (`workflowId`, routed through the runtime's workflow runner) or fires
+ * a built-in `intent` handled directly in the input layer — the latter
+ * for pure navigation (e.g. switching into a worktree) that must not go
+ * through the workflow runner's post-action git/context refresh.
+ */
+export type LogInkChoiceOption = {
+  key: string
+  label: string
+  destructive?: boolean
+  workflowId?: string
+  intent?: 'switch-worktree'
+}
+
+/**
+ * A multi-option prompt — the n-way generalization of the y/n
+ * confirmation. Rendered by `renderChoicePanel`; resolved in the input
+ * layer by matching a keypress against `options[].key` (with `n` / `Esc`
+ * to cancel).
+ */
+export type LogInkChoicePrompt = {
+  id: string
+  title: string
+  warning?: string
+  options: LogInkChoiceOption[]
+}
+
+/**
  * True when `pending` (a `state.pendingItemAction`) targets this exact
  * row. Action-agnostic on purpose — every surface + the sidebar render
  * the same spinner whether the row is being deleted or checked out, so
@@ -383,10 +412,20 @@ export type LogInkState = {
    * already checked out in another worktree (#1175). Carries the branch
    * the user tried to check out and the worktree holding it (+ whether
    * that worktree is dirty) so the conflict prompt can offer to switch
-   * into it or remove it. Lives alongside a
-   * `pendingConfirmationId === 'switch-to-conflicting-worktree'`.
+   * into it or remove it. Read by the conflict-resolution workflow
+   * handlers; surfaced via a `pendingChoice` (see below).
    */
   worktreeCheckoutConflict?: { branch: string; worktreePath: string; dirty: boolean }
+  /**
+   * Multi-option prompt (#1181). Generalizes the y/n confirmation for
+   * situations with more than two answers — the user picks an option by
+   * its key. Each option either runs a workflow (`workflowId`) or fires
+   * a built-in `intent` handled directly in the input layer (used for
+   * pure navigation like switching worktrees, which must not route
+   * through the workflow runner's post-action context refresh). `n` /
+   * `Esc` cancels.
+   */
+  pendingChoice?: LogInkChoicePrompt
   pendingKey?: string
   /**
    * The list item whose deletion is currently in flight, if any. Set by
@@ -878,6 +917,7 @@ export type LogInkAction =
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
   | { type: 'setWorktreeCheckoutConflict'; value?: { branch: string; worktreePath: string; dirty: boolean } }
+  | { type: 'setPendingChoice'; value?: LogInkChoicePrompt }
   | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
   | { type: 'setPendingItemAction'; value?: LogInkPendingItemAction }
   | { type: 'appendPaletteFilter'; value: string }
@@ -2241,6 +2281,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       }
     case 'setWorktreeCheckoutConflict':
       return { ...state, worktreeCheckoutConflict: action.value, pendingKey: undefined }
+    case 'setPendingChoice':
+      return { ...state, pendingChoice: action.value, pendingKey: undefined }
     case 'setPendingMutationConfirmation':
       return {
         ...state,

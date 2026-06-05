@@ -10,7 +10,7 @@ import { createLogInkContextStatus } from '../chrome/context'
 import { createLogInkTheme } from '../chrome/theme'
 import { createLogInkState } from '../../commands/log/inkViewModel'
 import { renderDetailPanel } from './detailPanel'
-import { renderConfirmationPanel, renderSplitPlanOverlay } from './overlays'
+import { renderChoicePanel, renderConfirmationPanel, renderSplitPlanOverlay } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
 type StubProps = Record<string, unknown>
@@ -134,41 +134,34 @@ describe('split-plan overlay — unclaimed group (#1180)', () => {
   })
 })
 
-describe('worktree-checkout-conflict confirmation panel (#1175)', () => {
+describe('choice panel — worktree-checkout conflict (#1175, #1181)', () => {
   const components: LogInkComponents = { Box, Text }
 
-  it('names the branch and worktree, and explains what y does', () => {
-    const state = {
-      ...createLogInkState([]),
-      pendingConfirmationId: 'switch-to-conflicting-worktree',
-      worktreeCheckoutConflict: { branch: 'feat/x', worktreePath: '/repo/.wt/foo', dirty: false },
-    }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 100, theme, false))
+  const conflictPrompt = (dirty: boolean) => ({
+    id: 'worktree-checkout-conflict',
+    title: "'feat/x' is checked out in another worktree",
+    warning: `Checked out at /repo/.wt/foo.${dirty ? ' That worktree has uncommitted changes — removal will be refused until it is clean or stashed.' : ''}`,
+    options: [
+      { key: 'y', label: 'Switch to that worktree', intent: 'switch-worktree' as const },
+      { key: 'r', label: 'Remove worktree & check out here', workflowId: 'conflict-remove-worktree-checkout', destructive: true },
+      { key: 'x', label: 'Remove worktree & delete branch', workflowId: 'conflict-remove-worktree-branch', destructive: true },
+    ],
+  })
+
+  it('names the branch + worktree and lists every option with its key', () => {
+    const text = flattenText(renderChoicePanel(createElement, components, conflictPrompt(false), 100, theme, false))
     expect(text).toContain('feat/x')
     expect(text).toContain('/repo/.wt/foo')
-    expect(text).toContain('switch')
-    // Not the generic destructive copy — switching is non-destructive.
+    expect(text).toContain('y  Switch to that worktree')
+    expect(text).toContain('r  Remove worktree & check out here')
+    expect(text).toContain('x  Remove worktree & delete branch')
+    expect(text).toContain('n/Esc  cancel')
+    // Generic confirmation copy must not leak into the choice panel.
     expect(text).not.toContain('Destructive Git action requires confirmation')
   })
 
-  it('enumerates the switch / remove keys', () => {
-    const state = {
-      ...createLogInkState([]),
-      pendingConfirmationId: 'switch-to-conflicting-worktree',
-      worktreeCheckoutConflict: { branch: 'feat/x', worktreePath: '/repo/.wt/foo', dirty: false },
-    }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 120, theme, false))
-    expect(text).toContain('remove worktree & check out here')
-    expect(text).toContain('remove worktree & delete branch')
-  })
-
-  it('warns when the conflicting worktree is dirty', () => {
-    const state = {
-      ...createLogInkState([]),
-      pendingConfirmationId: 'switch-to-conflicting-worktree',
-      worktreeCheckoutConflict: { branch: 'feat/x', worktreePath: '/repo/.wt/foo', dirty: true },
-    }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 120, theme, false))
+  it('surfaces the dirty-worktree warning', () => {
+    const text = flattenText(renderChoicePanel(createElement, components, conflictPrompt(true), 120, theme, false))
     expect(text).toContain('uncommitted changes')
   })
 })

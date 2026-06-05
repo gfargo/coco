@@ -1167,47 +1167,49 @@ export function getLogInkInputEvents(
     return []
   }
 
-  if (state.pendingConfirmationId) {
-    // Worktree-conflict removal options (#1175): alongside the y-switch,
-    // `r` removes the conflicting worktree and checks the branch out
-    // here, `x` removes the worktree AND deletes the branch. Both defer
-    // to the runtime (it owns the git ops + the conflict context); the
-    // runtime clears the conflict state once it resolves.
-    if (state.pendingConfirmationId === 'switch-to-conflicting-worktree' && state.worktreeCheckoutConflict) {
-      if (inputValue === 'r') {
-        return [
-          { type: 'runWorkflowAction', id: 'conflict-remove-worktree-checkout' },
-          action({ type: 'setPendingConfirmation', value: undefined }),
-        ]
-      }
-      if (inputValue === 'x') {
-        return [
-          { type: 'runWorkflowAction', id: 'conflict-remove-worktree-branch' },
-          action({ type: 'setPendingConfirmation', value: undefined }),
-        ]
-      }
-    }
-    if (inputValue === 'y') {
-      // Worktree-conflict switch (#1175): the branch is already checked
-      // out elsewhere, so "switch" just opens that worktree as a nested
-      // repo frame (same mechanism as drilling into a submodule) — no
-      // git mutation, hence handled here rather than via the runtime.
-      if (state.pendingConfirmationId === 'switch-to-conflicting-worktree') {
+  // Multi-option prompt (#1181) — the n-way generalization of the y/n
+  // confirmation. Match the keypress against the prompt's options; each
+  // either runs a workflow or fires a built-in navigation intent.
+  if (state.pendingChoice) {
+    const option = state.pendingChoice.options.find((opt) => opt.key === inputValue)
+    if (option) {
+      // `switch-worktree` is pure navigation — open the worktree as a
+      // nested repo frame. Handled here rather than via the workflow
+      // runner, whose post-action context refresh would mis-target the
+      // frame we just pushed.
+      if (option.intent === 'switch-worktree' && state.worktreeCheckoutConflict) {
         const conflict = state.worktreeCheckoutConflict
-        if (conflict) {
-          return [
-            action({ type: 'pushRepoFrame', label: conflict.branch, workdir: conflict.worktreePath }),
-            action({ type: 'setStatus', value: `Switched to worktree ${conflict.worktreePath} (${conflict.branch})` }),
-            action({ type: 'setPendingConfirmation', value: undefined }),
-            action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
-          ]
-        }
         return [
-          action({ type: 'setPendingConfirmation', value: undefined }),
+          action({ type: 'pushRepoFrame', label: conflict.branch, workdir: conflict.worktreePath }),
+          action({ type: 'setStatus', value: `Switched to worktree ${conflict.worktreePath} (${conflict.branch})` }),
+          action({ type: 'setPendingChoice', value: undefined }),
           action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
         ]
       }
+      if (option.workflowId) {
+        // The workflow runner owns the live context + clears any
+        // conflict state once it resolves.
+        return [
+          { type: 'runWorkflowAction', id: option.workflowId },
+          action({ type: 'setPendingChoice', value: undefined }),
+        ]
+      }
+      return [action({ type: 'setPendingChoice', value: undefined })]
+    }
+    if (inputValue === 'n' || key.escape) {
+      return [
+        action({ type: 'setPendingChoice', value: undefined }),
+        ...(state.worktreeCheckoutConflict
+          ? [action({ type: 'setWorktreeCheckoutConflict', value: undefined })]
+          : []),
+        action({ type: 'setStatus', value: 'cancelled' }),
+      ]
+    }
+    return []
+  }
 
+  if (state.pendingConfirmationId) {
+    if (inputValue === 'y') {
       const workflowAction = getLogInkWorkflowActionById(state.pendingConfirmationId)
 
       if (workflowAction?.id === 'ai-commit-summary') {
@@ -1237,11 +1239,6 @@ export function getLogInkInputEvents(
     if (inputValue === 'n' || key.escape) {
       return [
         action({ type: 'setPendingConfirmation', value: undefined }),
-        // Drop any worktree-conflict context so the prompt doesn't
-        // linger after the user declines to switch.
-        ...(state.worktreeCheckoutConflict
-          ? [action({ type: 'setWorktreeCheckoutConflict', value: undefined })]
-          : []),
         action({ type: 'setStatus', value: 'workflow action cancelled' }),
       ]
     }

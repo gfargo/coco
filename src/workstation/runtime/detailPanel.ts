@@ -35,6 +35,7 @@ import {
 } from '../surfaces/detail'
 import {
     renderChordOverlay,
+    renderChoicePanel,
     renderCommandPalette,
     renderConfirmationPanel,
     renderHelpPanel,
@@ -90,6 +91,10 @@ export function renderDetailPanel(
 
   if (state.inputPrompt) {
     return renderInputPromptPanel(h, components, state, width, theme, focused)
+  }
+
+  if (state.pendingChoice) {
+    return renderChoicePanel(h, components, state.pendingChoice, width, theme, focused)
   }
 
   if (state.pendingConfirmationId || state.pendingMutationConfirmation) {
