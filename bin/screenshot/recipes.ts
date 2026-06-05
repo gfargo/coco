@@ -1387,6 +1387,34 @@ export const RECIPES: ScreenshotRecipe[] = [
     ],
   },
   {
+    name: 'demo-checkout-worktree-conflict',
+    description: 'Worktree-aware checkout: enter on a branch checked out in another worktree raises a prompt — switch there (y), remove & checkout here (r), or remove & delete branch (x)',
+    // multiple-worktrees: main here, feat/alpha · feat/beta · hotfix/urgent
+    // each checked out in their own linked worktrees — so a checkout from
+    // the branches view hits the "already checked out" conflict.
+    scenario: 'multiple-worktrees',
+    command: 'ui',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      // Branches view, then cursor onto a worktree-held branch (row 1 —
+      // main is pinned at row 0) and press Enter to attempt the checkout.
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 1200 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 800 },
+      { kind: 'key', key: 'Enter' },
+      // The conflict prompt: y switch · r remove & checkout here · x
+      // remove & delete branch · n cancel.
+      { kind: 'sleep', ms: 2400 },
+      // y switches into that worktree (opened as a nested repo frame),
+      // landing on the branch where it actually lives.
+      { kind: 'type', text: 'y' },
+      { kind: 'sleep', ms: 2400 },
+    ],
+  },
+  {
     name: 'ui-which-key',
     description: 'Which-key chord overlay — press g to see the live menu of g-chord view selectors',
     scenario: 'feature-pr-ready',

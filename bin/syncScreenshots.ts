@@ -112,6 +112,8 @@ const SITE_RECIPES = [
   'ui-staging-hunks',
   // Stash workflow (rich rows + rename)
   'demo-stash-workflow',
+  // Worktree-aware checkout conflict (switch / remove+checkout / remove+branch)
+  'demo-checkout-worktree-conflict',
   // Motion demos for features that only had static shots
   'demo-single-pane',
   'demo-conflicts',
@@ -238,6 +240,7 @@ const FILENAME_MAP: Record<string, string[]> = {
   'demo-workstation-using': ['demo-workstation-using.gif'],
   'demo-staging-hunks': ['demo-staging-hunks.gif'],
   'demo-stash-workflow': ['demo-stash-workflow.gif'],
+  'demo-checkout-worktree-conflict': ['demo-checkout-worktree-conflict.gif'],
   'demo-single-pane': ['demo-single-pane.gif'],
   'demo-conflicts': ['demo-conflicts.gif'],
   'demo-bisect': ['demo-bisect.gif'],
