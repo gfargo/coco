@@ -126,7 +126,7 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
   {
     name: 'ui-stash-list',
-    description: 'Workstation Stashes view — rich rows (on <branch> · N files · age) + inspector preview',
+    description: 'Workstation Stashes view — aligned table (ref · age · branch · files · message) + inspector preview',
     scenario: 'stashed-changes',
     command: 'ui',
     actions: [
@@ -1363,7 +1363,7 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
   {
     name: 'demo-stash-workflow',
-    description: 'Stash like a pro: open the Stashes view (rich rows — on <branch> · N files · age), rename one (R), see the row update + inspector preview',
+    description: 'Stash like a pro: open the Stashes view (aligned table — ref · age · branch · files · message), rename one (R), see the row update + inspector preview',
     scenario: 'stashed-changes',
     command: 'ui',
     emitGif: true,
@@ -1371,8 +1371,8 @@ export const RECIPES: ScreenshotRecipe[] = [
     actions: [
       // Wait out the cold-cache "loading context" beat before the gz chord.
       { kind: 'sleep', ms: 4000 },
-      // Jump to the Stashes view — rows now read "stash@{0}  on main ·
-      // 3 files · 2w  <message>" with the inspector previewing contents.
+      // Jump to the Stashes view — an aligned table (ref · age · branch ·
+      // files · message) with the inspector previewing contents.
       { kind: 'type', text: 'gz' },
       { kind: 'sleep', ms: 2600 },
       // Rename the cursored stash — git has no native rename, so coco
