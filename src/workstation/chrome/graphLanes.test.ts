@@ -40,12 +40,13 @@ describe('renderGraphRowSegments', () => {
     renderGraphRowSegments('*', tracker, { ascii: false })
     const fork = renderGraphRowSegments('|\\', tracker, { ascii: false })
 
-    // Two segments: ├ on lane 0 (the trunk continuing) and ╮ on lane 1
-    // (the freshly-spawned branch). The renderer paints them in
-    // different palette colors so the fork is immediately legible.
+    // Two segments: │ on lane 0 (the trunk continuing straight) and ╲ on
+    // lane 1 (the freshly-spawned branch peeling off down-right). The
+    // renderer paints them in different palette colors so the fork is
+    // immediately legible.
     expect(fork).toEqual([
-      { text: '├', laneId: 0 },
-      { text: '╮', laneId: 1 },
+      { text: '│', laneId: 0 },
+      { text: '╲', laneId: 1 },
     ])
     expect(tracker.columnLanes.get(0)).toBe(0)
     expect(tracker.columnLanes.get(1)).toBe(1)
@@ -71,12 +72,12 @@ describe('renderGraphRowSegments', () => {
     renderGraphRowSegments('| *', tracker, { ascii: false })
     const converge = renderGraphRowSegments('|/', tracker, { ascii: false })
 
-    // The ╯ keeps the absorbed lane's color so the side branch's tail
+    // The ╱ keeps the absorbed lane's color so the side branch's tail
     // visually terminates on its own color before merging into the
     // trunk.
     expect(converge).toEqual([
-      { text: '├', laneId: 0 },
-      { text: '╯', laneId: 1 },
+      { text: '│', laneId: 0 },
+      { text: '╱', laneId: 1 },
     ])
     expect(tracker.columnLanes.has(1)).toBe(false)
 
@@ -112,7 +113,7 @@ describe('renderGraphRowSegments', () => {
     expect(renderGraphRowSegments('*\\', tracker2, { ascii: false, commitGlyph: '◉' }))
       .toEqual([
         { text: '◉', laneId: 0 },
-        { text: '╮', laneId: 1 },
+        { text: '╲', laneId: 1 },
       ])
   })
 
@@ -143,8 +144,8 @@ describe('advanceTrackerThrough', () => {
     // stable, which is what scrolling needs to preserve coloring.
     const next = renderGraphRowSegments('|/', tracker, { ascii: false })
     expect(next).toEqual([
-      { text: '├', laneId: 0 },
-      { text: '╯', laneId: 1 },
+      { text: '│', laneId: 0 },
+      { text: '╱', laneId: 1 },
     ])
   })
 

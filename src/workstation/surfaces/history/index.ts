@@ -244,18 +244,30 @@ function renderLaneSegmentSpans(
   theme: LogInkTheme,
   padTo: number,
   keyPrefix: string,
-  options: { forceDim?: boolean; suppressColor?: boolean } = {}
+  options: { suppressColor?: boolean } = {}
 ): ReactTypes.ReactElement[] {
   const muted = theme.noColor ? undefined : theme.colors.muted
   const elements: ReactTypes.ReactElement[] = []
   let totalLen = 0
 
   segments.forEach((seg, idx) => {
+    // Weight follows the lane, not the row. A tracked lane (`│`, the
+    // commit glyph, the fork/converge diagonals `╲ ╱` — anything that
+    // carries a `laneId`) renders bold so it reads at a consistent
+    // bright weight everywhere it appears: without the bold the base
+    // ANSI palette colors (`cyan`, `magenta`, …) sit a notch duller
+    // than the `*Bright` entries (#791), and earlier the whole fork/
+    // close row was dimmed (#831) — which made a single lane flicker
+    // bright→dim→bright as it passed through each junction. Genuine
+    // non-lane decoration (spaces, standalone `╲`/`╱`, no `laneId`)
+    // stays unbold in the muted color so it recedes on its own.
+    const hasLane = seg.laneId !== undefined
     const laneColor = options.suppressColor ? undefined : (getLaneColor(seg.laneId, theme) ?? muted)
     elements.push(h(Text, {
       key: `${keyPrefix}-${idx}`,
       color: laneColor,
-      dimColor: options.forceDim || (theme.noColor && seg.laneId === undefined),
+      bold: hasLane,
+      dimColor: theme.noColor && !hasLane,
     }, seg.text))
     totalLen += seg.text.length
   })
@@ -738,34 +750,28 @@ export function renderHistoryPanel(
       }
 
       if (item.type === 'graph') {
-        // Graph-only rows split into two visual categories:
-        //
-        //   - git's own lane-closure scaffolding (`|/`, `|\`, etc.)
-        //     stays dim-on-dim so it reads as connector chrome that
-        //     recedes behind the commits it joins (#831). The eye
-        //     should never confuse a fork/close row for a commit
-        //     somebody accidentally skipped.
-        //
-        //   - synthetic spacers we inject between linear commits
-        //     (`spacer: true`) render at FULL lane brightness so the
-        //     trunk lane bar visibly connects consecutive commits.
-        //     They are explicitly NOT scaffolding — they exist to
-        //     make linear-history rhythm read as one continuous lane.
-        const isSpacer = item.spacer === true
+        // Graph-only rows — git's fork/close junctions plus the
+        // synthetic spacers we inject between linear commits. Both just
+        // carry lanes between commits, so they render at the same lane
+        // weight as the commit rows; `renderLaneSegmentSpans` bolds the
+        // tracked lanes and mutes the non-lane decoration per-segment,
+        // so the row no longer needs a blanket dim (which used to make a
+        // lane flicker dim every time it crossed a junction — #831).
         if (item.laneSegments && !theme.ascii) {
           return h(Text, {
             key: `graph-${index}-${item.graph}`,
-            dimColor: !isSpacer,
           },
             ...renderLaneSegmentSpans(
-              h, Text, item.laneSegments, theme, visible.graphWidth, `g${index}`,
-              { forceDim: !isSpacer }
+              h, Text, item.laneSegments, theme, visible.graphWidth, `g${index}`
             ))
         }
+        // Legacy / ASCII fallback (no lane segments): the trunk has no
+        // per-lane color, so dim the synthetic spacers a touch less than
+        // git's own connectors to preserve the old vertical rhythm.
         return h(Text, {
           key: `graph-${index}-${item.graph}`,
           color: theme.noColor ? undefined : theme.colors.muted,
-          dimColor: !isSpacer,
+          dimColor: item.spacer !== true,
         }, truncateCells(substituteGraphChars(
           item.graph.padEnd(visible.graphWidth),
           { ascii: theme.ascii }

@@ -105,10 +105,11 @@ describe('Ink history rows', () => {
         { text: '◉', laneId: 0 },
         { text: '   ', laneId: undefined },
       ])
-      // |\  fork row: trunk on lane 0, new branch lane id assigned.
+      // |\  fork row: trunk continues on lane 0, new branch lane peels
+      // off as a diagonal with its own lane id.
       expect(visible.items[1].laneSegments).toEqual([
-        { text: '├', laneId: 0 },
-        { text: '╮', laneId: 1 },
+        { text: '│', laneId: 0 },
+        { text: '╲', laneId: 1 },
         { text: '  ', laneId: undefined },
       ])
     })
@@ -408,7 +409,7 @@ describe('Ink history rows', () => {
       // Compressed-fork form some git versions emit for `--no-ff`
       // merges: the `\` rides on the commit row itself. The spacer
       // rewrite would leave the `\` intact, producing a duplicate
-      // `╮` corner directly under the merge glyph.
+      // `╲` diagonal directly under the merge glyph.
       const compressedMergeRows: GitLogRow[] = [
         {
           type: 'commit', graph: '*\\  ', shortHash: 'merge1', hash: 'merge1'.padEnd(40, '0'),
