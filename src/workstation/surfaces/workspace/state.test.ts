@@ -344,4 +344,38 @@ describe('workspace state reducer', () => {
       expect(s.themePickerFilter).toBe('')
     })
   })
+
+  describe('selectVisibleRepos memoization (#1079)', () => {
+    it('returns the cached array across renders that leave the inputs untouched', () => {
+      const first = selectVisibleRepos(baseState)
+      // A cursor move only swaps selectedIndex — overview.repos, sortMode,
+      // tab, filter, and pullRequestCounts all carry by reference, so the
+      // visible list must come back as the very same array.
+      const moved = applyWorkspaceAction(baseState, { type: 'move-cursor', delta: 1 })
+      expect(selectVisibleRepos(moved)).toBe(first)
+      // A pure re-read of the same state hits the memo too.
+      expect(selectVisibleRepos(baseState)).toBe(first)
+    })
+
+    it('invalidates when any keyed input changes', () => {
+      const first = selectVisibleRepos(baseState)
+      const sorted = applyWorkspaceAction(baseState, { type: 'set-sort', sort: 'name' })
+      expect(selectVisibleRepos(sorted)).not.toBe(first)
+
+      const refreshed = applyWorkspaceAction(baseState, {
+        type: 'replace-overview',
+        overview: overview([repo({ name: 'solo' })]),
+      })
+      const refreshedVisible = selectVisibleRepos(refreshed)
+      expect(refreshedVisible).not.toBe(first)
+      expect(refreshedVisible.map((entry) => entry.name)).toEqual(['solo'])
+
+      const withCounts = applyWorkspaceAction(baseState, {
+        type: 'replace-pull-request-counts',
+        counts: { '/tmp/bravo': 1 },
+        authenticated: true,
+      })
+      expect(selectVisibleRepos(withCounts)).not.toBe(first)
+    })
+  })
 })
