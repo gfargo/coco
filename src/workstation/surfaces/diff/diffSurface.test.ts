@@ -11,6 +11,7 @@
 import { createElement } from 'react'
 import { createLogInkState } from '../../../commands/log/inkViewModel'
 import { createLogInkContextStatus } from '../../chrome/context'
+import { cellWidth } from '../../chrome/text'
 import { createLogInkTheme } from '../../chrome/theme'
 import { renderDiffSurface } from './index'
 import type { LogInkComponents, LogInkContext, SurfaceRenderContext } from '../../runtime/types'
@@ -44,8 +45,11 @@ const hunkStates = ['staged', 'unstaged', 'staged', 'unstaged'] as const
 const hunkOffsets = [0, 5, 10, 15]
 const diffLines = Array.from({ length: 20 }, (_, i) => (hunkOffsets.includes(i) ? `@@ hunk ${i} @@` : ` line ${i}`))
 
-function render(worktreeDiffOffset: number): string {
+function build(worktreeDiffOffset: number, width = 100, manyHunks = false): unknown {
   const base = createLogInkState([])
+  const hunks = manyHunks
+    ? Array.from({ length: 40 }, (_, i) => ({ state: i % 2 ? 'staged' : 'unstaged' }))
+    : hunkStates.map((state) => ({ state }))
   const ctx = {
     h: createElement,
     components,
@@ -67,7 +71,7 @@ function render(worktreeDiffOffset: number): string {
     } as unknown as LogInkContext,
     contextStatus: createLogInkContextStatus('ready'),
     bodyRows: 30,
-    width: 100,
+    width,
     theme,
   } as unknown as SurfaceRenderContext
 
@@ -79,7 +83,7 @@ function render(worktreeDiffOffset: number): string {
       hunkOffsets,
     },
     worktreeDiffLoading: false,
-    worktreeHunks: { hunks: hunkStates.map((state) => ({ state })) },
+    worktreeHunks: { hunks },
     worktreeHunksLoading: false,
     filePreview: undefined,
     filePreviewLoading: false,
@@ -92,7 +96,24 @@ function render(worktreeDiffOffset: number): string {
     syntaxSpans: undefined,
   } as unknown as DiffSurfaceData
 
-  return flattenText(renderDiffSurface(ctx, diff))
+  return renderDiffSurface(ctx, diff)
+}
+
+function render(worktreeDiffOffset: number): string {
+  return flattenText(build(worktreeDiffOffset))
+}
+
+/** Flatten each header line (`diff-surface-header-*`) into its own string. */
+function headerLines(node: unknown, out: string[] = []): string[] {
+  if (node == null || node === false || typeof node === 'string' || typeof node === 'number') return out
+  if (Array.isArray(node)) { node.forEach((n) => headerLines(n, out)); return out }
+  const el = node as { key?: unknown; props?: { children?: unknown } }
+  if (typeof el.key === 'string' && /^diff-surface-header-\d+$/.test(el.key)) {
+    out.push(flattenText(el))
+    return out
+  }
+  if (el.props && 'children' in el.props) headerLines(el.props.children, out)
+  return out
 }
 
 describe('worktree diff — hunk staging rail (#1184, #1185)', () => {
@@ -110,5 +131,16 @@ describe('worktree diff — hunk staging rail (#1184, #1185)', () => {
     const text = render(0)
     expect(text).toContain('Hunk 1/4')
     expect(text).toContain('2/4 staged')
+  })
+
+  it('truncates the header to the panel interior at the narrow floor (#1187)', () => {
+    // A 16-hunk rail would blow past a 50-col panel; the header must
+    // truncate to the interior (width - 4), not the old hardcoded 140.
+    const width = 50
+    const lines = headerLines(build(0, width, true))
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) {
+      expect(cellWidth(line)).toBeLessThanOrEqual(width - 4)
+    }
   })
 })

@@ -323,7 +323,7 @@ export function renderDiffSurface(
           'commit-diff-split', syntaxSpans
         )
         : visiblePreviewHunks.map((line, index) => renderDiffLine(
-          h, Text, line, theme, syntaxSpans, 140,
+          h, Text, line, theme, syntaxSpans, Math.max(8, width - 5),
           `diff-surface-line-${state.diffPreviewOffset + index}`
         ))
 
@@ -342,7 +342,7 @@ export function renderDiffSurface(
     ...headerLines.map((line, index) => h(Text, {
       key: `diff-surface-header-${index}`,
       dimColor: index > 0,
-    }, truncateCells(line, 140))),
+    }, truncateCells(line, Math.max(20, width - 4)))),
     ...commitBodyNodes)
   }
 
@@ -417,7 +417,7 @@ export function renderDiffSurface(
   ...headerLines.map((line, index) => h(Text, {
     key: `diff-surface-header-${index}`,
     dimColor: index > 0,
-  }, truncateCells(line, 140))),
+  }, truncateCells(line, Math.max(20, width - 4)))),
   ...(showDiffLines
     ? renderWorktreeDiffBody(h, components, {
       lines: diffLines,
