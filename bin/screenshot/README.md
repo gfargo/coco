@@ -158,16 +158,20 @@ Run `npm run screenshot -- --list` for the live list. Current catalog:
 |--------|--------------|
 | `workspace-multi-repo` | 3 repos in different states |
 
-### Theme variants (30 `ui-history-theme-*` screenshots)
-Every truecolor preset gets a `ui-history-theme-<name>` recipe, each captured
-with its matching terminal palette (see Determinism → Terminal palette).
-Current themes:
-catppuccin, gruvbox, dracula, nord, solarized-dark, tokyo-night, one-dark,
-rose-pine, kanagawa, everforest, monokai, synthwave, ayu-dark, palenight,
-github-dark, horizon, nightfox, carbonfox, tokyonight-storm, catppuccin-latte,
-solarized-light, github-light, iceberg, material-ocean, moonlight, poimandres,
-vitesse-dark, vesper, flexoki, mellow — plus `monochrome` and the `default`
-preset (both on the Catppuccin Mocha terminal palette).
+### Theme variants (one `ui-history-theme-*` screenshot per preset)
+Every selectable preset except the bare `default` gets a
+`ui-history-theme-<name>` recipe, each captured with its matching terminal
+palette (see Determinism → Terminal palette). As of the color-theme release
+that's **108 themes** (`monochrome` + 107 color themes) — the full set is
+enumerated by `getLogInkThemePresets()`.
+
+This list is **not maintained by hand**: both `recipes.ts` (the recipe
+catalog) and `syncScreenshots.ts` (the `.www` sync) derive the theme carousel
+from `THEME_PRESET_COLORS` in `src/workstation/chrome/theme.ts`. Add a theme
+there — plus a terminal surface in `terminalThemes.ts` — and its recipe,
+screenshot, and site image all follow automatically. `monochrome` and
+`default` ride the named "Catppuccin Mocha" terminal palette; every other
+preset gets a palette derived from its own accents.
 
 ### Stdout / utility (8 screenshots)
 | Recipe | What it shows |
