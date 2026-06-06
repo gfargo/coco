@@ -2179,17 +2179,10 @@ export function getLogInkInputEvents(
       })]
     }
 
-    // Worktree (staging) diff: ↑/↓ move between hunks — the hunk is the
-    // unit you stage, so the cursor walks hunks (auto-scrolling to the
-    // selected one). Single-hunk files fall through to line-scroll so a
-    // long lone hunk stays readable; `[`/`]` remain hunk-jump aliases.
-    if (state.activeView === 'diff' && (context.worktreeHunkOffsets?.length ?? 0) > 1) {
-      return [action({
-        type: 'jumpWorktreeHunk',
-        delta: -1,
-        hunkOffsets: context.worktreeHunkOffsets as number[],
-      })]
-    }
+    // Worktree (staging) diff: ↑/↓ scroll lines — consistent with the
+    // commit / stash diffs (#1185). `[`/`]` jump between hunks (the
+    // staging unit), and the current hunk is derived from the scroll
+    // position, so line-scrolling still walks the staging target.
     if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
@@ -2325,15 +2318,8 @@ export function getLogInkInputEvents(
       })]
     }
 
-    // Worktree (staging) diff: ↓ walks to the next hunk (see the ↑
-    // handler). Multi-hunk only; single-hunk files line-scroll.
-    if (state.activeView === 'diff' && (context.worktreeHunkOffsets?.length ?? 0) > 1) {
-      return [action({
-        type: 'jumpWorktreeHunk',
-        delta: 1,
-        hunkOffsets: context.worktreeHunkOffsets as number[],
-      })]
-    }
+    // Worktree (staging) diff: ↓ scrolls lines (see the ↑ handler) —
+    // `[`/`]` jump hunks (#1185).
     if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',

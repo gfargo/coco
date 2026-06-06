@@ -1223,11 +1223,12 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
         global: NORMAL_GLOBAL_HINTS,
       }
     }
-    // Worktree (staging) diff. The hunk is the unit of action: ↑/↓ walk
-    // hunks, space stages/unstages the selected one, a stages the whole
-    // file, z discards the hunk.
+    // Worktree (staging) diff. Consistent with the commit/stash diffs
+    // (#1185): j/k scroll lines, [/] jump between hunks. space stages /
+    // unstages the hunk under the viewport, a stages the whole file, z
+    // discards the current hunk.
     return {
-      contextual: ['↑/↓ hunk', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
+      contextual: ['j/k lines', '[/] hunk', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

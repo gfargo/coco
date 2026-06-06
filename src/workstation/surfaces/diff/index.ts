@@ -29,6 +29,7 @@ import type {
   GitCommitDetail,
   GitCommitFilePreview,
 } from '../../../commands/log/data'
+import { hunkIndexAtOffset } from '../../../commands/log/inkViewModel'
 import {
   findStashFileForOffset,
   parseStashDiffFiles,
@@ -348,6 +349,11 @@ export function renderDiffSurface(
   const diffLines = worktreeDiff?.lines || []
   const totalHunks = worktreeHunks?.hunks.length ?? 0
   const stagedHunks = worktreeHunks?.hunks.filter((hunk) => hunk.state === 'staged').length ?? 0
+  // The "current" hunk is derived from the scroll position (#1185) —
+  // the single source of truth is `worktreeDiffOffset`. ↑/↓ scroll
+  // lines and `[`/`]` jump hunks; either way the header, rail, and
+  // stage/revert target all follow what's on screen.
+  const currentHunkIndex = hunkIndexAtOffset(state.worktreeDiffOffset, worktreeDiff?.hunkOffsets ?? [])
   const visibleDiffLines = diffLines.slice(
     state.worktreeDiffOffset,
     state.worktreeDiffOffset + visibleRows
@@ -365,7 +371,7 @@ export function renderDiffSurface(
   const hunkRail = (worktreeHunks?.hunks ?? [])
     .map((hunk, index) => {
       const marker = railMarker(hunk.state === 'staged')
-      return index === state.selectedWorktreeHunkIndex ? `[${marker}]` : marker
+      return index === currentHunkIndex ? `[${marker}]` : marker
     })
     .join('')
   const hunkHeaderLine = worktreeHunksLoading
@@ -373,7 +379,7 @@ export function renderDiffSurface(
     : worktreeDiff?.untracked
       ? (theme.ascii ? 'New file — press space to stage it whole.' : '✚ New file — press space to stage it whole.')
       : totalHunks
-        ? `Hunk ${state.selectedWorktreeHunkIndex + 1}/${totalHunks}  ${hunkRail}  ${stagedHunks}/${totalHunks} staged`
+        ? `Hunk ${currentHunkIndex + 1}/${totalHunks}  ${hunkRail}  ${stagedHunks}/${totalHunks} staged`
         : 'No stageable hunks for this file.'
   const headerLines: string[] = isLogInkContextKeyLoading(contextStatus, 'worktree')
     ? ['Loading file context...']
@@ -422,7 +428,7 @@ export function renderDiffSurface(
       syntaxSpans,
       hunkOffsets: worktreeDiff?.hunkOffsets || [],
       hunks: worktreeHunks?.hunks || [],
-      selectedIndex: state.selectedWorktreeHunkIndex,
+      selectedIndex: currentHunkIndex,
       keyPrefix: 'diff-surface-line',
     })
     : []))

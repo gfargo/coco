@@ -136,6 +136,7 @@ import {
     createLogInkState,
     getSelectedInkCommit,
     getThemePickerSelection,
+    hunkIndexAtOffset,
 } from '../../commands/log/inkViewModel'
 import { getGitOperationOverview } from '../../git/operationData'
 import { openProviderUrl } from '../../git/providerActions'
@@ -1999,7 +2000,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile])
 
   const toggleSelectedHunkStage = React.useCallback(async () => {
-    const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
+    // The staging target is the hunk under the viewport (#1185) —
+    // derived from the scroll offset, the single source of truth.
+    const selectedHunk = worktreeHunks?.hunks[
+      hunkIndexAtOffset(state.worktreeDiffOffset, worktreeDiff?.hunkOffsets ?? [])
+    ]
 
     if (!selectedHunk) {
       dispatch({ type: 'setStatus', value: 'no hunk selected', kind: 'warning' })
@@ -2029,7 +2034,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         kind: 'error',
       })
     }
-  }, [dispatch, git, refreshWorktreeContext, state.selectedWorktreeHunkIndex, worktreeHunks])
+  }, [dispatch, git, refreshWorktreeContext, state.worktreeDiffOffset, worktreeDiff, worktreeHunks])
 
   const revertSelectedFile = React.useCallback(async () => {
     if (!selectedWorktreeFile) {
@@ -2047,7 +2052,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile])
 
   const revertSelectedHunk = React.useCallback(async () => {
-    const selectedHunk = worktreeHunks?.hunks[state.selectedWorktreeHunkIndex]
+    const selectedHunk = worktreeHunks?.hunks[
+      hunkIndexAtOffset(state.worktreeDiffOffset, worktreeDiff?.hunkOffsets ?? [])
+    ]
 
     if (!selectedHunk) {
       dispatch({ type: 'setStatus', value: 'no hunk selected', kind: 'warning' })
@@ -2068,7 +2075,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         kind: 'error',
       })
     }
-  }, [dispatch, git, refreshWorktreeContext, state.selectedWorktreeHunkIndex, worktreeHunks])
+  }, [dispatch, git, refreshWorktreeContext, state.worktreeDiffOffset, worktreeDiff, worktreeHunks])
 
   const createCommitFromCompose = React.useCallback(async () => {
     const stagedCount = context.worktree?.stagedCount || 0
