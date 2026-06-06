@@ -200,19 +200,66 @@ export function createWorkspaceState(init: WorkspaceStateInit): WorkspaceState {
 }
 
 /**
+ * Single-entry memo for {@link selectVisibleRepos}. The visible list
+ * is a pure function of five referentially-stable state slices, and
+ * the hot path — cursor movement (`j`/`k`) — leaves all five untouched
+ * (`move-cursor` only swaps `selectedIndex`). Without the memo the
+ * renderer recomputes the full sort + tab-filter + text-filter three
+ * times per render (list window, header chips, and the direct call in
+ * `renderListBody`), plus once more in the reducer, on every keystroke.
+ *
+ * Keyed on object/string identity so a reducer transition that swaps
+ * any of `overview.repos`, `sortMode`, `tab`, `filter`, or
+ * `pullRequestCounts` is a guaranteed cache miss. Callers never mutate
+ * the returned array, so handing back the cached reference is safe and
+ * also stabilises the array identity for any future `React.memo`.
+ */
+let visibleReposCache:
+  | {
+      repos: ReadonlyArray<WorkspaceRepoSummary>
+      sortMode: WorkspaceState['sortMode']
+      tab: WorkspaceState['tab']
+      filter: string
+      pullRequestCounts: WorkspaceState['pullRequestCounts']
+      result: WorkspaceRepoSummary[]
+    }
+  | null = null
+
+/**
  * Recompute the visible repo list — sort → tab filter → text filter.
  * The renderer consumes this; the reducer also uses it to rectify the
  * cursor after a filter/sort change so the selection stays in range.
+ * Memoized on its five inputs (see {@link visibleReposCache}).
  */
 export function selectVisibleRepos(state: WorkspaceState): WorkspaceRepoSummary[] {
-  const sorted = sortWorkspaceRepos(state.overview.repos, state.sortMode)
+  const repos = state.overview.repos
+  const cache = visibleReposCache
+  if (
+    cache !== null &&
+    cache.repos === repos &&
+    cache.sortMode === state.sortMode &&
+    cache.tab === state.tab &&
+    cache.filter === state.filter &&
+    cache.pullRequestCounts === state.pullRequestCounts
+  ) {
+    return cache.result
+  }
+  const sorted = sortWorkspaceRepos(repos, state.sortMode)
   const tabFiltered = filterWorkspaceRepos(sorted, state.tab, {
     pullRequestCounts: state.pullRequestCounts,
   })
-  if (!state.filter) {
-    return tabFiltered
+  const result = state.filter
+    ? tabFiltered.filter((entry) => matchesWorkspaceText(entry, state.filter))
+    : tabFiltered
+  visibleReposCache = {
+    repos,
+    sortMode: state.sortMode,
+    tab: state.tab,
+    filter: state.filter,
+    pullRequestCounts: state.pullRequestCounts,
+    result,
   }
-  return tabFiltered.filter((entry) => matchesWorkspaceText(entry, state.filter))
+  return result
 }
 
 function clampCursor(index: number, length: number): number {
