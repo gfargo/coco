@@ -96,6 +96,28 @@ export type ScreenshotRecipe = {
  */
 export const SNAPSHOT_NOW = '2026-05-27T12:00:00Z'
 
+/**
+ * Theme presets added in the "color theme release" — each gets a history-view
+ * gallery recipe generated below, mirroring the hand-authored entries for the
+ * original presets. Kept as an explicit list (rather than diffing against the
+ * existing recipes) so the generated set stays obvious and reviewable.
+ */
+const NEW_THEME_GALLERY_PRESETS = [
+  'catppuccin-frappe', 'rose-pine-moon', 'kanagawa-dragon', 'kanagawa-lotus',
+  'nordfox', 'duskfox', 'terafox', 'dawnfox', 'ayu-mirage', 'material-darker',
+  'tokyo-night-moon', 'gruvbox-material', 'gruvbox-material-light', 'modus-vivendi',
+  'zenburn', 'oxocarbon', 'tomorrow-night', 'monokai-pro', 'sonokai', 'doom-one',
+  'andromeda', 'aura', 'cyberdream', 'nightfly', 'panda', 'hyper-snazzy',
+  'apprentice', 'melange', 'melange-light', 'spaceduck', 'embark', 'bluloco-dark',
+  'bluloco-light', 'papercolor-dark', 'base16-ocean', 'base16-eighties',
+  'everblush', 'darcula', 'eldritch', 'edge-light', 'zenbones', 'iceberg-light',
+  'github-dark-dimmed', 'edge-dark', 'selenized-dark', 'selenized-black',
+  'selenized-light', 'monokai-pro-machine', 'monokai-pro-octagon',
+  'monokai-pro-ristretto', 'monokai-pro-spectrum', 'base16-default-dark',
+  'base16-default-light', 'tomorrow', 'tokyodark', 'spacemacs-dark', 'bamboo',
+  'citylights', 'oxocarbon-light',
+] as const
+
 export const RECIPES: ScreenshotRecipe[] = [
   // ─────────────────────────────────────────────────────────────────
   // `coco ui` — workstation across representative scenarios
@@ -750,6 +772,17 @@ export const RECIPES: ScreenshotRecipe[] = [
     command: 'ui --view history --theme quiet-light',
     dimensions: { cols: 140, rows: 32 },
   },
+
+  // Color theme release — history-view gallery recipes for the new presets,
+  // generated from NEW_THEME_GALLERY_PRESETS so the catalog stays in one place.
+  ...NEW_THEME_GALLERY_PRESETS.map((preset): ScreenshotRecipe => ({
+    name: `ui-history-theme-${preset}`,
+    description: `History view rendered with the ${preset} theme preset`,
+    scenario: 'feature-pr-ready',
+    command: `ui --view history --theme ${preset}`,
+    dimensions: { cols: 140, rows: 32 },
+    theme: preset,
+  })),
 
   // Theme variants across different views — shows how each theme
   // adapts to status, diff, and branches surfaces

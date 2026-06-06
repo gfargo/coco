@@ -14,9 +14,21 @@ import { cpSync, existsSync, mkdirSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
 import { spawnSync } from 'child_process'
 
+import { getLogInkThemePresets } from '../src/workstation/chrome/theme'
+
 const REPO_ROOT = resolve(__dirname, '..')
 const SCREENSHOTS_DIR = join(REPO_ROOT, '.screenshots')
 const WWW_PUBLIC = join(REPO_ROOT, '.www', 'public', 'screenshots')
+
+/**
+ * Every selectable preset except `default` has a `ui-history-theme-<preset>`
+ * gallery recipe (the bare `default` is the baseline shown across the other
+ * view shots, so it isn't a carousel entry). Derived from the theme source of
+ * truth so the carousel — and its `.www` sync — pick up new themes for free.
+ */
+const THEME_HISTORY_RECIPES = getLogInkThemePresets()
+  .filter((preset) => preset !== 'default')
+  .map((preset) => `ui-history-theme-${preset}`)
 
 /**
  * Recipes that produce assets used on the marketing site.
@@ -47,56 +59,9 @@ const SITE_RECIPES = [
   'ui-submodules-view',
   'ui-changelog',
   'ui-help-overlay',
-  // Theme carousel (all built-in color themes — kept in sync with .www/src/config/themes.ts)
-  'ui-history-theme-catppuccin',
-  'ui-history-theme-gruvbox',
-  'ui-history-theme-dracula',
-  'ui-history-theme-nord',
-  'ui-history-theme-tokyo-night',
-  'ui-history-theme-one-dark',
-  'ui-history-theme-rose-pine',
-  'ui-history-theme-kanagawa',
-  'ui-history-theme-everforest',
-  'ui-history-theme-monokai',
-  'ui-history-theme-synthwave',
-  'ui-history-theme-ayu-dark',
-  'ui-history-theme-palenight',
-  'ui-history-theme-github-dark',
-  'ui-history-theme-horizon',
-  'ui-history-theme-nightfox',
-  'ui-history-theme-carbonfox',
-  'ui-history-theme-tokyonight-storm',
-  'ui-history-theme-iceberg',
-  'ui-history-theme-material-ocean',
-  'ui-history-theme-moonlight',
-  'ui-history-theme-poimandres',
-  'ui-history-theme-vitesse-dark',
-  'ui-history-theme-vesper',
-  'ui-history-theme-flexoki',
-  'ui-history-theme-mellow',
-  'ui-history-theme-solarized-dark',
-  'ui-history-theme-solarized-light',
-  'ui-history-theme-catppuccin-latte',
-  'ui-history-theme-github-light',
-  'ui-history-theme-monochrome',
-  'ui-history-theme-night-owl',
-  'ui-history-theme-cobalt2',
-  'ui-history-theme-oceanic-next',
-  'ui-history-theme-catppuccin-macchiato',
-  'ui-history-theme-gruvbox-light',
-  'ui-history-theme-tokyo-night-day',
-  'ui-history-theme-one-light',
-  'ui-history-theme-ayu-light',
-  'ui-history-theme-rose-pine-dawn',
-  'ui-history-theme-everforest-light',
-  'ui-history-theme-vitesse-light',
-  'ui-history-theme-dayfox',
-  'ui-history-theme-night-owl-light',
-  'ui-history-theme-flexoki-light',
-  'ui-history-theme-material-lighter',
-  'ui-history-theme-papercolor-light',
-  'ui-history-theme-modus-operandi',
-  'ui-history-theme-quiet-light',
+  // Theme carousel (all built-in color themes — derived from the theme source
+  // of truth and kept in sync with .www/src/config/themes.ts)
+  ...THEME_HISTORY_RECIPES,
   // Utility
   'workspace-multi-repo',
   'ui-command-palette',
@@ -176,55 +141,12 @@ const FILENAME_MAP: Record<string, string[]> = {
   'ui-submodules-view': ['view-submodules.png'],
   'ui-changelog': ['view-changelog.png'],
   'ui-help-overlay': ['workstation-help.png'],
-  'ui-history-theme-catppuccin': ['theme-catppuccin.png'],
-  'ui-history-theme-gruvbox': ['theme-gruvbox.png'],
-  'ui-history-theme-dracula': ['theme-dracula.png'],
-  'ui-history-theme-nord': ['theme-nord.png'],
-  'ui-history-theme-tokyo-night': ['theme-tokyo-night.png'],
-  'ui-history-theme-one-dark': ['theme-one-dark.png'],
-  'ui-history-theme-rose-pine': ['theme-rose-pine.png'],
-  'ui-history-theme-kanagawa': ['theme-kanagawa.png'],
-  'ui-history-theme-everforest': ['theme-everforest.png'],
-  'ui-history-theme-monokai': ['theme-monokai.png'],
-  'ui-history-theme-synthwave': ['theme-synthwave.png'],
-  'ui-history-theme-ayu-dark': ['theme-ayu-dark.png'],
-  'ui-history-theme-palenight': ['theme-palenight.png'],
-  'ui-history-theme-github-dark': ['theme-github-dark.png'],
-  'ui-history-theme-horizon': ['theme-horizon.png'],
-  'ui-history-theme-nightfox': ['theme-nightfox.png'],
-  'ui-history-theme-carbonfox': ['theme-carbonfox.png'],
-  'ui-history-theme-tokyonight-storm': ['theme-tokyonight-storm.png'],
-  'ui-history-theme-iceberg': ['theme-iceberg.png'],
-  'ui-history-theme-material-ocean': ['theme-material-ocean.png'],
-  'ui-history-theme-moonlight': ['theme-moonlight.png'],
-  'ui-history-theme-poimandres': ['theme-poimandres.png'],
-  'ui-history-theme-vitesse-dark': ['theme-vitesse-dark.png'],
-  'ui-history-theme-vesper': ['theme-vesper.png'],
-  'ui-history-theme-flexoki': ['theme-flexoki.png'],
-  'ui-history-theme-mellow': ['theme-mellow.png'],
-  'ui-history-theme-solarized-dark': ['theme-solarized-dark.png'],
-  'ui-history-theme-solarized-light': ['theme-solarized-light.png'],
-  'ui-history-theme-catppuccin-latte': ['theme-catppuccin-latte.png'],
-  'ui-history-theme-github-light': ['theme-github-light.png'],
-  'ui-history-theme-monochrome': ['theme-monochrome.png'],
-  'ui-history-theme-night-owl': ['theme-night-owl.png'],
-  'ui-history-theme-cobalt2': ['theme-cobalt2.png'],
-  'ui-history-theme-oceanic-next': ['theme-oceanic-next.png'],
-  'ui-history-theme-catppuccin-macchiato': ['theme-catppuccin-macchiato.png'],
-  'ui-history-theme-gruvbox-light': ['theme-gruvbox-light.png'],
-  'ui-history-theme-tokyo-night-day': ['theme-tokyo-night-day.png'],
-  'ui-history-theme-one-light': ['theme-one-light.png'],
-  'ui-history-theme-ayu-light': ['theme-ayu-light.png'],
-  'ui-history-theme-rose-pine-dawn': ['theme-rose-pine-dawn.png'],
-  'ui-history-theme-everforest-light': ['theme-everforest-light.png'],
-  'ui-history-theme-vitesse-light': ['theme-vitesse-light.png'],
-  'ui-history-theme-dayfox': ['theme-dayfox.png'],
-  'ui-history-theme-night-owl-light': ['theme-night-owl-light.png'],
-  'ui-history-theme-flexoki-light': ['theme-flexoki-light.png'],
-  'ui-history-theme-material-lighter': ['theme-material-lighter.png'],
-  'ui-history-theme-papercolor-light': ['theme-papercolor-light.png'],
-  'ui-history-theme-modus-operandi': ['theme-modus-operandi.png'],
-  'ui-history-theme-quiet-light': ['theme-quiet-light.png'],
+  // Theme carousel — each `ui-history-theme-<preset>` recipe maps 1:1 to
+  // `theme-<preset>.png` on the site. Generated from the same derived list as
+  // SITE_RECIPES so every preset's image syncs without hand-maintenance.
+  ...Object.fromEntries(
+    THEME_HISTORY_RECIPES.map((recipe) => [recipe, [`${recipe.replace('ui-history-', '')}.png`]]),
+  ),
   'workspace-multi-repo': ['workspace-multi-repo.png'],
   'ui-command-palette': ['feature-palette.png'],
   'ui-theme-picker': ['theme-picker.png'],

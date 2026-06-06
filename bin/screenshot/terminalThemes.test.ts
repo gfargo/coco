@@ -3,6 +3,7 @@ import { describe, expect, it } from '@jest/globals'
 import { buildTape } from './tape'
 import { findRecipe } from './recipes'
 import { DEFAULT_VHS_THEME, renderSetTheme, resolveVhsTheme } from './terminalThemes'
+import { THEME_PRESET_COLORS } from '../../src/workstation/chrome/theme'
 
 function jsonTheme(preset: string): Record<string, string> {
   const t = resolveVhsTheme(preset)
@@ -15,6 +16,16 @@ describe('resolveVhsTheme', () => {
     for (const preset of ['default', 'monochrome', undefined, 'not-a-real-theme']) {
       expect(resolveVhsTheme(preset)).toEqual({ kind: 'named', name: DEFAULT_VHS_THEME })
     }
+  })
+
+  it('has a custom surface for every color preset (no silent fallback)', () => {
+    // `default` is the only color preset deliberately shown on the named VHS
+    // default; every other preset must resolve to its own JSON palette so the
+    // theme gallery never renders one theme on another theme's background.
+    const missing = Object.keys(THEME_PRESET_COLORS)
+      .filter((preset) => preset !== 'default')
+      .filter((preset) => resolveVhsTheme(preset).kind !== 'json')
+    expect(missing).toEqual([])
   })
 
   it('gives visually distinct backgrounds to distinct themes', () => {

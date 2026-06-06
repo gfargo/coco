@@ -1,7 +1,7 @@
 import { Arguments, Argv, Options } from 'yargs'
 
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
-import { LogInkThemePreset } from '../../workstation/chrome/theme'
+import { getLogInkThemePresets, LogInkThemePreset } from '../../workstation/chrome/theme'
 import { BaseCommandOptions } from '../types'
 
 export interface WorkspaceOptions extends BaseCommandOptions {
@@ -32,7 +32,9 @@ export const options = {
   },
   theme: {
     description: 'TUI theme preset',
-    choices: ['default', 'monochrome', 'catppuccin', 'gruvbox', 'dracula', 'nord', 'solarized-dark', 'tokyo-night', 'one-dark', 'rose-pine', 'kanagawa', 'everforest', 'monokai', 'synthwave', 'ayu-dark', 'palenight', 'github-dark', 'horizon', 'nightfox', 'carbonfox', 'tokyonight-storm', 'catppuccin-latte', 'solarized-light', 'github-light', 'iceberg', 'material-ocean', 'moonlight', 'poimandres', 'vitesse-dark', 'vesper', 'flexoki', 'mellow', 'night-owl', 'cobalt2', 'oceanic-next', 'catppuccin-macchiato', 'gruvbox-light', 'tokyo-night-day', 'one-light', 'ayu-light', 'rose-pine-dawn', 'everforest-light', 'vitesse-light', 'dayfox', 'night-owl-light', 'flexoki-light', 'material-lighter', 'papercolor-light', 'modus-operandi', 'quiet-light'],
+    // Derived from the single source of truth (`THEME_PRESET_COLORS`) so the
+    // workspace CLI choices stay in sync with the themes the picker offers.
+    choices: getLogInkThemePresets(),
   },
 } as Record<string, Options>
 
