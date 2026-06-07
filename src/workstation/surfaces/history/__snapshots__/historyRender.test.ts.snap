@@ -28,6 +28,7 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
     color="#ffffff"
   >
     <Text
+      bold={true}
       dimColor={false}
     >
       ◉
@@ -59,10 +60,9 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
       add something
     </Text>
   </Text>
-  <Text
-    dimColor={false}
-  >
+  <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -71,6 +71,7 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
   </Text>
   <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -100,10 +101,9 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
       resolve regression
     </Text>
   </Text>
-  <Text
-    dimColor={false}
-  >
+  <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -112,6 +112,7 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
   </Text>
   <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -141,10 +142,9 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
       update README
     </Text>
   </Text>
-  <Text
-    dimColor={false}
-  >
+  <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -213,6 +213,7 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
     color="#ffffff"
   >
     <Text
+      bold={true}
       dimColor={false}
     >
       ◉
@@ -238,10 +239,9 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
       add something
     </Text>
   </Text>
-  <Text
-    dimColor={false}
-  >
+  <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -250,6 +250,7 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
   </Text>
   <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -273,10 +274,9 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
       resolve regression
     </Text>
   </Text>
-  <Text
-    dimColor={false}
-  >
+  <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -285,6 +285,7 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
   </Text>
   <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >
@@ -308,10 +309,9 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
       update README
     </Text>
   </Text>
-  <Text
-    dimColor={false}
-  >
+  <Text>
     <Text
+      bold={true}
       color="cyan"
       dimColor={false}
     >

@@ -91,19 +91,25 @@ export function renderGraphRowSegments(
       const laneId = tracker.columnLanes.get(col)
       const glyph = c === '|' ? '│' : commitGlyph
 
+      // Fork (`|\`) / converge (`|/`): the lane on THIS column carries
+      // straight down (`│`, or the commit glyph) and the spacer holds a
+      // diagonal that bridges to the adjacent lane. Diagonals — not
+      // corner glyphs — because git's lanes sit on a 2-column pitch and a
+      // single `╲`/`╱` spans exactly that step, keeping the line
+      // continuous into the commit above/below (see graphChars header).
       if (next === '\\') {
         const newLaneId = tracker.nextLaneId++
         tracker.columnLanes.set(col + 1, newLaneId)
-        push(c === '|' ? '├' : commitGlyph, laneId)
-        push('╮', newLaneId)
+        push(c === '|' ? '│' : commitGlyph, laneId)
+        push('╲', newLaneId)
         i += 2
         continue
       }
 
       if (next === '/') {
         const absorbedLaneId = tracker.columnLanes.get(col + 1)
-        push(c === '|' ? '├' : commitGlyph, laneId)
-        push('╯', absorbedLaneId)
+        push(c === '|' ? '│' : commitGlyph, laneId)
+        push('╱', absorbedLaneId)
         tracker.columnLanes.delete(col + 1)
         i += 2
         continue

@@ -26,63 +26,57 @@ describe('substituteGraphChars', () => {
 
   // #791 stage 1 — pattern-based junctions. Real git emits `|\` / `|/`
   // (no space between the pipe and the diagonal) for fork / converge.
-  // The 1-to-1 substitution renders these as `│╲` / `│╱` which read as
-  // overlapping pipes; the box-drawing junctions ├╮ / ├╯ make it clear
-  // that the trunk is forking off / receiving a lane.
-  describe('pattern-based junctions (#791)', () => {
-    it('emits ├╮ for the |\\ fork pattern', () => {
-      expect(substituteGraphChars('|\\', { ascii: false })).toBe('├╮')
+  // We render these as diagonals (`│╲` / `│╱`) rather than corner
+  // junctions (├╮ / ├╯): git lanes sit on a 2-column pitch and a single
+  // diagonal spans that step, so the line stays continuous into the
+  // commit above/below. Corners assume a 1-column step and land one
+  // column shy of the commit, leaving a detached hook (#791 revisited).
+  describe('fork / converge diagonals (#791)', () => {
+    it('emits │╲ for the |\\ fork pattern', () => {
+      expect(substituteGraphChars('|\\', { ascii: false })).toBe('│╲')
     })
 
-    it('emits ├╯ for the |/ converge pattern', () => {
-      expect(substituteGraphChars('|/', { ascii: false })).toBe('├╯')
+    it('emits │╱ for the |/ converge pattern', () => {
+      expect(substituteGraphChars('|/', { ascii: false })).toBe('│╱')
     })
 
-    it('preserves trailing padding around junction patterns', () => {
-      expect(substituteGraphChars('|\\  ', { ascii: false })).toBe('├╮  ')
-      expect(substituteGraphChars('|/  ', { ascii: false })).toBe('├╯  ')
+    it('preserves trailing padding around fork / converge patterns', () => {
+      expect(substituteGraphChars('|\\  ', { ascii: false })).toBe('│╲  ')
+      expect(substituteGraphChars('|/  ', { ascii: false })).toBe('│╱  ')
     })
 
-    it('handles junctions deeper in the row', () => {
+    it('handles fork / converge deeper in the row', () => {
       // Lane 0 vertical, lane 1 vertical, lane 2 forking off.
-      expect(substituteGraphChars('| | |\\', { ascii: false })).toBe('│ │ ├╮')
-      expect(substituteGraphChars('| | |/', { ascii: false })).toBe('│ │ ├╯')
+      expect(substituteGraphChars('| | |\\', { ascii: false })).toBe('│ │ │╲')
+      expect(substituteGraphChars('| | |/', { ascii: false })).toBe('│ │ │╱')
     })
 
-    it('falls back to single-char diagonals when not part of a junction', () => {
-      // `\` not preceded by `|` or `*` — keep the legacy diagonal so we
-      // do not accidentally render unrelated lane shifts as junctions.
+    it('renders standalone diagonals the same as lane diagonals', () => {
+      // A `\` / `/` not preceded by `|` or `*` is just a lane shift; it
+      // renders as the same diagonal — there is no special-cased junction
+      // glyph to drift away from.
       expect(substituteGraphChars(' \\ ', { ascii: false })).toBe(' ╲ ')
       expect(substituteGraphChars(' / ', { ascii: false })).toBe(' ╱ ')
     })
 
-    it('handles consecutive junctions in the same row', () => {
-      // Two adjacent forks: rare in practice but the tokenizer must
-      // consume each bigram cleanly without leaking diagonals across
-      // lane boundaries.
-      expect(substituteGraphChars('|\\|\\', { ascii: false })).toBe('├╮├╮')
-    })
-
     it('renders *\\ and */ commit-row variants with the configured commit glyph', () => {
-      // Uncommon — git typically puts the fork on its own row — but
-      // when it does emit a commit + diagonal we still want a clean
-      // junction so the commit glyph is preserved.
-      expect(substituteGraphChars('*\\', { ascii: false })).toBe('●╮')
-      expect(substituteGraphChars('*/', { ascii: false })).toBe('●╯')
+      // Uncommon — git typically puts the fork on its own row — but when
+      // it does emit a commit + diagonal the commit glyph is preserved
+      // and the diagonal carries the branching lane.
+      expect(substituteGraphChars('*\\', { ascii: false })).toBe('●╲')
+      expect(substituteGraphChars('*/', { ascii: false })).toBe('●╱')
     })
 
-    it('honors commitGlyph option for stage-3 merge / HEAD glyphs', () => {
-      // Stage 3 of #791 will pass ◆ for merges and ◉ for HEAD; verify
-      // the option threads through both standalone commits and the
-      // commit-with-diagonal patterns.
+    it('honors commitGlyph option for merge / HEAD glyphs', () => {
+      // ◆ for merges and ◉ for HEAD; verify the option threads through
+      // both standalone commits and the commit-with-diagonal patterns.
       expect(substituteGraphChars('*', { ascii: false, commitGlyph: '◆' })).toBe('◆')
-      expect(substituteGraphChars('*\\', { ascii: false, commitGlyph: '◉' })).toBe('◉╮')
+      expect(substituteGraphChars('*\\', { ascii: false, commitGlyph: '◉' })).toBe('◉╲')
       expect(substituteGraphChars('| *', { ascii: false, commitGlyph: '◆' })).toBe('│ ◆')
     })
 
-    it('keeps ASCII output untouched even when bigrams are present', () => {
-      // ascii bypass is the safety net for legacy terminals — junction
-      // tokenization must not run when ascii is true.
+    it('keeps ASCII output untouched', () => {
+      // ascii bypass is the safety net for legacy terminals.
       expect(substituteGraphChars('|\\', { ascii: true })).toBe('|\\')
       expect(substituteGraphChars('|/', { ascii: true })).toBe('|/')
     })

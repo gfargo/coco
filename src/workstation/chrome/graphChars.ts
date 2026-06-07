@@ -1,13 +1,17 @@
 /**
  * The chars `git log --graph` emits for branch topology — `*`, `|`, `\`,
- * `/`, `_`, ` `. ASCII-only output is bulletproof for legacy terminals
- * but the angles read poorly when many branches overlap.
+ * `/`, `_`, ` ` — mapped 1-to-1 to box-drawing glyphs.
  *
- * `substituteGraphChars` walks the row left-to-right with one-char
- * lookahead so it can recognize git's two-char junction patterns and
- * emit proper box-drawing junctions (├╮ / ├╯) instead of overlapping
- * pipes (│╲ / │╱). Anything that isn't part of a recognized pattern
- * falls back to the legacy 1-to-1 substitution.
+ * `substituteGraphChars` walks the row and substitutes each char via
+ * `ASCII_TO_UNICODE_MAP` (with `*` overridable to a commit glyph). The
+ * fork/converge diagonals (`\` → `╲`, `/` → `╱`) are kept as diagonals
+ * rather than rewritten to corner glyphs (├╮ / ├╯): git lays its lanes
+ * out on a 2-column pitch (lane N at column 2N), and a single diagonal
+ * spans exactly that 2-column step, so it visually connects the lane
+ * above to the lane below. A corner glyph assumes a 1-column step and
+ * therefore lands one column shy of the commit it should meet, leaving
+ * a detached "hook" and a floating commit (#791 revisited — the corners
+ * read cleaner in isolation but break the line continuity).
  *
  * `theme.ascii` (TERM=dumb / vt100) bypasses substitution entirely so
  * legacy terminals get the raw `git log --graph` output. `theme.noColor`
@@ -47,25 +51,6 @@ export type SubstituteGraphCharsOptions = {
   commitGlyph?: string
 }
 
-/**
- * Recognized 2-char junction patterns. The key is the bigram git emits
- * (lane char + spacer char); the value is the box-drawing pair we render.
- *
- * - `|\` (fork): trunk lane gains a right-T (├) and the spacer becomes
- *   the upper-right corner (╮) starting the new lane below.
- * - `|/` (converge): trunk lane gains a right-T (├) and the spacer
- *   becomes the upper-left corner (╯) absorbing the side lane from
- *   above.
- *
- * `*\` and `* /` (commit-row variants) are handled the same way, but
- * the commit glyph itself stays configurable via `commitGlyph` so
- * stage 3 can swap in `◆` / `◉` for merges and HEAD.
- */
-const PIPE_FORK = '├╮'
-const PIPE_CONVERGE = '├╯'
-const FORK_SPACER = '╮'
-const CONVERGE_SPACER = '╯'
-
 export function substituteGraphChars(
   graph: string,
   options: SubstituteGraphCharsOptions
@@ -76,41 +61,13 @@ export function substituteGraphChars(
 
   const commitGlyph = options.commitGlyph ?? DEFAULT_COMMIT_GLYPH
   let output = ''
-  let i = 0
-
-  while (i < graph.length) {
-    const a = graph[i]
-    const b = i + 1 < graph.length ? graph[i + 1] : ''
-
-    if (a === '|' && b === '\\') {
-      output += PIPE_FORK
-      i += 2
-      continue
-    }
-    if (a === '|' && b === '/') {
-      output += PIPE_CONVERGE
-      i += 2
-      continue
-    }
-    if (a === '*' && b === '\\') {
-      output += commitGlyph + FORK_SPACER
-      i += 2
-      continue
-    }
-    if (a === '*' && b === '/') {
-      output += commitGlyph + CONVERGE_SPACER
-      i += 2
-      continue
-    }
-
-    if (a === '*') {
+  for (const character of graph) {
+    if (character === '*') {
       output += commitGlyph
     } else {
-      output += ASCII_TO_UNICODE_MAP[a] ?? a
+      output += ASCII_TO_UNICODE_MAP[character] ?? character
     }
-    i += 1
   }
-
   return output
 }
 
