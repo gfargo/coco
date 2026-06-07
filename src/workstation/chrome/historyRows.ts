@@ -5,12 +5,13 @@ import {
   HEAD_COMMIT_GLYPH,
   MERGE_COMMIT_GLYPH,
 } from './graphChars'
+import { LaneSegment } from './graphLanes'
+import { computeGraphLayout, GraphLayout } from './graphLayout'
 import {
-  LaneSegment,
-  advanceTrackerThrough,
-  createLaneTrackerState,
-  renderGraphRowSegments,
-} from './graphLanes'
+  renderCommitRowSegments,
+  renderRowGraphAscii,
+  renderTransitionRowSegments,
+} from './graphOrtho'
 import { LogInkState } from '../../commands/log/inkViewModel'
 
 /**
@@ -172,99 +173,35 @@ function isSelectedCommit(row: GitLogRow, selected: GitLogCommitRow | undefined)
 }
 
 /**
- * Build the vertical-only graph string that follows a commit row when
- * `withSpacers` is enabled. Every commit-cell glyph (`*`) is rewritten
- * to a lane bar (`|`) so the synthetic row continues every open lane
- * without re-rendering the commit dot. All other graph chars pass
- * through unchanged, so a commit graph like `* | |` becomes `| | |`.
+ * Lane layout is a pure function of the ordered commit list, so cache it
+ * by the array's identity — recomputed only when the commit list itself
+ * changes (a data load), never on a scroll or selection move.
  */
-function buildSpacerGraph(commitGraph: string): string {
-  return commitGraph.replace(/\*/g, '|')
+const layoutCache = new WeakMap<readonly GitLogCommitRow[], GraphLayout>()
+
+function getGraphLayout(commits: GitLogCommitRow[]): GraphLayout {
+  const cached = layoutCache.get(commits)
+  if (cached) return cached
+  const layout = computeGraphLayout(commits)
+  layoutCache.set(commits, layout)
+  return layout
 }
 
+/**
+ * One row in the expanded full-graph list. `commit` and `transition`
+ * index into the layout (and the commit list) in lockstep; bucket
+ * headers are pure presentation rows.
+ */
 type ExpandedRow =
-  | { kind: 'source'; row: GitLogRow }
-  | { kind: 'spacer'; sourceCommit: GitLogCommitRow }
+  | { kind: 'commit'; index: number }
+  | { kind: 'transition'; index: number }
   | { kind: 'bucket-header'; label: string }
 
 /**
- * Walk `state.rows` and inject a synthetic spacer entry after every
- * commit row when `withSpacers` is true. The spacer is a graph-only
- * row that renders as `|` per active lane so consecutive commits have
- * a clear vertical rhythm without losing topology continuity.
- *
- * The spacer is suppressed in two cases where it would create visible
- * "tearing" on the graph column:
- *
- *   1. The next row is git's own graph-only topology row (`|\` /
- *      `|/` / `| |`). That row already provides vertical breathing
- *      AND draws the lane transition; sandwiching our spacer between
- *      the commit and the transition produces an extra all-pipes row
- *      that reads as misalignment.
- *
- *   2. The current commit's graph contains a backslash or forward
- *      slash (the compressed forms git uses for `*\` / `*` followed
- *      by slash, when it draws the fork on the same row as the
- *      commit). The spacer's commit-glyph → lane-bar rewrite would
- *      leave the diagonal intact, rendering a second corner glyph
- *      immediately below the merge — a duplicate that looks like a
- *      glyph stutter.
- *
- * When `withSpacers` is false the list is identity-mapped from
- * source rows, preserving the legacy zero-padding behavior for any
- * caller that wants raw git topology (filters, tests, etc.).
- */
-function commitGraphIsSimple(graph: string): boolean {
-  return !/[\\/]/.test(graph)
-}
-
-function expandRowsWithSpacers(rows: GitLogRow[], withSpacers: boolean): ExpandedRow[] {
-  const out: ExpandedRow[] = []
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i]
-    out.push({ kind: 'source', row })
-    if (!withSpacers || row.type !== 'commit') continue
-    if (!commitGraphIsSimple(row.graph || '*')) continue
-    const next = rows[i + 1]
-    if (next && next.type === 'graph') continue
-    out.push({ kind: 'spacer', sourceCommit: row })
-  }
-  return out
-}
-
-/**
- * Walk an already-expanded row list and inject `bucket-header`
- * entries immediately before each commit whose date bucket differs
- * from the previous commit's. The very first commit always gets a
- * header so the user lands inside a labeled section regardless of
- * where the scroll window starts. Non-commit entries (spacers, git
- * topology rows) pass through unchanged.
- */
-function injectBucketHeaders(rows: ExpandedRow[], now: Date): ExpandedRow[] {
-  const out: ExpandedRow[] = []
-  let prevBucket: string | undefined = undefined
-  for (const entry of rows) {
-    if (entry.kind === 'source' && entry.row.type === 'commit') {
-      const bucket = getDateBucket(entry.row.date, now)
-      if (bucket.key !== prevBucket) {
-        out.push({ kind: 'bucket-header', label: bucket.label })
-        prevBucket = bucket.key
-      }
-    }
-    out.push(entry)
-  }
-  return out
-}
-
-/**
  * Find the most recent bucket header at or above `start` so a slice
- * that begins mid-bucket can still surface its section label. Used
- * for the "sticky header" behavior — when the window scrolls past
- * the natural header position, prepend the header to the slice so
- * the user always sees which bucket they're in. Returns the label
- * to prepend, or `undefined` when no prepend is needed (either
- * `expanded[start]` is already a header, or there is no earlier
- * header in the list).
+ * that begins mid-bucket can still surface its section label (the
+ * "sticky header" behavior). Returns the label to prepend, or
+ * `undefined` when none is needed.
  */
 function findStickyBucketLabel(expanded: ExpandedRow[], start: number): string | undefined {
   if (start < expanded.length && expanded[start].kind === 'bucket-header') return undefined
@@ -283,13 +220,40 @@ function toFullGraphItems(
     bucketingNow: undefined,
   }
 ): LogInkHistoryItem[] {
+  const commits = state.commits
+  if (commits.length === 0) return []
+
+  // Compute the whole layout up front (cached). Doing it globally — not
+  // per visible window — means a lane's column and color are identical
+  // no matter where the scroll sits, and the transition edges of the
+  // last visible commit still point correctly at commits below the
+  // window. This replaces the old per-render lane-tracker fast-forward.
+  const layout = getGraphLayout(commits)
   const selected = state.filteredCommits[state.selectedIndex]
-  const withSpacers = expandRowsWithSpacers(state.rows, options.withSpacers)
-  const expanded = options.bucketingNow
-    ? injectBucketHeaders(withSpacers, options.bucketingNow)
-    : withSpacers
+  const { withSpacers, bucketingNow } = options
+
+  // Expand to (optional bucket header) + commit + (optional transition)
+  // per commit across the full list, so windowing is a simple slice.
+  const expanded: ExpandedRow[] = []
+  let prevBucket: string | undefined
+  for (let i = 0; i < commits.length; i += 1) {
+    if (bucketingNow) {
+      const bucket = getDateBucket(commits[i].date, bucketingNow)
+      if (bucket.key !== prevBucket) {
+        expanded.push({ kind: 'bucket-header', label: bucket.label })
+        prevBucket = bucket.key
+      }
+    }
+    expanded.push({ kind: 'commit', index: i })
+    // The transition row carries this commit's topology (fork / merge /
+    // continuation) down to the next commit and doubles as the linear
+    // spacer. Off only for non-rendering callers (filters, tests) that
+    // want commit rows alone.
+    if (withSpacers) expanded.push({ kind: 'transition', index: i })
+  }
+
   const selectedExpandedIndex = expanded.findIndex(
-    (entry) => entry.kind === 'source' && isSelectedCommit(entry.row, selected)
+    (entry) => entry.kind === 'commit' && isSelectedCommit(commits[entry.index], selected)
   )
   const start = clampWindowStart(
     selectedExpandedIndex >= 0 ? selectedExpandedIndex : 0,
@@ -297,35 +261,9 @@ function toFullGraphItems(
     visibleCount
   )
 
-  // Lane tracking is order-dependent — fast-forward the tracker through
-  // every row above the visible window so lane ids stay stable as the
-  // user scrolls. Without this, scrolling would re-color lanes from a
-  // fresh tracker each time. Spacers contribute their vertical-only
-  // graph to the prefix so the tracker sees a no-op advance and lane
-  // state stays consistent at the window boundary. Bucket headers
-  // skip the tracker entirely since they have no graph string.
-  const tracker = createLaneTrackerState()
-  const prefixGraphs: string[] = []
-  for (let k = 0; k < start; k += 1) {
-    const entry = expanded[k]
-    if (entry.kind === 'bucket-header') continue
-    if (entry.kind === 'spacer') {
-      prefixGraphs.push(buildSpacerGraph(entry.sourceCommit.graph || '*'))
-      continue
-    }
-    prefixGraphs.push(
-      entry.row.type === 'commit' ? entry.row.graph || '*' : entry.row.graph
-    )
-  }
-  advanceTrackerThrough(prefixGraphs, tracker, prefixGraphs.length)
-
-  // Sticky header — if the slice would start partway into a bucket
-  // (most commonly when scrolling), prepend the bucket label so the
-  // user keeps temporal context. The prepend costs one row from the
-  // visible budget, so the slice itself shrinks by 1.
-  const stickyLabel = options.bucketingNow
-    ? findStickyBucketLabel(expanded, start)
-    : undefined
+  // Sticky header — prepend the active bucket label when the slice
+  // starts partway into a bucket; costs one row from the budget.
+  const stickyLabel = bucketingNow ? findStickyBucketLabel(expanded, start) : undefined
   const sliceCount = stickyLabel ? visibleCount - 1 : visibleCount
   const sliced = expanded.slice(start, start + sliceCount)
   const finalEntries: ExpandedRow[] = stickyLabel
@@ -336,33 +274,22 @@ function toFullGraphItems(
     if (entry.kind === 'bucket-header') {
       return bucketHeaderItem(entry.label)
     }
-    if (entry.kind === 'spacer') {
-      const graph = buildSpacerGraph(entry.sourceCommit.graph || '*')
+    const row = layout.rows[entry.index]
+    if (entry.kind === 'transition') {
       return {
         type: 'graph',
-        graph,
-        laneSegments: renderGraphRowSegments(graph, tracker, { ascii: false }),
+        graph: renderRowGraphAscii(row, 'transition'),
+        laneSegments: renderTransitionRowSegments(row),
         spacer: true,
       }
     }
-
-    const { row } = entry
-    if (row.type === 'graph') {
-      return {
-        type: 'graph',
-        graph: row.graph,
-        laneSegments: renderGraphRowSegments(row.graph, tracker, { ascii: false }),
-      }
-    }
-
-    const graph = row.graph || '*'
-    const commitGlyph = commitGlyphFor(row)
+    const commit = commits[entry.index]
     return {
       type: 'commit',
-      commit: row,
-      graph,
-      laneSegments: renderGraphRowSegments(graph, tracker, { ascii: false, commitGlyph }),
-      selected: isSelectedCommit(row, selected),
+      commit,
+      graph: renderRowGraphAscii(row, 'commit'),
+      laneSegments: renderCommitRowSegments(row, commitGlyphFor(commit)),
+      selected: isSelectedCommit(commit, selected),
     }
   })
 }

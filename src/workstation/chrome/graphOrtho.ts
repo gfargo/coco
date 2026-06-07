@@ -6,7 +6,8 @@
  * the transition row beneath each commit. This module turns that model
  * into the `LaneSegment[]` the existing renderer already consumes
  * (`renderLaneSegmentSpans` in the history surface), so the rest of the
- * pipeline is untouched.
+ * pipeline is untouched. It also projects each row to an ASCII string
+ * for the `theme.ascii` fallback and for the dynamic `graphWidth` calc.
  *
  * ## Why orthogonal beats diagonals
  *
@@ -81,7 +82,6 @@ type Cell = { text: string; laneId: number | undefined }
 /** Coalesce adjacent cells of equal lane id into segments; drop the
  *  trailing run of blanks (the downstream renderer pads to width). */
 function coalesce(cells: Cell[]): LaneSegment[] {
-  // Trim trailing blank (lane-less) cells.
   let end = cells.length
   while (end > 0 && cells[end - 1].text === ' ' && cells[end - 1].laneId === undefined) {
     end -= 1
@@ -99,32 +99,11 @@ function coalesce(cells: Cell[]): LaneSegment[] {
   return segments
 }
 
-/**
- * Render the commit row: the commit glyph at its column, a `│` for every
- * lane passing through, blanks elsewhere. `commitGlyph` is supplied by
- * the caller (merge `◆` / HEAD `◉` / regular `●` via `commitGlyphFor`).
- */
-export function renderCommitRowSegments(
-  row: CommitLayoutRow,
-  commitGlyph: string = DEFAULT_COMMIT_GLYPH
-): LaneSegment[] {
-  const cells: Cell[] = Array.from({ length: cellCount(row.width) }, () => ({
-    text: ' ',
-    laneId: undefined,
-  }))
-  for (const lane of row.passthrough) {
-    cells[nodeOffset(lane.column)] = { text: '│', laneId: lane.laneId }
-  }
-  cells[nodeOffset(row.column)] = { text: commitGlyph, laneId: row.laneId }
-  return coalesce(cells)
-}
-
-/**
- * Render the transition row beneath a commit: every edge routed
- * orthogonally with corners + horizontals, junctions composed from the
- * accumulated direction set of each cell.
- */
-export function renderTransitionRowSegments(row: CommitLayoutRow): LaneSegment[] {
+/** Per-cell connection masks + owning lane for a commit's transition row. */
+function transitionMasks(row: CommitLayoutRow): {
+  masks: number[]
+  laneIds: (number | undefined)[]
+} {
   const masks: number[] = new Array(cellCount(row.width)).fill(0)
   const laneIds: (number | undefined)[] = new Array(masks.length).fill(undefined)
 
@@ -159,11 +138,73 @@ export function renderTransitionRowSegments(row: CommitLayoutRow): LaneSegment[]
     }
   }
 
+  return { masks, laneIds }
+}
+
+/** Cells of a commit row: the glyph at its column, `│` per pass-through. */
+function commitCells(row: CommitLayoutRow, dot: string, bar: string): Cell[] {
+  const cells: Cell[] = Array.from({ length: cellCount(row.width) }, () => ({
+    text: ' ',
+    laneId: undefined,
+  }))
+  for (const lane of row.passthrough) {
+    cells[nodeOffset(lane.column)] = { text: bar, laneId: lane.laneId }
+  }
+  cells[nodeOffset(row.column)] = { text: dot, laneId: row.laneId }
+  return cells
+}
+
+/**
+ * Render the commit row: the commit glyph at its column, a `│` for every
+ * lane passing through, blanks elsewhere. `commitGlyph` is supplied by
+ * the caller (merge `◆` / HEAD `◉` / regular `●` via `commitGlyphFor`).
+ */
+export function renderCommitRowSegments(
+  row: CommitLayoutRow,
+  commitGlyph: string = DEFAULT_COMMIT_GLYPH
+): LaneSegment[] {
+  return coalesce(commitCells(row, commitGlyph, '│'))
+}
+
+/**
+ * Render the transition row beneath a commit: every edge routed
+ * orthogonally with corners + horizontals, junctions composed from the
+ * accumulated direction set of each cell.
+ */
+export function renderTransitionRowSegments(row: CommitLayoutRow): LaneSegment[] {
+  const { masks, laneIds } = transitionMasks(row)
   const cells: Cell[] = masks.map((mask, i) => ({
     text: mask === 0 ? ' ' : GLYPH_BY_MASK[mask] ?? ' ',
     laneId: mask === 0 ? undefined : laneIds[i],
   }))
   return coalesce(cells)
+}
+
+/** ASCII glyph for a transition cell's direction mask (`theme.ascii`). */
+function asciiForMask(mask: number): string {
+  if (mask === 0) return ' '
+  const horizontal = mask & (L | R)
+  const vertical = mask & (U | D)
+  if (horizontal && vertical) return '+' // any corner / junction / cross
+  if (horizontal) return '-'
+  return '|'
+}
+
+/**
+ * Project a row to a plain ASCII graph string (width = the row's cell
+ * count). Used for the `theme.ascii` fallback and as the `graph` field
+ * that feeds the dynamic `graphWidth` calc — the Unicode path renders
+ * from `laneSegments`, not this string.
+ */
+export function renderRowGraphAscii(row: CommitLayoutRow, kind: 'commit' | 'transition'): string {
+  if (kind === 'commit') {
+    return commitCells(row, '*', '|')
+      .map((cell) => cell.text)
+      .join('')
+  }
+  return transitionMasks(row)
+    .masks.map(asciiForMask)
+    .join('')
 }
 
 /** Grid cell width of a row — for padding / `graphWidth` projection. */

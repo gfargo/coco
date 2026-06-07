@@ -54,10 +54,13 @@ function makeCommit(overrides: Partial<GitLogRow> = {}): GitLogRow {
   } as GitLogRow
 }
 
+// Connected linear chain (each commit's parent is the next) so the DAG
+// layout reads as one trunk lane — `parents: []` everywhere would be
+// three disconnected roots, each handed its own lane/color.
 const baseRows: GitLogRow[] = [
-  makeCommit({ shortHash: 'aaa1111', hash: 'aaa1111', message: 'feat: add something', refs: ['HEAD -> main'] }),
-  makeCommit({ shortHash: 'bbb2222', hash: 'bbb2222', message: 'fix: resolve regression' }),
-  makeCommit({ shortHash: 'ccc3333', hash: 'ccc3333', message: 'docs: update README' }),
+  makeCommit({ shortHash: 'aaa1111', hash: 'aaa1111', parents: ['bbb2222'], message: 'feat: add something', refs: ['HEAD -> main'] }),
+  makeCommit({ shortHash: 'bbb2222', hash: 'bbb2222', parents: ['ccc3333'], message: 'fix: resolve regression' }),
+  makeCommit({ shortHash: 'ccc3333', hash: 'ccc3333', parents: [], message: 'docs: update README' }),
 ]
 
 function makeState(overrides: Partial<LogInkState> = {}): LogInkState {

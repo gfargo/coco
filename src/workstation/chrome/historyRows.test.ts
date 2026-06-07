@@ -62,11 +62,13 @@ describe('Ink history rows', () => {
     expect(visible.graphWidth).toBe(1)
   })
 
-  it('preserves graph continuation rows in full graph mode', () => {
+  it('interleaves a transition row after each commit in full graph mode', () => {
     // Full mode is the 0.54.x default; pass explicitly so the test
-    // intent reads correctly without depending on the default.
+    // intent reads correctly without depending on the default. The DAG
+    // renderer emits a transition (graph) row beneath every commit,
+    // carrying its topology + lane continuation.
     const state = createLogInkState(rows, { fullGraph: true })
-    const visible = getVisibleLogInkHistory(state, 5)
+    const visible = getVisibleLogInkHistory(state, 5, { fullGraphSpacing: true })
 
     expect(visible.items.map((item) => item.type)).toEqual([
       'commit',
@@ -75,7 +77,15 @@ describe('Ink history rows', () => {
       'graph',
       'commit',
     ])
-    expect(visible.graphWidth).toBe(4)
+    // 2-cells-per-column grid: a 2-lane fork spans 3 cells (●·●).
+    expect(visible.graphWidth).toBe(3)
+  })
+
+  it('renders commit rows only when spacing is off', () => {
+    const state = createLogInkState(rows, { fullGraph: true })
+    const visible = getVisibleLogInkHistory(state, 5)
+
+    expect(visible.items.map((item) => item.type)).toEqual(['commit', 'commit', 'commit'])
   })
 
   it('renders refs as distinct labels without dot truncation', () => {
@@ -95,22 +105,19 @@ describe('Ink history rows', () => {
   describe('lane segment attachment', () => {
     it('attaches lane segments to each visible item in full graph mode', () => {
       const state = createLogInkState(rows, { fullGraph: true })
-      const visible = getVisibleLogInkHistory(state, 5)
+      const visible = getVisibleLogInkHistory(state, 5, { fullGraphSpacing: true })
 
       const types = visible.items.map((item) => Boolean(item.laneSegments))
       expect(types).toEqual([true, true, true, true, true])
 
       // First commit is HEAD on a merge; HEAD ring wins (stage 3).
-      expect(visible.items[0].laneSegments).toEqual([
-        { text: '◉', laneId: 0 },
-        { text: '   ', laneId: undefined },
-      ])
-      // |\  fork row: trunk continues on lane 0, new branch lane peels
-      // off as a diagonal with its own lane id.
+      expect(visible.items[0].laneSegments).toEqual([{ text: '◉', laneId: 0 }])
+      // Transition below the merge: trunk continues (├) on lane 0 while
+      // the feature parent forks right (─╮) on its own lane, the corner
+      // landing under the lane it opens.
       expect(visible.items[1].laneSegments).toEqual([
-        { text: '│', laneId: 0 },
-        { text: '╲', laneId: 1 },
-        { text: '  ', laneId: undefined },
+        { text: '├', laneId: 0 },
+        { text: '─╮', laneId: 1 },
       ])
     })
 
@@ -124,7 +131,10 @@ describe('Ink history rows', () => {
         graph: '* ',
         shortHash: `hash${i}`,
         hash: `hash${i}`.padEnd(40, '0'),
-        parents: [],
+        // Connected linear chain — each commit's parent is the next one,
+        // so they share a single trunk lane (id 0). With disconnected
+        // roots the DAG engine would (correctly) hand each its own lane.
+        parents: i < 19 ? [`hash${i + 1}`.padEnd(40, '0')] : [],
         date: '2026-04-30',
         author: 'Coco',
         refs: [],
@@ -266,7 +276,8 @@ describe('Ink history rows', () => {
       graph: '* ',
       shortHash: `hash${i}`,
       hash: `hash${i}`.padEnd(40, '0'),
-      parents: [],
+      // Connected chain so the four commits share one trunk lane.
+      parents: i < 3 ? [`hash${i + 1}`.padEnd(40, '0')] : [],
       date: '2026-04-30',
       author: 'Coco',
       refs: [],
@@ -280,9 +291,10 @@ describe('Ink history rows', () => {
       expect(visible.items.map((item) => item.type)).toEqual([
         'commit', 'graph', 'commit', 'graph', 'commit', 'graph', 'commit', 'graph',
       ])
-      // The spacers carry vertical lane markers (rendered as the
-      // box-drawing `│`), not the commit dot.
-      expect(visible.items[1].graph).toBe('| ')
+      // The transition rows carry vertical lane markers (rendered as the
+      // box-drawing `│`), not the commit dot — a single-lane chain is one
+      // cell wide, so the ASCII projection is just `|`.
+      expect(visible.items[1].graph).toBe('|')
       const spacer = visible.items[1] as {
         laneSegments?: Array<{ text: string }>
         spacer?: boolean
@@ -295,18 +307,20 @@ describe('Ink history rows', () => {
       expect(spacer.spacer).toBe(true)
     })
 
-    it('only marks synthetic spacers, not git\'s own topology rows', () => {
-      // Build a row list with an explicit topology row inside so we
-      // can verify that injected spacers carry `spacer: true` while
-      // git's natural graph rows do not.
+    it('marks every transition row as a spacer', () => {
+      // The DAG renderer owns the topology now — git's own graph rows in
+      // `state.rows` are ignored, so every graph row in the output is one
+      // of our transition rows and carries `spacer: true` (the renderer
+      // uses that flag to keep them at full lane brightness).
       const mergeShapedRows: GitLogRow[] = [
         {
           type: 'commit', graph: '*   ', shortHash: 'main1', hash: 'main1'.padEnd(40, '0'),
-          parents: [], date: '2026-05-15', author: 'Coco', refs: [], message: 'feat: main commit',
+          parents: ['main0'.padEnd(40, '0')],
+          date: '2026-05-15', author: 'Coco', refs: [], message: 'feat: main commit',
         },
         {
           type: 'commit', graph: '*   ', shortHash: 'main0', hash: 'main0'.padEnd(40, '0'),
-          parents: ['p1'.padEnd(40, '0'), 'p2'.padEnd(40, '0')],
+          parents: ['side1'.padEnd(40, '0'), 'p2'.padEnd(40, '0')],
           date: '2026-04-23', author: 'Coco', refs: [], message: "Merge branch 'feat/x'",
         },
         { type: 'graph', graph: '|\\  ' },
@@ -319,14 +333,10 @@ describe('Ink history rows', () => {
       const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
 
       const items = visible.items as Array<{ type: string; spacer?: boolean }>
-      // Find graph rows and partition by `spacer` flag.
       const graphRows = items.filter((i) => i.type === 'graph')
-      const synthetic = graphRows.filter((i) => i.spacer === true)
-      const natural = graphRows.filter((i) => i.spacer !== true)
 
-      // At least one of each kind should be present in this shape.
-      expect(synthetic.length).toBeGreaterThan(0)
-      expect(natural.length).toBeGreaterThan(0)
+      expect(graphRows.length).toBeGreaterThan(0)
+      expect(graphRows.every((i) => i.spacer === true)).toBe(true)
     })
 
     it('does not inject spacers when fullGraphSpacing is off', () => {
@@ -360,78 +370,47 @@ describe('Ink history rows', () => {
       })
     })
 
-    // Tearing-fix follow-up: spacers must NOT sandwich themselves
-    // between a commit and a git-emitted topology row (`|\` / `|/`),
-    // and must NOT fire on commits whose own graph already carries
-    // the lane-fork glyph (`*\` / `*/`). Both cases produced a
-    // duplicate corner glyph the user saw as misalignment.
-    it('skips the spacer when git\'s next row is a topology graph row', () => {
-      const mergeShapedRows: GitLogRow[] = [
-        {
-          type: 'commit', graph: '*   ', shortHash: 'merge1', hash: 'merge1'.padEnd(40, '0'),
-          parents: ['p1'.padEnd(40, '0'), 'p2'.padEnd(40, '0')],
-          date: '2026-04-23', author: 'Coco', refs: [], message: "Merge branch 'feat/x'",
-        },
-        { type: 'graph', graph: '|\\  ' },
-        {
-          type: 'commit', graph: '| * ', shortHash: 'side1', hash: 'side1'.padEnd(40, '0'),
-          parents: [], date: '2026-04-22', author: 'Coco', refs: [], message: 'feat: side commit',
-        },
-        { type: 'graph', graph: '|/  ' },
-        {
-          type: 'commit', graph: '*   ', shortHash: 'main1', hash: 'main1'.padEnd(40, '0'),
-          parents: [], date: '2026-04-15', author: 'Coco', refs: [], message: 'feat: main below merge',
-        },
-      ]
-      const state = createLogInkState(mergeShapedRows, { fullGraph: true })
-      const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
+    it('emits exactly one transition row after every commit', () => {
+      // The DAG renderer pairs each commit with a single transition row
+      // (its topology + continuation). No suppression heuristics — the
+      // count is deterministic: 2 rows per commit.
+      const state = createLogInkState(linearRows, { fullGraph: true })
+      const visible = getVisibleLogInkHistory(state, 8, { fullGraphSpacing: true })
 
-      // Expected sequence — no synthetic spacers between the merge
-      // commit and `|\`, between the side commit and `|/`, or
-      // between the last source-graph row and the final commit on
-      // main (graph rows aren't commits so the loop doesn't even
-      // consider them). Only `main1` at the tail gets a spacer
-      // because nothing follows it.
-      expect(visible.items.map((item) => item.type)).toEqual([
-        'commit', // merge
-        'graph',  // |\
-        'commit', // side
-        'graph',  // |/
-        'commit', // main
-        'graph',  // spacer for main (no row after it, but the rule
-                  // only checks `next.type === 'graph'`; an absent
-                  // next still gets a spacer so the trailing commit
-                  // has its breathing row).
-      ])
+      const commits = visible.items.filter((i) => i.type === 'commit')
+      const transitions = visible.items.filter((i) => i.type === 'graph')
+      expect(commits.length).toBe(4)
+      expect(transitions.length).toBe(4)
     })
 
-    it('skips the spacer when the commit\'s graph carries the compressed fork (`*\\`)', () => {
-      // Compressed-fork form some git versions emit for `--no-ff`
-      // merges: the `\` rides on the commit row itself. The spacer
-      // rewrite would leave the `\` intact, producing a duplicate
-      // `╲` diagonal directly under the merge glyph.
-      const compressedMergeRows: GitLogRow[] = [
+    it('draws a fork junction in the transition row below a merge', () => {
+      // A real merge DAG: M merges A (first parent) and F (feature);
+      // F rejoins at A. The transition below M must fork right toward
+      // the feature lane.
+      const mergeRows: GitLogRow[] = [
         {
-          type: 'commit', graph: '*\\  ', shortHash: 'merge1', hash: 'merge1'.padEnd(40, '0'),
-          parents: ['p1'.padEnd(40, '0'), 'p2'.padEnd(40, '0')],
-          date: '2026-04-23', author: 'Coco', refs: [], message: "Merge branch 'feat/x'",
+          type: 'commit', graph: '*', shortHash: 'mmm', hash: 'mmm'.padEnd(40, '0'),
+          parents: ['aaa'.padEnd(40, '0'), 'fff'.padEnd(40, '0')],
+          date: '2026-04-23', author: 'Coco', refs: [], message: 'Merge feature',
         },
         {
-          type: 'commit', graph: '| * ', shortHash: 'side1', hash: 'side1'.padEnd(40, '0'),
-          parents: [], date: '2026-04-22', author: 'Coco', refs: [], message: 'feat: side commit',
+          type: 'commit', graph: '*', shortHash: 'fff', hash: 'fff'.padEnd(40, '0'),
+          parents: ['aaa'.padEnd(40, '0')],
+          date: '2026-04-22', author: 'Coco', refs: [], message: 'feat: feature commit',
+        },
+        {
+          type: 'commit', graph: '*', shortHash: 'aaa', hash: 'aaa'.padEnd(40, '0'),
+          parents: [], date: '2026-04-21', author: 'Coco', refs: [], message: 'feat: base',
         },
       ]
-      const state = createLogInkState(compressedMergeRows, { fullGraph: true })
+      const state = createLogInkState(mergeRows, { fullGraph: true })
       const visible = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
 
-      // No spacer between merge and side: merge's graph has `\` so
-      // `commitGraphIsSimple` returns false. Side gets its trailing
-      // spacer because nothing prevents it.
-      expect(visible.items.map((item) => item.type)).toEqual([
-        'commit', // merge (no trailing spacer — compressed fork)
-        'commit', // side
-        'graph',  // spacer for side
-      ])
+      // items[1] is the transition below the merge commit.
+      const transition = visible.items[1]
+      expect(transition.type).toBe('graph')
+      const rendered = transition.laneSegments?.map((s) => s.text).join('')
+      expect(rendered).toBe('├─╮')
     })
   })
 

@@ -1,6 +1,7 @@
 import type { CommitLayoutRow } from './graphLayout'
 import {
   renderCommitRowSegments,
+  renderRowGraphAscii,
   renderTransitionRowSegments,
   rowCellWidth,
 } from './graphOrtho'
@@ -131,6 +132,49 @@ describe('renderTransitionRowSegments', () => {
     expect(rendered.indexOf('┼')).toBe(2)
     const crossSegment = segments.find((s) => s.text.includes('┼'))
     expect(crossSegment?.laneId).toBe(5)
+  })
+})
+
+describe('renderRowGraphAscii', () => {
+  it('projects a commit row with * and lane bars', () => {
+    expect(renderRowGraphAscii(rowOf({ width: 1 }), 'commit')).toBe('*')
+    expect(
+      renderRowGraphAscii(
+        rowOf({ column: 1, laneId: 1, passthrough: [{ laneId: 0, column: 0 }], width: 2 }),
+        'commit'
+      )
+    ).toBe('| *')
+  })
+
+  it('projects a transition row with | - + for bars, runs and junctions', () => {
+    // Same fork as ├─╮ → ASCII +-+ family: trunk junction, run, corner.
+    expect(
+      renderRowGraphAscii(
+        rowOf({
+          width: 2,
+          edges: [
+            { laneId: 0, from: 0, to: 0 },
+            { laneId: 1, from: 0, to: 1 },
+          ],
+        }),
+        'transition'
+      )
+    ).toBe('+-+')
+    // A straight lane is a single bar.
+    expect(
+      renderRowGraphAscii(rowOf({ width: 1, edges: [{ laneId: 0, from: 0, to: 0 }] }), 'transition')
+    ).toBe('|')
+  })
+
+  it('matches the cell width of the unicode render', () => {
+    const row = rowOf({
+      width: 3,
+      edges: [
+        { laneId: 0, from: 0, to: 0 },
+        { laneId: 1, from: 0, to: 2 },
+      ],
+    })
+    expect(renderRowGraphAscii(row, 'transition').length).toBe(rowCellWidth(row))
   })
 })
 
