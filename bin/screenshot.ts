@@ -24,6 +24,9 @@ import { spawnSync } from 'child_process'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fromScenario, listRegistered } from '@gfargo/git-scenarios'
+// Side-effect import: registers screenshot-only custom scenarios into the
+// git-scenarios registry before any `fromScenario` / `listRegistered` call.
+import './screenshot/scenarios'
 import { findRecipe, listRecipeNames, RECIPES, type ScreenshotRecipe } from './screenshot/recipes'
 import { buildTape, createSecretRedactor, hasForwardedSecrets } from './screenshot/tape'
 

@@ -215,8 +215,11 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
   {
     name: 'ui-diff-feature-branch',
-    description: 'Side-by-side (split) diff view of a commit on a feature branch',
-    scenario: 'feature-pr-ready',
+    description: 'Side-by-side (split) diff view of a JavaScript refactor on a feature branch',
+    // `diff-js-showcase` (registered in ./scenarios) puts a substantial
+    // .js rewrite on the tip commit so the split diff fills with syntax
+    // highlighting — keywords, strings, JSDoc, template literals.
+    scenario: 'diff-js-showcase',
     command: 'ui --view diff',
     // Press `d` once to switch unified → side-by-side. Split needs the diff
     // panel ≥ MIN_SPLIT_DIFF_WIDTH (120) — and the diff view also shows the
