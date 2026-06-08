@@ -10,9 +10,10 @@ describe('buildScenarioFixtures', () => {
     // temp git repo, runs `git init` + multiple `git commit`s for
     // the feature-pr-ready scenario, then walks the log calling
     // `git show --numstat` + per-file `git show` for each commit.
-    // Under load (parallel jest workers) the shell-out cost adds
-    // up. The 30s budget is comfortably under any reasonable CI
-    // run-time and avoids the periodic flake we saw under default.
+    // Under load (parallel jest workers) the shell-out + grammar-
+    // download cost adds up and periodically blew the old 30s budget.
+    // 120s is generous headroom for the heaviest CI runner while still
+    // catching a genuine hang.
     const { repo, fixtures } = await buildScenarioFixtures('feature-pr-ready')
     try {
       expect(fixtures.scenario).toBe('feature-pr-ready')
@@ -35,7 +36,7 @@ describe('buildScenarioFixtures', () => {
     } finally {
       await repo.cleanup()
     }
-  }, 30_000)
+  }, 120_000)
 
   it('extracts the same byte-identical fixture set across runs (determinism)', async () => {
     // Same 30s budget as the sibling test — this one spins up
@@ -58,5 +59,5 @@ describe('buildScenarioFixtures', () => {
       await a.repo.cleanup()
       await b.repo.cleanup()
     }
-  }, 30_000)
+  }, 120_000)
 })

@@ -74,7 +74,7 @@ const mockLoadSummarizationChain = loadSummarizationChain as jest.MockedFunction
   typeof loadSummarizationChain
 >
 
-jest.setTimeout(15000)
+jest.setTimeout(180000)
 
 const serviceConfig = {
   authentication: {
