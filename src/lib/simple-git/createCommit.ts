@@ -34,6 +34,8 @@ export function isPreCommitHookModifiedFilesError(error: unknown): boolean {
 export interface CreateCommitOptions {
   /** When true, passes --no-verify to git commit, skipping pre-commit and commit-msg hooks. */
   noVerify?: boolean
+  /** When true, passes --amend to rewrite the most recent commit (`coco amend`). */
+  amend?: boolean
 }
 
 /**
@@ -55,7 +57,10 @@ export async function createCommit(
   onHookModifiedFiles?: () => void | Promise<void>,
   options?: CreateCommitOptions
 ): Promise<CommitResult> {
-  const flags = options?.noVerify ? ['--no-verify'] : []
+  const flags = [
+    ...(options?.amend ? ['--amend'] : []),
+    ...(options?.noVerify ? ['--no-verify'] : []),
+  ]
 
   try {
     return await git.commit(message, flags)

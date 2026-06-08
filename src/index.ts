@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import yargs from 'yargs'
+import amend from './commands/amend'
 import cache from './commands/cache'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
@@ -13,6 +14,7 @@ import review from './commands/review'
 import ui from './commands/ui'
 import workspace from './commands/workspace'
 
+import { AmendOptions } from './commands/amend/config'
 import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
@@ -110,6 +112,13 @@ y.command<CommitOptions>(
   commit.desc,
   commit.builder,
   commit.handler
+)
+
+y.command<AmendOptions>(
+  amend.command,
+  amend.desc,
+  amend.builder,
+  amend.handler
 )
 
 y.command<ChangelogOptions>(

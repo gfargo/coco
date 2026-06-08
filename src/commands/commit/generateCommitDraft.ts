@@ -17,6 +17,7 @@ import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessa
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { LLMModel } from '../../lib/langchain/types'
+import { FileChange } from '../../lib/types'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
@@ -71,6 +72,14 @@ export type CommitDraftInput = {
    * without a draft, same failure mode as a network error.
    */
   signal?: AbortSignal
+  /**
+   * Override the change set the draft is generated from (#0.67 `coco amend`).
+   * When provided, the staged-changes lookup is skipped and these changes are
+   * summarized instead — letting `amend` draft a message from the last commit's
+   * diff rather than the working-tree staging area. `commitRef` is the label
+   * passed to the diff parser (e.g. `'HEAD'`).
+   */
+  changeSource?: { changes: FileChange[]; commitRef: string }
 }
 
 export type CommitDraftResult = {
@@ -161,6 +170,7 @@ export async function generateCommitDraft({
   logger = new Logger({ silent: true }),
   onStreamChunk,
   signal,
+  changeSource,
 }: CommitDraftInput): Promise<CommitDraftResult> {
   const config = loadConfig<CommitOptions, CommitArgv>(argv as Arguments<CommitArgv>)
   const key = getApiKeyForModel(config)
@@ -189,7 +199,13 @@ export async function generateCommitDraft({
 
   const useConventional = Boolean(config.conventionalCommits || argv.conventional)
 
+  // `coco amend` passes an explicit change set (the last commit's diff). The
+  // default path summarizes the staged working tree.
+  const diffLabel = changeSource?.commitRef ?? '--staged'
   const changes = await (async () => {
+    if (changeSource) {
+      return changeSource.changes
+    }
     if (config.noDiff) {
       const status = await git.status()
       return status.files.map((file) => ({
@@ -214,16 +230,16 @@ export async function generateCommitDraft({
     return {
       ok: false,
       draft: '',
-      warnings: ['No staged changes detected.'],
+      warnings: [changeSource ? 'No changes detected to summarize.' : 'No staged changes detected.'],
       validationErrors: [],
     }
   }
 
-  const summary = config.noDiff
+  const summary = config.noDiff && !changeSource
     ? `Staged files:\n${changes.map((c) => `${c.status}: ${c.filePath}`).join('\n')}`
     : await fileChangeParser({
       changes,
-      commit: '--staged',
+      commit: diffLabel,
       options: createFileChangeParserOptions({
         command: 'commit',
         tokenizer,
