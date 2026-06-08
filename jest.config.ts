@@ -10,6 +10,12 @@ export default {
   // are unaffected (they consume the real package).
   moduleNameMapper: {
     '^@langchain/mistralai$': '<rootDir>/src/test/mocks/langchainMistral.ts',
+    // `@langchain/aws` pulls in the AWS SDK v3 Bedrock client, whose CommonJS
+    // bundles reach for Node internals ts-jest's sandbox doesn't provide,
+    // breaking module load for every suite that imports the provider
+    // registry. Map it to a lightweight stub for tests; runtime/build are
+    // unaffected (they consume the real package).
+    '^@langchain/aws$': '<rootDir>/src/test/mocks/langchainAws.ts',
   },
   // Constrain test discovery to the directories that actually contain
   // coco's tests. Without this, jest's default recursion from the

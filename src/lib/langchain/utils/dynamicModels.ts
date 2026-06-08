@@ -150,6 +150,40 @@ const MISTRAL_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   },
 }
 
+const BEDROCK_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  cost: {
+    summarize: 'anthropic.claude-3-5-haiku-20241022-v1:0',
+    commit: 'anthropic.claude-3-5-haiku-20241022-v1:0',
+    // Floor at sonnet — see note on OpenAI commitSplit above.
+    commitSplit: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    changelog: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    review: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    recap: 'anthropic.claude-3-5-haiku-20241022-v1:0',
+    repair: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    largeDiff: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  },
+  balanced: {
+    summarize: 'anthropic.claude-3-5-haiku-20241022-v1:0',
+    commit: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    commitSplit: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    changelog: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    review: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    recap: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    repair: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    largeDiff: 'anthropic.claude-sonnet-4-20250514-v1:0',
+  },
+  quality: {
+    summarize: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    commit: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    commitSplit: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    changelog: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    review: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    recap: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    repair: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    largeDiff: 'anthropic.claude-sonnet-4-20250514-v1:0',
+  },
+}
+
 const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   cost: {
     summarize: 'llama3.2:3b',
@@ -191,6 +225,7 @@ const DYNAMIC_DEFAULTS: Record<LLMProvider, ProviderDynamicDefaults> = {
   anthropic: ANTHROPIC_DYNAMIC_DEFAULTS,
   gemini: GEMINI_DYNAMIC_DEFAULTS,
   mistral: MISTRAL_DYNAMIC_DEFAULTS,
+  bedrock: BEDROCK_DYNAMIC_DEFAULTS,
   ollama: OLLAMA_DYNAMIC_DEFAULTS,
 }
 

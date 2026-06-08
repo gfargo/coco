@@ -54,7 +54,7 @@ function checkServiceBlock(config: Config, diagnostics: Diagnostic[]) {
     diagnostics.push({
       severity: 'error',
       message: 'No provider set in service config.',
-      fix: 'Set service.provider to "openai", "anthropic", "azure", "gemini", "mistral", or "ollama".',
+      fix: 'Set service.provider to "openai", "anthropic", "azure", "gemini", "mistral", "bedrock", or "ollama".',
     })
   }
 
@@ -71,6 +71,26 @@ function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
   if (!config.service) return
 
   const { provider, authentication } = config.service
+
+  // Bedrock authenticates via the AWS credential chain, not a coco-managed
+  // API key — so an authentication.type of 'None' is valid and expected.
+  if (provider === 'bedrock') {
+    if (authentication && authentication.type !== 'None') {
+      diagnostics.push({
+        severity: 'warn',
+        message:
+          'AWS Bedrock uses the AWS credential chain, not a coco-managed API key. Set authentication.type to "None".',
+        fix: 'Change service.authentication to { "type": "None" }, and provide AWS credentials via AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION (or a shared profile).',
+        autoFix: (raw) => {
+          const svc = raw.service as Record<string, unknown>
+          if (svc) {
+            svc.authentication = { type: 'None' }
+          }
+        },
+      })
+    }
+    return
+  }
 
   if (provider === 'ollama') {
     if (authentication && authentication.type !== 'None') {

@@ -1,6 +1,6 @@
 import { Config } from '../../commands/types'
 import { LangChainAuthenticationError, LangChainConfigurationError } from './errors'
-import { AnthropicLLMService, AzureLLMService, GeminiLLMService, LLMModel, LLMProvider, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from './types'
+import { AnthropicLLMService, AzureLLMService, BedrockLLMService, GeminiLLMService, LLMModel, LLMProvider, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from './types'
 import { validateRequired, validateServiceConfig } from './validation'
 import { providerRequiresAuth } from './providers/registry'
 
@@ -217,6 +217,23 @@ export const DEFAULT_AZURE_LLM_SERVICE: AzureLLMService = {
   },
 }
 
+export const DEFAULT_BEDROCK_LLM_SERVICE: BedrockLLMService = {
+  provider: 'bedrock',
+  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  region: 'us-east-1',
+  maxConcurrent: 8,
+  tokenLimit: 4096,
+  temperature: 0.32,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  // Bedrock authenticates via the AWS credential chain, not a coco-managed
+  // API key — so its auth type is 'None'.
+  authentication: {
+    type: 'None',
+    credentials: undefined,
+  },
+}
+
 export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   provider: 'ollama',
   model: 'llama3',
@@ -279,6 +296,12 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
         model: model || DEFAULT_AZURE_LLM_SERVICE.model,
       } as AzureLLMService
 
+    case 'bedrock':
+      return {
+        ...DEFAULT_BEDROCK_LLM_SERVICE,
+        model: model || DEFAULT_BEDROCK_LLM_SERVICE.model,
+      } as BedrockLLMService
+
     case 'ollama':
       return {
         ...DEFAULT_OLLAMA_LLM_SERVICE,
@@ -293,8 +316,8 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
       
     default:
       throw new LangChainConfigurationError(
-        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, azure, gemini, mistral, ollama`,
-        { provider, supportedProviders: ['openai', 'anthropic', 'azure', 'gemini', 'mistral', 'ollama'] }
+        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, azure, gemini, mistral, bedrock, ollama`,
+        { provider, supportedProviders: ['openai', 'anthropic', 'azure', 'gemini', 'mistral', 'bedrock', 'ollama'] }
       )
   }
 }

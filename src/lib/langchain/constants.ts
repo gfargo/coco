@@ -1,5 +1,5 @@
 import { TiktokenModel } from '@langchain/openai'
-import { AnthropicModel, GeminiModel, MistralModel } from './types'
+import { AnthropicModel, BedrockModel, GeminiModel, MistralModel } from './types'
 
 export const OPEN_AI_MODELS = [
   'gpt-4.5',
@@ -52,3 +52,12 @@ export const MISTRAL_MODELS = [
   'ministral-3b-latest',
   'open-mistral-nemo',
 ] as MistralModel[]
+
+export const BEDROCK_MODELS = [
+  'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  'anthropic.claude-3-5-haiku-20241022-v1:0',
+  'anthropic.claude-sonnet-4-20250514-v1:0',
+  'anthropic.claude-3-haiku-20240307-v1:0',
+  'meta.llama3-1-70b-instruct-v1:0',
+  'mistral.mistral-large-2407-v1:0',
+] as BedrockModel[]

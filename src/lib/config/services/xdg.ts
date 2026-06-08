@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { AnthropicLLMService, AzureLLMService, GeminiLLMService, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
+import { AnthropicLLMService, AzureLLMService, BedrockLLMService, GeminiLLMService, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 import { Config } from '../types'
 
 /**
@@ -115,6 +115,20 @@ function parseServiceConfig(service: any): LLMService | undefined {
         },
         fields: service.fields
       } as AzureLLMService
+    case 'bedrock':
+      return {
+        provider: 'bedrock',
+        model: service.model,
+        region: service.region,
+        accessKeyId: service.accessKeyId,
+        secretAccessKey: service.secretAccessKey,
+        sessionToken: service.sessionToken,
+        authentication: {
+          type: 'None',
+          credentials: undefined
+        },
+        fields: service.fields
+      } as BedrockLLMService
     case 'ollama':
       return {
         provider: 'ollama',

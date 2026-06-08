@@ -1,4 +1,4 @@
-import { ANTHROPIC_MODELS, GEMINI_MODELS, MISTRAL_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
+import { ANTHROPIC_MODELS, BEDROCK_MODELS, GEMINI_MODELS, MISTRAL_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
 import {
     confirmPrompt,
@@ -66,6 +66,11 @@ export const questions = {
           name: 'Azure OpenAI',
           value: 'azure',
           description: 'Azure OpenAI Service',
+        },
+        {
+          name: 'AWS Bedrock',
+          value: 'bedrock',
+          description: 'AWS Bedrock (uses the AWS credential chain)',
         }
       ],
       default: 'ollama',
@@ -113,6 +118,15 @@ export const questions = {
     if (provider === 'azure') {
       availableModels = [
         ...OPEN_AI_MODELS.map((model) => ({
+          name: model as string,
+          value: model,
+        })),
+      ]
+    }
+
+    if (provider === 'bedrock') {
+      availableModels = [
+        ...BEDROCK_MODELS.map((model) => ({
           name: model as string,
           value: model,
         })),

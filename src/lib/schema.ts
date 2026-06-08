@@ -196,6 +196,9 @@ export const schema = {
         },
         {
           "$ref": "#/definitions/AzureLLMService"
+        },
+        {
+          "$ref": "#/definitions/BedrockLLMService"
         }
       ]
     },
@@ -413,7 +416,8 @@ export const schema = {
         "anthropic",
         "gemini",
         "mistral",
-        "azure"
+        "azure",
+        "bedrock"
       ]
     },
     "ConfiguredLLMModel": {
@@ -443,6 +447,9 @@ export const schema = {
         },
         {
           "$ref": "#/definitions/MistralModel"
+        },
+        {
+          "$ref": "#/definitions/BedrockModel"
         }
       ]
     },
@@ -666,6 +673,25 @@ export const schema = {
         "ministral-3b-latest",
         "open-mistral-nemo"
       ]
+    },
+    "BedrockModel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "anthropic.claude-3-5-haiku-20241022-v1:0",
+            "anthropic.claude-sonnet-4-20250514-v1:0",
+            "anthropic.claude-3-haiku-20240307-v1:0",
+            "meta.llama3-1-70b-instruct-v1:0",
+            "mistral.mistral-large-2407-v1:0"
+          ]
+        }
+      ],
+      "description": "AWS Bedrock model ids are free-form (model id strings and inference-profile ARNs). The `(string & {})` member keeps the literal suggestions while still accepting any AWS id. It must NOT collapse `LLMModel` to bare `string` — `(string & {})` preserves the literal union members of the other providers."
     },
     "DynamicModelProfile": {
       "type": "object",
@@ -1526,6 +1552,215 @@ export const schema = {
           "type": "string"
         },
         "apiVersion": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ]
+    },
+    "BedrockLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "region": {
+          "type": "string"
+        },
+        "accessKeyId": {
+          "type": "string"
+        },
+        "secretAccessKey": {
+          "type": "string"
+        },
+        "sessionToken": {
           "type": "string"
         },
         "fields": {

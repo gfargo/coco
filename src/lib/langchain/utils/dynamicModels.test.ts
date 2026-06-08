@@ -2,6 +2,7 @@ import { Config } from '../../../commands/types'
 import {
   DEFAULT_ANTHROPIC_LLM_SERVICE,
   DEFAULT_AZURE_LLM_SERVICE,
+  DEFAULT_BEDROCK_LLM_SERVICE,
   DEFAULT_GEMINI_LLM_SERVICE,
   DEFAULT_MISTRAL_LLM_SERVICE,
   DEFAULT_OLLAMA_LLM_SERVICE,
@@ -36,6 +37,7 @@ const providerServices: Record<LLMProvider, LLMService> = {
   azure: DEFAULT_AZURE_LLM_SERVICE,
   gemini: DEFAULT_GEMINI_LLM_SERVICE,
   mistral: DEFAULT_MISTRAL_LLM_SERVICE,
+  bedrock: DEFAULT_BEDROCK_LLM_SERVICE,
   ollama: DEFAULT_OLLAMA_LLM_SERVICE,
 }
 const providerOverrides = {

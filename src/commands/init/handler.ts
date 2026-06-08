@@ -100,6 +100,15 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     }
   }
 
+  if (llmProvider === 'bedrock') {
+    // Bedrock authenticates through the AWS credential chain — there is no
+    // coco-managed API key to prompt for. Point the user at the env vars
+    // the AWS SDK resolves automatically.
+    console.log(
+      'AWS Bedrock uses the standard AWS credential chain (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION). Set those in your environment.'
+    )
+  }
+
   const advOptions = await questions.configureAdvancedOptions()
 
     /**

@@ -1,6 +1,6 @@
 import { type TiktokenModel } from '@langchain/openai'
 
-export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini' | 'mistral' | 'azure'
+export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini' | 'mistral' | 'azure' | 'bedrock'
 export type DynamicModelTask =
   | 'summarize'
   | 'commit'
@@ -122,7 +122,23 @@ export type OllamaModel =
   | 'qwen2.5-coder:14b'
   | 'qwen2.5-coder:32b'
 
-export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel | GeminiModel | MistralModel
+/**
+ * AWS Bedrock model ids are free-form (model id strings and inference-profile
+ * ARNs). The `(string & {})` member keeps the literal suggestions while still
+ * accepting any AWS id. It must NOT collapse `LLMModel` to bare `string` —
+ * `(string & {})` preserves the literal union members of the other providers.
+ */
+export type BedrockModel =
+  | 'anthropic.claude-3-5-sonnet-20241022-v2:0'
+  | 'anthropic.claude-3-5-haiku-20241022-v1:0'
+  | 'anthropic.claude-sonnet-4-20250514-v1:0'
+  | 'anthropic.claude-3-haiku-20240307-v1:0'
+  | 'meta.llama3-1-70b-instruct-v1:0'
+  | 'mistral.mistral-large-2407-v1:0'
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {})
+
+export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel | GeminiModel | MistralModel | BedrockModel
 export type ConfiguredLLMModel = LLMModel | 'dynamic'
 export type DynamicModelProfile = Partial<Record<DynamicModelTask, LLMModel>>
 
@@ -362,6 +378,16 @@ export type AzureLLMService = BaseLLMService & {
   fields?: Record<string, unknown>
 }
 
+export type BedrockLLMService = BaseLLMService & {
+  provider: 'bedrock'
+  model: BedrockModel | 'dynamic'
+  region?: string
+  accessKeyId?: string
+  secretAccessKey?: string
+  sessionToken?: string
+  fields?: Record<string, unknown>
+}
+
 export type LLMService =
   | OpenAILLMService
   | OllamaLLMService
@@ -369,3 +395,4 @@ export type LLMService =
   | GeminiLLMService
   | MistralLLMService
   | AzureLLMService
+  | BedrockLLMService

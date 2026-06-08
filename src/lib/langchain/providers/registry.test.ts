@@ -1,4 +1,5 @@
 import { ChatAnthropic } from '@langchain/anthropic'
+import { ChatBedrockConverse } from '@langchain/aws'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { ChatMistralAI } from '@langchain/mistralai'
 import { ChatOllama } from '@langchain/ollama'
@@ -25,7 +26,7 @@ function makeConfig(service: Record<string, unknown>): Config {
 
 describe('provider registry', () => {
   it('registers the built-in providers', () => {
-    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'azure', 'gemini', 'mistral', 'ollama', 'openai'])
+    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'azure', 'bedrock', 'gemini', 'mistral', 'ollama', 'openai'])
   })
 
   it('exposes per-provider auth requirements', () => {
@@ -34,6 +35,7 @@ describe('provider registry', () => {
     expect(providerRequiresAuth('gemini')).toBe(true)
     expect(providerRequiresAuth('mistral')).toBe(true)
     expect(providerRequiresAuth('azure')).toBe(true)
+    expect(providerRequiresAuth('bedrock')).toBe(false)
     expect(providerRequiresAuth('ollama')).toBe(false)
     expect(providerRequiresAuth('nope')).toBe(false)
   })
@@ -95,6 +97,27 @@ describe('getLlm via registry', () => {
     )
     expect(llm).toBeInstanceOf(AzureChatOpenAI)
     expect(getLlmMetadata(llm).provider).toBe('azure')
+  })
+
+  it('builds a Bedrock model (no auth) and records provider metadata', () => {
+    // Bedrock authenticates via the AWS credential chain, not a coco-managed
+    // API key — `requiresAuth` is false. The ChatBedrockConverse constructor
+    // resolves AWS credentials lazily (on first invoke), so it instantiates
+    // fine in the test env without any AWS creds present.
+    expect(findProviderDefinition('bedrock')?.requiresAuth).toBe(false)
+
+    const llm = getLlm(
+      'bedrock',
+      'anthropic.claude-3-5-sonnet-20241022-v2:0' as LLMModel,
+      makeConfig({
+        provider: 'bedrock',
+        model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        region: 'us-east-1',
+        authentication: { type: 'None' },
+      })
+    )
+    expect(llm).toBeInstanceOf(ChatBedrockConverse)
+    expect(getLlmMetadata(llm).provider).toBe('bedrock')
   })
 
   it('builds an Ollama model (no auth) and records the endpoint', () => {

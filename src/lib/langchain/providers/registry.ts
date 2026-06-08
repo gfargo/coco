@@ -1,6 +1,7 @@
 import type { LLMProvider } from '../types'
 import { anthropicProvider } from './anthropic'
 import { azureProvider } from './azure'
+import { bedrockProvider } from './bedrock'
 import { geminiProvider } from './gemini'
 import { mistralProvider } from './mistral'
 import { ollamaProvider } from './ollama'
@@ -19,6 +20,7 @@ export const PROVIDERS: Record<LLMProvider, ProviderDefinition> = {
   azure: azureProvider,
   gemini: geminiProvider,
   mistral: mistralProvider,
+  bedrock: bedrockProvider,
   ollama: ollamaProvider,
 }
 
