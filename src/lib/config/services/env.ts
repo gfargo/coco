@@ -34,6 +34,8 @@ export function loadEnvConfig<ConfigType = Config>(
     'COCO_SERVICE_PROVIDER',
     'COCO_SERVICE_MODEL',
     'OPEN_AI_KEY',
+    'GEMINI_API_KEY',
+    'GOOGLE_API_KEY',
     'COCO_SERVICE_BASE_URL',
     'COCO_SERVICE_ENDPOINT',
     'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
@@ -55,6 +57,8 @@ export function loadEnvConfig<ConfigType = Config>(
       key === 'COCO_SERVICE_PROVIDER' ||
       key === 'COCO_SERVICE_MODEL' ||
       key === 'OPEN_AI_KEY' ||
+      key === 'GEMINI_API_KEY' ||
+      key === 'GOOGLE_API_KEY' ||
       key === 'COCO_SERVICE_BASE_URL' ||
       key === 'COCO_SERVICE_ENDPOINT' ||
       key === 'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT' ||
@@ -97,6 +101,17 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
       break
     case 'OPEN_AI_KEY':
       if (service.provider === 'openai') {
+        service.authentication = {
+          type: 'APIKey',
+          credentials: {
+            apiKey: value,
+          },
+        }
+      }
+      break
+    case 'GEMINI_API_KEY':
+    case 'GOOGLE_API_KEY':
+      if (service.provider === 'gemini') {
         service.authentication = {
           type: 'APIKey',
           credentials: {

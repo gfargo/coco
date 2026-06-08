@@ -1,4 +1,5 @@
 import { ChatAnthropic } from '@langchain/anthropic'
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { ChatOllama } from '@langchain/ollama'
 import { ChatOpenAI } from '@langchain/openai'
 import { Config } from '../../../commands/types'
@@ -22,13 +23,14 @@ function makeConfig(service: Record<string, unknown>): Config {
 }
 
 describe('provider registry', () => {
-  it('registers the three built-in providers', () => {
-    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'ollama', 'openai'])
+  it('registers the built-in providers', () => {
+    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'gemini', 'ollama', 'openai'])
   })
 
   it('exposes per-provider auth requirements', () => {
     expect(providerRequiresAuth('openai')).toBe(true)
     expect(providerRequiresAuth('anthropic')).toBe(true)
+    expect(providerRequiresAuth('gemini')).toBe(true)
     expect(providerRequiresAuth('ollama')).toBe(false)
     expect(providerRequiresAuth('nope')).toBe(false)
   })
@@ -54,6 +56,16 @@ describe('getLlm via registry', () => {
     )
     expect(llm).toBeInstanceOf(ChatAnthropic)
     expect(getLlmMetadata(llm).provider).toBe('anthropic')
+  })
+
+  it('builds a Gemini model and records provider metadata', () => {
+    const llm = getLlm(
+      'gemini',
+      'gemini-2.5-flash' as LLMModel,
+      makeConfig({ provider: 'gemini', model: 'gemini-2.5-flash' })
+    )
+    expect(llm).toBeInstanceOf(ChatGoogleGenerativeAI)
+    expect(getLlmMetadata(llm).provider).toBe('gemini')
   })
 
   it('builds an Ollama model (no auth) and records the endpoint', () => {

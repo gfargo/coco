@@ -1,4 +1,4 @@
-import { ANTHROPIC_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
+import { ANTHROPIC_MODELS, GEMINI_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
 import {
     confirmPrompt,
@@ -51,6 +51,11 @@ export const questions = {
           name: "Anthropic",
           value: "anthropic",
           description: "Anthropic API"
+        },
+        {
+          name: 'Google Gemini',
+          value: 'gemini',
+          description: 'Google Gemini API',
         }
       ],
       default: 'ollama',
@@ -71,6 +76,15 @@ export const questions = {
     if (provider === 'anthropic') {
       availableModels = [
         ...ANTHROPIC_MODELS.map((model) => ({
+          name: model as string,
+          value: model,
+        })),
+      ]
+    }
+
+    if (provider === 'gemini') {
+      availableModels = [
+        ...GEMINI_MODELS.map((model) => ({
           name: model as string,
           value: model,
         })),

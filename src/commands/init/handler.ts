@@ -76,6 +76,14 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     }
   }
 
+  if (llmProvider === 'gemini') {
+    apiKey = await questions.inputApiKey('Google Gemini', 'GEMINI_API_KEY')
+
+    if (config.service.authentication.type === 'APIKey') {
+      config.service.authentication.credentials.apiKey = '•••••••••••••••'
+    }
+  }
+
   const advOptions = await questions.configureAdvancedOptions()
 
     /**

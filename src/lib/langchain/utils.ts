@@ -1,6 +1,6 @@
 import { Config } from '../../commands/types'
 import { LangChainAuthenticationError, LangChainConfigurationError } from './errors'
-import { AnthropicLLMService, LLMModel, LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from './types'
+import { AnthropicLLMService, GeminiLLMService, LLMModel, LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from './types'
 import { validateRequired, validateServiceConfig } from './validation'
 import { providerRequiresAuth } from './providers/registry'
 
@@ -168,6 +168,22 @@ export const DEFAULT_ANTHROPIC_LLM_SERVICE: AnthropicLLMService = {
   },
 }
 
+export const DEFAULT_GEMINI_LLM_SERVICE: GeminiLLMService = {
+  provider: 'gemini',
+  model: 'gemini-2.5-flash',
+  temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: {
+      apiKey: '',
+    },
+  },
+}
+
 export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   provider: 'ollama',
   model: 'llama3',
@@ -212,6 +228,12 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
         model: model || DEFAULT_ANTHROPIC_LLM_SERVICE.model,
       } as AnthropicLLMService
       
+    case 'gemini':
+      return {
+        ...DEFAULT_GEMINI_LLM_SERVICE,
+        model: model || DEFAULT_GEMINI_LLM_SERVICE.model,
+      } as GeminiLLMService
+
     case 'ollama':
       return {
         ...DEFAULT_OLLAMA_LLM_SERVICE,
@@ -226,8 +248,8 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
       
     default:
       throw new LangChainConfigurationError(
-        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, ollama`,
-        { provider, supportedProviders: ['openai', 'anthropic', 'ollama'] }
+        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, gemini, ollama`,
+        { provider, supportedProviders: ['openai', 'anthropic', 'gemini', 'ollama'] }
       )
   }
 }

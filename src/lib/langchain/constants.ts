@@ -1,5 +1,5 @@
 import { TiktokenModel } from '@langchain/openai'
-import { AnthropicModel } from './types'
+import { AnthropicModel, GeminiModel } from './types'
 
 export const OPEN_AI_MODELS = [
   'gpt-4.5',
@@ -31,3 +31,14 @@ export const ANTHROPIC_MODELS = [
   'claude-3-sonnet-20240229',
   'claude-3-haiku-20240307',
 ] as AnthropicModel[]
+
+export const GEMINI_MODELS = [
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-pro',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+] as GeminiModel[]

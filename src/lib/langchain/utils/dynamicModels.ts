@@ -82,6 +82,40 @@ const ANTHROPIC_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   },
 }
 
+const GEMINI_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  cost: {
+    summarize: 'gemini-2.5-flash-lite',
+    commit: 'gemini-2.5-flash-lite',
+    // Floor at flash — see note on OpenAI commitSplit above.
+    commitSplit: 'gemini-2.5-flash',
+    changelog: 'gemini-2.5-flash',
+    review: 'gemini-2.5-flash',
+    recap: 'gemini-2.5-flash-lite',
+    repair: 'gemini-2.5-flash',
+    largeDiff: 'gemini-2.5-flash',
+  },
+  balanced: {
+    summarize: 'gemini-2.5-flash-lite',
+    commit: 'gemini-2.5-flash',
+    commitSplit: 'gemini-2.5-pro',
+    changelog: 'gemini-2.5-flash',
+    review: 'gemini-2.5-pro',
+    recap: 'gemini-2.5-flash',
+    repair: 'gemini-2.5-pro',
+    largeDiff: 'gemini-2.5-pro',
+  },
+  quality: {
+    summarize: 'gemini-2.5-flash',
+    commit: 'gemini-2.5-pro',
+    commitSplit: 'gemini-2.5-pro',
+    changelog: 'gemini-2.5-pro',
+    review: 'gemini-2.5-pro',
+    recap: 'gemini-2.5-pro',
+    repair: 'gemini-2.5-pro',
+    largeDiff: 'gemini-2.5-pro',
+  },
+}
+
 const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   cost: {
     summarize: 'llama3.2:3b',
@@ -119,6 +153,7 @@ const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
 const DYNAMIC_DEFAULTS: Record<LLMProvider, ProviderDynamicDefaults> = {
   openai: OPENAI_DYNAMIC_DEFAULTS,
   anthropic: ANTHROPIC_DYNAMIC_DEFAULTS,
+  gemini: GEMINI_DYNAMIC_DEFAULTS,
   ollama: OLLAMA_DYNAMIC_DEFAULTS,
 }
 

@@ -54,7 +54,7 @@ function checkServiceBlock(config: Config, diagnostics: Diagnostic[]) {
     diagnostics.push({
       severity: 'error',
       message: 'No provider set in service config.',
-      fix: 'Set service.provider to "openai", "anthropic", or "ollama".',
+      fix: 'Set service.provider to "openai", "anthropic", "gemini", or "ollama".',
     })
   }
 
@@ -108,7 +108,7 @@ function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
     diagnostics.push({
       severity: 'error',
       message: `Provider "${provider}" requires authentication but none is configured.`,
-      fix: `Set service.authentication to { "type": "APIKey", "credentials": { "apiKey": "..." } } or use the OPENAI_API_KEY / ANTHROPIC_API_KEY environment variable.`,
+      fix: `Set service.authentication to { "type": "APIKey", "credentials": { "apiKey": "..." } } or use the OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY environment variable.`,
     })
     return
   }
@@ -119,7 +119,7 @@ function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
       diagnostics.push({
         severity: 'warn',
         message: 'API key appears to be a placeholder or empty. Coco may fall back to environment variables.',
-        fix: `Set the API key in your config or via environment variable (OPENAI_API_KEY or ANTHROPIC_API_KEY).`,
+        fix: `Set the API key in your config or via environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY).`,
       })
     }
   }

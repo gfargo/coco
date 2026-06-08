@@ -1,6 +1,6 @@
 import { type TiktokenModel } from '@langchain/openai'
 
-export type LLMProvider = 'openai' | 'ollama' | 'anthropic'
+export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini'
 export type DynamicModelTask =
   | 'summarize'
   | 'commit'
@@ -37,6 +37,16 @@ export type AnthropicModel =
   | 'claude-3-opus-20240229'
   | 'claude-3-sonnet-20240229'
   | 'claude-3-haiku-20240307'
+
+export type GeminiModel =
+  | 'gemini-2.5-pro'
+  | 'gemini-2.5-flash'
+  | 'gemini-2.5-flash-lite'
+  | 'gemini-2.0-flash'
+  | 'gemini-2.0-flash-lite'
+  | 'gemini-1.5-pro'
+  | 'gemini-1.5-flash'
+  | 'gemini-1.5-flash-8b'
 
 export type OllamaModel =
   | 'deepseek-r1:1.5b'
@@ -103,7 +113,7 @@ export type OllamaModel =
   | 'qwen2.5-coder:14b'
   | 'qwen2.5-coder:32b'
 
-export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel
+export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel | GeminiModel
 export type ConfiguredLLMModel = LLMModel | 'dynamic'
 export type DynamicModelProfile = Partial<Record<DynamicModelTask, LLMModel>>
 
@@ -322,4 +332,14 @@ export type AnthropicLLMService = BaseLLMService & {
   }
 }
 
-export type LLMService = OpenAILLMService | OllamaLLMService | AnthropicLLMService
+export type GeminiLLMService = BaseLLMService & {
+  provider: 'gemini'
+  model: GeminiModel | 'dynamic'
+  fields?: Record<string, unknown>
+}
+
+export type LLMService =
+  | OpenAILLMService
+  | OllamaLLMService
+  | AnthropicLLMService
+  | GeminiLLMService

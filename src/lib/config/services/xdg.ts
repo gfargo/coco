@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { AnthropicLLMService, LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
+import { AnthropicLLMService, GeminiLLMService, LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 import { Config } from '../types'
 
 /**
@@ -76,6 +76,18 @@ function parseServiceConfig(service: any): LLMService | undefined {
         },
         fields: service.fields
       } as AnthropicLLMService
+    case 'gemini':
+      return {
+        provider: 'gemini',
+        model: service.model,
+        authentication: {
+          type: 'APIKey',
+          credentials: {
+            apiKey: service.apiKey
+          }
+        },
+        fields: service.fields
+      } as GeminiLLMService
     case 'ollama':
       return {
         provider: 'ollama',
