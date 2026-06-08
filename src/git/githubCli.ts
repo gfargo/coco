@@ -33,11 +33,19 @@ export type GitHubRepository = {
   name: string
 }
 
+/**
+ * Canonical GitHub remote-URL parser. Handles all four remote forms gh/git
+ * emit: scp-style ssh (`git@github.com:o/r`), ssh protocol
+ * (`ssh://git@github.com/o/r`), https, and the legacy `git://` protocol.
+ * `providerData` builds on this and adds the derived `webUrl`.
+ */
 export function parseGitHubRemoteUrl(url: string): GitHubRepository | undefined {
   const trimmed = url.trim().replace(/\.git$/, '')
   const sshMatch = trimmed.match(/^git@github\.com:([^/]+)\/(.+)$/)
+  const sshProtocolMatch = trimmed.match(/^ssh:\/\/git@github\.com\/([^/]+)\/(.+)$/)
   const httpsMatch = trimmed.match(/^https:\/\/github\.com\/([^/]+)\/(.+)$/)
-  const match = sshMatch || httpsMatch
+  const gitMatch = trimmed.match(/^git:\/\/github\.com\/([^/]+)\/(.+)$/)
+  const match = sshMatch || sshProtocolMatch || httpsMatch || gitMatch
 
   if (!match) {
     return undefined

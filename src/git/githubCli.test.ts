@@ -29,6 +29,20 @@ describe('githubCli', () => {
       })
     })
 
+    it('parses ssh:// protocol remotes', () => {
+      expect(parseGitHubRemoteUrl('ssh://git@github.com/gfargo/coco.git')).toEqual({
+        owner: 'gfargo',
+        name: 'coco',
+      })
+    })
+
+    it('parses git:// protocol remotes', () => {
+      expect(parseGitHubRemoteUrl('git://github.com/gfargo/coco.git')).toEqual({
+        owner: 'gfargo',
+        name: 'coco',
+      })
+    })
+
     it('returns undefined for non-GitHub remotes', () => {
       expect(parseGitHubRemoteUrl('git@gitlab.com:gfargo/coco.git')).toBeUndefined()
       expect(parseGitHubRemoteUrl('https://bitbucket.org/gfargo/coco.git')).toBeUndefined()

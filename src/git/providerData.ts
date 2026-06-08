@@ -1,7 +1,11 @@
 import { SimpleGit } from 'simple-git'
 import { BranchRef } from './branchData'
 import { GhRunner, defaultGhRunner } from './pullRequestData'
-import { describeGhStatus, getGhStatus } from './githubCli'
+import {
+  describeGhStatus,
+  getGhStatus,
+  parseGitHubRemoteUrl as parseGitHubRemoteUrlBase,
+} from './githubCli'
 
 export type GitProviderType = 'github' | 'unsupported'
 
@@ -43,22 +47,18 @@ export type ProviderUrlTarget =
   | { type: 'pull-request'; number: number }
   | { type: 'compare'; base: string; head: string }
 
-export function parseGitHubRemoteUrl(url: string): Pick<ProviderRepository, 'owner' | 'name' | 'webUrl'> | undefined {
-  const trimmed = url.trim().replace(/\.git$/, '')
-  const sshMatch = trimmed.match(/^git@github\.com:([^/]+)\/(.+)$/)
-  const sshProtocolMatch = trimmed.match(/^ssh:\/\/git@github\.com\/([^/]+)\/(.+)$/)
-  const httpsMatch = trimmed.match(/^https:\/\/github\.com\/([^/]+)\/(.+)$/)
-  const gitMatch = trimmed.match(/^git:\/\/github\.com\/([^/]+)\/(.+)$/)
-  const match = sshMatch || sshProtocolMatch || httpsMatch || gitMatch
+export function parseGitHubRemoteUrl(
+  url: string
+): Pick<ProviderRepository, 'owner' | 'name' | 'webUrl'> | undefined {
+  const base = parseGitHubRemoteUrlBase(url)
 
-  if (!match) {
+  if (!base) {
     return undefined
   }
 
   return {
-    owner: match[1],
-    name: match[2],
-    webUrl: `https://github.com/${match[1]}/${match[2]}`,
+    ...base,
+    webUrl: `https://github.com/${base.owner}/${base.name}`,
   }
 }
 
