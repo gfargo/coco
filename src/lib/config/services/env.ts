@@ -1,4 +1,4 @@
-import { LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
+import { LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { removeUndefined } from '../../utils/removeUndefined'
 import { updateFileSection } from '../../utils/updateFileSection'
@@ -75,7 +75,14 @@ export function loadEnvConfig<ConfigType = Config>(
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
       envConfig.service = envConfig.service || {}
-      handleServiceEnvVar(envConfig.service as LLMService, key, envValue)
+      // Provider-scoped env vars (API keys) must be matched against the
+      // EFFECTIVE provider, which usually comes from an earlier config layer
+      // (config file / git), not from this env pass. Fall back to it so e.g.
+      // OPEN_AI_KEY applies to a file-configured openai service even when
+      // COCO_SERVICE_PROVIDER isn't also set.
+      const effectiveProvider =
+        (envConfig.service as Partial<LLMService>).provider ?? config.service?.provider
+      handleServiceEnvVar(envConfig.service as LLMService, key, envValue, effectiveProvider)
       foundAny = true
     } else {
       if (key === 'service' || !envValue) {
@@ -87,15 +94,33 @@ export function loadEnvConfig<ConfigType = Config>(
     }
   })
 
-  const merged = { ...config, ...removeUndefined(envConfig) } as ConfigType
+  const cleanedEnv = removeUndefined(envConfig)
+  const merged = { ...config, ...cleanedEnv } as ConfigType
+
+  // Deep-merge `service` rather than letting the shallow top-level spread
+  // replace it. An env var that only touches the service (e.g. OPEN_AI_KEY sets
+  // just `authentication`) would otherwise clobber the provider/model/etc. that
+  // an earlier config layer already established.
+  if (envConfig.service && config.service) {
+    ;(merged as Config).service = {
+      ...(config.service as object),
+      ...(envConfig.service as object),
+    } as Config['service']
+  }
+
   if (opts?.returnSource) {
     return { config: merged, active: foundAny }
   }
   return merged
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function handleServiceEnvVar(service: LLMService, key: string, value: any) {
+function handleServiceEnvVar(
+  service: LLMService,
+  key: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  value: any,
+  effectiveProvider?: LLMProvider
+) {
   switch (key) {
     case 'COCO_SERVICE_PROVIDER':
       service.provider = value
@@ -104,7 +129,7 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
       service.model = value
       break
     case 'OPEN_AI_KEY':
-      if (service.provider === 'openai') {
+      if (effectiveProvider === 'openai') {
         service.authentication = {
           type: 'APIKey',
           credentials: {
@@ -115,7 +140,7 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
       break
     case 'GEMINI_API_KEY':
     case 'GOOGLE_API_KEY':
-      if (service.provider === 'gemini') {
+      if (effectiveProvider === 'gemini') {
         service.authentication = {
           type: 'APIKey',
           credentials: {
@@ -125,7 +150,7 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
       }
       break
     case 'MISTRAL_API_KEY':
-      if (service.provider === 'mistral') {
+      if (effectiveProvider === 'mistral') {
         service.authentication = {
           type: 'APIKey',
           credentials: {
@@ -135,7 +160,7 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
       }
       break
     case 'AZURE_OPENAI_API_KEY':
-      if (service.provider === 'azure') {
+      if (effectiveProvider === 'azure') {
         service.authentication = {
           type: 'APIKey',
           credentials: {
@@ -145,13 +170,13 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
       }
       break
     case 'COCO_SERVICE_BASE_URL':
-      if (service.provider === 'openai') {
+      if (effectiveProvider === 'openai') {
         // Cast to OpenAILLMService to access baseURL property
         (service as OpenAILLMService).baseURL = value
       }
       break
     case 'COCO_SERVICE_ENDPOINT':
-      if (service.provider === 'ollama') {
+      if (effectiveProvider === 'ollama') {
         (service as OllamaLLMService).endpoint = value
       }
       break
@@ -208,6 +233,15 @@ function toEnvVarName(key: string): string {
   }
 
   if (key.includes('COCO_')) {
+    return key
+  }
+
+  // Already an env-var-form name (UPPER_SNAKE_CASE), e.g. OPEN_AI_KEY,
+  // GEMINI_API_KEY, AZURE_OPENAI_API_KEY. Read these verbatim — the
+  // camelCase→COCO_ transform below would mangle every uppercase letter
+  // (OPEN_AI_KEY → COCO__O_P_E_N__A_I__K_E_Y), so without this guard the
+  // provider API-key env vars were never resolved.
+  if (/^[A-Z0-9]+(?:_[A-Z0-9]+)*$/.test(key)) {
     return key
   }
 

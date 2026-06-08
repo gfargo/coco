@@ -76,4 +76,70 @@ describe('loadXDGConfig', () => {
       expect(config.service.baseURL).toBe('https://openrouter.ai/api/v1')
     }
   })
+
+  it('parses a gemini service with an API key', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        service: { provider: 'gemini', model: 'gemini-2.5-flash', apiKey: 'g-key' },
+      })
+    )
+    const config = loadXDGConfig({ service: getDefaultServiceConfigFromAlias('gemini') })
+    expect(config.service.provider).toBe('gemini')
+    expect(config.service.authentication.type).toBe('APIKey')
+  })
+
+  it('parses a mistral service with an API key', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        service: { provider: 'mistral', model: 'mistral-small-latest', apiKey: 'm-key' },
+      })
+    )
+    const config = loadXDGConfig({ service: getDefaultServiceConfigFromAlias('mistral') })
+    expect(config.service.provider).toBe('mistral')
+    expect(config.service.authentication.type).toBe('APIKey')
+  })
+
+  it('parses an azure service with instance/deployment/apiVersion', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        service: {
+          provider: 'azure',
+          model: 'gpt-4o',
+          apiKey: 'a-key',
+          instanceName: 'my-instance',
+          deploymentName: 'gpt-4o-deploy',
+          apiVersion: '2024-10-21',
+        },
+      })
+    )
+    const config = loadXDGConfig({ service: getDefaultServiceConfigFromAlias('azure') })
+    expect(config.service.provider).toBe('azure')
+    if (config.service.provider === 'azure') {
+      expect(config.service.instanceName).toBe('my-instance')
+      expect(config.service.deploymentName).toBe('gpt-4o-deploy')
+      expect(config.service.apiVersion).toBe('2024-10-21')
+    }
+  })
+
+  it('parses a bedrock service with region and no-auth credential chain', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        service: {
+          provider: 'bedrock',
+          model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          region: 'us-east-1',
+        },
+      })
+    )
+    const config = loadXDGConfig({ service: getDefaultServiceConfigFromAlias('bedrock') })
+    expect(config.service.provider).toBe('bedrock')
+    expect(config.service.authentication.type).toBe('None')
+    if (config.service.provider === 'bedrock') {
+      expect(config.service.region).toBe('us-east-1')
+    }
+  })
 })

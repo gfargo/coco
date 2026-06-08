@@ -14,5 +14,10 @@
  */
 export class ChatBedrockConverse {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(public readonly config: any) {}
+  constructor(public readonly config: any) {
+    // Mirror LangChain chat models, which surface their constructor params as
+    // instance fields (`.temperature`, `.region`, ...), so unit tests can assert
+    // config forwarding without reaching into `.config`.
+    Object.assign(this, config)
+  }
 }

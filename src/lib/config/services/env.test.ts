@@ -18,7 +18,7 @@ describe('loadEnvConfig', () => {
     const config = loadEnvConfig(defaultConfig)
     expect(config.service.provider).toBe('openai')
     expect(config.defaultBranch).toBe('coco')
-    delete process.env.COCO_SERVICE
+    delete process.env.COCO_SERVICE_PROVIDER
     delete process.env.COCO_DEFAULT_BRANCH
   })
 
@@ -93,5 +93,51 @@ describe('loadEnvConfig', () => {
     }
     delete process.env.COCO_SERVICE_PROVIDER
     delete process.env.COCO_SERVICE_BASE_URL
+  })
+
+  describe('provider API keys from the environment', () => {
+    // Regression for the toEnvVarName mangling bug: these env-var-form names
+    // (OPEN_AI_KEY, GEMINI_API_KEY, ...) must be read verbatim, not rewritten
+    // to COCO__O_P_E_N__A_I__K_E_Y. Each key only applies to its provider.
+    const cases: Array<{ provider: 'openai' | 'gemini' | 'mistral' | 'azure'; envVar: string }> = [
+      { provider: 'openai', envVar: 'OPEN_AI_KEY' },
+      { provider: 'gemini', envVar: 'GEMINI_API_KEY' },
+      { provider: 'gemini', envVar: 'GOOGLE_API_KEY' },
+      { provider: 'mistral', envVar: 'MISTRAL_API_KEY' },
+      { provider: 'azure', envVar: 'AZURE_OPENAI_API_KEY' },
+    ]
+
+    it.each(cases)('reads $envVar into the $provider service auth', ({ provider, envVar }) => {
+      process.env[envVar] = 'env-provided-key'
+      try {
+        const config = loadEnvConfig({
+          ...defaultConfig,
+          service: getDefaultServiceConfigFromAlias(provider),
+        })
+        expect(config.service.provider).toBe(provider)
+        expect(config.service.authentication.type).toBe('APIKey')
+        if (config.service.authentication.type === 'APIKey') {
+          expect(config.service.authentication.credentials?.apiKey).toBe('env-provided-key')
+        }
+      } finally {
+        delete process.env[envVar]
+      }
+    })
+
+    it('ignores a provider key when the configured provider differs', () => {
+      process.env.GEMINI_API_KEY = 'gemini-key'
+      try {
+        const config = loadEnvConfig({
+          ...defaultConfig,
+          service: getDefaultServiceConfigFromAlias('openai'),
+        })
+        // openai service shouldn't pick up the gemini key
+        if (config.service.authentication.type === 'APIKey') {
+          expect(config.service.authentication.credentials?.apiKey).not.toBe('gemini-key')
+        }
+      } finally {
+        delete process.env.GEMINI_API_KEY
+      }
+    })
   })
 })

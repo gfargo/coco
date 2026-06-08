@@ -6,7 +6,9 @@ function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatMode
   const openaiConfig: Partial<ConstructorParameters<typeof ChatOpenAI>[0]> = {
     apiKey,
     model,
-    temperature: config.service.temperature || 0.2,
+    // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
+    // respected instead of being coerced to the 0.2 default.
+    temperature: config.service.temperature ?? 0.2,
   }
 
   // Custom base URL for OpenAI-compatible APIs (OpenRouter, etc.).
