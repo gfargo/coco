@@ -17,6 +17,11 @@ describe('structuralParserRegistry', () => {
       expect(snapshot.py).toContain('regex')
       expect(snapshot.rs).toContain('regex')
       expect(snapshot.go).toContain('regex')
+      expect(snapshot.java).toContain('regex')
+      expect(snapshot.cpp).toContain('regex')
+      expect(snapshot.cs).toContain('regex')
+      expect(snapshot.rb).toContain('regex')
+      expect(snapshot.php).toContain('regex')
     })
 
     it('keeps each chain non-empty (no language is unreachable)', () => {

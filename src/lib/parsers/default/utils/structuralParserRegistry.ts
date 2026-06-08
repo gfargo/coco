@@ -29,8 +29,13 @@ import { treeSitterGoParser } from '../__tree_sitter__/goTreeSitterParser'
 import { treeSitterPythonParser } from '../__tree_sitter__/pythonTreeSitterParser'
 import { treeSitterRustParser } from '../__tree_sitter__/rustTreeSitterParser'
 import { treeSitterTsParser } from '../__tree_sitter__/tsTreeSitterParser'
+import { summarizeCppStructuralDiff } from './cppStructuralDiff'
+import { summarizeCsStructuralDiff } from './csStructuralDiff'
 import { summarizeGoStructuralDiff } from './goStructuralDiff'
+import { summarizeJavaStructuralDiff } from './javaStructuralDiff'
+import { summarizePhpStructuralDiff } from './phpStructuralDiff'
 import { summarizePythonStructuralDiff } from './pythonStructuralDiff'
+import { summarizeRubyStructuralDiff } from './rbStructuralDiff'
 import { summarizeRustStructuralDiff } from './rustStructuralDiff'
 import { summarizeTsStructuralDiff } from './tsStructuralDiff'
 
@@ -38,7 +43,17 @@ import { summarizeTsStructuralDiff } from './tsStructuralDiff'
 export type StructuralParserKind = 'regex' | 'tree-sitter'
 
 /** Language identifier used as the registry key. */
-export type StructuralLanguageId = 'ts' | 'js' | 'py' | 'rs' | 'go'
+export type StructuralLanguageId =
+  | 'ts'
+  | 'js'
+  | 'py'
+  | 'rs'
+  | 'go'
+  | 'java'
+  | 'cpp'
+  | 'cs'
+  | 'rb'
+  | 'php'
 
 /**
  * A structural parser is a strategy for producing a templated
@@ -87,6 +102,11 @@ const regexJs = regexTs   // same extractor; the language detector inside
 const regexPy = regexParser(summarizePythonStructuralDiff)
 const regexRs = regexParser(summarizeRustStructuralDiff)
 const regexGo = regexParser(summarizeGoStructuralDiff)
+const regexJava = regexParser(summarizeJavaStructuralDiff)
+const regexCpp = regexParser(summarizeCppStructuralDiff)
+const regexCs = regexParser(summarizeCsStructuralDiff)
+const regexRb = regexParser(summarizeRubyStructuralDiff)
+const regexPhp = regexParser(summarizePhpStructuralDiff)
 
 /**
  * Per-language parser chains, in priority order. Tree-sitter is
@@ -102,6 +122,11 @@ const REGISTRY: Record<StructuralLanguageId, StructuralParser[]> = {
   py: [treeSitterPythonParser, regexPy],
   rs: [treeSitterRustParser, regexRs],
   go: [treeSitterGoParser, regexGo],
+  java: [regexJava],
+  cpp: [regexCpp],
+  cs: [regexCs],
+  rb: [regexRb],
+  php: [regexPhp],
 }
 
 /**

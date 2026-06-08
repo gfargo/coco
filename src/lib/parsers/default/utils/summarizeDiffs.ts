@@ -186,7 +186,18 @@ export type SummarizeDiffsOptions = {
     markdown?: boolean
     languageAware?: {
       enabled?: boolean
-      languages?: ('ts' | 'js' | 'py' | 'rs' | 'go')[]
+      languages?: (
+        | 'ts'
+        | 'js'
+        | 'py'
+        | 'rs'
+        | 'go'
+        | 'java'
+        | 'cpp'
+        | 'cs'
+        | 'rb'
+        | 'php'
+      )[]
     }
   }
   handleOutput?: typeof defaultOutputCallback

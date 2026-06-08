@@ -276,6 +276,11 @@ export type BaseLLMService = {
      *   - 'py' : `.py` / `.pyi`
      *   - 'rs' : `.rs`
      *   - 'go' : `.go`
+     *   - 'java' : `.java`
+     *   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`
+     *   - 'cs' : `.cs`
+     *   - 'rb' : `.rb`
+     *   - 'php' : `.php`
      */
     languageAware?: {
       /**
@@ -289,7 +294,18 @@ export type BaseLLMService = {
        * Languages to opt in. Omit / empty to enable all supported
        * languages.
        */
-      languages?: ('ts' | 'js' | 'py' | 'rs' | 'go')[]
+      languages?: (
+        | 'ts'
+        | 'js'
+        | 'py'
+        | 'rs'
+        | 'go'
+        | 'java'
+        | 'cpp'
+        | 'cs'
+        | 'rb'
+        | 'php'
+      )[]
     }
   }
 }

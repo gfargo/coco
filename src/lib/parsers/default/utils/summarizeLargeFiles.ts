@@ -10,8 +10,13 @@ import {
   writeDiffSummary,
 } from './diffSummaryCache'
 import { summarizeMarkdownDiff } from './markdownDiff'
+import { isCppFile } from './cppStructuralDiff'
+import { isCsFile } from './csStructuralDiff'
 import { isGoFile } from './goStructuralDiff'
+import { isJavaFile } from './javaStructuralDiff'
+import { isPhpFile } from './phpStructuralDiff'
 import { isPythonFile } from './pythonStructuralDiff'
+import { isRubyFile } from './rbStructuralDiff'
 import { isRustFile } from './rustStructuralDiff'
 import {
   dispatchStructuralParser,
@@ -35,6 +40,11 @@ function detectStructuralLanguageId(path: string): StructuralLanguageId | undefi
   if (isPythonFile(path)) return 'py'
   if (isRustFile(path)) return 'rs'
   if (isGoFile(path)) return 'go'
+  if (isJavaFile(path)) return 'java'
+  if (isCppFile(path)) return 'cpp'
+  if (isCsFile(path)) return 'cs'
+  if (isRubyFile(path)) return 'rb'
+  if (isPhpFile(path)) return 'php'
   return undefined
 }
 
@@ -85,7 +95,18 @@ export type SummarizeLargeFilesOptions = {
      */
     languageAware?: {
       enabled?: boolean
-      languages?: ('ts' | 'js' | 'py' | 'rs' | 'go')[]
+      languages?: (
+        | 'ts'
+        | 'js'
+        | 'py'
+        | 'rs'
+        | 'go'
+        | 'java'
+        | 'cpp'
+        | 'cs'
+        | 'rb'
+        | 'php'
+      )[]
     }
   }
   tokenizer: TokenCounter
