@@ -92,6 +92,14 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     }
   }
 
+  if (llmProvider === 'azure') {
+    apiKey = await questions.inputApiKey('Azure OpenAI', 'AZURE_OPENAI_API_KEY')
+
+    if (config.service.authentication.type === 'APIKey') {
+      config.service.authentication.credentials.apiKey = '•••••••••••••••'
+    }
+  }
+
   const advOptions = await questions.configureAdvancedOptions()
 
     /**

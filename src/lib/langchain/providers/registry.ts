@@ -1,5 +1,6 @@
 import type { LLMProvider } from '../types'
 import { anthropicProvider } from './anthropic'
+import { azureProvider } from './azure'
 import { geminiProvider } from './gemini'
 import { mistralProvider } from './mistral'
 import { ollamaProvider } from './ollama'
@@ -15,6 +16,7 @@ import type { ProviderDefinition } from './types'
 export const PROVIDERS: Record<LLMProvider, ProviderDefinition> = {
   openai: openaiProvider,
   anthropic: anthropicProvider,
+  azure: azureProvider,
   gemini: geminiProvider,
   mistral: mistralProvider,
   ollama: ollamaProvider,

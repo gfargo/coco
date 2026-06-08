@@ -1,6 +1,6 @@
 import { type TiktokenModel } from '@langchain/openai'
 
-export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini' | 'mistral'
+export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini' | 'mistral' | 'azure'
 export type DynamicModelTask =
   | 'summarize'
   | 'commit'
@@ -353,9 +353,19 @@ export type MistralLLMService = BaseLLMService & {
   fields?: Record<string, unknown>
 }
 
+export type AzureLLMService = BaseLLMService & {
+  provider: 'azure'
+  model: OpenAIModel | 'dynamic'
+  instanceName?: string
+  deploymentName?: string
+  apiVersion?: string
+  fields?: Record<string, unknown>
+}
+
 export type LLMService =
   | OpenAILLMService
   | OllamaLLMService
   | AnthropicLLMService
   | GeminiLLMService
   | MistralLLMService
+  | AzureLLMService

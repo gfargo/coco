@@ -2,7 +2,7 @@ import { ChatAnthropic } from '@langchain/anthropic'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { ChatMistralAI } from '@langchain/mistralai'
 import { ChatOllama } from '@langchain/ollama'
-import { ChatOpenAI } from '@langchain/openai'
+import { AzureChatOpenAI, ChatOpenAI } from '@langchain/openai'
 import { Config } from '../../../commands/types'
 import { LLMModel } from '../types'
 import { getLlm } from '../utils/getLlm'
@@ -25,7 +25,7 @@ function makeConfig(service: Record<string, unknown>): Config {
 
 describe('provider registry', () => {
   it('registers the built-in providers', () => {
-    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'gemini', 'mistral', 'ollama', 'openai'])
+    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'azure', 'gemini', 'mistral', 'ollama', 'openai'])
   })
 
   it('exposes per-provider auth requirements', () => {
@@ -33,6 +33,7 @@ describe('provider registry', () => {
     expect(providerRequiresAuth('anthropic')).toBe(true)
     expect(providerRequiresAuth('gemini')).toBe(true)
     expect(providerRequiresAuth('mistral')).toBe(true)
+    expect(providerRequiresAuth('azure')).toBe(true)
     expect(providerRequiresAuth('ollama')).toBe(false)
     expect(providerRequiresAuth('nope')).toBe(false)
   })
@@ -78,6 +79,22 @@ describe('getLlm via registry', () => {
     )
     expect(llm).toBeInstanceOf(ChatMistralAI)
     expect(getLlmMetadata(llm).provider).toBe('mistral')
+  })
+
+  it('builds an Azure OpenAI model and records provider metadata', () => {
+    const llm = getLlm(
+      'azure',
+      'gpt-4o' as LLMModel,
+      makeConfig({
+        provider: 'azure',
+        model: 'gpt-4o',
+        instanceName: 'my-instance',
+        deploymentName: 'gpt-4o',
+        apiVersion: '2024-10-21',
+      })
+    )
+    expect(llm).toBeInstanceOf(AzureChatOpenAI)
+    expect(getLlmMetadata(llm).provider).toBe('azure')
   })
 
   it('builds an Ollama model (no auth) and records the endpoint', () => {

@@ -1,6 +1,7 @@
 import { Config } from '../../../commands/types'
 import {
   DEFAULT_ANTHROPIC_LLM_SERVICE,
+  DEFAULT_AZURE_LLM_SERVICE,
   DEFAULT_GEMINI_LLM_SERVICE,
   DEFAULT_MISTRAL_LLM_SERVICE,
   DEFAULT_OLLAMA_LLM_SERVICE,
@@ -32,12 +33,17 @@ const baseConfig = {
 const providerServices: Record<LLMProvider, LLMService> = {
   openai: DEFAULT_OPENAI_LLM_SERVICE,
   anthropic: DEFAULT_ANTHROPIC_LLM_SERVICE,
+  azure: DEFAULT_AZURE_LLM_SERVICE,
   gemini: DEFAULT_GEMINI_LLM_SERVICE,
   mistral: DEFAULT_MISTRAL_LLM_SERVICE,
   ollama: DEFAULT_OLLAMA_LLM_SERVICE,
 }
 const providerOverrides = {
   openai: {
+    summarize: 'gpt-4.1-nano',
+    largeDiff: 'gpt-4.1-mini',
+  },
+  azure: {
     summarize: 'gpt-4.1-nano',
     largeDiff: 'gpt-4.1-mini',
   },

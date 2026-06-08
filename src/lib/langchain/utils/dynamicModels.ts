@@ -186,6 +186,8 @@ const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
 
 const DYNAMIC_DEFAULTS: Record<LLMProvider, ProviderDynamicDefaults> = {
   openai: OPENAI_DYNAMIC_DEFAULTS,
+  // Azure hosts the same OpenAI models, so it reuses the OpenAI defaults.
+  azure: OPENAI_DYNAMIC_DEFAULTS,
   anthropic: ANTHROPIC_DYNAMIC_DEFAULTS,
   gemini: GEMINI_DYNAMIC_DEFAULTS,
   mistral: MISTRAL_DYNAMIC_DEFAULTS,

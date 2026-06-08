@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { AnthropicLLMService, GeminiLLMService, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
+import { AnthropicLLMService, AzureLLMService, GeminiLLMService, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 import { Config } from '../types'
 
 /**
@@ -100,6 +100,21 @@ function parseServiceConfig(service: any): LLMService | undefined {
         },
         fields: service.fields
       } as MistralLLMService
+    case 'azure':
+      return {
+        provider: 'azure',
+        model: service.model,
+        instanceName: service.instanceName,
+        deploymentName: service.deploymentName,
+        apiVersion: service.apiVersion,
+        authentication: {
+          type: 'APIKey',
+          credentials: {
+            apiKey: service.apiKey
+          }
+        },
+        fields: service.fields
+      } as AzureLLMService
     case 'ollama':
       return {
         provider: 'ollama',

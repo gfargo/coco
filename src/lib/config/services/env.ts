@@ -37,6 +37,7 @@ export function loadEnvConfig<ConfigType = Config>(
     'GEMINI_API_KEY',
     'GOOGLE_API_KEY',
     'MISTRAL_API_KEY',
+    'AZURE_OPENAI_API_KEY',
     'COCO_SERVICE_BASE_URL',
     'COCO_SERVICE_ENDPOINT',
     'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
@@ -61,6 +62,7 @@ export function loadEnvConfig<ConfigType = Config>(
       key === 'GEMINI_API_KEY' ||
       key === 'GOOGLE_API_KEY' ||
       key === 'MISTRAL_API_KEY' ||
+      key === 'AZURE_OPENAI_API_KEY' ||
       key === 'COCO_SERVICE_BASE_URL' ||
       key === 'COCO_SERVICE_ENDPOINT' ||
       key === 'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT' ||
@@ -124,6 +126,16 @@ function handleServiceEnvVar(service: LLMService, key: string, value: any) {
       break
     case 'MISTRAL_API_KEY':
       if (service.provider === 'mistral') {
+        service.authentication = {
+          type: 'APIKey',
+          credentials: {
+            apiKey: value,
+          },
+        }
+      }
+      break
+    case 'AZURE_OPENAI_API_KEY':
+      if (service.provider === 'azure') {
         service.authentication = {
           type: 'APIKey',
           credentials: {

@@ -1,6 +1,6 @@
 import { Config } from '../../commands/types'
 import { LangChainAuthenticationError, LangChainConfigurationError } from './errors'
-import { AnthropicLLMService, GeminiLLMService, LLMModel, LLMProvider, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from './types'
+import { AnthropicLLMService, AzureLLMService, GeminiLLMService, LLMModel, LLMProvider, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from './types'
 import { validateRequired, validateServiceConfig } from './validation'
 import { providerRequiresAuth } from './providers/registry'
 
@@ -200,6 +200,23 @@ export const DEFAULT_MISTRAL_LLM_SERVICE: MistralLLMService = {
   },
 }
 
+export const DEFAULT_AZURE_LLM_SERVICE: AzureLLMService = {
+  provider: 'azure',
+  model: 'gpt-4.1-nano',
+  apiVersion: '2024-10-21',
+  tokenLimit: 4096,
+  temperature: 0.32,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: {
+      apiKey: '',
+    },
+  },
+}
+
 export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   provider: 'ollama',
   model: 'llama3',
@@ -256,6 +273,12 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
         model: model || DEFAULT_MISTRAL_LLM_SERVICE.model,
       } as MistralLLMService
 
+    case 'azure':
+      return {
+        ...DEFAULT_AZURE_LLM_SERVICE,
+        model: model || DEFAULT_AZURE_LLM_SERVICE.model,
+      } as AzureLLMService
+
     case 'ollama':
       return {
         ...DEFAULT_OLLAMA_LLM_SERVICE,
@@ -270,8 +293,8 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
       
     default:
       throw new LangChainConfigurationError(
-        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, gemini, mistral, ollama`,
-        { provider, supportedProviders: ['openai', 'anthropic', 'gemini', 'mistral', 'ollama'] }
+        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, azure, gemini, mistral, ollama`,
+        { provider, supportedProviders: ['openai', 'anthropic', 'azure', 'gemini', 'mistral', 'ollama'] }
       )
   }
 }

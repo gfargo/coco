@@ -61,6 +61,11 @@ export const questions = {
           name: 'Mistral',
           value: 'mistral',
           description: 'Mistral API',
+        },
+        {
+          name: 'Azure OpenAI',
+          value: 'azure',
+          description: 'Azure OpenAI Service',
         }
       ],
       default: 'ollama',
@@ -99,6 +104,15 @@ export const questions = {
     if (provider === 'mistral') {
       availableModels = [
         ...MISTRAL_MODELS.map((model) => ({
+          name: model as string,
+          value: model,
+        })),
+      ]
+    }
+
+    if (provider === 'azure') {
+      availableModels = [
+        ...OPEN_AI_MODELS.map((model) => ({
           name: model as string,
           value: model,
         })),
