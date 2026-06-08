@@ -1,4 +1,4 @@
-import { ANTHROPIC_MODELS, GEMINI_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
+import { ANTHROPIC_MODELS, GEMINI_MODELS, MISTRAL_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
 import {
     confirmPrompt,
@@ -56,6 +56,11 @@ export const questions = {
           name: 'Google Gemini',
           value: 'gemini',
           description: 'Google Gemini API',
+        },
+        {
+          name: 'Mistral',
+          value: 'mistral',
+          description: 'Mistral API',
         }
       ],
       default: 'ollama',
@@ -85,6 +90,15 @@ export const questions = {
     if (provider === 'gemini') {
       availableModels = [
         ...GEMINI_MODELS.map((model) => ({
+          name: model as string,
+          value: model,
+        })),
+      ]
+    }
+
+    if (provider === 'mistral') {
+      availableModels = [
+        ...MISTRAL_MODELS.map((model) => ({
           name: model as string,
           value: model,
         })),

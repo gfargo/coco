@@ -116,6 +116,40 @@ const GEMINI_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   },
 }
 
+const MISTRAL_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  cost: {
+    summarize: 'ministral-8b-latest',
+    commit: 'ministral-8b-latest',
+    // Floor at small — see note on OpenAI commitSplit above.
+    commitSplit: 'mistral-small-latest',
+    changelog: 'mistral-small-latest',
+    review: 'mistral-small-latest',
+    recap: 'ministral-8b-latest',
+    repair: 'mistral-small-latest',
+    largeDiff: 'mistral-small-latest',
+  },
+  balanced: {
+    summarize: 'ministral-8b-latest',
+    commit: 'mistral-small-latest',
+    commitSplit: 'mistral-medium-latest',
+    changelog: 'mistral-small-latest',
+    review: 'mistral-medium-latest',
+    recap: 'mistral-small-latest',
+    repair: 'mistral-medium-latest',
+    largeDiff: 'mistral-medium-latest',
+  },
+  quality: {
+    summarize: 'mistral-small-latest',
+    commit: 'mistral-medium-latest',
+    commitSplit: 'mistral-large-latest',
+    changelog: 'mistral-medium-latest',
+    review: 'mistral-large-latest',
+    recap: 'mistral-medium-latest',
+    repair: 'mistral-large-latest',
+    largeDiff: 'mistral-large-latest',
+  },
+}
+
 const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   cost: {
     summarize: 'llama3.2:3b',
@@ -154,6 +188,7 @@ const DYNAMIC_DEFAULTS: Record<LLMProvider, ProviderDynamicDefaults> = {
   openai: OPENAI_DYNAMIC_DEFAULTS,
   anthropic: ANTHROPIC_DYNAMIC_DEFAULTS,
   gemini: GEMINI_DYNAMIC_DEFAULTS,
+  mistral: MISTRAL_DYNAMIC_DEFAULTS,
   ollama: OLLAMA_DYNAMIC_DEFAULTS,
 }
 

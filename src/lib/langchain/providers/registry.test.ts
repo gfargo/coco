@@ -1,5 +1,6 @@
 import { ChatAnthropic } from '@langchain/anthropic'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
+import { ChatMistralAI } from '@langchain/mistralai'
 import { ChatOllama } from '@langchain/ollama'
 import { ChatOpenAI } from '@langchain/openai'
 import { Config } from '../../../commands/types'
@@ -24,13 +25,14 @@ function makeConfig(service: Record<string, unknown>): Config {
 
 describe('provider registry', () => {
   it('registers the built-in providers', () => {
-    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'gemini', 'ollama', 'openai'])
+    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'gemini', 'mistral', 'ollama', 'openai'])
   })
 
   it('exposes per-provider auth requirements', () => {
     expect(providerRequiresAuth('openai')).toBe(true)
     expect(providerRequiresAuth('anthropic')).toBe(true)
     expect(providerRequiresAuth('gemini')).toBe(true)
+    expect(providerRequiresAuth('mistral')).toBe(true)
     expect(providerRequiresAuth('ollama')).toBe(false)
     expect(providerRequiresAuth('nope')).toBe(false)
   })
@@ -66,6 +68,16 @@ describe('getLlm via registry', () => {
     )
     expect(llm).toBeInstanceOf(ChatGoogleGenerativeAI)
     expect(getLlmMetadata(llm).provider).toBe('gemini')
+  })
+
+  it('builds a Mistral model and records provider metadata', () => {
+    const llm = getLlm(
+      'mistral',
+      'mistral-small-latest' as LLMModel,
+      makeConfig({ provider: 'mistral', model: 'mistral-small-latest' })
+    )
+    expect(llm).toBeInstanceOf(ChatMistralAI)
+    expect(getLlmMetadata(llm).provider).toBe('mistral')
   })
 
   it('builds an Ollama model (no auth) and records the endpoint', () => {

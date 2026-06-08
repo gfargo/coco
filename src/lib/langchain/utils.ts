@@ -1,6 +1,6 @@
 import { Config } from '../../commands/types'
 import { LangChainAuthenticationError, LangChainConfigurationError } from './errors'
-import { AnthropicLLMService, GeminiLLMService, LLMModel, LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from './types'
+import { AnthropicLLMService, GeminiLLMService, LLMModel, LLMProvider, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from './types'
 import { validateRequired, validateServiceConfig } from './validation'
 import { providerRequiresAuth } from './providers/registry'
 
@@ -184,6 +184,22 @@ export const DEFAULT_GEMINI_LLM_SERVICE: GeminiLLMService = {
   },
 }
 
+export const DEFAULT_MISTRAL_LLM_SERVICE: MistralLLMService = {
+  provider: 'mistral',
+  model: 'mistral-small-latest',
+  temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: {
+      apiKey: '',
+    },
+  },
+}
+
 export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   provider: 'ollama',
   model: 'llama3',
@@ -234,6 +250,12 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
         model: model || DEFAULT_GEMINI_LLM_SERVICE.model,
       } as GeminiLLMService
 
+    case 'mistral':
+      return {
+        ...DEFAULT_MISTRAL_LLM_SERVICE,
+        model: model || DEFAULT_MISTRAL_LLM_SERVICE.model,
+      } as MistralLLMService
+
     case 'ollama':
       return {
         ...DEFAULT_OLLAMA_LLM_SERVICE,
@@ -248,8 +270,8 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
       
     default:
       throw new LangChainConfigurationError(
-        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, gemini, ollama`,
-        { provider, supportedProviders: ['openai', 'anthropic', 'gemini', 'ollama'] }
+        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, gemini, mistral, ollama`,
+        { provider, supportedProviders: ['openai', 'anthropic', 'gemini', 'mistral', 'ollama'] }
       )
   }
 }

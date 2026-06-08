@@ -84,6 +84,14 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     }
   }
 
+  if (llmProvider === 'mistral') {
+    apiKey = await questions.inputApiKey('Mistral', 'MISTRAL_API_KEY')
+
+    if (config.service.authentication.type === 'APIKey') {
+      config.service.authentication.credentials.apiKey = '•••••••••••••••'
+    }
+  }
+
   const advOptions = await questions.configureAdvancedOptions()
 
     /**

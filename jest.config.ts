@@ -2,6 +2,15 @@ export default {
   preset: 'ts-jest',
   testEnvironment: 'node',
   transformIgnorePatterns: ['/node_modules/', '/dist/'],
+  // `@langchain/mistralai` re-exports the official `@mistralai/mistralai`
+  // SDK, which ships as pure ESM (no CommonJS build). ts-jest runs tests
+  // through CommonJS `require`, which cannot load that ESM entry, so every
+  // suite that pulls in the provider registry would fail to load the module
+  // graph. Map the wrapper to a lightweight stub for tests; runtime/build
+  // are unaffected (they consume the real package).
+  moduleNameMapper: {
+    '^@langchain/mistralai$': '<rootDir>/src/test/mocks/langchainMistral.ts',
+  },
   // Constrain test discovery to the directories that actually contain
   // coco's tests. Without this, jest's default recursion from the
   // repo root descends into:

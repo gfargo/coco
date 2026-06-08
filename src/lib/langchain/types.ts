@@ -1,6 +1,6 @@
 import { type TiktokenModel } from '@langchain/openai'
 
-export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini'
+export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini' | 'mistral'
 export type DynamicModelTask =
   | 'summarize'
   | 'commit'
@@ -47,6 +47,15 @@ export type GeminiModel =
   | 'gemini-1.5-pro'
   | 'gemini-1.5-flash'
   | 'gemini-1.5-flash-8b'
+
+export type MistralModel =
+  | 'mistral-large-latest'
+  | 'mistral-medium-latest'
+  | 'mistral-small-latest'
+  | 'codestral-latest'
+  | 'ministral-8b-latest'
+  | 'ministral-3b-latest'
+  | 'open-mistral-nemo'
 
 export type OllamaModel =
   | 'deepseek-r1:1.5b'
@@ -113,7 +122,7 @@ export type OllamaModel =
   | 'qwen2.5-coder:14b'
   | 'qwen2.5-coder:32b'
 
-export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel | GeminiModel
+export type LLMModel = OpenAIModel | OllamaModel | AnthropicModel | GeminiModel | MistralModel
 export type ConfiguredLLMModel = LLMModel | 'dynamic'
 export type DynamicModelProfile = Partial<Record<DynamicModelTask, LLMModel>>
 
@@ -338,8 +347,15 @@ export type GeminiLLMService = BaseLLMService & {
   fields?: Record<string, unknown>
 }
 
+export type MistralLLMService = BaseLLMService & {
+  provider: 'mistral'
+  model: MistralModel | 'dynamic'
+  fields?: Record<string, unknown>
+}
+
 export type LLMService =
   | OpenAILLMService
   | OllamaLLMService
   | AnthropicLLMService
   | GeminiLLMService
+  | MistralLLMService

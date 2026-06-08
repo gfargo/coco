@@ -1,5 +1,5 @@
 import { TiktokenModel } from '@langchain/openai'
-import { AnthropicModel, GeminiModel } from './types'
+import { AnthropicModel, GeminiModel, MistralModel } from './types'
 
 export const OPEN_AI_MODELS = [
   'gpt-4.5',
@@ -42,3 +42,13 @@ export const GEMINI_MODELS = [
   'gemini-1.5-flash',
   'gemini-1.5-flash-8b',
 ] as GeminiModel[]
+
+export const MISTRAL_MODELS = [
+  'mistral-large-latest',
+  'mistral-medium-latest',
+  'mistral-small-latest',
+  'codestral-latest',
+  'ministral-8b-latest',
+  'ministral-3b-latest',
+  'open-mistral-nemo',
+] as MistralModel[]

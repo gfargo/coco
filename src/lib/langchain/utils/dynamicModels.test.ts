@@ -2,6 +2,7 @@ import { Config } from '../../../commands/types'
 import {
   DEFAULT_ANTHROPIC_LLM_SERVICE,
   DEFAULT_GEMINI_LLM_SERVICE,
+  DEFAULT_MISTRAL_LLM_SERVICE,
   DEFAULT_OLLAMA_LLM_SERVICE,
   DEFAULT_OPENAI_LLM_SERVICE,
 } from '../utils'
@@ -32,6 +33,7 @@ const providerServices: Record<LLMProvider, LLMService> = {
   openai: DEFAULT_OPENAI_LLM_SERVICE,
   anthropic: DEFAULT_ANTHROPIC_LLM_SERVICE,
   gemini: DEFAULT_GEMINI_LLM_SERVICE,
+  mistral: DEFAULT_MISTRAL_LLM_SERVICE,
   ollama: DEFAULT_OLLAMA_LLM_SERVICE,
 }
 const providerOverrides = {
@@ -46,6 +48,10 @@ const providerOverrides = {
   gemini: {
     summarize: 'gemini-2.5-flash-lite',
     largeDiff: 'gemini-2.5-flash',
+  },
+  mistral: {
+    summarize: 'ministral-8b-latest',
+    largeDiff: 'mistral-small-latest',
   },
   ollama: {
     summarize: 'llama3.2:3b',
@@ -93,6 +99,9 @@ describe('dynamic model routing', () => {
     ['anthropic', 'cost', 'claude-3-5-haiku-latest', 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest'] as const,
     ['anthropic', 'balanced', 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest'] as const,
     ['anthropic', 'quality', 'claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-sonnet-4-0'] as const,
+    ['mistral', 'cost', 'ministral-8b-latest', 'ministral-8b-latest', 'mistral-small-latest'] as const,
+    ['mistral', 'balanced', 'ministral-8b-latest', 'mistral-small-latest', 'mistral-medium-latest'] as const,
+    ['mistral', 'quality', 'mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest'] as const,
     ['ollama', 'cost', 'llama3.2:3b', 'llama3.1:8b', 'qwen2.5-coder:14b'] as const,
     ['ollama', 'balanced', 'llama3.1:8b', 'qwen2.5-coder:14b', 'qwen2.5-coder:32b'] as const,
     ['ollama', 'quality', 'qwen2.5-coder:14b', 'qwen2.5-coder:32b', 'qwen2.5-coder:32b'] as const,
@@ -124,7 +133,7 @@ describe('dynamic model routing', () => {
     expect(resolveDynamicModel(config, 'review')).toBe('gpt-4.1')
   })
 
-  it.each(['openai', 'anthropic', 'gemini', 'ollama'] as const)(
+  it.each(['openai', 'anthropic', 'gemini', 'mistral', 'ollama'] as const)(
     'lets user overrides win over %s provider defaults',
     (provider) => {
       const baseProviderConfig = createDynamicConfig(provider, 'quality')
@@ -155,6 +164,9 @@ describe('dynamic model routing', () => {
     ['gemini', 'cost', 'gemini-2.5-flash'] as const,
     ['gemini', 'balanced', 'gemini-2.5-pro'] as const,
     ['gemini', 'quality', 'gemini-2.5-pro'] as const,
+    ['mistral', 'cost', 'mistral-small-latest'] as const,
+    ['mistral', 'balanced', 'mistral-medium-latest'] as const,
+    ['mistral', 'quality', 'mistral-large-latest'] as const,
     ['ollama', 'cost', 'qwen2.5-coder:14b'] as const,
     ['ollama', 'balanced', 'qwen2.5-coder:32b'] as const,
     ['ollama', 'quality', 'qwen2.5-coder:32b'] as const,
