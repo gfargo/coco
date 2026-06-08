@@ -93,13 +93,15 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
   )
 
-  const INTERACTIVE = isInteractive(config)
+  const INTERACTIVE = argv.json ? false : isInteractive(config)
 
   if (INTERACTIVE) {
     if (!config.hideCocoBanner) {
       logger.log(LOGO)
     }
   }
+
+  let structured: ChangelogResponse | undefined
 
   async function factory(): Promise<FactoryResult> {
     const branchName = await getCurrentBranchName({ git })
@@ -309,6 +311,8 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       const ticketId = extractTicketIdFromBranchName(branchName)
       const footer = ticketId ? `\n\nPart of **${ticketId}**` : ''
 
+      structured = { title: changelog.title, content: `${changelog.content}${footer}` }
+
       return `${changelog.title}\n\n${changelog.content}${footer}`
     },
     noResult: async () => {
@@ -326,6 +330,11 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       commandExit(0)
     },
   })
+
+  if (argv.json) {
+    logger.log(JSON.stringify(structured ?? null, null, 2))
+    return
+  }
 
   const MODE =
     (INTERACTIVE && 'interactive') || (config.commit && 'interactive') || config?.mode || 'stdout'

@@ -202,6 +202,36 @@ describe('recap command', () => {
     expect(mockGetChangesByTimestamp).toHaveBeenCalled()
   })
 
+  it('emits machine-readable JSON when --json is passed', async () => {
+    argv.json = true
+    mockGetChanges.mockResolvedValue({
+      staged: [{ filePath: 'src/file.ts', status: 'modified', summary: 'changed file' }],
+      unstaged: [],
+      untracked: [],
+    })
+
+    await handler(argv, logger)
+
+    const jsonCall = (logger.log as jest.Mock).mock.calls
+      .map((call) => call[0] as string)
+      .find((message) => {
+        try {
+          JSON.parse(message)
+          return true
+        } catch {
+          return false
+        }
+      })
+
+    expect(jsonCall).toBeDefined()
+    const parsed = JSON.parse(jsonCall as string)
+    expect(parsed).toEqual({
+      title: 'mocked git commit title',
+      summary: 'mocked summary message from git commit message',
+    })
+    expect(mockHandleResult).not.toHaveBeenCalled()
+  })
+
   it('trims oversized rendered recap prompts before execution', async () => {
     mockLoadConfig.mockReturnValue({
       service: {

@@ -55,7 +55,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const llm = getLlm(provider, model as LLMModel, { ...config, service: reviewService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
 
-  const INTERACTIVE = argv.interactive || isInteractive(config)
+  const INTERACTIVE = argv.json ? false : (argv.interactive || isInteractive(config))
   if (INTERACTIVE) {
     if (!config.hideCocoBanner) {
       logger.log(LOGO)
@@ -263,6 +263,11 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       commandExit(0)
     },
   })
+
+  if (argv.json) {
+    logger.log(JSON.stringify((recap as ReviewFeedbackItem[]) ?? [], null, 2))
+    return
+  }
 
   const reviewer = new TaskList(recap as ReviewFeedbackItem[], { ...config, apiKey: key ?? undefined })
   logLlmTelemetrySummary(logger, 'review')

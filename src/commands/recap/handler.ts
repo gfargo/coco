@@ -49,7 +49,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   const llm = getLlm(provider, model as LLMModel, { ...config, service: recapService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
 
-  const INTERACTIVE = argv.interactive || isInteractive(config)
+  const INTERACTIVE = argv.json ? false : (argv.interactive || isInteractive(config))
   if (INTERACTIVE) {
     if (!config.hideCocoBanner) {
       logger.log(LOGO)
@@ -57,6 +57,8 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   } else {
     logger.setConfig({ silent: true })
   }
+
+  let structured: { title: string; summary: string } | undefined
 
   const { 'last-month': lastMonth, 'last-tag': lastTag, yesterday, 'last-week': lastWeek } = argv
 
@@ -261,6 +263,10 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
           },
         })
 
+        if (response) {
+          structured = { title: response.title, summary: response.summary }
+        }
+
         return response ? `${response.title}\n\n${response.summary}` : 'no response'
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
@@ -287,6 +293,15 @@ ${errorMessage}
       }
     },
   })
+
+  if (argv.json) {
+    // The logger is silenced in non-interactive mode; re-enable so the JSON
+    // payload reaches stdout, but only the JSON (status lines stay suppressed
+    // because they were emitted earlier while silent).
+    logger.setConfig({ silent: false })
+    logger.log(JSON.stringify(structured ?? null, null, 2))
+    return
+  }
 
   // Handle the result based on the mode (interactive or stdout)
   const MODE =

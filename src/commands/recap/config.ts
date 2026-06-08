@@ -10,6 +10,7 @@ export interface RecapOptions extends BaseCommandOptions {
   'last-tag'?: boolean
   currentBranch?: boolean
   timeframe?: 'current' | 'yesterday' | 'last-week' | 'last-month' | 'last-tag' | 'currentBranch'
+  json?: boolean
 }
 
 export type RecapArgv = Arguments<RecapOptions>
@@ -57,6 +58,11 @@ export const options = {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
+  },
+  json: {
+    type: 'boolean',
+    default: false,
+    description: 'Output machine-readable JSON instead of formatted text',
   },
 } as Record<string, Options>
 

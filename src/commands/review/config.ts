@@ -6,6 +6,7 @@ import { BaseCommandOptions } from '../types'
 export interface ReviewOptions extends BaseCommandOptions {
   interactive: boolean
   branch: string
+  json?: boolean
 }
 
 export type ReviewArgv = Arguments<ReviewOptions>
@@ -48,6 +49,11 @@ export const options = {
     type: 'string',
     alias: 'branch',
     description: 'Branch to review',
+  },
+  json: {
+    type: 'boolean',
+    default: false,
+    description: 'Output machine-readable JSON instead of formatted text',
   },
 } as Record<string, Options>
 

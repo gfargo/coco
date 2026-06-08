@@ -11,6 +11,7 @@ export interface ChangelogOptions extends BaseCommandOptions {
   onlyDiff?: boolean
   additional?: string
   author?: boolean
+  json?: boolean
 }
 
 export type ChangelogArgv = Arguments<ChangelogOptions>
@@ -72,6 +73,11 @@ export const options = {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
+  },
+  json: {
+    type: 'boolean',
+    default: false,
+    description: 'Output machine-readable JSON instead of formatted text',
   },
 } as Record<string, Options>
 
