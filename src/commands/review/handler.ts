@@ -116,6 +116,30 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
         )
       }
 
+      // `--staged`: scope the review to staged changes only (the
+      // pre-commit / CI-gating shape) instead of the whole worktree.
+      if (argv.staged) {
+        if (staged.length === 0) {
+          logger.log('No staged changes detected. Exiting...')
+          commandExit(0)
+        }
+        const stagedOnly = await fileChangeParser({
+          changes: staged,
+          commit: '--staged',
+          options: createFileChangeParserOptions({
+            command: 'review',
+            tokenizer,
+            git,
+            llm: summaryLlm,
+            logger,
+            provider,
+            model: String(summaryService.model),
+            service: config.service,
+          }),
+        })
+        return [`Staged changes:\n${stagedOnly}`]
+      }
+
       const unstagedChanges = await fileChangeParser({
         changes: unstaged || [],
         commit: '--unstaged',
@@ -264,12 +288,31 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     },
   })
 
+  const findings = (recap as ReviewFeedbackItem[]) ?? []
+
+  // `--severity <n>`: CI gate. After surfacing the review, exit non-zero
+  // if any finding is at or above the threshold so pipelines can block on it.
+  const severityThreshold = typeof argv.severity === 'number' ? argv.severity : undefined
+  const exceedsThreshold =
+    severityThreshold !== undefined && findings.some((f) => f.severity >= severityThreshold)
+
   if (argv.json) {
-    logger.log(JSON.stringify((recap as ReviewFeedbackItem[]) ?? [], null, 2))
+    logger.log(JSON.stringify(findings, null, 2))
+    if (exceedsThreshold) {
+      commandExit(1)
+    }
     return
   }
 
-  const reviewer = new TaskList(recap as ReviewFeedbackItem[], { ...config, apiKey: key ?? undefined })
+  const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined })
   logLlmTelemetrySummary(logger, 'review')
   await reviewer.start()
+
+  if (exceedsThreshold) {
+    logger.log(
+      `Review found ${findings.filter((f) => f.severity >= severityThreshold!).length} finding(s) at or above severity ${severityThreshold}.`,
+      { color: 'red' }
+    )
+    commandExit(1)
+  }
 }

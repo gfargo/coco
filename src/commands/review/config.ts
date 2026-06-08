@@ -7,6 +7,8 @@ export interface ReviewOptions extends BaseCommandOptions {
   interactive: boolean
   branch: string
   json?: boolean
+  staged?: boolean
+  severity?: number
 }
 
 export type ReviewArgv = Arguments<ReviewOptions>
@@ -54,6 +56,16 @@ export const options = {
     type: 'boolean',
     default: false,
     description: 'Output machine-readable JSON instead of formatted text',
+  },
+  staged: {
+    type: 'boolean',
+    default: false,
+    description: 'Review only staged changes (instead of the full working tree)',
+  },
+  severity: {
+    type: 'number',
+    alias: 's',
+    description: 'Exit non-zero if any finding has severity >= this threshold (1-10). For CI gating.',
   },
 } as Record<string, Options>
 

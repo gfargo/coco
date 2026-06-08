@@ -164,6 +164,33 @@ describe('review command', () => {
     })
   })
 
+  it('exits non-zero when a finding meets the --severity threshold (--json)', async () => {
+    argv.json = true
+    argv.severity = 4 // finding severity is 5 → should gate
+
+    await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+  })
+
+  it('does not gate when findings are below the --severity threshold', async () => {
+    argv.json = true
+    argv.severity = 8 // finding severity is 5 → below threshold
+
+    await expect(handler(argv, logger)).resolves.toBeUndefined()
+  })
+
+  it('reviews only staged changes with --staged', async () => {
+    argv.staged = true
+    argv.json = true
+
+    await handler(argv, logger)
+
+    // staged-only path summarizes the staged diff and never touches branch diff
+    expect(mockGetDiffForBranch).not.toHaveBeenCalled()
+    expect(mockFileChangeParser).toHaveBeenCalledWith(
+      expect.objectContaining({ commit: '--staged' })
+    )
+  })
+
   it('trims oversized rendered review prompts before execution', async () => {
     mockLoadConfig.mockReturnValue({
       service: {
