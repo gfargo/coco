@@ -1,0 +1,153 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderCommitDiffDetail structural snapshot — no detail 1`] = `
+<Box
+  borderColor="gray"
+  borderStyle="round"
+  flexDirection="column"
+  paddingX={1}
+  width={100}
+>
+  <Text
+    bold={true}
+  >
+    Commit
+  </Text>
+  <Text
+    dimColor={false}
+  >
+    No commit selected.
+  </Text>
+  <Text
+    dimColor={false}
+  />
+  <Text
+    dimColor={true}
+  >
+    Commit details unavailable.
+  </Text>
+</Box>
+`;
+
+exports[`renderHistoryInspector structural snapshot — no detail 1`] = `
+<Box
+  borderColor="gray"
+  borderStyle="round"
+  flexDirection="column"
+  paddingX={1}
+  width={100}
+>
+  <Text
+    bold={true}
+  >
+    Inspector
+  </Text>
+  <Text
+    dimColor={false}
+  >
+    No commit selected.
+  </Text>
+  <Text
+    dimColor={false}
+  />
+  <Text
+    dimColor={true}
+  >
+    Commit details unavailable.
+  </Text>
+  <Text />
+  <Text>
+    Actions:
+  </Text>
+  <Text>
+    <Text
+      color="cyan"
+    >
+      enter
+    </Text>
+      
+    Open diff
+  </Text>
+  <Text>
+    <Text
+      color="cyan"
+    >
+      c    
+    </Text>
+      
+    Cherry-pick
+  </Text>
+  <Text>
+    <Text
+      color="red"
+    >
+      R    
+    </Text>
+      
+    Revert
+    <Text
+      color="red"
+      dimColor={false}
+    >
+        [!]
+    </Text>
+  </Text>
+  <Text>
+    <Text
+      color="red"
+    >
+      Z    
+    </Text>
+      
+    Reset to commit
+    <Text
+      color="red"
+      dimColor={false}
+    >
+        [!]
+    </Text>
+  </Text>
+  <Text>
+    <Text
+      color="red"
+    >
+      i    
+    </Text>
+      
+    Interactive rebase
+    <Text
+      color="red"
+      dimColor={false}
+    >
+        [!]
+    </Text>
+  </Text>
+  <Text>
+    <Text
+      color="cyan"
+    >
+      y    
+    </Text>
+      
+    Yank hash
+  </Text>
+  <Text>
+    <Text
+      color="cyan"
+    >
+      Y    
+    </Text>
+      
+    Yank short hash
+  </Text>
+  <Text>
+    <Text
+      color="cyan"
+    >
+      O    
+    </Text>
+      
+    Open in browser
+  </Text>
+</Box>
+`;

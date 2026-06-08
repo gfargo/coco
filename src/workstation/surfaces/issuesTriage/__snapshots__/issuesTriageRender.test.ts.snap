@@ -1,0 +1,88 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderIssuesTriageSurface structural snapshot — empty list 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Issues *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0/0 | ▼ open
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+    No issues match the current GitHub filter (default: open issues).
+  </Text>
+</Box>
+`;
+
+exports[`renderIssuesTriageSurface structural snapshot — populated 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Issues *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1/1 | ▼ open
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    dimColor={false}
+  >
+    &gt; 
+    <Text
+      dimColor={true}
+    >
+      #1   
+    </Text>
+    <Text
+      color="green"
+      dimColor={false}
+    >
+      open    
+    </Text>
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+            
+    </Text>
+    Something is broken
+    <Text
+      dimColor={true}
+    />
+    <Text
+      dimColor={true}
+    />
+  </Text>
+</Box>
+`;

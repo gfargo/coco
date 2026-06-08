@@ -1,0 +1,108 @@
+/**
+ * Structural tests for `renderIssuesTriageSurface`. Stubs `Text` / `Box` per the
+ * `surfaces/status/statusRender.test.ts` pattern. Data flows in via
+ * `context.issueList`.
+ */
+import { createElement, type ReactElement } from 'react'
+import { createLogInkState, type LogInkState } from '../../../commands/log/inkViewModel'
+import { createLogInkTheme } from '../../chrome/theme'
+import {
+  createLogInkContextStatus,
+  updateLogInkContextStatus,
+} from '../../chrome/context'
+import type { IssueListItem, IssueListOverview } from '../../../git/issuesListData'
+import type { LogInkContext, LogInkComponents } from '../../runtime/types'
+import { renderIssuesTriageSurface } from './index'
+
+type StubProps = Record<string, unknown>
+const Text = ((props: StubProps) =>
+  createElement('text', props, props.children as React.ReactNode)
+) as unknown as React.ComponentType<StubProps>
+const Box = ((props: StubProps) =>
+  createElement('box', props, props.children as React.ReactNode)
+) as unknown as React.ComponentType<StubProps>
+
+const components: LogInkComponents = { Box, Text }
+
+function makeState(overrides: Partial<LogInkState> = {}): LogInkState {
+  return { ...createLogInkState([]), ...overrides }
+}
+
+function makeIssue(overrides: Partial<IssueListItem> = {}): IssueListItem {
+  return {
+    number: 1,
+    title: 'Something is broken',
+    url: 'https://github.com/o/r/issues/1',
+    state: 'OPEN',
+    createdAt: '2024-01-01',
+    updatedAt: '2024-01-02',
+    ...overrides,
+  } as IssueListItem
+}
+
+function render(
+  state: LogInkState,
+  options: { issueList?: IssueListOverview; loading?: boolean } = {}
+): ReactElement {
+  const theme = createLogInkTheme({})
+  const context: LogInkContext = options.issueList ? { issueList: options.issueList } : {}
+  const contextStatus = options.loading
+    ? updateLogInkContextStatus(createLogInkContextStatus('idle'), 'issueList', 'loading')
+    : createLogInkContextStatus('ready')
+  return renderIssuesTriageSurface({
+    h: createElement,
+    components,
+    state,
+    context,
+    contextStatus,
+    bodyRows: 30,
+    width: 120,
+    theme,
+  })
+}
+
+describe('renderIssuesTriageSurface', () => {
+  it('renders an unavailable state with no GitHub remote', () => {
+    const tree = render(makeState(), {
+      issueList: { available: false, authenticated: false, message: 'No GitHub remote detected.' },
+    })
+    expect(tree).toBeDefined()
+    expect(tree.type).toBe(Box)
+  })
+
+  it('renders an empty authenticated list', () => {
+    const tree = render(makeState(), {
+      issueList: { available: true, authenticated: true, issues: [] },
+    })
+    expect(tree).toBeDefined()
+  })
+
+  it('renders a loading placeholder while issues hydrate', () => {
+    expect(render(makeState(), { loading: true })).toBeDefined()
+  })
+
+  it('renders rows for a populated issue list', () => {
+    const tree = render(makeState(), {
+      issueList: {
+        available: true,
+        authenticated: true,
+        issues: [makeIssue(), makeIssue({ number: 2, title: 'Another', state: 'CLOSED' })],
+      },
+    })
+    expect(tree).toBeDefined()
+  })
+
+  it('structural snapshot — empty list', () => {
+    expect(
+      render(makeState(), { issueList: { available: true, authenticated: true, issues: [] } })
+    ).toMatchSnapshot()
+  })
+
+  it('structural snapshot — populated', () => {
+    expect(
+      render(makeState(), {
+        issueList: { available: true, authenticated: true, issues: [makeIssue()] },
+      })
+    ).toMatchSnapshot()
+  })
+})

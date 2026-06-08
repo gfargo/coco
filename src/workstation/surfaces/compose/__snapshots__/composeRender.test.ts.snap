@@ -1,0 +1,135 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderComposeSurface structural snapshot — empty 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Compose commit *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0 staged | 0 unstaged | 0 untracked
+    </Text>
+  </Box>
+  <Text />
+  <Box>
+    <Text
+      backgroundColor="#1a3a4a"
+      bold={true}
+      color="#ffffff"
+      dimColor={false}
+    >
+      ▸ Summary
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+      &lt;empty&gt;
+  </Text>
+  <Text />
+  <Box>
+    <Text
+      bold={false}
+      dimColor={true}
+    >
+        Body
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+      &lt;empty&gt;
+  </Text>
+  <Text />
+  <Text
+    dimColor={true}
+  >
+    No staged changes to commit. Press gs to stage files, then gc to come back here.
+  </Text>
+  <Box
+    flexGrow={1}
+  />
+  <Text
+    dimColor={true}
+  >
+    Press e to edit, c to commit, I for AI draft, esc to leave.
+  </Text>
+</Box>
+`;
+
+exports[`renderComposeSurface structural snapshot — loading 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Compose commit *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      Status loading
+    </Text>
+  </Box>
+  <Text />
+  <Box>
+    <Text
+      backgroundColor="#1a3a4a"
+      bold={true}
+      color="#ffffff"
+      dimColor={false}
+    >
+      ▸ Summary
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+      &lt;empty&gt;
+  </Text>
+  <Text />
+  <Box>
+    <Text
+      bold={false}
+      dimColor={true}
+    >
+        Body
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+      &lt;empty&gt;
+  </Text>
+  <Box
+    flexGrow={1}
+  />
+  <Text
+    dimColor={true}
+  >
+    Press e to edit, c to commit, I for AI draft, esc to leave.
+  </Text>
+</Box>
+`;

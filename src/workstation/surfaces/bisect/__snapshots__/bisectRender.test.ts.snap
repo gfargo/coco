@@ -1,0 +1,140 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderBisectSurface structural snapshot — active 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Bisect *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      BISECTING
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+  >
+    Bisecting · current candidate abc1234
+  </Text>
+  <Text />
+  <Text
+    dimColor={true}
+  >
+    No decisions logged yet — press g (good) or b (bad) to record one.
+  </Text>
+  <Text />
+  <Text
+    dimColor={true}
+  >
+    Actions: g good · b bad · s skip · R run · x reset
+  </Text>
+</Box>
+`;
+
+exports[`renderBisectSurface structural snapshot — inactive 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Bisect *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      inactive
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+  >
+    Bisect — find the commit that introduced a bug.
+  </Text>
+  <Text />
+  <Text
+    bold={true}
+  >
+    How it works
+  </Text>
+  <Text>
+      Binary search through history. You mark commits as "good" (bug
+  </Text>
+  <Text>
+      not present) or "bad" (bug present); git narrows the range until
+  </Text>
+  <Text>
+      it identifies the first bad commit.
+  </Text>
+  <Text />
+  <Text
+    bold={true}
+  >
+    How to start
+  </Text>
+  <Text>
+      In coco (recommended):
+  </Text>
+  <Text
+    color="cyan"
+  >
+        s  pick bad + good commits visually from history
+  </Text>
+  <Text>
+      From your shell:
+  </Text>
+  <Text
+    color="cyan"
+  >
+        git bisect start &lt;bad-ref&gt; &lt;good-ref&gt;
+  </Text>
+  <Text>
+      Either way, single-keystroke controls take over once active:
+  </Text>
+  <Text
+    color="cyan"
+  >
+        g  mark good      s  skip (e.g. doesn't build)
+  </Text>
+  <Text
+    color="cyan"
+  >
+        b  mark bad       x  reset / cancel
+  </Text>
+  <Text />
+  <Text
+    bold={true}
+  >
+    Tip
+  </Text>
+  <Text>
+      Pick a recent release tag as your "good" anchor if you don't
+  </Text>
+  <Text>
+      remember when the bug appeared. Tags are visible from the tags
+  </Text>
+  <Text>
+      view (g t).
+  </Text>
+</Box>
+`;

@@ -1,0 +1,102 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderPullRequestTriageSurface structural snapshot — empty list 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Pull requests *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0/0 | ▼ open
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+    No pull requests match the current GitHub filter (default: open PRs).
+  </Text>
+</Box>
+`;
+
+exports[`renderPullRequestTriageSurface structural snapshot — populated 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Pull requests *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1/1 | ▼ open
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    dimColor={false}
+  >
+    &gt; 
+    <Text
+      dimColor={true}
+    >
+      #42  
+    </Text>
+    <Text
+      color="green"
+      dimColor={false}
+    >
+      open    
+    </Text>
+    <Text
+      color="gray"
+      dimColor={false}
+    >
+      ·  
+    </Text>
+    <Text
+      color="gray"
+      dimColor={false}
+    >
+         
+    </Text>
+    <Text
+      color="cyan"
+      dimColor={false}
+    >
+            
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      feature/x  
+    </Text>
+    Add a thing
+    <Text
+      dimColor={true}
+    />
+  </Text>
+</Box>
+`;
