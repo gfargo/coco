@@ -55,7 +55,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const llm = getLlm(provider, model as LLMModel, { ...config, service: reviewService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
 
-  const INTERACTIVE = isInteractive(config)
+  const INTERACTIVE = argv.interactive || isInteractive(config)
   if (INTERACTIVE) {
     if (!config.hideCocoBanner) {
       logger.log(LOGO)

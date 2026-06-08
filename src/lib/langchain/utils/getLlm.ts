@@ -34,13 +34,32 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config) {
 
   try {
     switch (provider) {
-      case 'anthropic':
-        return new ChatAnthropic({
+      case 'anthropic': {
+        const anthropicConfig: ConstructorParameters<typeof ChatAnthropic>[0] = {
           anthropicApiKey: apiKey,
           maxConcurrency: config.service.maxConcurrent,
           model,
-        })
-        
+        }
+
+        // Respect the base temperature, overridable by the per-service field.
+        if (typeof config.service.temperature === 'number') {
+          anthropicConfig.temperature = config.service.temperature
+        }
+
+        // Custom endpoint for proxies / gateways.
+        if ('baseURL' in config.service && config.service.baseURL) {
+          anthropicConfig.anthropicApiUrl = config.service.baseURL
+        }
+
+        // Merge Anthropic-specific fields (temperature, maxTokens, ...).
+        if ('fields' in config.service && config.service.fields) {
+          Object.assign(anthropicConfig, config.service.fields)
+        }
+
+        return new ChatAnthropic(anthropicConfig)
+      }
+
+
       case 'ollama':
         // Use endpoint from service config if available, otherwise fall back to default
         const endpoint = 'endpoint' in config.service 

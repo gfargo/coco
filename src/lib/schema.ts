@@ -873,6 +873,10 @@ export const schema = {
         "model": {
           "$ref": "#/definitions/ConfiguredLLMModel"
         },
+        "baseURL": {
+          "type": "string",
+          "description": "Custom base URL for Anthropic-compatible APIs (e.g. a proxy or gateway). If not specified, uses the default Anthropic API endpoint."
+        },
         "fields": {
           "type": "object",
           "properties": {

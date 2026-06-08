@@ -311,6 +311,11 @@ export type OllamaLLMService = BaseLLMService & {
 export type AnthropicLLMService = BaseLLMService & {
   provider: 'anthropic'
   model: AnthropicModel | 'dynamic'
+  /**
+   * Custom base URL for Anthropic-compatible APIs (e.g. a proxy or gateway).
+   * If not specified, uses the default Anthropic API endpoint.
+   */
+  baseURL?: string
   fields?: {
     temperature?: number
     maxTokens?: number

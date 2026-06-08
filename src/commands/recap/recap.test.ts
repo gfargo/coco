@@ -13,6 +13,7 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { handleResult } from '../../lib/ui/handleResult'
 import { Logger } from '../../lib/utils/logger'
 import { SimpleGit } from 'simple-git'
 import { Config } from '../../commands/types'
@@ -29,6 +30,7 @@ jest.mock('../../lib/config/utils/loadConfig')
 jest.mock('../../lib/langchain/utils')
 jest.mock('../../lib/langchain/utils/getLlm')
 jest.mock('../../lib/utils/tokenizer')
+jest.mock('../../lib/ui/handleResult')
 jest.mock('../../lib/ui/generateAndReviewLoop', () => ({
   generateAndReviewLoop: jest.fn().mockImplementation(async ({ factory, parser, agent, noResult, options }) => {
     const changes = await factory();
@@ -56,6 +58,7 @@ const mockGetModelAndProviderFromConfig = getModelAndProviderFromConfig as jest.
 >
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
 const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockHandleResult = handleResult as jest.MockedFunction<typeof handleResult>
 
 
 describe('recap command', () => {
@@ -175,6 +178,28 @@ describe('recap command', () => {
         { filePath: 'branch-file.txt', status: 'added', summary: 'branch file summary' },
       ],
     }))
+  })
+
+  it('resolves stdout mode when non-interactive (regression for `?? ` short-circuit)', async () => {
+    argv.interactive = false
+    await handler(argv, logger)
+    expect(mockHandleResult).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'stdout' })
+    )
+  })
+
+  it('resolves interactive mode when --interactive is passed', async () => {
+    argv.interactive = true
+    await handler(argv, logger)
+    expect(mockHandleResult).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'interactive' })
+    )
+  })
+
+  it('honors an explicit --timeframe value', async () => {
+    argv.timeframe = 'last-week'
+    await handler(argv, logger)
+    expect(mockGetChangesByTimestamp).toHaveBeenCalled()
   })
 
   it('trims oversized rendered recap prompts before execution', async () => {

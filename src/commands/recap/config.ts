@@ -48,6 +48,11 @@ export const options = {
     type: 'boolean',
     description: 'Recap for the current branch',
   },
+  timeframe: {
+    type: 'string',
+    choices: ['current', 'yesterday', 'last-week', 'last-month', 'last-tag', 'currentBranch'],
+    description: 'Recap timeframe (canonical form of the shortcut flags above)',
+  },
   i: {
     type: 'boolean',
     alias: 'interactive',

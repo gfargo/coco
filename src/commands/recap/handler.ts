@@ -70,7 +70,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     ? 'last-week'
     : argv.currentBranch || config.currentBranch
     ? 'currentBranch'
-    : 'current'
+    : argv.timeframe ?? config.timeframe ?? 'current'
 
   logger.log(`Generating recap for timeframe: ${timeframe}`)
 
@@ -290,7 +290,7 @@ ${errorMessage}
 
   // Handle the result based on the mode (interactive or stdout)
   const MODE =
-    (INTERACTIVE && 'interactive') ?? (config.recap && 'interactive') ?? config?.mode ?? 'stdout' // Default to stdout
+    (INTERACTIVE && 'interactive') || (config.recap && 'interactive') || config?.mode || 'stdout' // Default to stdout
 
   handleResult({
     result: recapResult,
