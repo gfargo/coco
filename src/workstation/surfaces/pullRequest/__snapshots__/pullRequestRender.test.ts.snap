@@ -1,0 +1,91 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderPullRequestSurface structural snapshot — populated 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Pull request *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      #42 · feature/x → main
+    </Text>
+  </Box>
+  <Text>
+    Add a thing
+  </Text>
+  <Text
+    dimColor={true}
+  >
+    OPEN
+  </Text>
+  <Text />
+  <Text
+    bold={true}
+    color="cyan"
+  >
+    Checks
+  </Text>
+  <Text
+    dimColor={true}
+  >
+      No status checks reported
+  </Text>
+  <Text />
+  <Text
+    bold={true}
+    color="cyan"
+  >
+    Reviews
+  </Text>
+  <Text
+    dimColor={true}
+  >
+      No reviews submitted
+  </Text>
+  <Text />
+</Box>
+`;
+
+exports[`renderPullRequestSurface structural snapshot — unavailable 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Pull request *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      no PR
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+    No GitHub remote detected.
+  </Text>
+</Box>
+`;

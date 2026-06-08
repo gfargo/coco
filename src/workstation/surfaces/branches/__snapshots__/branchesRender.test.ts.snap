@@ -1,0 +1,82 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderBranchesSurface structural snapshot — empty 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Branches *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0/0 local | current: main | ▼ name
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+    No local branches. Press gh to return to history, or use git from the shell to create one.
+  </Text>
+</Box>
+`;
+
+exports[`renderBranchesSurface structural snapshot — populated 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Branches *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1/1 local | current: main | ▼ name
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    dimColor={false}
+  >
+    &gt; 
+    <Text
+      color="green"
+      dimColor={false}
+    >
+      *
+    </Text>
+    <Text
+      color="green"
+      dimColor={false}
+    >
+       main     
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      2y ago  
+    </Text>
+     no upstream
+  </Text>
+</Box>
+`;

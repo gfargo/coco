@@ -1,0 +1,64 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderTagsSurface structural snapshot — empty 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Tags *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0/0 tags | ▼ recent
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+    No tags found. Tags created via git tag &lt;name&gt; will appear here.
+  </Text>
+</Box>
+`;
+
+exports[`renderTagsSurface structural snapshot — populated 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Tags *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1/1 tags | ▼ recent
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    dimColor={false}
+  >
+    &gt; v1.0.0   release
+  </Text>
+</Box>
+`;

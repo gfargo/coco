@@ -1,0 +1,64 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderReflogSurface structural snapshot — empty 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Reflog *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0/0 entries
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+    No reflog entries. Activity in this repo will appear here over time.
+  </Text>
+</Box>
+`;
+
+exports[`renderReflogSurface structural snapshot — populated 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Reflog *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1/1 entries
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    dimColor={false}
+  >
+    &gt; 2 hours ago commit abc1234  latest work
+  </Text>
+</Box>
+`;
