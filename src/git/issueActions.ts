@@ -11,11 +11,13 @@
  * mutations, all gated through the y-confirm path.
  */
 
-import { defaultGhRunner, type GhRunner } from './githubCli'
+import { defaultGhRunner, resolveGhActionError, type GhRunner } from './githubCli'
 
 export type IssueActionResult = {
   ok: boolean
   message: string
+  /** Bounded extra lines from a compacted gh error, when present. */
+  details?: string[]
 }
 
 async function runGhAction(
@@ -26,9 +28,11 @@ async function runGhAction(
   try {
     return successMessage(await runner(args))
   } catch (error) {
+    const { message, details } = await resolveGhActionError(error, runner)
     return {
       ok: false,
-      message: (error as Error).message,
+      message,
+      ...(details && details.length ? { details } : {}),
     }
   }
 }

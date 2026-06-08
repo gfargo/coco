@@ -34,12 +34,27 @@ describe('issueActions', () => {
       })
     })
 
-    it('surfaces runner errors as ok: false', async () => {
-      const runner = jest.fn().mockRejectedValue(new Error('rate limited'))
+    it('surfaces runner errors as ok: false (compacted when gh is healthy)', async () => {
+      // gh itself is fine (auth probe succeeds); the action failed for an
+      // unrelated reason, so the compacted raw error is surfaced.
+      const runner = jest.fn((args: string[]) =>
+        args[0] === 'auth'
+          ? Promise.resolve('Logged in to github.com')
+          : Promise.reject(new Error('rate limited'))
+      )
       await expect(commentIssue(1, 'hello', runner)).resolves.toEqual({
         ok: false,
         message: 'rate limited',
       })
+    })
+
+    it('surfaces a de-auth as the curated recovery hint', async () => {
+      const runner = jest
+        .fn()
+        .mockRejectedValue(new Error('You are not logged into any GitHub hosts.'))
+      const result = await commentIssue(1, 'hello', runner)
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('gh auth login')
     })
   })
 
@@ -105,7 +120,11 @@ describe('destructive issue actions (#882 phase 5)', () => {
     })
 
     it('surfaces gh errors as ok: false', async () => {
-      const runner = jest.fn().mockRejectedValue(new Error('already closed'))
+      const runner = jest.fn((args: string[]) =>
+        args[0] === 'auth'
+          ? Promise.resolve('Logged in to github.com')
+          : Promise.reject(new Error('already closed'))
+      )
       await expect(closeIssue(1, runner)).resolves.toEqual({
         ok: false,
         message: 'already closed',

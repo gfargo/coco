@@ -143,13 +143,31 @@ describe('log pull request actions', () => {
       expect(runner).not.toHaveBeenCalled()
     })
 
-    it('surfaces gh runner errors as failed action results', async () => {
-      const runner = jest.fn().mockRejectedValue(new Error('gh: not authenticated'))
+    it('surfaces a de-auth as the curated recovery hint, not raw stderr', async () => {
+      // Runner rejects both the action and the getGhStatus probe with a
+      // recognizable "not logged in" message → routed to the curated hint.
+      const runner = jest
+        .fn()
+        .mockRejectedValue(new Error('You are not logged into any GitHub hosts.'))
 
-      await expect(mergePullRequest('merge', runner)).resolves.toEqual({
-        ok: false,
-        message: 'gh: not authenticated',
-      })
+      const result = await mergePullRequest('merge', runner)
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('gh auth login')
+    })
+
+    it('compacts a raw gh error when gh itself is still healthy', async () => {
+      // Action fails for a non-auth reason; the status probe succeeds, so we
+      // surface the compacted underlying error rather than an auth hint.
+      const runner = jest.fn((args: string[]) =>
+        args[0] === 'auth'
+          ? Promise.resolve('Logged in to github.com')
+          : Promise.reject(new Error('Pull request is not mergeable\nresolve conflicts first'))
+      )
+
+      const result = await mergePullRequest('merge', runner)
+      expect(result.ok).toBe(false)
+      expect(result.message).toBe('Pull request is not mergeable')
+      expect(result.details).toEqual(['resolve conflicts first'])
     })
 
     it('preserves trimmed gh stdout as the success message when present', async () => {
@@ -223,7 +241,11 @@ describe('triage-by-number PR actions (#882 phase 4)', () => {
     })
 
     it('surfaces gh errors as ok: false', async () => {
-      const runner = jest.fn().mockRejectedValue(new Error('no such user'))
+      const runner = jest.fn((args: string[]) =>
+        args[0] === 'auth'
+          ? Promise.resolve('Logged in to github.com')
+          : Promise.reject(new Error('no such user'))
+      )
       await expect(addPullRequestAssignee(1, 'ghost', runner)).resolves.toEqual({
         ok: false,
         message: 'no such user',

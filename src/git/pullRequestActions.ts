@@ -1,9 +1,12 @@
 import { GhRunner, defaultGhRunner } from './pullRequestData'
+import { resolveGhActionError } from './githubCli'
 
 export type PullRequestActionResult = {
   ok: boolean
   message: string
   url?: string
+  /** Bounded extra lines from a compacted gh error, when present. */
+  details?: string[]
 }
 
 export type CreatePullRequestInput = {
@@ -29,9 +32,11 @@ async function runGhAction(
   try {
     return successMessage(await runner(args))
   } catch (error) {
+    const { message, details } = await resolveGhActionError(error, runner)
     return {
       ok: false,
-      message: (error as Error).message,
+      message,
+      ...(details && details.length ? { details } : {}),
     }
   }
 }

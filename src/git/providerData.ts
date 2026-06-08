@@ -1,6 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { BranchRef } from './branchData'
 import { GhRunner, defaultGhRunner } from './pullRequestData'
+import { describeGhStatus, getGhStatus } from './githubCli'
 
 export type GitProviderType = 'github' | 'unsupported'
 
@@ -241,9 +242,8 @@ export async function getProviderOverview(
     }
   }
 
-  try {
-    await runner(['auth', 'status', '--hostname', 'github.com'])
-  } catch {
+  const ghStatus = await getGhStatus(runner)
+  if (ghStatus.kind !== 'ok') {
     return {
       repository: {
         ...repository,
@@ -251,7 +251,7 @@ export async function getProviderOverview(
       },
       currentBranch,
       authenticated: false,
-      message: 'GitHub CLI is missing or not authenticated.',
+      message: describeGhStatus(ghStatus),
     }
   }
 

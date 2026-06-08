@@ -4,9 +4,26 @@ import { SimpleGit } from 'simple-git'
 
 const execFileAsync = promisify(execFile)
 
+/**
+ * Default wall-clock ceiling for a single `gh` invocation. Without this a
+ * hung gh (e.g. one prompting for auth on a TTY-less session, or a stalled
+ * network call) would block the TUI indefinitely.
+ */
+export const GH_DEFAULT_TIMEOUT_MS = 20_000
+
+/**
+ * Default stdout buffer ceiling. The Node `execFile` default is 1 MB, which
+ * large `gh ... --json` payloads (big PR/issue lists) can overflow, crashing
+ * the call with ERR_CHILD_PROCESS_STDIO_MAXBUFFER. 16 MB is comfortably above
+ * realistic gh JSON output.
+ */
+export const GH_MAX_BUFFER_BYTES = 16 * 1024 * 1024
+
 export type GhRunOptions = {
   /** Abort the gh process when the signal fires (Node 16.14+). */
   signal?: AbortSignal
+  /** Per-call wall-clock timeout in ms. Defaults to `GH_DEFAULT_TIMEOUT_MS`. */
+  timeout?: number
 }
 
 export type GhRunner = (args: string[], options?: GhRunOptions) => Promise<string>
@@ -36,7 +53,11 @@ export async function defaultGhRunner(
   args: string[],
   options: GhRunOptions = {}
 ): Promise<string> {
-  const result = await execFileAsync('gh', args, options.signal ? { signal: options.signal } : {})
+  const result = await execFileAsync('gh', args, {
+    timeout: options.timeout ?? GH_DEFAULT_TIMEOUT_MS,
+    maxBuffer: GH_MAX_BUFFER_BYTES,
+    ...(options.signal ? { signal: options.signal } : {}),
+  })
   return result.stdout
 }
 
@@ -143,4 +164,53 @@ export function describeGhStatus(status: GhStatus): string {
     case 'unknown':
       return `GitHub CLI returned an unexpected error: ${status.detail}. Try \`gh auth status\` directly to diagnose.`
   }
+}
+
+/** Structured, user-facing form of a failed gh action. */
+export type GhActionError = {
+  message: string
+  details?: string[]
+}
+
+/**
+ * Compact a multi-line gh error/stderr into a head line plus a bounded set of
+ * detail lines, mirroring `operationActions.compactOutputLines`. Keeps a raw
+ * stderr dump from flooding a notification.
+ */
+export function compactGhError(message: string): GhActionError {
+  const lines = message
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  return {
+    message: lines[0] || 'GitHub CLI command failed.',
+    details: lines.slice(1, 8),
+  }
+}
+
+/**
+ * Turn a thrown gh error into a user-facing message. Mutating gh actions (PR /
+ * issue create/merge/comment/...) don't pre-check auth, so a session that
+ * de-authed mid-flight would otherwise dump raw gh stderr. We probe
+ * `getGhStatus` on the error path: if gh is no longer `ok`, return the curated
+ * recovery hint; otherwise compact the underlying error. The probe is one extra
+ * gh call and only happens when an action has already failed.
+ */
+export async function resolveGhActionError(
+  error: unknown,
+  runner: GhRunner
+): Promise<GhActionError> {
+  const raw = (error as Error)?.message || 'GitHub CLI command failed.'
+
+  try {
+    const status = await getGhStatus(runner)
+    if (status.kind !== 'ok') {
+      return { message: describeGhStatus(status) }
+    }
+  } catch {
+    // If even the status probe throws, fall back to compacting the raw error.
+  }
+
+  return compactGhError(raw)
 }

@@ -165,11 +165,15 @@ describe('log provider data', () => {
       ]),
       raw: buildGitRawMock({ currentBranch: 'main', originHead: 'main' }),
     }
-    const runner = jest.fn().mockRejectedValue(new Error('not authenticated'))
+    const runner = jest
+      .fn()
+      .mockRejectedValue(new Error('You are not logged into any GitHub hosts.'))
 
     await expect(getProviderOverview(git as never, runner)).resolves.toMatchObject({
       authenticated: false,
-      message: 'GitHub CLI is missing or not authenticated.',
+      // Now routed through getGhStatus/describeGhStatus, so the message is the
+      // tailored recovery hint rather than a flat catch-all.
+      message: expect.stringContaining('gh auth login'),
       repository: {
         provider: 'github',
         owner: 'gfargo',
