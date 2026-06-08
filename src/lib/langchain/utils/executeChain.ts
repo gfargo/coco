@@ -4,6 +4,7 @@ import { handleLangChainError, isNetworkError } from '../errorHandler'
 import { LangChainExecutionError, LangChainNetworkError } from '../errors'
 import { validateRequired } from '../validation'
 import { getLlm } from './getLlm'
+import { getLlmMetadata } from './llmMetadata'
 import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
 import { estimatePromptTokens, LlmCallMetadata, logLlmCall } from './observability'
@@ -21,32 +22,6 @@ type ExecuteChainInput<T> = {
   logger?: Logger
   tokenizer?: TokenCounter
   metadata?: Partial<LlmCallMetadata>
-}
-
-/**
- * Extracts provider and endpoint info from LLM instance if available
- */
-function extractLlmInfo(llm: ReturnType<typeof getLlm>): { provider?: string; endpoint?: string } {
-  const info: { provider?: string; endpoint?: string } = {}
-
-  // Try to extract provider from class name
-  const className = llm?.constructor?.name || ''
-  if (className.includes('Ollama')) {
-    info.provider = 'ollama'
-    // Try to get baseUrl from ollama instance
-    if ('lc_kwargs' in llm && typeof llm.lc_kwargs === 'object' && llm.lc_kwargs !== null) {
-      const kwargs = llm.lc_kwargs as Record<string, unknown>
-      if (typeof kwargs.baseUrl === 'string') {
-        info.endpoint = kwargs.baseUrl
-      }
-    }
-  } else if (className.includes('OpenAI')) {
-    info.provider = 'openai'
-  } else if (className.includes('Anthropic')) {
-    info.provider = 'anthropic'
-  }
-
-  return info
 }
 
 /**
@@ -82,7 +57,7 @@ export const executeChain = async <T>({
   }
 
   // Extract LLM info for error reporting if not provided
-  const llmInfo = extractLlmInfo(llm)
+  const llmInfo = getLlmMetadata(llm)
   const effectiveProvider = provider || llmInfo.provider
   const effectiveEndpoint = endpoint || llmInfo.endpoint
 

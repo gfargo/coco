@@ -1,5 +1,6 @@
 import { LangChainValidationError, LangChainConfigurationError } from './errors'
 import { LLMProvider, LLMModel, LLMService } from './types'
+import { LLM_PROVIDER_IDS } from './providers/registry'
 
 /**
  * Validates that a required parameter is not null or undefined
@@ -60,8 +61,8 @@ export function validateProvider(
   provider: unknown,
   functionName?: string
 ): asserts provider is LLMProvider {
-  const validProviders: LLMProvider[] = ['openai', 'anthropic', 'ollama']
-  
+  const validProviders: LLMProvider[] = LLM_PROVIDER_IDS
+
   if (!validProviders.includes(provider as LLMProvider)) {
     throw new LangChainConfigurationError(
       `${functionName ? `${functionName}: ` : ''}Invalid provider '${provider}'. Supported providers: ${validProviders.join(', ')}`,

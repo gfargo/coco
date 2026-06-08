@@ -2,6 +2,7 @@ import { Config } from '../../commands/types'
 import { LangChainAuthenticationError, LangChainConfigurationError } from './errors'
 import { AnthropicLLMService, LLMModel, LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from './types'
 import { validateRequired, validateServiceConfig } from './validation'
+import { providerRequiresAuth } from './providers/registry'
 
 /**
  * Retrieves the provider and model from the given configuration object.
@@ -53,8 +54,9 @@ export function getDefaultServiceApiKey(config: Config): string {
   const service = config.service as LLMService
   const { provider } = service
 
-  // Check if authentication is required for this provider
-  const requiresAuth = provider === 'openai' || provider === 'anthropic'
+  // Check if authentication is required for this provider (sourced from the
+  // provider registry so new providers declare their own auth requirement).
+  const requiresAuth = providerRequiresAuth(provider)
 
   if (service.authentication.type === 'APIKey') {
     const apiKey = service.authentication.credentials?.apiKey

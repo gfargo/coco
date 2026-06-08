@@ -8,6 +8,7 @@ import {
 } from '../errors'
 import { validateRequired } from '../validation'
 import { getLlm } from './getLlm'
+import { getLlmMetadata } from './llmMetadata'
 import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
 import {
@@ -84,32 +85,6 @@ export interface ExecuteChainStreamingInput<T> {
   metadata?: Partial<LlmCallMetadata>
 }
 
-/**
- * Same provider / endpoint best-effort extraction `executeChain` uses,
- * duplicated here rather than imported so the streaming module doesn't
- * pull on `executeChain`'s implementation. If both helpers ever need to
- * share more, factor this out to a shared `llmInfo.ts`.
- */
-function extractLlmInfo(
-  llm: ReturnType<typeof getLlm>,
-): { provider?: string; endpoint?: string } {
-  const info: { provider?: string; endpoint?: string } = {}
-  const className = llm?.constructor?.name || ''
-  if (className.includes('Ollama')) {
-    info.provider = 'ollama'
-    if ('lc_kwargs' in llm && typeof llm.lc_kwargs === 'object' && llm.lc_kwargs !== null) {
-      const kwargs = llm.lc_kwargs as Record<string, unknown>
-      if (typeof kwargs.baseUrl === 'string') {
-        info.endpoint = kwargs.baseUrl
-      }
-    }
-  } else if (className.includes('OpenAI')) {
-    info.provider = 'openai'
-  } else if (className.includes('Anthropic')) {
-    info.provider = 'anthropic'
-  }
-  return info
-}
 
 /**
  * Coerce one streamed chunk into its text fragment. LangChain's
@@ -203,7 +178,7 @@ export async function executeChainStreaming<T>({
     )
   }
 
-  const llmInfo = extractLlmInfo(llm)
+  const llmInfo = getLlmMetadata(llm)
   const effectiveProvider = provider || llmInfo.provider
   const effectiveEndpoint = endpoint || llmInfo.endpoint
 
