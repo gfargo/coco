@@ -110,7 +110,10 @@ function formatGenericError(error: Error, logger: Logger): void {
 function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: CommandHandler<T>) {
   return async (argv: T) => {
     const options = loadConfig(argv)
-    const logger = new Logger(options)
+    // `--quiet` flips the logger silent so coco's status chrome is suppressed.
+    // Results still reach stdout (handleResult / emitJson write directly).
+    const quiet = (argv as { quiet?: boolean })?.quiet === true
+    const logger = new Logger(quiet ? { ...options, silent: true } : options)
 
     try {
       await handler(argv, logger)

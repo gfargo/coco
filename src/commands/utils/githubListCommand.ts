@@ -11,6 +11,7 @@ import {
 import type { IssueListFilter } from '../../git/issuesListData'
 import type { PullRequestListFilter } from '../../git/pullRequestListData'
 import { applyRepoFlag } from './applyRepoFlag'
+import { emitJson } from '../../lib/ui/emitJson'
 
 /**
  * Shared shape behind `coco issues` and `coco prs`. The two commands were
@@ -139,7 +140,7 @@ export function createGitHubListHandler<
     }
 
     if (argv.json) {
-      logger.log(JSON.stringify(items, null, 2))
+      emitJson(items)
       return
     }
 

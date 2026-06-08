@@ -74,11 +74,7 @@ export const options = {
     alias: 'interactive',
     description: 'Toggle interactive mode',
   },
-  json: {
-    type: 'boolean',
-    default: false,
-    description: 'Output machine-readable JSON instead of formatted text',
-  },
+  // `--json` is a global flag (see src/index.ts).
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {

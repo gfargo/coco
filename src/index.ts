@@ -61,6 +61,28 @@ y.option('verbose', {
   global: true,
 })
 
+// Global `--quiet` (alias `-q`) — silences coco's chrome (banners, status
+// lines, spinners) by flipping the Logger into silent mode. Results still
+// reach stdout: `handleResult`'s stdout path and `emitJson` write to
+// `process.stdout` directly, independent of the logger.
+y.option('quiet', {
+  type: 'boolean',
+  alias: 'q',
+  description: 'Suppress non-error status output. Results (and --json) still print to stdout.',
+  default: false,
+  global: true,
+})
+
+// Global `--json` — declared globally so it's a recognized, documented flag
+// on every command. Commands that produce structured output (issues, prs,
+// log, changelog, recap, review) read `argv.json` and emit via `emitJson`.
+y.option('json', {
+  type: 'boolean',
+  description: 'Emit machine-readable JSON to stdout (supported commands only).',
+  default: false,
+  global: true,
+})
+
 // `$0` (no positional args) routes through the smart default router
 // rather than aliasing directly to `coco commit`. The router probes
 // the user's environment (config presence, git-repo presence) and

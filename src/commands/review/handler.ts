@@ -18,6 +18,7 @@ import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { CommandHandler } from '../../lib/types'
 import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
+import { emitJson } from '../../lib/ui/emitJson'
 import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
@@ -297,7 +298,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     severityThreshold !== undefined && findings.some((f) => f.severity >= severityThreshold)
 
   if (argv.json) {
-    logger.log(JSON.stringify(findings, null, 2))
+    emitJson(findings)
     if (exceedsThreshold) {
       commandExit(1)
     }

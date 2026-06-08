@@ -19,6 +19,7 @@ import { CommandHandler } from '../../lib/types'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { handleResult } from '../../lib/ui/handleResult'
+import { emitJson } from '../../lib/ui/emitJson'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { commandExit } from '../../lib/utils/commandExit'
@@ -295,11 +296,9 @@ ${errorMessage}
   })
 
   if (argv.json) {
-    // The logger is silenced in non-interactive mode; re-enable so the JSON
-    // payload reaches stdout, but only the JSON (status lines stay suppressed
-    // because they were emitted earlier while silent).
-    logger.setConfig({ silent: false })
-    logger.log(JSON.stringify(structured ?? null, null, 2))
+    // emitJson writes to stdout directly, so the silenced logger (non-interactive
+    // mode, or global --quiet) doesn't suppress the payload.
+    emitJson(structured ?? null)
     return
   }
 

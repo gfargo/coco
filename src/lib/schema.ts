@@ -39,6 +39,14 @@ export const schema = {
           "type": "string",
           "description": "Repository directory to operate against. When set, the command chdir's to this path before loading config / opening a git instance, so every downstream read (config lookup, simple-git baseDir, commitlint discovery, etc.) sees the same root.\n\n`--cwd` is an alias.\n\nInherited by every coco subcommand so scripts / editor wrappers / scenario tests can target arbitrary repos without `cd`-ing first. Defaults to `process.cwd()` when omitted (unchanged behavior for users who launch via the regular `cd && coco ...` path)."
         },
+        "quiet": {
+          "type": "boolean",
+          "description": "Global `--quiet` (`-q`): silence coco's status chrome. Results still print."
+        },
+        "json": {
+          "type": "boolean",
+          "description": "Global `--json`: emit machine-readable JSON on supported commands."
+        },
         "mode": {
           "type": "string",
           "enum": [

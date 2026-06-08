@@ -20,6 +20,10 @@ export interface BaseArgvOptions {
    * path).
    */
   repo?: string
+  /** Global `--quiet` (`-q`): silence coco's status chrome. Results still print. */
+  quiet?: boolean
+  /** Global `--json`: emit machine-readable JSON on supported commands. */
+  json?: boolean
 }
 
 export interface BaseCommandOptions extends BaseArgvOptions {}

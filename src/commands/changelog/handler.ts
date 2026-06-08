@@ -22,6 +22,7 @@ import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { handleResult } from '../../lib/ui/handleResult'
+import { emitJson } from '../../lib/ui/emitJson'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
@@ -332,7 +333,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   })
 
   if (argv.json) {
-    logger.log(JSON.stringify(structured ?? null, null, 2))
+    emitJson(structured ?? null)
     return
   }
 

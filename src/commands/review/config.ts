@@ -52,11 +52,7 @@ export const options = {
     alias: 'branch',
     description: 'Branch to review',
   },
-  json: {
-    type: 'boolean',
-    default: false,
-    description: 'Output machine-readable JSON instead of formatted text',
-  },
+  // `--json` is a global flag (see src/index.ts).
   staged: {
     type: 'boolean',
     default: false,

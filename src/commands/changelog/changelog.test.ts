@@ -132,10 +132,20 @@ describe('changelog command', () => {
   it('emits machine-readable JSON when --json is passed', async () => {
     argv.json = true
 
-    await handler(argv, logger)
+    const writes: string[] = []
+    const writeSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(((chunk: string) => {
+        writes.push(String(chunk))
+        return true
+      }) as never)
+    try {
+      await handler(argv, logger)
+    } finally {
+      writeSpy.mockRestore()
+    }
 
-    const jsonCall = (logger.log as jest.Mock).mock.calls
-      .map((call) => call[0] as string)
+    const jsonCall = writes
       .find((message) => {
         try {
           JSON.parse(message)
