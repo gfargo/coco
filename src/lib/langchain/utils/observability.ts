@@ -3,6 +3,7 @@ import * as path from 'node:path'
 
 import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
+import { recordUsage } from './usageLedger'
 
 export type LlmCallMetadata = {
   task: string
@@ -97,6 +98,8 @@ export function logLlmCall(logger: Logger | undefined, metadata: LlmCallMetadata
 
   recordLlmTelemetry(metadata)
   recordBenchCall(metadata)
+  // Opt-in cross-run usage ledger (#0.68); no-op unless COCO_USAGE_LOG is set.
+  recordUsage(metadata)
 
   const fields = [
     `task=${metadata.task}`,

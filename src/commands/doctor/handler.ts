@@ -8,8 +8,71 @@ import { FAIL, INFO, PASS, WARN } from '../../lib/ui/glyphs'
 import { LOGO } from '../../lib/ui/helpers'
 import { commandExit } from '../../lib/utils/commandExit'
 import { applyRepoCwd } from '../utils/applyRepoFlag'
+import { emitJson } from '../../lib/ui/emitJson'
+import { buildModelRoutingProfile } from '../../lib/langchain/utils/modelRoutingProfile'
+import {
+  getUsageLogPath,
+  isUsageLoggingEnabled,
+  readUsageRecords,
+  summarizeUsageByModel,
+  summarizeUsageByTask,
+  type UsageAggregate,
+} from '../../lib/langchain/utils/usageLedger'
 import { DoctorArgv, DoctorOptions } from './config'
 import { DiagnosticSeverity, runDiagnostics } from './checks'
+import { Config } from '../../lib/config/types'
+
+function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
+  return rows.map((row) => {
+    const tokens = row.promptTokens > 0 ? `${row.promptTokens} tok` : '–'
+    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms`
+  })
+}
+
+/**
+ * `coco doctor --cost`: the model routing cost profile (which model runs each
+ * dynamic-model task) plus, when the opt-in usage ledger has data, aggregated
+ * tokens + latency by task and model.
+ */
+function renderCostReport(config: Config, logger: Parameters<CommandHandler<DoctorArgv>>[1], json: boolean): void {
+  const profile = buildModelRoutingProfile(config)
+  const records = readUsageRecords()
+  const byTask = summarizeUsageByTask(records)
+  const byModel = summarizeUsageByModel(records)
+
+  if (json) {
+    emitJson({ routing: profile, usage: { records: records.length, byTask, byModel } })
+    return
+  }
+
+  logger.log(chalk.bold('Model routing') + chalk.dim(
+    profile.dynamic ? ` (dynamic · preference: ${profile.preference})` : ' (fixed model)'
+  ))
+  logger.log('')
+  for (const row of profile.rows) {
+    logger.log(`  ${row.task.padEnd(14)} ${chalk.cyan(row.model)}`)
+  }
+  logger.log('')
+
+  if (records.length === 0) {
+    if (isUsageLoggingEnabled()) {
+      logger.log(chalk.dim(`No usage recorded yet (logging to ${getUsageLogPath()}).`))
+    } else {
+      logger.log(
+        chalk.dim('Set COCO_USAGE_LOG=1 to record per-task token/latency usage across runs.')
+      )
+    }
+    return
+  }
+
+  logger.log(chalk.bold(`LLM usage`) + chalk.dim(` (${records.length} call(s) · ${getUsageLogPath()})`))
+  logger.log('')
+  logger.log(chalk.dim('  By task:'))
+  for (const line of renderUsageRows(byTask, 'call')) logger.log(line)
+  logger.log('')
+  logger.log(chalk.dim('  By model:'))
+  for (const line of renderUsageRows(byModel, 'call')) logger.log(line)
+}
 
 const SEVERITY_ICON: Record<DiagnosticSeverity, string> = {
   error: FAIL(),
@@ -53,6 +116,16 @@ export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
 
   const config = loadConfig<DoctorOptions, DoctorArgv>(argv)
   const sources = getConfigSources()
+
+  if (argv.cost) {
+    if (!argv.json) {
+      logger.log(LOGO)
+      logger.log('')
+      logger.log(chalk.bold('coco doctor') + ' — cost report\n')
+    }
+    renderCostReport(config, logger, Boolean(argv.json))
+    return
+  }
 
   logger.log(LOGO)
   logger.log('')

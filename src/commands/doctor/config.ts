@@ -4,6 +4,7 @@ import { BaseCommandOptions } from '../types'
 
 export interface DoctorOptions extends BaseCommandOptions {
   fix?: boolean
+  cost?: boolean
 }
 
 export type DoctorArgv = Arguments<DoctorOptions>
@@ -16,6 +17,13 @@ export const options = {
     type: 'boolean',
     default: false,
   },
+  cost: {
+    description:
+      'Show the per-task model routing cost profile and (if recorded) aggregated LLM usage',
+    type: 'boolean',
+    default: false,
+  },
+  // `--json` is a global flag (see src/index.ts).
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
