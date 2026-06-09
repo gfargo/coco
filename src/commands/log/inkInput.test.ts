@@ -1,7 +1,12 @@
 import { GitLogRow } from './data'
-import { getLogInkInputEvents, getLogInkPaletteExecuteEvents } from './inkInput'
+import {
+  getLogInkInputEvents,
+  getLogInkPaletteExecuteEvents,
+  isCreatePrView,
+  isCreateStashView,
+} from './inkInput'
 import { getLogInkPaletteCommands } from './inkKeymap'
-import { LogInkState, applyLogInkAction, createLogInkState } from './inkViewModel'
+import { LogInkState, LogInkView, applyLogInkAction, createLogInkState } from './inkViewModel'
 import { getLogInkLayout } from '../../workstation/chrome/layout'
 
 const rows: GitLogRow[] = [
@@ -4752,5 +4757,30 @@ describe('triage filter cycling (#882 phase 6)', () => {
       expect(after.pendingChoice).toBeDefined()
       expect(after.repoStack.length).toBe(state.repoStack.length)
     })
+  })
+})
+
+// Every view in the LogInkView union. Kept here (not imported as a runtime
+// list — the type has no runtime form) so a reviewer adding a view to the union
+// updates both the allowlists in inkInput.ts AND this expectation, which is the
+// whole point of the allowlist conversion (#0.68): no silent inheritance.
+const ALL_VIEWS: LogInkView[] = [
+  'history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash',
+  'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'conflicts',
+  'reflog', 'bisect', 'changelog', 'submodules',
+]
+
+describe('global key allowlists (negation-guard conversion)', () => {
+  it('C creates a PR in every view except conflicts', () => {
+    for (const view of ALL_VIEWS) {
+      expect(isCreatePrView(view)).toBe(view !== 'conflicts')
+    }
+  })
+
+  it('S creates a stash in every view except the commit triad (compose/status/diff)', () => {
+    const triad: LogInkView[] = ['compose', 'status', 'diff']
+    for (const view of ALL_VIEWS) {
+      expect(isCreateStashView(view)).toBe(!triad.includes(view))
+    }
   })
 })

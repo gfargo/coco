@@ -15,6 +15,7 @@ import {
     LogInkCompareRef,
     LogInkSidebarTab,
     LogInkState,
+    LogInkView,
     filterThemePresets,
     getThemePickerSelection,
     isLogInkNestedRepo,
@@ -415,6 +416,41 @@ function isStashActionTarget(state: LogInkState): boolean {
  */
 function isReflogActionTarget(state: LogInkState): boolean {
   return state.activeView === 'reflog' && state.focus === 'commits'
+}
+
+/**
+ * Explicit allowlists for the two "global-except-one-view" key bindings, per
+ * KEYMAP.md's recommendation (§ "Prefer allowlists over negation guards"). These
+ * used to be negation guards (`activeView !== 'conflicts'` / `!== compose/status/
+ * diff`), which meant every NEW view silently inherited the binding. Listing the
+ * views explicitly forces a new view to opt in instead.
+ *
+ * Keep these in sync with `LogInkView`: a binding test asserts the excluded
+ * views are absent so the lists can't silently drift.
+ */
+// Bare `C` creates a pull request everywhere EXCEPT the conflicts view, where
+// `C` means "mark conflict resolved".
+const CREATE_PR_VIEWS: readonly LogInkView[] = [
+  'history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash',
+  'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'reflog',
+  'bisect', 'changelog', 'submodules',
+]
+// Bare `S` creates a stash everywhere EXCEPT the commit triad
+// (compose / status / diff), where `S` starts the commit-split flow.
+const CREATE_STASH_VIEWS: readonly LogInkView[] = [
+  'history', 'branches', 'tags', 'stash', 'worktrees', 'pull-request',
+  'pull-request-triage', 'issues', 'conflicts', 'reflog', 'bisect',
+  'changelog', 'submodules',
+]
+
+/** True when bare `C` should create a PR in the active view. */
+export function isCreatePrView(view: LogInkView): boolean {
+  return CREATE_PR_VIEWS.includes(view)
+}
+
+/** True when bare `S` should create a stash in the active view. */
+export function isCreateStashView(view: LogInkView): boolean {
+  return CREATE_STASH_VIEWS.includes(view)
 }
 
 /**
@@ -3037,12 +3073,7 @@ export function getLogInkInputEvents(
   // those views fall through past this check). The triad is the
   // natural commit-message work surface; create-stash is reachable
   // from anywhere else (history, branches, tags, …).
-  if (
-    inputValue === 'S' &&
-    state.activeView !== 'compose' &&
-    state.activeView !== 'status' &&
-    state.activeView !== 'diff'
-  ) {
+  if (inputValue === 'S' && isCreateStashView(state.activeView)) {
     return [action({
       type: 'openInputPrompt',
       kind: 'create-stash',
@@ -3115,7 +3146,7 @@ export function getLogInkInputEvents(
       kind: 'warning',
     })]
   }
-  if (inputValue === 'C' && state.activeView !== 'conflicts') {
+  if (inputValue === 'C' && isCreatePrView(state.activeView)) {
     return [{ type: 'startCreatePullRequest' }]
   }
 
