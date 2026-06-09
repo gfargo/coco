@@ -5080,8 +5080,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     theme,
   }
   const mainPanel = () =>
-    renderMainPanel(
-      mainSurface,
+    renderMainPanel(mainSurface, {
       worktreeDiff,
       worktreeDiffLoading,
       worktreeHunks,
@@ -5099,26 +5098,30 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       hasMoreCommits,
       loadingMoreCommits,
       spinnerFrame,
-      layout.density,
-      layout.historyRowMode,
-      Boolean(dateBucketingEnabled),
-      diffSyntaxSpans
-    )
+      density: layout.density,
+      rowMode: layout.historyRowMode,
+      dateBucketingEnabled: Boolean(dateBucketingEnabled),
+      syntaxSpans: diffSyntaxSpans,
+    })
   const detailPanel = () =>
     renderDetailPanel(
-      h,
-      { Box, Text },
-      state,
-      context,
-      contextStatus,
-      detail,
-      detailLoading,
-      filePreview,
-      filePreviewLoading,
-      layout.detailWidth,
-      layout.inspectorTabbed,
-      theme,
-      layout.bodyRows
+      {
+        h,
+        components: { Box, Text },
+        state,
+        context,
+        contextStatus,
+        bodyRows: layout.bodyRows,
+        width: layout.detailWidth,
+        theme,
+      },
+      {
+        detail,
+        loading: detailLoading,
+        filePreview,
+        filePreviewLoading,
+        tabbed: layout.inspectorTabbed,
+      }
     )
 
   // Single-pane mode (narrow terminals): exactly one full-width pane,

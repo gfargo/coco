@@ -14,13 +14,10 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkContextStatus } from '../chrome/context'
-import type { LogInkTheme } from '../chrome/theme'
 import type {
     GitCommitDetail,
     GitCommitFilePreview,
 } from '../../commands/log/data'
-import type { LogInkState } from '../../workstation/runtime/inkViewModel'
 import {
     renderBranchPreviewPanel,
     renderCommitDiffDetail,
@@ -44,23 +41,28 @@ import {
     renderThemePickerOverlay,
     renderViewKeysOverlay,
 } from './overlays'
-import type { LogInkComponents, LogInkContext } from './types'
+import type { SurfaceRenderContext } from './types'
+
+/**
+ * The detail/inspector-specific render slices, bundled (#0.68) so
+ * `renderDetailPanel` takes the shared `SurfaceRenderContext` plus this object
+ * instead of 13 positional params (which it shared awkwardly with the universal
+ * h/components/state/... values now carried by the context).
+ */
+export type DetailPanelExtras = {
+  detail: GitCommitDetail | undefined
+  loading: boolean
+  filePreview: GitCommitFilePreview | undefined
+  filePreviewLoading: boolean
+  tabbed: boolean
+}
 
 export function renderDetailPanel(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  detail: GitCommitDetail | undefined,
-  loading: boolean,
-  filePreview: GitCommitFilePreview | undefined,
-  filePreviewLoading: boolean,
-  width: number,
-  tabbed: boolean,
-  theme: LogInkTheme,
-  bodyRows: number = 0
+  surface: SurfaceRenderContext,
+  extras: DetailPanelExtras
 ): ReactTypes.ReactElement {
+  const { h, components, state, context, contextStatus, bodyRows, width, theme } = surface
+  const { detail, loading, filePreview, filePreviewLoading, tabbed } = extras
   const focused = state.focus === 'detail'
 
   // Overlays (help / palette / input / confirmation / chord) take

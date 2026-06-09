@@ -36,30 +36,64 @@ import { renderTagsSurface } from '../surfaces/tags'
 import { renderWorktreesSurface } from '../surfaces/worktrees'
 import type { SurfaceRenderContext } from './types'
 
+/**
+ * The per-surface render slices the main-panel dispatcher threads through to
+ * the active surface. Bundled into one object (#0.68) so `renderMainPanel` is a
+ * two-argument call (`surface` + `extras`) instead of 22 positional params — the
+ * old signature made call-site edits error-prone and obscured which value fed
+ * which surface.
+ */
+export type MainPanelExtras = {
+  worktreeDiff: WorktreeFileDiff | undefined
+  worktreeDiffLoading: boolean
+  worktreeHunks: WorktreeHunkOverview | undefined
+  worktreeHunksLoading: boolean
+  filePreview: GitCommitFilePreview | undefined
+  filePreviewLoading: boolean
+  commitDiffHunkOffsets: number[] | undefined
+  selectedDetailFile: GitCommitDetail['files'][number] | undefined
+  stashDiffLines: string[] | undefined
+  stashDiffLoading: boolean
+  compareDiffLines: string[] | undefined
+  compareDiffLoading: boolean
+  bisectCandidateDetail: GitCommitDetail | undefined
+  bisectCandidateLoading: boolean
+  hasMoreCommits: boolean
+  loadingMoreCommits: boolean
+  spinnerFrame: number
+  density: LogInkLayoutDensity
+  rowMode: 'single' | 'stacked'
+  dateBucketingEnabled: boolean
+  syntaxSpans?: Map<string, SyntaxSpan[]>
+}
+
 export function renderMainPanel(
   surface: SurfaceRenderContext,
-  worktreeDiff: WorktreeFileDiff | undefined,
-  worktreeDiffLoading: boolean,
-  worktreeHunks: WorktreeHunkOverview | undefined,
-  worktreeHunksLoading: boolean,
-  filePreview: GitCommitFilePreview | undefined,
-  filePreviewLoading: boolean,
-  commitDiffHunkOffsets: number[] | undefined,
-  selectedDetailFile: GitCommitDetail['files'][number] | undefined,
-  stashDiffLines: string[] | undefined,
-  stashDiffLoading: boolean,
-  compareDiffLines: string[] | undefined,
-  compareDiffLoading: boolean,
-  bisectCandidateDetail: GitCommitDetail | undefined,
-  bisectCandidateLoading: boolean,
-  hasMoreCommits: boolean,
-  loadingMoreCommits: boolean,
-  spinnerFrame: number,
-  density: LogInkLayoutDensity,
-  rowMode: 'single' | 'stacked',
-  dateBucketingEnabled: boolean,
-  syntaxSpans?: Map<string, SyntaxSpan[]>
+  extras: MainPanelExtras
 ): ReactTypes.ReactElement {
+  const {
+    worktreeDiff,
+    worktreeDiffLoading,
+    worktreeHunks,
+    worktreeHunksLoading,
+    filePreview,
+    filePreviewLoading,
+    commitDiffHunkOffsets,
+    selectedDetailFile,
+    stashDiffLines,
+    stashDiffLoading,
+    compareDiffLines,
+    compareDiffLoading,
+    bisectCandidateDetail,
+    bisectCandidateLoading,
+    hasMoreCommits,
+    loadingMoreCommits,
+    spinnerFrame,
+    density,
+    rowMode,
+    dateBucketingEnabled,
+    syntaxSpans,
+  } = extras
   // The universal render values now arrive bundled (#1136); only the
   // few raw values the dispatcher itself touches (split-plan overlay,
   // activeView switch) are destructured here. Surfaces receive `surface`

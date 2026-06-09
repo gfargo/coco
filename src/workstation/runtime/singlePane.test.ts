@@ -69,19 +69,23 @@ describe('single-pane render smoke (80×24 floor)', () => {
 
     const tree = asNode(
       renderDetailPanel(
-        createElement,
-        { Box, Text },
-        state,
-        context,
-        contextStatus,
-        undefined,
-        false,
-        undefined,
-        false,
-        layout.detailWidth,
-        layout.inspectorTabbed,
-        theme,
-        layout.bodyRows
+        {
+          h: createElement,
+          components: { Box, Text },
+          state,
+          context,
+          contextStatus,
+          bodyRows: layout.bodyRows,
+          width: layout.detailWidth,
+          theme,
+        },
+        {
+          detail: undefined,
+          loading: false,
+          filePreview: undefined,
+          filePreviewLoading: false,
+          tabbed: false,
+        }
       )
     )
     expect(tree.props.width).toBe(80)

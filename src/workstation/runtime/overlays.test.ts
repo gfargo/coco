@@ -45,19 +45,23 @@ function renderViewKeys(activeView: string) {
     activeView: activeView as never,
   }
   return renderDetailPanel(
-    createElement,
-    { Box, Text },
-    state,
-    context,
-    contextStatus,
-    undefined,
-    false,
-    undefined,
-    false,
-    60,
-    false,
-    theme,
-    24
+    {
+      h: createElement,
+      components: { Box, Text },
+      state,
+      context,
+      contextStatus,
+      bodyRows: 24,
+      width: 60,
+      theme,
+    },
+    {
+      detail: undefined,
+      loading: false,
+      filePreview: undefined,
+      filePreviewLoading: false,
+      tabbed: false,
+    }
   )
 }
 
