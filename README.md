@@ -45,15 +45,19 @@ coco commit -i
 ## Commands
 
 - **`coco commit`** - Generate commit messages from staged changes
+- **`coco amend`** - Regenerate the last commit's message from its diff and `git commit --amend`
 - **`coco changelog`** - Create changelogs from commit history  
+- **`coco pr create`** - Generate a PR title and body from the branch diff, then open it via `gh`
 - **`coco recap`** - Summarize recent changes and activity
-- **`coco review`** - AI-powered code review of your changes
+- **`coco review`** - AI-powered code review of your changes (`--severity <n>` and `--staged` for CI gating)
 - **`coco log`** - Explore commit history with graph, filters, JSON output, and commit details
 - **`coco ui`** - Open the full-screen Git workstation TUI
 - **`coco workspace`** (alias `ws`) - Multi-repo overview TUI; drill into any repo as a `coco ui` session
 - **`coco issues`** / **`coco prs`** - List GitHub issues / pull requests (stdout or interactive triage)
-- **`coco doctor`** - Diagnose your environment, config, and provider setup
+- **`coco doctor`** - Diagnose your environment, config, and provider setup (`--cost` shows per-task model routing and usage)
 - **`coco init`** - Interactive setup wizard
+
+> Global flags: `--repo <dir>` targets any repository, `--json` requests machine-readable output where supported, and `--quiet` (`-q`) suppresses status chrome while keeping results on stdout.
 
 > **Smart default (0.57.0+):** running `coco` with **no subcommand** routes by environment — `coco ui` inside a git repo, `coco workspace` outside one, or `coco init` on a fresh install. It no longer defaults to `commit`; use `coco commit` for messages (or `--commit` / `COCO_DEFAULT=commit` to restore the old default).
 
@@ -137,10 +141,15 @@ coco init
 coco init --scope project
 ```
 
-**AI Providers:**
-- **OpenAI** - GPT-4o, GPT-4o-mini (API key required)
-- **Anthropic** - Claude 3.5 Sonnet (API key required)  
+**AI Providers:** seven first-class providers (API keys read from config or env)
+- **OpenAI** - GPT-4o / GPT-4.1 family (`OPENAI_API_KEY`)
+- **Anthropic** - Claude 4 / 3.x family (`ANTHROPIC_API_KEY`)
+- **Google Gemini** - Gemini 2.5 / 2.0 / 1.5 (`GEMINI_API_KEY` or `GOOGLE_API_KEY`)
+- **Mistral** - Mistral large/medium/small, Codestral, Ministral (`MISTRAL_API_KEY`)
+- **Azure OpenAI** - native Azure deployments (`AZURE_OPENAI_API_KEY` + instance/deployment/api-version)
+- **AWS Bedrock** - via the AWS credential chain (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION`)
 - **Ollama** - Local models, no API costs, full privacy
+- Plus any OpenAI-compatible endpoint (OpenRouter, custom `baseURL`)
 
 **Example Configuration:**
 ```json
