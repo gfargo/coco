@@ -246,6 +246,7 @@ import { getBisectCompletion, getBisectStatus } from '../../git/bisectData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../git/bisectActions'
 import { getCompareDiff } from '../../git/compareData'
 import { getReflogOverview } from '../../git/reflogData'
+import { checkoutReflogEntry } from '../../git/reflogActions'
 import { getTagOverview } from '../../git/tagData'
 import { getWorktreeListOverview } from '../../git/worktreeData'
 import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
@@ -3407,8 +3408,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         })
       },
       'reset-to-commit': async () => {
-        const commit = getSelectedInkCommit(state)
-        if (!commit) return { ok: false, message: 'No commit selected' }
         // Mode arrives via the action's `payload` field — the input
         // handler runs the reset-mode prompt (kind: 'reset-mode') and
         // routes the typed value here. Default to `mixed` (git's own
@@ -3417,6 +3416,21 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!isResetMode(raw)) {
           return { ok: false, message: `Unknown reset mode: ${raw}. Use soft, mixed, or hard.` }
         }
+        // Reflog "time machine" (#0.67): when the reflog view is active the
+        // target is the cursored reflog entry, not a history commit.
+        if (state.activeView === 'reflog') {
+          const entry = filteredReflogList[
+            Math.min(state.selectedReflogIndex, Math.max(0, filteredReflogList.length - 1))
+          ]
+          if (!entry) return { ok: false, message: 'No reflog entry selected' }
+          return resetToCommit(git, {
+            hash: entry.hash,
+            shortHash: entry.hash,
+            message: entry.subject,
+          }, raw as ResetMode)
+        }
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
         return resetToCommit(git, {
           hash: commit.hash,
           shortHash: commit.shortHash,
@@ -3433,14 +3447,29 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         })
       },
       'create-branch-here': async () => {
-        const commit = getSelectedInkCommit(state)
         const name = payload?.trim()
-        if (!commit) return { ok: false, message: 'No commit selected' }
         if (!name) return { ok: false, message: 'Branch name required' }
+        // Reflog "time machine" (#0.67): branch from the cursored reflog entry.
+        if (state.activeView === 'reflog') {
+          const entry = filteredReflogList[
+            Math.min(state.selectedReflogIndex, Math.max(0, filteredReflogList.length - 1))
+          ]
+          if (!entry) return { ok: false, message: 'No reflog entry selected' }
+          return createBranchFromCommit(git, name, { hash: entry.hash, shortHash: entry.hash })
+        }
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
         return createBranchFromCommit(git, name, {
           hash: commit.hash,
           shortHash: commit.shortHash,
         })
+      },
+      'checkout-reflog-entry': async () => {
+        const entry = filteredReflogList[
+          Math.min(state.selectedReflogIndex, Math.max(0, filteredReflogList.length - 1))
+        ]
+        if (!entry) return { ok: false, message: 'No reflog entry selected' }
+        return checkoutReflogEntry(git, entry)
       },
       'create-tag-here': async () => {
         const commit = getSelectedInkCommit(state)

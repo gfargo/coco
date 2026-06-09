@@ -68,6 +68,20 @@ describe('log Ink workflows', () => {
     expect(getLogInkWorkflowActionByKey('')).toBeUndefined()
   })
 
+  it('registers the reflog checkout action (non-destructive, key c)', () => {
+    expect(getLogInkWorkflowActionById('checkout-reflog-entry')).toMatchObject({
+      key: 'c',
+      kind: 'normal',
+      requiresConfirmation: false,
+    })
+  })
+
+  it('declares every workflow action id at most once', () => {
+    const ids = getLogInkWorkflowActions().map((a) => a.id)
+    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i)
+    expect(dupes).toEqual([])
+  })
+
   it('still finds palette-only actions by id (cherry-pick-commit, etc.)', () => {
     expect(getLogInkWorkflowActionById('cherry-pick-commit')?.key).toBe('')
     expect(getLogInkWorkflowActionById('checkout-file-from-commit')?.key).toBe('')

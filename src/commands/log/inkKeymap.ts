@@ -1300,7 +1300,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.activeView === 'reflog') {
     return {
-      contextual: ['↑/↓ entries', 'enter inspect', 'esc back'],
+      contextual: ['↑/↓ entries', 'enter inspect', 'c checkout', 'B branch', 'Z reset', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

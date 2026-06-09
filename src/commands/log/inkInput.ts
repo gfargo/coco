@@ -3267,6 +3267,29 @@ export function getLogInkInputEvents(
     })]
   }
 
+  // Reflog "time machine" (#0.67): the cursored reflog entry supports the same
+  // reset / branch-from operations as a history commit, plus a checkout that
+  // detaches HEAD at the entry. `reset-to-commit` / `create-branch-here` resolve
+  // their target from the reflog cursor when the reflog view is active (see
+  // runtime handlers); the prompts here are identical to the history path.
+  if (inputValue === 'Z' && isReflogActionTarget(state) && context.reflogCount) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'reset-mode',
+      label: 'Reset mode (soft / mixed / hard)',
+    })]
+  }
+  if (inputValue === 'B' && isReflogActionTarget(state) && context.reflogCount) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'create-branch-here',
+      label: 'New branch name (at reflog entry)',
+    })]
+  }
+  if (inputValue === 'c' && isReflogActionTarget(state) && context.reflogCount) {
+    return [{ type: 'runWorkflowAction', id: 'checkout-reflog-entry' }]
+  }
+
   // `y` / `Y` yank the contextually relevant identifier from the active
   // view to the system clipboard:
   //   history    → cursored commit hash (Y for short hash)
