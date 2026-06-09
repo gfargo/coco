@@ -3,7 +3,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { LogInkSidebarTab } from '../../commands/log/inkViewModel'
+import { LogInkSidebarTab } from '../../workstation/runtime/inkViewModel'
 
 /**
  * Persist which sidebar tab the user last had active, keyed per repo so

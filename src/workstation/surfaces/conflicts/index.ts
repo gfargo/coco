@@ -10,7 +10,7 @@
  *     continue" hint.
  *   - Conflicts remain → list with windowed scrolling.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.3
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.3
  * of #890. No behavior change.
  */
 

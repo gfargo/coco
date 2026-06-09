@@ -1,5 +1,5 @@
 import type { SimpleGit } from 'simple-git'
-import type { LogInkRepoFrame } from '../../commands/log/inkViewModel'
+import type { LogInkRepoFrame } from '../../workstation/runtime/inkViewModel'
 import { createLogInkContextStatus } from '../chrome/context'
 import {
   getActiveRepoFrameRuntime,

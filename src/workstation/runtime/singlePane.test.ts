@@ -12,7 +12,7 @@
  * Ink (ESM) into ts-jest. Same trick as `footer.test.ts`.
  */
 import { createElement } from 'react'
-import { createLogInkState } from '../../commands/log/inkViewModel'
+import { createLogInkState } from '../../workstation/runtime/inkViewModel'
 import { createLogInkContextStatus } from '../chrome/context'
 import { getLogInkLayout } from '../chrome/layout'
 import { createLogInkTheme } from '../chrome/theme'

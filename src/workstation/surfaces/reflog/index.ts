@@ -4,7 +4,7 @@
  * action, hash, and message. Press Enter on any row to drill into the
  * diff for that entry's hash.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.1
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.1
  * of #890. No behavior change.
  */
 

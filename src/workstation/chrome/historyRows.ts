@@ -12,7 +12,7 @@ import {
   renderRowGraphAscii,
   renderTransitionRowSegments,
 } from './graphOrtho'
-import { LogInkState } from '../../commands/log/inkViewModel'
+import { LogInkState } from '../../workstation/runtime/inkViewModel'
 
 /**
  * Pick the commit glyph based on parent count + HEAD-ness so the

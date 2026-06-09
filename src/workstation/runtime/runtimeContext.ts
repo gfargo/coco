@@ -22,7 +22,7 @@
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkAction, LogInkState } from '../../commands/log/inkViewModel'
+import type { LogInkAction, LogInkState } from '../../workstation/runtime/inkViewModel'
 import type { LogInkLayout } from '../chrome/layout'
 import type { LogInkTheme } from '../chrome/theme'
 import type { LogInkContext } from './types'

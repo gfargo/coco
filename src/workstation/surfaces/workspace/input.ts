@@ -1,6 +1,6 @@
 import type { Key as InkKey } from 'ink'
 
-import { filterThemePresets, getThemePickerSelectionFor } from '../../../commands/log/inkViewModel'
+import { filterThemePresets, getThemePickerSelectionFor } from '../../../workstation/runtime/inkViewModel'
 import type { WorkspaceAction, WorkspaceState } from './state'
 
 /**

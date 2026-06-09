@@ -21,7 +21,7 @@
  * are not exported — they're shared between the exported renderers
  * above. Same pattern as the history surface in 5a.5.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.6
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.6
  * of #890. No behavior change.
  */
 
@@ -53,8 +53,8 @@ import type {
   GitCommitDetail,
   GitCommitFilePreview,
 } from '../../../commands/log/data'
-import type { LogInkState } from '../../../commands/log/inkViewModel'
-import { getSelectedInkCommit } from '../../../commands/log/inkViewModel'
+import type { LogInkState } from '../../../workstation/runtime/inkViewModel'
+import { getSelectedInkCommit } from '../../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../../git/providerData'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'

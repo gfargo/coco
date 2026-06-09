@@ -12,7 +12,7 @@
  * into ts-jest — same pattern as `pendingItemAction.test.ts`.
  */
 import { createElement } from 'react'
-import { createLogInkState } from '../../../commands/log/inkViewModel'
+import { createLogInkState } from '../../../workstation/runtime/inkViewModel'
 import { createLogInkContextStatus } from '../../chrome/context'
 import { createLogInkTheme } from '../../chrome/theme'
 import { cellWidth } from '../../chrome/text'

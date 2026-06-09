@@ -59,7 +59,7 @@ import {
   type LogInkThemePreset,
 } from '../../chrome/theme'
 import { saveThemePreset } from '../../chrome/themePersistence'
-import { getThemePickerSelectionFor } from '../../../commands/log/inkViewModel'
+import { getThemePickerSelectionFor } from '../../../workstation/runtime/inkViewModel'
 import {
   readCachedWorkspace,
   writeCachedWorkspace,
@@ -106,7 +106,7 @@ type DynamicImport = <T>(specifier: string) => Promise<T>
  * import expression as a string at compile time — the runtime then
  * eval-parses it as native ESM dynamic import.
  *
- * Same trick `src/commands/log/inkRuntime.ts` uses; documented in
+ * Same trick `src/workstation/runtime/inkRuntime.ts` uses; documented in
  * `src/workstation/README.md`.
  */
 const dynamicImport = new Function('specifier', 'return import(specifier)') as DynamicImport

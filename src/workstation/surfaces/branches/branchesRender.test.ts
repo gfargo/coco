@@ -6,7 +6,7 @@
  * React tree without pulling Ink (ESM) through ts-jest.
  */
 import { createElement, type ReactElement } from 'react'
-import { createLogInkState, type LogInkState } from '../../../commands/log/inkViewModel'
+import { createLogInkState, type LogInkState } from '../../../workstation/runtime/inkViewModel'
 import { createLogInkTheme } from '../../chrome/theme'
 import {
   createLogInkContextStatus,

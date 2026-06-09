@@ -3,7 +3,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { LogInkDiffViewMode } from '../../commands/log/inkViewModel'
+import { LogInkDiffViewMode } from '../../workstation/runtime/inkViewModel'
 
 /**
  * Persist the user's preferred diff view mode (unified vs side-by-side

@@ -10,7 +10,7 @@
  *   state hint pointing the user at `C` to create one.
  * - GitHub CLI missing / unauthenticated → unavailable hint.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.2
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.2
  * of #890. No behavior change.
  */
 

@@ -8,7 +8,7 @@
  * Per-row actions (open diff, copy hash, cherry-pick, revert, reset,
  * rebase, etc.) are wired in inkInput.ts; this renderer is read-only.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.5
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.5
  * of #890. The supporting helpers (`renderLaneSegmentSpans`,
  * `renderCommitHistoryRow`, `renderPendingCommitRow`,
  * `formatHistoryFetchArgs`) lived in inkRuntime.ts only to support
@@ -41,7 +41,7 @@ import type { GitLogCommitRow } from '../../../commands/log/data'
 import type {
     LogInkHistoryFetchArgs,
     LogInkState,
-} from '../../../commands/log/inkViewModel'
+} from '../../../workstation/runtime/inkViewModel'
 import type { LogInkComponents, LogInkContext, SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 import { getRenderNow } from '../../chrome/snapshotMode'

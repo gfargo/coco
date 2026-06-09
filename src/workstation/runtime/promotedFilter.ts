@@ -8,13 +8,13 @@
  *     above the list as a discoverability cue,
  *   - filter matching is case-insensitive and substring-based.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` so per-surface
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` so per-surface
  * modules can implement that contract without copy-pasting the
  * predicate or the affordance.
  */
 
 import type * as ReactTypes from 'react'
-import type { LogInkState } from '../../commands/log/inkViewModel'
+import type { LogInkState } from '../../workstation/runtime/inkViewModel'
 import type { LogInkTheme } from '../chrome/theme'
 import type { LogInkComponents } from './types'
 

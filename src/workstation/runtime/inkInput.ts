@@ -1,10 +1,10 @@
-import { deriveGitignoreOptions } from '../../workstation/chrome/gitignore'
-import { extractDiffHunk } from '../../workstation/chrome/hunkExtraction'
+import { deriveGitignoreOptions } from '../chrome/gitignore'
+import { extractDiffHunk } from '../chrome/hunkExtraction'
 import {
     InspectorAction,
     InspectorActionContext,
     getInspectorActions,
-} from '../../workstation/chrome/inspectorActions'
+} from '../chrome/inspectorActions'
 import {
     LogInkPaletteCommand,
     filterLogInkPaletteCommands,
@@ -25,7 +25,7 @@ import {
     getLogInkWorkflowActionById,
     getLogInkWorkflowActionByKey,
 } from './inkWorkflows'
-import { sidebarTabHasSelectableItems } from '../../workstation/chrome/sidebarSelection'
+import { sidebarTabHasSelectableItems } from '../chrome/sidebarSelection'
 
 export type LogInkInputKey = {
   backspace?: boolean

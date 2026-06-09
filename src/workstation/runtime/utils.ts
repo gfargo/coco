@@ -1,14 +1,14 @@
 /**
  * Pure visual helpers shared across workstation render code.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` so per-surface modules
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` so per-surface modules
  * can render with the same color / glyph rules without re-importing the
  * orchestration file. None of these helpers touch React, Ink, or git —
  * they take state/theme inputs and return strings or style props.
  */
 
 import type { GitCommitDetail } from '../../commands/log/data'
-import type { LogInkSidebarTab } from '../../commands/log/inkViewModel'
+import type { LogInkSidebarTab } from '../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../git/providerData'
 import { buildProviderUrl } from '../../git/providerData'
 import type { LogInkTheme } from '../chrome/theme'

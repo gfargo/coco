@@ -12,7 +12,7 @@
  * Plus a sixth overlay that takes over the whole layout for first-run:
  *   - onboarding overlay (P1.3, gated by `hasSeenOnboarding`).
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.7
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.7
  * of #890. No behavior change.
  */
 
@@ -30,10 +30,10 @@ import {
     getLogInkHelpSections,
     getLogInkPaletteCommands,
     getLogInkViewKeyBindings,
-} from '../../commands/log/inkKeymap'
-import type { LogInkChoicePrompt, LogInkState } from '../../commands/log/inkViewModel'
-import { filterThemePresets } from '../../commands/log/inkViewModel'
-import { getLogInkWorkflowActionById } from '../../commands/log/inkWorkflows'
+} from '../../workstation/runtime/inkKeymap'
+import type { LogInkChoicePrompt, LogInkState } from '../../workstation/runtime/inkViewModel'
+import { filterThemePresets } from '../../workstation/runtime/inkViewModel'
+import { getLogInkWorkflowActionById } from '../../workstation/runtime/inkWorkflows'
 import type { LogInkComponents } from './types'
 import { focusBorderColor, panelTitle } from './utils'
 

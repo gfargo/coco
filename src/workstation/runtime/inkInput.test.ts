@@ -1,4 +1,4 @@
-import { GitLogRow } from './data'
+import { GitLogRow } from '../../commands/log/data'
 import {
   getLogInkInputEvents,
   getLogInkPaletteExecuteEvents,
@@ -7,7 +7,7 @@ import {
 } from './inkInput'
 import { getLogInkPaletteCommands } from './inkKeymap'
 import { LogInkState, LogInkView, applyLogInkAction, createLogInkState } from './inkViewModel'
-import { getLogInkLayout } from '../../workstation/chrome/layout'
+import { getLogInkLayout } from '../chrome/layout'
 
 const rows: GitLogRow[] = [
   {

@@ -17,7 +17,7 @@
  *
  * Side-by-side mode (#785) gates on `MIN_SPLIT_DIFF_WIDTH` (120 cols).
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.4
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.4
  * of #890. No behavior change.
  */
 
@@ -29,7 +29,7 @@ import type {
   GitCommitDetail,
   GitCommitFilePreview,
 } from '../../../commands/log/data'
-import { hunkIndexAtOffset } from '../../../commands/log/inkViewModel'
+import { hunkIndexAtOffset } from '../../../workstation/runtime/inkViewModel'
 import {
   findStashFileForOffset,
   parseStashDiffFiles,

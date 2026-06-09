@@ -19,7 +19,7 @@
  * used, applied at the chip-list level instead of the inline glyph
  * split.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase
  * 5a.7 of #890. Chip restructuring introduced post-0.54.2.
  */
 
@@ -38,8 +38,8 @@ import {
   combineLogInkBreadcrumbSegments,
   formatLogInkBreadcrumb,
   formatLogInkRepoBreadcrumb,
-} from '../../commands/log/inkKeymap'
-import type { LogInkState } from '../../commands/log/inkViewModel'
+} from '../../workstation/runtime/inkKeymap'
+import type { LogInkState } from '../../workstation/runtime/inkViewModel'
 import type { LogInkComponents, LogInkContext } from './types'
 
 export function renderHeader(

@@ -8,7 +8,7 @@
 import { createElement } from 'react'
 import { createLogInkContextStatus } from '../chrome/context'
 import { createLogInkTheme } from '../chrome/theme'
-import { createLogInkState } from '../../commands/log/inkViewModel'
+import { createLogInkState } from '../../workstation/runtime/inkViewModel'
 import { renderDetailPanel } from './detailPanel'
 import { renderChoicePanel, renderConfirmationPanel, renderSplitPlanOverlay } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'

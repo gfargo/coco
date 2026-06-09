@@ -1,7 +1,7 @@
 /**
  * Shared types for the Ink workstation runtime.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` so per-surface modules
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` so per-surface modules
  * (planned under `src/workstation/surfaces/<view>/`) and chrome render
  * helpers (planned under `src/workstation/runtime/`) can speak the same
  * type vocabulary without re-importing the giant inkRuntime module.
@@ -33,8 +33,8 @@ import type { WorktreeOverview as WorktreeListOverview } from '../../git/worktre
 import type { ClipboardRunner } from '../../git/historyActions'
 import type { LogArgv } from '../../commands/log/config'
 import type { GitLogRow } from '../../commands/log/data'
-import type { LogInkState, LogInkView } from '../../commands/log/inkViewModel'
-import type { LogInkInputKey } from '../../commands/log/inkInput'
+import type { LogInkState, LogInkView } from '../../workstation/runtime/inkViewModel'
+import type { LogInkInputKey } from '../../workstation/runtime/inkInput'
 import type { LogInkContextStatus } from '../chrome/context'
 import type { LogInkTheme, LogInkThemeConfig } from '../chrome/theme'
 

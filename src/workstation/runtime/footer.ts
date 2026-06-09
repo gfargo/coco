@@ -43,7 +43,7 @@
  * kind now uses its dedicated theme color and ships an ASCII glyph
  * fallback for `theme.ascii` mode (TERM=dumb / vt100).
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase
  * 5a.7 of #890. Two-row layout introduced post-0.54.2; per-kind
  * colors + glyphs added in the same pass.
  */
@@ -51,8 +51,8 @@
 import type * as ReactTypes from 'react'
 import { pickSpinnerFrame } from '../chrome/spinner'
 import type { LogInkTheme } from '../chrome/theme'
-import { getLogInkFooterHints } from '../../commands/log/inkKeymap'
-import type { LogInkState } from '../../commands/log/inkViewModel'
+import { getLogInkFooterHints } from '../../workstation/runtime/inkKeymap'
+import type { LogInkState } from '../../workstation/runtime/inkViewModel'
 import type { LogInkComponents, LogInkContext } from './types'
 
 export function renderFooter(

@@ -8,7 +8,7 @@
  * Per-row actions (stage, unstage, revert, hunk-stage) are wired in
  * inkInput.ts; this renderer is read-only.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.3
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.3
  * of #890. The local helpers (`buildStatusSurfaceRows`,
  * `capitalizeGroupName`, `formatStatusFilterMask`,
  * `isStatusFilterMaskActive`) and the `StatusSurfaceRow` type lived in
@@ -26,7 +26,7 @@ import { cellWidth, truncateCells } from '../../chrome/text'
 import { isPathLfsTracked } from '../../../git/lfsAttributes'
 import type { WorktreeFile, WorktreeFileGroup } from '../../../git/statusData'
 import { applyStatusFilterMask, groupWorktreeFiles } from '../../../git/statusData'
-import type { LogInkStatusFilterMask } from '../../../commands/log/inkViewModel'
+import type { LogInkStatusFilterMask } from '../../../workstation/runtime/inkViewModel'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 

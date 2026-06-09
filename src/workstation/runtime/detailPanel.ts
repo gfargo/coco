@@ -9,7 +9,7 @@
  *   - whether the history view is showing the synthetic pending-commit
  *     row (which swaps the inspector out for the worktree summary)
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.7
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.7
  * of #890. No behavior change.
  */
 
@@ -20,7 +20,7 @@ import type {
     GitCommitDetail,
     GitCommitFilePreview,
 } from '../../commands/log/data'
-import type { LogInkState } from '../../commands/log/inkViewModel'
+import type { LogInkState } from '../../workstation/runtime/inkViewModel'
 import {
     renderBranchPreviewPanel,
     renderCommitDiffDetail,

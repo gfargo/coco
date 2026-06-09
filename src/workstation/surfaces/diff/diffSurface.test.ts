@@ -9,7 +9,7 @@
  * into ts-jest — same pattern as the other surface tests.
  */
 import { createElement } from 'react'
-import { createLogInkState } from '../../../commands/log/inkViewModel'
+import { createLogInkState } from '../../../workstation/runtime/inkViewModel'
 import { createLogInkContextStatus } from '../../chrome/context'
 import { cellWidth } from '../../chrome/text'
 import { createLogInkTheme } from '../../chrome/theme'

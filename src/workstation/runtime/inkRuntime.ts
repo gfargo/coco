@@ -14,15 +14,15 @@
 
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
-import { GitLogRow } from './data'
-import { startInteractiveLog } from './interactive'
+import { GitLogRow } from '../../commands/log/data'
+import { startInteractiveLog } from '../../commands/log/interactive'
 import { LogInkView } from './inkViewModel'
-import { LogInkApp } from '../../workstation/runtime/app'
-import { createLogInkTheme, LogInkThemeConfig } from '../../workstation/chrome/theme'
-import { installTerminalLifecycle } from '../../workstation/chrome/terminalLifecycle'
-import { canStartLogInkTui, getLogInkRenderOptions } from '../../workstation/chrome/terminal'
-import type { LogInkRuntime } from '../../workstation/runtime/types'
-import { LogArgv } from './config'
+import { LogInkApp } from '../runtime/app'
+import { createLogInkTheme, LogInkThemeConfig } from '../chrome/theme'
+import { installTerminalLifecycle } from '../chrome/terminalLifecycle'
+import { canStartLogInkTui, getLogInkRenderOptions } from '../chrome/terminal'
+import type { LogInkRuntime } from '../runtime/types'
+import { LogArgv } from '../../commands/log/config'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
 const dynamicImport = new Function('specifier', 'return import(specifier)') as DynamicImport

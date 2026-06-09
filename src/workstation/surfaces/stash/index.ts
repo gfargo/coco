@@ -3,7 +3,7 @@
  * filter support. Per-entry actions (apply, pop, drop, file-checkout)
  * are wired in inkInput.ts; this renderer is read-only.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.1
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.1
  * of #890. No behavior change.
  */
 
@@ -20,7 +20,7 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
-import { isPendingItemAction } from '../../../commands/log/inkViewModel'
+import { isPendingItemAction } from '../../../workstation/runtime/inkViewModel'
 
 const GAP = 2 // cells between columns
 

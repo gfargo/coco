@@ -8,7 +8,7 @@
  * navigable so the user can read the documentation before starting
  * — they can't break anything from here.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.1
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.1
  * of #890. No behavior change.
  */
 

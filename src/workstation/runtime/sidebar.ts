@@ -10,7 +10,7 @@
  * Tab selection (`1`-`5` / `[`-`]`) is wired in inkInput.ts; this
  * renderer is read-only and assumes the active tab from `state.sidebarTab`.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.7
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.7
  * of #890. No behavior change.
  */
 
@@ -26,8 +26,8 @@ import type { LogInkTheme } from '../chrome/theme'
 import type {
   LogInkSidebarTab,
   LogInkState,
-} from '../../commands/log/inkViewModel'
-import { getLogInkSidebarTabs, isPendingItemAction } from '../../commands/log/inkViewModel'
+} from '../../workstation/runtime/inkViewModel'
+import { getLogInkSidebarTabs, isPendingItemAction } from '../../workstation/runtime/inkViewModel'
 import type { LogInkComponents, LogInkContext } from './types'
 import { focusBorderColor, panelTitle, sidebarTabLabel } from './utils'
 

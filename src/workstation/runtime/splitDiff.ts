@@ -6,7 +6,7 @@
  * (`buildSplitDiffRows`); this module wraps that data into Ink nodes
  * with the right column widths, gutter, and per-row styling.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5a.4
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5a.4
  * of #890. No behavior change.
  */
 
@@ -16,7 +16,7 @@ import { cellWidth, truncateCells } from '../chrome/text'
 import { resolveSyntaxColor } from '../chrome/syntaxColors'
 import type { LogInkTheme } from '../chrome/theme'
 import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
-import type { LogInkState } from '../../commands/log/inkViewModel'
+import type { LogInkState } from '../../workstation/runtime/inkViewModel'
 import type { LogInkComponents } from './types'
 
 /**

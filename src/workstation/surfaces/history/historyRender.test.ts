@@ -17,7 +17,7 @@ import { createElement, type ReactElement } from 'react'
 import {
     createLogInkState,
     type LogInkState,
-} from '../../../commands/log/inkViewModel'
+} from '../../../workstation/runtime/inkViewModel'
 import { createLogInkContextStatus } from '../../chrome/context'
 import { createLogInkTheme } from '../../chrome/theme'
 import type { GitLogRow } from '../../../commands/log/data'

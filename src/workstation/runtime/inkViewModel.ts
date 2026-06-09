@@ -1,20 +1,20 @@
-import { GitLogCommitRow, GitLogRow, getCommitRows } from './data'
+import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../commands/log/data'
 import { hashesMatchAny } from '../../git/hashes'
-import { getLogInkThemePresets, type LogInkThemePreset } from '../../workstation/chrome/theme'
+import { getLogInkThemePresets, type LogInkThemePreset } from '../chrome/theme'
 import {
     CommitComposeAction,
     CommitComposeState,
     applyCommitComposeAction,
     createCommitComposeState,
-} from './commitCompose'
-import type { CommitSplitPlan, CommitSplitPlanContext } from '../commit/split'
+} from '../../commands/log/commitCompose'
+import type { CommitSplitPlan, CommitSplitPlanContext } from '../../commands/commit/split'
 import {
   cycleIssueFilterPreset,
   cyclePullRequestFilterPreset,
   type IssueFilterPreset,
   type PullRequestFilterPreset,
 } from '../../git/triageFilterPresets'
-import { PromotedSelectionsSnapshot } from '../../workstation/chrome/selectionRectify'
+import { PromotedSelectionsSnapshot } from '../chrome/selectionRectify'
 import {
     BranchSortMode,
     DEFAULT_BRANCH_SORT_MODE,
@@ -22,7 +22,7 @@ import {
     TagSortMode,
     cycleBranchSort,
     cycleTagSort,
-} from '../../workstation/chrome/sorting'
+} from '../chrome/sorting'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 

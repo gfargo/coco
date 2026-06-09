@@ -7,10 +7,10 @@
  *
  * The entry point (`startInkInteractiveLog`) and the orchestration
  * helpers (`loadLogInkContext`, `loadInkRuntime`, `safe`) stay in
- * `src/commands/log/inkRuntime.ts` — they're the boot sequence, not the
+ * `src/workstation/runtime/inkRuntime.ts` — they're the boot sequence, not the
  * component itself.
  *
- * Extracted from `src/commands/log/inkRuntime.ts` as part of phase 5b
+ * Extracted from `src/workstation/runtime/inkRuntime.ts` as part of phase 5b
  * of #890. No behavior change.
  */
 
@@ -89,7 +89,7 @@ import {
     LogInkInputKey,
     getInspectorActionsForState,
     getLogInkInputEvents,
-} from '../../commands/log/inkInput'
+} from '../../workstation/runtime/inkInput'
 import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
 import { createLogInkTheme, type LogInkThemePreset } from '../chrome/theme'
 import { saveThemePreset } from '../chrome/themePersistence'
@@ -137,7 +137,7 @@ import {
     getSelectedInkCommit,
     getThemePickerSelection,
     hunkIndexAtOffset,
-} from '../../commands/log/inkViewModel'
+} from '../../workstation/runtime/inkViewModel'
 import { getGitOperationOverview } from '../../git/operationData'
 import { openProviderUrl } from '../../git/providerActions'
 import { getProviderOverview } from '../../git/providerData'

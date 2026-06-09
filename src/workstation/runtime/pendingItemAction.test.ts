@@ -18,7 +18,7 @@ import {
   createLogInkState,
   isPendingItemAction,
   type LogInkPendingItemAction,
-} from '../../commands/log/inkViewModel'
+} from '../../workstation/runtime/inkViewModel'
 import { inlineSpinnerGlyph } from '../chrome/spinner'
 import { createLogInkContextStatus } from '../chrome/context'
 import { createLogInkTheme } from '../chrome/theme'

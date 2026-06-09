@@ -12,7 +12,7 @@
  * prints the React tree. Deterministic across CI + dev terminals.
  */
 import { createElement, type ReactElement } from 'react'
-import { createLogInkState, type LogInkState } from '../../commands/log/inkViewModel'
+import { createLogInkState, type LogInkState } from '../../workstation/runtime/inkViewModel'
 import { createLogInkTheme } from '../chrome/theme'
 import { renderFooter } from './footer'
 import type { LogInkContext } from './types'

@@ -7,7 +7,7 @@
  */
 
 import { LogInkTheme } from './theme'
-import { LogInkSidebarTab } from '../../commands/log/inkViewModel'
+import { LogInkSidebarTab } from '../../workstation/runtime/inkViewModel'
 
 /* ----------------------------- P3.1 — branch ----------------------------- */
 

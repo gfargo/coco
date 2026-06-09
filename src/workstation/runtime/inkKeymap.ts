@@ -1,5 +1,5 @@
 import { LogInkFocus, LogInkView } from './inkViewModel'
-import type { LogInkVisiblePane } from '../../workstation/chrome/layout'
+import type { LogInkVisiblePane } from '../chrome/layout'
 import {
     LogInkWorkflowAction,
     LogInkWorkflowActionKind,

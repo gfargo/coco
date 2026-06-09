@@ -5,7 +5,7 @@ import {
   formatInkRefLabels,
   getVisibleLogInkHistory,
 } from './historyRows'
-import { applyLogInkAction, createLogInkState } from '../../commands/log/inkViewModel'
+import { applyLogInkAction, createLogInkState } from '../../workstation/runtime/inkViewModel'
 
 const rows: GitLogRow[] = [
   {
