@@ -323,4 +323,11 @@ export const questions = {
       message: 'set up commitlint for conventional commits support?',
       default: true,
     }),
+
+  enableUsageStats: async (): Promise<boolean> =>
+    await confirmPrompt({
+      message:
+        'keep a local record of AI usage stats (tokens + latency) for `coco doctor --cost`? stays on this machine; opt out anytime',
+      default: true,
+    }),
 }

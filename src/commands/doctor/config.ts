@@ -5,6 +5,7 @@ import { BaseCommandOptions } from '../types'
 export interface DoctorOptions extends BaseCommandOptions {
   fix?: boolean
   cost?: boolean
+  clear?: boolean
 }
 
 export type DoctorArgv = Arguments<DoctorOptions>
@@ -20,6 +21,11 @@ export const options = {
   cost: {
     description:
       'Show the per-task model routing cost profile and (if recorded) aggregated LLM usage',
+    type: 'boolean',
+    default: false,
+  },
+  clear: {
+    description: 'Delete the local usage-stats ledger that `--cost` reads',
     type: 'boolean',
     default: false,
   },

@@ -4,6 +4,45 @@ import * as path from 'path'
 import { AnthropicLLMService, AzureLLMService, BedrockLLMService, GeminiLLMService, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
 import { Config } from '../types'
 
+/** Path to the global XDG config (`$XDG_CONFIG_HOME/coco/config.json`). */
+export function getXdgConfigPath(): string {
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
+  return path.join(xdgConfigHome, 'coco', 'config.json')
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Persist `telemetry.usage` into the global XDG config, merging into any
+ * existing content (only this one key is touched). This is the per-machine home
+ * for the recording preference — deliberately NOT the project config, so a
+ * shared repo can't flip a collaborator's local recording on. Returns true on
+ * success; best-effort, so a read-only HOME or malformed file never throws.
+ */
+export function persistUsagePreference(usage: boolean): boolean {
+  const file = getXdgConfigPath()
+  try {
+    let config: Record<string, unknown> = {}
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'))
+      if (isRecord(parsed)) config = parsed
+    } catch {
+      // No existing file (or unreadable/malformed) — start fresh.
+      config = {}
+    }
+    const telemetry = isRecord(config.telemetry) ? config.telemetry : {}
+    config.telemetry = { ...telemetry, usage }
+
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
  * Load XDG config
  *
@@ -23,8 +62,7 @@ export function loadXDGConfig<ConfigType = Config>(
   config: Partial<Config>,
   opts?: { returnSource?: boolean }
 ): ConfigType | { config: ConfigType; path?: string } {
-  const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
-  const xdgConfigPath = path.join(xdgConfigHome, 'coco', 'config.json')
+  const xdgConfigPath = getXdgConfigPath()
   let foundPath: string | undefined
 
   if (fs.existsSync(xdgConfigPath)) {

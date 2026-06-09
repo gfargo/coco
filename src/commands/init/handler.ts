@@ -1,6 +1,7 @@
 import { appendToEnvFile } from '../../lib/config/services/env'
 import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToProjectJsonConfig } from '../../lib/config/services/project'
+import { persistUsagePreference } from '../../lib/config/services/xdg'
 import chalk from 'chalk'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
 import { FAIL, PASS, WARN } from '../../lib/ui/glyphs'
@@ -184,6 +185,11 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       }
     }
 
+  // Opt-out for the local usage ledger (#0.69). Stored per-machine in the
+  // global XDG config (not the scoped config written below), since a recording
+  // preference belongs to the user, not a shared repo.
+  const enableUsageStats = await questions.enableUsageStats()
+
   logResult('Config', JSON.stringify(config, null, 2))
   let approvalMessage = 'does this look good?'
 
@@ -218,6 +224,14 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     } else if (configFilePath.endsWith('.coco.config.json')) {
       appendToProjectJsonConfig(configFilePath, config)
     }
+
+    // Persist the usage-stats choice to the global (per-machine) config.
+    persistUsagePreference(enableUsageStats)
+    logger.log(
+      enableUsageStats
+        ? `${chalk.dim('Local AI usage stats: on')} ${chalk.dim('(opt out later with telemetry.usage=false or COCO_USAGE_LOG=0)')}`
+        : chalk.dim('Local AI usage stats: off'),
+    )
 
     // After config is written, check for package installation
     await checkAndHandlePackageInstallation({ global: scope === 'global', logger })

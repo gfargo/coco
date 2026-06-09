@@ -177,6 +177,18 @@ export const schema = {
           },
           "additionalProperties": false,
           "description": "Multi-repo workspace surface settings (`coco workspace`)."
+        },
+        "telemetry": {
+          "type": "object",
+          "properties": {
+            "usage": {
+              "type": "boolean",
+              "description": "Keep a local, cross-run record of AI usage — prompt-token estimate and latency per task / model / repo — that `coco doctor --cost` reads. The ledger is a plain JSONL file under the cache directory and never leaves the machine; it records no prompt, diff, or code content.\n\n`coco init` writes this preference, and on the first interactive command with no preference set anywhere coco defaults it on and prints a one-time notice (non-interactive / CI runs stay off). The `COCO_USAGE_LOG` environment variable overrides this setting either way: set it to `0` / `false` to force recording off, or to `1` / a file path to force it on. Unset everywhere means off.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Local AI usage statistics. Everything here stays on this machine and is never transmitted."
         }
       },
       "required": [

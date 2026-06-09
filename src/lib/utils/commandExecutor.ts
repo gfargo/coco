@@ -1,10 +1,20 @@
+import chalk from 'chalk'
 import { Argv } from 'yargs'
 import { loadConfig } from '../config/utils/loadConfig'
 import { Logger } from './logger'
 import { CommandHandler } from '../types'
 import { BaseArgvOptions } from '../../commands/types'
+import { Config } from '../config/types'
 import { LangChainNetworkError, LangChainAuthenticationError } from '../langchain/errors'
 import { isCommandExitError } from './commandExit'
+import { decideUsageConsent, isConsentInteractive, USAGE_ENABLED_NOTICE } from './usageConsent'
+import { persistUsagePreference } from '../config/services/xdg'
+import {
+  isUsageLoggingEnabled,
+  setUsageConfigPreference,
+  setUsageRepoTag,
+} from '../langchain/utils/usageLedger'
+import { resolveRepoIdentifier } from '../../git/repoIdentifier'
 
 /**
  * Formats a network error with helpful troubleshooting information
@@ -107,6 +117,40 @@ function formatGenericError(error: Error, logger: Logger): void {
   }
 }
 
+/**
+ * Resolve the local usage-stats recording preference for this run (#0.69) and
+ * arm the ledger. Recording is opt-out: a first interactive run with no
+ * preference set anywhere defaults on, persists the choice to the global
+ * config, and prints a one-time notice; non-interactive / CI runs stay off.
+ * `COCO_USAGE_LOG` overrides everything. When recording is on, the current
+ * repo identifier is resolved so usage can be broken down per project. Entirely
+ * best-effort — telemetry setup must never break a command.
+ */
+async function applyUsageTelemetry(argv: unknown, options: Config, logger: Logger): Promise<void> {
+  try {
+    const commandName = String((argv as { _?: unknown[] })?._?.[0] ?? '')
+    const decision = decideUsageConsent({
+      commandName,
+      configPreference: options.telemetry?.usage,
+      envOverride: process.env.COCO_USAGE_LOG,
+      interactive: isConsentInteractive(),
+    })
+    setUsageConfigPreference(decision.preference)
+
+    if (decision.enabledOnFirstRun) {
+      persistUsagePreference(true)
+      logger.log(chalk.dim(USAGE_ENABLED_NOTICE))
+    }
+
+    if (isUsageLoggingEnabled()) {
+      const repoDir = (argv as { repo?: string })?.repo
+      setUsageRepoTag(await resolveRepoIdentifier({ cwd: repoDir }))
+    }
+  } catch {
+    // Telemetry setup is never allowed to interfere with the command.
+  }
+}
+
 function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: CommandHandler<T>) {
   return async (argv: T) => {
     const options = loadConfig(argv)
@@ -114,6 +158,8 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
     // Results still reach stdout (handleResult / emitJson write directly).
     const quiet = (argv as { quiet?: boolean })?.quiet === true
     const logger = new Logger(quiet ? { ...options, silent: true } : options)
+
+    await applyUsageTelemetry(argv, options as Config, logger)
 
     try {
       await handler(argv, logger)

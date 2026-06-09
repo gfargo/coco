@@ -4,12 +4,19 @@ import * as path from 'node:path'
 import type { LlmCallMetadata } from './observability'
 
 /**
- * Opt-in LLM usage ledger (#0.68). Records a compact line per LLM call so the
- * `coco doctor` cost report can aggregate tokens + latency by task / model
- * ACROSS runs — the in-memory telemetry in `observability.ts` only survives a
- * single command. Recording is OFF by default and gated on `COCO_USAGE_LOG`
- * (no usage data is written to disk unless the user opts in); reading is always
- * available so `coco doctor` can surface whatever has accumulated.
+ * Local LLM usage ledger. Records a compact line per LLM call so the
+ * `coco doctor --cost` report can aggregate tokens + latency by task / model /
+ * repo ACROSS runs — the in-memory telemetry in `observability.ts` only
+ * survives a single command.
+ *
+ * Recording is gated two ways (#0.69): the `COCO_USAGE_LOG` environment
+ * variable wins outright (a path / `1` / `true` forces it on, `0` / `false`
+ * forces it off), and when that env var is unset recording follows the
+ * `telemetry.usage` config preference resolved once per run by the command
+ * executor. The ledger holds metadata only — task, model, prompt-token
+ * estimate, latency, repo identifier — never prompt, diff, or code content,
+ * and it never leaves the machine. Reading is always available so `coco
+ * doctor` can surface whatever has accumulated.
  */
 export type UsageRecord = {
   /** Epoch milliseconds. */
@@ -20,6 +27,8 @@ export type UsageRecord = {
   model?: string
   promptTokens?: number
   elapsedMs?: number
+  /** Readable `owner/repo` (or directory name) the call ran against. */
+  repo?: string
 }
 
 export type UsageAggregate = {
@@ -29,6 +38,15 @@ export type UsageAggregate = {
   totalMs: number
   avgMs: number
 }
+
+/**
+ * Keep the ledger bounded. Once the file crosses `MAX_LEDGER_BYTES`, it is
+ * rewritten with only the most recent `TRIM_TO_RECORDS` lines. The size check
+ * is a cheap `stat`; the rewrite happens rarely (only when the cap is crossed),
+ * and ~20k records sits comfortably under the 5 MB ceiling.
+ */
+const MAX_LEDGER_BYTES = 5 * 1024 * 1024
+const TRIM_TO_RECORDS = 20_000
 
 function cacheDir(): string {
   const xdg = process.env.XDG_CACHE_HOME
@@ -54,12 +72,48 @@ function isBooleanish(value: string): boolean {
   return v === '1' || v === '0' || v === 'true' || v === 'false'
 }
 
-/** True when usage recording is enabled (any truthy `COCO_USAGE_LOG`). */
+/**
+ * Config-resolved recording preference (`telemetry.usage`), set once per run by
+ * the command executor. `COCO_USAGE_LOG` still overrides this either way; when
+ * the env var is unset, this is what decides whether recording is on.
+ */
+let configPreference: boolean | undefined
+
+/** Repo identifier stamped on each record, set once per run by the executor. */
+let repoTag: string | undefined
+
+/**
+ * Set the config-resolved recording preference for this process. Called by the
+ * command executor after it resolves `telemetry.usage` (and any first-run
+ * consent). `undefined` leaves recording gated on `COCO_USAGE_LOG` alone.
+ */
+export function setUsageConfigPreference(preference: boolean | undefined): void {
+  configPreference = preference
+}
+
+/** Stamp each subsequent record with the current repo identifier. */
+export function setUsageRepoTag(repo: string | undefined): void {
+  repoTag = repo
+}
+
+/** Reset module-level recording state. Tests use this between cases. */
+export function resetUsageLedgerState(): void {
+  configPreference = undefined
+  repoTag = undefined
+}
+
+/**
+ * True when usage recording is enabled. `COCO_USAGE_LOG` wins both ways — a
+ * path / `1` / `true` forces it on, `0` / `false` forces it off — and when the
+ * env var is unset recording follows the config preference (`telemetry.usage`).
+ */
 export function isUsageLoggingEnabled(): boolean {
   const env = process.env.COCO_USAGE_LOG
-  if (!env) return false
-  const v = env.toLowerCase()
-  return v !== '0' && v !== 'false'
+  if (env !== undefined && env !== '') {
+    const v = env.toLowerCase()
+    return v !== '0' && v !== 'false'
+  }
+  return configPreference === true
 }
 
 /**
@@ -77,14 +131,35 @@ export function recordUsage(metadata: LlmCallMetadata): void {
     model: metadata.model,
     promptTokens: metadata.promptTokens,
     elapsedMs: metadata.elapsedMs,
+    ...(repoTag ? { repo: repoTag } : {}),
   }
 
   try {
     const filePath = getUsageLogPath()
     fs.mkdirSync(path.dirname(filePath), { recursive: true })
     fs.appendFileSync(filePath, `${JSON.stringify(record)}\n`, 'utf8')
+    rotateLedgerIfNeeded(filePath)
   } catch {
     // Best-effort telemetry — swallow write errors.
+  }
+}
+
+/**
+ * Trim the ledger to its most recent records once it grows past the byte cap.
+ * Best-effort: a failed rotation just leaves the ledger oversized for now.
+ */
+function rotateLedgerIfNeeded(filePath: string): void {
+  try {
+    if (fs.statSync(filePath).size <= MAX_LEDGER_BYTES) return
+    const lines = fs
+      .readFileSync(filePath, 'utf8')
+      .split('\n')
+      .filter((line) => line.trim())
+    if (lines.length <= TRIM_TO_RECORDS) return
+    const kept = lines.slice(-TRIM_TO_RECORDS)
+    fs.writeFileSync(filePath, `${kept.join('\n')}\n`, 'utf8')
+  } catch {
+    // ignore
   }
 }
 
@@ -140,6 +215,11 @@ export function summarizeUsageByTask(records: UsageRecord[]): UsageAggregate[] {
 /** Aggregate usage by model id. */
 export function summarizeUsageByModel(records: UsageRecord[]): UsageAggregate[] {
   return aggregate(records, (r) => r.model || 'unknown')
+}
+
+/** Aggregate usage by repo identifier. */
+export function summarizeUsageByRepo(records: UsageRecord[]): UsageAggregate[] {
+  return aggregate(records, (r) => r.repo || 'unknown')
 }
 
 /** Delete the ledger file (best-effort). */

@@ -11,10 +11,12 @@ import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { emitJson } from '../../lib/ui/emitJson'
 import { buildModelRoutingProfile } from '../../lib/langchain/utils/modelRoutingProfile'
 import {
+  clearUsageLog,
   getUsageLogPath,
   isUsageLoggingEnabled,
   readUsageRecords,
   summarizeUsageByModel,
+  summarizeUsageByRepo,
   summarizeUsageByTask,
   type UsageAggregate,
 } from '../../lib/langchain/utils/usageLedger'
@@ -39,9 +41,14 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
   const records = readUsageRecords()
   const byTask = summarizeUsageByTask(records)
   const byModel = summarizeUsageByModel(records)
+  const byRepo = summarizeUsageByRepo(records)
+  const hasRepoData = byRepo.some((row) => row.key !== 'unknown')
 
   if (json) {
-    emitJson({ routing: profile, usage: { records: records.length, byTask, byModel } })
+    emitJson({
+      routing: profile,
+      usage: { records: records.length, byTask, byModel, byRepo },
+    })
     return
   }
 
@@ -59,7 +66,9 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
       logger.log(chalk.dim(`No usage recorded yet (logging to ${getUsageLogPath()}).`))
     } else {
       logger.log(
-        chalk.dim('Set COCO_USAGE_LOG=1 to record per-task token/latency usage across runs.')
+        chalk.dim(
+          'Usage recording is off. Turn it on with `coco init`, telemetry.usage=true, or COCO_USAGE_LOG=1.'
+        )
       )
     }
     return
@@ -72,6 +81,11 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
   logger.log('')
   logger.log(chalk.dim('  By model:'))
   for (const line of renderUsageRows(byModel, 'call')) logger.log(line)
+  if (hasRepoData) {
+    logger.log('')
+    logger.log(chalk.dim('  By repo:'))
+    for (const line of renderUsageRows(byRepo, 'call')) logger.log(line)
+  }
 }
 
 const SEVERITY_ICON: Record<DiagnosticSeverity, string> = {
@@ -116,6 +130,19 @@ export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
 
   const config = loadConfig<DoctorOptions, DoctorArgv>(argv)
   const sources = getConfigSources()
+
+  if (argv.clear) {
+    const ledgerPath = getUsageLogPath()
+    clearUsageLog()
+    if (argv.json) {
+      emitJson({ cleared: true, path: ledgerPath })
+    } else {
+      logger.log(LOGO)
+      logger.log('')
+      logger.log(chalk.green(`Cleared the local usage-stats ledger (${ledgerPath}).`))
+    }
+    return
+  }
 
   if (argv.cost) {
     if (!argv.json) {
