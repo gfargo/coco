@@ -8,6 +8,7 @@ import doctor from './commands/doctor'
 import init from './commands/init'
 import issues from './commands/issues'
 import log from './commands/log'
+import prCreate from './commands/prCreate'
 import prs from './commands/prs'
 import recap from './commands/recap'
 import review from './commands/review'
@@ -23,6 +24,7 @@ import { DoctorOptions } from './commands/doctor/config'
 import { InitOptions } from './commands/init/config'
 import { IssuesOptions } from './commands/issues/config'
 import { LogOptions } from './commands/log/config'
+import { PrCreateOptions } from './commands/prCreate/config'
 import { PrsOptions } from './commands/prs/config'
 import { RecapOptions } from './commands/recap/config'
 import { ReviewOptions } from './commands/review/config'
@@ -189,6 +191,13 @@ y.command<IssuesOptions>(
   issues.desc,
   issues.builder,
   issues.handler
+)
+
+y.command<PrCreateOptions>(
+  prCreate.command,
+  prCreate.desc,
+  prCreate.builder,
+  prCreate.handler
 )
 
 y.command<PrsOptions>(
