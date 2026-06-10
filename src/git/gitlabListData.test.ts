@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { getGitLabIssueList, getMergeRequestList, __test } from './gitlabListData'
+import { issueFilterForPreset, pullRequestFilterForPreset } from './triageFilterPresets'
 
 const { buildMergeRequestEndpoint, buildIssueEndpoint, parseMergeRequests, parseIssues } = __test
 
@@ -36,6 +37,87 @@ describe('gitlab endpoint building (#0.70)', () => {
     // GitLab issues API has no state=all; omit it (returns everything).
     expect(buildIssueEndpoint('g/p', { state: 'all' })).not.toContain('state=')
     expect(buildIssueEndpoint('g/p', {})).not.toContain('state=')
+  })
+})
+
+describe('@me -> GitLab scope (#0.70 regression)', () => {
+  it('maps assignee @me to scope=assigned_to_me (not assignee_username)', () => {
+    const e = buildMergeRequestEndpoint('g/p', { assignee: '@me' })
+    expect(e).toContain('scope=assigned_to_me')
+    expect(e).not.toContain('assignee_username')
+  })
+
+  it('maps author @me to scope=created_by_me', () => {
+    expect(buildMergeRequestEndpoint('g/p', { author: '@me' })).toContain('scope=created_by_me')
+  })
+
+  it('passes concrete usernames through as *_username (no scope)', () => {
+    const e = buildMergeRequestEndpoint('g/p', { assignee: 'bob', author: 'alice' })
+    expect(e).toContain('assignee_username=bob')
+    expect(e).toContain('author_username=alice')
+    expect(e).not.toContain('scope=')
+  })
+
+  it('applies @me scope to issues too', () => {
+    expect(buildIssueEndpoint('g/p', { assignee: '@me' })).toContain('scope=assigned_to_me')
+    expect(buildIssueEndpoint('g/p', { author: '@me' })).toContain('scope=created_by_me')
+  })
+})
+
+describe('TUI filter presets resolve to correct GitLab queries (#0.70)', () => {
+  // The workstation `f`-cycle uses these presets; @me must become a scope so the
+  // GitLab triage views filter correctly (not silently empty).
+  it('PR "mine" preset -> created_by_me + open', () => {
+    const e = buildMergeRequestEndpoint('g/p', pullRequestFilterForPreset('mine'))
+    expect(e).toContain('scope=created_by_me')
+    expect(e).toContain('state=opened')
+  })
+
+  it('PR "assigned" preset -> assigned_to_me', () => {
+    expect(buildMergeRequestEndpoint('g/p', pullRequestFilterForPreset('assigned'))).toContain(
+      'scope=assigned_to_me'
+    )
+  })
+
+  it('PR "merged" preset -> state=merged', () => {
+    expect(buildMergeRequestEndpoint('g/p', pullRequestFilterForPreset('merged'))).toContain('state=merged')
+  })
+
+  it('issue "mine" preset -> assigned_to_me + open', () => {
+    const e = buildIssueEndpoint('g/p', issueFilterForPreset('mine'))
+    expect(e).toContain('scope=assigned_to_me')
+    expect(e).toContain('state=opened')
+  })
+})
+
+describe('GitLab parse edge cases (#0.70)', () => {
+  it('handles locked state, work_in_progress draft fallback, object labels, and missing fields', () => {
+    const fixture = JSON.stringify([
+      {
+        iid: 1,
+        state: 'locked',
+        work_in_progress: true, // older field; coco falls back to it for isDraft
+        labels: [{ name: 'bug' }], // tolerate object label form
+        title: 'x',
+        web_url: 'u',
+        source_branch: 's',
+        target_branch: 't',
+        created_at: '',
+        updated_at: '',
+      },
+      { iid: 2 }, // almost everything missing
+    ])
+    const parsed = parseMergeRequests(fixture)
+    expect(parsed[0]).toMatchObject({ state: 'LOCKED', isDraft: true, labels: ['bug'] })
+    expect(parsed[1]).toMatchObject({ number: 2, title: '', isDraft: false })
+    expect(parsed[1].labels).toBeUndefined()
+  })
+
+  it('issue parser tolerates missing author/assignees/labels', () => {
+    const parsed = parseIssues(JSON.stringify([{ iid: 5, state: 'opened', title: 'y' }]))
+    expect(parsed[0]).toMatchObject({ number: 5, state: 'OPEN', title: 'y' })
+    expect(parsed[0].author).toBeUndefined()
+    expect(parsed[0].assignees).toBeUndefined()
   })
 })
 

@@ -73,6 +73,28 @@ function buildQuery(params: Record<string, string | number | undefined>): string
   return pairs.length ? `?${pairs.join('&')}` : ''
 }
 
+/**
+ * GitLab has no `@me` username (that is a GitHub convention coco uses for
+ * `--mine` / `--author @me`). Translate `@me` into GitLab's `scope` filter
+ * (`assigned_to_me` / `created_by_me`); pass any other username through as the
+ * matching `*_username` param. Without this, `--mine` silently matches nothing
+ * on GitLab.
+ */
+function userScopeParams(
+  author: string | undefined,
+  assignee: string | undefined
+): Record<string, string | undefined> {
+  const params: Record<string, string | undefined> = {}
+  if (assignee === '@me') params.scope = 'assigned_to_me'
+  else if (assignee) params.assignee_username = assignee
+  if (author === '@me') {
+    if (!params.scope) params.scope = 'created_by_me'
+  } else if (author) {
+    params.author_username = author
+  }
+  return params
+}
+
 // ---------------------------------------------------------------------------
 // Merge requests
 // ---------------------------------------------------------------------------
@@ -110,8 +132,7 @@ function parseMergeRequests(output: string): PullRequestListItem[] {
 function buildMergeRequestEndpoint(path: string, filter: PullRequestListFilter): string {
   const query = buildQuery({
     state: mrStateParam(filter.state),
-    author_username: filter.author,
-    assignee_username: filter.assignee,
+    ...userScopeParams(filter.author, filter.assignee),
     labels: filter.label,
     search: filter.search,
     source_branch: filter.head,
@@ -200,8 +221,7 @@ function parseIssues(output: string): IssueListItem[] {
 function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
   const query = buildQuery({
     state: issueStateParam(filter.state),
-    author_username: filter.author,
-    assignee_username: filter.assignee,
+    ...userScopeParams(filter.author, filter.assignee),
     labels: filter.label,
     search: filter.search,
     per_page: filter.limit ?? 30,

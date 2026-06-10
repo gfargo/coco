@@ -15,6 +15,7 @@ import type {
   PullRequestListOverview,
 } from '../../../git/pullRequestListData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
+import { __test as gitlabInternals } from '../../../git/gitlabListData'
 import { renderPullRequestTriageSurface } from './index'
 
 type StubProps = Record<string, unknown>
@@ -102,6 +103,37 @@ describe('renderPullRequestTriageSurface', () => {
       },
     })
     expect(tree).toBeDefined()
+  })
+
+  it('renders rows from GitLab-sourced merge requests (#0.70)', () => {
+    // Data goes through the real GitLab parser, proving the triage surface
+    // renders GitLab MRs (mapped to the shared view model) the same as gh PRs.
+    const pullRequests = gitlabInternals.parseMergeRequests(
+      JSON.stringify([
+        {
+          iid: 7,
+          title: 'Add dashboard',
+          web_url: 'https://gitlab.com/g/p/-/merge_requests/7',
+          state: 'opened',
+          draft: false,
+          source_branch: 'feat/dash',
+          target_branch: 'main',
+          author: { username: 'gfargo' },
+          labels: ['enhancement'],
+          created_at: '2026-01-01',
+          updated_at: '2026-01-02',
+        },
+        { iid: 8, title: 'WIP login', web_url: 'u', state: 'opened', draft: true, source_branch: 'fix/login', target_branch: 'main', created_at: '', updated_at: '' },
+      ])
+    )
+    expect(pullRequests[0].number).toBe(7) // GitLab iid -> shared `number`
+    expect(pullRequests[1].isDraft).toBe(true)
+
+    const tree = render(makeState(), {
+      pullRequestList: { available: true, authenticated: true, repository: { owner: 'g', name: 'p' }, pullRequests },
+    })
+    expect(tree).toBeDefined()
+    expect(tree.type).toBe(Box)
   })
 
   it('structural snapshot — empty list', () => {
