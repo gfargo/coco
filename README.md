@@ -63,7 +63,7 @@ coco commit -i
 
 > **Local usage stats (0.69.0+):** coco keeps a local, per-machine record of AI usage (prompt-token estimate and latency by task, model, and repo) to power `coco doctor --cost`. It stays on your machine and records no prompt, diff, or code content. The first interactive run enables it after a one-time notice; non-interactive and CI runs stay off. Opt out anytime with `coco init`, `telemetry.usage: false`, or `COCO_USAGE_LOG=0`.
 
-> **Multi-forge (0.70.0+):** `coco prs`, `coco issues`, and `coco pr create` work with **GitHub**, **GitHub Enterprise**, and **GitLab**. coco detects the forge from your remote and shells out to the matching CLI: `gh` for GitHub / GitHub Enterprise, `glab` for GitLab (install it and run `glab auth login`). GitLab support is command-line in 0.70; the workstation TUI GitLab integration lands in a later release.
+> **Multi-forge (0.70.0+):** `coco prs`, `coco issues`, `coco pr create`, and the full `coco ui` workstation (PR/issue triage, inspectors, and every per-row action) work with **GitHub**, **GitHub Enterprise**, and **GitLab**. coco detects the forge from your remote and shells out to the matching CLI: `gh` for GitHub / GitHub Enterprise, `glab` for GitLab (install it and run `glab auth login`).
 
 ## Usage Examples
 
