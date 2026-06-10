@@ -7,6 +7,12 @@ import {
   parseGitHubRemoteUrl as parseGitHubRemoteUrlBase,
   parseRemoteUrl,
 } from './githubCli'
+import {
+  defaultGlabRunner,
+  describeGlabStatus,
+  getGlabStatus,
+  type GlabRunner,
+} from './glabCli'
 
 export type GitProviderType = 'github' | 'gitlab' | 'unsupported'
 
@@ -262,9 +268,92 @@ async function getCurrentPullRequest(
   }
 }
 
+async function getGitLabDefaultBranch(
+  encodedPath: string | undefined,
+  runner: GlabRunner
+): Promise<string | undefined> {
+  if (!encodedPath) return undefined
+  try {
+    const out = (await runner(['api', `projects/${encodedPath}`])).trim()
+    if (!out) return undefined
+    return (JSON.parse(out) as { default_branch?: string }).default_branch
+  } catch {
+    return undefined
+  }
+}
+
+async function getCurrentMergeRequest(
+  encodedPath: string,
+  sourceBranch: string,
+  runner: GlabRunner
+): Promise<ProviderPullRequestStatus | undefined> {
+  try {
+    const out = (
+      await runner([
+        'api',
+        `projects/${encodedPath}/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened`,
+      ])
+    ).trim()
+    if (!out) return undefined
+    const mr = (JSON.parse(out) as Array<{
+      iid: number
+      title: string
+      state: string
+      draft?: boolean
+      work_in_progress?: boolean
+    }>)[0]
+    if (!mr) return undefined
+    return {
+      number: mr.iid,
+      title: mr.title,
+      state: mr.state,
+      isDraft: Boolean(mr.draft ?? mr.work_in_progress),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+/** GitLab overview via glab: auth probe, default branch, current-branch MR. */
+async function getGitLabProviderOverview(
+  repository: ProviderRepository,
+  currentBranch: string | undefined,
+  localDefaultBranch: string | undefined,
+  runner: GlabRunner
+): Promise<ProviderOverview> {
+  const status = await getGlabStatus(runner)
+  if (status.kind !== 'ok') {
+    return {
+      repository: { ...repository, defaultBranch: localDefaultBranch },
+      currentBranch,
+      authenticated: false,
+      message: describeGlabStatus(status),
+    }
+  }
+
+  const path =
+    repository.owner && repository.name ? `${repository.owner}/${repository.name}` : undefined
+  const encoded = path ? encodeURIComponent(path) : undefined
+
+  const [defaultBranch, currentPullRequest] = await Promise.all([
+    getGitLabDefaultBranch(encoded, runner),
+    currentBranch && encoded
+      ? getCurrentMergeRequest(encoded, currentBranch, runner)
+      : Promise.resolve(undefined),
+  ])
+
+  return {
+    repository: { ...repository, defaultBranch: defaultBranch || localDefaultBranch },
+    currentBranch,
+    currentPullRequest,
+    authenticated: true,
+  }
+}
+
 export async function getProviderOverview(
   git: SimpleGit,
-  runner: GhRunner = defaultGhRunner
+  runner: GhRunner = defaultGhRunner,
+  glabRunner: GlabRunner = defaultGlabRunner
 ): Promise<ProviderOverview> {
   const [remotes, currentBranchOutput, localDefaultBranch] = await Promise.all([
     git.getRemotes(true),
@@ -285,6 +374,10 @@ export async function getProviderOverview(
       message: 'No Git remote detected.',
     }
   const currentBranch = currentBranchOutput.trim() || undefined
+
+  if (repository.provider === 'gitlab') {
+    return getGitLabProviderOverview(repository, currentBranch, localDefaultBranch, glabRunner)
+  }
 
   if (repository.provider !== 'github') {
     return {
