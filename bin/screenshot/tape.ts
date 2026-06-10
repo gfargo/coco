@@ -60,6 +60,8 @@ type TapeOptions = {
    * canned data instead of the real GitHub CLI.
    */
   ghMockDir?: string
+  /** Optional directory holding a mock `glab`. Prepended to PATH like `ghMockDir`. */
+  glabMockDir?: string
 }
 
 const DEFAULT_DIMENSIONS = { cols: 140, rows: 40 } as const
@@ -302,7 +304,7 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // Ensure the VHS shell can find node + tsx + git + gh + system utils.
     // Include /usr/local/bin and /opt/homebrew/bin for tools like gh.
     // $PATH expands to the shell's existing PATH (includes /usr/bin etc).
-    `Type "export PATH=${options.ghMockDir ? `${quoteTapeString(options.ghMockDir)}:` : ''}${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
+    `Type "export PATH=${options.ghMockDir ? `${quoteTapeString(options.ghMockDir)}:` : ''}${options.glabMockDir ? `${quoteTapeString(options.glabMockDir)}:` : ''}${quoteTapeString(options.repoRoot)}/node_modules/.bin:${quoteTapeString(options.nodeBinDir)}:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
     `Enter`,
     `Sleep 300ms`,
     // Snapshot mode pin — freezes wall-clock `now` for relative
