@@ -1,8 +1,25 @@
 import {
+  addMergeRequestAssignee,
+  addMergeRequestLabel,
+  approveMergeRequest,
+  approveMergeRequestByNumber,
   buildCreateMergeRequestArgs,
+  closeMergeRequest,
+  closeMergeRequestByNumber,
+  commentMergeRequest,
+  commentMergeRequestByNumber,
   createMergeRequest,
+  mergeMergeRequest,
+  mergeMergeRequestByNumber,
   openMergeRequest,
+  requestChangesMergeRequestByNumber,
 } from './mergeRequestActions'
+
+/** Capture the args a glab action passes to the runner. */
+function capturingRunner(): { calls: string[][]; runner: (a: string[]) => Promise<string> } {
+  const calls: string[][] = []
+  return { calls, runner: async (a: string[]) => { calls.push(a); return '' } }
+}
 
 describe('buildCreateMergeRequestArgs (#0.70)', () => {
   it('maps create input to glab mr create flags', () => {
@@ -60,5 +77,49 @@ describe('createMergeRequest (#0.70)', () => {
       message: 'Opened merge request: https://gitlab.com/g/p/-/merge_requests/3',
       url: 'https://gitlab.com/g/p/-/merge_requests/3',
     })
+  })
+})
+
+describe('MR mutating action arg contracts (#0.70)', () => {
+  it('builds glab mr verbs by number', async () => {
+    const { calls, runner } = capturingRunner()
+    await mergeMergeRequestByNumber(5, 'squash', runner)
+    await mergeMergeRequestByNumber(5, 'merge', runner)
+    await approveMergeRequestByNumber(5, runner)
+    await closeMergeRequestByNumber(5, runner)
+    await commentMergeRequestByNumber(5, 'hi', runner)
+    await requestChangesMergeRequestByNumber(5, 'fix it', runner)
+    await addMergeRequestLabel(5, 'bug', runner)
+    await addMergeRequestAssignee(5, 'bob', runner)
+    expect(calls).toEqual([
+      ['mr', 'merge', '5', '--squash', '--yes'],
+      ['mr', 'merge', '5', '--yes'],
+      ['mr', 'approve', '5'],
+      ['mr', 'close', '5'],
+      ['mr', 'note', '5', '--message', 'hi'],
+      ['mr', 'note', '5', '--message', 'Requested changes: fix it'],
+      ['mr', 'update', '5', '--label', 'bug'],
+      ['mr', 'update', '5', '--assignee', 'bob'],
+    ])
+  })
+
+  it('builds glab mr verbs for the current branch (no IID)', async () => {
+    const { calls, runner } = capturingRunner()
+    await mergeMergeRequest('rebase', runner)
+    await closeMergeRequest(runner)
+    await approveMergeRequest(runner)
+    await commentMergeRequest('hello', runner)
+    expect(calls).toEqual([
+      ['mr', 'merge', '--rebase', '--yes'],
+      ['mr', 'close'],
+      ['mr', 'approve'],
+      ['mr', 'note', '--message', 'hello'],
+    ])
+  })
+
+  it('rejects empty comment / label / assignee bodies', async () => {
+    expect((await commentMergeRequestByNumber(5, '  ')).ok).toBe(false)
+    expect((await addMergeRequestLabel(5, '')).ok).toBe(false)
+    expect((await addMergeRequestAssignee(5, '')).ok).toBe(false)
   })
 })
