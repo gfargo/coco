@@ -77,8 +77,27 @@ export function parseGitHubRemoteUrl(
  * github, which also catches GitHub Enterprise hosts named like
  * `github.acme.com`). Anything else is `unsupported`.
  */
+/**
+ * Per-host forge overrides from config (`forgeHosts`), set once per run by the
+ * command executor. Lets self-hosted installs on vanity hostnames (no `gitlab`
+ * / `github` in the name) be detected explicitly.
+ */
+let forgeHostOverrides: Record<string, 'github' | 'gitlab'> = {}
+
+export function setForgeHostOverrides(
+  overrides: Record<string, 'github' | 'gitlab'> | undefined
+): void {
+  forgeHostOverrides = {}
+  if (overrides) {
+    for (const [host, provider] of Object.entries(overrides)) {
+      forgeHostOverrides[host.toLowerCase()] = provider
+    }
+  }
+}
+
 export function detectProvider(host: string): GitProviderType {
   const h = host.toLowerCase()
+  if (forgeHostOverrides[h]) return forgeHostOverrides[h]
   if (h === 'github.com') return 'github'
   if (h === 'gitlab.com') return 'gitlab'
   if (h.includes('gitlab')) return 'gitlab'

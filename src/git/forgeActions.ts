@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
-import type { GitProviderType } from './providerData'
+import { getProviderRepositoryForGit, type GitProviderType } from './providerData'
+import { getPullRequestOverview, type PullRequestOverview } from './pullRequestData'
 import type { IssueListFilter, IssueListOverview } from './issuesListData'
 import type {
   PullRequestListFilter,
@@ -44,7 +45,7 @@ import {
 } from './issueActions'
 
 // GitLab implementations.
-import { getMergeRequestList, getGitLabIssueList } from './gitlabListData'
+import { getMergeRequestList, getGitLabIssueList, getMergeRequestOverview } from './gitlabListData'
 import { getMergeRequestDetail, getGitLabIssueDetail } from './gitlabDetailData'
 import {
   addMergeRequestAssignee,
@@ -176,4 +177,15 @@ export function getForgeActions(
   options: { gitlabPath?: string } = {}
 ): ForgeActions {
   return provider === 'gitlab' ? gitlabActions(options.gitlabPath) : githubActions
+}
+
+/**
+ * Current-branch PR/MR overview, dispatched by detecting the provider straight
+ * from `git`. Standalone (not part of the ForgeActions facade) because it is
+ * also called from non-component contexts (boot context load, legacy
+ * interactive log) that don't carry the resolved provider.
+ */
+export async function getForgePullRequestOverview(git: SimpleGit): Promise<PullRequestOverview> {
+  const repo = await getProviderRepositoryForGit(git)
+  return repo?.provider === 'gitlab' ? getMergeRequestOverview(git) : getPullRequestOverview(git)
 }

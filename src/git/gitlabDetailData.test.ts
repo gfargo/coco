@@ -32,7 +32,7 @@ describe('getMergeRequestDetail / getGitLabIssueDetail (#0.70)', () => {
   it('assembles MR detail from the fan-out endpoints', async () => {
     const runner = async (args: string[]): Promise<string> => {
       const endpoint = args[1]
-      if (endpoint.endsWith('/notes')) {
+      if (endpoint.includes('/notes')) {
         return JSON.stringify([{ body: 'c1', created_at: 't', system: false, author: { username: 'a' } }])
       }
       if (endpoint.endsWith('/approvals')) {
@@ -57,7 +57,7 @@ describe('getMergeRequestDetail / getGitLabIssueDetail (#0.70)', () => {
   it('assembles issue detail from issue + notes', async () => {
     const runner = async (args: string[]): Promise<string> => {
       const endpoint = args[1]
-      if (endpoint.endsWith('/notes')) {
+      if (endpoint.includes('/notes')) {
         return JSON.stringify([{ body: 'hi', created_at: 't', system: false, author: { username: 'a' } }])
       }
       return JSON.stringify({ description: 'issue body' })

@@ -179,8 +179,7 @@ import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dr
 import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
-import { getForgeActions } from '../../git/forgeActions'
-import { getPullRequestOverview } from '../../git/pullRequestData'
+import { getForgeActions, getForgePullRequestOverview } from '../../git/forgeActions'
 import { clearGitHubListCache } from '../../git/githubListCache'
 import {
     issueFilterForPreset,
@@ -239,7 +238,7 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
   const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules] =
     await Promise.all([
       safe(getBranchOverview(git)),
-      safe(getPullRequestOverview(git)),
+      safe(getForgePullRequestOverview(git)),
       safe(getTagOverview(git)),
       safe(getWorktreeOverview(git)),
       safe(getStashOverview(git)),
@@ -1438,7 +1437,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       (current) => updateLogInkContextStatus(current, 'pullRequest', 'loading'),
       issuedAtDepth,
     )
-    void safe(getPullRequestOverview(git)).then((value) => {
+    void safe(getForgePullRequestOverview(git)).then((value) => {
       if (!active) return
       setContext(
         (current) => ({

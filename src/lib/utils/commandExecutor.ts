@@ -15,6 +15,7 @@ import {
   setUsageRepoTag,
 } from '../langchain/utils/usageLedger'
 import { resolveRepoIdentifier } from '../../git/repoIdentifier'
+import { setForgeHostOverrides } from '../../git/providerData'
 
 /**
  * Formats a network error with helpful troubleshooting information
@@ -158,6 +159,9 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
     // Results still reach stdout (handleResult / emitJson write directly).
     const quiet = (argv as { quiet?: boolean })?.quiet === true
     const logger = new Logger(quiet ? { ...options, silent: true } : options)
+
+    // Arm self-hosted forge detection (vanity hostnames) for this run.
+    setForgeHostOverrides((options as Config).forgeHosts)
 
     await applyUsageTelemetry(argv, options as Config, logger)
 

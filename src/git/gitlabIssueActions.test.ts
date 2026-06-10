@@ -22,7 +22,7 @@ describe('GitLab issue action arg contracts (#0.70)', () => {
     expect(calls).toEqual([
       ['issue', 'note', '7', '--message', 'hi'],
       ['issue', 'update', '7', '--label', 'bug'],
-      ['issue', 'update', '7', '--assignee', 'bob'],
+      ['issue', 'update', '7', '--assignee', '+bob'],
       ['issue', 'close', '7'],
       ['issue', 'reopen', '7'],
     ])

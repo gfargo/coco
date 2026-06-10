@@ -33,7 +33,8 @@ describe('gitlab endpoint building (#0.70)', () => {
   it('maps issue state open->opened and omits state for all', () => {
     expect(buildIssueEndpoint('g/p', { state: 'open' })).toContain('state=opened')
     expect(buildIssueEndpoint('g/p', { state: 'closed' })).toContain('state=closed')
-    expect(buildIssueEndpoint('g/p', { state: 'all' })).toContain('state=all')
+    // GitLab issues API has no state=all; omit it (returns everything).
+    expect(buildIssueEndpoint('g/p', { state: 'all' })).not.toContain('state=')
     expect(buildIssueEndpoint('g/p', {})).not.toContain('state=')
   })
 })

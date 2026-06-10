@@ -3,7 +3,8 @@ import { LogAiAction, LogAiActionImpact } from '../../git/aiActions'
 import { BranchOverview, BranchRef, getBranchOverview } from '../../git/branchData'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
 import { HistoryCommitRef, ReflogEntry, ResetMode } from '../../git/historyActions'
-import { PullRequestOverview, getPullRequestOverview } from '../../git/pullRequestData'
+import { type PullRequestOverview } from '../../git/pullRequestData'
+import { getForgePullRequestOverview } from '../../git/forgeActions'
 import { StashOverview, getStashOverview } from '../../git/stashData'
 import { WorktreeOverview, getWorktreeOverview } from '../../git/statusData'
 import { WorktreeHunkOverview } from '../../git/statusHunks'
@@ -706,7 +707,7 @@ export async function startInteractiveLog(
       providerOverview,
     ] = await Promise.all([
       getBranchOverview(git),
-      getPullRequestOverview(git),
+      getForgePullRequestOverview(git),
       getTagOverview(git),
       getWorktreeOverview(git),
       getStashOverview(git),

@@ -82,7 +82,7 @@ export async function getMergeRequestDetail(
     const base = `projects/${enc(projectPath)}/merge_requests/${mergeRequestNumber}`
     const [mr, notesOut, approvals] = await Promise.all([
       safeJson<{ description?: string; head_pipeline?: unknown }>(runner, base),
-      runner(['api', `${base}/notes`]).catch(() => ''),
+      runner(['api', `${base}/notes?per_page=100`]).catch(() => ''),
       safeJson<unknown>(runner, `${base}/approvals`),
     ])
 
@@ -112,7 +112,7 @@ export async function getGitLabIssueDetail(
     const base = `projects/${enc(projectPath)}/issues/${issueNumber}`
     const [issue, notesOut] = await Promise.all([
       safeJson<{ description?: string }>(runner, base),
-      runner(['api', `${base}/notes`]).catch(() => ''),
+      runner(['api', `${base}/notes?per_page=100`]).catch(() => ''),
     ])
 
     if (!issue) {

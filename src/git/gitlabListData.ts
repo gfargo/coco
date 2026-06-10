@@ -10,6 +10,7 @@ import type {
   PullRequestListItem,
   PullRequestListOverview,
 } from './pullRequestListData'
+import type { PullRequestInfo, PullRequestOverview } from './pullRequestData'
 
 /**
  * GitLab list loaders. These produce the SAME overview shapes as the GitHub
@@ -170,9 +171,12 @@ export async function getMergeRequestList(
 // ---------------------------------------------------------------------------
 
 function issueStateParam(state: IssueListFilter['state']): string | undefined {
-  if (!state || state === 'all') return state === 'all' ? 'all' : undefined
+  // The GitLab issues API supports only opened/closed; omitting state returns
+  // everything, so `all` (and unset) maps to no param. (MRs differ — their API
+  // does accept state=all, handled by mrStateParam.)
   if (state === 'open') return 'opened'
-  return 'closed'
+  if (state === 'closed') return 'closed'
+  return undefined
 }
 
 function parseIssues(output: string): IssueListItem[] {
@@ -242,6 +246,84 @@ export async function getGitLabIssueList(
       repository: { owner: project.owner, name: project.name },
       filter,
       message: error instanceof Error ? error.message : 'Failed to fetch issue list.',
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Current-branch merge request (single-PR surface parity)
+// ---------------------------------------------------------------------------
+
+function mrToPullRequestInfo(mr: Record<string, unknown>): PullRequestInfo {
+  return {
+    number: Number(mr.iid),
+    title: String(mr.title || ''),
+    url: String(mr.web_url || ''),
+    state: normalizeState(mr.state),
+    isDraft: Boolean(mr.draft ?? mr.work_in_progress),
+    headRefName: String(mr.source_branch || ''),
+    baseRefName: String(mr.target_branch || ''),
+    body: typeof mr.description === 'string' ? mr.description : undefined,
+    author: usernameOf(mr.author),
+    reviewDecision: undefined,
+    mergeable: typeof mr.merge_status === 'string' ? mr.merge_status : undefined,
+    mergeStateStatus:
+      typeof mr.detailed_merge_status === 'string' ? mr.detailed_merge_status : undefined,
+    statusCheckRollup: undefined,
+    reviews: undefined,
+  }
+}
+
+/**
+ * Current-branch merge-request overview — the glab counterpart to
+ * `getPullRequestOverview`, for the single-PR (`g p`) surface. Resolves the open
+ * MR whose source branch is the checked-out branch and maps it to the shared
+ * `PullRequestOverview` shape.
+ */
+export async function getMergeRequestOverview(
+  git: SimpleGit,
+  runner: GlabRunner = defaultGlabRunner
+): Promise<PullRequestOverview> {
+  const [project, branchOut] = await Promise.all([
+    getGitLabProject(git),
+    git.raw(['branch', '--show-current']),
+  ])
+  const currentBranch = branchOut.trim() || undefined
+
+  if (!project) {
+    return { available: false, authenticated: false, currentBranch, message: 'No GitLab remote detected.' }
+  }
+
+  const repository = { owner: project.owner, name: project.name }
+
+  const status = await getGlabStatus(runner)
+  if (status.kind !== 'ok') {
+    return { available: true, authenticated: false, repository, currentBranch, message: describeGlabStatus(status) }
+  }
+
+  if (!currentBranch) {
+    return { available: true, authenticated: true, repository, message: 'No current branch.' }
+  }
+
+  try {
+    const endpoint = `projects/${encodeProjectPath(project.path)}/merge_requests?source_branch=${encodeURIComponent(currentBranch)}&state=opened`
+    const out = (await runner(['api', endpoint])).trim()
+    const mr = (out ? (JSON.parse(out) as Array<Record<string, unknown>>) : [])[0]
+    return {
+      available: true,
+      authenticated: true,
+      repository,
+      currentBranch,
+      currentPullRequest: mr ? mrToPullRequestInfo(mr) : undefined,
+      ...(mr ? {} : { message: `No merge request found for ${currentBranch}.` }),
+    }
+  } catch (error) {
+    return {
+      available: true,
+      authenticated: true,
+      repository,
+      currentBranch,
+      message: error instanceof Error ? error.message : `No merge request found for ${currentBranch}.`,
     }
   }
 }

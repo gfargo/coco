@@ -69,7 +69,8 @@ export function addGitLabIssueAssignee(
   }
   return runGlabAction(
     runner,
-    ['issue', 'update', String(issueNumber), '--assignee', assignee],
+    // `+` prefix ADDS to existing assignees; a bare username would replace them.
+    ['issue', 'update', String(issueNumber), '--assignee', `+${assignee}`],
     () => ({
       ok: true,
       message: `Assigned ${assignee} to issue #${issueNumber}`,

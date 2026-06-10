@@ -36,6 +36,7 @@ describe('buildCreateMergeRequestArgs (#0.70)', () => {
       'T',
       '--description',
       'B',
+      '--push',
       '--yes',
     ])
   })
@@ -96,10 +97,10 @@ describe('MR mutating action arg contracts (#0.70)', () => {
       ['mr', 'merge', '5', '--yes'],
       ['mr', 'approve', '5'],
       ['mr', 'close', '5'],
-      ['mr', 'note', '5', '--message', 'hi'],
-      ['mr', 'note', '5', '--message', 'Requested changes: fix it'],
+      ['mr', 'note', 'create', '5', '--message', 'hi'],
+      ['mr', 'note', 'create', '5', '--message', 'Requested changes: fix it'],
       ['mr', 'update', '5', '--label', 'bug'],
-      ['mr', 'update', '5', '--assignee', 'bob'],
+      ['mr', 'update', '5', '--assignee', '+bob'],
     ])
   })
 
@@ -113,7 +114,7 @@ describe('MR mutating action arg contracts (#0.70)', () => {
       ['mr', 'merge', '--rebase', '--yes'],
       ['mr', 'close'],
       ['mr', 'approve'],
-      ['mr', 'note', '--message', 'hello'],
+      ['mr', 'note', 'create', '--message', 'hello'],
     ])
   })
 

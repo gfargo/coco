@@ -51,6 +51,10 @@ export function buildCreateMergeRequestArgs(input: CreateMergeRequestInput): str
     input.title,
     '--description',
     input.body,
+    // Push the (committed) source branch as part of creation so the MR can be
+    // opened even when the branch isn't on the remote yet — mirrors how the
+    // GitHub flow expects a pushed branch.
+    '--push',
     '--yes',
   ]
 
@@ -149,7 +153,7 @@ export function commentMergeRequestByNumber(
   }
   return runGlabAction(
     runner,
-    ['mr', 'note', String(mergeRequestNumber), '--message', body],
+    ['mr', 'note', 'create', String(mergeRequestNumber), '--message', body],
     (output) => ({
       ok: true,
       message: output.trim() || `Commented on merge request !${mergeRequestNumber}`,
@@ -172,7 +176,7 @@ export function requestChangesMergeRequestByNumber(
   }
   return runGlabAction(
     runner,
-    ['mr', 'note', String(mergeRequestNumber), '--message', `Requested changes: ${body}`],
+    ['mr', 'note', 'create', String(mergeRequestNumber), '--message', `Requested changes: ${body}`],
     (output) => ({
       ok: true,
       message: output.trim() || `Requested changes on merge request !${mergeRequestNumber}`,
@@ -208,7 +212,8 @@ export function addMergeRequestAssignee(
   }
   return runGlabAction(
     runner,
-    ['mr', 'update', String(mergeRequestNumber), '--assignee', assignee],
+    // `+` prefix ADDS to existing assignees; a bare username would replace them.
+    ['mr', 'update', String(mergeRequestNumber), '--assignee', `+${assignee}`],
     () => ({
       ok: true,
       message: `Assigned ${assignee} to merge request !${mergeRequestNumber}`,
@@ -254,7 +259,7 @@ export function commentMergeRequest(
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Comment body required' })
   }
-  return runGlabAction(runner, ['mr', 'note', '--message', body], (output) => ({
+  return runGlabAction(runner, ['mr', 'note', 'create', '--message', body], (output) => ({
     ok: true,
     message: output.trim() || 'Comment added',
   }))
@@ -267,7 +272,7 @@ export function requestChangesMergeRequest(
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Review body required for change-request' })
   }
-  return runGlabAction(runner, ['mr', 'note', '--message', `Requested changes: ${body}`], (output) => ({
+  return runGlabAction(runner, ['mr', 'note', 'create', '--message', `Requested changes: ${body}`], (output) => ({
     ok: true,
     message: output.trim() || 'Requested changes',
   }))
