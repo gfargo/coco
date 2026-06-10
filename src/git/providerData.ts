@@ -114,6 +114,21 @@ export function getProviderRepository(remoteName: string, remoteUrl: string): Pr
   }
 }
 
+/**
+ * Resolve the provider repository directly from a git instance (origin remote,
+ * else the first remote). Pure remote parsing, no network — used by the list
+ * command factory to detect the forge and render the header on the cache-hit
+ * path. Returns undefined when no remote is configured.
+ */
+export async function getProviderRepositoryForGit(
+  git: SimpleGit
+): Promise<ProviderRepository | undefined> {
+  const remotes = await git.getRemotes(true)
+  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
+  const url = remote?.refs.push || remote?.refs.fetch
+  return url ? getProviderRepository(remote.name, url) : undefined
+}
+
 export function buildProviderUrl(
   repository: ProviderRepository,
   target: ProviderUrlTarget
