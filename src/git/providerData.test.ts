@@ -40,12 +40,66 @@ describe('log provider data', () => {
     })
   })
 
-  it('falls back for unsupported providers', () => {
+  it('detects GitLab remotes', () => {
     expect(getProviderRepository('origin', 'git@gitlab.com:gfargo/coco.git')).toEqual({
+      provider: 'gitlab',
+      remote: 'origin',
+      host: 'gitlab.com',
+      owner: 'gfargo',
+      name: 'coco',
+      webUrl: 'https://gitlab.com/gfargo/coco',
+    })
+  })
+
+  it('preserves GitLab subgroup namespaces', () => {
+    expect(getProviderRepository('origin', 'https://gitlab.com/group/subgroup/proj.git')).toEqual({
+      provider: 'gitlab',
+      remote: 'origin',
+      host: 'gitlab.com',
+      owner: 'group/subgroup',
+      name: 'proj',
+      webUrl: 'https://gitlab.com/group/subgroup/proj',
+    })
+  })
+
+  it('treats GitHub Enterprise hosts as github', () => {
+    const repo = getProviderRepository('origin', 'git@github.acme.com:team/app.git')
+    expect(repo.provider).toBe('github')
+    expect(repo.host).toBe('github.acme.com')
+  })
+
+  it('falls back for unsupported hosts', () => {
+    expect(getProviderRepository('origin', 'git@bitbucket.org:gfargo/coco.git')).toEqual({
       provider: 'unsupported',
       remote: 'origin',
-      message: 'Unsupported remote provider for origin.',
+      host: 'bitbucket.org',
+      owner: 'gfargo',
+      name: 'coco',
+      message: 'Unsupported remote host "bitbucket.org" for origin.',
     })
+  })
+
+  it('builds GitLab provider URLs under the /-/ namespace', () => {
+    const gitlab = {
+      provider: 'gitlab' as const,
+      remote: 'origin',
+      host: 'gitlab.com',
+      owner: 'gfargo',
+      name: 'coco',
+      webUrl: 'https://gitlab.com/gfargo/coco',
+    }
+    expect(buildProviderUrl(gitlab, { type: 'branch', branch: 'feat/x' })).toBe(
+      'https://gitlab.com/gfargo/coco/-/tree/feat%2Fx'
+    )
+    expect(buildProviderUrl(gitlab, { type: 'commit', commit: 'abc123' })).toBe(
+      'https://gitlab.com/gfargo/coco/-/commit/abc123'
+    )
+    expect(buildProviderUrl(gitlab, { type: 'pull-request', number: 7 })).toBe(
+      'https://gitlab.com/gfargo/coco/-/merge_requests/7'
+    )
+    expect(buildProviderUrl(gitlab, { type: 'compare', base: 'main', head: 'feat/x' })).toBe(
+      'https://gitlab.com/gfargo/coco/-/compare/main...feat%2Fx'
+    )
   })
 
   it('builds GitHub provider URLs', () => {

@@ -5,13 +5,16 @@ import {
   describeGhStatus,
   getGhStatus,
   parseGitHubRemoteUrl as parseGitHubRemoteUrlBase,
+  parseRemoteUrl,
 } from './githubCli'
 
-export type GitProviderType = 'github' | 'unsupported'
+export type GitProviderType = 'github' | 'gitlab' | 'unsupported'
 
 export type ProviderRepository = {
   provider: GitProviderType
   remote: string
+  /** Lowercased remote host (`github.com`, `gitlab.com`, `ghe.acme.com`, ...). */
+  host?: string
   owner?: string
   name?: string
   webUrl?: string
@@ -62,21 +65,52 @@ export function parseGitHubRemoteUrl(
   }
 }
 
-export function getProviderRepository(remoteName: string, remoteUrl: string): ProviderRepository {
-  const github = parseGitHubRemoteUrl(remoteUrl)
+/**
+ * Map a remote host to a forge. Known hosts win first; unknown self-hosted
+ * hosts fall back to a hostname heuristic (`*gitlab*` -> gitlab, `*github*` ->
+ * github, which also catches GitHub Enterprise hosts named like
+ * `github.acme.com`). Anything else is `unsupported`.
+ */
+export function detectProvider(host: string): GitProviderType {
+  const h = host.toLowerCase()
+  if (h === 'github.com') return 'github'
+  if (h === 'gitlab.com') return 'gitlab'
+  if (h.includes('gitlab')) return 'gitlab'
+  if (h.includes('github')) return 'github'
+  return 'unsupported'
+}
 
-  if (github) {
+export function getProviderRepository(remoteName: string, remoteUrl: string): ProviderRepository {
+  const parsed = parseRemoteUrl(remoteUrl)
+
+  if (!parsed) {
     return {
-      provider: 'github',
+      provider: 'unsupported',
       remote: remoteName,
-      ...github,
+      message: `Unsupported remote provider for ${remoteName}.`,
+    }
+  }
+
+  const provider = detectProvider(parsed.host)
+
+  if (provider === 'unsupported') {
+    return {
+      provider: 'unsupported',
+      remote: remoteName,
+      host: parsed.host,
+      owner: parsed.owner,
+      name: parsed.name,
+      message: `Unsupported remote host "${parsed.host}" for ${remoteName}.`,
     }
   }
 
   return {
-    provider: 'unsupported',
+    provider,
     remote: remoteName,
-    message: `Unsupported remote provider for ${remoteName}.`,
+    host: parsed.host,
+    owner: parsed.owner,
+    name: parsed.name,
+    webUrl: `https://${parsed.host}/${parsed.owner}/${parsed.name}`,
   }
 }
 
@@ -84,27 +118,34 @@ export function buildProviderUrl(
   repository: ProviderRepository,
   target: ProviderUrlTarget
 ): string | undefined {
-  if (repository.provider !== 'github' || !repository.webUrl) {
+  if (repository.provider === 'unsupported' || !repository.webUrl) {
     return undefined
   }
 
+  const base = repository.webUrl
+  // GitLab namespaces every sub-path under `/-/`; GitHub does not.
+  const seg = repository.provider === 'gitlab' ? '/-' : ''
+
   if (target.type === 'repo') {
-    return repository.webUrl
+    return base
   }
 
   if (target.type === 'branch') {
-    return `${repository.webUrl}/tree/${encodeURIComponent(target.branch)}`
+    return `${base}${seg}/tree/${encodeURIComponent(target.branch)}`
   }
 
   if (target.type === 'commit') {
-    return `${repository.webUrl}/commit/${target.commit}`
+    return `${base}${seg}/commit/${target.commit}`
   }
 
   if (target.type === 'pull-request') {
-    return `${repository.webUrl}/pull/${target.number}`
+    // GitLab calls them merge requests and routes them differently.
+    return repository.provider === 'gitlab'
+      ? `${base}/-/merge_requests/${target.number}`
+      : `${base}/pull/${target.number}`
   }
 
-  return `${repository.webUrl}/compare/${encodeURIComponent(target.base)}...${encodeURIComponent(target.head)}`
+  return `${base}${seg}/compare/${encodeURIComponent(target.base)}...${encodeURIComponent(target.head)}`
 }
 
 function parseRepositoryJson(output: string): { defaultBranchRef?: { name?: string } } | undefined {
@@ -242,7 +283,9 @@ export async function getProviderOverview(
     }
   }
 
-  const ghStatus = await getGhStatus(runner)
+  // Probe the repo's own host so GitHub Enterprise remotes are checked against
+  // their server, not hardcoded github.com.
+  const ghStatus = await getGhStatus(runner, repository.host ?? 'github.com')
   if (ghStatus.kind !== 'ok') {
     return {
       repository: {
