@@ -96,6 +96,12 @@ const SITE_RECIPES = [
   'ui-pull-request',
   'ui-pr-triage',
   'ui-issues',
+  // Multi-step TOUR demos — complete-task journeys wired into Key Workflows
+  // (ship / review / recover) and the Workspace section (drive many repos)
+  'demo-tour-ship-change',
+  'demo-tour-review-pr',
+  'demo-tour-find-regression',
+  'demo-tour-workspace',
 ]
 
 /**
@@ -149,6 +155,10 @@ const FILENAME_MAP: Record<string, string[]> = {
   'demo-single-pane': ['demo-single-pane.gif'],
   'demo-conflicts': ['demo-conflicts.gif'],
   'demo-bisect': ['demo-bisect.gif'],
+  'demo-tour-ship-change': ['demo-tour-ship-change.gif'],
+  'demo-tour-review-pr': ['demo-tour-review-pr.gif'],
+  'demo-tour-find-regression': ['demo-tour-find-regression.gif'],
+  'demo-tour-workspace': ['demo-tour-workspace.gif'],
   'ui-single-pane-narrow': ['single-pane-narrow.png'],
   'ui-single-pane-peek': ['single-pane-peek.png'],
   'ui-which-key': ['which-key.png'],
