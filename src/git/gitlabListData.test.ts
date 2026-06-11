@@ -285,4 +285,15 @@ describe('getMergeRequestList / getGitLabIssueList (#0.70)', () => {
     expect(overview.message).toContain('404 Project Not Found')
     expect(overview.pullRequests).toBeUndefined()
   })
+
+  it('scopes the glab auth probe to the remote host (self-hosted GitLab)', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]) => {
+      calls.push(args)
+      return args[0] === 'auth' ? '' : '[]'
+    }
+    await getMergeRequestList(fakeGit('git@gitlab.example.com:group/proj.git'), {}, runner)
+    const authCall = calls.find((a) => a[0] === 'auth')
+    expect(authCall).toEqual(['auth', 'status', '--hostname', 'gitlab.example.com'])
+  })
 })

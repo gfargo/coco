@@ -201,7 +201,7 @@ export async function getMergeRequestList(
     return { available: false, authenticated: false, filter, message: 'No GitLab remote detected.' }
   }
 
-  const status = await getGlabStatus(runner)
+  const status = await getGlabStatus(runner, project.host)
   if (status.kind !== 'ok') {
     return {
       available: true,
@@ -295,7 +295,7 @@ export async function getGitLabIssueList(
     return { available: false, authenticated: false, filter, message: 'No GitLab remote detected.' }
   }
 
-  const status = await getGlabStatus(runner)
+  const status = await getGlabStatus(runner, project.host)
   if (status.kind !== 'ok') {
     return {
       available: true,
@@ -379,7 +379,7 @@ export async function getMergeRequestOverview(
 
   const repository = { owner: project.owner, name: project.name }
 
-  const status = await getGlabStatus(runner)
+  const status = await getGlabStatus(runner, project.host)
   if (status.kind !== 'ok') {
     return { available: true, authenticated: false, repository, currentBranch, message: describeGlabStatus(status) }
   }

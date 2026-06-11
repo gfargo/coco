@@ -90,6 +90,7 @@ describe('getGitLabProject (#0.70)', () => {
       owner: 'group/sub',
       name: 'proj',
       path: 'group/sub/proj',
+      host: 'gitlab.com',
     })
   })
 

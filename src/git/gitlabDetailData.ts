@@ -30,10 +30,8 @@ type GlabNote = {
   author?: { username?: string }
 }
 
-function parseNotes(output: string): IssueComment[] {
-  const trimmed = output.trim()
-  if (!trimmed) return []
-  const notes = JSON.parse(trimmed) as GlabNote[]
+/** Map raw GitLab notes to comments, dropping system (activity) notes. */
+function mapNotes(notes: GlabNote[]): IssueComment[] {
   return notes
     // System notes are activity events (label changes, etc.), not comments.
     .filter((note) => !note.system && (note.body || '').trim())
@@ -42,6 +40,46 @@ function parseNotes(output: string): IssueComment[] {
       body: note.body || '',
       createdAt: note.created_at || '',
     }))
+}
+
+function parseNotes(output: string): IssueComment[] {
+  const trimmed = output.trim()
+  if (!trimmed) return []
+  const raw = JSON.parse(trimmed)
+  // GitLab returns `{ "message": ... }` on errors; treat any non-array as "no
+  // comments" rather than throwing a cryptic "notes.filter is not a function"
+  // that would collapse the entire detail panel.
+  if (!Array.isArray(raw)) return []
+  return mapNotes(raw as GlabNote[])
+}
+
+/**
+ * Page through an MR/issue's notes endpoint. GitLab caps `per_page` at 100, so a
+ * single request silently truncates long discussion threads; accumulate pages
+ * (up to a 2000-note ceiling) until a short page. A failed or malformed page
+ * degrades to whatever was collected rather than failing the whole detail.
+ */
+async function fetchAllNotes(runner: GlabRunner, base: string): Promise<IssueComment[]> {
+  const comments: IssueComment[] = []
+  for (let page = 1; page <= 20; page++) {
+    let out = ''
+    try {
+      out = (await runner(['api', `${base}/notes?per_page=100&page=${page}`])).trim()
+    } catch {
+      break
+    }
+    if (!out) break
+    let raw: unknown
+    try {
+      raw = JSON.parse(out)
+    } catch {
+      break
+    }
+    if (!Array.isArray(raw)) break
+    comments.push(...mapNotes(raw as GlabNote[]))
+    if (raw.length < 100) break
+  }
+  return comments
 }
 
 async function safeJson<T>(runner: GlabRunner, endpoint: string): Promise<T | undefined> {
@@ -66,11 +104,39 @@ function parseApprovalsAsReviews(approvals: unknown): PullRequestReview[] {
     .filter((review) => review.author)
 }
 
+/**
+ * Map a GitLab pipeline status to the GitHub check vocabulary the shared
+ * inspector renderer buckets on (success / failure / pending). Without this,
+ * GitLab's `failed`/`running`/`canceled` fall through to the renderer's "other"
+ * bucket, so a red pipeline shows "1 other" instead of "1 fail".
+ */
+function normalizePipelineConclusion(status: string): string {
+  switch (status) {
+    case 'success':
+      return 'success'
+    case 'failed':
+      return 'failure'
+    case 'canceled':
+      return 'cancelled'
+    case 'running':
+      return 'in_progress'
+    case 'pending':
+    case 'created':
+    case 'scheduled':
+    case 'manual':
+    case 'preparing':
+    case 'waiting_for_resource':
+      return 'pending'
+    default:
+      return status // skipped / unknown → renderer's "other" bucket
+  }
+}
+
 function parsePipelineAsChecks(pipeline: unknown): PullRequestStatusCheck[] {
   const p = pipeline as { status?: string } | null | undefined
   if (!p || typeof p.status !== 'string') return []
   // GitLab pipeline status: success/failed/running/pending/canceled/skipped.
-  return [{ name: 'pipeline', status: p.status, conclusion: p.status }]
+  return [{ name: 'pipeline', status: p.status, conclusion: normalizePipelineConclusion(p.status) }]
 }
 
 export async function getMergeRequestDetail(
@@ -80,9 +146,9 @@ export async function getMergeRequestDetail(
 ): Promise<PullRequestDetailResult> {
   try {
     const base = `projects/${enc(projectPath)}/merge_requests/${mergeRequestNumber}`
-    const [mr, notesOut, approvals] = await Promise.all([
+    const [mr, comments, approvals] = await Promise.all([
       safeJson<{ description?: string; head_pipeline?: unknown }>(runner, base),
-      runner(['api', `${base}/notes?per_page=100`]).catch(() => ''),
+      fetchAllNotes(runner, base),
       safeJson<unknown>(runner, `${base}/approvals`),
     ])
 
@@ -93,7 +159,7 @@ export async function getMergeRequestDetail(
     const detail: PullRequestDetail = {
       number: mergeRequestNumber,
       body: mr.description || '',
-      comments: parseNotes(notesOut),
+      comments,
       reviews: parseApprovalsAsReviews(approvals),
       statusCheckRollup: parsePipelineAsChecks(mr.head_pipeline),
     }
@@ -110,9 +176,9 @@ export async function getGitLabIssueDetail(
 ): Promise<IssueDetailResult> {
   try {
     const base = `projects/${enc(projectPath)}/issues/${issueNumber}`
-    const [issue, notesOut] = await Promise.all([
+    const [issue, comments] = await Promise.all([
       safeJson<{ description?: string }>(runner, base),
-      runner(['api', `${base}/notes?per_page=100`]).catch(() => ''),
+      fetchAllNotes(runner, base),
     ])
 
     if (!issue) {
@@ -122,7 +188,7 @@ export async function getGitLabIssueDetail(
     const detail: IssueDetail = {
       number: issueNumber,
       body: issue.description || '',
-      comments: parseNotes(notesOut),
+      comments,
     }
     return { ok: true, detail }
   } catch (error) {
