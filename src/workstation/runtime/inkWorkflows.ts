@@ -580,6 +580,36 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // #0.71 — submodule maintenance actions. All three are scoped
+      // per-view in inkInput (active only when activeView ===
+      // 'submodules') so their single-letter keys (i / u / s) stay free
+      // elsewhere. Empty `key` keeps them palette-discoverable. None are
+      // destructive — init/update/sync can't lose committed work — so
+      // they run immediately, no y-confirm.
+      id: 'submodule-init',
+      key: '',
+      label: 'Submodule: init',
+      description: 'Register the cursored submodule in .git/config from its .gitmodules entry.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'submodule-update',
+      key: '',
+      label: 'Submodule: update',
+      description: 'Fetch and check out the cursored submodule at the pinned commit (init first if needed).',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'submodule-sync',
+      key: '',
+      label: 'Submodule: sync URL',
+      description: 'Re-sync the cursored submodule’s remote URL from .gitmodules into config.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // #784 — bisect workflow actions. All four are scoped per-view in
       // inkInput (active only when activeView === 'bisect') so the
       // single-letter keys stay free elsewhere. Empty `key` keeps them

@@ -222,6 +222,7 @@ import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart,
 import { getCompareDiff } from '../../git/compareData'
 import { getReflogOverview } from '../../git/reflogData'
 import { checkoutReflogEntry } from '../../git/reflogActions'
+import { initSubmodule, syncSubmodule, updateSubmodule } from '../../git/submoduleActions'
 import { getTagOverview } from '../../git/tagData'
 import { getWorktreeListOverview } from '../../git/worktreeData'
 import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
@@ -3467,6 +3468,32 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!entry) return { ok: false, message: 'No reflog entry selected' }
         return checkoutReflogEntry(git, entry)
       },
+      // #0.71 — submodule maintenance. Resolve the target from the
+      // filtered list so the cursor index lines up with what's on screen
+      // (a filtered-out submodule can never be the action target). The
+      // post-handler refreshContext reloads the submodule overview so the
+      // row's status flag updates after the action lands.
+      'submodule-init': async () => {
+        const entry = filteredSubmoduleList[
+          Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
+        ]
+        if (!entry) return { ok: false, message: 'No submodule selected' }
+        return initSubmodule(git, entry)
+      },
+      'submodule-update': async () => {
+        const entry = filteredSubmoduleList[
+          Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
+        ]
+        if (!entry) return { ok: false, message: 'No submodule selected' }
+        return updateSubmodule(git, entry, { init: true })
+      },
+      'submodule-sync': async () => {
+        const entry = filteredSubmoduleList[
+          Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
+        ]
+        if (!entry) return { ok: false, message: 'No submodule selected' }
+        return syncSubmodule(git, entry)
+      },
       'create-tag-here': async () => {
         const commit = getSelectedInkCommit(state)
         const name = payload?.trim()
@@ -4188,7 +4215,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
     state.branchSort, state.filter, state.selectedBranchIndex,
-    state.selectedStashIndex, state.selectedTagIndex, state.selectedWorktreeListIndex, state.stashDiffRef,
+    state.selectedStashIndex, state.selectedSubmoduleIndex, state.selectedTagIndex,
+    state.selectedWorktreeListIndex, state.stashDiffRef,
     state.statusFilterMask, state.tagSort, state.worktreeCheckoutConflict])
 
   // Resolve the active view's "yank target" (commit hash / branch /

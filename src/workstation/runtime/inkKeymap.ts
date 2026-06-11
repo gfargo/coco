@@ -1327,7 +1327,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.activeView === 'submodules') {
     return {
-      contextual: ['↑/↓ entries', 'y yank path', 'Y yank sha', '/ filter', 'esc back'],
+      contextual: ['↑/↓ entries', 'i init', 'u update', 's sync', 'y yank path', 'Y yank sha', '/ filter', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
