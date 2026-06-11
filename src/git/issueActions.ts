@@ -12,6 +12,7 @@
  */
 
 import { defaultGhRunner, resolveGhActionError, type GhRunner } from './githubCli'
+import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 
 export type IssueActionResult = {
   ok: boolean
@@ -47,7 +48,7 @@ export function commentIssue(
   }
   return runGhAction(
     runner,
-    ['issue', 'comment', String(issueNumber), '--body', body],
+    ['issue', 'comment', String(issueNumber), `--body=${body}`],
     (output) => ({
       ok: true,
       message: output.trim() || `Commented on issue #${issueNumber}`,
@@ -63,9 +64,11 @@ export function addIssueLabel(
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
   }
+  const bad = rejectFlagLike(label, 'Label')
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGhAction(
     runner,
-    ['issue', 'edit', String(issueNumber), '--add-label', label],
+    ['issue', 'edit', String(issueNumber), `--add-label=${label}`],
     () => ({
       ok: true,
       message: `Added label '${label}' to issue #${issueNumber}`,
@@ -81,9 +84,11 @@ export function addIssueAssignee(
   if (!assignee.trim()) {
     return Promise.resolve({ ok: false, message: 'Assignee login required' })
   }
+  const bad = rejectUnsafeUsername(assignee)
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGhAction(
     runner,
-    ['issue', 'edit', String(issueNumber), '--add-assignee', assignee],
+    ['issue', 'edit', String(issueNumber), `--add-assignee=${assignee}`],
     () => ({
       ok: true,
       message: `Assigned ${assignee} to issue #${issueNumber}`,

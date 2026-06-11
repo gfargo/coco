@@ -1,4 +1,5 @@
 import { defaultGlabRunner, resolveGlabActionError, type GlabRunner } from './glabCli'
+import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { PullRequestActionResult } from './pullRequestActions'
 
 /**
@@ -43,14 +44,10 @@ export function buildCreateMergeRequestArgs(input: CreateMergeRequestInput): str
   const args = [
     'mr',
     'create',
-    '--source-branch',
-    input.head,
-    '--target-branch',
-    input.base,
-    '--title',
-    input.title,
-    '--description',
-    input.body,
+    `--source-branch=${input.head}`,
+    `--target-branch=${input.base}`,
+    `--title=${input.title}`,
+    `--description=${input.body}`,
     // Push the (committed) source branch as part of creation so the MR can be
     // opened even when the branch isn't on the remote yet — mirrors how the
     // GitHub flow expects a pushed branch.
@@ -69,6 +66,8 @@ export function createMergeRequest(
   input: CreateMergeRequestInput,
   runner: GlabRunner = defaultGlabRunner
 ): Promise<PullRequestActionResult> {
+  const bad = rejectFlagLike(input.head, 'Branch name') || rejectFlagLike(input.base, 'Branch name')
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGlabAction(runner, buildCreateMergeRequestArgs(input), (output) => {
     const url = parseCreatedMergeRequestUrl(output)
     return {
@@ -153,7 +152,7 @@ export function commentMergeRequestByNumber(
   }
   return runGlabAction(
     runner,
-    ['mr', 'note', 'create', String(mergeRequestNumber), '--message', body],
+    ['mr', 'note', 'create', String(mergeRequestNumber), `--message=${body}`],
     (output) => ({
       ok: true,
       message: output.trim() || `Commented on merge request !${mergeRequestNumber}`,
@@ -176,7 +175,7 @@ export function requestChangesMergeRequestByNumber(
   }
   return runGlabAction(
     runner,
-    ['mr', 'note', 'create', String(mergeRequestNumber), '--message', `Requested changes: ${body}`],
+    ['mr', 'note', 'create', String(mergeRequestNumber), `--message=Requested changes: ${body}`],
     (output) => ({
       ok: true,
       message: output.trim() || `Requested changes on merge request !${mergeRequestNumber}`,
@@ -192,9 +191,11 @@ export function addMergeRequestLabel(
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
   }
+  const bad = rejectFlagLike(label, 'Label')
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGlabAction(
     runner,
-    ['mr', 'update', String(mergeRequestNumber), '--label', label],
+    ['mr', 'update', String(mergeRequestNumber), `--label=${label}`],
     () => ({
       ok: true,
       message: `Added label '${label}' to merge request !${mergeRequestNumber}`,
@@ -210,10 +211,12 @@ export function addMergeRequestAssignee(
   if (!assignee.trim()) {
     return Promise.resolve({ ok: false, message: 'Assignee username required' })
   }
+  const bad = rejectUnsafeUsername(assignee)
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGlabAction(
     runner,
     // `+` prefix ADDS to existing assignees; a bare username would replace them.
-    ['mr', 'update', String(mergeRequestNumber), '--assignee', `+${assignee}`],
+    ['mr', 'update', String(mergeRequestNumber), `--assignee=+${assignee}`],
     () => ({
       ok: true,
       message: `Assigned ${assignee} to merge request !${mergeRequestNumber}`,
@@ -259,7 +262,7 @@ export function commentMergeRequest(
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Comment body required' })
   }
-  return runGlabAction(runner, ['mr', 'note', 'create', '--message', body], (output) => ({
+  return runGlabAction(runner, ['mr', 'note', 'create', `--message=${body}`], (output) => ({
     ok: true,
     message: output.trim() || 'Comment added',
   }))
@@ -272,7 +275,7 @@ export function requestChangesMergeRequest(
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Review body required for change-request' })
   }
-  return runGlabAction(runner, ['mr', 'note', 'create', '--message', `Requested changes: ${body}`], (output) => ({
+  return runGlabAction(runner, ['mr', 'note', 'create', `--message=Requested changes: ${body}`], (output) => ({
     ok: true,
     message: output.trim() || 'Requested changes',
   }))

@@ -23,7 +23,7 @@ describe('issueActions', () => {
         ok: true,
         message: 'https://github.com/gfargo/coco/issues/882#comment-1',
       })
-      expect(runner).toHaveBeenCalledWith(['issue', 'comment', '882', '--body', 'lgtm'])
+      expect(runner).toHaveBeenCalledWith(['issue', 'comment', '882', '--body=lgtm'])
     })
 
     it('falls back to a synthesized message when gh output is empty', async () => {
@@ -75,7 +75,7 @@ describe('issueActions', () => {
         ok: true,
         message: "Added label 'enhancement' to issue #882",
       })
-      expect(runner).toHaveBeenCalledWith(['issue', 'edit', '882', '--add-label', 'enhancement'])
+      expect(runner).toHaveBeenCalledWith(['issue', 'edit', '882', '--add-label=enhancement'])
     })
   })
 
@@ -95,7 +95,22 @@ describe('issueActions', () => {
         ok: true,
         message: 'Assigned @me to issue #882',
       })
-      expect(runner).toHaveBeenCalledWith(['issue', 'edit', '882', '--add-assignee', '@me'])
+      expect(runner).toHaveBeenCalledWith(['issue', 'edit', '882', '--add-assignee=@me'])
+    })
+
+    it('rejects flag-like / comma-bearing logins without invoking gh', async () => {
+      const runner = jest.fn()
+      expect((await addIssueAssignee(882, '-rf', runner)).ok).toBe(false)
+      expect((await addIssueAssignee(882, 'bob,carol', runner)).ok).toBe(false)
+      expect(runner).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('addIssueLabel guards', () => {
+    it('rejects flag-like labels without invoking gh', async () => {
+      const runner = jest.fn()
+      expect((await addIssueLabel(882, '--delete', runner)).ok).toBe(false)
+      expect(runner).not.toHaveBeenCalled()
     })
   })
 })
