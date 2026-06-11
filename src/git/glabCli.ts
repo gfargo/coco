@@ -22,6 +22,8 @@ export type GitLabProject = {
   owner: string
   name: string
   path: string
+  /** Remote host (gitlab.com or a self-hosted instance) for host-scoped auth. */
+  host: string
 }
 
 /**
@@ -62,6 +64,7 @@ export async function getGitLabProject(git: SimpleGit): Promise<GitLabProject | 
     owner: parsed.owner,
     name: parsed.name,
     path: parsed.owner ? `${parsed.owner}/${parsed.name}` : parsed.name,
+    host: parsed.host,
   }
 }
 

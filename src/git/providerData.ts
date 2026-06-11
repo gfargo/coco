@@ -340,7 +340,7 @@ async function getGitLabProviderOverview(
   localDefaultBranch: string | undefined,
   runner: GlabRunner
 ): Promise<ProviderOverview> {
-  const status = await getGlabStatus(runner)
+  const status = await getGlabStatus(runner, repository.host)
   if (status.kind !== 'ok') {
     return {
       repository: { ...repository, defaultBranch: localDefaultBranch },
