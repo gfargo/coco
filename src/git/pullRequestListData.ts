@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { sanitizePullRequestListItem } from './forgeText'
 import {
     defaultGhRunner,
     describeGhStatus,
@@ -182,7 +183,7 @@ export async function getPullRequestList(
       authenticated: true,
       repository,
       filter,
-      pullRequests: parsePullRequestListItems(output),
+      pullRequests: parsePullRequestListItems(output).map(sanitizePullRequestListItem),
     }
   } catch (error) {
     return {

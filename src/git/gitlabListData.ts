@@ -11,6 +11,11 @@ import type {
   PullRequestListOverview,
 } from './pullRequestListData'
 import type { PullRequestInfo, PullRequestOverview } from './pullRequestData'
+import {
+  sanitizeIssueListItem,
+  sanitizePullRequestInfo,
+  sanitizePullRequestListItem,
+} from './forgeText'
 
 /**
  * GitLab list loaders. These produce the SAME overview shapes as the GitHub
@@ -229,7 +234,7 @@ export async function getMergeRequestList(
       authenticated: true,
       repository: { owner: project.owner, name: project.name },
       filter,
-      pullRequests,
+      pullRequests: pullRequests.map(sanitizePullRequestListItem),
     }
   } catch (error) {
     return {
@@ -320,7 +325,7 @@ export async function getGitLabIssueList(
       authenticated: true,
       repository: { owner: project.owner, name: project.name },
       filter,
-      issues,
+      issues: issues.map(sanitizeIssueListItem),
     }
   } catch (error) {
     return {
@@ -397,7 +402,7 @@ export async function getMergeRequestOverview(
       authenticated: true,
       repository,
       currentBranch,
-      currentPullRequest: mr ? mrToPullRequestInfo(mr) : undefined,
+      currentPullRequest: mr ? sanitizePullRequestInfo(mrToPullRequestInfo(mr)) : undefined,
       ...(mr ? {} : { message: `No merge request found for ${currentBranch}.` }),
     }
   } catch (error) {
