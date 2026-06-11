@@ -1,4 +1,5 @@
 import { platform } from 'node:os'
+import { join } from 'node:path'
 import {
   getCacheRootDir,
   getCachedWasmPath,
@@ -35,10 +36,10 @@ describe('cache directory resolution', () => {
     it('is the tree-sitter subdir of the cache root', () => {
       const root = getCacheRootDir()
       const sub = getTreeSitterCacheDir()
-      expect(sub).toBe(`${root}/tree-sitter`.replace(/\//g, platform() === 'win32' ? /[\\/]/.source : '/').replace(/\[.+\]/, '/'))
-      // Loose check that handles platform separator without
-      // rebuilding the path: tree-sitter subdir must startWith
-      // the root and end with `tree-sitter`.
+      // Rebuild with path.join so the separator is OS-native; the
+      // invariant is "the tree-sitter subdir lives directly under the
+      // cache root", not the `/` vs `\` style.
+      expect(sub).toBe(join(root, 'tree-sitter'))
       expect(sub.startsWith(root)).toBe(true)
       expect(sub).toMatch(/tree-sitter$/)
     })

@@ -70,8 +70,13 @@ describe('diffSummaryCache (#845, PR 5)', () => {
 
     it('falls back to ~/.cache/coco when XDG_CACHE_HOME is unset', () => {
       delete process.env.XDG_CACHE_HOME
-      expect(getDiffSummaryCachePath('/repo/x'))
-        .toMatch(new RegExp(`^${os.homedir()}/.cache/coco/diff-summaries/`))
+      // Build the expected prefix with path.join so the separator is
+      // OS-native (POSIX `/` vs Windows `\`) — the invariant under test
+      // is the cache *location*, not the separator style.
+      const expectedDir = path.join(os.homedir(), '.cache', 'coco', 'diff-summaries')
+      const cachePath = getDiffSummaryCachePath('/repo/x')
+      expect(cachePath.startsWith(expectedDir + path.sep)).toBe(true)
+      expect(cachePath).toMatch(/summaries\.[a-f0-9]{16}\.json$/)
     })
   })
 

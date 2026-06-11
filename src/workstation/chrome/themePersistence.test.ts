@@ -1,6 +1,29 @@
-import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+
+// Mock node:fs but keep every real implementation — `writeFileSync` is
+// wrapped in a jest.fn that delegates to the real impl by default, so
+// individual tests can override it (e.g. to simulate an EACCES failure) in
+// a deterministic, OS-agnostic way. Native module properties are
+// non-configurable and the namespace import is getter-only under ts-jest,
+// so neither jest.spyOn(fs, ...) nor direct reassignment works here.
+jest.mock('node:fs', () => {
+  const actual = jest.requireActual('node:fs')
+  return { ...actual, writeFileSync: jest.fn() }
+})
+
+import * as fs from 'node:fs'
+
+const actualFs = jest.requireActual('node:fs') as typeof fs
+const mockedWriteFileSync = fs.writeFileSync as jest.MockedFunction<typeof fs.writeFileSync>
+
+// Default to the real implementation so every other test writes for real;
+// individual tests override this to simulate write failures.
+beforeEach(() => {
+  mockedWriteFileSync.mockImplementation(
+    (...args: Parameters<typeof actualFs.writeFileSync>) => actualFs.writeFileSync(...args)
+  )
+})
 
 import { getSavedThemePreset, getXdgConfigPath, saveThemePreset } from './themePersistence'
 
@@ -93,7 +116,14 @@ describe('theme preset persistence', () => {
   })
 
   it('is best-effort: returns false (no throw) when the path cannot be written', () => {
-    process.env.XDG_CONFIG_HOME = '/dev/null/forbidden'
+    // Force the write to fail deterministically on every platform by
+    // mocking the fs call the writer uses, rather than relying on an
+    // OS-specific "unwritable" path (e.g. `/dev/null/forbidden`, which
+    // is not unwritable on Windows).
+    mockedWriteFileSync.mockImplementation(() => {
+      throw new Error('EACCES: permission denied')
+    })
+
     expect(() => saveThemePreset('gruvbox')).not.toThrow()
     expect(saveThemePreset('gruvbox')).toBe(false)
   })

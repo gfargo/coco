@@ -1,3 +1,5 @@
+import * as path from 'node:path'
+
 import { applyRepoFlag } from './applyRepoFlag'
 
 jest.mock('../../lib/simple-git/getRepo', () => ({
@@ -35,11 +37,16 @@ describe('applyRepoFlag', () => {
   })
 
   it('returns getRepo(absolutePath) and chdirs when --repo is set', () => {
-    applyRepoFlag({ repo: '/tmp/some-repo' })
+    // An already-absolute input is passed through `path.resolve`, which
+    // normalizes to the OS-native form (`/tmp/some-repo` on POSIX,
+    // `<drive>:\tmp\some-repo` on Windows). Build the expectation the
+    // same way so the assertion holds on every platform.
+    const repo = path.resolve('/tmp/some-repo')
+    applyRepoFlag({ repo })
 
     expect(chdirSpy).toHaveBeenCalledTimes(1)
-    expect(chdirSpy).toHaveBeenCalledWith('/tmp/some-repo')
-    expect(mockedGetRepo).toHaveBeenCalledWith('/tmp/some-repo')
+    expect(chdirSpy).toHaveBeenCalledWith(repo)
+    expect(mockedGetRepo).toHaveBeenCalledWith(repo)
   })
 
   it('resolves a relative --repo path to absolute before chdir', () => {
@@ -51,8 +58,11 @@ describe('applyRepoFlag', () => {
 
     expect(chdirSpy).toHaveBeenCalledTimes(1)
     const target = chdirSpy.mock.calls[0][0] as string
-    expect(target.startsWith('/')).toBe(true)
-    expect(target.endsWith('/fixture')).toBe(true)
+    // Assert it was resolved to an absolute, OS-native path ending in
+    // `fixture` — without pinning the POSIX separator so this holds on
+    // Windows too.
+    expect(path.isAbsolute(target)).toBe(true)
+    expect(path.basename(target)).toBe('fixture')
     expect(mockedGetRepo).toHaveBeenCalledWith(target)
   })
 

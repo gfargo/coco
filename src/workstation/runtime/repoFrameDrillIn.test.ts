@@ -1,7 +1,15 @@
+import { join } from 'node:path'
+
 import {
   resolveCommitDiffDrillInTarget,
   resolveSubmoduleViewDrillInTarget,
 } from './repoFrameDrillIn'
+
+// The resolvers build workdirs with `path.join(activeRepoRoot, entry.path)`,
+// so the expected value is OS-native (`/abs/coco/...` on POSIX,
+// `\abs\coco\...` on Windows). Build expectations through `join` too so the
+// assertions are platform-agnostic instead of pinning the POSIX separator.
+const ABS_REPO_ROOT = '/abs/coco'
 
 const baseOverview = {
   hasSubmodules: true,
@@ -71,7 +79,7 @@ describe('resolveCommitDiffDrillInTarget', () => {
     })
     expect(target).toEqual({
       label: 'vendor/lib',
-      workdir: '/abs/coco/vendor/lib',
+      workdir: join(ABS_REPO_ROOT, 'vendor/lib'),
       entryRange: {
         oldSha: '11111111',
         newSha: '22222222',
@@ -92,7 +100,7 @@ describe('resolveCommitDiffDrillInTarget', () => {
       submodules: baseOverview,
       activeRepoRoot: '/abs/coco',
     })
-    expect(target?.workdir).toBe('/abs/coco/packages/tools')
+    expect(target?.workdir).toBe(join(ABS_REPO_ROOT, 'packages/tools'))
     expect(target?.label).toBe('tools')
   })
 
@@ -110,7 +118,7 @@ describe('resolveCommitDiffDrillInTarget', () => {
     })
     expect(target?.entryRange).toBeUndefined()
     expect(target?.label).toBe('vendor/lib')
-    expect(target?.workdir).toBe('/abs/coco/vendor/lib')
+    expect(target?.workdir).toBe(join(ABS_REPO_ROOT, 'vendor/lib'))
   })
 
   it('omits entryRange for a removed submodule (no after sha)', () => {
@@ -199,7 +207,7 @@ describe('resolveSubmoduleViewDrillInTarget (#931 PR 4)', () => {
       activeRepoRoot: '/abs/coco',
     })).toEqual({
       label: 'vendor/lib',
-      workdir: '/abs/coco/vendor/lib',
+      workdir: join(ABS_REPO_ROOT, 'vendor/lib'),
     })
   })
 
@@ -210,7 +218,7 @@ describe('resolveSubmoduleViewDrillInTarget (#931 PR 4)', () => {
       activeRepoRoot: '/abs/coco',
     })).toEqual({
       label: 'tools',
-      workdir: '/abs/coco/packages/tools',
+      workdir: join(ABS_REPO_ROOT, 'packages/tools'),
     })
   })
 
