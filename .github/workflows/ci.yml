@@ -57,6 +57,9 @@ jobs:
   test:
     name: Test (Node ${{ matrix.node-version }} on ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Experimental matrix cells (currently Windows) surface failures
+    # without blocking the PR until they're reliably green.
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -78,6 +81,14 @@ jobs:
           # enough confidence on its own.
           - os: macos-latest
             node-version: 22.22.2
+          # Windows matrix cell (0.71). The workflow has long flagged
+          # path-separator concerns; this exercises them. Marked
+          # experimental (continue-on-error above) so newly-surfaced
+          # Windows-only failures don't block PRs while we stabilize.
+          # Promote to a required cell once it's reliably green.
+          - os: windows-latest
+            node-version: 22.22.2
+            experimental: true
 
     steps:
       - name: Checkout
@@ -204,3 +215,39 @@ jobs:
 
       - name: Run packaged CLI smoke
         run: npm run test:cli
+
+  # Integration tests exercise the real CLI / data paths end-to-end via
+  # the dedicated `test:integration` script (previously unused in CI).
+  # The non-live suite always runs; the live GitLab suite is gated on
+  # COCO_GITLAB_IT + a test project and self-skips unless those repo
+  # secrets are configured, so the default flow needs no GitLab creds.
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Configure git identity
+        # commands.integration spins up temp repos and commits to them.
+        run: |
+          git config --global user.name "Coco CI"
+          git config --global user.email "ci@example.com"
+
+      - name: Run integration tests
+        # Live GitLab tests activate only when these secrets are set;
+        # otherwise they self-skip (describe.skip).
+        env:
+          COCO_GITLAB_IT: ${{ secrets.COCO_GITLAB_IT }}
+          COCO_GITLAB_TEST_PROJECT: ${{ secrets.COCO_GITLAB_TEST_PROJECT }}
+        run: npm run test:integration
