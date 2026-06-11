@@ -15,8 +15,8 @@ import type { PullRequestListItem } from '../../../git/pullRequestListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { forgeNouns } from '../../chrome/forgeNouns'
 import {
-  formatLogInkGitHubNoRemote,
-  formatLogInkGitHubUnauthenticated,
+  formatLogInkForgeNoRemote,
+  formatLogInkForgeUnauthenticated,
   formatLogInkLoading,
   formatLogInkPullRequestTriageEmpty,
 } from '../../chrome/surfaceStates'
@@ -123,13 +123,13 @@ export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): React
     headerRight = 'unavailable'
     bodyLines = [
       h(Text, { key: 'pr-triage-no-remote', dimColor: true },
-        formatLogInkGitHubNoRemote({ resource: nouns.plural })),
+        formatLogInkForgeNoRemote({ resource: nouns.plural, forge: nouns.name })),
     ]
   } else if (!overview.authenticated) {
-    headerRight = 'gh not authenticated'
+    headerRight = `${nouns.cli} not authenticated`
     bodyLines = [
       h(Text, { key: 'pr-triage-unauth', dimColor: true },
-        formatLogInkGitHubUnauthenticated({ resource: nouns.plural })),
+        formatLogInkForgeUnauthenticated({ resource: nouns.plural, cli: nouns.cli, forge: nouns.name })),
     ]
   } else if (overview.message && !overview.pullRequests) {
     headerRight = 'error'

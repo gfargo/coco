@@ -300,10 +300,11 @@ export function formatIssueTriagePreview(
  */
 export function formatPullRequestTriagePreview(
   pr: PullRequestListItem | undefined,
-  detail?: PullRequestDetail
+  detail?: PullRequestDetail,
+  nounLower = 'pull request'
 ): PreviewLine[] {
   if (!pr) {
-    return [dim('Select a pull request to preview.')]
+    return [dim(`Select a ${nounLower} to preview.`)]
   }
 
   const out: PreviewLine[] = [

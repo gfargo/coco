@@ -122,7 +122,7 @@ export function formatLogInkIssuesEmpty({ filter }: LogInkIssuesEmptyArgs): stri
   if (filter.trim()) {
     return `No issues match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No issues match the current GitHub filter (default: open issues).'
+  return 'No issues match the current filter (default: open issues).'
 }
 
 export type LogInkPullRequestTriageEmptyArgs = {
@@ -144,29 +144,38 @@ export function formatLogInkPullRequestTriageEmpty({
   return `No ${noun} match the current filter (default: open).`
 }
 
-export type LogInkGitHubUnauthenticatedArgs = {
-  /** Short noun for the resource: "issues", "pull requests". */
+export type LogInkForgeUnavailableArgs = {
+  /** Short noun for the resource: "issues", "pull requests" / "merge requests". */
   resource: string
+  /** Forge CLI binary ("gh" / "glab"). Defaults to the GitHub wording. */
+  cli?: string
+  /** Forge display name ("GitHub" / "GitLab"). Defaults to GitHub. */
+  forge?: string
 }
 
 /**
- * Surface-level fallback when the GitHub CLI is missing or not
+ * Surface-level fallback when the forge CLI is missing or not
  * authenticated. The triage views (#882) all share this empty-state
  * copy — the underlying problem is the same regardless of which
- * surface the user is on, and the recovery is identical.
+ * surface the user is on, and the recovery is identical. `cli`/`forge`
+ * default to the GitHub wording so GitHub callers stay correct; GitLab
+ * surfaces pass `glab`/`GitLab`.
  */
-export function formatLogInkGitHubUnauthenticated({
+export function formatLogInkForgeUnauthenticated({
   resource,
-}: LogInkGitHubUnauthenticatedArgs): string {
-  return `${resource} require the GitHub CLI. Install \`gh\` and run \`gh auth login\` to enable triage.`
+  cli = 'gh',
+  forge = 'GitHub',
+}: LogInkForgeUnavailableArgs): string {
+  return `${resource} require the ${forge} CLI. Install \`${cli}\` and run \`${cli} auth login\` to enable triage.`
 }
 
 /**
- * Surface-level fallback when the repo has no GitHub remote. Same
- * shared message across the triage surfaces.
+ * Surface-level fallback when the repo has no remote for the active
+ * forge. Same shared message across the triage surfaces.
  */
-export function formatLogInkGitHubNoRemote({
+export function formatLogInkForgeNoRemote({
   resource,
-}: LogInkGitHubUnauthenticatedArgs): string {
-  return `${resource} require a GitHub remote (origin or fallback). None detected for this repo.`
+  forge = 'GitHub',
+}: LogInkForgeUnavailableArgs): string {
+  return `${resource} require a ${forge} remote (origin or fallback). None detected for this repo.`
 }

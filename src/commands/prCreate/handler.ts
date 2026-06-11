@@ -6,6 +6,7 @@ import { getProviderOverview } from '../../git/providerData'
 import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import { createPullRequest, openPullRequest } from '../../git/pullRequestActions'
 import { createMergeRequest, openMergeRequest } from '../../git/mergeRequestActions'
+import { forgeNouns } from '../../workstation/chrome/forgeNouns'
 import { commandExit } from '../../lib/utils/commandExit'
 import { emitJson } from '../../lib/ui/emitJson'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
@@ -30,6 +31,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
 
   const overview = await getProviderOverview(git)
   const provider = overview.repository.provider
+  const nouns = forgeNouns(provider)
 
   if (provider !== 'github' && provider !== 'gitlab') {
     logger.log(
@@ -58,7 +60,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   const base = argv.base || overview.repository.defaultBranch || 'main'
   if (head === base) {
     logger.log(
-      `You're on the base branch ('${base}'). Check out a feature branch before creating a PR.`,
+      `You're on the base branch ('${base}'). Check out a feature branch before creating a ${nouns.abbrev}.`,
       { color: 'yellow' }
     )
     commandExit(1)
@@ -67,7 +69,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
 
   if (overview.currentPullRequest) {
     logger.log(
-      `A pull request already exists for '${head}': #${overview.currentPullRequest.number} (${overview.currentPullRequest.state}).`,
+      `A ${nouns.singularLower} already exists for '${head}': #${overview.currentPullRequest.number} (${overview.currentPullRequest.state}).`,
       { color: 'yellow' }
     )
     commandExit(0)
@@ -86,7 +88,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   if (!title || !body) {
     const generated = await runPullRequestBodyWorkflow({ baseBranch: base })
     if (!generated.ok) {
-      logger.log(generated.message || 'Failed to generate a pull request body.', { color: 'red' })
+      logger.log(generated.message || `Failed to generate a ${nouns.singularLower} body.`, { color: 'red' })
       commandExit(1)
       return
     }
@@ -95,7 +97,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   }
 
   if (!title) {
-    logger.log('Could not produce a pull request title.', { color: 'red' })
+    logger.log(`Could not produce a ${nouns.singularLower} title.`, { color: 'red' })
     commandExit(1)
     return
   }
@@ -119,7 +121,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
     logger.log('')
 
     const choice = await selectPrompt<'create' | 'edit' | 'cancel'>({
-      message: 'Create this pull request?',
+      message: `Create this ${nouns.singularLower}?`,
       choices: [
         { name: '✅ Create', value: 'create' },
         { name: '✏️  Edit & create', value: 'edit' },
@@ -128,7 +130,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
     })
 
     if (choice === 'cancel') {
-      logger.log('Pull request creation cancelled.', { color: 'yellow' })
+      logger.log(`${nouns.singular} creation cancelled.`, { color: 'yellow' })
       commandExit(0)
       return
     }
@@ -140,7 +142,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
       })
       const reparsed = splitTitleBody(edited)
       if (!reparsed.title) {
-        logger.log('Empty title — pull request creation cancelled.', { color: 'yellow' })
+        logger.log(`Empty title — ${nouns.singularLower} creation cancelled.`, { color: 'yellow' })
         commandExit(0)
         return
       }

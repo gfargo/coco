@@ -90,9 +90,12 @@ export function formatIssueList(items: IssueListItem[]): string {
     .join('\n')
 }
 
-export function formatPullRequestList(items: PullRequestListItem[]): string {
+export function formatPullRequestList(
+  items: PullRequestListItem[],
+  nounLower = 'pull request'
+): string {
   if (items.length === 0) {
-    return chalk.dim('No pull requests match the current filter.')
+    return chalk.dim(`No ${nounLower}s match the current filter.`)
   }
 
   const numberWidth = Math.max(...items.map((i) => `#${i.number}`.length))

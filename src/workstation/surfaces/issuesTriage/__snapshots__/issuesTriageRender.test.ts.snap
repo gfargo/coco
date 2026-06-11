@@ -26,7 +26,7 @@ exports[`renderIssuesTriageSurface structural snapshot — empty list 1`] = `
   <Text
     dimColor={true}
   >
-    No issues match the current GitHub filter (default: open issues).
+    No issues match the current filter (default: open issues).
   </Text>
 </Box>
 `;

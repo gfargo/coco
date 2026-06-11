@@ -982,5 +982,5 @@ export function renderPullRequestTriagePreviewPanel(
     ? context.pullRequestDetailByNumber?.get(pr.number)
     : undefined
   return renderPreviewPanel(h, { Box, Text }, `${nouns.singular} preview`,
-    formatPullRequestTriagePreview(pr, detail), width, theme, focused)
+    formatPullRequestTriagePreview(pr, detail, nouns.singularLower), width, theme, focused)
 }

@@ -90,6 +90,7 @@ import {
     getInspectorActionsForState,
     getLogInkInputEvents,
 } from '../../workstation/runtime/inkInput'
+import { forgeNouns } from '../chrome/forgeNouns'
 import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
 import { createLogInkTheme, type LogInkThemePreset } from '../chrome/theme'
 import { saveThemePreset } from '../chrome/themePersistence'
@@ -2271,9 +2272,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // lands in a follow-up if hard cancel becomes a request.
   const pullRequestBodyCancelRef = React.useRef<{ cancelled: boolean } | null>(null)
   const startCreatePullRequest = React.useCallback(async () => {
+    const nouns = forgeNouns(forgeProvider)
     const head = context.branches?.currentBranch || context.provider?.currentBranch
     if (!head) {
-      dispatch({ type: 'setStatus', value: 'No current branch to create a PR from.', kind: 'warning' })
+      dispatch({ type: 'setStatus', value: `No current branch to create a ${nouns.abbrev} from.`, kind: 'warning' })
       return
     }
     const defaultBranch = context.provider?.repository.defaultBranch
@@ -2294,8 +2296,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'setStatus',
         value: existing
-          ? `PR #${existing.number} already open for ${head}. Use the PR view to manage it.`
-          : `A pull request is already open for ${head}.`,
+          ? `${nouns.abbrev} #${existing.number} already open for ${head}. Use the ${nouns.abbrev} view to manage it.`
+          : `A ${nouns.singularLower} is already open for ${head}.`,
         kind: 'warning',
       })
       return
@@ -2317,7 +2319,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // misled into thinking they're saving tokens.
     dispatch({
       type: 'setStatus',
-      value: `generating PR body from changelog (vs ${defaultBranch}) — Esc to skip prompt`,
+      value: `generating ${nouns.abbrev} body from changelog (vs ${defaultBranch}) — Esc to skip prompt`,
       loading: true,
     })
 
@@ -2330,7 +2332,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // already settled — its result is discarded. Hard cancel
       // (aborting the HTTP request mid-flight) is a follow-up.
       if (cancelHandle.cancelled) {
-        dispatch({ type: 'setStatus', value: 'PR draft cancelled.' })
+        dispatch({ type: 'setStatus', value: `${nouns.abbrev} draft cancelled.` })
         return
       }
 
@@ -2343,9 +2345,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       const initial = initialBody ? `${initialTitle}\n\n${initialBody}` : initialTitle
 
       if (!body.ok) {
-        dispatch({ type: 'setStatus', value: `PR body generation failed: ${body.message}. Edit manually.`, kind: 'error' })
+        dispatch({ type: 'setStatus', value: `${nouns.abbrev} body generation failed: ${body.message}. Edit manually.`, kind: 'error' })
       } else {
-        dispatch({ type: 'setStatus', value: 'PR body drafted — review and Ctrl+D to submit.', kind: 'success' })
+        dispatch({ type: 'setStatus', value: `${nouns.abbrev} body drafted — review and Ctrl+D to submit.`, kind: 'success' })
       }
 
       // Audit finding #11: clear the pending flag BEFORE opening the
@@ -2361,7 +2363,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       dispatch({
         type: 'openInputPrompt',
         kind: 'create-pr',
-        label: `Create PR: ${head} → ${defaultBranch}  (line 1 title · rest body · Enter newline · Ctrl+D submit)`,
+        label: `Create ${nouns.abbrev}: ${head} → ${defaultBranch}  (line 1 title · rest body · Enter newline · Ctrl+D submit)`,
         initial,
         multiline: true,
       })
@@ -2384,6 +2386,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context.provider?.currentPullRequest,
     context.provider?.repository.defaultBranch,
     context.pullRequest?.currentPullRequest,
+    forgeProvider,
     dispatch,
   ])
 
@@ -3613,8 +3616,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       },
       'open-pr': async () => {
         const repo = context.provider?.repository
-        if (!repo || repo.provider !== 'github' || !repo.owner || !repo.name) {
-          return { ok: false, message: 'No GitHub remote detected for this repo' }
+        // Any detected forge works here: buildProviderUrl emits the correct
+        // GitHub or GitLab web URLs. Only reject genuinely unsupported remotes.
+        if (!repo || repo.provider === 'unsupported' || !repo.owner || !repo.name) {
+          return { ok: false, message: 'No supported forge remote detected for this repo' }
         }
         // History view: prefer the cursored commit's URL so `O` from
         // a commit context lands the user on the commit page rather
@@ -3718,17 +3723,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         // The input-prompt submit handler validates non-empty title
         // already; this is the defensive belt-and-suspenders for
         // future palette callers passing in a raw payload.
+        const nouns = forgeNouns(forgeProvider)
         const text = (payload || '').trim()
         if (!text) {
-          return { ok: false, message: 'Pull request title is required (first line of the prompt).' }
+          return { ok: false, message: `${nouns.singular} title is required (first line of the prompt).` }
         }
         const lines = text.split('\n')
         const title = lines[0].trim()
         if (!title) {
-          return { ok: false, message: 'Pull request title cannot be blank.' }
+          return { ok: false, message: `${nouns.singular} title cannot be blank.` }
         }
         // Body: lines 2+, with the leading blank line tolerated. Empty
-        // body is allowed — GitHub renders an empty PR body fine.
+        // body is allowed — the forge renders an empty body fine.
         const body = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd()
         const head = context.branches?.currentBranch || context.provider?.currentBranch
         const base = context.provider?.repository.defaultBranch
@@ -3736,7 +3742,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           return { ok: false, message: 'No current branch detected.' }
         }
         if (!base) {
-          return { ok: false, message: 'No default branch detected. Configure the GitHub remote.' }
+          return { ok: false, message: `No default branch detected. Configure the ${nouns.name} remote.` }
         }
         return forge.createPullRequest({ base, head, title, body })
       },

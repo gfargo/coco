@@ -15,6 +15,10 @@ export type ForgeNouns = {
   plural: string
   singularLower: string
   pluralLower: string
+  /** The forge's CLI binary ("gh" / "glab") for install/auth hints. */
+  cli: string
+  /** Human display name of the forge ("GitHub" / "GitLab"). */
+  name: string
 }
 
 export function forgeNouns(provider: GitProviderType | undefined): ForgeNouns {
@@ -25,6 +29,8 @@ export function forgeNouns(provider: GitProviderType | undefined): ForgeNouns {
       plural: 'Merge requests',
       singularLower: 'merge request',
       pluralLower: 'merge requests',
+      cli: 'glab',
+      name: 'GitLab',
     }
   }
   return {
@@ -33,5 +39,7 @@ export function forgeNouns(provider: GitProviderType | undefined): ForgeNouns {
     plural: 'Pull requests',
     singularLower: 'pull request',
     pluralLower: 'pull requests',
+    cli: 'gh',
+    name: 'GitHub',
   }
 }

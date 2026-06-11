@@ -53,6 +53,11 @@ export type GitHubListCommandSpec<
   kind: Cached['kind']
   /** Singular noun for the count line, e.g. 'issue' | 'pull request'. */
   noun: string
+  /**
+   * Forge-specific singular noun used when the detected remote is GitLab
+   * (e.g. 'merge request'). Falls back to `noun` when unset.
+   */
+  gitlabNoun?: string
   /** Short label for the auth hint, e.g. 'issue triage' | 'PR triage'. */
   triageLabel: string
   buildFilter: (argv: Argv) => Filter
@@ -60,7 +65,8 @@ export type GitHubListCommandSpec<
   fetch: (git: SimpleGit, filter: Filter, provider: GitProviderType | undefined) => Promise<Overview>
   extractItems: (overview: Overview) => Item[] | undefined
   toCachePayload: (items: Item[]) => Cached
-  formatList: (items: Item[]) => string
+  /** Render the list body. `nounLower` is the forge-aware singular noun. */
+  formatList: (items: Item[], nounLower?: string) => string
   summarizeFilter: (filter: Filter) => string[]
 }
 
@@ -152,6 +158,9 @@ export function createGitHubListHandler<
       return
     }
 
+    const listNoun =
+      provider === 'gitlab' && spec.gitlabNoun ? spec.gitlabNoun : spec.noun
+
     if (repository?.owner && repository?.name) {
       const filterParts = spec.summarizeFilter(filter)
       const suffix = filterParts.length ? chalk.dim(` (${filterParts.join(', ')})`) : ''
@@ -161,13 +170,13 @@ export function createGitHubListHandler<
           : ''
       logger.log(
         chalk.bold(`${repository.owner}/${repository.name}`) +
-          chalk.dim(` · ${items.length} ${spec.noun}${items.length === 1 ? '' : 's'}`) +
+          chalk.dim(` · ${items.length} ${listNoun}${items.length === 1 ? '' : 's'}`) +
           suffix +
           cacheTag
       )
       logger.log('')
     }
 
-    logger.log(spec.formatList(items))
+    logger.log(spec.formatList(items, listNoun))
   }
 }
