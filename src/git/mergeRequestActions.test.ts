@@ -28,14 +28,10 @@ describe('buildCreateMergeRequestArgs (#0.70)', () => {
     ).toEqual([
       'mr',
       'create',
-      '--source-branch',
-      'feature/x',
-      '--target-branch',
-      'main',
-      '--title',
-      'T',
-      '--description',
-      'B',
+      '--source-branch=feature/x',
+      '--target-branch=main',
+      '--title=T',
+      '--description=B',
       '--push',
       '--yes',
     ])
@@ -97,10 +93,10 @@ describe('MR mutating action arg contracts (#0.70)', () => {
       ['mr', 'merge', '5', '--yes'],
       ['mr', 'approve', '5'],
       ['mr', 'close', '5'],
-      ['mr', 'note', 'create', '5', '--message', 'hi'],
-      ['mr', 'note', 'create', '5', '--message', 'Requested changes: fix it'],
-      ['mr', 'update', '5', '--label', 'bug'],
-      ['mr', 'update', '5', '--assignee', '+bob'],
+      ['mr', 'note', 'create', '5', '--message=hi'],
+      ['mr', 'note', 'create', '5', '--message=Requested changes: fix it'],
+      ['mr', 'update', '5', '--label=bug'],
+      ['mr', 'update', '5', '--assignee=+bob'],
     ])
   })
 
@@ -114,7 +110,7 @@ describe('MR mutating action arg contracts (#0.70)', () => {
       ['mr', 'merge', '--rebase', '--yes'],
       ['mr', 'close'],
       ['mr', 'approve'],
-      ['mr', 'note', 'create', '--message', 'hello'],
+      ['mr', 'note', 'create', '--message=hello'],
     ])
   })
 
@@ -122,5 +118,14 @@ describe('MR mutating action arg contracts (#0.70)', () => {
     expect((await commentMergeRequestByNumber(5, '  ')).ok).toBe(false)
     expect((await addMergeRequestLabel(5, '')).ok).toBe(false)
     expect((await addMergeRequestAssignee(5, '')).ok).toBe(false)
+  })
+
+  it('rejects flag-like / unsafe arg shapes without invoking glab', async () => {
+    const { calls, runner } = capturingRunner()
+    expect((await addMergeRequestLabel(5, '--delete', runner)).ok).toBe(false)
+    expect((await addMergeRequestAssignee(5, '-rf', runner)).ok).toBe(false)
+    expect((await addMergeRequestAssignee(5, 'bob,carol', runner)).ok).toBe(false)
+    expect((await createMergeRequest({ base: 'main', head: '--foo', title: 'T', body: 'B' }, runner)).ok).toBe(false)
+    expect(calls).toEqual([])
   })
 })

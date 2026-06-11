@@ -1,4 +1,5 @@
 import { defaultGlabRunner, resolveGlabActionError, type GlabRunner } from './glabCli'
+import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { IssueActionResult } from './issueActions'
 
 /**
@@ -33,7 +34,7 @@ export function commentGitLabIssue(
   }
   return runGlabAction(
     runner,
-    ['issue', 'note', String(issueNumber), '--message', body],
+    ['issue', 'note', String(issueNumber), `--message=${body}`],
     (output) => ({
       ok: true,
       message: output.trim() || `Commented on issue #${issueNumber}`,
@@ -49,9 +50,11 @@ export function addGitLabIssueLabel(
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
   }
+  const bad = rejectFlagLike(label, 'Label')
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGlabAction(
     runner,
-    ['issue', 'update', String(issueNumber), '--label', label],
+    ['issue', 'update', String(issueNumber), `--label=${label}`],
     () => ({
       ok: true,
       message: `Added label '${label}' to issue #${issueNumber}`,
@@ -67,10 +70,12 @@ export function addGitLabIssueAssignee(
   if (!assignee.trim()) {
     return Promise.resolve({ ok: false, message: 'Assignee username required' })
   }
+  const bad = rejectUnsafeUsername(assignee)
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGlabAction(
     runner,
     // `+` prefix ADDS to existing assignees; a bare username would replace them.
-    ['issue', 'update', String(issueNumber), '--assignee', `+${assignee}`],
+    ['issue', 'update', String(issueNumber), `--assignee=+${assignee}`],
     () => ({
       ok: true,
       message: `Assigned ${assignee} to issue #${issueNumber}`,

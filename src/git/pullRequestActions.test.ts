@@ -28,14 +28,10 @@ describe('log pull request actions', () => {
     })).toEqual([
       'pr',
       'create',
-      '--base',
-      'main',
-      '--head',
-      'feature/pr',
-      '--title',
-      'Add PR workflow',
-      '--body',
-      'Generated body',
+      '--base=main',
+      '--head=feature/pr',
+      '--title=Add PR workflow',
+      '--body=Generated body',
     ])
 
     expect(buildCreatePullRequestArgs({
@@ -69,6 +65,13 @@ describe('log pull request actions', () => {
       url: 'https://github.com/gfargo/coco/pull/123',
     })
     expect(runner).toHaveBeenLastCalledWith(['pr', 'view', '--web'])
+  })
+
+  it('rejects flag-like branch names on create without invoking gh', async () => {
+    const runner = jest.fn()
+    expect((await createPullRequest({ base: 'main', head: '--foo', title: 'T', body: 'B' }, runner)).ok).toBe(false)
+    expect((await createPullRequest({ base: '-x', head: 'feature/pr', title: 'T', body: 'B' }, runner)).ok).toBe(false)
+    expect(runner).not.toHaveBeenCalled()
   })
 
   // #783 — full PR action panel. Each action wraps a single
@@ -119,14 +122,14 @@ describe('log pull request actions', () => {
         message: 'Requested changes',
       })
       expect(runner).toHaveBeenLastCalledWith([
-        'pr', 'review', '--request-changes', '--body', 'please address X',
+        'pr', 'review', '--request-changes', '--body=please address X',
       ])
 
       await expect(commentPullRequest('lgtm', runner)).resolves.toEqual({
         ok: true,
         message: 'Comment added',
       })
-      expect(runner).toHaveBeenLastCalledWith(['pr', 'comment', '--body', 'lgtm'])
+      expect(runner).toHaveBeenLastCalledWith(['pr', 'comment', '--body=lgtm'])
     })
 
     it('rejects empty bodies for request-changes and comment without invoking gh', async () => {
@@ -198,7 +201,7 @@ describe('triage-by-number PR actions (#882 phase 4)', () => {
         ok: true,
         message: 'Commented on pull request #962',
       })
-      expect(runner).toHaveBeenCalledWith(['pr', 'comment', '962', '--body', 'lgtm'])
+      expect(runner).toHaveBeenCalledWith(['pr', 'comment', '962', '--body=lgtm'])
     })
   })
 
@@ -218,9 +221,15 @@ describe('triage-by-number PR actions (#882 phase 4)', () => {
         ok: true,
         message: "Added label 'enhancement' to pull request #962",
       })
-      expect(runner).toHaveBeenCalledWith(['pr', 'edit', '962', '--add-label', 'enhancement'])
+      expect(runner).toHaveBeenCalledWith(['pr', 'edit', '962', '--add-label=enhancement'])
     })
-  })
+
+    it('rejects flag-like labels without invoking gh', async () => {
+      const runner = jest.fn()
+      expect((await addPullRequestLabel(962, '--delete', runner)).ok).toBe(false)
+      expect(runner).not.toHaveBeenCalled()
+    })
+})
 
   describe('addPullRequestAssignee', () => {
     it('rejects empty assignees', async () => {
@@ -237,7 +246,14 @@ describe('triage-by-number PR actions (#882 phase 4)', () => {
         ok: true,
         message: 'Assigned @me to pull request #962',
       })
-      expect(runner).toHaveBeenCalledWith(['pr', 'edit', '962', '--add-assignee', '@me'])
+      expect(runner).toHaveBeenCalledWith(['pr', 'edit', '962', '--add-assignee=@me'])
+    })
+
+    it('rejects flag-like / comma-bearing logins without invoking gh', async () => {
+      const runner = jest.fn()
+      expect((await addPullRequestAssignee(962, '-rf', runner)).ok).toBe(false)
+      expect((await addPullRequestAssignee(962, 'bob,carol', runner)).ok).toBe(false)
+      expect(runner).not.toHaveBeenCalled()
     })
 
     it('surfaces gh errors as ok: false', async () => {
@@ -321,7 +337,7 @@ describe('destructive PR by-number actions (#882 phase 5)', () => {
         message: 'Requested changes on pull request #962',
       })
       expect(runner).toHaveBeenCalledWith([
-        'pr', 'review', '962', '--request-changes', '--body', 'please address X',
+        'pr', 'review', '962', '--request-changes', '--body=please address X',
       ])
     })
   })

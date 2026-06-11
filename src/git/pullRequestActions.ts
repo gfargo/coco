@@ -1,5 +1,6 @@
 import { GhRunner, defaultGhRunner } from './pullRequestData'
 import { resolveGhActionError } from './githubCli'
+import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 
 export type PullRequestActionResult = {
   ok: boolean
@@ -45,14 +46,10 @@ export function buildCreatePullRequestArgs(input: CreatePullRequestInput): strin
   const args = [
     'pr',
     'create',
-    '--base',
-    input.base,
-    '--head',
-    input.head,
-    '--title',
-    input.title,
-    '--body',
-    input.body,
+    `--base=${input.base}`,
+    `--head=${input.head}`,
+    `--title=${input.title}`,
+    `--body=${input.body}`,
   ]
 
   if (input.draft) {
@@ -66,6 +63,8 @@ export function createPullRequest(
   input: CreatePullRequestInput,
   runner: GhRunner = defaultGhRunner
 ): Promise<PullRequestActionResult> {
+  const bad = rejectFlagLike(input.head, 'Branch name') || rejectFlagLike(input.base, 'Branch name')
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGhAction(runner, buildCreatePullRequestArgs(input), (output) => {
     const url = parseCreatedPullRequestUrl(output)
 
@@ -151,7 +150,7 @@ export function requestChangesPullRequest(
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Review body required for change-request' })
   }
-  return runGhAction(runner, ['pr', 'review', '--request-changes', '--body', body], (output) => ({
+  return runGhAction(runner, ['pr', 'review', '--request-changes', `--body=${body}`], (output) => ({
     ok: true,
     message: output.trim() || 'Requested changes',
   }))
@@ -164,7 +163,7 @@ export function commentPullRequest(
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Comment body required' })
   }
-  return runGhAction(runner, ['pr', 'comment', '--body', body], (output) => ({
+  return runGhAction(runner, ['pr', 'comment', `--body=${body}`], (output) => ({
     ok: true,
     message: output.trim() || 'Comment added',
   }))
@@ -189,7 +188,7 @@ export function commentPullRequestByNumber(
   }
   return runGhAction(
     runner,
-    ['pr', 'comment', String(pullRequestNumber), '--body', body],
+    ['pr', 'comment', String(pullRequestNumber), `--body=${body}`],
     (output) => ({
       ok: true,
       message: output.trim() || `Commented on pull request #${pullRequestNumber}`,
@@ -205,9 +204,11 @@ export function addPullRequestLabel(
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
   }
+  const bad = rejectFlagLike(label, 'Label')
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGhAction(
     runner,
-    ['pr', 'edit', String(pullRequestNumber), '--add-label', label],
+    ['pr', 'edit', String(pullRequestNumber), `--add-label=${label}`],
     () => ({
       ok: true,
       message: `Added label '${label}' to pull request #${pullRequestNumber}`,
@@ -223,9 +224,11 @@ export function addPullRequestAssignee(
   if (!assignee.trim()) {
     return Promise.resolve({ ok: false, message: 'Assignee login required' })
   }
+  const bad = rejectUnsafeUsername(assignee)
+  if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGhAction(
     runner,
-    ['pr', 'edit', String(pullRequestNumber), '--add-assignee', assignee],
+    ['pr', 'edit', String(pullRequestNumber), `--add-assignee=${assignee}`],
     () => ({
       ok: true,
       message: `Assigned ${assignee} to pull request #${pullRequestNumber}`,
@@ -294,7 +297,7 @@ export function requestChangesPullRequestByNumber(
   }
   return runGhAction(
     runner,
-    ['pr', 'review', String(pullRequestNumber), '--request-changes', '--body', body],
+    ['pr', 'review', String(pullRequestNumber), '--request-changes', `--body=${body}`],
     (output) => ({
       ok: true,
       message:

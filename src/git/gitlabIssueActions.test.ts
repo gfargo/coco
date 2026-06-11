@@ -20,9 +20,9 @@ describe('GitLab issue action arg contracts (#0.70)', () => {
     await closeGitLabIssue(7, runner)
     await reopenGitLabIssue(7, runner)
     expect(calls).toEqual([
-      ['issue', 'note', '7', '--message', 'hi'],
-      ['issue', 'update', '7', '--label', 'bug'],
-      ['issue', 'update', '7', '--assignee', '+bob'],
+      ['issue', 'note', '7', '--message=hi'],
+      ['issue', 'update', '7', '--label=bug'],
+      ['issue', 'update', '7', '--assignee=+bob'],
       ['issue', 'close', '7'],
       ['issue', 'reopen', '7'],
     ])
@@ -33,6 +33,14 @@ describe('GitLab issue action arg contracts (#0.70)', () => {
     expect((await commentGitLabIssue(7, '   ')).ok).toBe(false)
     expect((await addGitLabIssueLabel(7, '')).ok).toBe(false)
     expect((await addGitLabIssueAssignee(7, '')).ok).toBe(false)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('rejects flag-like / unsafe arg shapes without shelling out', async () => {
+    const { calls, runner } = capturingRunner()
+    expect((await addGitLabIssueLabel(7, '--delete', runner)).ok).toBe(false)
+    expect((await addGitLabIssueAssignee(7, '-rf', runner)).ok).toBe(false)
+    expect((await addGitLabIssueAssignee(7, 'bob,carol', runner)).ok).toBe(false)
     expect(calls).toHaveLength(0)
   })
 
