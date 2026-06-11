@@ -28,12 +28,13 @@ function parseCreatedMergeRequestUrl(output: string): string | undefined {
 async function runGlabAction(
   runner: GlabRunner,
   args: string[],
-  onSuccess: (output: string) => PullRequestActionResult
+  onSuccess: (output: string) => PullRequestActionResult,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   try {
     return onSuccess(await runner(args))
   } catch (error) {
-    const { message, details } = await resolveGlabActionError(error, runner)
+    const { message, details } = await resolveGlabActionError(error, runner, hostname)
     return { ok: false, message, ...(details && details.length ? { details } : {}) }
   }
 }
@@ -64,7 +65,8 @@ export function buildCreateMergeRequestArgs(input: CreateMergeRequestInput): str
 
 export function createMergeRequest(
   input: CreateMergeRequestInput,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   const bad = rejectFlagLike(input.head, 'Branch name') || rejectFlagLike(input.base, 'Branch name')
   if (bad) return Promise.resolve({ ok: false, message: bad })
@@ -75,18 +77,19 @@ export function createMergeRequest(
       message: url ? `Created merge request: ${url}` : 'Created merge request',
       url,
     }
-  })
+  }, hostname)
 }
 
 export function openMergeRequest(
   url: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   return runGlabAction(runner, ['mr', 'view', '--web'], () => ({
     ok: true,
     message: `Opened merge request: ${url}`,
     url,
-  }))
+  }), hostname)
 }
 
 /**
@@ -110,7 +113,8 @@ function mergeStrategyFlags(strategy: MergeRequestMergeStrategy): string[] {
 export function mergeMergeRequestByNumber(
   mergeRequestNumber: number,
   strategy: MergeRequestMergeStrategy,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   return runGlabAction(
     runner,
@@ -118,34 +122,48 @@ export function mergeMergeRequestByNumber(
     (output) => ({
       ok: true,
       message: output.trim() || `Merged merge request !${mergeRequestNumber} with ${strategy}`,
-    })
+    }),
+    hostname
   )
 }
 
 export function approveMergeRequestByNumber(
   mergeRequestNumber: number,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
-  return runGlabAction(runner, ['mr', 'approve', String(mergeRequestNumber)], (output) => ({
-    ok: true,
-    message: output.trim() || `Approved merge request !${mergeRequestNumber}`,
-  }))
+  return runGlabAction(
+    runner,
+    ['mr', 'approve', String(mergeRequestNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Approved merge request !${mergeRequestNumber}`,
+    }),
+    hostname
+  )
 }
 
 export function closeMergeRequestByNumber(
   mergeRequestNumber: number,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
-  return runGlabAction(runner, ['mr', 'close', String(mergeRequestNumber)], (output) => ({
-    ok: true,
-    message: output.trim() || `Closed merge request !${mergeRequestNumber}`,
-  }))
+  return runGlabAction(
+    runner,
+    ['mr', 'close', String(mergeRequestNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Closed merge request !${mergeRequestNumber}`,
+    }),
+    hostname
+  )
 }
 
 export function commentMergeRequestByNumber(
   mergeRequestNumber: number,
   body: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Comment body required' })
@@ -156,7 +174,8 @@ export function commentMergeRequestByNumber(
     (output) => ({
       ok: true,
       message: output.trim() || `Commented on merge request !${mergeRequestNumber}`,
-    })
+    }),
+    hostname
   )
 }
 
@@ -168,7 +187,8 @@ export function commentMergeRequestByNumber(
 export function requestChangesMergeRequestByNumber(
   mergeRequestNumber: number,
   body: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Review body required for change-request' })
@@ -179,14 +199,16 @@ export function requestChangesMergeRequestByNumber(
     (output) => ({
       ok: true,
       message: output.trim() || `Requested changes on merge request !${mergeRequestNumber}`,
-    })
+    }),
+    hostname
   )
 }
 
 export function addMergeRequestLabel(
   mergeRequestNumber: number,
   label: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
@@ -199,14 +221,16 @@ export function addMergeRequestLabel(
     () => ({
       ok: true,
       message: `Added label '${label}' to merge request !${mergeRequestNumber}`,
-    })
+    }),
+    hostname
   )
 }
 
 export function addMergeRequestAssignee(
   mergeRequestNumber: number,
   assignee: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   if (!assignee.trim()) {
     return Promise.resolve({ ok: false, message: 'Assignee username required' })
@@ -220,7 +244,8 @@ export function addMergeRequestAssignee(
     () => ({
       ok: true,
       message: `Assigned ${assignee} to merge request !${mergeRequestNumber}`,
-    })
+    }),
+    hostname
   )
 }
 
@@ -229,35 +254,39 @@ export function addMergeRequestAssignee(
 
 export function mergeMergeRequest(
   strategy: MergeRequestMergeStrategy,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   return runGlabAction(runner, ['mr', 'merge', ...mergeStrategyFlags(strategy), '--yes'], (output) => ({
     ok: true,
     message: output.trim() || `Merged merge request with ${strategy}`,
-  }))
+  }), hostname)
 }
 
 export function closeMergeRequest(
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   return runGlabAction(runner, ['mr', 'close'], (output) => ({
     ok: true,
     message: output.trim() || 'Closed merge request',
-  }))
+  }), hostname)
 }
 
 export function approveMergeRequest(
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   return runGlabAction(runner, ['mr', 'approve'], (output) => ({
     ok: true,
     message: output.trim() || 'Approved merge request',
-  }))
+  }), hostname)
 }
 
 export function commentMergeRequest(
   body: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Comment body required' })
@@ -265,12 +294,13 @@ export function commentMergeRequest(
   return runGlabAction(runner, ['mr', 'note', 'create', `--message=${body}`], (output) => ({
     ok: true,
     message: output.trim() || 'Comment added',
-  }))
+  }), hostname)
 }
 
 export function requestChangesMergeRequest(
   body: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<PullRequestActionResult> {
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Review body required for change-request' })
@@ -278,5 +308,5 @@ export function requestChangesMergeRequest(
   return runGlabAction(runner, ['mr', 'note', 'create', `--message=Requested changes: ${body}`], (output) => ({
     ok: true,
     message: output.trim() || 'Requested changes',
-  }))
+  }), hostname)
 }

@@ -15,14 +15,18 @@ import * as issues from './gitlabIssueActions'
 import * as lists from './gitlabListData'
 import * as detail from './gitlabDetailData'
 import { getForgeActions } from './forgeActions'
+import { defaultGlabRunner } from './glabCli'
 
 const fakeGit = {} as unknown as SimpleGit
 
 describe('forge GitLab dispatch (#0.70)', () => {
   beforeEach(() => jest.clearAllMocks())
 
-  it('routes MR mutations to the glab implementations', async () => {
-    const forge = getForgeActions('gitlab', { gitlabPath: 'g/p' })
+  it('routes MR mutations to the glab implementations, binding runner + host', async () => {
+    // The facade binds `defaultGlabRunner` + the remote host into every glab
+    // action so the error-path auth re-probe (resolveGlabActionError) scopes to
+    // the right instance. `undefined` host is fine — actions stay host-less.
+    const forge = getForgeActions('gitlab', { gitlabPath: 'g/p', gitlabHost: 'gitlab.acme.com' })
     await forge.mergePullRequestByNumber(5, 'squash')
     await forge.commentPullRequestByNumber(5, 'hi')
     await forge.addPullRequestLabel(5, 'bug')
@@ -32,29 +36,35 @@ describe('forge GitLab dispatch (#0.70)', () => {
     await forge.requestChangesPullRequestByNumber(5, 'fix')
     await forge.createPullRequest({ base: 'main', head: 'f', title: 'T', body: 'B' })
 
-    expect(mr.mergeMergeRequestByNumber).toHaveBeenCalledWith(5, 'squash')
-    expect(mr.commentMergeRequestByNumber).toHaveBeenCalledWith(5, 'hi')
-    expect(mr.addMergeRequestLabel).toHaveBeenCalledWith(5, 'bug')
-    expect(mr.addMergeRequestAssignee).toHaveBeenCalledWith(5, 'bob')
-    expect(mr.approveMergeRequestByNumber).toHaveBeenCalledWith(5)
-    expect(mr.closeMergeRequestByNumber).toHaveBeenCalledWith(5)
-    expect(mr.requestChangesMergeRequestByNumber).toHaveBeenCalledWith(5, 'fix')
-    expect(mr.createMergeRequest).toHaveBeenCalledWith({ base: 'main', head: 'f', title: 'T', body: 'B' })
+    const host = 'gitlab.acme.com'
+    expect(mr.mergeMergeRequestByNumber).toHaveBeenCalledWith(5, 'squash', defaultGlabRunner, host)
+    expect(mr.commentMergeRequestByNumber).toHaveBeenCalledWith(5, 'hi', defaultGlabRunner, host)
+    expect(mr.addMergeRequestLabel).toHaveBeenCalledWith(5, 'bug', defaultGlabRunner, host)
+    expect(mr.addMergeRequestAssignee).toHaveBeenCalledWith(5, 'bob', defaultGlabRunner, host)
+    expect(mr.approveMergeRequestByNumber).toHaveBeenCalledWith(5, defaultGlabRunner, host)
+    expect(mr.closeMergeRequestByNumber).toHaveBeenCalledWith(5, defaultGlabRunner, host)
+    expect(mr.requestChangesMergeRequestByNumber).toHaveBeenCalledWith(5, 'fix', defaultGlabRunner, host)
+    expect(mr.createMergeRequest).toHaveBeenCalledWith(
+      { base: 'main', head: 'f', title: 'T', body: 'B' },
+      defaultGlabRunner,
+      host
+    )
   })
 
-  it('routes issue mutations to the glab implementations', async () => {
-    const forge = getForgeActions('gitlab', {})
+  it('routes issue mutations to the glab implementations, binding runner + host', async () => {
+    const forge = getForgeActions('gitlab', { gitlabHost: 'gitlab.acme.com' })
     await forge.commentIssue(7, 'hi')
     await forge.addIssueLabel(7, 'bug')
     await forge.addIssueAssignee(7, 'bob')
     await forge.closeIssue(7)
     await forge.reopenIssue(7)
 
-    expect(issues.commentGitLabIssue).toHaveBeenCalledWith(7, 'hi')
-    expect(issues.addGitLabIssueLabel).toHaveBeenCalledWith(7, 'bug')
-    expect(issues.addGitLabIssueAssignee).toHaveBeenCalledWith(7, 'bob')
-    expect(issues.closeGitLabIssue).toHaveBeenCalledWith(7)
-    expect(issues.reopenGitLabIssue).toHaveBeenCalledWith(7)
+    const host = 'gitlab.acme.com'
+    expect(issues.commentGitLabIssue).toHaveBeenCalledWith(7, 'hi', defaultGlabRunner, host)
+    expect(issues.addGitLabIssueLabel).toHaveBeenCalledWith(7, 'bug', defaultGlabRunner, host)
+    expect(issues.addGitLabIssueAssignee).toHaveBeenCalledWith(7, 'bob', defaultGlabRunner, host)
+    expect(issues.closeGitLabIssue).toHaveBeenCalledWith(7, defaultGlabRunner, host)
+    expect(issues.reopenGitLabIssue).toHaveBeenCalledWith(7, defaultGlabRunner, host)
   })
 
   it('routes lists + detail to the glab implementations, binding the project path', async () => {

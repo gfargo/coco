@@ -129,15 +129,20 @@ export function compactGlabError(message: string): GhActionError {
  * Turn a thrown glab error into a user-facing message, probing auth on the
  * error path so a mid-session de-auth yields the curated recovery hint instead
  * of raw glab stderr. Mirrors `resolveGhActionError`.
+ *
+ * Pass `hostname` (the repo's remote host) so the auth re-probe checks the
+ * right instance — self-hosted GitLab installs aren't `gitlab.com`, and a
+ * host-less probe would report on the wrong server.
  */
 export async function resolveGlabActionError(
   error: unknown,
-  runner: GlabRunner
+  runner: GlabRunner,
+  hostname?: string
 ): Promise<GhActionError> {
   const raw = (error as Error)?.message || 'GitLab CLI command failed.'
 
   try {
-    const status = await getGlabStatus(runner)
+    const status = await getGlabStatus(runner, hostname)
     if (status.kind !== 'ok') {
       return { message: describeGlabStatus(status) }
     }

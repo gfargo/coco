@@ -14,12 +14,13 @@ import type { IssueActionResult } from './issueActions'
 async function runGlabAction(
   runner: GlabRunner,
   args: string[],
-  onSuccess: (output: string) => IssueActionResult
+  onSuccess: (output: string) => IssueActionResult,
+  hostname?: string
 ): Promise<IssueActionResult> {
   try {
     return onSuccess(await runner(args))
   } catch (error) {
-    const { message, details } = await resolveGlabActionError(error, runner)
+    const { message, details } = await resolveGlabActionError(error, runner, hostname)
     return { ok: false, message, ...(details && details.length ? { details } : {}) }
   }
 }
@@ -27,7 +28,8 @@ async function runGlabAction(
 export function commentGitLabIssue(
   issueNumber: number,
   body: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<IssueActionResult> {
   if (!body.trim()) {
     return Promise.resolve({ ok: false, message: 'Comment body required' })
@@ -38,14 +40,16 @@ export function commentGitLabIssue(
     (output) => ({
       ok: true,
       message: output.trim() || `Commented on issue #${issueNumber}`,
-    })
+    }),
+    hostname
   )
 }
 
 export function addGitLabIssueLabel(
   issueNumber: number,
   label: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<IssueActionResult> {
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
@@ -58,14 +62,16 @@ export function addGitLabIssueLabel(
     () => ({
       ok: true,
       message: `Added label '${label}' to issue #${issueNumber}`,
-    })
+    }),
+    hostname
   )
 }
 
 export function addGitLabIssueAssignee(
   issueNumber: number,
   assignee: string,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<IssueActionResult> {
   if (!assignee.trim()) {
     return Promise.resolve({ ok: false, message: 'Assignee username required' })
@@ -79,26 +85,39 @@ export function addGitLabIssueAssignee(
     () => ({
       ok: true,
       message: `Assigned ${assignee} to issue #${issueNumber}`,
-    })
+    }),
+    hostname
   )
 }
 
 export function closeGitLabIssue(
   issueNumber: number,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<IssueActionResult> {
-  return runGlabAction(runner, ['issue', 'close', String(issueNumber)], (output) => ({
-    ok: true,
-    message: output.trim() || `Closed issue #${issueNumber}`,
-  }))
+  return runGlabAction(
+    runner,
+    ['issue', 'close', String(issueNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Closed issue #${issueNumber}`,
+    }),
+    hostname
+  )
 }
 
 export function reopenGitLabIssue(
   issueNumber: number,
-  runner: GlabRunner = defaultGlabRunner
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
 ): Promise<IssueActionResult> {
-  return runGlabAction(runner, ['issue', 'reopen', String(issueNumber)], (output) => ({
-    ok: true,
-    message: output.trim() || `Reopened issue #${issueNumber}`,
-  }))
+  return runGlabAction(
+    runner,
+    ['issue', 'reopen', String(issueNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Reopened issue #${issueNumber}`,
+    }),
+    hostname
+  )
 }

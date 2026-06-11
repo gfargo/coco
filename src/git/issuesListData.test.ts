@@ -79,6 +79,17 @@ describe('issuesListData', () => {
     ])
   })
 
+  it('degrades to an empty list when the gh body is not an array', async () => {
+    const runner = jest
+      .fn()
+      .mockResolvedValueOnce('') // auth status
+      .mockResolvedValueOnce(JSON.stringify({ message: 'Not Found' }))
+
+    const overview = await getIssueList(githubRemoteGit(), {}, runner)
+    expect(overview.authenticated).toBe(true)
+    expect(overview.issues).toEqual([])
+  })
+
   it('threads filter knobs into the gh args', async () => {
     const runner = jest
       .fn()

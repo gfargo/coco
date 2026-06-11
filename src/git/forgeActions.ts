@@ -70,6 +70,7 @@ import {
   commentGitLabIssue,
   reopenGitLabIssue,
 } from './gitlabIssueActions'
+import { defaultGlabRunner } from './glabCli'
 
 /**
  * Provider-agnostic forge facade. The workstation runtime dispatches every
@@ -136,7 +137,15 @@ const githubActions: ForgeActions = {
   reopenIssue,
 }
 
-function gitlabActions(path: string | undefined): ForgeActions {
+/**
+ * GitLab facade. `host` is the repo's remote hostname (`gitlab.com` or a
+ * self-hosted instance) — threaded to the mutating actions so their error-path
+ * auth re-probe (`resolveGlabActionError` → `getGlabStatus`) checks the right
+ * GitLab instance instead of defaulting to `gitlab.com`. Passing
+ * `defaultGlabRunner` explicitly keeps the runner default while reaching the
+ * trailing `hostname` slot.
+ */
+function gitlabActions(path: string | undefined, host?: string): ForgeActions {
   return {
     getPullRequestList: (git, filter) => getMergeRequestList(git, filter),
     getIssueList: (git, filter) => getGitLabIssueList(git, filter),
@@ -144,25 +153,25 @@ function gitlabActions(path: string | undefined): ForgeActions {
       path ? getMergeRequestDetail(path, n) : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
     getIssueDetail: (n) =>
       path ? getGitLabIssueDetail(path, n) : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
-    commentPullRequestByNumber: (n, body) => commentMergeRequestByNumber(n, body),
-    addPullRequestLabel: (n, label) => addMergeRequestLabel(n, label),
-    addPullRequestAssignee: (n, assignee) => addMergeRequestAssignee(n, assignee),
-    mergePullRequestByNumber: (n, strategy) => mergeMergeRequestByNumber(n, strategy),
-    closePullRequestByNumber: (n) => closeMergeRequestByNumber(n),
-    approvePullRequestByNumber: (n) => approveMergeRequestByNumber(n),
-    requestChangesPullRequestByNumber: (n, body) => requestChangesMergeRequestByNumber(n, body),
-    mergePullRequest: (strategy) => mergeMergeRequest(strategy),
-    closePullRequest: () => closeMergeRequest(),
-    approvePullRequest: () => approveMergeRequest(),
-    commentPullRequest: (body) => commentMergeRequest(body),
-    requestChangesPullRequest: (body) => requestChangesMergeRequest(body),
-    createPullRequest: (input) => createMergeRequest(input),
-    openPullRequest: (url) => openMergeRequest(url),
-    commentIssue: (n, body) => commentGitLabIssue(n, body),
-    addIssueLabel: (n, label) => addGitLabIssueLabel(n, label),
-    addIssueAssignee: (n, assignee) => addGitLabIssueAssignee(n, assignee),
-    closeIssue: (n) => closeGitLabIssue(n),
-    reopenIssue: (n) => reopenGitLabIssue(n),
+    commentPullRequestByNumber: (n, body) => commentMergeRequestByNumber(n, body, defaultGlabRunner, host),
+    addPullRequestLabel: (n, label) => addMergeRequestLabel(n, label, defaultGlabRunner, host),
+    addPullRequestAssignee: (n, assignee) => addMergeRequestAssignee(n, assignee, defaultGlabRunner, host),
+    mergePullRequestByNumber: (n, strategy) => mergeMergeRequestByNumber(n, strategy, defaultGlabRunner, host),
+    closePullRequestByNumber: (n) => closeMergeRequestByNumber(n, defaultGlabRunner, host),
+    approvePullRequestByNumber: (n) => approveMergeRequestByNumber(n, defaultGlabRunner, host),
+    requestChangesPullRequestByNumber: (n, body) => requestChangesMergeRequestByNumber(n, body, defaultGlabRunner, host),
+    mergePullRequest: (strategy) => mergeMergeRequest(strategy, defaultGlabRunner, host),
+    closePullRequest: () => closeMergeRequest(defaultGlabRunner, host),
+    approvePullRequest: () => approveMergeRequest(defaultGlabRunner, host),
+    commentPullRequest: (body) => commentMergeRequest(body, defaultGlabRunner, host),
+    requestChangesPullRequest: (body) => requestChangesMergeRequest(body, defaultGlabRunner, host),
+    createPullRequest: (input) => createMergeRequest(input, defaultGlabRunner, host),
+    openPullRequest: (url) => openMergeRequest(url, defaultGlabRunner, host),
+    commentIssue: (n, body) => commentGitLabIssue(n, body, defaultGlabRunner, host),
+    addIssueLabel: (n, label) => addGitLabIssueLabel(n, label, defaultGlabRunner, host),
+    addIssueAssignee: (n, assignee) => addGitLabIssueAssignee(n, assignee, defaultGlabRunner, host),
+    closeIssue: (n) => closeGitLabIssue(n, defaultGlabRunner, host),
+    reopenIssue: (n) => reopenGitLabIssue(n, defaultGlabRunner, host),
   }
 }
 
@@ -170,13 +179,17 @@ function gitlabActions(path: string | undefined): ForgeActions {
  * Select the forge facade for the detected provider. Anything other than
  * `gitlab` (github, GitHub Enterprise, unsupported) keeps the GitHub `gh`
  * implementations, preserving existing behavior. For GitLab, pass the project
- * path (`owner/name`) so the detail loaders can address `glab api` endpoints.
+ * path (`owner/name`) so the detail loaders can address `glab api` endpoints,
+ * and the remote `gitlabHost` so error-path auth re-probes hit the right
+ * instance (self-hosted installs aren't `gitlab.com`).
  */
 export function getForgeActions(
   provider: GitProviderType | undefined,
-  options: { gitlabPath?: string } = {}
+  options: { gitlabPath?: string; gitlabHost?: string } = {}
 ): ForgeActions {
-  return provider === 'gitlab' ? gitlabActions(options.gitlabPath) : githubActions
+  return provider === 'gitlab'
+    ? gitlabActions(options.gitlabPath, options.gitlabHost)
+    : githubActions
 }
 
 /**
