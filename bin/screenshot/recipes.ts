@@ -1610,6 +1610,36 @@ export const RECIPES: ScreenshotRecipe[] = [
     ],
   },
   {
+    // Animated demo for the marketing site — GitLab MR triage in motion:
+    // enter the triage list, browse rows (the inspector re-hydrates per MR),
+    // then cycle the filter. Served via mock glab so it stays deterministic.
+    name: 'demo-gitlab-mr-triage',
+    description: 'GitLab MR triage in motion — open merge requests (g P), browse rows, inspector updates per MR, filter cycling (mock glab) [GIF]',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    gitlabRemote: 'git@gitlab.com:gfargo/coco.git',
+    glabMock: true,
+    dimensions: { cols: 150, rows: 38 },
+    emitGif: true,
+    actions: [
+      // The MR-triage surface is only reachable via the `gP` chord (the --view
+      // flag only exposes history/status/diff), so settle, then open it on
+      // camera and browse. The GIF reads as "open coco ui -> g P -> merge
+      // requests -> browse them".
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gP' },
+      { kind: 'sleep', ms: 1800 },
+      { kind: 'type', text: 'j' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'j' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'k' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'f' },
+      { kind: 'sleep', ms: 1700 },
+    ],
+  },
+  {
     name: 'demo-single-pane',
     description: 'Narrow terminal in motion: at 80×24 the panes fold to one — Tab cycles sidebar→main→inspector, v peeks the sidebar',
     scenario: 'feature-pr-ready',
