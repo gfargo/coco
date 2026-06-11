@@ -11,6 +11,8 @@
  * Sequence:  ESC ] 8 ; ; <url> ESC \  <text>  ESC ] 8 ; ;  ESC \
  */
 
+import { stripControl } from '../../git/forgeText'
+
 const ESC = '\u001b'
 const OSC_PREFIX = `${ESC}]8;;`
 const ST = `${ESC}\\`
@@ -88,5 +90,9 @@ export function formatHyperlink(
   if (!supportsHyperlinks(env)) {
     return text
   }
-  return `${OSC_PREFIX}${url}${ST}${text}${OSC_PREFIX}${ST}`
+  // Strip control bytes from the URL so a hostile `web_url` can't carry an ESC
+  // or ST (string terminator) that closes the OSC 8 sequence early and injects
+  // raw escapes into the terminal.
+  const safeUrl = stripControl(url)
+  return `${OSC_PREFIX}${safeUrl}${ST}${text}${OSC_PREFIX}${ST}`
 }

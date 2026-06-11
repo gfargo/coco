@@ -1,4 +1,5 @@
 import { defaultGlabRunner, type GlabRunner } from './glabCli'
+import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
 import type {
   PullRequestDetail,
@@ -163,7 +164,7 @@ export async function getMergeRequestDetail(
       reviews: parseApprovalsAsReviews(approvals),
       statusCheckRollup: parsePipelineAsChecks(mr.head_pipeline),
     }
-    return { ok: true, detail }
+    return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) }
   }
@@ -190,7 +191,7 @@ export async function getGitLabIssueDetail(
       body: issue.description || '',
       comments,
     }
-    return { ok: true, detail }
+    return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) }
   }

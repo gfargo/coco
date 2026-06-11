@@ -12,6 +12,7 @@
  */
 
 import { defaultGhRunner, type GhRunner } from './githubCli'
+import { sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment } from './issueDetailData'
 
 export type PullRequestReview = {
@@ -139,7 +140,7 @@ export async function getPullRequestDetail(
         message: `Empty response from gh for pull request #${pullRequestNumber}`,
       }
     }
-    return { ok: true, detail }
+    return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
     return {
       ok: false,

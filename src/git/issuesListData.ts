@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { sanitizeIssueListItem } from './forgeText'
 import {
     defaultGhRunner,
     describeGhStatus,
@@ -156,7 +157,7 @@ export async function getIssueList(
       authenticated: true,
       repository,
       filter,
-      issues: parseIssueListItems(output),
+      issues: parseIssueListItems(output).map(sanitizeIssueListItem),
     }
   } catch (error) {
     return {

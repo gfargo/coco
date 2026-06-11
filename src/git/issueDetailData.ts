@@ -12,6 +12,7 @@
  */
 
 import { defaultGhRunner, type GhRunner } from './githubCli'
+import { sanitizeIssueDetail } from './forgeText'
 
 export type IssueComment = {
   author?: string
@@ -82,7 +83,7 @@ export async function getIssueDetail(
     if (!detail) {
       return { ok: false, message: `Empty response from gh for issue #${issueNumber}` }
     }
-    return { ok: true, detail }
+    return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {
     return {
       ok: false,
