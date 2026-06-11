@@ -35,6 +35,19 @@ describe('log Ink idle tips (P4.3)', () => {
     expect(pickIdleTip(IDLE_TIPS.length * 3 + 2)).toBe(IDLE_TIPS[1])
   })
 
+  it('substitutes the forge noun into the {abbrev} tip', () => {
+    const abbrevIndex = IDLE_TIPS.findIndex((tip) => tip.includes('{abbrev}'))
+    expect(abbrevIndex).toBeGreaterThanOrEqual(0)
+    const tick = abbrevIndex + 1
+    // No placeholder should survive into the rendered tip.
+    expect(pickIdleTip(tick)).not.toContain('{abbrev}')
+    // GitHub (and the undefined / default case) read "PR"; GitLab reads "MR".
+    expect(pickIdleTip(tick, 'github')).toContain('PR')
+    expect(pickIdleTip(tick)).toContain('PR')
+    expect(pickIdleTip(tick, 'gitlab')).toContain('MR')
+    expect(pickIdleTip(tick, 'gitlab')).not.toContain('PR')
+  })
+
   it('matches the spec timing constants (>10s grace, ~8s rotation)', () => {
     expect(IDLE_TIPS_GRACE_MS).toBeGreaterThanOrEqual(10_000)
     expect(IDLE_TIPS_INTERVAL_MS).toBeGreaterThanOrEqual(5_000)

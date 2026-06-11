@@ -14,6 +14,15 @@
  * idle stretches.
  */
 
+import type { GitProviderType } from '../../git/providerData'
+import { forgeNouns } from './forgeNouns'
+
+/**
+ * Idle tips. Forge-specific abbreviations (PR/MR) are written as the
+ * `{abbrev}` placeholder so the same table renders correctly on GitHub
+ * and GitLab — `pickIdleTip` substitutes the active forge's noun
+ * (`forgeNouns(provider).abbrev`) when it builds the tip.
+ */
 export const IDLE_TIPS: string[] = [
   'press : to search every command',
   'g h returns home from anywhere',
@@ -24,7 +33,7 @@ export const IDLE_TIPS: string[] = [
   '< or esc walks the navigation stack back',
   'S splits a large staged set into multiple commits',
   'L generates a changelog for the current branch',
-  'C creates a PR seeded from the changelog',
+  'C creates a {abbrev} seeded from the changelog',
   'E opens the commit draft in $EDITOR or $VISUAL',
   'I drafts an AI commit message from staged changes',
 ]
@@ -39,8 +48,13 @@ export const IDLE_TIPS_GRACE_MS = 10_000
 /** Cadence between subsequent tips in ms. */
 export const IDLE_TIPS_INTERVAL_MS = 8_000
 
-export function pickIdleTip(tickIndex: number): string | undefined {
+export function pickIdleTip(
+  tickIndex: number,
+  provider?: GitProviderType
+): string | undefined {
   if (tickIndex <= 0) return undefined
   if (IDLE_TIPS.length === 0) return undefined
-  return IDLE_TIPS[(tickIndex - 1) % IDLE_TIPS.length]
+  const tip = IDLE_TIPS[(tickIndex - 1) % IDLE_TIPS.length]
+  // Substitute the forge-specific noun so GitLab repos read "MR" not "PR".
+  return tip.replace('{abbrev}', forgeNouns(provider).abbrev)
 }

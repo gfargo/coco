@@ -175,7 +175,7 @@ export function buildProviderUrl(
   }
 
   if (target.type === 'commit') {
-    return `${base}${seg}/commit/${target.commit}`
+    return `${base}${seg}/commit/${encodeURIComponent(target.commit)}`
   }
 
   if (target.type === 'pull-request') {

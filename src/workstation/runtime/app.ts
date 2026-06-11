@@ -790,7 +790,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       if (interval) clearInterval(interval)
     }
   }, [idleTipsEnabled, state.statusMessage])
-  const idleTip = idleTipsEnabled && !state.statusMessage ? pickIdleTip(idleTipIndex) : undefined
+  const idleTip =
+    idleTipsEnabled && !state.statusMessage
+      ? pickIdleTip(idleTipIndex, context.provider?.repository.provider)
+      : undefined
 
   // Animation tick driver for loading states. Increments every 80ms
   // while any overlay/surface is in a loading state — the renderer
@@ -1471,9 +1474,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context.provider?.repository.owner && context.provider?.repository.name
       ? `${context.provider.repository.owner}/${context.provider.repository.name}`
       : undefined
+  // Remote host (`gitlab.com` or a self-hosted instance) — threaded so the
+  // GitLab error-path auth re-probe checks the right server.
+  const forgeGitlabHost = context.provider?.repository.host
   const forge = React.useMemo(
-    () => getForgeActions(forgeProvider, { gitlabPath: forgeGitlabPath }),
-    [forgeProvider, forgeGitlabPath]
+    () => getForgeActions(forgeProvider, { gitlabPath: forgeGitlabPath, gitlabHost: forgeGitlabHost }),
+    [forgeProvider, forgeGitlabPath, forgeGitlabHost]
   )
 
   React.useEffect(() => {
@@ -4155,6 +4161,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // ("Dropped stash@{N}") — the visible list shrinking is the
       // unambiguous signal that the operation landed.
     }
+    } catch (error) {
+      // Defense-in-depth: today every action resolves to a result object
+      // (failures are carried in `result.ok` / `result.message`, not
+      // thrown), so this arm shouldn't fire. If a handler or a refresh
+      // ever rejects, surface a clean error status instead of an
+      // unhandled rejection — and let `finally` still clear the loaders.
+      dispatch({
+        type: 'setStatus',
+        value: error instanceof Error ? error.message : String(error),
+        kind: 'error',
+      })
     } finally {
       // Always clear the loader — even if a refresh threw — so a
       // failed fetch/pull can't leave the history surface stuck behind

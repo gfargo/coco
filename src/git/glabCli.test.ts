@@ -77,6 +77,16 @@ describe('resolveGlabActionError (#0.70)', () => {
     expect(result.message).toBe('line1')
     expect(result.details).toEqual(['line2', 'line3'])
   })
+
+  it('scopes the auth re-probe to the given hostname', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]) => {
+      calls.push(args)
+      return ''
+    }
+    await resolveGlabActionError(new Error('failed'), runner, 'gitlab.acme.com')
+    expect(calls[0]).toEqual(['auth', 'status', '--hostname', 'gitlab.acme.com'])
+  })
 })
 
 function fakeGit(remotes: Array<{ name: string; refs: { fetch?: string; push?: string } }>): SimpleGit {

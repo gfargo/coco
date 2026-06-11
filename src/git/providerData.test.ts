@@ -118,6 +118,12 @@ describe('log provider data', () => {
     )
   })
 
+  it('encodes the commit hash in provider URLs', () => {
+    expect(buildProviderUrl(repository, { type: 'commit', commit: 'refs/tags/v1 rc' })).toBe(
+      'https://github.com/gfargo/coco/commit/refs%2Ftags%2Fv1%20rc'
+    )
+  })
+
   // git.raw now answers three commands during a single getProviderOverview
   // call: branch --show-current, symbolic-ref origin/HEAD (for local
   // default-branch detection), and possibly rev-parse fallbacks. This

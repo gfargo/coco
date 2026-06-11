@@ -109,6 +109,17 @@ describe('pullRequestListData', () => {
     ])
   })
 
+  it('degrades to an empty list when the gh body is not an array', async () => {
+    const runner = jest
+      .fn()
+      .mockResolvedValueOnce('')
+      .mockResolvedValueOnce(JSON.stringify({ message: 'Not Found' }))
+
+    const overview = await getPullRequestList(githubRemoteGit(), {}, runner)
+    expect(overview.authenticated).toBe(true)
+    expect(overview.pullRequests).toEqual([])
+  })
+
   it('parses a minimal PR payload without enriched fields', async () => {
     const runner = jest
       .fn()

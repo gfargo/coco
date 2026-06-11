@@ -76,6 +76,7 @@ function parseIssueListItems(output: string): IssueListItem[] {
   if (!trimmed) return []
 
   const raw = JSON.parse(trimmed) as Array<Record<string, unknown>>
+  if (!Array.isArray(raw)) return []
 
   return raw.map((entry) => {
     const author =
