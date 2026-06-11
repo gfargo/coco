@@ -1,6 +1,6 @@
 import {
-  formatLogInkGitHubNoRemote,
-  formatLogInkGitHubUnauthenticated,
+  formatLogInkForgeNoRemote,
+  formatLogInkForgeUnauthenticated,
   formatLogInkIssuesEmpty,
   formatLogInkPullRequestTriageEmpty,
 } from './surfaceStates'
@@ -17,6 +17,10 @@ describe('triage surface empty-state messages', () => {
       expect(msg).toContain('open')
       expect(msg).not.toContain("''")
     })
+
+    it('is forge-neutral (no hardcoded GitHub)', () => {
+      expect(formatLogInkIssuesEmpty({ filter: '' })).not.toContain('GitHub')
+    })
   })
 
   describe('formatLogInkPullRequestTriageEmpty', () => {
@@ -29,26 +33,39 @@ describe('triage surface empty-state messages', () => {
     })
   })
 
-  describe('formatLogInkGitHubUnauthenticated', () => {
+  describe('formatLogInkForgeUnauthenticated', () => {
     it('embeds the resource noun', () => {
-      expect(formatLogInkGitHubUnauthenticated({ resource: 'Issues' })).toContain('Issues')
-      expect(formatLogInkGitHubUnauthenticated({ resource: 'Pull requests' })).toContain(
+      expect(formatLogInkForgeUnauthenticated({ resource: 'Issues' })).toContain('Issues')
+      expect(formatLogInkForgeUnauthenticated({ resource: 'Pull requests' })).toContain(
         'Pull requests'
       )
     })
 
-    it('points the user at gh auth login', () => {
-      expect(formatLogInkGitHubUnauthenticated({ resource: 'Issues' })).toContain('gh auth login')
+    it('points the user at gh auth login by default (GitHub)', () => {
+      expect(formatLogInkForgeUnauthenticated({ resource: 'Issues' })).toContain('gh auth login')
+      expect(formatLogInkForgeUnauthenticated({ resource: 'Issues' })).toContain('GitHub')
+    })
+
+    it('points the user at glab auth login for GitLab', () => {
+      const msg = formatLogInkForgeUnauthenticated({
+        resource: 'Merge requests',
+        cli: 'glab',
+        forge: 'GitLab',
+      })
+      expect(msg).toContain('glab auth login')
+      expect(msg).toContain('GitLab')
+      expect(msg).not.toContain('gh auth login')
     })
   })
 
-  describe('formatLogInkGitHubNoRemote', () => {
+  describe('formatLogInkForgeNoRemote', () => {
     it('embeds the resource noun', () => {
-      expect(formatLogInkGitHubNoRemote({ resource: 'Issues' })).toContain('Issues')
+      expect(formatLogInkForgeNoRemote({ resource: 'Issues' })).toContain('Issues')
     })
 
-    it('mentions GitHub explicitly', () => {
-      expect(formatLogInkGitHubNoRemote({ resource: 'Issues' })).toContain('GitHub')
+    it('mentions GitHub by default and GitLab when asked', () => {
+      expect(formatLogInkForgeNoRemote({ resource: 'Issues' })).toContain('GitHub')
+      expect(formatLogInkForgeNoRemote({ resource: 'Issues', forge: 'GitLab' })).toContain('GitLab')
     })
   })
 })

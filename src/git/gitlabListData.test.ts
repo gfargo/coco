@@ -244,4 +244,45 @@ describe('getMergeRequestList / getGitLabIssueList (#0.70)', () => {
     const overview = await getMergeRequestList(git, {}, async () => '')
     expect(overview).toMatchObject({ available: false, message: 'No GitLab remote detected.' })
   })
+
+  it('paginates beyond one page to satisfy a large --limit', async () => {
+    const mk = (start: number, count: number) =>
+      JSON.stringify(
+        Array.from({ length: count }, (_, i) => ({
+          iid: start + i,
+          title: 't',
+          web_url: 'u',
+          state: 'opened',
+          source_branch: 's',
+          target_branch: 't',
+          created_at: '',
+          updated_at: '',
+        }))
+      )
+    const calls: string[] = []
+    let page = 0
+    const runner = async (args: string[]) => {
+      if (args[0] === 'auth') return ''
+      calls.push(args[1])
+      page += 1
+      // 100 on page 1 (== per_page, keep paging), 30 on page 2 (short, stop).
+      return page === 1 ? mk(1, 100) : mk(101, 30)
+    }
+    const overview = await getMergeRequestList(fakeGit(), { limit: 130 }, runner)
+    expect(overview.pullRequests).toHaveLength(130)
+    // per_page is clamped to GitLab's 100 max even though limit is 130.
+    expect(calls[0]).toContain('per_page=100')
+    expect(calls.some((c) => c.includes('&page=1'))).toBe(true)
+    expect(calls.some((c) => c.includes('&page=2'))).toBe(true)
+  })
+
+  it('surfaces the GitLab error body when the API returns a non-array', async () => {
+    const runner = async (args: string[]) => {
+      if (args[0] === 'auth') return ''
+      return JSON.stringify({ message: '404 Project Not Found' })
+    }
+    const overview = await getMergeRequestList(fakeGit(), {}, runner)
+    expect(overview.message).toContain('404 Project Not Found')
+    expect(overview.pullRequests).toBeUndefined()
+  })
 })

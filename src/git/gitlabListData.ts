@@ -29,6 +29,54 @@ function encodeProjectPath(path: string): string {
   return encodeURIComponent(path)
 }
 
+/**
+ * Build a clear error from a non-array `glab api` response. GitLab returns a
+ * JSON object like `{ "message": "404 Not Found" }` on errors (not an array),
+ * so without this the list parsers would throw a cryptic "raw.map is not a
+ * function" instead of surfacing the real API message.
+ */
+function gitlabListError(raw: unknown, resource: string): Error {
+  const detail =
+    raw && typeof raw === 'object'
+      ? String(
+          (raw as Record<string, unknown>).message ??
+            (raw as Record<string, unknown>).error ??
+            ''
+        )
+      : ''
+  return new Error(
+    detail
+      ? `GitLab API error fetching ${resource}: ${detail}`
+      : `Unexpected GitLab API response while fetching ${resource}.`
+  )
+}
+
+/**
+ * Fetch up to `want` rows from a paginated `glab api` list endpoint. GitLab
+ * caps `per_page` at 100, so a single request silently truncates large result
+ * sets; page through (`per_page` is baked into `baseEndpoint`) until we have
+ * `want` rows or reach the last page. Mirrors how `gh` paginates internally so
+ * `--limit N` behaves the same on both forges. The `page <= 100` ceiling is a
+ * safety stop against a misbehaving API.
+ */
+async function fetchAllPages<T>(
+  runner: GlabRunner,
+  baseEndpoint: string,
+  parse: (output: string) => T[],
+  want: number,
+  perPage: number
+): Promise<T[]> {
+  const acc: T[] = []
+  let page = 1
+  while (acc.length < want && page <= 100) {
+    const batch = parse(await runner(['api', `${baseEndpoint}&page=${page}`]))
+    acc.push(...batch)
+    if (batch.length < perPage) break
+    page += 1
+  }
+  return acc.slice(0, want)
+}
+
 /** Map a GitLab MR/issue `state` to coco's uppercased state vocabulary. */
 function normalizeState(raw: unknown): string {
   const s = String(raw || '').toLowerCase()
@@ -108,8 +156,9 @@ function mrStateParam(state: PullRequestListFilter['state']): string | undefined
 function parseMergeRequests(output: string): PullRequestListItem[] {
   const trimmed = output.trim()
   if (!trimmed) return []
-  const raw = JSON.parse(trimmed) as Array<Record<string, unknown>>
-  return raw.map((mr) => ({
+  const raw = JSON.parse(trimmed)
+  if (!Array.isArray(raw)) throw gitlabListError(raw, 'merge requests')
+  return (raw as Array<Record<string, unknown>>).map((mr) => ({
     number: Number(mr.iid),
     title: String(mr.title || ''),
     url: String(mr.web_url || ''),
@@ -137,7 +186,7 @@ function buildMergeRequestEndpoint(path: string, filter: PullRequestListFilter):
     search: filter.search,
     source_branch: filter.head,
     target_branch: filter.base,
-    per_page: filter.limit ?? 30,
+    per_page: Math.min(filter.limit ?? 30, 100),
   })
   return `projects/${encodeProjectPath(path)}/merge_requests${query}`
 }
@@ -164,8 +213,14 @@ export async function getMergeRequestList(
   }
 
   try {
-    const output = await runner(['api', buildMergeRequestEndpoint(project.path, filter)])
-    let pullRequests = parseMergeRequests(output)
+    const want = filter.limit ?? 30
+    let pullRequests = await fetchAllPages(
+      runner,
+      buildMergeRequestEndpoint(project.path, filter),
+      parseMergeRequests,
+      want,
+      Math.min(want, 100)
+    )
     // The REST API has no stable cross-version "draft only" filter; apply it
     // client-side so `--draft` behaves the same as on GitHub.
     if (filter.draft) pullRequests = pullRequests.filter((mr) => mr.isDraft)
@@ -203,8 +258,9 @@ function issueStateParam(state: IssueListFilter['state']): string | undefined {
 function parseIssues(output: string): IssueListItem[] {
   const trimmed = output.trim()
   if (!trimmed) return []
-  const raw = JSON.parse(trimmed) as Array<Record<string, unknown>>
-  return raw.map((issue) => ({
+  const raw = JSON.parse(trimmed)
+  if (!Array.isArray(raw)) throw gitlabListError(raw, 'issues')
+  return (raw as Array<Record<string, unknown>>).map((issue) => ({
     number: Number(issue.iid),
     title: String(issue.title || ''),
     url: String(issue.web_url || ''),
@@ -224,7 +280,7 @@ function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
     ...userScopeParams(filter.author, filter.assignee),
     labels: filter.label,
     search: filter.search,
-    per_page: filter.limit ?? 30,
+    per_page: Math.min(filter.limit ?? 30, 100),
   })
   return `projects/${encodeProjectPath(path)}/issues${query}`
 }
@@ -251,13 +307,20 @@ export async function getGitLabIssueList(
   }
 
   try {
-    const output = await runner(['api', buildIssueEndpoint(project.path, filter)])
+    const want = filter.limit ?? 30
+    const issues = await fetchAllPages(
+      runner,
+      buildIssueEndpoint(project.path, filter),
+      parseIssues,
+      want,
+      Math.min(want, 100)
+    )
     return {
       available: true,
       authenticated: true,
       repository: { owner: project.owner, name: project.name },
       filter,
-      issues: parseIssues(output),
+      issues,
     }
   } catch (error) {
     return {

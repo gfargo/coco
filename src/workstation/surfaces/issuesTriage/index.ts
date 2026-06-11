@@ -12,9 +12,10 @@
 import type * as ReactTypes from 'react'
 import type { IssueListItem } from '../../../git/issuesListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { forgeNouns } from '../../chrome/forgeNouns'
 import {
-  formatLogInkGitHubNoRemote,
-  formatLogInkGitHubUnauthenticated,
+  formatLogInkForgeNoRemote,
+  formatLogInkForgeUnauthenticated,
   formatLogInkIssuesEmpty,
   formatLogInkLoading,
 } from '../../chrome/surfaceStates'
@@ -57,6 +58,7 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
   const focused = state.focus === 'commits'
   const overview = context.issueList
   const loading = isLogInkContextKeyLoading(contextStatus, 'issueList')
+  const forge = forgeNouns(context.provider?.repository.provider)
 
   // Resolve the "what should the panel say" headline first, then fan
   // out to the row body. The chrome (border + title + headerRight) is
@@ -74,13 +76,13 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
     headerRight = 'unavailable'
     bodyLines = [
       h(Text, { key: 'issues-no-remote', dimColor: true },
-        formatLogInkGitHubNoRemote({ resource: 'Issues' })),
+        formatLogInkForgeNoRemote({ resource: 'Issues', forge: forge.name })),
     ]
   } else if (!overview.authenticated) {
-    headerRight = 'gh not authenticated'
+    headerRight = `${forge.cli} not authenticated`
     bodyLines = [
       h(Text, { key: 'issues-unauth', dimColor: true },
-        formatLogInkGitHubUnauthenticated({ resource: 'Issues' })),
+        formatLogInkForgeUnauthenticated({ resource: 'Issues', cli: forge.cli, forge: forge.name })),
     ]
   } else if (overview.message && !overview.issues) {
     headerRight = 'error'

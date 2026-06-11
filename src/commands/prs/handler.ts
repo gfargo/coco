@@ -22,6 +22,7 @@ export const handler = createGitHubListHandler<
 >({
   kind: 'prs',
   noun: 'pull request',
+  gitlabNoun: 'merge request',
   triageLabel: 'PR triage',
   buildFilter: (argv) => ({
     state: argv.state,
