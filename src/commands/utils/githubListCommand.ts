@@ -2,7 +2,10 @@ import chalk from 'chalk'
 import { SimpleGit } from 'simple-git'
 import { CommandHandler } from '../../lib/types'
 import { commandExit } from '../../lib/utils/commandExit'
-import { getGitHubRepository } from '../../git/githubCli'
+import {
+  getProviderRepositoryForGit,
+  type GitProviderType,
+} from '../../git/providerData'
 import {
   CachedList,
   readCachedList,
@@ -53,7 +56,8 @@ export type GitHubListCommandSpec<
   /** Short label for the auth hint, e.g. 'issue triage' | 'PR triage'. */
   triageLabel: string
   buildFilter: (argv: Argv) => Filter
-  fetch: (git: SimpleGit, filter: Filter) => Promise<Overview>
+  /** Fetch the list, dispatching on the detected forge (github | gitlab). */
+  fetch: (git: SimpleGit, filter: Filter, provider: GitProviderType | undefined) => Promise<Overview>
   extractItems: (overview: Overview) => Item[] | undefined
   toCachePayload: (items: Item[]) => Cached
   formatList: (items: Item[]) => string
@@ -96,8 +100,10 @@ export function createGitHubListHandler<
 
     // Repository metadata is needed for the header in both paths (cache hit
     // and fresh fetch). The cache hit path skips the fetch entirely, so probe
-    // it directly here — cheap, just a single `git remote` parse.
-    const repository = await getGitHubRepository(git)
+    // it directly here — cheap, just a single `git remote` parse. The detected
+    // provider also routes the fetch to the right forge CLI.
+    const repository = await getProviderRepositoryForGit(git)
+    const provider = repository?.provider
 
     if (cacheEnabled && !argv.refresh) {
       const cached = readCachedList<Cached>(spec.kind, repoPath, filter)
@@ -109,19 +115,21 @@ export function createGitHubListHandler<
     }
 
     if (!items) {
-      const overview = await spec.fetch(git, filter)
+      const overview = await spec.fetch(git, filter, provider)
 
       if (!overview.available) {
-        logger.log(chalk.red(overview.message || 'No GitHub remote detected.'))
+        logger.log(chalk.red(overview.message || 'No supported remote (GitHub or GitLab) detected.'))
         commandExit(1)
         return
       }
 
       if (!overview.authenticated) {
+        logger.log(chalk.yellow(overview.message || 'No authenticated forge CLI detected.'))
         logger.log(
-          chalk.yellow(overview.message || 'GitHub CLI is missing or not authenticated.')
+          chalk.dim(
+            `Authenticate the matching CLI (GitHub \`gh\` or GitLab \`glab\`) to enable ${spec.triageLabel}.`
+          )
         )
-        logger.log(chalk.dim(`Install \`gh\` and run \`gh auth login\` to enable ${spec.triageLabel}.`))
         commandExit(1)
         return
       }
@@ -144,7 +152,7 @@ export function createGitHubListHandler<
       return
     }
 
-    if (repository) {
+    if (repository?.owner && repository?.name) {
       const filterParts = spec.summarizeFilter(filter)
       const suffix = filterParts.length ? chalk.dim(` (${filterParts.join(', ')})`) : ''
       const cacheTag =

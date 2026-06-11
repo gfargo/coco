@@ -1,0 +1,54 @@
+# Local GitLab CE for testing coco's GitLab support end-to-end.
+#
+#   docker compose -f docker-compose.gitlab.yml up -d
+#
+# First boot takes a few minutes and needs ~4 GB RAM free. Once "healthy":
+#   1. Get the root password:
+#        docker compose -f docker-compose.gitlab.yml exec gitlab \
+#          cat /etc/gitlab/initial_root_password
+#   2. Log in at http://gitlab.local:8929 (root / that password). Add
+#        127.0.0.1 gitlab.local
+#      to /etc/hosts so the hostname resolves.
+#   3. Create a project, then a Personal Access Token (api scope).
+#   4. Point glab at it:
+#        glab auth login --hostname gitlab.local:8929 --token <PAT>
+#   5. Run the gated live test (see docs/gitlab-integration-testing.md):
+#        COCO_GITLAB_IT=1 COCO_GITLAB_TEST_PROJECT="root/your-project" \
+#          npm run test:integration -- gitlab.integration
+#
+# `gitlab.local` contains "gitlab", so coco auto-detects it as a GitLab forge.
+# To exercise the vanity-host path, use a hostname like `git.local` instead and
+# set `forgeHosts: { "git.local": "gitlab" }` in your coco config.
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: coco-gitlab-ce
+    hostname: gitlab.local
+    restart: unless-stopped
+    shm_size: '256m'
+    ports:
+      - '8929:8929' # HTTP
+      - '2289:22' # SSH (git over ssh)
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://gitlab.local:8929'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2289
+        # Trim memory for a test box (single Puma/Sidekiq worker).
+        puma['worker_processes'] = 0
+        sidekiq['max_concurrency'] = 5
+        prometheus_monitoring['enable'] = false
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:8929/-/health']
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+
+volumes:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:

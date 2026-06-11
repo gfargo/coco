@@ -5,13 +5,22 @@ import {
   describeGhStatus,
   getGhStatus,
   parseGitHubRemoteUrl as parseGitHubRemoteUrlBase,
+  parseRemoteUrl,
 } from './githubCli'
+import {
+  defaultGlabRunner,
+  describeGlabStatus,
+  getGlabStatus,
+  type GlabRunner,
+} from './glabCli'
 
-export type GitProviderType = 'github' | 'unsupported'
+export type GitProviderType = 'github' | 'gitlab' | 'unsupported'
 
 export type ProviderRepository = {
   provider: GitProviderType
   remote: string
+  /** Lowercased remote host (`github.com`, `gitlab.com`, `ghe.acme.com`, ...). */
+  host?: string
   owner?: string
   name?: string
   webUrl?: string
@@ -62,49 +71,121 @@ export function parseGitHubRemoteUrl(
   }
 }
 
-export function getProviderRepository(remoteName: string, remoteUrl: string): ProviderRepository {
-  const github = parseGitHubRemoteUrl(remoteUrl)
+/**
+ * Map a remote host to a forge. Known hosts win first; unknown self-hosted
+ * hosts fall back to a hostname heuristic (`*gitlab*` -> gitlab, `*github*` ->
+ * github, which also catches GitHub Enterprise hosts named like
+ * `github.acme.com`). Anything else is `unsupported`.
+ */
+/**
+ * Per-host forge overrides from config (`forgeHosts`), set once per run by the
+ * command executor. Lets self-hosted installs on vanity hostnames (no `gitlab`
+ * / `github` in the name) be detected explicitly.
+ */
+let forgeHostOverrides: Record<string, 'github' | 'gitlab'> = {}
 
-  if (github) {
+export function setForgeHostOverrides(
+  overrides: Record<string, 'github' | 'gitlab'> | undefined
+): void {
+  forgeHostOverrides = {}
+  if (overrides) {
+    for (const [host, provider] of Object.entries(overrides)) {
+      forgeHostOverrides[host.toLowerCase()] = provider
+    }
+  }
+}
+
+export function detectProvider(host: string): GitProviderType {
+  const h = host.toLowerCase()
+  if (forgeHostOverrides[h]) return forgeHostOverrides[h]
+  if (h === 'github.com') return 'github'
+  if (h === 'gitlab.com') return 'gitlab'
+  if (h.includes('gitlab')) return 'gitlab'
+  if (h.includes('github')) return 'github'
+  return 'unsupported'
+}
+
+export function getProviderRepository(remoteName: string, remoteUrl: string): ProviderRepository {
+  const parsed = parseRemoteUrl(remoteUrl)
+
+  if (!parsed) {
     return {
-      provider: 'github',
+      provider: 'unsupported',
       remote: remoteName,
-      ...github,
+      message: `Unsupported remote provider for ${remoteName}.`,
+    }
+  }
+
+  const provider = detectProvider(parsed.host)
+
+  if (provider === 'unsupported') {
+    return {
+      provider: 'unsupported',
+      remote: remoteName,
+      host: parsed.host,
+      owner: parsed.owner,
+      name: parsed.name,
+      message: `Unsupported remote host "${parsed.host}" for ${remoteName}.`,
     }
   }
 
   return {
-    provider: 'unsupported',
+    provider,
     remote: remoteName,
-    message: `Unsupported remote provider for ${remoteName}.`,
+    host: parsed.host,
+    owner: parsed.owner,
+    name: parsed.name,
+    webUrl: `https://${parsed.host}/${parsed.owner}/${parsed.name}`,
   }
+}
+
+/**
+ * Resolve the provider repository directly from a git instance (origin remote,
+ * else the first remote). Pure remote parsing, no network — used by the list
+ * command factory to detect the forge and render the header on the cache-hit
+ * path. Returns undefined when no remote is configured.
+ */
+export async function getProviderRepositoryForGit(
+  git: SimpleGit
+): Promise<ProviderRepository | undefined> {
+  const remotes = await git.getRemotes(true)
+  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
+  const url = remote?.refs.push || remote?.refs.fetch
+  return url ? getProviderRepository(remote.name, url) : undefined
 }
 
 export function buildProviderUrl(
   repository: ProviderRepository,
   target: ProviderUrlTarget
 ): string | undefined {
-  if (repository.provider !== 'github' || !repository.webUrl) {
+  if (repository.provider === 'unsupported' || !repository.webUrl) {
     return undefined
   }
 
+  const base = repository.webUrl
+  // GitLab namespaces every sub-path under `/-/`; GitHub does not.
+  const seg = repository.provider === 'gitlab' ? '/-' : ''
+
   if (target.type === 'repo') {
-    return repository.webUrl
+    return base
   }
 
   if (target.type === 'branch') {
-    return `${repository.webUrl}/tree/${encodeURIComponent(target.branch)}`
+    return `${base}${seg}/tree/${encodeURIComponent(target.branch)}`
   }
 
   if (target.type === 'commit') {
-    return `${repository.webUrl}/commit/${target.commit}`
+    return `${base}${seg}/commit/${target.commit}`
   }
 
   if (target.type === 'pull-request') {
-    return `${repository.webUrl}/pull/${target.number}`
+    // GitLab calls them merge requests and routes them differently.
+    return repository.provider === 'gitlab'
+      ? `${base}/-/merge_requests/${target.number}`
+      : `${base}/pull/${target.number}`
   }
 
-  return `${repository.webUrl}/compare/${encodeURIComponent(target.base)}...${encodeURIComponent(target.head)}`
+  return `${base}${seg}/compare/${encodeURIComponent(target.base)}...${encodeURIComponent(target.head)}`
 }
 
 function parseRepositoryJson(output: string): { defaultBranchRef?: { name?: string } } | undefined {
@@ -206,9 +287,92 @@ async function getCurrentPullRequest(
   }
 }
 
+async function getGitLabDefaultBranch(
+  encodedPath: string | undefined,
+  runner: GlabRunner
+): Promise<string | undefined> {
+  if (!encodedPath) return undefined
+  try {
+    const out = (await runner(['api', `projects/${encodedPath}`])).trim()
+    if (!out) return undefined
+    return (JSON.parse(out) as { default_branch?: string }).default_branch
+  } catch {
+    return undefined
+  }
+}
+
+async function getCurrentMergeRequest(
+  encodedPath: string,
+  sourceBranch: string,
+  runner: GlabRunner
+): Promise<ProviderPullRequestStatus | undefined> {
+  try {
+    const out = (
+      await runner([
+        'api',
+        `projects/${encodedPath}/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened`,
+      ])
+    ).trim()
+    if (!out) return undefined
+    const mr = (JSON.parse(out) as Array<{
+      iid: number
+      title: string
+      state: string
+      draft?: boolean
+      work_in_progress?: boolean
+    }>)[0]
+    if (!mr) return undefined
+    return {
+      number: mr.iid,
+      title: mr.title,
+      state: mr.state,
+      isDraft: Boolean(mr.draft ?? mr.work_in_progress),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+/** GitLab overview via glab: auth probe, default branch, current-branch MR. */
+async function getGitLabProviderOverview(
+  repository: ProviderRepository,
+  currentBranch: string | undefined,
+  localDefaultBranch: string | undefined,
+  runner: GlabRunner
+): Promise<ProviderOverview> {
+  const status = await getGlabStatus(runner)
+  if (status.kind !== 'ok') {
+    return {
+      repository: { ...repository, defaultBranch: localDefaultBranch },
+      currentBranch,
+      authenticated: false,
+      message: describeGlabStatus(status),
+    }
+  }
+
+  const path =
+    repository.owner && repository.name ? `${repository.owner}/${repository.name}` : undefined
+  const encoded = path ? encodeURIComponent(path) : undefined
+
+  const [defaultBranch, currentPullRequest] = await Promise.all([
+    getGitLabDefaultBranch(encoded, runner),
+    currentBranch && encoded
+      ? getCurrentMergeRequest(encoded, currentBranch, runner)
+      : Promise.resolve(undefined),
+  ])
+
+  return {
+    repository: { ...repository, defaultBranch: defaultBranch || localDefaultBranch },
+    currentBranch,
+    currentPullRequest,
+    authenticated: true,
+  }
+}
+
 export async function getProviderOverview(
   git: SimpleGit,
-  runner: GhRunner = defaultGhRunner
+  runner: GhRunner = defaultGhRunner,
+  glabRunner: GlabRunner = defaultGlabRunner
 ): Promise<ProviderOverview> {
   const [remotes, currentBranchOutput, localDefaultBranch] = await Promise.all([
     git.getRemotes(true),
@@ -230,6 +394,10 @@ export async function getProviderOverview(
     }
   const currentBranch = currentBranchOutput.trim() || undefined
 
+  if (repository.provider === 'gitlab') {
+    return getGitLabProviderOverview(repository, currentBranch, localDefaultBranch, glabRunner)
+  }
+
   if (repository.provider !== 'github') {
     return {
       repository: {
@@ -242,7 +410,9 @@ export async function getProviderOverview(
     }
   }
 
-  const ghStatus = await getGhStatus(runner)
+  // Probe the repo's own host so GitHub Enterprise remotes are checked against
+  // their server, not hardcoded github.com.
+  const ghStatus = await getGhStatus(runner, repository.host ?? 'github.com')
   if (ghStatus.kind !== 'ok') {
     return {
       repository: {

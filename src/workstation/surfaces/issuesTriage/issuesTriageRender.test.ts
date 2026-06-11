@@ -12,6 +12,7 @@ import {
 } from '../../chrome/context'
 import type { IssueListItem, IssueListOverview } from '../../../git/issuesListData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
+import { __test as gitlabInternals } from '../../../git/gitlabListData'
 import { renderIssuesTriageSurface } from './index'
 
 type StubProps = Record<string, unknown>
@@ -65,6 +66,31 @@ describe('renderIssuesTriageSurface', () => {
   it('renders an unavailable state with no GitHub remote', () => {
     const tree = render(makeState(), {
       issueList: { available: false, authenticated: false, message: 'No GitHub remote detected.' },
+    })
+    expect(tree).toBeDefined()
+    expect(tree.type).toBe(Box)
+  })
+
+  it('renders rows from GitLab-sourced issues (#0.70)', () => {
+    const issues = gitlabInternals.parseIssues(
+      JSON.stringify([
+        {
+          iid: 3,
+          title: 'Investigate slow load',
+          web_url: 'https://gitlab.com/g/p/-/issues/3',
+          state: 'opened',
+          author: { username: 'gfargo' },
+          labels: ['triage'],
+          user_notes_count: 2,
+          created_at: '2026-01-01',
+          updated_at: '2026-01-02',
+        },
+      ])
+    )
+    expect(issues[0]).toMatchObject({ number: 3, state: 'OPEN', labels: ['triage'], comments: 2 })
+
+    const tree = render(makeState(), {
+      issueList: { available: true, authenticated: true, repository: { owner: 'g', name: 'p' }, issues },
     })
     expect(tree).toBeDefined()
     expect(tree.type).toBe(Box)

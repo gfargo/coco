@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Deterministic mock of the GitLab CLI (`glab`) for the screenshot pipeline.
+#
+# coco's GitLab paths shell out to real `glab` (see src/git/glabCli.ts and the
+# `glab api ...` calls in gitlabListData.ts / gitlabDetailData.ts), which can't
+# be captured in a temp-repo screenshot. Recipes that set `glabMock: true` get
+# this script prepended to PATH (as `glab`) so the merge-request / MR-triage /
+# issue views render canned, stable data.
+#
+# It switches on the subcommand (`auth` / `api`) and, for `api`, routes on the
+# endpoint path (after stripping the query string) to echo JSON matching the
+# GitLab REST shapes coco's parsers read. Dates are fixed near COCO_SNAPSHOT_NOW
+# so relative ages don't drift between captures.
+
+set -euo pipefail
+
+sub="${1:-}"
+ep="${2:-}"
+
+# `glab auth status` — coco only checks the exit code.
+if [[ "$sub" == "auth" ]]; then
+  echo "gitlab.com: logged in as gfargo" >&2
+  exit 0
+fi
+
+# Everything else coco issues is `glab api <endpoint>`.
+if [[ "$sub" != "api" ]]; then
+  exit 0
+fi
+
+# Route on the path with the query string removed.
+path="${ep%%\?*}"
+
+# --- Merge requests ---------------------------------------------------------
+
+# MR notes (comments) for the inspector.
+if [[ "$path" == *"/merge_requests/"*"/notes" ]]; then
+  cat <<'JSON'
+[{"body":"LGTM — the CSV header fix looks right.","created_at":"2026-06-01T10:00:00Z","system":false,"author":{"username":"octocat"}},
+ {"body":"changed milestone to v0.70","created_at":"2026-06-01T10:05:00Z","system":true,"author":{"username":"bot"}},
+ {"body":"Pipeline is green now.","created_at":"2026-06-02T08:30:00Z","system":false,"author":{"username":"gfargo"}}]
+JSON
+  exit 0
+fi
+
+# MR approvals -> mapped to "reviews" in the inspector.
+if [[ "$path" == *"/merge_requests/"*"/approvals" ]]; then
+  echo '{"approved_by":[{"user":{"username":"octocat"}}]}'
+  exit 0
+fi
+
+# A single MR (numeric iid at the end) -> description + head pipeline.
+if [[ "$path" =~ /merge_requests/[0-9]+$ ]]; then
+  echo '{"iid":42,"description":"Adds a configurable analytics dashboard with CSV export and a data-fetch hook.","head_pipeline":{"status":"success"}}'
+  exit 0
+fi
+
+# MR list (also serves the current-branch overview via ?source_branch=...).
+if [[ "$path" == *"/merge_requests" ]]; then
+  cat <<'JSON'
+[
+ {"iid":42,"title":"Add analytics dashboard with CSV export","web_url":"https://gitlab.com/gfargo/coco/-/merge_requests/42","state":"opened","draft":false,"source_branch":"feat/dashboard","target_branch":"main","author":{"username":"gfargo"},"assignees":[{"username":"octocat"}],"labels":["enhancement","dashboard"],"merge_status":"can_be_merged","detailed_merge_status":"mergeable","created_at":"2026-05-28T14:10:00Z","updated_at":"2026-06-02T09:30:00Z"},
+ {"iid":41,"title":"Fix login redirect default","web_url":"https://gitlab.com/gfargo/coco/-/merge_requests/41","state":"opened","draft":true,"source_branch":"fix/login-redirect","target_branch":"main","author":{"username":"contrib-dev"},"assignees":[],"labels":["bug"],"merge_status":"cannot_be_merged","detailed_merge_status":"ci_still_running","created_at":"2026-05-30T11:00:00Z","updated_at":"2026-06-03T08:00:00Z"},
+ {"iid":39,"title":"Refactor dashboard data-fetch into a hook","web_url":"https://gitlab.com/gfargo/coco/-/merge_requests/39","state":"opened","draft":false,"source_branch":"refactor/data-hook","target_branch":"main","author":{"username":"gfargo"},"assignees":[{"username":"gfargo"}],"labels":["refactor"],"merge_status":"can_be_merged","detailed_merge_status":"mergeable","created_at":"2026-05-29T16:20:00Z","updated_at":"2026-06-01T13:45:00Z"}
+]
+JSON
+  exit 0
+fi
+
+# --- Issues -----------------------------------------------------------------
+
+if [[ "$path" == *"/issues/"*"/notes" ]]; then
+  echo '[{"body":"Repro confirmed on a cold load.","created_at":"2026-06-01T09:00:00Z","system":false,"author":{"username":"gfargo"}}]'
+  exit 0
+fi
+
+if [[ "$path" =~ /issues/[0-9]+$ ]]; then
+  echo '{"iid":7,"description":"The exported CSV omits the header row on the first export of a session."}'
+  exit 0
+fi
+
+if [[ "$path" == *"/issues" ]]; then
+  cat <<'JSON'
+[
+ {"iid":7,"title":"Dashboard CSV export missing headers","web_url":"https://gitlab.com/gfargo/coco/-/issues/7","state":"opened","author":{"username":"gfargo"},"assignees":[{"username":"octocat"}],"labels":["bug"],"user_notes_count":3,"created_at":"2026-05-28T12:00:00Z","updated_at":"2026-06-01T08:00:00Z"},
+ {"iid":6,"title":"Add dark mode to the dashboard","web_url":"https://gitlab.com/gfargo/coco/-/issues/6","state":"opened","author":{"username":"contrib-dev"},"assignees":[],"labels":["enhancement"],"user_notes_count":1,"created_at":"2026-05-27T15:00:00Z","updated_at":"2026-05-31T10:00:00Z"},
+ {"iid":5,"title":"Investigate slow initial dashboard load","web_url":"https://gitlab.com/gfargo/coco/-/issues/5","state":"opened","author":{"username":"gfargo"},"assignees":[{"username":"gfargo"}],"labels":["triage","performance"],"user_notes_count":2,"created_at":"2026-05-26T11:00:00Z","updated_at":"2026-05-30T09:00:00Z"}
+]
+JSON
+  exit 0
+fi
+
+# --- Project (default branch) ----------------------------------------------
+# Must come AFTER the merge_requests / issues routes since they also start with
+# `projects/`.
+if [[ "$path" == projects/* ]]; then
+  echo '{"default_branch":"main"}'
+  exit 0
+fi
+
+echo "[]"

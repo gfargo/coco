@@ -47,13 +47,13 @@ coco commit -i
 - **`coco commit`** - Generate commit messages from staged changes
 - **`coco amend`** - Regenerate the last commit's message from its diff and `git commit --amend`
 - **`coco changelog`** - Create changelogs from commit history  
-- **`coco pr create`** - Generate a PR title and body from the branch diff, then open it via `gh`
+- **`coco pr create`** - Generate a PR title and body from the branch diff, then open it via `gh` (GitHub) or `glab` (GitLab)
 - **`coco recap`** - Summarize recent changes and activity
 - **`coco review`** - AI-powered code review of your changes (`--severity <n>` and `--staged` for CI gating)
 - **`coco log`** - Explore commit history with graph, filters, JSON output, and commit details
 - **`coco ui`** - Open the full-screen Git workstation TUI
 - **`coco workspace`** (alias `ws`) - Multi-repo overview TUI; drill into any repo as a `coco ui` session
-- **`coco issues`** / **`coco prs`** - List GitHub issues / pull requests (stdout or interactive triage)
+- **`coco issues`** / **`coco prs`** - List GitHub or GitLab issues / pull requests (stdout or interactive triage)
 - **`coco doctor`** - Diagnose your environment, config, and provider setup (`--cost` shows per-task model routing plus usage by task, model, and repo; `--clear` wipes the local usage ledger)
 - **`coco init`** - Interactive setup wizard
 
@@ -62,6 +62,8 @@ coco commit -i
 > **Smart default (0.57.0+):** running `coco` with **no subcommand** routes by environment — `coco ui` inside a git repo, `coco workspace` outside one, or `coco init` on a fresh install. It no longer defaults to `commit`; use `coco commit` for messages (or `--commit` / `COCO_DEFAULT=commit` to restore the old default).
 
 > **Local usage stats (0.69.0+):** coco keeps a local, per-machine record of AI usage (prompt-token estimate and latency by task, model, and repo) to power `coco doctor --cost`. It stays on your machine and records no prompt, diff, or code content. The first interactive run enables it after a one-time notice; non-interactive and CI runs stay off. Opt out anytime with `coco init`, `telemetry.usage: false`, or `COCO_USAGE_LOG=0`.
+
+> **Multi-forge (0.70.0+):** `coco prs`, `coco issues`, `coco pr create`, and the full `coco ui` workstation (PR/issue triage, inspectors, and every per-row action) work with **GitHub**, **GitHub Enterprise**, and **GitLab**. coco detects the forge from your remote and shells out to the matching CLI: `gh` for GitHub / GitHub Enterprise, `glab` for GitLab (install it and run `glab auth login`).
 
 ## Usage Examples
 

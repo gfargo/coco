@@ -33,27 +33,74 @@ export type GitHubRepository = {
   name: string
 }
 
-/**
- * Canonical GitHub remote-URL parser. Handles all four remote forms gh/git
- * emit: scp-style ssh (`git@github.com:o/r`), ssh protocol
- * (`ssh://git@github.com/o/r`), https, and the legacy `git://` protocol.
- * `providerData` builds on this and adds the derived `webUrl`.
- */
-export function parseGitHubRemoteUrl(url: string): GitHubRepository | undefined {
-  const trimmed = url.trim().replace(/\.git$/, '')
-  const sshMatch = trimmed.match(/^git@github\.com:([^/]+)\/(.+)$/)
-  const sshProtocolMatch = trimmed.match(/^ssh:\/\/git@github\.com\/([^/]+)\/(.+)$/)
-  const httpsMatch = trimmed.match(/^https:\/\/github\.com\/([^/]+)\/(.+)$/)
-  const gitMatch = trimmed.match(/^git:\/\/github\.com\/([^/]+)\/(.+)$/)
-  const match = sshMatch || sshProtocolMatch || httpsMatch || gitMatch
+export type ParsedRemote = {
+  /** Lowercased host, e.g. `github.com`, `gitlab.com`, `ghe.acme.com`. */
+  host: string
+  /** Namespace / owner. May contain slashes for GitLab subgroups. */
+  owner: string
+  /** Repository / project name (the last path segment). */
+  name: string
+}
 
-  if (!match) {
+/**
+ * Host-agnostic remote-URL parser. Handles every form git emits — scp-style ssh
+ * (`git@host:owner/name`), ssh / git protocol URLs, and https (with optional
+ * `user@` and `:port`) — for ANY host, and preserves multi-segment owners so
+ * GitLab subgroups (`group/subgroup/project`) round-trip. Strips a trailing
+ * `.git`. Returns undefined when the URL doesn't resolve to host + owner + name.
+ */
+export function parseRemoteUrl(url: string): ParsedRemote | undefined {
+  const trimmed = url.trim().replace(/\.git$/, '')
+  let host: string | undefined
+  let rawPath: string | undefined
+
+  if (trimmed.includes('://')) {
+    // scheme://[user@]host[:port]/path
+    const m = trimmed.match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i)
+    if (m) {
+      host = m[1]
+      rawPath = m[2]
+    }
+  } else {
+    // scp-style: [user@]host:path
+    const m = trimmed.match(/^(?:[^@/]+@)?([^/:]+):(.+)$/)
+    if (m) {
+      host = m[1]
+      rawPath = m[2]
+    }
+  }
+
+  if (!host || !rawPath) {
+    return undefined
+  }
+
+  const segments = rawPath.replace(/^\/+/, '').split('/').filter(Boolean)
+  if (segments.length < 2) {
     return undefined
   }
 
   return {
-    owner: match[1],
-    name: match[2],
+    host: host.toLowerCase(),
+    owner: segments.slice(0, -1).join('/'),
+    name: segments[segments.length - 1],
+  }
+}
+
+/**
+ * GitHub.com remote parser, preserved for the GitHub code paths. Built on the
+ * host-agnostic `parseRemoteUrl`; returns owner/name only for github.com
+ * remotes. GitHub Enterprise and other forges are handled by the provider
+ * layer, which reads the parsed host directly.
+ */
+export function parseGitHubRemoteUrl(url: string): GitHubRepository | undefined {
+  const parsed = parseRemoteUrl(url)
+  if (!parsed || parsed.host !== 'github.com') {
+    return undefined
+  }
+
+  return {
+    owner: parsed.owner,
+    name: parsed.name,
   }
 }
 
@@ -115,9 +162,9 @@ export type GhStatus =
  *     → `unknown` with the underlying error message attached for
  *     diagnostic display.
  */
-export async function getGhStatus(runner: GhRunner): Promise<GhStatus> {
+export async function getGhStatus(runner: GhRunner, hostname = 'github.com'): Promise<GhStatus> {
   try {
-    await runner(['auth', 'status', '--hostname', 'github.com'])
+    await runner(['auth', 'status', '--hostname', hostname])
     return { kind: 'ok' }
   } catch (error) {
     const err = error as NodeJS.ErrnoException & { stderr?: string; code?: string | number }

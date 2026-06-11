@@ -26,7 +26,7 @@ exports[`renderPullRequestTriageSurface structural snapshot — empty list 1`] =
   <Text
     dimColor={true}
   >
-    No pull requests match the current GitHub filter (default: open PRs).
+    No pull requests match the current filter (default: open).
   </Text>
 </Box>
 `;

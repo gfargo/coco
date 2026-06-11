@@ -96,6 +96,7 @@ export function renderHeader(
       state: prInfo.state,
       isDraft: prInfo.isDraft,
     } : undefined,
+    forge: context.provider?.repository.provider,
     breadcrumb: view,
     loading,
     mode,

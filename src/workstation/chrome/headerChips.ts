@@ -28,8 +28,10 @@
  */
 
 import { cellWidth } from './text'
+import { forgeNouns } from './forgeNouns'
 import type { LogInkTheme } from './theme'
 import { getPullRequestStateGlyph } from './iconography'
+import type { GitProviderType } from '../../git/providerData'
 
 export type HeaderChip = {
   /**
@@ -82,6 +84,12 @@ export type BuildHeaderChipsInput = {
    * omits the PR chip entirely (no "no PR" placeholder).
    */
   pullRequest: { number: number; state: string; isDraft?: boolean } | undefined
+  /**
+   * Detected forge for the active repo. Drives the PR chip abbreviation
+   * ("PR" on GitHub/unsupported, "MR" on GitLab). `undefined` keeps the
+   * GitHub "PR" wording.
+   */
+  forge?: GitProviderType
   /**
    * Combined repo + view breadcrumb (e.g. "submodule/lib › diff").
    * Rendered only when non-empty.
@@ -191,9 +199,10 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
     const stateLabel = input.pullRequest.isDraft
       ? 'DRAFT'
       : input.pullRequest.state.toUpperCase()
+    const abbrev = forgeNouns(input.forge).abbrev
     const label = prGlyph.glyph
-      ? `${prGlyph.glyph} PR #${input.pullRequest.number} ${stateLabel}`
-      : `PR #${input.pullRequest.number} ${stateLabel}`
+      ? `${prGlyph.glyph} ${abbrev} #${input.pullRequest.number} ${stateLabel}`
+      : `${abbrev} #${input.pullRequest.number} ${stateLabel}`
     chips.push({
       id: 'pr',
       label,

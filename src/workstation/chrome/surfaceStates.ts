@@ -127,15 +127,21 @@ export function formatLogInkIssuesEmpty({ filter }: LogInkIssuesEmptyArgs): stri
 
 export type LogInkPullRequestTriageEmptyArgs = {
   filter: string
+  /**
+   * Forge-aware plural noun ("pull requests" / "merge requests"). Defaults
+   * to the GitHub wording so older callers stay correct.
+   */
+  noun?: string
 }
 
 export function formatLogInkPullRequestTriageEmpty({
   filter,
+  noun = 'pull requests',
 }: LogInkPullRequestTriageEmptyArgs): string {
   if (filter.trim()) {
-    return `No pull requests match filter '${filter}'. Press ctrl+u to clear.`
+    return `No ${noun} match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No pull requests match the current GitHub filter (default: open PRs).'
+  return `No ${noun} match the current filter (default: open).`
 }
 
 export type LogInkGitHubUnauthenticatedArgs = {

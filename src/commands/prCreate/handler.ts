@@ -5,6 +5,7 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getProviderOverview } from '../../git/providerData'
 import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import { createPullRequest, openPullRequest } from '../../git/pullRequestActions'
+import { createMergeRequest, openMergeRequest } from '../../git/mergeRequestActions'
 import { commandExit } from '../../lib/utils/commandExit'
 import { emitJson } from '../../lib/ui/emitJson'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
@@ -28,17 +29,21 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   const INTERACTIVE = previewOnly ? false : argv.interactive || isInteractive(config)
 
   const overview = await getProviderOverview(git)
+  const provider = overview.repository.provider
 
-  if (overview.repository.provider !== 'github') {
-    logger.log(overview.repository.message || 'No GitHub remote detected.', { color: 'red' })
+  if (provider !== 'github' && provider !== 'gitlab') {
+    logger.log(
+      overview.repository.message || 'No supported remote (GitHub or GitLab) detected.',
+      { color: 'red' }
+    )
     commandExit(1)
     return
   }
 
   if (!overview.authenticated) {
-    // `getProviderOverview` already routes through getGhStatus, so this is the
-    // curated "install / gh auth login" recovery hint.
-    logger.log(overview.message || 'GitHub CLI is unavailable.', { color: 'yellow' })
+    // `getProviderOverview` already routes through the forge's auth probe, so
+    // this is the curated "install / authenticate the CLI" recovery hint.
+    logger.log(overview.message || 'The forge CLI is unavailable.', { color: 'yellow' })
     commandExit(1)
     return
   }
@@ -144,7 +149,9 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
     }
   }
 
-  const result = await createPullRequest({ base, head, title, body, draft: Boolean(argv.draft) })
+  const input = { base, head, title, body, draft: Boolean(argv.draft) }
+  const result =
+    provider === 'gitlab' ? await createMergeRequest(input) : await createPullRequest(input)
 
   if (!result.ok) {
     logger.log(result.message, { color: 'red' })
@@ -156,6 +163,6 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   logger.log(result.message, { color: 'green' })
 
   if (argv.web && result.url) {
-    await openPullRequest(result.url)
+    await (provider === 'gitlab' ? openMergeRequest(result.url) : openPullRequest(result.url))
   }
 }

@@ -179,39 +179,13 @@ import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dr
 import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
-import { getIssueDetail } from '../../git/issueDetailData'
-import { getIssueList } from '../../git/issuesListData'
-import {
-    addIssueAssignee,
-    addIssueLabel,
-    closeIssue,
-    commentIssue,
-    reopenIssue,
-} from '../../git/issueActions'
-import { getPullRequestDetail } from '../../git/pullRequestDetailData'
-import { getPullRequestOverview } from '../../git/pullRequestData'
-import { getPullRequestList } from '../../git/pullRequestListData'
+import { getForgeActions, getForgePullRequestOverview } from '../../git/forgeActions'
 import { clearGitHubListCache } from '../../git/githubListCache'
 import {
     issueFilterForPreset,
     pullRequestFilterForPreset,
 } from '../../git/triageFilterPresets'
-import {
-    addPullRequestAssignee,
-    addPullRequestLabel,
-    approvePullRequest,
-    approvePullRequestByNumber,
-    closePullRequest,
-    closePullRequestByNumber,
-    commentPullRequest,
-    commentPullRequestByNumber,
-    createPullRequest,
-    isPullRequestMergeStrategy,
-    mergePullRequest,
-    mergePullRequestByNumber,
-    requestChangesPullRequest,
-    requestChangesPullRequestByNumber,
-} from '../../git/pullRequestActions'
+import { isPullRequestMergeStrategy } from '../../git/pullRequestActions'
 import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import {
     findStashFileForOffset,
@@ -264,7 +238,7 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
   const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules] =
     await Promise.all([
       safe(getBranchOverview(git)),
-      safe(getPullRequestOverview(git)),
+      safe(getForgePullRequestOverview(git)),
       safe(getTagOverview(git)),
       safe(getWorktreeOverview(git)),
       safe(getStashOverview(git)),
@@ -1463,7 +1437,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       (current) => updateLogInkContextStatus(current, 'pullRequest', 'loading'),
       issuedAtDepth,
     )
-    void safe(getPullRequestOverview(git)).then((value) => {
+    void safe(getForgePullRequestOverview(git)).then((value) => {
       if (!active) return
       setContext(
         (current) => ({
@@ -1488,6 +1462,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // `state.selectedIssueFilter` triggers the refetch). The
   // existing `context.issueList` guard collapses to a no-op when
   // the preset hasn't changed and data is already loaded.
+  // Forge facade — picks gh (GitHub / GHE) vs glab (GitLab) implementations
+  // from the detected provider, so every list / detail / action below routes
+  // to the right CLI without per-call-site branching.
+  const forgeProvider = context.provider?.repository.provider
+  const forgeGitlabPath =
+    context.provider?.repository.owner && context.provider?.repository.name
+      ? `${context.provider.repository.owner}/${context.provider.repository.name}`
+      : undefined
+  const forge = React.useMemo(
+    () => getForgeActions(forgeProvider, { gitlabPath: forgeGitlabPath }),
+    [forgeProvider, forgeGitlabPath]
+  )
+
   React.useEffect(() => {
     if (state.activeView !== 'issues') return
     if (context.issueList) return
@@ -1498,7 +1485,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       issuedAtDepth,
     )
     const filter = issueFilterForPreset(state.selectedIssueFilter)
-    void safe(getIssueList(git, filter)).then((value) => {
+    void safe(forge.getIssueList(git, filter)).then((value) => {
       if (!active) return
       setContext(
         (current) => ({
@@ -1553,7 +1540,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       issuedAtDepth,
     )
     const filter = pullRequestFilterForPreset(state.selectedPullRequestFilter)
-    void safe(getPullRequestList(git, filter)).then((value) => {
+    void safe(forge.getPullRequestList(git, filter)).then((value) => {
       if (!active) return
       setContext(
         (current) => ({
@@ -1615,7 +1602,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const issuedAtDepth = runtimes.length - 1
     let active = true
     const timer = setTimeout(async () => {
-      const result = await getIssueDetail(cursored.number)
+      const result = await forge.getIssueDetail(cursored.number)
       if (!active || !result.ok) return
       setContext(
         (current) => ({
@@ -1656,7 +1643,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const issuedAtDepth = runtimes.length - 1
     let active = true
     const timer = setTimeout(async () => {
-      const result = await getPullRequestDetail(cursored.number)
+      const result = await forge.getPullRequestDetail(cursored.number)
       if (!active || !result.ok) return
       setContext(
         (current) => ({
@@ -3751,26 +3738,26 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!base) {
           return { ok: false, message: 'No default branch detected. Configure the GitHub remote.' }
         }
-        return createPullRequest({ base, head, title, body })
+        return forge.createPullRequest({ base, head, title, body })
       },
       'merge-pr': async () => {
         const strategy = (payload || 'merge').toLowerCase()
         if (!isPullRequestMergeStrategy(strategy)) {
           return { ok: false, message: `Unknown merge strategy: ${strategy}. Use merge, squash, or rebase.` }
         }
-        return mergePullRequest(strategy)
+        return forge.mergePullRequest(strategy)
       },
-      'close-pr': async () => closePullRequest(),
-      'approve-pr': async () => approvePullRequest(),
+      'close-pr': async () => forge.closePullRequest(),
+      'approve-pr': async () => forge.approvePullRequest(),
       'request-changes-pr': async () => {
         const body = payload?.trim()
         if (!body) return { ok: false, message: 'Review body required for change-request' }
-        return requestChangesPullRequest(body)
+        return forge.requestChangesPullRequest(body)
       },
       'comment-pr': async () => {
         const body = payload?.trim()
         if (!body) return { ok: false, message: 'Comment body required' }
-        return commentPullRequest(body)
+        return forge.commentPullRequest(body)
       },
       // #882 phase 4 — triage-view low-risk mutations. Each picks
       // the cursored item from the *filtered* list (matching what
@@ -3800,7 +3787,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
-        const result = await commentIssue(issue.number, body)
+        const result = await forge.commentIssue(issue.number, body)
         if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
@@ -3811,7 +3798,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
-        const result = await addIssueLabel(issue.number, label)
+        const result = await forge.addIssueLabel(issue.number, label)
         if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
@@ -3822,7 +3809,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
-        const result = await addIssueAssignee(issue.number, assignee)
+        const result = await forge.addIssueAssignee(issue.number, assignee)
         if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
@@ -3845,7 +3832,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
-        const result = await commentPullRequestByNumber(pr.number, body)
+        const result = await forge.commentPullRequestByNumber(pr.number, body)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
@@ -3856,7 +3843,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
-        const result = await addPullRequestLabel(pr.number, label)
+        const result = await forge.addPullRequestLabel(pr.number, label)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
@@ -3867,7 +3854,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
-        const result = await addPullRequestAssignee(pr.number, assignee)
+        const result = await forge.addPullRequestAssignee(pr.number, assignee)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
@@ -3882,7 +3869,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
-        const result = await closeIssue(issue.number)
+        const result = await forge.closeIssue(issue.number)
         if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
@@ -3891,7 +3878,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
         ]
         if (!issue) return { ok: false, message: 'No issue under cursor' }
-        const result = await reopenIssue(issue.number)
+        const result = await forge.reopenIssue(issue.number)
         if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
@@ -3907,7 +3894,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
-        const result = await mergePullRequestByNumber(pr.number, strategy)
+        const result = await forge.mergePullRequestByNumber(pr.number, strategy)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
@@ -3916,7 +3903,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
-        const result = await closePullRequestByNumber(pr.number)
+        const result = await forge.closePullRequestByNumber(pr.number)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
@@ -3925,7 +3912,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
-        const result = await approvePullRequestByNumber(pr.number)
+        const result = await forge.approvePullRequestByNumber(pr.number)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
@@ -3936,7 +3923,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
         ]
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
-        const result = await requestChangesPullRequestByNumber(pr.number, body)
+        const result = await forge.requestChangesPullRequestByNumber(pr.number, body)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },

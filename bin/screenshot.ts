@@ -258,6 +258,26 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
     }
   }
 
+  // GitLab-integration recipes: same idea as the gh block, but the origin is a
+  // GitLab host (so coco routes through `glab`) and we stage a mock `glab`.
+  let glabMockDir: string | undefined
+  if (recipe.gitlabRemote || recipe.glabMock) {
+    const { execSync } = await import('child_process')
+    if (recipe.gitlabRemote) {
+      execSync(
+        `git -C "${repo.path}" remote add origin "${recipe.gitlabRemote}" 2>/dev/null || git -C "${repo.path}" remote set-url origin "${recipe.gitlabRemote}"`,
+        { stdio: 'ignore' }
+      )
+    }
+    if (recipe.glabMock) {
+      const { copyFileSync, chmodSync } = await import('fs')
+      glabMockDir = mkdtempSync(join(tmpdir(), 'coco-glab-mock-'))
+      const dest = join(glabMockDir, 'glab')
+      copyFileSync(join(REPO_ROOT, 'bin', 'screenshot', 'mock-glab'), dest)
+      chmodSync(dest, 0o755)
+    }
+  }
+
   try {
     const tape = buildTape(recipe, {
       cwd: repo.path,
@@ -267,6 +287,7 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
       repoRoot: REPO_ROOT,
       nodeBinDir: NODE_BIN_DIR,
       ghMockDir,
+      glabMockDir,
     })
     writeFileSync(tapePath, tape, 'utf8')
 

@@ -86,6 +86,18 @@ export type ScreenshotRecipe = {
    * `githubRemote`.
    */
   ghMock?: boolean
+  /**
+   * GitLab counterpart of `githubRemote`. Add an `origin` whose host coco
+   * detects as GitLab so the forge layer routes to `glab`. Use
+   * `git@gitlab.com:owner/repo.git`.
+   */
+  gitlabRemote?: string
+  /**
+   * When true, prepend a deterministic mock `glab` (bin/screenshot/mock-glab)
+   * to PATH so the merge-request / MR-triage / issue views render canned data
+   * instead of shelling out to the real GitLab CLI. Pair with `gitlabRemote`.
+   */
+  glabMock?: boolean
 }
 
 /**
@@ -1550,6 +1562,81 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 4000 },
       { kind: 'type', text: 'gi' },
       { kind: 'sleep', ms: 2000 },
+    ],
+  },
+  // GitLab-backed workstation views — same surfaces as the gh recipes above,
+  // but the scenario remote is a GitLab host so coco routes through `glab`
+  // (mocked deterministically by bin/screenshot/mock-glab).
+  {
+    name: 'ui-gitlab-mr-triage',
+    description: 'GitLab MR triage (g P) — merge requests with draft / pipeline / approval badges, served via glab (mock glab)',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    gitlabRemote: 'git@gitlab.com:gfargo/coco.git',
+    glabMock: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gP' },
+      { kind: 'sleep', ms: 2000 },
+    ],
+  },
+  {
+    name: 'ui-gitlab-issues',
+    description: 'GitLab issues (g i) — issues with labels / assignees + inspector, served via glab (mock glab)',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    gitlabRemote: 'git@gitlab.com:gfargo/coco.git',
+    glabMock: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gi' },
+      { kind: 'sleep', ms: 2000 },
+    ],
+  },
+  {
+    name: 'ui-gitlab-merge-request',
+    description: 'GitLab merge request (g p) — current branch MR with pipeline status, approvals, and actions (mock glab)',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    gitlabRemote: 'git@gitlab.com:gfargo/coco.git',
+    glabMock: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gp' },
+      { kind: 'sleep', ms: 2000 },
+    ],
+  },
+  {
+    // Animated demo for the marketing site — GitLab MR triage in motion:
+    // enter the triage list, browse rows (the inspector re-hydrates per MR),
+    // then cycle the filter. Served via mock glab so it stays deterministic.
+    name: 'demo-gitlab-mr-triage',
+    description: 'GitLab MR triage in motion — open merge requests (g P), browse rows, inspector updates per MR, filter cycling (mock glab) [GIF]',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    gitlabRemote: 'git@gitlab.com:gfargo/coco.git',
+    glabMock: true,
+    dimensions: { cols: 150, rows: 38 },
+    emitGif: true,
+    actions: [
+      // The MR-triage surface is only reachable via the `gP` chord (the --view
+      // flag only exposes history/status/diff), so settle, then open it on
+      // camera and browse. The GIF reads as "open coco ui -> g P -> merge
+      // requests -> browse them".
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gP' },
+      { kind: 'sleep', ms: 1800 },
+      { kind: 'type', text: 'j' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'j' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'k' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'f' },
+      { kind: 'sleep', ms: 1700 },
     ],
   },
   {

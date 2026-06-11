@@ -90,6 +90,26 @@ describe('buildHeaderChips', () => {
     expect(pr.color).toBe('green') // theme.colors.success for OPEN
   })
 
+  it('uses the MR abbreviation on a GitLab repo (#0.70)', () => {
+    const chips = buildHeaderChips(makeInput({
+      forge: 'gitlab',
+      pullRequest: { number: 1234, state: 'open' },
+    }))
+    const pr = chips.find((c) => c.id === 'pr')!
+    expect(pr.label).toContain('MR #1234')
+    expect(pr.label).not.toContain('PR #1234')
+  })
+
+  it('keeps the PR abbreviation on a GitHub repo (#0.70)', () => {
+    const chips = buildHeaderChips(makeInput({
+      forge: 'github',
+      pullRequest: { number: 1234, state: 'open' },
+    }))
+    const pr = chips.find((c) => c.id === 'pr')!
+    expect(pr.label).toContain('PR #1234')
+    expect(pr.label).not.toContain('MR #1234')
+  })
+
   it('uses DRAFT label when the pull request is a draft', () => {
     const chips = buildHeaderChips(makeInput({
       pullRequest: { number: 99, state: 'open', isDraft: true },

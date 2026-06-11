@@ -193,6 +193,17 @@ type BaseConfig = {
      */
     usage?: boolean
   }
+
+  /**
+   * Map self-hosted git remote hosts to a forge so coco talks to the right CLI.
+   * coco auto-detects github.com, gitlab.com, and hosts whose name contains
+   * `gitlab` / `github` (which covers most GitLab self-managed and GitHub
+   * Enterprise installs). For vanity hostnames that carry neither word (e.g.
+   * `git.acme.com`), set the mapping here so detection and dispatch work.
+   *
+   * @example { "git.acme.com": "gitlab", "code.internal": "github" }
+   */
+  forgeHosts?: Record<string, 'github' | 'gitlab'>
 }
 
 export type ConfigWithServiceObject = BaseConfig &
