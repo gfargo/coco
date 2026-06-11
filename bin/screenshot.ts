@@ -81,11 +81,22 @@ const SCREENSHOTS_DIR = join(REPO_ROOT, '.screenshots')
 const COCO_CLI = join(REPO_ROOT, 'node_modules', '.bin', 'tsx') + ' ' + join(REPO_ROOT, 'src', 'index.ts')
 const NODE_BIN_DIR = dirname(process.execPath)
 
+/**
+ * Default gifsicle `--lossy` level applied during optimization. Gentle
+ * (30) — high enough to let consecutive near-identical terminal frames
+ * collapse into a single frame (the dominant size win; see optimizeGif),
+ * low enough to stay visually lossless on crisp monospace text. Override
+ * per-run with `--lossy <n>`; disable with `--lossless`.
+ */
+const DEFAULT_GIF_LOSSY = 30
+
 type CliArgs = {
   list: boolean
   help: boolean
   recipe: string | undefined
   keepTape: boolean
+  /** gifsicle `--lossy` level; 0 means lossless (`-O3` only). */
+  gifLossy: number
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -94,18 +105,28 @@ function parseArgs(argv: string[]): CliArgs {
     help: false,
     recipe: undefined,
     keepTape: false,
+    gifLossy: DEFAULT_GIF_LOSSY,
   }
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--list' || arg === '-l') args.list = true
     else if (arg === '--help' || arg === '-h') args.help = true
     else if (arg === '--keep-tape') args.keepTape = true
-    else if (arg === '--recipe' || arg === '-r') {
+    else if (arg === '--lossless') args.gifLossy = 0
+    else if (arg === '--lossy') {
+      args.gifLossy = Number(argv[i + 1])
+      i += 1
+    } else if (arg.startsWith('--lossy=')) {
+      args.gifLossy = Number(arg.slice('--lossy='.length))
+    } else if (arg === '--recipe' || arg === '-r') {
       args.recipe = argv[i + 1]
       i += 1
     } else if (arg.startsWith('--recipe=')) {
       args.recipe = arg.slice('--recipe='.length)
     }
+  }
+  if (!Number.isFinite(args.gifLossy) || args.gifLossy < 0) {
+    args.gifLossy = DEFAULT_GIF_LOSSY
   }
   return args
 }
@@ -123,10 +144,13 @@ Options:
   -r, --recipe <name>    Capture a single recipe by name
   -l, --list             Print every recipe name + description
       --keep-tape        Don't delete the generated .tape file (for debugging)
+      --lossy <n>        gifsicle --lossy level for GIF shrink (default ${DEFAULT_GIF_LOSSY})
+      --lossless         Disable lossy GIF shrink (gifsicle -O3 only)
   -h, --help             Show this help
 
 Output: .screenshots/<recipe-name>.png (and .gif when emitGif is true).
-Requires: vhs on PATH (https://github.com/charmbracelet/vhs).`)
+GIFs are shrunk with gifsicle -O3 --lossy=${DEFAULT_GIF_LOSSY} (visually lossless on
+terminal text; collapses duplicate sleep-frames). Requires: vhs + gifsicle on PATH.`)
 }
 
 function checkVhsAvailable(): boolean {
@@ -135,33 +159,63 @@ function checkVhsAvailable(): boolean {
 }
 
 /**
- * Lossless GIF shrink. VHS writes full, undeduplicated frames, so a
- * short terminal demo lands at 10–20 MB even though almost nothing
- * changes between frames. `gifsicle -O3` rewrites the file with
- * inter-frame transparency optimization — typically a 20–30× reduction
- * with ZERO pixel changes (no `--lossy`, no colour quantization), which
- * is what keeps marketing-site GIFs viable.
+ * Count the frames in a GIF via `gifsicle --info` ("<n> images" on the
+ * header line). Best-effort: returns null if gifsicle/parse fails — the
+ * count is only used for a log line, never for control flow.
+ */
+function countGifFrames(gifPath: string): number | null {
+  const result = spawnSync('gifsicle', ['--info', gifPath], { encoding: 'utf8', stdio: 'pipe' })
+  if (result.status !== 0) return null
+  const match = result.stdout.match(/(\d+) images/)
+  return match ? Number(match[1]) : null
+}
+
+/**
+ * Shrink a VHS-captured GIF. VHS writes full, undeduplicated frames at
+ * its capture framerate, so a short terminal demo lands at 10–30 MB —
+ * mostly *duplicate* frames painted during the `Sleep` beats while
+ * nothing on screen changes.
+ *
+ * `gifsicle -O3` alone can't merge those duplicates: sub-pixel dithering
+ * noise leaves consecutive "static" frames not-quite-identical, so all of
+ * them survive (a 7s demo stays 180+ frames / ~28 MB). A gentle
+ * `--lossy=<level>` pass quantizes that noise away, which lets `-O3`
+ * collapse each run of now-identical frames into ONE frame with an
+ * extended delay — timing preserved, only the genuinely-distinct visual
+ * states kept. On terminal captures this is the dominant lever (~100×),
+ * and at level 30 it's visually lossless on monospace text.
+ *
+ * `lossy === 0` keeps the old lossless-only behaviour (`--lossless` flag).
  *
  * Best-effort: if `gifsicle` isn't on PATH we leave the raw GIF in place
  * and print an install hint rather than failing the capture. Optimizing
  * in the pipeline (not by hand) means `screenshot:sync` regenerations
  * stay small without anyone remembering a post-step.
  */
-function optimizeGif(gifPath: string): void {
+function optimizeGif(gifPath: string, lossy: number): void {
   const probe = spawnSync('gifsicle', ['--version'], { stdio: 'pipe' })
   if (probe.status !== 0) {
     console.log('  · gifsicle not found — GIF left unoptimized (brew install gifsicle)')
     return
   }
   const before = existsSync(gifPath) ? statSync(gifPath).size : 0
-  const result = spawnSync('gifsicle', ['-O3', '--batch', gifPath], { stdio: 'pipe' })
+  const framesBefore = countGifFrames(gifPath)
+  const gifsicleArgs = lossy > 0
+    ? ['-O3', `--lossy=${lossy}`, '--batch', gifPath]
+    : ['-O3', '--batch', gifPath]
+  const result = spawnSync('gifsicle', gifsicleArgs, { stdio: 'pipe' })
   if (result.status !== 0) {
     console.log('  · gifsicle optimization failed — GIF left unoptimized')
     return
   }
   const after = statSync(gifPath).size
-  const mb = (n: number) => (n / 1048576).toFixed(1)
-  console.log(`  · gifsicle -O3 (lossless): ${mb(before)} MB → ${mb(after)} MB`)
+  const framesAfter = countGifFrames(gifPath)
+  const mb = (n: number) => (n / 1048576).toFixed(2)
+  const mode = lossy > 0 ? `--lossy=${lossy}` : 'lossless'
+  const frames = framesBefore != null && framesAfter != null
+    ? ` (${framesBefore} → ${framesAfter} frames)`
+    : ''
+  console.log(`  · gifsicle -O3 ${mode}: ${mb(before)} MB → ${mb(after)} MB${frames}`)
 }
 
 /**
@@ -228,7 +282,7 @@ async function spinUpAsync(scenarioName: string | null): Promise<{ path: string;
   }
 }
 
-async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean }): Promise<void> {
+async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean; gifLossy: number }): Promise<void> {
   console.log(`▸ ${recipe.name} — ${recipe.description}`)
 
   const repo = await spinUpAsync(recipe.scenario)
@@ -337,7 +391,7 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean 
 
     console.log(`  ✓ ${pngPath}`)
     if (gifPath && existsSync(gifPath)) {
-      optimizeGif(gifPath)
+      optimizeGif(gifPath, options.gifLossy)
       console.log(`  ✓ ${gifPath}`)
     }
   } finally {
@@ -402,7 +456,7 @@ async function main(): Promise<void> {
   let failed = 0
   for (const recipe of targets) {
     try {
-      await runRecipe(recipe, { keepTape: args.keepTape })
+      await runRecipe(recipe, { keepTape: args.keepTape, gifLossy: args.gifLossy })
       succeeded += 1
     } catch (error) {
       failed += 1
