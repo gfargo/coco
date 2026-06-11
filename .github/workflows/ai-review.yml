@@ -1,23 +1,68 @@
 name: AI Review
+
+# Claude-based PR code review (0.71). Replaces the previous OpenAI
+# (anc95/ChatGPT-CodeReview) action. Opt-in per PR via the "claude review"
+# label, so it never spends tokens on every push.
+#
+# Requires an ANTHROPIC_API_KEY repo secret
+# (Settings -> Secrets and variables -> Actions). Without it the job fails,
+# exactly like the old workflow needed OPENAI_API_KEY.
+
 permissions:
   contents: read
   pull-requests: write
+  issues: read
+
 on:
   pull_request:
     types:
       - opened
       - reopened
       - synchronize
+      - labeled
+
 jobs:
-  test:
-    if: ${{ contains(github.event.*.labels.*.name, 'gpt review') }} # Optional; to run only when a label is attached
+  review:
+    # Label-gated: only runs when the PR carries the "claude review" label.
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'claude review') }}
     runs-on: ubuntu-latest
     steps:
-      # Pinned to a specific tag instead of `@main` so an upstream
-      # change to anc95/ChatGPT-CodeReview can't silently break this
-      # workflow or leak unexpected behaviour into PR reviews. Bump
-      # this manually after reviewing the upstream changelog.
-      - uses: anc95/ChatGPT-CodeReview@v1.0.23
-        env:
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
-          OPENAI_API_KEY: '${{ secrets.OPENAI_API_KEY }}'
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so the reviewer can reason about the change in context.
+          fetch-depth: 0
+
+      # Pinned to the major-version tag rather than @main so an upstream
+      # change can't silently alter review behaviour. For stricter
+      # supply-chain control (matching the old action's exact pin), swap
+      # `@v1` for an exact release tag or commit SHA after reviewing the
+      # upstream changelog: https://github.com/anthropics/claude-code-action
+      - name: Claude code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Bound the run; raise --max-turns for larger diffs. Add e.g.
+          # `--model claude-opus-4-8` for deeper (pricier) reviews; the
+          # action otherwise uses its current default model.
+          claude_args: --max-turns 6
+          prompt: |
+            Review this pull request as a senior engineer on the coco
+            project — a TypeScript git CLI built on yargs commands, a
+            LangChain provider layer, and an Ink + React terminal
+            workstation (the "ui" surface).
+
+            Focus, in priority order, on:
+            - Correctness bugs, missed edge cases, and error handling.
+            - Security: untrusted input, subprocess / CLI-argument
+              construction (gh / glab), control-character / terminal
+              injection, and secret exposure.
+            - Forge-abstraction consistency: GitHub vs GitLab parity in
+              both behaviour and user-facing wording.
+            - Adherence to the surrounding code's patterns, naming, and
+              the project's test conventions.
+
+            Post concrete findings as inline comments on the diff. Skip
+            style nitpicks; lead with a short summary, then the
+            highest-value issues. If the change looks solid, say so
+            briefly rather than inventing concerns.
