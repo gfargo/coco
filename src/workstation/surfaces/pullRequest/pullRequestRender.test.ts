@@ -40,12 +40,28 @@ function makePr(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   } as PullRequestInfo
 }
 
+/** Flatten an Ink element tree into the concatenated visible text. */
+function treeText(node: unknown): string {
+  if (node == null || node === false) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(treeText).join('')
+  const el = node as { props?: { children?: unknown } }
+  return el.props ? treeText(el.props.children) : ''
+}
+
 function render(
   state: LogInkState,
-  options: { pullRequest?: PullRequestOverview; loading?: boolean } = {}
+  options: {
+    pullRequest?: PullRequestOverview
+    loading?: boolean
+    provider?: LogInkContext['provider']
+  } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
-  const context: LogInkContext = options.pullRequest ? { pullRequest: options.pullRequest } : {}
+  const context: LogInkContext = {
+    ...(options.pullRequest ? { pullRequest: options.pullRequest } : {}),
+    ...(options.provider ? { provider: options.provider } : {}),
+  }
   const contextStatus = options.loading
     ? updateLogInkContextStatus(createLogInkContextStatus('idle'), 'pullRequest', 'loading')
     : createLogInkContextStatus('ready')
@@ -96,6 +112,40 @@ describe('renderPullRequestSurface', () => {
       },
     })
     expect(tree).toBeDefined()
+  })
+
+  it('uses Merge-request wording on a GitLab repo (#0.70)', () => {
+    const tree = render(makeState(), {
+      pullRequest: {
+        available: true,
+        authenticated: true,
+        currentPullRequest: makePr(),
+      },
+      provider: {
+        repository: { provider: 'gitlab', owner: 'g', name: 'p' },
+        authenticated: true,
+      } as never,
+    })
+    const text = treeText(tree)
+    expect(text).toContain('Merge request')
+    expect(text).not.toContain('Pull request')
+  })
+
+  it('keeps Pull-request wording on a GitHub repo (#0.70)', () => {
+    const tree = render(makeState(), {
+      pullRequest: {
+        available: true,
+        authenticated: true,
+        currentPullRequest: makePr(),
+      },
+      provider: {
+        repository: { provider: 'github', owner: 'o', name: 'r' },
+        authenticated: true,
+      } as never,
+    })
+    const text = treeText(tree)
+    expect(text).toContain('Pull request')
+    expect(text).not.toContain('Merge request')
   })
 
   it('reflects focus state via border color', () => {

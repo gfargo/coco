@@ -13,6 +13,7 @@
 import type * as ReactTypes from 'react'
 import type { PullRequestListItem } from '../../../git/pullRequestListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { forgeNouns } from '../../chrome/forgeNouns'
 import {
   formatLogInkGitHubNoRemote,
   formatLogInkGitHubUnauthenticated,
@@ -108,26 +109,27 @@ export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): React
   const focused = state.focus === 'commits'
   const overview = context.pullRequestList
   const loading = isLogInkContextKeyLoading(contextStatus, 'pullRequestList')
+  const nouns = forgeNouns(context.provider?.repository.provider)
 
   let headerRight = ''
   let bodyLines: ReactTypes.ReactNode[] = []
 
   if (loading || !overview) {
-    headerRight = 'loading pull requests'
+    headerRight = `loading ${nouns.pluralLower}`
     bodyLines = [
-      h(Text, { key: 'pr-triage-loading', dimColor: true }, formatLogInkLoading({ resource: 'pull requests' })),
+      h(Text, { key: 'pr-triage-loading', dimColor: true }, formatLogInkLoading({ resource: nouns.pluralLower })),
     ]
   } else if (!overview.available) {
     headerRight = 'unavailable'
     bodyLines = [
       h(Text, { key: 'pr-triage-no-remote', dimColor: true },
-        formatLogInkGitHubNoRemote({ resource: 'Pull requests' })),
+        formatLogInkGitHubNoRemote({ resource: nouns.plural })),
     ]
   } else if (!overview.authenticated) {
     headerRight = 'gh not authenticated'
     bodyLines = [
       h(Text, { key: 'pr-triage-unauth', dimColor: true },
-        formatLogInkGitHubUnauthenticated({ resource: 'Pull requests' })),
+        formatLogInkGitHubUnauthenticated({ resource: nouns.plural })),
     ]
   } else if (overview.message && !overview.pullRequests) {
     headerRight = 'error'
@@ -160,7 +162,7 @@ export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): React
     if (visible.length === 0) {
       bodyLines = [
         h(Text, { key: 'pr-triage-empty', dimColor: true },
-          formatLogInkPullRequestTriageEmpty({ filter: state.filter })),
+          formatLogInkPullRequestTriageEmpty({ filter: state.filter, noun: nouns.pluralLower })),
       ]
     } else {
       const numberColWidth = Math.min(
@@ -235,7 +237,7 @@ export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): React
     width,
   },
   h(Box, { justifyContent: 'space-between' },
-    h(Text, { bold: true }, panelTitle('Pull requests', focused)),
+    h(Text, { bold: true }, panelTitle(nouns.plural, focused)),
     h(Text, { dimColor: true }, headerRight)
   ),
   ...bodyLines)

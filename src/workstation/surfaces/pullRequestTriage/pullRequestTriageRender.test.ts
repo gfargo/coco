@@ -47,14 +47,28 @@ function makePr(overrides: Partial<PullRequestListItem> = {}): PullRequestListIt
   } as PullRequestListItem
 }
 
+/** Flatten an Ink element tree into the concatenated visible text. */
+function treeText(node: unknown): string {
+  if (node == null || node === false) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(treeText).join('')
+  const el = node as { props?: { children?: unknown } }
+  return el.props ? treeText(el.props.children) : ''
+}
+
 function render(
   state: LogInkState,
-  options: { pullRequestList?: PullRequestListOverview; loading?: boolean } = {}
+  options: {
+    pullRequestList?: PullRequestListOverview
+    loading?: boolean
+    provider?: LogInkContext['provider']
+  } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
-  const context: LogInkContext = options.pullRequestList
-    ? { pullRequestList: options.pullRequestList }
-    : {}
+  const context: LogInkContext = {
+    ...(options.pullRequestList ? { pullRequestList: options.pullRequestList } : {}),
+    ...(options.provider ? { provider: options.provider } : {}),
+  }
   const contextStatus = options.loading
     ? updateLogInkContextStatus(createLogInkContextStatus('idle'), 'pullRequestList', 'loading')
     : createLogInkContextStatus('ready')
@@ -131,9 +145,39 @@ describe('renderPullRequestTriageSurface', () => {
 
     const tree = render(makeState(), {
       pullRequestList: { available: true, authenticated: true, repository: { owner: 'g', name: 'p' }, pullRequests },
+      provider: {
+        repository: { provider: 'gitlab', owner: 'g', name: 'p' },
+        authenticated: true,
+      } as never,
     })
     expect(tree).toBeDefined()
     expect(tree.type).toBe(Box)
+  })
+
+  it('uses Merge-request wording on a GitLab repo (#0.70)', () => {
+    const tree = render(makeState(), {
+      pullRequestList: { available: true, authenticated: true, pullRequests: [makePr()] },
+      provider: {
+        repository: { provider: 'gitlab', owner: 'g', name: 'p' },
+        authenticated: true,
+      } as never,
+    })
+    const text = treeText(tree)
+    expect(text).toContain('Merge requests')
+    expect(text).not.toContain('Pull requests')
+  })
+
+  it('keeps Pull-request wording on a GitHub repo (#0.70)', () => {
+    const tree = render(makeState(), {
+      pullRequestList: { available: true, authenticated: true, pullRequests: [makePr()] },
+      provider: {
+        repository: { provider: 'github', owner: 'o', name: 'r' },
+        authenticated: true,
+      } as never,
+    })
+    const text = treeText(tree)
+    expect(text).toContain('Pull requests')
+    expect(text).not.toContain('Merge requests')
   })
 
   it('structural snapshot — empty list', () => {

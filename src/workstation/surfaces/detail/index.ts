@@ -29,6 +29,7 @@ import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatHyperlink } from '../../chrome/hyperlinks'
+import { forgeNouns } from '../../chrome/forgeNouns'
 import type {
   InspectorAction,
   InspectorActionContext,
@@ -954,9 +955,10 @@ export function renderPullRequestTriagePreviewPanel(
   focused: boolean
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
+  const nouns = forgeNouns(context.provider?.repository.provider)
   if (isLogInkContextKeyLoading(contextStatus, 'pullRequestList')) {
-    return renderPreviewPanel(h, { Box, Text }, 'Pull request preview',
-      [{ text: formatLogInkLoading({ resource: 'pull requests' }), emphasis: 'dim' }],
+    return renderPreviewPanel(h, { Box, Text }, `${nouns.singular} preview`,
+      [{ text: formatLogInkLoading({ resource: nouns.pluralLower }), emphasis: 'dim' }],
       width, theme, focused)
   }
   const all = context.pullRequestList?.pullRequests || []
@@ -979,6 +981,6 @@ export function renderPullRequestTriagePreviewPanel(
   const detail = pr
     ? context.pullRequestDetailByNumber?.get(pr.number)
     : undefined
-  return renderPreviewPanel(h, { Box, Text }, 'Pull request preview',
+  return renderPreviewPanel(h, { Box, Text }, `${nouns.singular} preview`,
     formatPullRequestTriagePreview(pr, detail), width, theme, focused)
 }

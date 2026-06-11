@@ -24,6 +24,7 @@ import {
   summarizePullRequestChecks,
   summarizePullRequestReviews,
 } from '../../chrome/pullRequestPanel'
+import { forgeNouns } from '../../chrome/forgeNouns'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import type { SurfaceRenderContext } from '../../runtime/types'
@@ -34,6 +35,7 @@ export function renderPullRequestSurface(ctx: SurfaceRenderContext): ReactTypes.
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const loading = isLogInkContextKeyLoading(contextStatus, 'pullRequest')
+  const nouns = forgeNouns(context.provider?.repository.provider)
   const pullRequestOverview = context.pullRequest
   // Use the dedicated `pullRequest` overview only — the `provider`
   // shape carries a slimmer ProviderPullRequestStatus that lacks
@@ -56,19 +58,19 @@ export function renderPullRequestSurface(ctx: SurfaceRenderContext): ReactTypes.
   if (loading && !pr) {
     return h(Box, containerProps,
       h(Box, { justifyContent: 'space-between' },
-        h(Text, { bold: true }, panelTitle('Pull request', focused)),
+        h(Text, { bold: true }, panelTitle(nouns.singular, focused)),
         h(Text, { dimColor: true }, 'loading')
       ),
-      h(Text, { dimColor: true }, formatLogInkLoading({ resource: 'pull request' })))
+      h(Text, { dimColor: true }, formatLogInkLoading({ resource: nouns.singularLower })))
   }
 
   if (!pr) {
     const hint = pullRequestOverview?.message
-      || 'No pull request detected for this branch. Press `C` (or `:create-pr`) to create one.'
+      || `No ${nouns.singularLower} detected for this branch. Press \`C\` (or \`:create-pr\`) to create one.`
     return h(Box, containerProps,
       h(Box, { justifyContent: 'space-between' },
-        h(Text, { bold: true }, panelTitle('Pull request', focused)),
-        h(Text, { dimColor: true }, 'no PR')
+        h(Text, { bold: true }, panelTitle(nouns.singular, focused)),
+        h(Text, { dimColor: true }, `no ${nouns.abbrev}`)
       ),
       h(Text, { dimColor: true }, truncateCells(hint, width - 4)))
   }
@@ -101,7 +103,7 @@ export function renderPullRequestSurface(ctx: SurfaceRenderContext): ReactTypes.
 
   return h(Box, containerProps,
     h(Box, { justifyContent: 'space-between' },
-      h(Text, { bold: true }, panelTitle('Pull request', focused)),
+      h(Text, { bold: true }, panelTitle(nouns.singular, focused)),
       h(Text, { dimColor: true }, headerRight)
     ),
     h(Text, undefined, truncateCells(pr.title, width - 4)),
