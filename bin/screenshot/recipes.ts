@@ -1696,6 +1696,125 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 1900 },
     ],
   },
+
+  // ───────────────────────────────────────────────────────────────────
+  // Multi-step TOUR demos — complete-task journeys, vs the single-feature
+  // clips above. Longer and more deliberate: each tells one end-to-end
+  // story (the inner loop, the PR loop, recovery, many-repos). The lossy
+  // pipeline collapses their idle sleep-frames, so even ~20s tours land
+  // small. Sleep durations + key counts below are first-pass estimates —
+  // tune them empirically against rendered output (see VHS gotchas in the
+  // screenshot README) before wiring the GIFs into the site.
+  // ───────────────────────────────────────────────────────────────────
+  {
+    name: 'demo-tour-ship-change',
+    description:
+      'Tour — ship a change (inner loop): status → open a file → stage a hunk → compose → the model drafts a Conventional Commit message, ready to review',
+    scenario: 'dirty-many-files',
+    command: 'ui --view status',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 40 },
+    actions: [
+      { kind: 'sleep', ms: 3500 },
+      // Walk into the Unstaged group and open a file's staging diff.
+      { kind: 'key', key: 'Down', count: 14 },
+      { kind: 'sleep', ms: 800 },
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 1800 },
+      // Stage the cursored hunk — the ○ badge flips to ●.
+      { kind: 'type', text: ' ' },
+      { kind: 'sleep', ms: 1500 },
+      { kind: 'type', text: '<' }, // back to status; the file is now Staged
+      { kind: 'sleep', ms: 1400 },
+      // Compose the commit and let the model draft the message.
+      { kind: 'type', text: 'gc' }, // compose view
+      { kind: 'sleep', ms: 1600 },
+      { kind: 'type', text: 'I' }, // AI draft (compose footer: "I AI draft")
+      { kind: 'sleep', ms: 900 },
+      { kind: 'type', text: 'y' }, // confirm the AI action ("press y to confirm")
+      { kind: 'sleep', ms: 7000 }, // model generates — Summary/Body stream in
+      // The draft lands in edit mode; Esc exits editing (keeping the message)
+      // so the closing frame is the finished, AI-written commit — the payoff.
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 2200 },
+    ],
+  },
+  {
+    name: 'demo-tour-review-pr',
+    description:
+      "Tour — review a PR (outer loop): open the current branch's PR (body, checks, reviews), then the multi-PR triage list and cycle the filter (mock gh)",
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    githubRemote: 'git@github.com:gfargo/coco.git',
+    ghMock: true,
+    emitGif: true,
+    dimensions: { cols: 150, rows: 40 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gp' }, // current branch's PR: body + checks + reviews
+      { kind: 'sleep', ms: 2800 },
+      // Cross to the triage list to show the breadth.
+      { kind: 'type', text: 'gP' }, // PR triage (multi-PR)
+      { kind: 'sleep', ms: 2000 },
+      { kind: 'type', text: 'j' }, // browse rows — inspector re-hydrates per PR
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'j' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'f' }, // cycle the filter (open / draft / mine / …)
+      { kind: 'sleep', ms: 1800 },
+    ],
+  },
+  {
+    name: 'demo-tour-find-regression',
+    description:
+      'Tour — recover / track down a regression: open bisect, mark bad → good → good and watch the candidate range collapse toward the culprit',
+    scenario: 'mid-bisect',
+    command: 'ui',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 40 },
+    actions: [
+      { kind: 'sleep', ms: 4000 },
+      { kind: 'type', text: 'gB' }, // bisect view
+      { kind: 'sleep', ms: 2200 },
+      { kind: 'type', text: 'b' }, // current candidate is bad
+      { kind: 'sleep', ms: 1900 },
+      { kind: 'type', text: 'g' }, // next candidate good — the range halves
+      { kind: 'sleep', ms: 1900 },
+      { kind: 'type', text: 'g' }, // narrow again toward the first bad commit
+      { kind: 'sleep', ms: 2200 },
+    ],
+  },
+  {
+    name: 'demo-tour-workspace',
+    description:
+      'Tour — drive many repos: scan the multi-repo workspace (dirty / ahead-behind / PR state), browse the list, then Enter a repo to drive it as a full workstation and land on its history',
+    scenario: '_workspace',
+    command: 'workspace --root . --maxDepth 1',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 40 },
+    actions: [
+      { kind: 'sleep', ms: 2600 },
+      // Browse the repo overview — each row shows dirty / ahead-behind / open
+      // PRs. Walking it IS the "many repos, one screen" beat.
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 900 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 900 },
+      { kind: 'key', key: 'Up' },
+      { kind: 'sleep', ms: 800 },
+      // Drive the cursored repo — it opens as a full workstation (history).
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 3200 },
+      // Walk the driven repo's history and settle there — the closing frame
+      // reads as "I'm now driving this repo", and loops cleanly back to the
+      // workspace list.
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 700 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 2200 },
+    ],
+  },
+
   {
     name: 'demo-boot-workstation',
     description:
