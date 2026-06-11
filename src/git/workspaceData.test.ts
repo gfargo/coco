@@ -30,7 +30,10 @@ describe('workspaceData parsers', () => {
   it('expands ~ to the user home directory', () => {
     expect(expandHome('~')).toBe(os.homedir())
     expect(expandHome('~/code')).toBe(path.join(os.homedir(), 'code'))
-    expect(expandHome('/tmp')).toBe('/tmp')
+    // A plain absolute path is returned resolved (OS-native: `/tmp` on
+    // POSIX, `<drive>:\tmp` on Windows) — build the expectation the same
+    // way the implementation does so the assertion is platform-agnostic.
+    expect(expandHome('/tmp')).toBe(path.resolve('/tmp'))
   })
 
   it('parses the HEAD ref line into branch + upstream', () => {
