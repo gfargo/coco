@@ -112,10 +112,6 @@ import {
     rectifyPromotedSelectionIndex,
 } from '../chrome/selectionRectify'
 import {
-    LogInkRefreshWatcher,
-    createRefreshWatcher,
-} from '../chrome/refreshWatcher'
-import {
     LOG_INK_DEFAULT_COLUMNS,
     LOG_INK_DEFAULT_ROWS,
     LOG_INK_MIN_COLUMNS,
@@ -339,6 +335,7 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
 import { useFilteredLists } from './hooks/buildFilteredLists'
+import { useContextHydration } from './hooks/useContextHydration'
 import { useBlameLoadingState, useDetailHydration } from './hooks/useDetailHydration'
 import {
   useCommitFilePreviewHydration,
@@ -348,6 +345,7 @@ import {
   useWorktreeHunksHydration,
 } from './hooks/useDiffHydration'
 import { useIdleTip } from './hooks/useIdleTip'
+import { useRefreshWatcher } from './hooks/useRefreshWatcher'
 import { useActiveRepoRoot, useViewModePersistence } from './hooks/useRepoPersistence'
 import { useSpinnerFrame } from './hooks/useSpinnerFrame'
 import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
@@ -1009,55 +1007,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }, [git, runtimes.length, setContext, setContextStatus])
 
   // Live refresh: watch .git metadata + the working tree root and reload
-  // context when something changes outside the TUI (editor save, external
-  // git commands, branch switch in another terminal). Best-effort — the
-  // watcher quietly skips paths that don't exist or platforms where
-  // fs.watch fails. Subdirectory unstaged edits don't fire; users can
-  // press `r` for those.
-  React.useEffect(() => {
-    let cancelled = false
-    let watcher: LogInkRefreshWatcher | null = null
-
-    void (async () => {
-      try {
-        const [repoRoot, gitDir] = await Promise.all([
-          git.revparse(['--show-toplevel']),
-          git.revparse(['--absolute-git-dir']),
-        ])
-        if (cancelled) {
-          return
-        }
-        watcher = createRefreshWatcher({
-          repoRoot: repoRoot.trim(),
-          gitDir: gitDir.trim(),
-          // Editor saves and git background processes can produce a steady
-          // drip of fs events on busy repos. The default 250ms debounce
-          // was tight enough that the watcher fired ~once per second; 750
-          // batches the steady-state better without delaying the user's
-          // perception of an actual change.
-          debounceMs: 750,
-          onChange: (kind) => {
-            if (!mountedRef.current) {
-              return
-            }
-            if (kind === 'full') {
-              void refreshContext({ silent: true })
-            } else {
-              void refreshWorktreeContext({ silent: true })
-            }
-          },
-        })
-      } catch {
-        // Not in a git worktree, or revparse failed. Skip — manual `r`
-        // refresh still works.
-      }
-    })()
-
-    return () => {
-      cancelled = true
-      watcher?.close()
-    }
-  }, [git, refreshContext, refreshWorktreeContext])
+  // context when something changes outside the TUI. Lifted verbatim into
+  // `useRefreshWatcher` (0.72 app.ts decomposition, PR 9) — the async
+  // `revparse` bootstrap, the `cancelled` guard, the 750ms debounce, the
+  // `mountedRef` mount check, and the `watcher?.close()` teardown all carry
+  // over byte-for-byte, as does the dep array.
+  useRefreshWatcher(React, {
+    git,
+    mountedRef,
+    refreshContext,
+    refreshWorktreeContext,
+  })
 
   // Per-repo sidebar tab persistence (#21). Resolve the repo root, look
   // up the cached tab, and dispatch `restoreSidebarTab` once on mount so
@@ -1190,75 +1150,25 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // effect still gated on git swaps only.
   const contextStatusRef = React.useRef(contextStatus)
   contextStatusRef.current = contextStatus
-  React.useEffect(() => {
-    // #994 — capture the depth this boot load is being issued for.
-    // The git instance in the closure is bound to this frame; tagged
-    // writes ensure resolved values land on the correct runtime entry
-    // even if a subsequent push/pop changes the active frame mid-load.
-    const issuedAtDepth = runtimes.length - 1
-    let active = true
-
-    loadLogInkContextEntries(git).forEach(({ key, load }) => {
-      if (contextStatusRef.current[key] === 'ready') return
-      void load().then((value) => {
-        if (!active) {
-          return
-        }
-
-        setContext(
-          (current) => ({
-            ...current,
-            [key]: value,
-          }),
-          issuedAtDepth,
-        )
-        setContextStatus(
-          (current) => updateLogInkContextStatus(current, key, 'ready'),
-          issuedAtDepth,
-        )
-      })
-    })
-
-    return () => {
-      active = false
-    }
-  }, [git, runtimes.length, setContext, setContextStatus])
-
-  // Lazy-load the full pullRequest overview (#808). Only fires when
-  // the user actually navigates to the PR view, and only when we
-  // don't already have data (so a workflow-triggered refresh that
-  // hydrated `pullRequest` doesn't re-fetch on view entry). The
-  // dedicated PR view shows its own loading state while this is in
-  // flight; everywhere else (header glyph, yank, workflow runner)
-  // already falls through to the slim `provider.currentPullRequest`
-  // so the chrome stays populated immediately on boot.
-  React.useEffect(() => {
-    if (state.activeView !== 'pull-request') return
-    if (context.pullRequest) return
-    const issuedAtDepth = runtimes.length - 1
-    let active = true
-    setContextStatus(
-      (current) => updateLogInkContextStatus(current, 'pullRequest', 'loading'),
-      issuedAtDepth,
-    )
-    void safe(getForgePullRequestOverview(git)).then((value) => {
-      if (!active) return
-      setContext(
-        (current) => ({
-          ...current,
-          pullRequest: value,
-        }),
-        issuedAtDepth,
-      )
-      setContextStatus(
-        (current) => updateLogInkContextStatus(current, 'pullRequest', 'ready'),
-        issuedAtDepth,
-      )
-    })
-    return () => {
-      active = false
-    }
-  }, [git, runtimes.length, state.activeView, context.pullRequest, setContext, setContextStatus])
+  // Cache-aware boot load + lazy PR-overview hydration. Both effects were
+  // lifted verbatim into `useContextHydration` (0.72 app.ts decomposition,
+  // PR 9): the per-key `'ready'` gate (read through `contextStatusRef`),
+  // the `active` cancellation flag, the PR view / cache guards, and — the
+  // critical invariant — the `issuedAtDepth = runtimes.length - 1`
+  // frame-tag captured *before* the await all carry over byte-for-byte, as
+  // do the dep arrays. `loadLogInkContextEntries` (the boot loader table)
+  // and `contextStatusRef` stay here and are injected so the move stays
+  // faithful without relocating unrelated module-local helpers.
+  useContextHydration(React, {
+    git,
+    activeView: state.activeView,
+    context,
+    runtimes,
+    loadLogInkContextEntries,
+    contextStatusRef,
+    setContext,
+    setContextStatus,
+  })
 
   // Lazy-load the issue triage list (#882 phase 3, filter-aware
   // since phase 6). Fires on entry to the view AND on filter
