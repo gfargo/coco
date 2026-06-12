@@ -196,7 +196,6 @@ import {
     getStashCommitHashes,
     getStashDiff,
     getStashOverview,
-    parseStashDiffFiles,
 } from '../../git/stashData'
 import {
     revertFile,
@@ -209,9 +208,7 @@ import {
 } from '../../git/statusActions'
 import {
     applyStatusFilterMask,
-    flattenWorktreeGroups,
     getWorktreeOverview,
-    groupWorktreeFiles,
 } from '../../git/statusData'
 import {
     WorktreeHunkOverview,
@@ -351,6 +348,7 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
 import { useFilteredLists } from './hooks/buildFilteredLists'
+import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
 import {
     buildLoadedHashSet,
     resolveCursorSyncDecision,
@@ -844,43 +842,39 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   const selected = getSelectedInkCommit(state)
   const selectedDetailFile = detail?.files[state.selectedFileIndex]
-  // Status surface visibility mask (#776). `visibleWorktreeFiles` is the
-  // single source of truth for staged/unstaged/untracked filtering: file
-  // count, selected-file resolution, and the rendered list all key off
-  // it so toggles never desync the cursor from the rendered rows.
-  const visibleWorktreeFiles = React.useMemo(
-    () => applyStatusFilterMask(context.worktree?.files || [], state.statusFilterMask),
-    [context.worktree?.files, state.statusFilterMask]
-  )
-  // Sectioned view of the visible files (#791 follow-up). Drives the
-  // status surface's three-tier cursor model: ←/→ jumps between
-  // groups, ↑ at index 0 promotes to the group header, Enter on the
-  // header fires the group's batch action. The renderer also consumes
-  // this so the visible file list stays in canonical group order
-  // regardless of whatever order `git status --porcelain` happens to
-  // emit.
-  const visibleWorktreeGroups = React.useMemo(
-    () => groupWorktreeFiles(visibleWorktreeFiles),
-    [visibleWorktreeFiles]
-  )
-  const visibleWorktreeFilesGrouped = React.useMemo(
-    () => flattenWorktreeGroups(visibleWorktreeGroups),
-    [visibleWorktreeGroups]
-  )
-  const selectedWorktreeFile = visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]
-
-  // Stash patch per-file segmentation (#808). Hoisted out of the
-  // useInput callback (was running on every keystroke), the yank
-  // handler (was running per `y` press), and renderDiffSurface (was
-  // running per paint) into a single LogInkApp-scoped memo. When the
-  // active stash diff has hundreds of files, the prior fan-out was
-  // re-walking the entire patch text 2-3x per keystroke for no
-  // observable reason — the parsed list is purely a function of the
-  // line array, which only changes when the user opens a different
-  // stash.
-  const stashDiffParsedFiles = React.useMemo(
-    () => stashDiffLines ? parseStashDiffFiles(stashDiffLines) : [],
-    [stashDiffLines]
+  // Status-surface derived data (#776 / #791 / #808). Extracted into
+  // `useStatusSurfaceData` (0.72 app.ts decomposition). The hook issues
+  // one `React.useMemo` per value in the same order — and with the same
+  // per-value dependency arrays — these memos used to, delegating to the
+  // pure `buildStatusSurfaceData` core. Hook call-order and per-value
+  // reference identity are unchanged:
+  // `visibleWorktreeFiles` is the single source of truth for
+  // staged/unstaged/untracked filtering and feeds the grouping below; it
+  // stays internal to the hook (no direct consumer in app.ts), so only
+  // the values app.ts reads are destructured:
+  //  - `visibleWorktreeGroups` / `visibleWorktreeFilesGrouped` drive the
+  //    status surface's three-tier cursor model and keep the rendered
+  //    list in canonical group order regardless of the order
+  //    `git status --porcelain` emits.
+  //  - `selectedWorktreeFile` keeps a dedicated memo (deps
+  //    `[visibleWorktreeFilesGrouped, selectedWorktreeFileIndex]`) so an
+  //    unchanged selection yields a stable reference — it feeds the
+  //    worktree-diff and worktree-hunks effects below via its `.path` /
+  //    `.indexStatus` / `.worktreeStatus`.
+  //  - `stashDiffParsedFiles` is the per-file segmentation of the active
+  //    stash patch (hoisted out of useInput / the yank handler /
+  //    renderDiffSurface, all of which used to re-walk the patch text).
+  const {
+    visibleWorktreeGroups,
+    visibleWorktreeFilesGrouped,
+    selectedWorktreeFile,
+    stashDiffParsedFiles,
+  } = useStatusSurfaceData(
+    React,
+    context.worktree?.files,
+    state.statusFilterMask,
+    state.selectedWorktreeFileIndex,
+    stashDiffLines,
   )
 
   // Filtered promoted-view lists (#808). These were recomputed inline
