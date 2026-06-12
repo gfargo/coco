@@ -75,7 +75,6 @@ import {
     LOG_INTERACTIVE_DEFAULT_LIMIT,
     buildToggleGraphArgs,
     getCommitDetail,
-    getCommitFilePreview,
     getCommitRows,
     getLogRows,
     getLogRowsAnchoredOn,
@@ -189,7 +188,6 @@ import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import {
     findStashFileForOffset,
     getStashCommitHashes,
-    getStashDiff,
     getStashOverview,
 } from '../../git/stashData'
 import {
@@ -207,21 +205,19 @@ import {
 } from '../../git/statusData'
 import {
     WorktreeHunkOverview,
-    getWorktreeHunks,
     revertHunk,
     stageHunk,
     unstageHunk,
 } from '../../git/statusHunks'
 import { getBisectCompletion, getBisectStatus } from '../../git/bisectData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../git/bisectActions'
-import { getCompareDiff } from '../../git/compareData'
 import { getReflogOverview } from '../../git/reflogData'
 import { checkoutReflogEntry } from '../../git/reflogActions'
 import { initSubmodule, syncSubmodule, updateSubmodule } from '../../git/submoduleActions'
 import { addRemote, pruneRemote, removeRemote, setRemoteUrl } from '../../git/remoteActions'
 import { getTagOverview } from '../../git/tagData'
 import { getWorktreeListOverview } from '../../git/worktreeData'
-import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
+import { WorktreeFileDiff } from '../../git/worktreeDiffData'
 
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -344,6 +340,13 @@ import type { LogArgv } from '../../commands/log/config'
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
 import { useFilteredLists } from './hooks/buildFilteredLists'
 import { useBlameLoadingState, useDetailHydration } from './hooks/useDetailHydration'
+import {
+  useCommitFilePreviewHydration,
+  useCompareDiffHydration,
+  useStashDiffHydration,
+  useWorktreeDiffHydration,
+  useWorktreeHunksHydration,
+} from './hooks/useDiffHydration'
 import { useIdleTip } from './hooks/useIdleTip'
 import { useActiveRepoRoot, useViewModePersistence } from './hooks/useRepoPersistence'
 import { useSpinnerFrame } from './hooks/useSpinnerFrame'
@@ -1079,21 +1082,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // P-stash-explorer: load `git stash show -p <ref>` once the diff view
   // becomes active with diffSource='stash'. Best-effort — empty stashes
   // or read errors fall through to a "no diff" hint at the render site.
-  React.useEffect(() => {
-    if (state.activeView !== 'diff' || state.diffSource !== 'stash' || !state.stashDiffRef) {
-      return
-    }
-    let active = true
-    setStashDiffLoading(true)
-    void (async () => {
-      const lines = await safe(getStashDiff(git, state.stashDiffRef!))
-      if (active) {
-        setStashDiffLines(lines || [])
-        setStashDiffLoading(false)
-      }
-    })()
-    return () => { active = false }
-  }, [git, state.activeView, state.diffSource, state.stashDiffRef])
+  // Lifted verbatim into `useStashDiffHydration` (0.72 app.ts
+  // decomposition, PR 8) — the guard, the `active` cancellation flag, the
+  // `safe()` wrapper, the loading toggle, and the dependency array all
+  // carry over byte-for-byte.
+  useStashDiffHydration(React, {
+    git,
+    activeView: state.activeView,
+    diffSource: state.diffSource,
+    stashDiffRef: state.stashDiffRef,
+    setStashDiffLines,
+    setStashDiffLoading,
+  })
 
   // #879 (item 2) — load commit detail for the active bisect's
   // current candidate so the bisect surface can show "what changed
@@ -1140,26 +1140,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // surface falls back to a "no diff" hint.
   const compareBaseRef = state.compareBase?.ref
   const compareHeadRef = state.compareHead?.ref
-  React.useEffect(() => {
-    if (
-      state.activeView !== 'diff' ||
-      state.diffSource !== 'compare' ||
-      !compareBaseRef ||
-      !compareHeadRef
-    ) {
-      return
-    }
-    let active = true
-    setCompareDiffLoading(true)
-    void (async () => {
-      const lines = await safe(getCompareDiff(git, compareBaseRef, compareHeadRef))
-      if (active) {
-        setCompareDiffLines(lines || [])
-        setCompareDiffLoading(false)
-      }
-    })()
-    return () => { active = false }
-  }, [git, state.activeView, state.diffSource, compareBaseRef, compareHeadRef])
+  // Lifted verbatim into `useCompareDiffHydration` (0.72 app.ts
+  // decomposition, PR 8) — guard, `active` flag, `safe()` wrapper, loading
+  // toggle, and dependency array carry over byte-for-byte.
+  useCompareDiffHydration(React, {
+    git,
+    activeView: state.activeView,
+    diffSource: state.diffSource,
+    compareBaseRef,
+    compareHeadRef,
+    setCompareDiffLines,
+    setCompareDiffLoading,
+  })
 
   // Reset compare-diff state whenever the diff view exits. Without
   // this, opening a new compare immediately after closing one would
@@ -1172,37 +1164,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [state.diffSource])
 
-  React.useEffect(() => {
-    let active = true
-
-    async function loadWorktreeHunks(): Promise<void> {
-      if (state.activeView !== 'diff' || !selectedWorktreeFile) {
-        setWorktreeHunks(undefined)
-        setWorktreeHunksLoading(false)
-        return
-      }
-
-      setWorktreeHunksLoading(true)
-      const nextHunks = await safe(getWorktreeHunks(git, selectedWorktreeFile))
-
-      if (active) {
-        setWorktreeHunks(nextHunks)
-        setWorktreeHunksLoading(false)
-      }
-    }
-
-    void loadWorktreeHunks()
-
-    return () => {
-      active = false
-    }
-  }, [
+  // Lifted verbatim into `useWorktreeHunksHydration` (0.72 app.ts
+  // decomposition, PR 8) — guard, `active` flag, `safe()` wrapper, loading
+  // toggle, and dependency array carry over byte-for-byte.
+  useWorktreeHunksHydration(React, {
     git,
-    selectedWorktreeFile?.indexStatus,
-    selectedWorktreeFile?.path,
-    selectedWorktreeFile?.worktreeStatus,
-    state.activeView,
-  ])
+    activeView: state.activeView,
+    selectedWorktreeFile,
+    setWorktreeHunks,
+    setWorktreeHunksLoading,
+  })
 
   // #931 PR 5 — Cache-aware boot load. The frame's `git` instance is
   // the dep that drives this effect; on push, the new frame's runtime
@@ -1659,37 +1630,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [state.activeView, state.focus, state.sidebarTab])
 
-  React.useEffect(() => {
-    let active = true
-
-    async function loadWorktreeDiff(): Promise<void> {
-      if (state.activeView !== 'diff' || !selectedWorktreeFile) {
-        setWorktreeDiff(undefined)
-        setWorktreeDiffLoading(false)
-        return
-      }
-
-      setWorktreeDiffLoading(true)
-      const nextDiff = await safe(getWorktreeFileDiff(git, selectedWorktreeFile))
-
-      if (active) {
-        setWorktreeDiff(nextDiff)
-        setWorktreeDiffLoading(false)
-      }
-    }
-
-    void loadWorktreeDiff()
-
-    return () => {
-      active = false
-    }
-  }, [
+  // Lifted verbatim into `useWorktreeDiffHydration` (0.72 app.ts
+  // decomposition, PR 8) — guard, `active` flag, `safe()` wrapper, loading
+  // toggle, and dependency array carry over byte-for-byte.
+  useWorktreeDiffHydration(React, {
     git,
-    selectedWorktreeFile?.indexStatus,
-    selectedWorktreeFile?.path,
-    selectedWorktreeFile?.worktreeStatus,
-    state.activeView,
-  ])
+    activeView: state.activeView,
+    selectedWorktreeFile,
+    setWorktreeDiff,
+    setWorktreeDiffLoading,
+  })
 
   // Syntax-highlight the diff currently in view, off the render path
   // (#1117 follow-up). Mirrors the worktree-diff effect: detect the
@@ -4256,30 +4206,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     visibleWorktreeFilesGrouped,
   ])
 
-  React.useEffect(() => {
-    let active = true
-
-    async function loadPreview(): Promise<void> {
-      if (!selected || !selectedDetailFile) {
-        setFilePreview(undefined)
-        return
-      }
-
-      setFilePreviewLoading(true)
-      const nextPreview = await safe(getCommitFilePreview(git, selected.hash, selectedDetailFile))
-
-      if (active) {
-        setFilePreview(nextPreview)
-        setFilePreviewLoading(false)
-      }
-    }
-
-    void loadPreview()
-
-    return () => {
-      active = false
-    }
-  }, [git, selected?.hash, selectedDetailFile?.path, selectedDetailFile?.oldPath])
+  // Lifted verbatim into `useCommitFilePreviewHydration` (0.72 app.ts
+  // decomposition, PR 8) — guard, `active` flag, `safe()` wrapper, loading
+  // toggle, and dependency array carry over byte-for-byte.
+  useCommitFilePreviewHydration(React, {
+    git,
+    selected,
+    selectedDetailFile,
+    setFilePreview,
+    setFilePreviewLoading,
+  })
 
   React.useEffect(() => {
     return () => {
