@@ -130,7 +130,6 @@ import {
 } from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
 import { sortBranches, sortTags } from '../chrome/sorting'
-import { IDLE_TIPS_GRACE_MS, IDLE_TIPS_INTERVAL_MS, pickIdleTip } from '../chrome/idleTips'
 import {
     LogInkPendingItemAction,
     LogInkState,
@@ -348,6 +347,7 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
 import { useFilteredLists } from './hooks/buildFilteredLists'
+import { useIdleTip } from './hooks/useIdleTip'
 import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
 import {
     buildLoadedHashSet,
@@ -771,39 +771,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // the object DB until gc, so the hash is enough to bring it back.
   const lastDroppedStashRef = React.useRef<{ hash: string; message: string } | null>(null)
 
-  // P4.3 — idle tip rotation. tickIndex 0 ⇒ no tip; the hook bumps it after
-  // a grace window of empty statusMessage and then on a steady cadence, so
-  // the footer surfaces a different hint every interval until the user does
-  // anything that sets statusMessage.
-  const [idleTipIndex, setIdleTipIndex] = React.useState(0)
-  React.useEffect(() => {
-    if (!idleTipsEnabled) return
-    if (state.statusMessage) {
-      // Any explicit message resets the cycle; next idle stretch starts
-      // from the grace window again.
-      setIdleTipIndex(0)
-      return
-    }
-    let interval: NodeJS.Timeout | undefined
-    // Both timer callbacks are function literals (never strings) and the
-    // delays are our own `IDLE_TIPS_*_MS` constants — no caller-supplied
-    // data flows in, so the eval-injection vector that drives
-    // DevSkim DS172411 doesn't apply here.
-    // DevSkim: ignore DS172411
-    const grace = setTimeout(() => {
-      setIdleTipIndex(1)
-      // DevSkim: ignore DS172411
-      interval = setInterval(() => setIdleTipIndex((tick) => tick + 1), IDLE_TIPS_INTERVAL_MS)
-    }, IDLE_TIPS_GRACE_MS)
-    return () => {
-      clearTimeout(grace)
-      if (interval) clearInterval(interval)
-    }
-  }, [idleTipsEnabled, state.statusMessage])
-  const idleTip =
-    idleTipsEnabled && !state.statusMessage
-      ? pickIdleTip(idleTipIndex, context.provider?.repository.provider)
-      : undefined
+  // P4.3 — idle tip rotation. Extracted into `useIdleTip` (0.72 app.ts
+  // decomposition). The hook issues the `useState` tick counter then the
+  // timer `useEffect` in the same order and with the same dep array the
+  // inline cluster used, so React hook ordering and the grace/cadence +
+  // reset-on-statusMessage timer semantics are unchanged; it returns the
+  // gated `idleTip` (tips enabled, no active statusMessage) via the same
+  // `pickIdleTip` provider argument.
+  const idleTip = useIdleTip(React, {
+    idleTipsEnabled,
+    statusMessage: state.statusMessage,
+    provider: context.provider?.repository.provider,
+  })
 
   // Animation tick driver for loading states. Increments every 80ms
   // while any overlay/surface is in a loading state — the renderer
