@@ -61,6 +61,7 @@ import { getBranchOverview } from '../../git/branchData'
 import { hashesMatchAny } from '../../git/hashes'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
+import { getBlame } from '../../git/blameData'
 import { getRemoteOverview } from '../../git/remoteData'
 import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
 import {
@@ -1128,6 +1129,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       (current) => ({
         ...current,
         worktree,
+        // Drop the blame cache (#0.71): staging / unstaging / reverting
+        // changes the working-tree contents, so any cached attribution
+        // (especially the "staged" not-yet-committed lines) is now
+        // potentially stale. Re-opening blame re-hydrates from the
+        // fresh tree.
+        blameByPath: undefined,
       }),
       issuedAtDepth,
     )
@@ -1299,6 +1306,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // crash the workstation because git couldn't resolve a sha.
   const [bisectCandidateDetail, setBisectCandidateDetail] = React.useState<GitCommitDetail | undefined>(undefined)
   const [bisectCandidateLoading, setBisectCandidateLoading] = React.useState(false)
+  // On-demand blame hydration flag (#0.71). True while the debounced
+  // `getBlame` for the active `state.blamePath` is in flight; the blame
+  // surface shows a loading placeholder until the parse lands in the
+  // `blameByPath` cache.
+  const [blameLoading, setBlameLoading] = React.useState(false)
   const bisectCandidateSha = state.activeView === 'bisect' && context.bisect?.active
     ? context.bisect.currentSha
     : ''
@@ -1690,6 +1702,58 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedPullRequestTriageIndex,
     filteredPullRequestTriageList,
     context.pullRequestDetailByNumber,
+    setContext,
+  ])
+
+  // On-demand blame hydration (#0.71). Mirrors the per-item inspector
+  // hydration above, but keyed by PATH rather than item number and
+  // entered from the dedicated blame view rather than a triage list.
+  // When the blame view is active for a path with no cached entry,
+  // debounce-fetch `git blame --porcelain`, parse once, and cache the
+  // result in `context.blameByPath`. Re-opening a previously-blamed
+  // path renders instantly from the cache. The debounce keeps a rapid
+  // sequence of `b` presses (open, esc, open another) from firing a
+  // blame on every transient path.
+  const BLAME_HYDRATION_DELAY_MS = 150
+
+  React.useEffect(() => {
+    if (state.activeView !== 'blame') return
+    const path = state.blamePath
+    if (!path) return
+    if (context.blameByPath?.has(path)) {
+      // Cache hit — make sure the loading flag is cleared (it may be set
+      // from a previous cold path) so the surface renders the cached
+      // blame immediately.
+      setBlameLoading(false)
+      return
+    }
+
+    const issuedAtDepth = runtimes.length - 1
+    let active = true
+    setBlameLoading(true)
+    const timer = setTimeout(async () => {
+      const result = await getBlame(git, path)
+      if (!active) return
+      setContext(
+        (current) => ({
+          ...current,
+          blameByPath: new Map(current.blameByPath || []).set(result.path, result),
+        }),
+        issuedAtDepth,
+      )
+      setBlameLoading(false)
+    }, BLAME_HYDRATION_DELAY_MS)
+
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [
+    runtimes.length,
+    git,
+    state.activeView,
+    state.blamePath,
+    context.blameByPath,
     setContext,
   ])
 
@@ -4924,6 +4988,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       submoduleSelectedPath,
       remoteCount: remoteVisibleCount,
       remoteSelectedName,
+      // Drive j/k on the blame view off the cached line count for the
+      // active path (#0.71); 0 while hydrating or on a failed blame, so
+      // the nav handlers no-op until lines exist.
+      blameLineCount: (() => {
+        const blame = state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined
+        return blame && blame.ok ? blame.lines.length : 0
+      })(),
       issueCount: issueVisibleCount,
       issueSelectedUrl,
       pullRequestTriageCount: pullRequestTriageVisibleCount,
@@ -5207,6 +5278,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       compareDiffLoading,
       bisectCandidateDetail,
       bisectCandidateLoading,
+      blame: state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined,
+      blameLoading,
       hasMoreCommits,
       loadingMoreCommits,
       spinnerFrame,

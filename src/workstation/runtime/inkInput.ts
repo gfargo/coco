@@ -120,6 +120,13 @@ export type LogInkInputContext = {
   remoteCount?: number
   /** Name of the cursored remote (#0.71). Used as the yank target on the remotes view. */
   remoteSelectedName?: string
+  /**
+   * Number of blamed source lines for the active path (#0.71). Drives
+   * j/k navigation on the on-demand blame view. Undefined / 0 while the
+   * blame is still hydrating or the file is empty — the nav handlers
+   * no-op in that case.
+   */
+  blameLineCount?: number
   /** Number of issues in the triage list view (#882 phase 3). Drives j/k navigation. */
   issueCount?: number
   /** URL of the cursored issue (#882 phase 3). Used by `O` to open in the browser. */
@@ -2322,6 +2329,10 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveRemote', delta: -1, count: context.remoteCount })]
     }
 
+    if (state.activeView === 'blame' && context.blameLineCount) {
+      return [action({ type: 'moveBlame', delta: -1, count: context.blameLineCount })]
+    }
+
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
       return [action({ type: 'moveSubmodule', delta: -1, count: context.submoduleCount })]
     }
@@ -2444,6 +2455,10 @@ export function getLogInkInputEvents(
 
     if (isRemotesActionTarget(state) && context.remoteCount) {
       return [action({ type: 'moveRemote', delta: 1, count: context.remoteCount })]
+    }
+
+    if (state.activeView === 'blame' && context.blameLineCount) {
+      return [action({ type: 'moveBlame', delta: 1, count: context.blameLineCount })]
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
@@ -3144,6 +3159,27 @@ export function getLogInkInputEvents(
   // revert / stage events).
   if (inputValue === 'i' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
     return [{ type: 'openGitignorePicker' }]
+  }
+  // `b` opens the on-demand blame drill-down for the cursored worktree
+  // file (#0.71). Entered from the status file list; the runtime
+  // resolves blame lazily into its `blameByPath` cache keyed by this
+  // path. Also available from the worktree diff view, where the focused
+  // file path is known.
+  if (
+    inputValue === 'b' &&
+    state.activeView === 'status' &&
+    context.worktreeFileCount &&
+    context.worktreeSelectedPath
+  ) {
+    return [action({ type: 'navigateOpenBlameForPath', path: context.worktreeSelectedPath })]
+  }
+  if (
+    inputValue === 'b' &&
+    state.activeView === 'diff' &&
+    state.diffSource === 'worktree' &&
+    context.worktreeSelectedPath
+  ) {
+    return [action({ type: 'navigateOpenBlameForPath', path: context.worktreeSelectedPath })]
   }
   if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'worktree' && context.worktreeSelectedPath) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]

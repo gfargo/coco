@@ -18,6 +18,7 @@ import type { WorktreeHunkOverview } from '../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../git/worktreeDiffData'
 import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
 import { renderBisectSurface } from '../surfaces/bisect'
+import { renderBlameSurface, type BlameSurfaceData } from '../surfaces/blame'
 import { renderBranchesSurface } from '../surfaces/branches'
 import { renderChangelogSurface } from '../surfaces/changelog'
 import { renderComposeSurface } from '../surfaces/compose'
@@ -59,6 +60,10 @@ export type MainPanelExtras = {
   compareDiffLoading: boolean
   bisectCandidateDetail: GitCommitDetail | undefined
   bisectCandidateLoading: boolean
+  /** Cached blame for `state.blamePath` (#0.71). Undefined on a cache miss. */
+  blame: BlameSurfaceData['blame']
+  /** True while the on-demand blame hydration is in flight (#0.71). */
+  blameLoading: boolean
   hasMoreCommits: boolean
   loadingMoreCommits: boolean
   spinnerFrame: number
@@ -87,6 +92,8 @@ export function renderMainPanel(
     compareDiffLoading,
     bisectCandidateDetail,
     bisectCandidateLoading,
+    blame,
+    blameLoading,
     hasMoreCommits,
     loadingMoreCommits,
     spinnerFrame,
@@ -169,6 +176,10 @@ export function renderMainPanel(
 
   if (state.activeView === 'remotes') {
     return renderRemotesSurface(surface)
+  }
+
+  if (state.activeView === 'blame') {
+    return renderBlameSurface(surface, { blame, loading: blameLoading })
   }
 
   if (state.activeView === 'pull-request') {

@@ -15,6 +15,7 @@
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import type { BisectStatus } from '../../git/bisectData'
+import type { BlameResult } from '../../git/blameData'
 import type { BranchOverview } from '../../git/branchData'
 import type { LfsAttributeStatus } from '../../git/lfsAttributes'
 import type { RemoteOverview } from '../../git/remoteData'
@@ -41,6 +42,16 @@ import type { LogInkTheme, LogInkThemeConfig } from '../chrome/theme'
 
 export type LogInkContext = {
   bisect?: BisectStatus
+  /**
+   * Per-path blame cache keyed by repo-relative path (#0.71). Unlike the
+   * boot-loaded overview slices, blame is expensive and per-file, so
+   * it's hydrated on demand: the blame view's hydration effect parses
+   * `git blame --porcelain` once per path and caches the result here.
+   * Re-opening a previously blamed path renders instantly from the
+   * cache; the entry is invalidated (cleared) when the worktree
+   * refreshes so stale attributions don't linger after a commit.
+   */
+  blameByPath?: Map<string, BlameResult>
   branches?: BranchOverview
   /**
    * Repository-wide LFS attribute status (#884). When present, the

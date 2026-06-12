@@ -1,0 +1,124 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderBlameSurface structural snapshot — empty / failure 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Blame *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0 lines
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+      logo.png
+  </Text>
+  <Text
+    dimColor={true}
+  >
+    Could not blame logo.png: binary file. Press esc to go back.
+  </Text>
+</Box>
+`;
+
+exports[`renderBlameSurface structural snapshot — loading 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Blame *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      loading blame
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+      src/example.ts
+  </Text>
+  <Text
+    dimColor={true}
+  >
+    · Loading blame…
+  </Text>
+</Box>
+`;
+
+exports[`renderBlameSurface structural snapshot — populated 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Blame *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1/2 lines
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+      src/example.ts
+  </Text>
+  <Text
+    bold={true}
+  >
+    <Text
+      dimColor={true}
+    >
+      &gt; a1b2c3d4 Ada Lovelace         1 
+    </Text>
+    const answer = 42
+  </Text>
+  <Text
+    bold={false}
+  >
+    <Text
+      dimColor={true}
+    >
+        99887766 Grace Hopper         2 
+    </Text>
+    return answer
+  </Text>
+</Box>
+`;

@@ -27,7 +27,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 
 /**
@@ -313,6 +313,22 @@ export type LogInkState = {
    * back.
    */
   selectedRemoteIndex: number
+  /**
+   * Cursor for the on-demand blame view (#0.71). Indexes into the
+   * blamed file's `BlameLine[]`; windowed-rendered around this index so
+   * large files stay responsive. Reset to 0 each time a fresh path is
+   * opened (`navigateOpenBlameForPath`) so blame always opens at the
+   * top of the file.
+   */
+  selectedBlameIndex: number
+  /**
+   * Repo-relative path the blame view is currently showing (#0.71).
+   * Unlike the boot-loaded overview slices, blame is keyed by path and
+   * hydrated on demand: the runtime reads this path, looks it up in the
+   * `blameByPath` cache, and fetches it (debounced) on a cache miss.
+   * Undefined when the blame view has never been opened.
+   */
+  blamePath?: string
   /**
    * Cursor for the issues triage view (#882). Same lifecycle as the
    * other promoted-view indices — preserved across navigations so
@@ -888,6 +904,7 @@ export type LogInkAction =
   | { type: 'moveReflog'; delta: number; count: number }
   | { type: 'moveSubmodule'; delta: number; count: number }
   | { type: 'moveRemote'; delta: number; count: number }
+  | { type: 'moveBlame'; delta: number; count: number }
   | { type: 'moveIssue'; delta: number; count: number }
   | { type: 'movePullRequestTriage'; delta: number; count: number }
   | { type: 'cycleIssueFilter' }
@@ -912,6 +929,7 @@ export type LogInkAction =
   | { type: 'returnFromCommit'; stillDirty: boolean }
   | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
+  | { type: 'navigateOpenBlameForPath'; path: string }
   | { type: 'navigateOpenDiffForStash'; ref: string; stashIndex?: number }
   | { type: 'navigateOpenDiffForCompare'; base: LogInkCompareRef; head: LogInkCompareRef }
   | { type: 'setCompareBase'; value: LogInkCompareRef }
@@ -1500,6 +1518,7 @@ export function createLogInkState(
     selectedReflogIndex: 0,
     selectedSubmoduleIndex: 0,
     selectedRemoteIndex: 0,
+    selectedBlameIndex: 0,
     selectedIssueIndex: 0,
     selectedPullRequestTriageIndex: 0,
     selectedIssueFilter: 'open',
@@ -1847,6 +1866,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedRemoteIndex: clampIndex(state.selectedRemoteIndex + action.delta, action.count),
         pendingKey: undefined,
       }
+    case 'moveBlame':
+      return {
+        ...state,
+        selectedBlameIndex: clampIndex(state.selectedBlameIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
     case 'moveIssue':
       return {
         ...state,
@@ -2124,6 +2149,19 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedWorktreeFileIndex: Math.max(0, action.fileIndex),
         worktreeDiffOffset: 0,
         diffSource: 'worktree',
+      }
+    }
+    case 'navigateOpenBlameForPath': {
+      // Open the on-demand blame drill-down for a path. Reset the blame
+      // cursor to the top whenever the path changes so blame never opens
+      // mid-file; preserve it when re-opening the same path (the cached
+      // hydration is still valid and the user's place is worth keeping).
+      const next = withPushedView(state, 'blame')
+      const samePath = state.blamePath === action.path
+      return {
+        ...next,
+        blamePath: action.path,
+        selectedBlameIndex: samePath ? state.selectedBlameIndex : 0,
       }
     }
     case 'navigateOpenDiffForStash': {
