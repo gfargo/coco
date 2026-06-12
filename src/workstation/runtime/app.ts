@@ -349,6 +349,7 @@ import { useFilteredLists } from './hooks/buildFilteredLists'
 import { useIdleTip } from './hooks/useIdleTip'
 import { useSpinnerFrame } from './hooks/useSpinnerFrame'
 import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
+import { useStatusAutoDismiss } from './hooks/useStatusAutoDismiss'
 import {
     buildLoadedHashSet,
     resolveCursorSyncDecision,
@@ -898,34 +899,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   // Auto-dismiss status messages after a short window so transient
   // confirmations ("Pulled current branch", "Edited foo.ts") don't
-  // linger forever. Each new message resets the timer; clearing the
-  // message via setStatus(undefined) cancels it. Doesn't fire while a
-  // modal (input prompt, confirmation, palette) is open — those flows
-  // use the status line as live feedback for the open task.
-  React.useEffect(() => {
-    if (!state.statusMessage) return
-    if (state.inputPrompt || state.pendingConfirmationId || state.pendingChoice || state.pendingMutationConfirmation || state.showCommandPalette) {
-      return
-    }
-    // The `setTimeout` callback is a literal arrow function (not a
-    // string), and the delay is a hard-coded constant, so the
-    // eval-injection vector behind DevSkim DS172411 doesn't apply here.
-    // DevSkim: ignore DS172411
-    const handle = setTimeout(() => {
-      if (mountedRef.current) {
-        dispatch({ type: 'setStatus', value: undefined })
-      }
-    }, 4000)
-    return () => clearTimeout(handle)
-  }, [
+  // linger forever. Extracted into `useStatusAutoDismiss` (0.72 app.ts
+  // decomposition). The hook issues the single timer `useEffect` in the
+  // same position and with the same dep array the inline cluster used, so
+  // React hook ordering and the timer's reset/cancel/mountedRef semantics
+  // are unchanged: each new message resets the timer, clearing the message
+  // via setStatus(undefined) cancels it, and it doesn't fire while a modal
+  // (input prompt, confirmation, palette) is open — those flows use the
+  // status line as live feedback for the open task.
+  useStatusAutoDismiss(React, {
+    statusMessage: state.statusMessage,
+    inputPrompt: state.inputPrompt,
+    pendingConfirmationId: state.pendingConfirmationId,
+    pendingChoice: state.pendingChoice,
+    pendingMutationConfirmation: state.pendingMutationConfirmation,
+    showCommandPalette: state.showCommandPalette,
     dispatch,
-    state.inputPrompt,
-    state.pendingConfirmationId,
-    state.pendingChoice,
-    state.pendingMutationConfirmation,
-    state.showCommandPalette,
-    state.statusMessage,
-  ])
+    mountedRef,
+  })
 
   /**
    * Re-fetch the head of the commit log and replace `state.rows`.
