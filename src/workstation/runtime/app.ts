@@ -350,6 +350,7 @@ import type { LogArgv } from '../../commands/log/config'
 // runtime/ rather than chrome/ because they're tightly coupled to the
 // LogInkState filter-mode shape.
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
+import { useFilteredLists } from './hooks/buildFilteredLists'
 import {
     buildLoadedHashSet,
     resolveCursorSyncDecision,
@@ -887,98 +888,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // branches / tags and an active filter, that's hundreds of regex
   // matches per arrow-key press. Memoizing on (raw list, filter)
   // collapses the work to one pass per filter / data change.
-  const filteredBranchList = React.useMemo(() => {
-    const all = context.branches?.localBranches || []
-    if (!state.filter) return all
-    return all.filter((branch) =>
-      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter)
-    )
-  }, [context.branches?.localBranches, state.filter])
-  const filteredTagList = React.useMemo(() => {
-    const all = context.tags?.tags || []
-    if (!state.filter) return all
-    return all.filter((tag) =>
-      matchesPromotedFilter([tag.name, tag.subject], state.filter)
-    )
-  }, [context.tags?.tags, state.filter])
-  const filteredStashList = React.useMemo(() => {
-    const all = context.stashes?.stashes || []
-    if (!state.filter) return all
-    return all.filter((stash) =>
-      matchesPromotedFilter([stash.ref, stash.message], state.filter)
-    )
-  }, [context.stashes?.stashes, state.filter])
-  const filteredWorktreeList = React.useMemo(() => {
-    const all = context.worktreeList?.worktrees || []
-    if (!state.filter) return all
-    return all.filter((entry) =>
-      matchesPromotedFilter([entry.path, entry.branch || ''], state.filter)
-    )
-  }, [context.worktreeList?.worktrees, state.filter])
-  const filteredReflogList = React.useMemo(() => {
-    const all = context.reflog?.entries || []
-    if (!state.filter) return all
-    return all.filter((entry) =>
-      matchesPromotedFilter(
-        [entry.selector, entry.hash, entry.relativeDate, entry.subject],
-        state.filter
-      )
-    )
-  }, [context.reflog?.entries, state.filter])
-  const filteredSubmoduleList = React.useMemo(() => {
-    const all = context.submodules?.entries || []
-    if (!state.filter) return all
-    return all.filter((entry) =>
-      matchesPromotedFilter(
-        [entry.name, entry.path, entry.trackingBranch || '', entry.url || ''],
-        state.filter,
-      )
-    )
-  }, [context.submodules?.entries, state.filter])
-  const filteredRemoteList = React.useMemo(() => {
-    const all = context.remotes?.entries || []
-    if (!state.filter) return all
-    return all.filter((entry) =>
-      matchesPromotedFilter([entry.name, entry.fetchUrl, entry.pushUrl], state.filter)
-    )
-  }, [context.remotes?.entries, state.filter])
-  // Issues + PR triage filtered lists (#882 phase 3). Same memo
-  // pattern as the other promoted views — collapses per-keystroke
-  // filter work to one pass per (data, filter) change.
-  const filteredIssueList = React.useMemo(() => {
-    const all = context.issueList?.issues || []
-    if (!state.filter) return all
-    return all.filter((issue) =>
-      matchesPromotedFilter(
-        [
-          `#${issue.number}`,
-          issue.title,
-          issue.author || '',
-          ...(issue.labels || []),
-          ...(issue.assignees || []),
-        ],
-        state.filter,
-      )
-    )
-  }, [context.issueList?.issues, state.filter])
-  const filteredPullRequestTriageList = React.useMemo(() => {
-    const all = context.pullRequestList?.pullRequests || []
-    if (!state.filter) return all
-    return all.filter((pr) =>
-      matchesPromotedFilter(
-        [
-          `#${pr.number}`,
-          pr.title,
-          pr.author || '',
-          pr.headRefName,
-          pr.baseRefName,
-          ...(pr.labels || []),
-          ...(pr.assignees || []),
-        ],
-        state.filter,
-      )
-    )
-  }, [context.pullRequestList?.pullRequests, state.filter])
+  // Extracted into `useFilteredLists` (0.72 app.ts decomposition). The
+  // hook issues one `React.useMemo` per list in the same order — and
+  // with the same per-list dependency arrays — these memos used to,
+  // delegating to the pure `buildFilteredLists` core. Hook call-order
+  // and per-list reference identity are unchanged; every downstream
+  // consumer (the input handler, cursor-sync) destructures the same
+  // names below.
+  const {
+    filteredBranchList,
+    filteredTagList,
+    filteredStashList,
+    filteredWorktreeList,
+    filteredReflogList,
+    filteredSubmoduleList,
+    filteredRemoteList,
+    filteredIssueList,
+    filteredPullRequestTriageList,
+  } = useFilteredLists(React, context, state.filter)
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
