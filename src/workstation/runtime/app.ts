@@ -61,7 +61,6 @@ import { getBranchOverview } from '../../git/branchData'
 import { hashesMatchAny } from '../../git/hashes'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
-import { getBlame } from '../../git/blameData'
 import { getRemoteOverview } from '../../git/remoteData'
 import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
 import {
@@ -344,6 +343,7 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
 import { useFilteredLists } from './hooks/buildFilteredLists'
+import { useBlameLoadingState, useDetailHydration } from './hooks/useDetailHydration'
 import { useIdleTip } from './hooks/useIdleTip'
 import { useActiveRepoRoot, useViewModePersistence } from './hooks/useRepoPersistence'
 import { useSpinnerFrame } from './hooks/useSpinnerFrame'
@@ -1107,8 +1107,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // On-demand blame hydration flag (#0.71). True while the debounced
   // `getBlame` for the active `state.blamePath` is in flight; the blame
   // surface shows a loading placeholder until the parse lands in the
-  // `blameByPath` cache.
-  const [blameLoading, setBlameLoading] = React.useState(false)
+  // `blameByPath` cache. The `useState` is issued here (in its original
+  // slot, next to the bisect-candidate `useState`s) by `useBlameLoadingState`
+  // to preserve hook ordering; the debounced effects that toggle it live in
+  // `useDetailHydration` further down (0.72 app.ts decomposition, PR 7).
+  const { blameLoading, setBlameLoading } = useBlameLoadingState(React)
   const bisectCandidateSha = state.activeView === 'bisect' && context.bisect?.active
     ? context.bisect.currentSha
     : ''
@@ -1408,152 +1411,30 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'))
   }, [state.selectedPullRequestFilter])
 
-  // Per-item inspector hydration (#882 follow-up to phase 6). When
-  // the user rests the cursor on an issue / PR row for ~250ms, fetch
-  // the body + comments (+ reviews + status checks for PRs) and
-  // cache the result keyed by number. Cursoring back to a previously-
-  // fetched item shows the cached entry instantly; rapid j/k
-  // navigation never fires a `gh` call because the debounce timer
-  // resets on every cursor move.
-  //
-  // The cache lives on `context.{issueDetailByNumber,
-  // pullRequestDetailByNumber}` so it survives the per-keystroke
-  // re-renders. It's intentionally Maps — `new Map(prev).set(k, v)`
-  // keeps the immutable update story simple, and entries persist
-  // until either the list is invalidated (post-mutation) or the
-  // process exits.
-  const DETAIL_HYDRATION_DELAY_MS = 250
-
-  React.useEffect(() => {
-    if (state.activeView !== 'issues') return
-    const cursored = filteredIssueList[
-      Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-    ]
-    if (!cursored) return
-    if (context.issueDetailByNumber?.has(cursored.number)) return
-
-    const issuedAtDepth = runtimes.length - 1
-    let active = true
-    const timer = setTimeout(async () => {
-      const result = await forge.getIssueDetail(cursored.number)
-      if (!active || !result.ok) return
-      setContext(
-        (current) => ({
-          ...current,
-          issueDetailByNumber: new Map(current.issueDetailByNumber || []).set(
-            result.detail.number,
-            result.detail
-          ),
-        }),
-        issuedAtDepth,
-      )
-    }, DETAIL_HYDRATION_DELAY_MS)
-
-    return () => {
-      active = false
-      clearTimeout(timer)
-    }
-  }, [
-    runtimes.length,
-    state.activeView,
-    state.selectedIssueIndex,
-    filteredIssueList,
-    context.issueDetailByNumber,
-    setContext,
-  ])
-
-  React.useEffect(() => {
-    if (state.activeView !== 'pull-request-triage') return
-    const cursored = filteredPullRequestTriageList[
-      Math.min(
-        state.selectedPullRequestTriageIndex,
-        Math.max(0, filteredPullRequestTriageList.length - 1)
-      )
-    ]
-    if (!cursored) return
-    if (context.pullRequestDetailByNumber?.has(cursored.number)) return
-
-    const issuedAtDepth = runtimes.length - 1
-    let active = true
-    const timer = setTimeout(async () => {
-      const result = await forge.getPullRequestDetail(cursored.number)
-      if (!active || !result.ok) return
-      setContext(
-        (current) => ({
-          ...current,
-          pullRequestDetailByNumber: new Map(current.pullRequestDetailByNumber || []).set(
-            result.detail.number,
-            result.detail
-          ),
-        }),
-        issuedAtDepth,
-      )
-    }, DETAIL_HYDRATION_DELAY_MS)
-
-    return () => {
-      active = false
-      clearTimeout(timer)
-    }
-  }, [
-    runtimes.length,
-    state.activeView,
-    state.selectedPullRequestTriageIndex,
-    filteredPullRequestTriageList,
-    context.pullRequestDetailByNumber,
-    setContext,
-  ])
-
-  // On-demand blame hydration (#0.71). Mirrors the per-item inspector
-  // hydration above, but keyed by PATH rather than item number and
-  // entered from the dedicated blame view rather than a triage list.
-  // When the blame view is active for a path with no cached entry,
-  // debounce-fetch `git blame --porcelain`, parse once, and cache the
-  // result in `context.blameByPath`. Re-opening a previously-blamed
-  // path renders instantly from the cache. The debounce keeps a rapid
-  // sequence of `b` presses (open, esc, open another) from firing a
-  // blame on every transient path.
-  const BLAME_HYDRATION_DELAY_MS = 150
-
-  React.useEffect(() => {
-    if (state.activeView !== 'blame') return
-    const path = state.blamePath
-    if (!path) return
-    if (context.blameByPath?.has(path)) {
-      // Cache hit — make sure the loading flag is cleared (it may be set
-      // from a previous cold path) so the surface renders the cached
-      // blame immediately.
-      setBlameLoading(false)
-      return
-    }
-
-    const issuedAtDepth = runtimes.length - 1
-    let active = true
-    setBlameLoading(true)
-    const timer = setTimeout(async () => {
-      const result = await getBlame(git, path)
-      if (!active) return
-      setContext(
-        (current) => ({
-          ...current,
-          blameByPath: new Map(current.blameByPath || []).set(result.path, result),
-        }),
-        issuedAtDepth,
-      )
-      setBlameLoading(false)
-    }, BLAME_HYDRATION_DELAY_MS)
-
-    return () => {
-      active = false
-      clearTimeout(timer)
-    }
-  }, [
-    runtimes.length,
+  // Per-item inspector hydration (#882) + on-demand blame hydration
+  // (#0.71). When the user rests the cursor on an issue / PR row for
+  // ~250ms — or opens the blame view for a path for ~150ms — fetch the
+  // detail and cache it keyed by number / path. Cursoring back to a
+  // previously-fetched item renders the cached entry instantly; rapid
+  // j/k navigation never fires a `gh` / `git blame` call because the
+  // debounce timer resets on every cursor move. The three debounced
+  // effects (issue detail, PR detail, blame) were lifted verbatim into
+  // `useDetailHydration` (0.72 app.ts decomposition, PR 7) — the debounce
+  // delays, the `active` cancellation flag, the cache-skip check, the
+  // `clearTimeout` cleanup, and the `issuedAtDepth` frame-tag captured
+  // before the await all carry over byte-for-byte. The `blameLoading`
+  // `useState` it toggles is issued above by `useBlameLoadingState`.
+  useDetailHydration(React, {
     git,
-    state.activeView,
-    state.blamePath,
-    context.blameByPath,
+    forge,
+    state,
+    context,
+    runtimes,
+    filteredIssueList,
+    filteredPullRequestTriageList,
     setContext,
-  ])
+    setBlameLoading,
+  })
 
   React.useEffect(() => {
     let active = true
