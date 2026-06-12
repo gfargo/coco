@@ -74,6 +74,7 @@ export type LogInkCommandId =
   | 'viewRevert'
   | 'viewReset'
   | 'viewInteractiveRebase'
+  | 'viewRebaseOnto'
   | 'viewCreateBranchHere'
   | 'viewCreateTagHere'
   | 'viewChangelog'
@@ -552,6 +553,19 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['history'],
   },
   {
+    // #0.71 — branches-view-only. `r` rebases the current branch onto the
+    // cursored branch / ref (non-interactive). Scoped to `branches` so it
+    // doesn't collide with the global `r` refresh (context `normal`); the
+    // resolver in inkInput intercepts it before the refresh path. The
+    // most dangerous op in the release, so it routes through the
+    // y-confirm gate with a warning naming both branches.
+    id: 'viewRebaseOnto',
+    keys: ['r'],
+    label: 'rebase onto',
+    description: 'Rebase the current branch onto the cursored branch / ref (non-interactive) after confirmation.',
+    contexts: ['branches'],
+  },
+  {
     id: 'viewCreateBranchHere',
     keys: ['B'],
     label: 'create branch here',
@@ -864,6 +878,9 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   workflowAbortOperation: 'mutate',
   workflowAiCommitSummary: 'mutate',
   workflowAiConflictHelp: 'mutate',
+  // Branches-view-only rebase-onto (#0.71) — a confirmation-gated
+  // destructive op, grouped with the global mutate cluster.
+  viewRebaseOnto: 'mutate',
   // ── History actions: per-view-only mutations scoped to the history
   //    surface. Distinct from the global mutate cluster so users see
   //    them grouped under their actual context.
@@ -1265,7 +1282,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
       }
     }
     return {
-      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 'm compare', 's sort', 'y yank'],
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 'r rebase', 'm compare', 's sort', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

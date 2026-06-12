@@ -114,6 +114,12 @@ export function renderConfirmationPanel(
     // branch — name the reason so the force isn't a blind "y again".
     : state.pendingConfirmationId === 'force-delete-branch'
     ? 'Not fully merged. Force-delete (git branch -D) is irreversible.'
+    // Rebase-onto carries a per-invocation warning naming both branches
+    // (built in inkInput from the cursored + current branch). Fall back
+    // to a static line if the payload is somehow absent.
+    : state.pendingConfirmationId === 'rebase-onto-branch'
+    ? state.pendingConfirmationPayload
+      || 'Rebase rewrites the current branch\'s history. This cannot be undone by Coco.'
     : action?.kind === 'ai'
     ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`
     : 'Destructive Git action requires confirmation.'

@@ -103,6 +103,28 @@ describe('force-delete-branch confirmation panel', () => {
   })
 })
 
+describe('rebase-onto-branch confirmation panel (#0.71)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  it('renders the per-invocation warning naming both branches', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'rebase-onto-branch',
+      pendingConfirmationPayload: "Rebase feature onto main? This rewrites feature's history.",
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    expect(text).toContain('Rebase current onto selected ref')
+    expect(text).toContain("Rebase feature onto main? This rewrites feature's history.")
+    expect(text).not.toContain('Destructive Git action requires confirmation')
+  })
+
+  it('falls back to a static warning when the payload is absent', () => {
+    const state = { ...createLogInkState([]), pendingConfirmationId: 'rebase-onto-branch' }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    expect(text).toContain('Rebase rewrites the current branch')
+  })
+})
+
 describe('split-plan overlay — unclaimed group (#1180)', () => {
   const components: LogInkComponents = { Box, Text }
 

@@ -333,6 +333,24 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #0.71 — rebase the current branch onto the cursored branch/ref
+      // (non-interactive `git rebase <ref>`). Per-view-only: the inkInput
+      // handler scopes the `r` keystroke to the branches surface and the
+      // runtime resolves the cursored + current branch, so the empty
+      // `key` keeps it palette-discoverable without registering a global
+      // hotkey. The most dangerous op in this release — it rewrites the
+      // current branch's history — so it gates on the y-confirm path with
+      // a warning naming both branches. A conflict leaves the repo
+      // mid-rebase; the existing `gx` / `A` surfaces reflect and unwind
+      // it (no `--continue` / `--abort` workflow added here, by design).
+      id: 'rebase-onto-branch',
+      key: '',
+      label: 'Rebase current onto selected ref',
+      description: 'Rebase the current branch onto the cursored branch / ref (non-interactive) after confirmation.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'delete-tag',
       key: 'T',
       label: 'Delete tag',
