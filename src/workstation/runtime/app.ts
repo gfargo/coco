@@ -109,8 +109,6 @@ import {
     type RepoFrameRuntime,
     type RepoStackRuntimes,
 } from './repoStackRuntime'
-import { getSavedDiffViewMode, saveDiffViewMode } from '../chrome/diffViewModePersistence'
-import { getSavedSidebarTab, saveSidebarTab } from '../chrome/sidebarPersistence'
 import {
     PromotedSelectionsSnapshot,
     rectifyPromotedSelectionIndex,
@@ -347,6 +345,7 @@ import type { LogArgv } from '../../commands/log/config'
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
 import { useFilteredLists } from './hooks/buildFilteredLists'
 import { useIdleTip } from './hooks/useIdleTip'
+import { useActiveRepoRoot, useViewModePersistence } from './hooks/useRepoPersistence'
 import { useSpinnerFrame } from './hooks/useSpinnerFrame'
 import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
 import { useStatusAutoDismiss } from './hooks/useStatusAutoDismiss'
@@ -712,25 +711,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // and skips its write. The `git` reference itself is captured by
   // closure, so each effect run resolves against the right binding.
   // No additional depth tagging is needed.
-  const [activeRepoRoot, setActiveRepoRoot] = React.useState<string | undefined>(undefined)
-  React.useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const root = (await git.revparse(['--show-toplevel'])).trim()
-        if (!cancelled && root) {
-          setActiveRepoRoot(root)
-        }
-      } catch {
-        if (!cancelled) {
-          setActiveRepoRoot(undefined)
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [git])
+  const activeRepoRoot = useActiveRepoRoot(React, git)
   const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
@@ -1087,72 +1068,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // Branches when entering compose / status doesn't overwrite the saved
   // preference.
   const repoRootRef = React.useRef<string | undefined>(undefined)
-  React.useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const repoRoot = (await git.revparse(['--show-toplevel'])).trim()
-        if (cancelled || !repoRoot) return
-        repoRootRef.current = repoRoot
-        const saved = getSavedSidebarTab(repoRoot)
-        if (saved && saved !== state.userSidebarTab) {
-          dispatch({ type: 'restoreSidebarTab', value: saved })
-        }
-        // Diff view mode persistence (#785). Same per-repo cache pattern
-        // as the sidebar tab — restore the user's last preference if
-        // they had one. New repos / fresh installs default to unified.
-        const savedDiffMode = getSavedDiffViewMode(repoRoot)
-        if (savedDiffMode && savedDiffMode !== state.diffViewMode) {
-          dispatch({ type: 'setDiffViewMode', value: savedDiffMode })
-        }
-      } catch {
-        // Not in a worktree, or revparse failed; nothing to restore.
-      }
-    })()
-    return () => { cancelled = true }
-  }, [git, dispatch])
-
-  // Audit finding #2: re-resolve the repo root inline on every save
-  // and key the deps off `git` + the saved value. The original
-  // implementation read from `repoRootRef.current`, which is async-
-  // populated by the resolver effect above and can lag behind a git
-  // swap. After #995's synchronous pop-restore, the parent's freshly
-  // restored sidebar tab was being written into the submodule's
-  // cache because the ref still held the submodule root during the
-  // brief window before the resolver settled.
-  //
-  // The extra `revparse` cost per save is negligible (saves fire
-  // once per user-initiated tab change, not per render) and the
-  // cancellation flag prevents a stale resolution from racing a
-  // newer one in flight.
-  React.useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const root = (await git.revparse(['--show-toplevel'])).trim()
-        if (cancelled || !root) return
-        saveSidebarTab(root, state.userSidebarTab)
-      } catch {
-        // Not in a worktree, or revparse failed — silently skip.
-        // The next save attempt will retry.
-      }
-    })()
-    return () => { cancelled = true }
-  }, [state.userSidebarTab, git])
-
-  React.useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const root = (await git.revparse(['--show-toplevel'])).trim()
-        if (cancelled || !root) return
-        saveDiffViewMode(root, state.diffViewMode)
-      } catch {
-        // Same as above.
-      }
-    })()
-    return () => { cancelled = true }
-  }, [state.diffViewMode, git])
+  useViewModePersistence(React, {
+    git,
+    dispatch,
+    repoRootRef,
+    userSidebarTab: state.userSidebarTab,
+    diffViewMode: state.diffViewMode,
+  })
 
   // P-stash-explorer: load `git stash show -p <ref>` once the diff view
   // becomes active with diffSource='stash'. Best-effort — empty stashes
