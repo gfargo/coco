@@ -99,6 +99,19 @@ describe('log Ink workflows', () => {
     expect(getLogInkWorkflowActionByKey('')).toBeUndefined()
   })
 
+  it('registers rebase-onto-branch as a keyless, confirmation-gated destructive op (#0.71)', () => {
+    // Per-view-only: the `r` keystroke is scoped to the branches surface
+    // in inkInput, so the registry entry is keyless (palette-discoverable
+    // without a global hotkey). Destructive — it rewrites history — so it
+    // must require confirmation.
+    const rebase = getLogInkWorkflowActionById('rebase-onto-branch')
+    expect(rebase).toMatchObject({
+      key: '',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    })
+  })
+
   // Issue #777 — revert / reset / interactive-rebase wired through the
   // workflow registry as palette-only entries (key: ''). Real keystroke
   // dispatch is per-view scoped in inkInput.ts so they only fire on

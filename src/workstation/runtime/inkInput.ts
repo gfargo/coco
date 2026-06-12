@@ -102,6 +102,13 @@ export type LogInkInputContext = {
    * resolve the head ref from the branches view.
    */
   branchSelectedShortName?: string
+  /**
+   * Name of the currently checked-out branch (#0.71). Used by the
+   * branches-view `r` (rebase-onto) handler to build the confirmation
+   * warning and to short-circuit a self-rebase / detached-HEAD before
+   * routing through the y-confirm path. Undefined on a detached HEAD.
+   */
+  currentBranch?: string
   tagCount?: number
   /**
    * Name of the cursored tag (#779). Same role as
@@ -2059,6 +2066,52 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'N') {
     return [action({ type: 'move', delta: -1 })]
+  }
+
+  // Per-view branches action: `r` rebases the current branch onto the
+  // cursored branch / ref (#0.71 — non-interactive `git rebase <ref>`).
+  // The most dangerous op in this release — it rewrites the current
+  // branch's history — so it NEVER runs directly: it routes through the
+  // y-confirm path. Two guards run up front so the confirm prompt is
+  // only raised for an operation that can actually proceed:
+  //   - detached HEAD (no current branch): nothing to rebase onto a ref
+  //   - self-rebase (cursored ref === current branch): a no-op git would
+  //     reject anyway, surfaced here as a clear status instead.
+  // Scoped to the branches target so the letter stays free elsewhere
+  // (the global `r` refresh below still fires on every other view). The
+  // confirmation warning names both branches; it's carried as the
+  // pending-confirmation payload and rendered by `renderConfirmationPanel`
+  // — the runtime handler re-resolves both branches off live context, so
+  // it ignores this payload.
+  if (inputValue === 'r' && isBranchActionTarget(state) && context.branchCount) {
+    const current = context.currentBranch
+    const target = context.branchSelectedShortName
+    if (!current) {
+      return [action({
+        type: 'setStatus',
+        value: 'Detached HEAD — checkout a branch before rebasing onto a ref.',
+        kind: 'warning',
+      })]
+    }
+    if (!target) {
+      return [action({
+        type: 'setStatus',
+        value: 'No branch under cursor to rebase onto.',
+        kind: 'warning',
+      })]
+    }
+    if (target === current) {
+      return [action({
+        type: 'setStatus',
+        value: 'Cannot rebase a branch onto itself.',
+        kind: 'warning',
+      })]
+    }
+    return [action({
+      type: 'setPendingConfirmation',
+      value: 'rebase-onto-branch',
+      payload: `Rebase ${current} onto ${target}? This rewrites ${current}'s history.`,
+    })]
   }
 
   if (inputValue === 'r') {

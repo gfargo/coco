@@ -181,6 +181,7 @@ import {
 import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStash, popStash, renameStash, restoreStash, stashBranch } from '../../git/stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../git/worktreeActions'
+import { rebaseOnto } from '../../git/rebaseActions'
 import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../git/operationActions'
 import { getForgeActions, getForgePullRequestOverview } from '../../git/forgeActions'
 import { clearGitHubListCache } from '../../git/githubListCache'
@@ -3275,6 +3276,31 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!branch) return { ok: false, message: 'No branch selected' }
         return deleteBranch(git, branch, true)
       },
+      // #0.71 — rebase the current branch onto the cursored branch / ref.
+      // Re-resolve BOTH branches off live context (the input-layer guards
+      // already gated the keystroke, but the confirm prompt sits between
+      // the keystroke and here, so the cursor / current branch could have
+      // moved — re-checking keeps the executed op honest). A conflict
+      // leaves the repo mid-rebase; the post-handler refreshContext below
+      // reloads the operation overview so the `gx` / `A` surfaces reflect
+      // it. No `--continue` / `--abort` here — those live on the existing
+      // in-progress-operation surfaces by design.
+      'rebase-onto-branch': async () => {
+        const current = context.branches?.currentBranch
+        if (!current) {
+          return { ok: false, message: 'Detached HEAD — checkout a branch before rebasing onto a ref.' }
+        }
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        if (branch.shortName === current) {
+          return { ok: false, message: 'Cannot rebase a branch onto itself.' }
+        }
+        return rebaseOnto(git, branch.shortName)
+      },
       'delete-tag': async () => {
         const all = sortTags(context.tags?.tags || [], state.tagSort)
         const visible = state.filter
@@ -4238,6 +4264,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       'reset-soft-to-commit',
       'reset-mixed-to-commit',
       'interactive-rebase-to-commit',
+      // Rebasing the current branch onto a ref rewrites its commits —
+      // refresh the graph so the replayed history (or the mid-rebase
+      // conflict state) shows instead of staying pinned to the pre-rebase
+      // tip.
+      'rebase-onto-branch',
       'bisect-good',
       'bisect-bad',
       'bisect-skip',
@@ -4979,6 +5010,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       commitDiffHunkOffsets,
       branchCount: branchVisibleCount,
       branchSelectedShortName,
+      // Current branch for the `r` rebase-onto guard + warning (#0.71).
+      // Undefined on a detached HEAD, which the handler treats as "no
+      // branch to rebase".
+      currentBranch: context.branches?.currentBranch,
       tagCount: tagVisibleCount,
       tagSelectedName,
       stashCount: stashVisibleCount,

@@ -673,6 +673,79 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('r rebase-onto on the branches view (#0.71)', () => {
+    // `r` is the global refresh everywhere — on the branches view it is
+    // intercepted FIRST to mean "rebase current onto cursored ref",
+    // routed through the y-confirm gate with a warning naming both
+    // branches. Guards short-circuit a self-rebase / detached HEAD.
+
+    it('routes r to the rebase-onto confirmation with a branch-naming warning', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'r', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setPendingConfirmation',
+            value: 'rebase-onto-branch',
+            payload: "Rebase feature onto main? This rewrites feature's history.",
+          },
+        },
+      ])
+    })
+
+    it('blocks a self-rebase with a clear warning instead of confirming', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'r', {}, {
+        branchCount: 3,
+        currentBranch: 'main',
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setStatus',
+            value: 'Cannot rebase a branch onto itself.',
+            kind: 'warning',
+          },
+        },
+      ])
+    })
+
+    it('blocks a rebase on detached HEAD (no current branch)', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'r', {}, {
+        branchCount: 3,
+        currentBranch: undefined,
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setStatus',
+            value: 'Detached HEAD — checkout a branch before rebasing onto a ref.',
+            kind: 'warning',
+          },
+        },
+      ])
+    })
+
+    it('still falls through to the global refresh outside the branches view', () => {
+      const state = createLogInkState(rows, { activeView: 'history' })
+      expect(getLogInkInputEvents(state, 'r', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })).toEqual([{ type: 'refreshContext' }])
+    })
+  })
+
   describe('help overlay key handling', () => {
     it('j/k scroll the help overlay without changing focus', () => {
       let state = createLogInkState(rows)
