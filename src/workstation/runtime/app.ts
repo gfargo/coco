@@ -58,7 +58,6 @@ import * as nodePath from 'node:path'
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { getBranchOverview } from '../../git/branchData'
-import { hashesMatchAny } from '../../git/hashes'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
 import { getRemoteOverview } from '../../git/remoteData'
@@ -77,7 +76,6 @@ import {
     getCommitDetail,
     getCommitRows,
     getLogRows,
-    getLogRowsAnchoredOn,
 } from '../../commands/log/data'
 import {
     LogInkContextKey,
@@ -350,10 +348,8 @@ import { useActiveRepoRoot, useViewModePersistence } from './hooks/useRepoPersis
 import { useSpinnerFrame } from './hooks/useSpinnerFrame'
 import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
 import { useStatusAutoDismiss } from './hooks/useStatusAutoDismiss'
-import {
-    buildLoadedHashSet,
-    resolveCursorSyncDecision,
-} from './cursorSyncResolver'
+import { useHistoryCursorSync } from './hooks/useHistoryCursorSync'
+import { useLoadMoreHistory } from './hooks/useLoadMoreHistory'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
 // per-surface and detail renderers are consumed internally by mainPanel /
@@ -1343,202 +1339,21 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   }, [git, selected?.hash])
 
   // #806 follow-up — auto-jump the history view to whichever branch /
-  // tag the user is currently cursoring in the sidebar (or the
-  // dedicated branches / tags view).
-  //
-  // Originally this fired on a 150ms trailing-edge debounce. The user
-  // reported the sync feeling inconsistent (#839) — the trailing
-  // pattern means a fast scroll through a long branch list cancels
-  // the timer on every keystroke and only fires once on release; the
-  // user never sees the cursor follow their navigation. Switched to
-  // synchronous fire-on-effect so each cursor move snaps the history
-  // graph immediately. The dispatch is cheap (O(n) findIndex on the
-  // filtered commits + a state spread); React batches the re-renders
-  // so even rapid scroll only paints the final position. Tracks the
-  // last-dispatched hash via a ref so we don't fire setStatus
-  // repeatedly when several adjacent branches all point at the same
-  // commit (very common with squash-merged feature branches that all
-  // converge on `main`'s tip).
-  //
-  // No-op when the cursored ref's tip isn't in the loaded commit
-  // window (under compact mode the cursored branch's tip may not be
-  // fetched yet); a status hint surfaces in that case so the user
-  // knows to toggle full graph or load older commits.
-  const lastSyncedHashRef = React.useRef<string | undefined>(undefined)
-  // Tracks which target hashes we've already anchored a `git log`
-  // fetch on (#1034 follow-up). When the cursor-syncs-history effect
-  // sees a target whose hash isn't in the loaded window AND isn't in
-  // this set, it kicks off `getLogRowsAnchoredOn` and adds the hash
-  // here. After the fetch resolves and rows are appended, the effect
-  // re-fires; if the target STILL isn't loaded the resolver sees the
-  // hash in this set and returns `unreachable` instead of looping.
-  //
-  // Stored as a ref because (a) the resolver only ever reads it and
-  // (b) component re-renders on state.filteredCommits change are the
-  // re-fire trigger; storing here in state would add a redundant
-  // render per attempt.
-  const attemptedContextHashesRef = React.useRef<Set<string>>(new Set())
-  // Forward-reference for the targeted context loader. Defined later
-  // in the component body — see the load-more refactor for why this
-  // forward-ref pattern is needed and why the implementation is stable
-  // so the race that bit the previous auto-load chain doesn't recur.
-  type LoadCommitContextFn = (target: { hash: string; label: string }) => Promise<void>
-  const loadCommitContextRef = React.useRef<LoadCommitContextFn | null>(null)
-  React.useEffect(() => {
-    const onBranchTab = state.activeView === 'branches' ||
-      (state.focus === 'sidebar' && state.sidebarTab === 'branches')
-    const onTagTab = state.activeView === 'tags' ||
-      (state.focus === 'sidebar' && state.sidebarTab === 'tags')
-    // User-reported gap: cursoring a stash didn't sync the history
-    // cursor the way cursoring a branch / tag did. Same auto-jump
-    // affordance now extends to stashes; the stash's commit hash IS
-    // the row to land on (stashes are commits living off the
-    // `refs/stash` tree, visible under `--all` / fullGraph).
-    const onStashTab = state.activeView === 'stash' ||
-      (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
-    if (!onBranchTab && !onTagTab && !onStashTab) return
-
-    let targetHash: string | undefined
-    let targetLabel: string | undefined
-
-    if (onBranchTab) {
-      const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-      const visible = state.filter
-        ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-        : all
-      const branch = visible[Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1))]
-      if (branch) {
-        targetHash = branch.hash
-        targetLabel = `branch ${branch.shortName}`
-      }
-    } else if (onTagTab) {
-      const all = sortTags(context.tags?.tags || [], state.tagSort)
-      const visible = state.filter
-        ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
-        : all
-      const tag = visible[Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1))]
-      if (tag) {
-        targetHash = tag.hash
-        targetLabel = `tag ${tag.name}`
-      }
-    } else if (onStashTab) {
-      const all = context.stashes?.stashes || []
-      const visible = state.filter
-        ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-        : all
-      const stash = visible[Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1))]
-      if (stash) {
-        // Two-step fallback chain for stash cursor sync:
-        //
-        //   1. Try `baseHash` (the branch tip the stash was created
-        //      from). This answers the user-visible question "where
-        //      in larger git history was this stash made?" — that's
-        //      the branch origin point, not the stash's own merge-
-        //      commit row off in `refs/stash`. Base commits live on
-        //      regular branches so they're almost always in the
-        //      loaded window.
-        //
-        //   2. If `baseHash` isn't in the loaded window (the stash's
-        //      base branch was deleted, or the base is older than
-        //      the 1000-commit cap), fall back to `stash.hash`
-        //      itself. The stash commit was added as an extraRef so
-        //      it's reachable from the graph if it fits the window.
-        //
-        // Only after BOTH miss does the effect report "tip not in
-        // loaded window." The label flips to mention "base" vs the
-        // stash commit so the user knows what they're looking at.
-        // hashesMatchAny handles the short-hash auto-extension
-        // mismatch between `git stash list --format=%h` (stash hash)
-        // and `git log --pretty=format:%h` (history row). Same
-        // hazard as the branch/tag cursor sync — see src/git/hashes.ts.
-        const baseLoaded = Boolean(stash.baseHash) && state.filteredCommits.some((c) =>
-          hashesMatchAny(stash.baseHash, [c.hash, c.shortHash])
-        )
-        const hashLoaded = state.filteredCommits.some((c) =>
-          hashesMatchAny(stash.hash, [c.hash, c.shortHash])
-        )
-        if (baseLoaded) {
-          targetHash = stash.baseHash
-          targetLabel = `${stash.ref}'s base`
-        } else if (hashLoaded) {
-          targetHash = stash.hash
-          targetLabel = stash.ref
-        } else {
-          // Neither in window — set to baseHash so the standard
-          // "not in loaded window" message fires with a meaningful
-          // label (the base is what the user actually wants to see).
-          targetHash = stash.baseHash || stash.hash
-          targetLabel = stash.ref
-        }
-      }
-    }
-
-    // Delegate the actual decision to the pure resolver so the
-    // logic is testable in isolation. The effect just performs the
-    // resolver's chosen action.
-    const decision = resolveCursorSyncDecision({
-      target: targetHash ? { hash: targetHash, label: targetLabel || targetHash } : undefined,
-      loadedHashes: buildLoadedHashSet(state.filteredCommits),
-      lastSyncedHash: lastSyncedHashRef.current,
-      attemptedContextHashes: attemptedContextHashesRef.current,
-    })
-
-    switch (decision.type) {
-      case 'noop':
-        return
-      case 'jump':
-        lastSyncedHashRef.current = decision.hash
-        dispatch({ type: 'selectCommitByHash', hash: decision.hash })
-        dispatch({
-          type: 'setStatus',
-          value: `Synced history to ${decision.label} tip`,
-        })
-        return
-      case 'load-context':
-        // Mark the hash as attempted BEFORE firing the load so a
-        // re-fire of this effect (state.filteredCommits change while
-        // the load is in flight) doesn't kick off a duplicate
-        // request. The resolver sees the hash in the set and
-        // returns `noop` until the load completes; on completion the
-        // appendRows triggers a final re-fire that either jumps or
-        // returns `unreachable`.
-        attemptedContextHashesRef.current.add(decision.target.hash)
-        void loadCommitContextRef.current?.(decision.target)
-        return
-      case 'unreachable':
-        dispatch({
-          type: 'setStatus',
-          value: `${decision.target.label} target commit is unreachable — not in any walked ref's history.`,
-          kind: 'warning',
-        })
-        return
-    }
-  }, [
-    dispatch, context.branches, context.tags, context.stashes,
-    state.activeView, state.focus, state.sidebarTab,
-    state.selectedBranchIndex, state.selectedTagIndex, state.selectedStashIndex,
-    state.branchSort, state.tagSort, state.filter,
-    state.filteredCommits,
-  ])
-
-  // Reset the dedup ref when the user moves focus away from the
-  // sidebar branches / tags / stashes tab so re-entering re-fires the
-  // sync even if the cursored row is the same as before.
-  React.useEffect(() => {
-    const onBranchTab = state.activeView === 'branches' ||
-      (state.focus === 'sidebar' && state.sidebarTab === 'branches')
-    const onTagTab = state.activeView === 'tags' ||
-      (state.focus === 'sidebar' && state.sidebarTab === 'tags')
-    const onStashTab = state.activeView === 'stash' ||
-      (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
-    if (!onBranchTab && !onTagTab && !onStashTab) {
-      lastSyncedHashRef.current = undefined
-      // Drop any context-load attempt tracking too. If the user
-      // navigates back later we want to retry rather than show
-      // "unreachable" based on a stale attempted-set.
-      attemptedContextHashesRef.current = new Set()
-    }
-  }, [state.activeView, state.focus, state.sidebarTab])
+  // tag / stash the user is cursoring (cluster N). Lifted verbatim into
+  // `useHistoryCursorSync` (0.72 app.ts decomposition, PR 10): the two
+  // cluster-local refs (`lastSyncedHashRef`, `attemptedContextHashesRef`),
+  // the forward-reference bridge ref (`loadCommitContextRef`), and the
+  // sync + reset effects move over in the same declaration order with
+  // byte-identical dep arrays. The hook RETURNS `loadCommitContextRef` so
+  // the load-more cluster (`useLoadMoreHistory`, far below) can keep its
+  // `loadCommitContextRef.current = loadCommitContext` assignment in the
+  // exact same relative slot — see that hook for the full render-order
+  // race write-up.
+  const loadCommitContextRef = useHistoryCursorSync(React, {
+    dispatch,
+    context,
+    state,
+  })
 
   // Lifted verbatim into `useWorktreeDiffHydration` (0.72 app.ts
   // decomposition, PR 8) — guard, `active` flag, `safe()` wrapper, loading
@@ -4133,194 +3948,34 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [])
 
-  React.useEffect(() => {
-    loadingMoreCommitsRef.current = loadingMoreCommits
-  }, [loadingMoreCommits])
-
-  // STABLE useCallback (empty deps) for loadMoreCommits. The function
-  // reads the volatile state (commit counts, fetch args, hasMore) via
-  // refs that update on every render so the identity stays constant.
-  //
-  // Why stable matters: the cursor-syncs-history auto-load chain
-  // calls this through a forward-reference ref (loadMoreCommitsRef).
-  // If loadMoreCommits regenerated on every render — as the previous
-  // implementation did via state deps — there was a render-order
-  // race: the cursor sync effect would call the PREVIOUS render's
-  // callback (still in the ref because the ref-setter useEffect runs
-  // after the cursor-sync effect in declaration order), which had
-  // captured a stale `state.commits.length` and re-fetched the same
-  // window. The auto-load chain appeared to fire but never advanced
-  // through history.
-  //
-  // Stable identity + refs sidesteps the race entirely: the function
-  // never changes, and every call reads the latest state.
-  const loadMoreStateRef = React.useRef({
-    commitsLength: state.commits.length,
-    filteredCommitsLength: state.filteredCommits.length,
-    historyFetchArgs: state.historyFetchArgs,
-    hasMoreCommits,
-    logArgv,
-  })
-  loadMoreStateRef.current = {
-    commitsLength: state.commits.length,
-    filteredCommitsLength: state.filteredCommits.length,
-    historyFetchArgs: state.historyFetchArgs,
-    hasMoreCommits,
-    logArgv,
-  }
-
-  const loadMoreCommits = React.useCallback(async (
-    options: { statusMessage?: string } = {}
-  ): Promise<{ fired: boolean; addedCommits: number }> => {
-    const snap = loadMoreStateRef.current
-    if (!snap.logArgv || snap.logArgv.limit || loadingMoreCommitsRef.current || !snap.hasMoreCommits) {
-      return { fired: false, addedCommits: 0 }
-    }
-    if (snap.filteredCommitsLength === 0) {
-      return { fired: false, addedCommits: 0 }
-    }
-
-    loadingMoreCommitsRef.current = true
-    const requestId = loadMoreRequestRef.current + 1
-    loadMoreRequestRef.current = requestId
-    setLoadingMoreCommits(true)
-    dispatch({
-      type: 'setStatus',
-      value: options.statusMessage || 'loading older commits',
-      loading: true,
-    })
-    const fetchArgs = snap.historyFetchArgs
-    const mergedArgv: LogArgv = {
-      ...snap.logArgv,
-      ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
-      ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
-    }
-    // Load-more paths a fresh page from git AFTER what's already
-    // loaded; pass the stash hashes again so the additional rows
-    // stay graph-consistent with the boot fetch (a window that
-    // dropped stashes mid-stream would render with broken junctions).
-    const stashHashes = await getStashCommitHashes(git).catch(() => [])
-    const nextRows = await safe(
-      getLogRows(git, mergedArgv, {
-        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
-        skip: snap.commitsLength,
-        extraRefs: stashHashes,
-      })
-    )
-
-    if (!mountedRef.current || loadMoreRequestRef.current !== requestId) {
-      return { fired: false, addedCommits: 0 }
-    }
-
-    loadingMoreCommitsRef.current = false
-    setLoadingMoreCommits(false)
-
-    const nextCommitCount = nextRows ? getCommitRows(nextRows).length : 0
-
-    if (!nextRows) {
-      dispatch({ type: 'setStatus', value: 'failed to load older commits', kind: 'error' })
-      return { fired: false, addedCommits: 0 }
-    }
-
-    if (nextRows?.length) {
-      dispatch({ type: 'appendRows', rows: nextRows })
-    }
-
-    setHasMoreCommits(nextCommitCount >= LOG_INTERACTIVE_DEFAULT_LIMIT)
-    return { fired: true, addedCommits: nextCommitCount }
-    // Empty deps — the function is intentionally stable. State is
-    // read via `loadMoreStateRef.current` at call time, and `dispatch`
-    // / `git` / `setLoadingMoreCommits` / `setHasMoreCommits` are
-    // already stable across renders by React's contract.
-  }, [dispatch, git])
-
-  // Scroll-near-bottom auto-trigger. Fires when the user's cursor is
-  // within 20 rows of the last loaded commit so older history is
-  // already on its way by the time they reach the bottom.
-  React.useEffect(() => {
-    const remaining = state.filteredCommits.length - state.selectedIndex - 1
-    if (remaining > 20) return
-    void loadMoreCommits().then((result) => {
-      if (result.fired) {
-        dispatch({
-          type: 'setStatus',
-          value: result.addedCommits
-            ? `loaded ${result.addedCommits} older commits`
-            : 'end of history',
-        })
-      }
-    })
-  }, [
+  // Load-more pagination + targeted-context loader (cluster O). Lifted
+  // verbatim into `useLoadMoreHistory` (0.72 app.ts decomposition, PR 10):
+  // the `loadingMoreCommitsRef` mirror effect, the STABLE `loadMoreCommits`
+  // `useCallback` (deps `[dispatch, git]`, identity preserved so the
+  // cursor-sync chain never sees a stale callback), the scroll-near-bottom
+  // auto-trigger effect, the STABLE `loadCommitContext` `useCallback`, and
+  // the `loadCommitContextRef.current = loadCommitContext` bridge-assignment
+  // effect all move over in the same declaration order with byte-identical
+  // dep arrays. `mountedRef`, `loadingMoreCommitsRef`, `loadMoreRequestRef`,
+  // the `hasMoreCommits` / `loadingMoreCommits` state and their setters stay
+  // in app.ts (read/written by the render and the history-filter / graph-
+  // toggle effects) and are passed in. The hook keeps the bridge assignment
+  // in its EXACT relative slot so the render-order race documented in
+  // `useHistoryCursorSync` cannot recur.
+  useLoadMoreHistory(React, {
+    git,
     dispatch,
-    loadMoreCommits,
-    state.filteredCommits.length,
-    state.selectedIndex,
-  ])
-
-  /**
-   * Targeted-context loader for the cursor-syncs-history effect. Called
-   * when the resolver returns `load-context` — the user cursored a
-   * branch / tag / stash whose target commit isn't in the loaded
-   * window, so we run a `git log` anchored on that commit (guaranteed
-   * to include it) and merge the result via `appendRows` (which
-   * already deduplicates by hash).
-   *
-   * Stable identity (empty deps) for the same reason as
-   * `loadMoreCommits` — the cursor-sync effect calls this through a
-   * forward-reference ref, and a regenerating callback would
-   * reintroduce the render-order race that bit the previous chain.
-   * All volatile state (logArgv, mostly) is read via refs.
-   */
-  const loadCommitContextStateRef = React.useRef({ logArgv })
-  loadCommitContextStateRef.current = { logArgv }
-
-  const loadCommitContext = React.useCallback(async (
-    target: { hash: string; label: string }
-  ): Promise<void> => {
-    const snap = loadCommitContextStateRef.current
-    if (!snap.logArgv) return
-    dispatch({
-      type: 'setStatus',
-      value: `Loading commits around ${target.label}…`,
-      loading: true,
-    })
-    try {
-      // No stashHashes here — `getLogRowsAnchoredOn` walks only from
-      // the target so it can guarantee the target's inclusion.
-      // Stashes are already in the loaded graph from boot's
-      // `loadRowsWithStashes`; `appendRows` deduplicates by hash so
-      // the merged result keeps both views without double-counting.
-      const rows = await getLogRowsAnchoredOn(git, snap.logArgv, target.hash, {})
-      if (!mountedRef.current) return
-      if (rows.length > 0) {
-        dispatch({ type: 'appendRows', rows })
-        // Don't dispatch a setStatus here — the cursor-sync effect
-        // will re-fire on the appendRows-driven filteredCommits
-        // change and either jump (success) or report unreachable
-        // (failure), surfacing the right message.
-      } else {
-        dispatch({
-          type: 'setStatus',
-          value: `${target.label} target commit returned no rows — orphan ref?`,
-          kind: 'warning',
-        })
-      }
-    } catch (error) {
-      if (mountedRef.current) {
-        dispatch({
-          type: 'setStatus',
-          value: `Failed to load context for ${target.label}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          kind: 'error',
-        })
-      }
-    }
-  }, [dispatch, git])
-
-  React.useEffect(() => {
-    loadCommitContextRef.current = loadCommitContext
-  }, [loadCommitContext])
+    state,
+    logArgv,
+    hasMoreCommits,
+    setHasMoreCommits,
+    loadingMoreCommits,
+    setLoadingMoreCommits,
+    mountedRef,
+    loadingMoreCommitsRef,
+    loadMoreRequestRef,
+    loadCommitContextRef,
+  })
 
   // Server-side history filter (#776). When the user submits `path:foo`
   // or `author:foo`, the filter parser dispatches setHistoryFetchArgs;
