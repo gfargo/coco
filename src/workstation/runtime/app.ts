@@ -61,7 +61,6 @@ import { getBranchOverview } from '../../git/branchData'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
 import { getRemoteOverview } from '../../git/remoteData'
-import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
 import {
     runCommitDraftWorkflow,
     runCommitSplitApplyWorkflow,
@@ -344,6 +343,8 @@ import { useStatusAutoDismiss } from './hooks/useStatusAutoDismiss'
 import { useHistoryCursorSync } from './hooks/useHistoryCursorSync'
 import { useLoadMoreHistory } from './hooks/useLoadMoreHistory'
 import { useWorktreeStageActions } from './hooks/useWorktreeStageActions'
+import { useCommitComposeActions } from './hooks/useCommitComposeActions'
+import { useEditorActions } from './hooks/useEditorActions'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
 // per-surface and detail renderers are consumed internally by mainPanel /
@@ -355,7 +356,6 @@ import { renderMainPanel } from '../runtime/mainPanel'
 import { renderDetailPanel } from '../runtime/detailPanel'
 import { renderOnboardingOverlay } from '../runtime/overlays'
 import { getLogInkRuntimeContext, type LogInkRuntimeContextValue } from '../runtime/runtimeContext'
-import { ensureConfigFile, resolveConfigPath, type CocoConfigScope } from './configFiles'
 
 
 
@@ -1430,56 +1430,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setWorktreeHunks,
   })
 
-  const createCommitFromCompose = React.useCallback(async () => {
-    const stagedCount = context.worktree?.stagedCount || 0
-
-    if (!stagedCount) {
-      dispatch({ type: 'setStatus', value: 'stage changes before committing', kind: 'warning' })
-      return
-    }
-
-    dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: true } })
-    dispatch({ type: 'setStatus', value: 'creating commit' })
-    const result = await createManualCommit({
-      git,
-      summary: state.commitCompose.summary,
-      body: state.commitCompose.body,
-    })
-
-    dispatch({
-      type: 'commitCompose',
-      action: { type: 'setResult', message: result.message, details: result.details },
-    })
-    dispatch({ type: 'setStatus', value: result.message })
-
-    if (result.ok) {
-      dispatch({ type: 'commitCompose', action: { type: 'reset' } })
-      // Refresh BOTH worktree AND history rows — the new commit
-      // needs to show up in the history view, not just the staged
-      // counts. Without refreshHistoryRows the user would press `gh`
-      // and see the pre-commit log (same silent-failure shape as
-      // the split-apply case caught in this PR).
-      await refreshHistoryRows()
-      const worktree = await refreshWorktreeContext()
-      // Leave the compose view automatically: a still-dirty tree returns
-      // to Status (so the user can keep staging), an otherwise-complete
-      // commit returns to History (where the new commit now shows). The
-      // reducer inspects the live viewStack to pick the destination.
-      const stillDirty = Boolean(
-        worktree &&
-          worktree.stagedCount + worktree.unstagedCount + worktree.untrackedCount > 0,
-      )
-      dispatch({ type: 'returnFromCommit', stillDirty })
-    }
-  }, [
-    context.worktree?.stagedCount,
-    dispatch,
+  // Lifted verbatim into `useCommitComposeActions` (0.72 app.ts
+  // decomposition). `createCommitFromCompose` and `openComposeInEditor`
+  // are non-contiguous in the original file but read only early-declared
+  // values, so a single hook call here reproduces both `useCallback`
+  // identities exactly. Both are keystroke-dispatch-only — not in any
+  // effect/memo dep array — so co-locating them is identity-safe.
+  const {
+    createCommitFromCompose,
+    openComposeInEditor,
+  } = useCommitComposeActions(React, {
     git,
+    dispatch,
+    context,
+    commitCompose: state.commitCompose,
     refreshHistoryRows,
     refreshWorktreeContext,
-    state.commitCompose.body,
-    state.commitCompose.summary,
-  ])
+    resumeRef,
+  })
 
   // AbortController for the in-flight AI draft (#881 phase 3). Kept in
   // a ref rather than state because cancel is a side-effect: the input
@@ -2001,187 +1969,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
   }, [dispatch, resumeRef, state.changelogView.text])
 
-  // Open a file in $EDITOR (or $VISUAL) by suspending Ink's hold on the
-  // terminal, spawning the editor synchronously inheriting stdio, then
-  // restoring the alt screen + raw mode and forcing a re-render. The
-  // dance mirrors the SIGTSTP / SIGCONT path in inkTerminalLifecycle.
-  // Falls back to vi when neither env var is set; surfaces a status
-  // message on missing-binary / non-zero exit so the user isn't left
-  // wondering.
-  const openInEditor = React.useCallback((path: string) => {
-    if (!path) return
-    const editorEnv = process.env.VISUAL || process.env.EDITOR || 'vi'
-    // $VISUAL / $EDITOR commonly include flags (`code -w`, `vim -f`,
-    // `emacs -nw`). Tokenize on whitespace so the leading word is the
-    // executable and the rest are passed as arguments — passing the
-    // full string to spawnSync as the executable would fail with
-    // ENOENT for any of those configurations.
-    const editorArgs = editorEnv.trim().split(/\s+/).filter(Boolean)
-    const editor = editorArgs[0] || 'vi'
-    const editorPrefixArgs = editorArgs.slice(1)
-    const out = process.stdout
-    const stdin = process.stdin
-    const ENTER_ALT = '\x1b[?1049h'
-    const EXIT_ALT = '\x1b[?1049l'
-    const SHOW_CURSOR = '\x1b[?25h'
-    const HIDE_CURSOR = '\x1b[?25l'
-    try {
-      // Drop into the primary buffer + cooked mode so the editor
-      // doesn't inherit our raw-mode keystrokes.
-      stdin.setRawMode?.(false)
-      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
-      const result = spawnSync(editor, [...editorPrefixArgs, path], { stdio: 'inherit' })
-      if (result.error) {
-        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
-      } else if (result.signal) {
-        // Editor was killed by a signal (e.g. ^C, SIGTERM). status is
-        // null in this case, so the old `status !== 0` check would
-        // mistakenly fall through to the success branch.
-        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}`, kind: 'warning' })
-      } else if (typeof result.status === 'number' && result.status !== 0) {
-        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}`, kind: 'warning' })
-      } else {
-        dispatch({ type: 'setStatus', value: `Edited ${path}`, kind: 'success' })
-      }
-    } finally {
-      // Re-enter the alt screen + raw mode + hidden cursor; nudge React
-      // so the freshly-restored screen actually paints.
-      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
-      stdin.setRawMode?.(true)
-      resumeRef?.current?.()
-    }
-    // Worktree status may have changed (e.g. user saved an edit) — silent
-    // refresh so the file row reflects the new staged/unstaged state.
-    void refreshWorktreeContext({ silent: true })
-  }, [dispatch, refreshWorktreeContext, resumeRef])
-
-  // Open the global or project coco config in $EDITOR (gk / gK + their
-  // command-palette entries). Scaffolds a templated starter when the file
-  // doesn't exist yet so the user never lands in an empty buffer or hits
-  // a "no such file" error.
-  const openConfigInEditor = React.useCallback((scope: CocoConfigScope) => {
-    // `repoRootRef` is populated async from `git rev-parse --show-toplevel`;
-    // fall back to cwd so a freshly-launched session can still scaffold +
-    // open the project config before that resolves.
-    const repoRoot = repoRootRef.current || process.cwd()
-    const filePath = resolveConfigPath(scope, repoRoot)
-    try {
-      const { created } = ensureConfigFile(filePath)
-      if (created) {
-        dispatch({ type: 'setStatus', value: `Created ${scope} config at ${filePath}`, kind: 'success' })
-      }
-    } catch (error) {
-      dispatch({ type: 'setStatus', value: `Could not create config: ${(error as Error).message}`, kind: 'error' })
-      return
-    }
-    openInEditor(filePath)
-  }, [dispatch, openInEditor])
-
-  // `E` keystroke handler — open the current commit draft in $EDITOR
-  // (or $VISUAL), then read the file back and update the compose state
-  // with the saved content. Mirrors the suspend → spawn → resume
-  // terminal dance of `openInEditor` but operates on an in-memory
-  // draft (round-tripped through a temp file) rather than a worktree
-  // file. Useful when the inline compose editor isn't enough — long
-  // bodies, markdown highlighting, paste from elsewhere, etc.
-  //
-  // Empty drafts are still written to the temp file so the user gets
-  // a blank canvas; the read-back uses `setDraft` which splits content
-  // into summary + body via `splitCommitDraft`, so the new content
-  // re-populates both fields correctly regardless of which one was
-  // active before.
-  const openComposeInEditor = React.useCallback(() => {
-    // Build the current draft text the same way `createManualCommit`
-    // would — single string, blank line between summary and body.
-    // Round-tripping through this format keeps the parse symmetric:
-    // the editor sees what a real commit message would look like, and
-    // `splitCommitDraft` on the way back reverses it cleanly.
-    const composeState = state.commitCompose
-    const draft = formatCommitComposeMessage(composeState.summary, composeState.body)
-
-    // Temp dir + file. mkdtemp is cleaned up at the end regardless of
-    // editor success/failure (`finally` block below). `.md` extension
-    // helps editors pick up markdown highlighting — most commit-
-    // message workflows treat the body as markdown-ish.
-    let dir: string | undefined
-    try {
-      dir = mkdtempSync(nodePath.join(tmpdir(), 'coco-compose-'))
-    } catch (error) {
-      dispatch({
-        type: 'setStatus',
-        value: `Failed to create temp file for editor: ${(error as Error).message}`,
-        kind: 'error',
-      })
-      return
-    }
-    const file = nodePath.join(dir, 'COMMIT_EDITMSG.md')
-    try {
-      writeFileSync(file, draft, 'utf8')
-    } catch (error) {
-      dispatch({
-        type: 'setStatus',
-        value: `Failed to seed temp file: ${(error as Error).message}`,
-        kind: 'error',
-      })
-      try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
-      return
-    }
-
-    const editorEnv = process.env.VISUAL || process.env.EDITOR || 'vi'
-    const editorArgs = editorEnv.trim().split(/\s+/).filter(Boolean)
-    const editor = editorArgs[0] || 'vi'
-    const editorPrefixArgs = editorArgs.slice(1)
-    const out = process.stdout
-    const stdin = process.stdin
-    const ENTER_ALT = '\x1b[?1049h'
-    const EXIT_ALT = '\x1b[?1049l'
-    const SHOW_CURSOR = '\x1b[?25h'
-    const HIDE_CURSOR = '\x1b[?25l'
-
-    let editorOk = false
-    try {
-      stdin.setRawMode?.(false)
-      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
-      const result = spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
-      if (result.error) {
-        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
-      } else if (result.signal) {
-        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}`, kind: 'warning' })
-      } else if (typeof result.status === 'number' && result.status !== 0) {
-        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}`, kind: 'warning' })
-      } else {
-        editorOk = true
-      }
-    } finally {
-      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
-      stdin.setRawMode?.(true)
-      resumeRef?.current?.()
-    }
-
-    // Read the (possibly edited) file back and update compose state.
-    // We only do this when the editor exited cleanly — a crash / kill
-    // shouldn't blow away the user's draft. The setDraft action
-    // re-splits into summary + body via splitCommitDraft.
-    if (editorOk) {
-      try {
-        const content = readFileSync(file, 'utf8')
-        dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: content } })
-        dispatch({ type: 'setStatus', value: 'Commit draft updated from editor.', kind: 'success' })
-      } catch (error) {
-        dispatch({
-          type: 'setStatus',
-          value: `Failed to read back edited draft: ${(error as Error).message}`,
-          kind: 'error',
-        })
-      }
-    }
-
-    // Always clean up the temp dir — even on failure paths above. We
-    // don't want abandoned coco-compose-* directories accumulating in
-    // /tmp across sessions. Best-effort; ignore errors (e.g. file
-    // already removed by the user from inside their editor).
-    try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
-  }, [dispatch, resumeRef, state.commitCompose])
+  // Lifted verbatim into `useEditorActions` (0.72 app.ts decomposition).
+  // `openConfigInEditor` depends on the in-hook `openInEditor` identity
+  // (`[dispatch, openInEditor]`), so the pair must share a hook. Both are
+  // keystroke-dispatch-only — not in any effect/memo dep array.
+  const {
+    openInEditor,
+    openConfigInEditor,
+  } = useEditorActions(React, {
+    dispatch,
+    refreshWorktreeContext,
+    resumeRef,
+    repoRootRef,
+  })
 
   // `S` keystroke — start the `coco commit --split` flow (#907).
   // Pre-flight refuses cleanly when:
