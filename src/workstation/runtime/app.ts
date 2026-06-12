@@ -97,7 +97,6 @@ import { hasSeenOnboarding, markOnboardingSeen } from '../chrome/onboarding'
 import { createLogInkTheme, type LogInkThemePreset } from '../chrome/theme'
 import { saveThemePreset } from '../chrome/themePersistence'
 import { formatSplitApplySuccess } from '../chrome/postApplyHints'
-import { SPINNER_TICK_MS } from '../chrome/spinner'
 import { createInitialContextStatus, createRepoFrameRuntime } from './repoFrameFactory'
 import {
     resolveCommitDiffDrillInTarget,
@@ -348,6 +347,7 @@ import type { LogArgv } from '../../commands/log/config'
 import { matchesPromotedFilter } from '../runtime/promotedFilter'
 import { useFilteredLists } from './hooks/buildFilteredLists'
 import { useIdleTip } from './hooks/useIdleTip'
+import { useSpinnerFrame } from './hooks/useSpinnerFrame'
 import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
 import {
     buildLoadedHashSet,
@@ -794,30 +794,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // interval is the same cost as N. We pause the tick entirely when
   // nothing is loading so an idle workstation doesn't waste cycles
   // re-rendering the same frame.
-  const [spinnerFrame, setSpinnerFrame] = React.useState(0)
-  const anyLoading =
-    state.splitPlan?.status === 'loading' ||
-    state.splitPlan?.status === 'applying' ||
-    state.changelogView.status === 'loading' ||
-    state.commitCompose.loading ||
-    Boolean(state.remoteOp) ||
-    Boolean(state.statusLoading) ||
-    // Keep the shared spinner ticking while a list-item action (delete
-    // or checkout) is in flight so its inline pending glyph animates
-    // instead of freezing.
-    Boolean(state.pendingItemAction)
-  React.useEffect(() => {
-    if (!anyLoading) {
-      // Reset to 0 so the next loading state starts from a known
-      // frame instead of wherever the last animation left off.
-      setSpinnerFrame(0)
-      return
-    }
-    // DevSkim: ignore DS172411 — callback is a function literal, delay
-    // is our own constant, no caller-supplied data flows through.
-    const id = setInterval(() => setSpinnerFrame((tick) => tick + 1), SPINNER_TICK_MS)
-    return () => clearInterval(id)
-  }, [anyLoading])
+  const spinnerFrame = useSpinnerFrame(React, {
+    splitPlanStatus: state.splitPlan?.status,
+    changelogStatus: state.changelogView.status,
+    commitComposeLoading: state.commitCompose.loading,
+    remoteOp: state.remoteOp,
+    statusLoading: state.statusLoading,
+    pendingItemAction: state.pendingItemAction,
+  })
 
   const selected = getSelectedInkCommit(state)
   const selectedDetailFile = detail?.files[state.selectedFileIndex]
