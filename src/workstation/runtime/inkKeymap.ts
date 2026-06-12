@@ -39,6 +39,7 @@ export type LogInkCommandId =
   | 'navigatePullRequest'
   | 'navigatePullRequestTriage'
   | 'navigateReflog'
+  | 'navigateRemotes'
   | 'navigateStash'
   | 'navigateSubmodules'
   | 'navigateWorktrees'
@@ -359,6 +360,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['gM'],
     label: 'submodules',
     description: 'Push the submodules view (#932). Lists every registered submodule with status / pinned commit / tracking branch / remote. Capital M disambiguates from the single-letter `m` (mark compare base).',
+    contexts: ['normal'],
+  },
+  {
+    id: 'navigateRemotes',
+    keys: ['gn'],
+    label: 'remotes',
+    description: 'Push the remotes view (#0.71). Lists every configured remote with its fetch / push URLs and offers add / remove / set-url / prune actions. `n` for network/remotes; gr is already reflog.',
     contexts: ['normal'],
   },
   {
@@ -809,6 +817,7 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   navigateReflog: 'navigation',
   navigateBisect: 'navigation',
   navigateSubmodules: 'navigation',
+  navigateRemotes: 'navigation',
   // ── Movement: cursor movement + search navigation within a view.
   moveUp: 'movement',
   moveDown: 'movement',
@@ -1328,6 +1337,16 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
   if (options.activeView === 'submodules') {
     return {
       contextual: ['↑/↓ entries', 'i init', 'u update', 's sync', 'y yank path', 'Y yank sha', '/ filter', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'remotes') {
+    return {
+      // #0.71 — remote management. add / set-url prompt for input
+      // (the prompt is the gate); remove / prune route through the
+      // y-confirm path (`*` marks the destructive ones).
+      contextual: ['↑/↓ remotes', 'a add', 'e set-url', 'x remove*', 'p prune*', 'y yank url', '/ filter', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

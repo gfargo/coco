@@ -17,6 +17,7 @@ import type { SimpleGit } from 'simple-git'
 import type { BisectStatus } from '../../git/bisectData'
 import type { BranchOverview } from '../../git/branchData'
 import type { LfsAttributeStatus } from '../../git/lfsAttributes'
+import type { RemoteOverview } from '../../git/remoteData'
 import type { SubmoduleOverview } from '../../git/submoduleData'
 import type { GitOperationOverview } from '../../git/operationData'
 import type { ProviderOverview } from '../../git/providerData'
@@ -80,6 +81,12 @@ export type LogInkContext = {
    */
   pullRequestDetailByNumber?: Map<number, PullRequestDetail>
   reflog?: ReflogOverview
+  /**
+   * Remote overview (#0.71). Carries every configured remote's name +
+   * fetch / push URLs parsed from `git remote -v`. Drives the dedicated
+   * Remotes view (`gn`) and its add / remove / set-url / prune actions.
+   */
+  remotes?: RemoteOverview
   stashes?: StashOverview
   /**
    * Submodule overview (#884). Carries per-submodule metadata

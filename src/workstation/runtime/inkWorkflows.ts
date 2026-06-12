@@ -610,6 +610,45 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // #0.71 — remote management. All four are scoped per-view in
+      // inkInput (active only when activeView === 'remotes') so their
+      // single-letter keys (a / e / x / p) stay free elsewhere. Empty
+      // `key` keeps them palette-discoverable. add / set-url collect
+      // input via a prompt (the prompt is the affirmative gate); remove
+      // and prune are destructive (they drop refs) so they route through
+      // the y-confirm path.
+      id: 'remote-add',
+      key: '',
+      label: 'Remote: add',
+      description: 'Add a new remote (prompts for `name url`).',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'remote-set-url',
+      key: '',
+      label: 'Remote: set URL',
+      description: 'Repoint the cursored remote at a new URL (prompts for the URL).',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'remote-remove',
+      key: '',
+      label: 'Remote: remove',
+      description: 'Remove the cursored remote and its tracking refs after confirmation.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'remote-prune',
+      key: '',
+      label: 'Remote: prune',
+      description: 'Prune stale remote-tracking refs for the cursored remote after confirmation.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       // #784 — bisect workflow actions. All four are scoped per-view in
       // inkInput (active only when activeView === 'bisect') so the
       // single-letter keys stay free elsewhere. Empty `key` keeps them

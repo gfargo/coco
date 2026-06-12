@@ -116,6 +116,10 @@ export type LogInkInputContext = {
   submoduleCount?: number
   /** Repo-relative path of the cursored submodule (#932). Reserved for future per-entry actions. */
   submoduleSelectedPath?: string
+  /** Number of configured remotes (#0.71). Drives j/k navigation on the remotes view. */
+  remoteCount?: number
+  /** Name of the cursored remote (#0.71). Used as the yank target on the remotes view. */
+  remoteSelectedName?: string
   /** Number of issues in the triage list view (#882 phase 3). Drives j/k navigation. */
   issueCount?: number
   /** URL of the cursored issue (#882 phase 3). Used by `O` to open in the browser. */
@@ -433,14 +437,14 @@ function isReflogActionTarget(state: LogInkState): boolean {
 const CREATE_PR_VIEWS: readonly LogInkView[] = [
   'history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash',
   'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'reflog',
-  'bisect', 'changelog', 'submodules',
+  'bisect', 'changelog', 'submodules', 'remotes',
 ]
 // Bare `S` creates a stash everywhere EXCEPT the commit triad
 // (compose / status / diff), where `S` starts the commit-split flow.
 const CREATE_STASH_VIEWS: readonly LogInkView[] = [
   'history', 'branches', 'tags', 'stash', 'worktrees', 'pull-request',
   'pull-request-triage', 'issues', 'conflicts', 'reflog', 'bisect',
-  'changelog', 'submodules',
+  'changelog', 'submodules', 'remotes',
 ]
 
 /** True when bare `C` should create a PR in the active view. */
@@ -459,6 +463,14 @@ export function isCreateStashView(view: LogInkView): boolean {
  */
 function isSubmodulesActionTarget(state: LogInkState): boolean {
   return state.activeView === 'submodules' && state.focus === 'commits'
+}
+
+/**
+ * Remotes has no sidebar tab — only the dedicated promoted view
+ * (#0.71). Same shape as `isReflogActionTarget` / `isSubmodulesActionTarget`.
+ */
+function isRemotesActionTarget(state: LogInkState): boolean {
+  return state.activeView === 'remotes' && state.focus === 'commits'
 }
 
 /**
@@ -660,6 +672,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'pushView', value: 'bisect' })]
     case 'navigateSubmodules':
       return [action({ type: 'pushView', value: 'submodules' })]
+    case 'navigateRemotes':
+      return [action({ type: 'pushView', value: 'remotes' })]
     case 'markForCompare':
       // Palette context can't reach the cursored ref (filtered branch /
       // tag lists live in runtime state, not the reducer). Surface a
@@ -966,6 +980,22 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   if (state.inputPrompt.kind === 'pr-request-changes') {
     return [
       action({ type: 'setPendingConfirmation', value: 'request-changes-pr', payload: value }),
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  // #0.71 — remotes view prompts. Both forward the typed value to their
+  // workflow id; the runtime parses `name url` (add) or applies the URL
+  // to the cursored remote (set-url). The prompt is the affirmative
+  // gate, so neither routes through the y-confirm path.
+  if (state.inputPrompt.kind === 'add-remote') {
+    return [
+      { type: 'runWorkflowAction', id: 'remote-add', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'set-remote-url') {
+    return [
+      { type: 'runWorkflowAction', id: 'remote-set-url', payload: value },
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -1791,6 +1821,17 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // `gn` chord: jump to the dedicated remotes view (#0.71). `n` for
+  // network/remotes; `gr` is already reflog. Always navigates — even
+  // when no remotes are configured — so the empty-state copy can point
+  // the user at `a add`.
+  if (state.pendingKey === 'g' && inputValue === 'n') {
+    return [
+      action({ type: 'pushView', value: 'remotes' }),
+      action({ type: 'setStatus', value: 'jumped to remotes' }),
+    ]
+  }
+
   // `gH` chord: apply the cursored hunk to the index (`git apply
   // --cached`). Sibling of bare `H` which targets the worktree.
   // Discoverable via the footer hint on diff views and the help
@@ -2277,6 +2318,10 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveReflog', delta: -1, count: context.reflogCount })]
     }
 
+    if (isRemotesActionTarget(state) && context.remoteCount) {
+      return [action({ type: 'moveRemote', delta: -1, count: context.remoteCount })]
+    }
+
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
       return [action({ type: 'moveSubmodule', delta: -1, count: context.submoduleCount })]
     }
@@ -2395,6 +2440,10 @@ export function getLogInkInputEvents(
 
     if (isReflogActionTarget(state) && context.reflogCount) {
       return [action({ type: 'moveReflog', delta: 1, count: context.reflogCount })]
+    }
+
+    if (isRemotesActionTarget(state) && context.remoteCount) {
+      return [action({ type: 'moveRemote', delta: 1, count: context.remoteCount })]
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
@@ -3337,6 +3386,34 @@ export function getLogInkInputEvents(
     return [{ type: 'runWorkflowAction', id: 'submodule-sync' }]
   }
 
+  // #0.71 — remote management on the remotes view. Scoped per-view so
+  // the bare keys don't collide elsewhere. `a` add and `e` set-url open
+  // an input prompt (the prompt is the affirmative gate). `x` remove and
+  // `p` prune are destructive (they drop refs), so they route through
+  // the y-confirm path via setPendingConfirmation rather than running
+  // directly. add works with zero remotes (it's how you create the
+  // first); set-url / remove / prune require a cursored row.
+  if (inputValue === 'a' && isRemotesActionTarget(state)) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'add-remote',
+      label: 'Add remote — name url (e.g. upstream https://example.com/up.git)',
+    })]
+  }
+  if (inputValue === 'e' && isRemotesActionTarget(state) && context.remoteCount) {
+    return [action({
+      type: 'openInputPrompt',
+      kind: 'set-remote-url',
+      label: `New URL for ${context.remoteSelectedName || 'remote'}`,
+    })]
+  }
+  if (inputValue === 'x' && isRemotesActionTarget(state) && context.remoteCount) {
+    return [action({ type: 'setPendingConfirmation', value: 'remote-remove' })]
+  }
+  if (inputValue === 'p' && isRemotesActionTarget(state) && context.remoteCount) {
+    return [action({ type: 'setPendingConfirmation', value: 'remote-prune' })]
+  }
+
   // `y` / `Y` yank the contextually relevant identifier from the active
   // view to the system clipboard:
   //   history    → cursored commit hash (Y for short hash)
@@ -3387,6 +3464,12 @@ export function getLogInkInputEvents(
     // history view's Y).
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
       return [{ type: 'yankFromActiveView', short }]
+    }
+    // #0.71 — remotes view: y yanks the cursored remote's fetch URL so
+    // the user can paste it into a clone / config command. Y is a no-op
+    // (no compact alternate identifier worth a second key).
+    if (isRemotesActionTarget(state) && context.remoteCount) {
+      return [{ type: 'yankFromActiveView' }]
     }
     // #882 phase 4 — triage views: y yanks the cursored issue / PR
     // URL so the user can paste it into a chat / PR description

@@ -29,6 +29,7 @@ import { renderIssuesTriageSurface } from '../surfaces/issuesTriage'
 import { renderPullRequestSurface } from '../surfaces/pullRequest'
 import { renderPullRequestTriageSurface } from '../surfaces/pullRequestTriage'
 import { renderReflogSurface } from '../surfaces/reflog'
+import { renderRemotesSurface } from '../surfaces/remotes'
 import { renderStashSurface } from '../surfaces/stash'
 import { renderStatusSurface } from '../surfaces/status'
 import { renderSubmodulesSurface } from '../surfaces/submodules'
@@ -164,6 +165,10 @@ export function renderMainPanel(
 
   if (state.activeView === 'submodules') {
     return renderSubmodulesSurface(surface)
+  }
+
+  if (state.activeView === 'remotes') {
+    return renderRemotesSurface(surface)
   }
 
   if (state.activeView === 'pull-request') {
