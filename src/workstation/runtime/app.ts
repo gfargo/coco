@@ -127,7 +127,6 @@ import {
     createLogInkState,
     getSelectedInkCommit,
     getThemePickerSelection,
-    hunkIndexAtOffset,
 } from '../../workstation/runtime/inkViewModel'
 import { getGitOperationOverview } from '../../git/operationData'
 import { openProviderUrl } from '../../git/providerActions'
@@ -185,13 +184,10 @@ import {
     getStashOverview,
 } from '../../git/stashData'
 import {
-    revertFile,
     stageAll,
     stageAllFiles,
-    stageFile,
     stagePathspec,
     unstageAllFiles,
-    unstageFile,
 } from '../../git/statusActions'
 import {
     applyStatusFilterMask,
@@ -199,9 +195,6 @@ import {
 } from '../../git/statusData'
 import {
     WorktreeHunkOverview,
-    revertHunk,
-    stageHunk,
-    unstageHunk,
 } from '../../git/statusHunks'
 import { getBisectCompletion, getBisectStatus } from '../../git/bisectData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../git/bisectActions'
@@ -350,6 +343,7 @@ import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
 import { useStatusAutoDismiss } from './hooks/useStatusAutoDismiss'
 import { useHistoryCursorSync } from './hooks/useHistoryCursorSync'
 import { useLoadMoreHistory } from './hooks/useLoadMoreHistory'
+import { useWorktreeStageActions } from './hooks/useWorktreeStageActions'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
 // per-surface and detail renderers are consumed internally by mainPanel /
@@ -1411,100 +1405,30 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     worktreeDiff,
   ])
 
-  const toggleSelectedFileStage = React.useCallback(async () => {
-    if (!selectedWorktreeFile) {
-      dispatch({ type: 'setStatus', value: 'no worktree file selected', kind: 'warning' })
-      return
-    }
-
-    dispatch({ type: 'setStatus', value: 'updating file stage state' })
-    const result = selectedWorktreeFile.state === 'staged'
-      ? await unstageFile(git, selectedWorktreeFile)
-      : await stageFile(git, selectedWorktreeFile)
-
-    dispatch({ type: 'setStatus', value: result.message })
-    await refreshWorktreeContext()
-    setWorktreeDiff(undefined)
-    setWorktreeHunks(undefined)
-  }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile])
-
-  const toggleSelectedHunkStage = React.useCallback(async () => {
-    // The staging target is the hunk under the viewport (#1185) —
-    // derived from the scroll offset, the single source of truth.
-    const selectedHunk = worktreeHunks?.hunks[
-      hunkIndexAtOffset(state.worktreeDiffOffset, worktreeDiff?.hunkOffsets ?? [])
-    ]
-
-    if (!selectedHunk) {
-      dispatch({ type: 'setStatus', value: 'no hunk selected', kind: 'warning' })
-      return
-    }
-
-    dispatch({ type: 'setStatus', value: 'updating hunk stage state' })
-    try {
-      if (selectedHunk.state === 'staged') {
-        await unstageHunk(git, selectedHunk)
-      } else {
-        await stageHunk(git, selectedHunk)
-      }
-
-      dispatch({
-        type: 'setStatus',
-        value: `${selectedHunk.state === 'staged' ? 'Unstaged' : 'Staged'} hunk`,
-        kind: 'success',
-      })
-      await refreshWorktreeContext()
-      setWorktreeDiff(undefined)
-      setWorktreeHunks(undefined)
-    } catch (error) {
-      dispatch({
-        type: 'setStatus',
-        value: (error as Error).message || 'failed to update hunk stage state',
-        kind: 'error',
-      })
-    }
-  }, [dispatch, git, refreshWorktreeContext, state.worktreeDiffOffset, worktreeDiff, worktreeHunks])
-
-  const revertSelectedFile = React.useCallback(async () => {
-    if (!selectedWorktreeFile) {
-      dispatch({ type: 'setStatus', value: 'no worktree file selected', kind: 'warning' })
-      return
-    }
-
-    dispatch({ type: 'setStatus', value: 'reverting selected file' })
-    const result = await revertFile(git, selectedWorktreeFile)
-
-    dispatch({ type: 'setStatus', value: result.message })
-    await refreshWorktreeContext()
-    setWorktreeDiff(undefined)
-    setWorktreeHunks(undefined)
-  }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile])
-
-  const revertSelectedHunk = React.useCallback(async () => {
-    const selectedHunk = worktreeHunks?.hunks[
-      hunkIndexAtOffset(state.worktreeDiffOffset, worktreeDiff?.hunkOffsets ?? [])
-    ]
-
-    if (!selectedHunk) {
-      dispatch({ type: 'setStatus', value: 'no hunk selected', kind: 'warning' })
-      return
-    }
-
-    dispatch({ type: 'setStatus', value: 'reverting selected hunk' })
-    try {
-      await revertHunk(git, selectedHunk)
-      dispatch({ type: 'setStatus', value: `Reverted hunk in ${selectedHunk.filePath}`, kind: 'success' })
-      await refreshWorktreeContext()
-      setWorktreeDiff(undefined)
-      setWorktreeHunks(undefined)
-    } catch (error) {
-      dispatch({
-        type: 'setStatus',
-        value: (error as Error).message || 'failed to revert hunk',
-        kind: 'error',
-      })
-    }
-  }, [dispatch, git, refreshWorktreeContext, state.worktreeDiffOffset, worktreeDiff, worktreeHunks])
+  // Lifted verbatim into `useWorktreeStageActions` (0.72 app.ts
+  // decomposition — the first extraction of action callbacks). The four
+  // staging/revert handlers are contiguous and invoked ONLY from the input
+  // handler's keystroke dispatch (no effect/memo dep-array reference), so a
+  // single hook at this slot preserves both hook order and the four
+  // `useCallback` identities. Bodies + dep arrays are byte-identical; the
+  // only change is `state.worktreeDiffOffset` is threaded in as
+  // `worktreeDiffOffset` (same value).
+  const {
+    toggleSelectedFileStage,
+    toggleSelectedHunkStage,
+    revertSelectedFile,
+    revertSelectedHunk,
+  } = useWorktreeStageActions(React, {
+    git,
+    dispatch,
+    selectedWorktreeFile,
+    worktreeDiff,
+    worktreeHunks,
+    worktreeDiffOffset: state.worktreeDiffOffset,
+    refreshWorktreeContext,
+    setWorktreeDiff,
+    setWorktreeHunks,
+  })
 
   const createCommitFromCompose = React.useCallback(async () => {
     const stagedCount = context.worktree?.stagedCount || 0
