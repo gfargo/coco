@@ -1,0 +1,96 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderRemotesSurface structural snapshot — divergent push URL 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Remotes *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1/1 remotes
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    dimColor={false}
+  >
+    &gt; origin git@github.com:gfargo/coco.git ↑ git@github.com:me/fork.git
+  </Text>
+</Box>
+`;
+
+exports[`renderRemotesSurface structural snapshot — empty 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Remotes *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      0/0 remotes
+    </Text>
+  </Box>
+  <Text
+    dimColor={true}
+  >
+    No remotes configured. Press a to add one.
+  </Text>
+</Box>
+`;
+
+exports[`renderRemotesSurface structural snapshot — populated 1`] = `
+<Box
+  borderColor="cyan"
+  borderStyle="round"
+  flexDirection="column"
+  flexShrink={0}
+  paddingX={1}
+  width={120}
+>
+  <Box
+    justifyContent="space-between"
+  >
+    <Text
+      bold={true}
+    >
+      Remotes *
+    </Text>
+    <Text
+      dimColor={true}
+    >
+      1/1 remotes
+    </Text>
+  </Box>
+  <Text
+    bold={true}
+    dimColor={false}
+  >
+    &gt; origin git@github.com:gfargo/coco.git
+  </Text>
+</Box>
+`;

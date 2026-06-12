@@ -61,6 +61,7 @@ import { getBranchOverview } from '../../git/branchData'
 import { hashesMatchAny } from '../../git/hashes'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
+import { getRemoteOverview } from '../../git/remoteData'
 import { createManualCommit, formatCommitComposeMessage } from '../../commands/log/commitCompose'
 import {
     runCommitDraftWorkflow,
@@ -223,6 +224,7 @@ import { getCompareDiff } from '../../git/compareData'
 import { getReflogOverview } from '../../git/reflogData'
 import { checkoutReflogEntry } from '../../git/reflogActions'
 import { initSubmodule, syncSubmodule, updateSubmodule } from '../../git/submoduleActions'
+import { addRemote, pruneRemote, removeRemote, setRemoteUrl } from '../../git/remoteActions'
 import { getTagOverview } from '../../git/tagData'
 import { getWorktreeListOverview } from '../../git/worktreeData'
 import { WorktreeFileDiff, getWorktreeFileDiff } from '../../git/worktreeDiffData'
@@ -237,7 +239,7 @@ async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
 }
 
 async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
-  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules] =
+  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules, remotes] =
     await Promise.all([
       safe(getBranchOverview(git)),
       safe(getForgePullRequestOverview(git)),
@@ -251,6 +253,7 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
       safe(getBisectStatus(git)),
       safe(getLfsAttributeStatus(git)),
       safe(getSubmoduleOverview(git)),
+      safe(getRemoteOverview(git)),
     ])
 
   return {
@@ -261,6 +264,7 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
     provider,
     pullRequest,
     reflog,
+    remotes,
     stashes,
     submodules,
     tags,
@@ -306,6 +310,10 @@ function loadLogInkContextEntries(git: SimpleGit): Array<{
     {
       key: 'submodules',
       load: () => safe(getSubmoduleOverview(git)),
+    },
+    {
+      key: 'remotes',
+      load: () => safe(getRemoteOverview(git)),
     },
     {
       key: 'worktree',
@@ -925,6 +933,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       )
     )
   }, [context.submodules?.entries, state.filter])
+  const filteredRemoteList = React.useMemo(() => {
+    const all = context.remotes?.entries || []
+    if (!state.filter) return all
+    return all.filter((entry) =>
+      matchesPromotedFilter([entry.name, entry.fetchUrl, entry.pushUrl], state.filter)
+    )
+  }, [context.remotes?.entries, state.filter])
   // Issues + PR triage filtered lists (#882 phase 3). Same memo
   // pattern as the other promoted views — collapses per-keystroke
   // filter work to one pass per (data, filter) change.
@@ -3494,6 +3509,44 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         if (!entry) return { ok: false, message: 'No submodule selected' }
         return syncSubmodule(git, entry)
       },
+      // #0.71 — remote management. add parses a single `name url` line
+      // from the prompt payload; set-url / remove / prune resolve the
+      // target from the filtered list so the cursor index lines up with
+      // what's on screen. The post-handler refreshContext reloads the
+      // remote overview so the list reflects the change.
+      'remote-add': async () => {
+        const raw = (payload || '').trim()
+        if (!raw) return { ok: false, message: 'Remote name and URL required' }
+        // Single-line `name url` prompt: first whitespace-run splits the
+        // name from the URL. A missing URL falls through to the action's
+        // own validation, which returns a friendly error.
+        const firstSpace = raw.search(/\s/)
+        const name = firstSpace === -1 ? raw : raw.slice(0, firstSpace)
+        const url = firstSpace === -1 ? '' : raw.slice(firstSpace).trim()
+        return addRemote(git, name, url)
+      },
+      'remote-set-url': async () => {
+        const entry = filteredRemoteList[
+          Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
+        ]
+        if (!entry) return { ok: false, message: 'No remote selected' }
+        const url = (payload || '').trim()
+        return setRemoteUrl(git, entry.name, url)
+      },
+      'remote-remove': async () => {
+        const entry = filteredRemoteList[
+          Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
+        ]
+        if (!entry) return { ok: false, message: 'No remote selected' }
+        return removeRemote(git, entry.name)
+      },
+      'remote-prune': async () => {
+        const entry = filteredRemoteList[
+          Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
+        ]
+        if (!entry) return { ok: false, message: 'No remote selected' }
+        return pruneRemote(git, entry.name)
+      },
       'create-tag-here': async () => {
         const commit = getSelectedInkCommit(state)
         const name = payload?.trim()
@@ -4215,7 +4268,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }
   }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
     state.branchSort, state.filter, state.selectedBranchIndex,
-    state.selectedStashIndex, state.selectedSubmoduleIndex, state.selectedTagIndex,
+    state.selectedStashIndex, state.selectedSubmoduleIndex, state.selectedRemoteIndex,
+    state.selectedTagIndex,
     state.selectedWorktreeListIndex, state.stashDiffRef,
     state.statusFilterMask, state.tagSort, state.worktreeCheckoutConflict])
 
@@ -4299,6 +4353,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
           value = entry.path
           label = `submodule path ${entry.path}`
         }
+      }
+    } else if (view === 'remotes') {
+      // #0.71 — yank from the dedicated remotes view. `y` copies the
+      // cursored remote's fetch URL (the value the user most often
+      // needs for a clone / config command). Short form (`Y`) is a
+      // no-op — there's no compact alternate worth a second key.
+      const entry = filteredRemoteList[
+        Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
+      ]
+      if (entry && entry.fetchUrl) {
+        value = entry.fetchUrl
+        label = `remote ${entry.name} URL`
       }
     } else if (view === 'issues') {
       // #882 phase 4 — y yanks the cursored issue's URL so the user
@@ -4393,6 +4459,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch,
     filteredIssueList,
     filteredPullRequestTriageList,
+    filteredRemoteList,
     selected,
     selectedDetailFile,
     stashDiffLines,
@@ -4407,6 +4474,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedIndex,
     state.selectedIssueIndex,
     state.selectedPullRequestTriageIndex,
+    state.selectedRemoteIndex,
     state.selectedStashIndex,
     state.selectedSubmoduleIndex,
     state.selectedTagIndex,
@@ -4801,6 +4869,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     const submoduleSelectedPath = filteredSubmoduleList[
       Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
     ]?.path
+    const remoteVisibleCount = filteredRemoteList.length
+    const remoteSelectedName = filteredRemoteList[
+      Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
+    ]?.name
     const issueVisibleCount = filteredIssueList.length
     const issueSelectedUrl = filteredIssueList[
       Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
@@ -4850,6 +4922,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       reflogSelectedHash,
       submoduleCount: submoduleVisibleCount,
       submoduleSelectedPath,
+      remoteCount: remoteVisibleCount,
+      remoteSelectedName,
       issueCount: issueVisibleCount,
       issueSelectedUrl,
       pullRequestTriageCount: pullRequestTriageVisibleCount,

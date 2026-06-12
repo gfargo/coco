@@ -114,6 +114,17 @@ export function formatLogInkSubmodulesEmpty({ filter }: LogInkSubmodulesEmptyArg
   return 'No submodules registered. Add one with `git submodule add <url> <path>` from the shell.'
 }
 
+export type LogInkRemotesEmptyArgs = {
+  filter: string
+}
+
+export function formatLogInkRemotesEmpty({ filter }: LogInkRemotesEmptyArgs): string {
+  if (filter.trim()) {
+    return `No remotes match filter '${filter}'. Press ctrl+u to clear.`
+  }
+  return 'No remotes configured. Press a to add one.'
+}
+
 export type LogInkIssuesEmptyArgs = {
   filter: string
 }

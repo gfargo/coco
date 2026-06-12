@@ -27,7 +27,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 
 /**
@@ -306,6 +306,13 @@ export type LogInkState = {
    * their place.
    */
   selectedSubmoduleIndex: number
+  /**
+   * Cursor for the dedicated remotes view (#0.71). Same lifecycle as
+   * the other promoted-view indices — preserved across navigations so
+   * the user keeps their place in the list when they drill out and
+   * back.
+   */
+  selectedRemoteIndex: number
   /**
    * Cursor for the issues triage view (#882). Same lifecycle as the
    * other promoted-view indices — preserved across navigations so
@@ -807,6 +814,13 @@ export type LogInkInputPromptKind =
   | 'pr-request-changes'
   | 'create-pr'
   | 'bisect-run-command'
+  // #0.71 — remotes view mutations. `add-remote` collects a single
+  // `name url` line (space-separated, parsed in the submit handler);
+  // `set-remote-url` collects just a URL applied to the cursored
+  // remote. The prompt itself is the affirmative gate for both, so
+  // neither routes through the y-confirm path.
+  | 'add-remote'
+  | 'set-remote-url'
   // #882 phase 4 — triage-view mutations. Distinct from the
   // single-PR `pr-comment` / `pr-request-changes` kinds above so
   // the submit handler routes to the by-number workflows (the
@@ -873,6 +887,7 @@ export type LogInkAction =
   | { type: 'moveStash'; delta: number; count: number }
   | { type: 'moveReflog'; delta: number; count: number }
   | { type: 'moveSubmodule'; delta: number; count: number }
+  | { type: 'moveRemote'; delta: number; count: number }
   | { type: 'moveIssue'; delta: number; count: number }
   | { type: 'movePullRequestTriage'; delta: number; count: number }
   | { type: 'cycleIssueFilter' }
@@ -1484,6 +1499,7 @@ export function createLogInkState(
     selectedConflictFileIndex: 0,
     selectedReflogIndex: 0,
     selectedSubmoduleIndex: 0,
+    selectedRemoteIndex: 0,
     selectedIssueIndex: 0,
     selectedPullRequestTriageIndex: 0,
     selectedIssueFilter: 'open',
@@ -1823,6 +1839,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedSubmoduleIndex: clampIndex(state.selectedSubmoduleIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
+    case 'moveRemote':
+      return {
+        ...state,
+        selectedRemoteIndex: clampIndex(state.selectedRemoteIndex + action.delta, action.count),
         pendingKey: undefined,
       }
     case 'moveIssue':
