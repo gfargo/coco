@@ -1,4 +1,5 @@
 import {
+  formatLogInkBlameEmpty,
   formatLogInkBranchesEmpty,
   formatLogInkComposeEmpty,
   formatLogInkHistoryEmpty,
@@ -61,6 +62,21 @@ describe('log Ink surface states', () => {
       const message = formatLogInkStashEmpty({ filter: 'wip' })
       expect(message).toContain("'wip'")
       expect(message).toContain('ctrl+u')
+    })
+  })
+
+  describe('formatLogInkBlameEmpty', () => {
+    it('leads with the git error when blame failed', () => {
+      const message = formatLogInkBlameEmpty({ path: 'logo.png', failureMessage: 'binary file' })
+      expect(message).toContain('logo.png')
+      expect(message).toContain('binary file')
+      expect(message).toContain('esc')
+    })
+
+    it('falls back to a neutral hint for a genuinely empty file', () => {
+      const message = formatLogInkBlameEmpty({ path: 'src/empty.ts' })
+      expect(message).toContain('src/empty.ts')
+      expect(message).toContain('esc')
     })
   })
 

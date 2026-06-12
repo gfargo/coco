@@ -125,6 +125,26 @@ export function formatLogInkRemotesEmpty({ filter }: LogInkRemotesEmptyArgs): st
   return 'No remotes configured. Press a to add one.'
 }
 
+export type LogInkBlameEmptyArgs = {
+  /** Repo-relative path being blamed, for a path-aware message. */
+  path?: string
+  /** Best-effort failure message when `git blame` couldn't run. */
+  failureMessage?: string
+}
+
+/**
+ * Empty / failure copy for the on-demand blame view (#0.71). A failed
+ * blame (binary file, path outside the repo) is the common "non-empty
+ * but unrenderable" case, so the message leads with the git error when
+ * present; a genuinely empty file falls through to the neutral hint.
+ */
+export function formatLogInkBlameEmpty({ path, failureMessage }: LogInkBlameEmptyArgs): string {
+  if (failureMessage) {
+    return `Could not blame ${path ?? 'this file'}: ${failureMessage}. Press esc to go back.`
+  }
+  return `No blame data for ${path ?? 'this file'} (empty or untracked). Press esc to go back.`
+}
+
 export type LogInkIssuesEmptyArgs = {
   filter: string
 }

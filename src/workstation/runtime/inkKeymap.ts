@@ -38,6 +38,7 @@ export type LogInkCommandId =
   | 'navigateIssues'
   | 'navigatePullRequest'
   | 'navigatePullRequestTriage'
+  | 'navigateBlame'
   | 'navigateReflog'
   | 'navigateRemotes'
   | 'navigateStash'
@@ -368,6 +369,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     label: 'remotes',
     description: 'Push the remotes view (#0.71). Lists every configured remote with its fetch / push URLs and offers add / remove / set-url / prune actions. `n` for network/remotes; gr is already reflog.',
     contexts: ['normal'],
+  },
+  {
+    id: 'navigateBlame',
+    keys: ['b'],
+    label: 'blame',
+    description: 'Open the on-demand `git blame` drill-down for the cursored file (#0.71). Available on a file row in the status view (and on the worktree diff). Blame is loaded lazily and cached per path; j/k scrolls, esc returns. `b` is free in these contexts — elsewhere it pages / marks bad.',
+    contexts: ['status', 'diff'],
   },
   {
     id: 'markForCompare',
@@ -1347,6 +1355,15 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
       // (the prompt is the gate); remove / prune route through the
       // y-confirm path (`*` marks the destructive ones).
       contextual: ['↑/↓ remotes', 'a add', 'e set-url', 'x remove*', 'p prune*', 'y yank url', '/ filter', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'blame') {
+    return {
+      // #0.71 — on-demand blame drill-down. Read-only: j/k scroll the
+      // windowed line list, esc pops back to the file list.
+      contextual: ['↑/↓ lines', 'gg/G top/bottom', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
