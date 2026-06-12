@@ -1214,6 +1214,28 @@ describe('log Ink input interactions', () => {
     expect(yShiftEvents).toContainEqual({ type: 'yankFromActiveView', short: true })
   })
 
+  it('i / u / s on the submodules view run init / update / sync (#0.71)', () => {
+    const state = createLogInkState(rows, { activeView: 'submodules' })
+
+    expect(getLogInkInputEvents(state, 'i', {}, { submoduleCount: 2 }))
+      .toContainEqual({ type: 'runWorkflowAction', id: 'submodule-init' })
+    expect(getLogInkInputEvents(state, 'u', {}, { submoduleCount: 2 }))
+      .toContainEqual({ type: 'runWorkflowAction', id: 'submodule-update' })
+    expect(getLogInkInputEvents(state, 's', {}, { submoduleCount: 2 }))
+      .toContainEqual({ type: 'runWorkflowAction', id: 'submodule-sync' })
+  })
+
+  it('submodule init / update / sync keys require a non-empty submodule list (#0.71)', () => {
+    const state = createLogInkState(rows, { activeView: 'submodules' })
+
+    for (const key of ['i', 'u', 's']) {
+      const events = getLogInkInputEvents(state, key, {}, { submoduleCount: 0 })
+      expect(events.find((e) =>
+        e.type === 'runWorkflowAction' && e.id.startsWith('submodule-')
+      )).toBeUndefined()
+    }
+  })
+
   it('lower-case g on the bisect view marks good (no chord trigger) (#784)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })

@@ -3321,6 +3321,22 @@ export function getLogInkInputEvents(
     return [{ type: 'runWorkflowAction', id: 'checkout-reflog-entry' }]
   }
 
+  // #0.71 — submodule maintenance on the cursored row. Scoped to the
+  // submodules view so the bare keys don't collide with the sort `s` /
+  // history `i` / stash+branch `u` bound on other views (the resolver
+  // reaches those earlier only when their own view is active). init /
+  // update / sync are all non-destructive, so they run straight through
+  // to the workflow handler with no y-confirm.
+  if (inputValue === 'i' && isSubmodulesActionTarget(state) && context.submoduleCount) {
+    return [{ type: 'runWorkflowAction', id: 'submodule-init' }]
+  }
+  if (inputValue === 'u' && isSubmodulesActionTarget(state) && context.submoduleCount) {
+    return [{ type: 'runWorkflowAction', id: 'submodule-update' }]
+  }
+  if (inputValue === 's' && isSubmodulesActionTarget(state) && context.submoduleCount) {
+    return [{ type: 'runWorkflowAction', id: 'submodule-sync' }]
+  }
+
   // `y` / `Y` yank the contextually relevant identifier from the active
   // view to the system clipboard:
   //   history    → cursored commit hash (Y for short hash)
