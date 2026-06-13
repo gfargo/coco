@@ -1,9 +1,9 @@
 # Homebrew formula for coco (npm package `git-coco`).
 #
 # This lives here as the canonical source. To publish it, copy it into a tap
-# repo named `gfargo/homebrew-coco` (file: Formula/coco.rb). Users then run:
+# repo named `gfargo/homebrew-tap` (file: Formula/coco.rb). Users then run:
 #
-#     brew install gfargo/coco/coco
+#     brew install gfargo/tap/coco
 #
 # Regenerate the url + sha256 on each release with:
 #

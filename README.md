@@ -10,7 +10,9 @@
 [![Last Commit](https://img.shields.io/github/last-commit/gfargo/coco)](https://github.com/gfargo/coco/tree/main)
 [![Discord](https://img.shields.io/discord/1176716060825767948)](https://discord.gg/KGu9nE9Ejx)
 
-**Write your git commits with AI — then never leave the terminal.** `coco` turns your staged diff into a clear, Conventional-Commits-ready message in one command, and grows into a full keyboard-driven git workstation when you want it. Works across seven AI providers — including **fully local Ollama** (no API costs, nothing leaves your machine) — on GitHub and GitLab.
+**git-coco — write your git commits with AI, then never leave the terminal.** The `coco` command turns your staged diff into a clear, Conventional-Commits-ready message in one step, and grows into a full keyboard-driven git workstation when you want it. Works across seven AI providers — including **fully local Ollama** (no API costs, nothing leaves your machine) — on GitHub, GitHub Enterprise, and GitLab.
+
+> **Name note:** the package and project are **git-coco**; the command you run is `coco`.
 
 ```bash
 git add .
@@ -36,7 +38,7 @@ That's the core. Everything else — changelogs, code review, PRs, and the `coco
 
 ```bash
 # Homebrew (macOS/Linux) — brings Node along, no prerequisites
-brew install gfargo/coco/coco
+brew install gfargo/tap/coco
 
 # curl installer
 curl -fsSL https://coco.griffen.codes/install.sh | sh

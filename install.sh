@@ -47,7 +47,7 @@ Install Node first, then re-run this script:
 Prefer not to manage Node yourself? On macOS/Linux you can install coco
 with Homebrew, which brings Node along as a dependency:
 
-  brew install gfargo/coco/coco
+  brew install gfargo/tap/coco
 
 EOF
   exit 1

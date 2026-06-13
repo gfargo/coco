@@ -26,12 +26,12 @@ toolchain.
 
 ### One-time tap setup
 
-1. Create a public repo named **`gfargo/homebrew-coco`**.
+1. Create a public repo named **`gfargo/homebrew-tap`**.
 2. Add the formula at `Formula/coco.rb` (copy from `packaging/homebrew/coco.rb`).
 3. Users install with:
 
    ```bash
-   brew install gfargo/coco/coco
+   brew install gfargo/tap/coco
    ```
 
 ### Keeping the formula current
@@ -50,6 +50,6 @@ This is wired into the release flow via the `release:formula` script.
 
 - [ ] `npm publish` succeeded and `npm view git-coco version` shows the new version
 - [ ] `node bin/genHomebrewFormula.mjs` run; `packaging/homebrew/coco.rb` updated
-- [ ] formula copied/pushed to `gfargo/homebrew-coco`
+- [ ] formula copied/pushed to `gfargo/homebrew-tap`
 - [ ] `install.sh` unchanged or re-copied to `.www/public/install.sh`
-- [ ] `brew install gfargo/coco/coco` smoke-tested on a clean machine (or CI)
+- [ ] `brew install gfargo/tap/coco` smoke-tested on a clean machine (or CI)
