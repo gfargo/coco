@@ -228,7 +228,7 @@ import {useInputHandler} from './hooks/useInputHandler'
 // per-surface and detail renderers are consumed internally by mainPanel /
 // detailPanel; LogInkApp just calls these top-level pieces.
 import {renderFooter} from '../runtime/footer'
-import {renderHeader} from '../runtime/header'
+import {createLogInkHeader} from '../runtime/header'
 import {renderSidebar} from '../runtime/sidebar'
 import {renderMainPanel} from '../runtime/mainPanel'
 import {renderDetailPanel} from '../runtime/detailPanel'
@@ -1564,6 +1564,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       .filter((index) => index >= 0)
   ), [filePreview])
 
+  // Header surface component (#1136, 0.72 phase 7). Built once with a
+  // stable identity so the subtree isn't remounted every render — the
+  // factory closes over the runtime React instance and rendering
+  // primitives, and the component reads state/context/theme/layout from
+  // `LogInkRuntimeContext` (the provider installed below) instead of
+  // receiving them as positional props. Empty deps: `React`, `h`, `Box`,
+  // `Text` are stable for the lifetime of the component.
+  const LogInkHeader = React.useMemo(
+    () => createLogInkHeader(React, h, { Box, Text }),
+    []
+  )
+
   const worktreeDirty = Boolean(
     context.worktree &&
     (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
@@ -1783,7 +1795,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   return h(RuntimeContext.Provider, { value: runtimeContextValue },
     h(Box, { flexDirection: 'column', height: layout.rows },
-    renderHeader(h, { Box, Text }, state, context, contextStatus, layout.columns, theme, appLabel),
+    h(LogInkHeader, { contextStatus, appLabel }),
     h(Box, { flexDirection: 'row', height: layout.bodyRows }, ...bodyPanels),
     renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame, layout.singlePane)
     )
