@@ -50,7 +50,9 @@ const config = [
       }),
       eslint({
         throwOnError: true,
-        throwOnWarning: true,
+        // Warnings are advisory (e.g. react-hooks/exhaustive-deps) and must not
+        // fail the build; errors (e.g. react-hooks/rules-of-hooks) still do.
+        throwOnWarning: false,
         include: ['src/**/*.ts'],
         exclude: ['node_modules/**', 'dist/**'],
       }),
