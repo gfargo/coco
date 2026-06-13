@@ -61,9 +61,6 @@ import { getBranchOverview } from '../../git/branchData'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
 import { getRemoteOverview } from '../../git/remoteData'
-import {
-    runCommitDraftWorkflow,
-} from '../../git/commitWorkflowActions'
 import { runChangelogTextWorkflow } from '../../git/aiActions'
 import {
     GitCommitDetail,
@@ -145,7 +142,6 @@ import {
 } from '../../git/branchActions'
 import { addToGitignore } from '../../git/gitignore'
 import { highlightDiffCode, type SyntaxSpan } from '../../lib/syntax/highlightEngine'
-import { humanizeAiError } from '../chrome/aiErrors'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
 import {
     ClipboardRunner,
@@ -173,7 +169,6 @@ import {
     pullRequestFilterForPreset,
 } from '../../git/triageFilterPresets'
 import { isPullRequestMergeStrategy } from '../../git/pullRequestActions'
-import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import {
     findStashFileForOffset,
     getStashCommitHashes,
@@ -342,6 +337,8 @@ import { useLoadMoreHistory } from './hooks/useLoadMoreHistory'
 import { useWorktreeStageActions } from './hooks/useWorktreeStageActions'
 import { useCommitComposeActions } from './hooks/useCommitComposeActions'
 import { useCommitSplitActions } from './hooks/useCommitSplitActions'
+import { useAiCommitDraftActions } from './hooks/useAiCommitDraftActions'
+import { usePullRequestActions } from './hooks/usePullRequestActions'
 import { useEditorActions } from './hooks/useEditorActions'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
@@ -1447,296 +1444,33 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     resumeRef,
   })
 
-  // AbortController for the in-flight AI draft (#881 phase 3). Kept in
-  // a ref rather than state because cancel is a side-effect: the input
-  // handler reads `controllerRef.current?.abort()` synchronously when
-  // Esc fires during a loading draft. Storing it in state would force
-  // a re-render on every set, and React doesn't need to know — only
-  // the imperative cancel path does. Cleared after each call settles
-  // so a stale controller can't cancel a future draft.
-  const aiDraftAbortRef = React.useRef<AbortController | null>(null)
-
-  const runAiCommitDraft = React.useCallback(async () => {
-    // Tear down any controller from a previous draft (defensive — a
-    // settled call should have cleared it in the finally block, but
-    // double-running would otherwise leave the first orphaned).
-    aiDraftAbortRef.current?.abort()
-    const controller = new AbortController()
-    aiDraftAbortRef.current = controller
-
-    dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: true } })
-    dispatch({ type: 'setStatus', value: 'generating AI commit draft', loading: true })
-    // Streaming preview (#881 phase 2). The workflow forwards this to
-    // `generateCommitDraft`, which only actually streams when the
-    // user opted in via `service.streaming.enabled`. The callback
-    // updates `commitCompose.streamingPreview` so the compose surface
-    // renders a live last-N-lines preview below the loader. The
-    // reducer clears `streamingPreview` whenever loading flips off
-    // (success or failure), so we don't need an explicit teardown
-    // dispatch here.
-    try {
-      const result = await runCommitDraftWorkflow({
-        git,
-        signal: controller.signal,
-        onStreamChunk: (_text, accumulated) => {
-          // Audit finding #4: skip dispatching into a torn-down
-          // tree. If the user quit (or otherwise unmounted the
-          // workstation) mid-stream, React warns about updates on
-          // an unmounted component. Drop the chunk silently.
-          if (!mountedRef.current) return
-          // Dispatch the full accumulated text — the preview chrome
-          // helper does the last-N-lines slicing at render time, so
-          // re-doing the slice here would be wasted work. Per-chunk
-          // dispatches are cheap; React batches them and Ink redraws
-          // at its own frame cadence.
-          dispatch({
-            type: 'commitCompose',
-            action: { type: 'setStreamingPreview', value: accumulated },
-          })
-        },
-      })
-
-      // Audit finding #4 (unmount race): bail out before any
-      // post-await dispatch if the user quit while the LLM call was
-      // in flight. Same pattern as `refreshHistoryRows` upstream.
-      if (!mountedRef.current) return
-
-      // Cancel path (#881 phase 3). User pressed Esc during the
-      // stream; reducer drops loading + preview, status line shows
-      // a neutral "cancelled" message. Skip the result / failure
-      // dispatches because the user already knows what happened.
-      if (result.cancelled) {
-        dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: false } })
-        dispatch({ type: 'setStatus', value: 'AI draft cancelled.', kind: 'info' })
-        return
-      }
-
-      if (result.ok && result.draft) {
-        dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: result.draft } })
-        dispatch({ type: 'setStatus', value: 'AI draft ready for editing', kind: 'success' })
-        return
-      }
-
-      // Humanize provider errors (rate limit / auth / context / network)
-      // into a short actionable line; success-but-no-draft keeps its
-      // message as-is.
-      const composeMessage = result.ok ? result.message : humanizeAiError(result.message)
-      dispatch({
-        type: 'commitCompose',
-        action: { type: 'setResult', message: composeMessage, details: result.details },
-      })
-      dispatch({ type: 'setStatus', value: composeMessage, kind: result.ok ? undefined : 'error' })
-    } catch (error) {
-      // Audit finding #3: defensive recovery for unexpected throws
-      // from the workflow. The workflow catches its own errors
-      // today, so this catch is latent — but any future refactor
-      // that lets an error escape would otherwise strand the
-      // spinner permanently with no user-facing recovery short of
-      // quitting. Surface a generic failure and clear the loading
-      // state so the user can re-try.
-      if (mountedRef.current) {
-        dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: false } })
-        dispatch({
-          type: 'setStatus',
-          value: `AI draft failed unexpectedly: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          kind: 'error',
-        })
-      }
-    } finally {
-      // Clear the ref only if it still points at OUR controller — a
-      // rapid second invocation could have already replaced it, in
-      // which case the new controller is the one that owns cancel
-      // duty now.
-      if (aiDraftAbortRef.current === controller) {
-        aiDraftAbortRef.current = null
-      }
-    }
-  }, [dispatch, git])
-
-  /**
-   * Cancel an in-flight AI draft (#881 phase 3). Called by the input
-   * handler when the user presses Esc while `commitCompose.loading`
-   * is true. Idempotent — calling without an active controller is a
-   * no-op rather than an error so the keystroke handler can fire
-   * unconditionally during the loading window.
-   *
-   * `controller.abort()` propagates through
-   * `executeChainStreaming`, which throws `LangChainCancelledError`,
-   * which becomes `cancelled: true` on the workflow result. The
-   * runAiCommitDraft promise's finally block clears the ref. The
-   * resulting cleanup dispatches (clearing loading + status) happen
-   * back in `runAiCommitDraft`, not here, so this function stays
-   * pure-imperative and the React state updates flow through a
-   * single code path.
-   */
-  const cancelAiCommitDraft = React.useCallback(() => {
-    aiDraftAbortRef.current?.abort()
-  }, [])
-
-  // `C` keystroke handler — start the create-pull-request flow. Resolves
-  // the head + base branches from the live context, runs
-  // `coco changelog --branch <base>` (via `runPullRequestBodyWorkflow`)
-  // to seed a title + body, then opens a multi-line input prompt
-  // pre-filled with that content for the user to edit before submission.
-  //
-  // On submit, the workflow handler `'create-pr'` parses the prompt
-  // value (line 1 = title, lines 2+ = body) and runs
-  // `createPullRequest({ base, head, title, body })`. If anything in the
-  // pre-flight goes sideways (no current branch, no provider, gh CLI
-  // missing) we surface the failure on the status line and skip the
-  // prompt entirely — better than opening a prompt the user can't
-  // actually submit successfully.
-  // Soft-cancel handle for the PR body draft (#881 phase 4). A mutable
-  // ref rather than state because the cancel decision needs to be
-  // visible synchronously inside the async workflow without forcing
-  // re-renders. Owned by the in-flight invocation: the cancel callback
-  // mutates `.cancelled` on the live ref; the workflow checks it after
-  // `await` resolves and decides whether to open the follow-up prompt.
-  //
-  // The LLM call itself keeps running (no AbortSignal threaded through
-  // `changelogHandler` today). The user-visible outcome — "PR draft
-  // cancelled, no prompt opens" — is identical to a hard cancel, at
-  // the cost of paying for the in-flight tokens. Deeper threading
-  // lands in a follow-up if hard cancel becomes a request.
-  const pullRequestBodyCancelRef = React.useRef<{ cancelled: boolean } | null>(null)
-  const startCreatePullRequest = React.useCallback(async () => {
-    const nouns = forgeNouns(forgeProvider)
-    const head = context.branches?.currentBranch || context.provider?.currentBranch
-    if (!head) {
-      dispatch({ type: 'setStatus', value: `No current branch to create a ${nouns.abbrev} from.`, kind: 'warning' })
-      return
-    }
-    const defaultBranch = context.provider?.repository.defaultBranch
-    if (!defaultBranch) {
-      dispatch({
-        type: 'setStatus',
-        value: 'No default branch detected. Set origin/HEAD or ensure main/master exists locally.',
-        kind: 'warning',
-      })
-      return
-    }
-    if (head === defaultBranch) {
-      dispatch({ type: 'setStatus', value: `Current branch is ${defaultBranch}; check out a feature branch first.`, kind: 'warning' })
-      return
-    }
-    if (context.pullRequest?.currentPullRequest || context.provider?.currentPullRequest) {
-      const existing = context.pullRequest?.currentPullRequest || context.provider?.currentPullRequest
-      dispatch({
-        type: 'setStatus',
-        value: existing
-          ? `${nouns.abbrev} #${existing.number} already open for ${head}. Use the ${nouns.abbrev} view to manage it.`
-          : `A ${nouns.singularLower} is already open for ${head}.`,
-        kind: 'warning',
-      })
-      return
-    }
-
-    // Set up the cancel handle BEFORE flipping the pending flag so a
-    // race between the flag-set and a synchronous Esc keystroke can't
-    // leave the input handler dispatching cancel without a ref to
-    // mutate. The cancel callback no-ops cleanly when the ref is null
-    // (call already settled).
-    const cancelHandle = { cancelled: false }
-    pullRequestBodyCancelRef.current = cancelHandle
-
-    dispatch({ type: 'setPendingPullRequestBodyDraft', value: true })
-    // Audit finding #6: soft cancel today — Esc skips opening the
-    // follow-up prompt, but the LLM call itself keeps running to
-    // completion (no AbortSignal threaded through the changelog CLI
-    // chain). Status copy reflects that honestly so the user isn't
-    // misled into thinking they're saving tokens.
-    dispatch({
-      type: 'setStatus',
-      value: `generating ${nouns.abbrev} body from changelog (vs ${defaultBranch}) — Esc to skip prompt`,
-      loading: true,
-    })
-
-    try {
-      const body = await runPullRequestBodyWorkflow({ baseBranch: defaultBranch })
-
-      // Soft-cancel check (#881 phase 4). If the user pressed Esc
-      // while the workflow was awaiting, skip opening the prompt and
-      // surface a neutral status. The underlying LLM call has
-      // already settled — its result is discarded. Hard cancel
-      // (aborting the HTTP request mid-flight) is a follow-up.
-      if (cancelHandle.cancelled) {
-        dispatch({ type: 'setStatus', value: `${nouns.abbrev} draft cancelled.` })
-        return
-      }
-
-      // Fallback shape when the changelog generation fails — open the
-      // prompt with empty title + body rather than aborting, so the user
-      // can still author the PR manually. The status line surfaces why
-      // we couldn't pre-fill.
-      const initialTitle = body.title || head.replace(/^(feat|fix|chore|docs|refactor|test)\//, '').replace(/[-_]/g, ' ')
-      const initialBody = body.body || ''
-      const initial = initialBody ? `${initialTitle}\n\n${initialBody}` : initialTitle
-
-      if (!body.ok) {
-        dispatch({ type: 'setStatus', value: `${nouns.abbrev} body generation failed: ${body.message}. Edit manually.`, kind: 'error' })
-      } else {
-        dispatch({ type: 'setStatus', value: `${nouns.abbrev} body drafted — review and Ctrl+D to submit.`, kind: 'success' })
-      }
-
-      // Audit finding #11: clear the pending flag BEFORE opening the
-      // prompt. If a future refactor adds an `await` between the flag
-      // clear (currently in `finally`) and the `openInputPrompt`
-      // dispatch, an Esc keystroke in the gap would dispatch
-      // `cancelPullRequestBodyDraft` AFTER the prompt opens, leaving
-      // the prompt visible with a stale "cancelled" message. Clearing
-      // here moves the flag teardown into the same React batch as the
-      // prompt open, eliminating the race.
-      dispatch({ type: 'setPendingPullRequestBodyDraft', value: false })
-
-      dispatch({
-        type: 'openInputPrompt',
-        kind: 'create-pr',
-        label: `Create ${nouns.abbrev}: ${head} → ${defaultBranch}  (line 1 title · rest body · Enter newline · Ctrl+D submit)`,
-        initial,
-        multiline: true,
-      })
-    } finally {
-      // Belt-and-suspenders: the `try` block clears the flag on the
-      // success path (audit finding #11). This duplicate clear handles
-      // the error / cancel paths where the early-returns skip the
-      // success-path dispatch. Safe to no-op when already false.
-      dispatch({ type: 'setPendingPullRequestBodyDraft', value: false })
-      // Only clear the ref if we still own it — a second invocation
-      // would have already taken ownership in which case the cancel
-      // duty has rolled over.
-      if (pullRequestBodyCancelRef.current === cancelHandle) {
-        pullRequestBodyCancelRef.current = null
-      }
-    }
-  }, [
-    context.branches?.currentBranch,
-    context.provider?.currentBranch,
-    context.provider?.currentPullRequest,
-    context.provider?.repository.defaultBranch,
-    context.pullRequest?.currentPullRequest,
-    forgeProvider,
+  // Lifted verbatim into `useAiCommitDraftActions` (0.72 app.ts
+  // decomposition). The hook declares `aiDraftAbortRef` internally
+  // (pair-local: read only by these two callbacks) and reproduces both
+  // `useCallback` bodies + dep arrays byte-for-byte. `mountedRef` is
+  // shared with the rest of the component so it stays here and is
+  // threaded in.
+  const {
+    runAiCommitDraft,
+    cancelAiCommitDraft,
+  } = useAiCommitDraftActions(React, {
+    git,
     dispatch,
-  ])
+    mountedRef,
+  })
 
-  /**
-   * Soft-cancel the in-flight PR body draft (#881 phase 4). The
-   * cancel ref's `.cancelled` flag is checked after the workflow's
-   * await resolves; setting it true causes the workflow to skip the
-   * prompt-open and surface a neutral "cancelled" status. The LLM
-   * call itself isn't aborted (no signal threaded through the
-   * `changelogHandler` chain) so the user still pays for the in-flight
-   * tokens. Acceptable for a 5-15s draft; hard cancel lands in a
-   * follow-up if it becomes a real ask.
-   *
-   * Idempotent — calling without an active draft is a no-op.
-   */
-  const cancelPullRequestBodyDraft = React.useCallback(() => {
-    const handle = pullRequestBodyCancelRef.current
-    if (!handle) return
-    handle.cancelled = true
-  }, [])
+  // Lifted verbatim into `usePullRequestActions` (0.72 app.ts
+  // decomposition). The hook declares `pullRequestBodyCancelRef`
+  // internally (pair-local: read only by these two callbacks) and
+  // reproduces both `useCallback` bodies + dep arrays byte-for-byte.
+  const {
+    startCreatePullRequest,
+    cancelPullRequestBodyDraft,
+  } = usePullRequestActions(React, {
+    dispatch,
+    context,
+    forgeProvider,
+  })
 
   // Copy an arbitrary string to the system clipboard. Distinct from
   // `yankFromActiveView` which derives the value from the current view
