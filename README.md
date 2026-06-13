@@ -10,7 +10,14 @@
 [![Last Commit](https://img.shields.io/github/last-commit/gfargo/coco)](https://github.com/gfargo/coco/tree/main)
 [![Discord](https://img.shields.io/discord/1176716060825767948)](https://discord.gg/KGu9nE9Ejx)
 
-An AI-powered git assistant that generates meaningful commit messages, creates changelogs, explores repository history, and streamlines your development workflow.
+**Write your git commits with AI — then never leave the terminal.** `coco` turns your staged diff into a clear, Conventional-Commits-ready message in one command, and grows into a full keyboard-driven git workstation when you want it. Works across seven AI providers — including **fully local Ollama** (no API costs, nothing leaves your machine) — on GitHub and GitLab.
+
+```bash
+git add .
+coco commit          # AI writes the message from your staged changes
+```
+
+That's the core. Everything else — changelogs, code review, PRs, and the `coco ui` workstation — is the same engine pointed at more of your git workflow.
 
 **✨ Key Features:**
 
@@ -25,16 +32,26 @@ An AI-powered git assistant that generates meaningful commit messages, creates c
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
 - 👥 **Team Ready** - Shared configurations and enterprise deployment
 
+## Install
+
+```bash
+# Homebrew (macOS/Linux) — brings Node along, no prerequisites
+brew install gfargo/coco/coco
+
+# curl installer
+curl -fsSL https://coco.griffen.codes/install.sh | sh
+
+# npm / pnpm / yarn (needs Node 22+)
+npm install -g git-coco
+
+# or try it without installing
+npx git-coco@latest init
+```
+
 ## Quick Start
 
 ```bash
-# Try without installing
-npx git-coco@latest init
-
-# Install globally  
-npm install -g git-coco
-
-# Setup and configure
+# Setup and configure (pick a provider, set preferences)
 coco init
 
 # Generate your first commit
