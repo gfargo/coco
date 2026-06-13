@@ -11,8 +11,8 @@
       "commitMessage": "chore: release v${version}"
     },
     "hooks": {
-      "before:init": ["git pull", "npm run lint", "npm test"],
-      "after:bump": "npx auto-changelog -p"
+      "before:init": ["git pull --ff-only", "npm run lint", "npm test"],
+      "after:bump": ["node bin/verifyRelease.mjs", "npx auto-changelog -p"]
     }
   }
   

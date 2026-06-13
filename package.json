@@ -58,6 +58,8 @@
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "release": "release-it",
     "release:dry-run": "release-it --ci --dry-run --no-git --no-github.release --no-github.publish --no-npm.publish",
+    "release:verify": "node bin/verifyRelease.mjs",
+    "release:formula": "node bin/genHomebrewFormula.mjs",
     "wiki:clone": "tsx bin/wiki.ts clone",
     "wiki:help": "tsx bin/wiki.ts help",
     "wiki:pull": "tsx bin/wiki.ts pull",
