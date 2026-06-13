@@ -39,85 +39,117 @@ import {
   formatLogInkBreadcrumb,
   formatLogInkRepoBreadcrumb,
 } from '../../workstation/runtime/inkKeymap'
-import type { LogInkState } from '../../workstation/runtime/inkViewModel'
-import type { LogInkComponents, LogInkContext } from './types'
+import { useLogInkRuntime } from './runtimeContext'
+import type { LogInkComponents } from './types'
 
-export function renderHeader(
-  h: typeof ReactTypes.createElement,
-  components: LogInkComponents,
-  state: LogInkState,
-  context: LogInkContext,
-  contextStatus: LogInkContextStatus,
-  columns: number,
-  theme: LogInkTheme,
+/**
+ * Props the header still receives explicitly. Everything else
+ * (`state` / `context` / `theme` / `layout.columns`) now comes from the
+ * runtime context via `useLogInkRuntime`; only these two values aren't
+ * carried on that context value, so they stay props.
+ */
+export type LogInkHeaderProps = {
+  contextStatus: LogInkContextStatus
   appLabel: string
-): ReactTypes.ReactElement {
+}
+
+/**
+ * Factory for the header surface component, mirroring the
+ * `getLogInkRuntimeContext(React)` convention: the workstation never
+ * statically imports React, so the component must be built from the same
+ * runtime React instance that renders the tree (and that the context
+ * provider is bound to). `h` / `components` are closed over so the
+ * component body keeps using the exact rendering primitives the old
+ * `renderHeader` function received.
+ *
+ * The returned component is the first real consumer of
+ * `LogInkRuntimeContext` (#1136): it reads `state` / `context` / `theme`
+ * / `layout` from the hook instead of receiving them as positional props.
+ * `React.memo` keeps the re-render behavior identical to the previous
+ * render-function call — the wrapping tree re-renders every frame, so the
+ * header element is rebuilt every frame just as before.
+ *
+ * Callers must create this once with a stable identity (e.g. a
+ * render-scope `useMemo` or a module cache); calling the factory inline
+ * each render would remount the subtree.
+ */
+export function createLogInkHeader(
+  React: typeof ReactTypes,
+  h: typeof ReactTypes.createElement,
+  components: LogInkComponents
+): ReactTypes.NamedExoticComponent<LogInkHeaderProps> {
   const { Box, Text } = components
 
-  // Pull the source state into the small "describe what to render"
-  // shape the chip builder expects. Keeps the runtime decoupled from
-  // the chip layout — the builder doesn't know about LogInkState /
-  // LogInkContext, just plain values.
-  const branch = context.branches?.currentBranch || context.provider?.currentBranch || '<detached>'
-  const dirty = Boolean(context.branches?.dirty)
-  const bisecting = Boolean(context.bisect?.active)
-  const repo = context.provider?.repository.owner && context.provider.repository.name
-    ? `${context.provider.repository.owner}/${context.provider.repository.name}`
-    : 'local repository'
-  const prInfo = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
-  // Boot loading wins over the per-context loading hint — same
-  // priority as pre-redesign. Context fetches still surface their own
-  // copy in the sidebars.
-  const loading = state.bootLoading
-    ? 'loading commits'
-    : isLogInkContextLoading(contextStatus) ? 'loading context' : ''
-  const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
-  const repoCrumb = formatLogInkRepoBreadcrumb(state.repoStack)
-  const view = combineLogInkBreadcrumbSegments(repoCrumb, breadcrumb)
-  const mode: 'NORMAL' | 'EDIT' | 'FILTER' = state.commitCompose.editing
-    ? 'EDIT'
-    : state.filterMode
-      ? 'FILTER'
-      : 'NORMAL'
-  const search = state.filterMode
-    ? `search: ${state.filter}_`
-    : state.filter
-      ? `filter: ${state.filter}`
-      : ''
+  return React.memo(function LogInkHeader(props: LogInkHeaderProps): ReactTypes.ReactElement {
+    const { state, context, theme, layout } = useLogInkRuntime(React)
+    const { contextStatus, appLabel } = props
+    const columns = layout.columns
 
-  const chips = buildHeaderChips({
-    appLabel,
-    repo,
-    branch,
-    dirty,
-    bisecting,
-    pullRequest: prInfo ? {
-      number: prInfo.number,
-      state: prInfo.state,
-      isDraft: prInfo.isDraft,
-    } : undefined,
-    forge: context.provider?.repository.provider,
-    breadcrumb: view,
-    loading,
-    mode,
-    search: search ? truncateCells(search, 36) : '',
-    theme,
+    // Pull the source state into the small "describe what to render"
+    // shape the chip builder expects. Keeps the runtime decoupled from
+    // the chip layout — the builder doesn't know about LogInkState /
+    // LogInkContext, just plain values.
+    const branch = context.branches?.currentBranch || context.provider?.currentBranch || '<detached>'
+    const dirty = Boolean(context.branches?.dirty)
+    const bisecting = Boolean(context.bisect?.active)
+    const repo = context.provider?.repository.owner && context.provider.repository.name
+      ? `${context.provider.repository.owner}/${context.provider.repository.name}`
+      : 'local repository'
+    const prInfo = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
+    // Boot loading wins over the per-context loading hint — same
+    // priority as pre-redesign. Context fetches still surface their own
+    // copy in the sidebars.
+    const loading = state.bootLoading
+      ? 'loading commits'
+      : isLogInkContextLoading(contextStatus) ? 'loading context' : ''
+    const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
+    const repoCrumb = formatLogInkRepoBreadcrumb(state.repoStack)
+    const view = combineLogInkBreadcrumbSegments(repoCrumb, breadcrumb)
+    const mode: 'NORMAL' | 'EDIT' | 'FILTER' = state.commitCompose.editing
+      ? 'EDIT'
+      : state.filterMode
+        ? 'FILTER'
+        : 'NORMAL'
+    const search = state.filterMode
+      ? `search: ${state.filter}_`
+      : state.filter
+        ? `filter: ${state.filter}`
+        : ''
+
+    const chips = buildHeaderChips({
+      appLabel,
+      repo,
+      branch,
+      dirty,
+      bisecting,
+      pullRequest: prInfo ? {
+        number: prInfo.number,
+        state: prInfo.state,
+        isDraft: prInfo.isDraft,
+      } : undefined,
+      forge: context.provider?.repository.provider,
+      breadcrumb: view,
+      loading,
+      mode,
+      search: search ? truncateCells(search, 36) : '',
+      theme,
+    })
+
+    // Truncation budget. Header line gets the full terminal width minus
+    // the box's horizontal padding (2 cells) and a small safety margin.
+    const budget = Math.max(0, columns - 4)
+    const chipsWidth = measureHeaderChipsWidth(chips)
+
+    return h(Box, {
+      borderColor: theme.colors.border,
+      borderStyle: theme.borderStyle,
+      height: 3,
+      paddingX: 1,
+    },
+    chipsWidth <= budget
+      ? renderChipRow(h, Text, chips)
+      : renderFallback(h, Text, chips, theme, budget))
   })
-
-  // Truncation budget. Header line gets the full terminal width minus
-  // the box's horizontal padding (2 cells) and a small safety margin.
-  const budget = Math.max(0, columns - 4)
-  const chipsWidth = measureHeaderChipsWidth(chips)
-
-  return h(Box, {
-    borderColor: theme.colors.border,
-    borderStyle: theme.borderStyle,
-    height: 3,
-    paddingX: 1,
-  },
-  chipsWidth <= budget
-    ? renderChipRow(h, Text, chips)
-    : renderFallback(h, Text, chips, theme, budget))
 }
 
 /**
