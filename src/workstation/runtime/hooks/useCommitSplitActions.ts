@@ -50,7 +50,7 @@
 
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
-import { writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as nodePath from 'node:path'
 import type { LogInkAction, SplitPlanState } from '../inkViewModel'
@@ -175,15 +175,24 @@ export function useCommitSplitActions(
     }
 
     // Diagnostic dump for the silent-failure bug surfaced in #944
-    // manual testing. Writes a per-step record to a file in /tmp so
+    // manual testing. Writes a per-step record to a file under /tmp so
     // we have ground truth when the workstation's view of the world
     // disagrees with the underlying git state. Path is printed in
     // the post-apply status so the user can paste it back in an
     // issue / PR comment.
-    const dumpPath = nodePath.join(
-      tmpdir(),
-      `coco-split-apply-${Date.now()}.log`
-    )
+    //
+    // The dump carries repo metadata (group titles, file paths, recent
+    // log, HEAD shas), so on a shared host it must not be world-readable
+    // or land at a predictable path. Mirror the editor temp-file hooks:
+    // mkdtemp gives an unpredictable, owner-only (0700) directory, and we
+    // additionally write the file 0o600 as defense-in-depth. The dir is
+    // left in place on purpose — it's diagnostics the user pastes back —
+    // and since the path is now random, echoing it leaks nothing guessable.
+    let dumpPath: string | undefined
+    try {
+      const dumpDir = mkdtempSync(nodePath.join(tmpdir(), 'coco-split-'))
+      dumpPath = nodePath.join(dumpDir, 'apply.log')
+    } catch { /* ignore — diagnostic is best-effort */ }
     const dump: string[] = [
       `[${new Date().toISOString()}] split apply diagnostic dump`,
       `plan: ${splitPlan.plan.groups.length} group(s)`,
@@ -228,9 +237,14 @@ export function useCommitSplitActions(
       dump.push(`post-apply git probe failed: ${(error as Error).message}`)
     }
 
-    try {
-      writeFileSync(dumpPath, dump.join('\n'), 'utf8')
-    } catch { /* ignore — diagnostic is best-effort */ }
+    if (dumpPath) {
+      try {
+        writeFileSync(dumpPath, dump.join('\n'), { encoding: 'utf8', mode: 0o600 })
+      } catch { /* ignore — diagnostic is best-effort */ }
+    }
+    // Only point the user at the log when we actually have one (mkdtemp
+    // could have failed above — the dump is best-effort).
+    const dumpNote = dumpPath ? ` · diagnostic log: ${dumpPath}` : ''
 
     if (!result.ok) {
       // Keep the overlay open so the user can see what happened and
@@ -239,7 +253,7 @@ export function useCommitSplitActions(
       dispatch({ type: 'setSplitPlanError', error: result.message })
       dispatch({
         type: 'setStatus',
-        value: `Split apply failed: ${result.message} · diagnostic log: ${dumpPath}`,
+        value: `Split apply failed: ${result.message}${dumpNote}`,
         kind: 'error',
       })
       return
@@ -318,7 +332,7 @@ export function useCommitSplitActions(
       const detail = result.message || 'No commits were created.'
       dispatch({
         type: 'setStatus',
-        value: `Split apply produced zero commits: ${detail} · diagnostic log: ${dumpPath}`,
+        value: `Split apply produced zero commits: ${detail}${dumpNote}`,
         kind: 'error',
       })
       return
