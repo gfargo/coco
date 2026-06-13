@@ -49,6 +49,9 @@ coverage/
 # WWW NextJS marketing frontend site
 .www/
 
+# Local Homebrew tap checkout (gfargo/homebrew-tap)
+.homebrew-tap/
+
 /src/lib/buildInfo.ts
 
 .kiro
