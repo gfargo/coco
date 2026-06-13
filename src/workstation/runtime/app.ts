@@ -51,17 +51,12 @@
  *     every text decoration is dropped.
  */
 
-import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import * as nodePath from 'node:path'
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import { getBranchOverview } from '../../git/branchData'
 import { getLfsAttributeStatus } from '../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../git/submoduleData'
 import { getRemoteOverview } from '../../git/remoteData'
-import { runChangelogTextWorkflow } from '../../git/aiActions'
 import {
     GitCommitDetail,
     GitCommitFilePreview,
@@ -144,13 +139,11 @@ import { addToGitignore } from '../../git/gitignore'
 import { highlightDiffCode, type SyntaxSpan } from '../../lib/syntax/highlightEngine'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../git/tagActions'
 import {
-    ClipboardRunner,
     ResetMode,
     checkoutFileFromCommit,
     cherryPickCommit,
     createBranchFromCommit,
     createTagAtCommit,
-    defaultClipboardRunner,
     defaultOpenUrlRunner,
     isResetMode,
     resetToCommit,
@@ -340,6 +333,8 @@ import { useCommitSplitActions } from './hooks/useCommitSplitActions'
 import { useAiCommitDraftActions } from './hooks/useAiCommitDraftActions'
 import { usePullRequestActions } from './hooks/usePullRequestActions'
 import { useEditorActions } from './hooks/useEditorActions'
+import { useYankActions } from './hooks/useYankActions'
+import { useChangelogActions } from './hooks/useChangelogActions'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
 // per-surface and detail renderers are consumed internally by mainPanel /
@@ -1472,234 +1467,62 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     forgeProvider,
   })
 
-  // Copy an arbitrary string to the system clipboard. Distinct from
-  // `yankFromActiveView` which derives the value from the current view
-  // — this one takes the value as an explicit event payload, used by
-  // the changelog view's `y` keystroke (and a candidate for future
-  // "copy this" surfaces). Surfaces a status confirming what landed
-  // in clipboard.
-  const yankText = React.useCallback(async (value: string, label: string) => {
-    const clipboard: ClipboardRunner = clipboardRunner || defaultClipboardRunner
-    if (!value) {
-      dispatch({ type: 'setStatus', value: `Nothing to copy — ${label} is empty.`, kind: 'warning' })
-      return
-    }
-    try {
-      await clipboard(value)
-      dispatch({ type: 'setStatus', value: `Copied ${label} to clipboard.`, kind: 'success' })
-    } catch (error) {
-      dispatch({
-        type: 'setStatus',
-        value: `Copy failed (${label}): ${(error as Error).message}`,
-        kind: 'error',
-      })
-    }
-  }, [clipboardRunner, dispatch])
-
-  // `L` keystroke handler — generate (or recall from cache) a changelog
-  // for the current branch and push the dedicated `changelog` surface
-  // to display it. The view renders the full text in the main panel
-  // (not cramped into an input prompt), with its own keymap for scroll,
-  // yank, $EDITOR, create-PR, and regenerate.
-  //
-  // Caching: `state.changelogCache` is keyed by branch name. On `L`,
-  // we check the cache first and reuse if hit (no LLM call); the user
-  // presses `r` from inside the view to force a regenerate. Switching
-  // branches naturally produces a fresh generation since the cache key
-  // changes.
-  //
-  // Surface lifecycle: we push the `changelog` view BEFORE awaiting the
-  // workflow, so the user sees a loading state instead of a blank
-  // history view while the LLM runs. On error, we keep the view pushed
-  // and render the error there (with `r` to retry) instead of bailing
-  // back to history with a status-line message that may scroll past.
-  const startChangelogView = React.useCallback(async (options: { force?: boolean } = {}) => {
-    const head = context.branches?.currentBranch || context.provider?.currentBranch
-    if (!head) {
-      dispatch({ type: 'setStatus', value: 'No current branch — check out a branch first.', kind: 'warning' })
-      return
-    }
-    const defaultBranch = context.provider?.repository.defaultBranch
-    // The changelog command will fall back to its own defaults when no
-    // branch arg is passed, but being explicit about the base is more
-    // honest about what the user is seeing. With the local default-
-    // branch fallback in providerData (#912), `defaultBranch` is
-    // populated even for non-GitHub / offline scenarios — we only fall
-    // through to `--since-last-tag` when truly nothing resolves.
-    const argv = defaultBranch && head !== defaultBranch
-      ? { branch: defaultBranch }
-      : { sinceLastTag: true }
-    const baseLabel = defaultBranch && head !== defaultBranch
-      ? `vs ${defaultBranch}`
-      : 'since last tag'
-
-    // Cache hit — skip the LLM, push view with ready content. The
-    // generated-at timestamp on the cache entry drives the "(cached, N
-    // ago)" hint in the header, so the user knows whether to press `r`.
-    const cached = !options.force ? state.changelogCache[head] : undefined
-    if (cached) {
-      dispatch({ type: 'pushView', value: 'changelog' })
-      dispatch({
-        type: 'setChangelogReady',
-        branch: head,
-        baseLabel: cached.baseLabel,
-        text: cached.text,
-        // Audit finding #9: cache-hit path preserves the original
-        // generation timestamp rather than minting a fresh one — the
-        // "X ago" header should reflect when the LLM ran, not when
-        // the cached entry was re-displayed.
-        generatedAt: cached.generatedAt,
-      })
-      dispatch({
-        type: 'setStatus',
-        value: `Changelog loaded from cache (${cached.baseLabel}). r to regenerate.`,
-      })
-      return
-    }
-
-    // No cache (or force=true via `r`) — push view with loading state,
-    // then run the workflow.
-    dispatch({ type: 'pushView', value: 'changelog' })
-    dispatch({ type: 'setChangelogLoading', branch: head, baseLabel })
-    dispatch({ type: 'setStatus', value: `generating changelog (${baseLabel})…`, loading: true })
-
-    const result = await runChangelogTextWorkflow(argv)
-
-    if (!result.ok || !result.text) {
-      dispatch({
-        type: 'setChangelogError',
-        branch: head,
-        baseLabel,
-        error: result.message,
-      })
-      dispatch({ type: 'setStatus', value: `Changelog failed: ${result.message}`, kind: 'error' })
-      return
-    }
-
-    dispatch({
-      type: 'setChangelogReady',
-      branch: head,
-      baseLabel,
-      text: result.text,
-      // Audit finding #9: timestamp captured at dispatch time, not
-      // inside the reducer.
-      generatedAt: Date.now(),
-    })
-    dispatch({
-      type: 'setStatus',
-      value: 'Changelog ready — y yank · E $EDITOR · c PR · r regen · < back.',
-      kind: 'success',
-    })
-  }, [
-    context.branches?.currentBranch,
-    context.provider?.currentBranch,
-    context.provider?.repository.defaultBranch,
+  // Lifted verbatim into `useYankActions` (0.72 app.ts decomposition,
+  // alongside `useChangelogActions`). `yankText` (generic clipboard copy)
+  // and `yankFromActiveView` (view-polymorphic target resolution) are the
+  // two clipboard callbacks; they're independent (`yankFromActiveView`
+  // resolves the `clipboard` runner directly rather than calling `yankText`),
+  // so the hook holds no in-hook cross-reference. All of
+  // `yankFromActiveView`'s ~31 dep-array inputs (`context`, `state`,
+  // `selected`, `selectedDetailFile`, `stashDiffLines`,
+  // `stashDiffParsedFiles`, `visibleWorktreeFilesGrouped`, the three
+  // filtered lists) are declared above this slot. Both callbacks are
+  // keystroke-dispatch-only — not in any effect/memo dep array — so the
+  // move is identity-safe. `yankText` is destructured out so
+  // `useChangelogActions` (called next) can thread it into `yankChangelog`.
+  const {
+    yankText,
+    yankFromActiveView,
+  } = useYankActions(React, {
+    clipboardRunner,
     dispatch,
-    state.changelogCache,
-  ])
+    context,
+    state,
+    selected,
+    selectedDetailFile,
+    stashDiffLines,
+    stashDiffParsedFiles,
+    visibleWorktreeFilesGrouped,
+    filteredRemoteList,
+    filteredIssueList,
+    filteredPullRequestTriageList,
+  })
 
-  // `r` keystroke inside the changelog view — re-run generation
-  // ignoring any cached result. Thin wrapper since the underlying
-  // logic in `startChangelogView` already supports the force path.
-  const regenerateChangelog = React.useCallback(() => {
-    void startChangelogView({ force: true })
-  }, [startChangelogView])
-
-  // `y` keystroke inside the changelog view — yank the current text
-  // to the system clipboard. Pulled from view state rather than from
-  // wherever the cursor is (no per-row selection on this surface).
-  const yankChangelog = React.useCallback(() => {
-    const text = state.changelogView.text
-    if (!text) {
-      dispatch({ type: 'setStatus', value: 'No changelog text to copy.', kind: 'warning' })
-      return
-    }
-    void yankText(text, 'changelog')
-  }, [dispatch, state.changelogView.text, yankText])
-
-  // `E` keystroke inside the changelog view — open the current text in
-  // $EDITOR / $VISUAL, read it back, update view + cache. Mirrors the
-  // compose `E` flow (#913) but on the changelog-view state slice.
-  // After save, `setChangelogText` updates both view and cache so the
-  // edits persist across view re-entry.
-  const openChangelogInEditor = React.useCallback(() => {
-    const current = state.changelogView.text
-    if (current === undefined) {
-      dispatch({ type: 'setStatus', value: 'Changelog not loaded yet — wait for generation.', kind: 'warning' })
-      return
-    }
-
-    let dir: string | undefined
-    try {
-      dir = mkdtempSync(nodePath.join(tmpdir(), 'coco-changelog-'))
-    } catch (error) {
-      dispatch({
-        type: 'setStatus',
-        value: `Failed to create temp file for editor: ${(error as Error).message}`,
-        kind: 'error',
-      })
-      return
-    }
-    const file = nodePath.join(dir, 'CHANGELOG.md')
-    try {
-      writeFileSync(file, current, 'utf8')
-    } catch (error) {
-      dispatch({
-        type: 'setStatus',
-        value: `Failed to seed temp file: ${(error as Error).message}`,
-        kind: 'error',
-      })
-      try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
-      return
-    }
-
-    const editorEnv = process.env.VISUAL || process.env.EDITOR || 'vi'
-    const editorArgs = editorEnv.trim().split(/\s+/).filter(Boolean)
-    const editor = editorArgs[0] || 'vi'
-    const editorPrefixArgs = editorArgs.slice(1)
-    const out = process.stdout
-    const stdin = process.stdin
-    const ENTER_ALT = '\x1b[?1049h'
-    const EXIT_ALT = '\x1b[?1049l'
-    const SHOW_CURSOR = '\x1b[?25h'
-    const HIDE_CURSOR = '\x1b[?25l'
-
-    let editorOk = false
-    try {
-      stdin.setRawMode?.(false)
-      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
-      const result = spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
-      if (result.error) {
-        dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
-      } else if (result.signal) {
-        dispatch({ type: 'setStatus', value: `${editor} interrupted by ${result.signal}`, kind: 'warning' })
-      } else if (typeof result.status === 'number' && result.status !== 0) {
-        dispatch({ type: 'setStatus', value: `${editor} exited with status ${result.status}`, kind: 'warning' })
-      } else {
-        editorOk = true
-      }
-    } finally {
-      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
-      stdin.setRawMode?.(true)
-      resumeRef?.current?.()
-    }
-
-    if (editorOk) {
-      try {
-        const content = readFileSync(file, 'utf8')
-        dispatch({ type: 'setChangelogText', text: content, generatedAt: Date.now() })
-        dispatch({ type: 'setStatus', value: 'Changelog updated from editor.', kind: 'success' })
-      } catch (error) {
-        dispatch({
-          type: 'setStatus',
-          value: `Failed to read back edited changelog: ${(error as Error).message}`,
-          kind: 'error',
-        })
-      }
-    }
-
-    try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
-  }, [dispatch, resumeRef, state.changelogView.text])
+  // Lifted verbatim into `useChangelogActions` (0.72 app.ts decomposition,
+  // alongside `useYankActions`). The four changelog callbacks
+  // (`startChangelogView` `L`, `regenerateChangelog` `r`, `yankChangelog`
+  // `y`, `openChangelogInEditor` `E`) share the changelog-view orchestration.
+  // `regenerateChangelog` references the in-hook `startChangelogView`
+  // identity; `yankChangelog` delegates to `yankText` — owned by the
+  // `useYankActions` hook called just above and threaded in here — keeping
+  // its `[dispatch, changelogViewText, yankText]` dep array verbatim. The
+  // `state.changelogCache` / `state.changelogView.text` dep slices are
+  // threaded in as `changelogCache` / `changelogViewText` (identical
+  // dependency SET). All four are keystroke-dispatch-only — not in any
+  // effect/memo dep array — so co-locating them is identity-safe.
+  const {
+    startChangelogView,
+    regenerateChangelog,
+    yankChangelog,
+    openChangelogInEditor,
+  } = useChangelogActions(React, {
+    dispatch,
+    context,
+    changelogCache: state.changelogCache,
+    changelogViewText: state.changelogView.text,
+    resumeRef,
+    yankText,
+  })
 
   // Lifted verbatim into `useEditorActions` (0.72 app.ts decomposition).
   // `openConfigInEditor` depends on the in-hook `openInEditor` identity
@@ -2948,216 +2771,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.selectedTagIndex,
     state.selectedWorktreeListIndex, state.stashDiffRef,
     state.statusFilterMask, state.tagSort, state.worktreeCheckoutConflict])
-
-  // Resolve the active view's "yank target" (commit hash / branch /
-  // tag / stash ref / file path) against the live filtered+sorted list,
-  // copy it to the system clipboard, and surface the result on the
-  // status line. `short=true` opts into the short hash on history /
-  // commit-diff views (Y vs y); ignored for ref-only views.
-  const yankFromActiveView = React.useCallback(async (short?: boolean) => {
-    const clipboard: ClipboardRunner = clipboardRunner || defaultClipboardRunner
-    let value: string | undefined
-    let label: string | undefined
-
-    const view = state.activeView
-    if (view === 'history') {
-      const commit = state.filteredCommits[state.selectedIndex]
-      if (commit) {
-        value = short ? commit.shortHash : commit.hash
-        label = short ? `short hash ${commit.shortHash}` : `commit ${commit.shortHash}`
-      }
-    } else if (view === 'branches') {
-      const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-      const visible = state.filter
-        ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-        : all
-      const branch = visible[Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1))]
-      if (branch) {
-        value = branch.shortName
-        label = `branch ${branch.shortName}`
-      }
-    } else if (view === 'tags') {
-      const all = sortTags(context.tags?.tags || [], state.tagSort)
-      const visible = state.filter
-        ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
-        : all
-      const tag = visible[Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1))]
-      if (tag) {
-        value = tag.name
-        label = `tag ${tag.name}`
-      }
-    } else if (view === 'stash') {
-      const all = context.stashes?.stashes || []
-      const visible = state.filter
-        ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-        : all
-      const stash = visible[Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1))]
-      if (stash) {
-        value = stash.ref
-        label = `stash ${stash.ref}`
-      }
-    } else if (view === 'status') {
-      // Read from the mask-filtered list (#776) so the cursor and the
-      // yanked path always match what's on screen — yanking a hidden
-      // row is always a desync bug.
-      const path = visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path
-      if (path) {
-        value = path
-        label = `path ${path}`
-      }
-    } else if (view === 'submodules') {
-      // #932 — yank from the dedicated submodules view. `y` (default)
-      // copies the cursored submodule's path; `Y` (short) copies the
-      // pinned commit's short sha. Either is what the user most
-      // likely wants — path for `git submodule update <path>`, sha
-      // for cross-referencing in logs or other repos.
-      const entries = context.submodules?.entries || []
-      const filtered = state.filter
-        ? entries.filter((entry) => matchesPromotedFilter(
-          [entry.name, entry.path, entry.trackingBranch || '', entry.url || ''],
-          state.filter,
-        ))
-        : entries
-      const entry = filtered[Math.min(state.selectedSubmoduleIndex, Math.max(0, filtered.length - 1))]
-      if (entry) {
-        if (short) {
-          if (entry.pinnedSha) {
-            value = entry.pinnedSha.slice(0, 8)
-            label = `short sha ${value} (submodule ${entry.name})`
-          }
-        } else {
-          value = entry.path
-          label = `submodule path ${entry.path}`
-        }
-      }
-    } else if (view === 'remotes') {
-      // #0.71 — yank from the dedicated remotes view. `y` copies the
-      // cursored remote's fetch URL (the value the user most often
-      // needs for a clone / config command). Short form (`Y`) is a
-      // no-op — there's no compact alternate worth a second key.
-      const entry = filteredRemoteList[
-        Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
-      ]
-      if (entry && entry.fetchUrl) {
-        value = entry.fetchUrl
-        label = `remote ${entry.name} URL`
-      }
-    } else if (view === 'issues') {
-      // #882 phase 4 — y yanks the cursored issue's URL so the user
-      // can paste it into Slack / a PR description / etc. without
-      // dropping back to the browser. Short form (`Y`) is a no-op
-      // here — there's no compact identifier worth a second key.
-      const issue = filteredIssueList[
-        Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-      ]
-      if (issue) {
-        value = issue.url
-        label = `issue #${issue.number} URL`
-      }
-    } else if (view === 'pull-request-triage') {
-      // #882 phase 4 — same URL-yank pattern for the multi-PR list.
-      // Distinct from `pull-request` (single, current-branch); that
-      // view falls through to the generic "Nothing to yank" path
-      // below since the action panel already exposes O for browser
-      // open.
-      const pr = filteredPullRequestTriageList[
-        Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-      ]
-      if (pr) {
-        value = pr.url
-        label = `pull request #${pr.number} URL`
-      }
-    } else if (view === 'bisect') {
-      // #879 item 3 — yank the first-bad commit sha from the
-      // completion panel. The headline answer is what the user
-      // came here to copy. Y opts into the short form; y returns
-      // the full sha as recorded in BISECT_LOG.
-      const completion = context.bisect?.active
-        ? getBisectCompletion(context.bisect.log)
-        : undefined
-      if (completion) {
-        value = short ? completion.sha.slice(0, 8) : completion.sha
-        label = short
-          ? `short hash ${completion.sha.slice(0, 8)} (first bad)`
-          : `commit ${completion.sha.slice(0, 8)} (first bad)`
-      }
-    } else if (view === 'diff') {
-      if (state.diffSource === 'worktree') {
-        const path = visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path
-        if (path) {
-          value = path
-          label = `path ${path}`
-        }
-      } else if (state.diffSource === 'stash' && stashDiffLines) {
-        // Walk back to the most recent file header at or before the
-        // current preview offset — same logic the input-context block
-        // uses to expose stashDiffSelectedPath. Reads the memoized
-        // parse so the yank handler doesn't re-walk the entire patch.
-        const current = findStashFileForOffset(stashDiffParsedFiles, state.diffPreviewOffset)
-        if (current) {
-          value = current.path
-          label = `path ${current.path}`
-        }
-      } else if (state.diffSource === 'commit') {
-        // Y on a commit-diff yanks the sha (handy when the user has
-        // drilled into the file list); y yanks the cursored file path.
-        if (short && selected) {
-          value = selected.hash
-          label = `commit ${selected.shortHash}`
-        } else if (selectedDetailFile?.path) {
-          value = selectedDetailFile.path
-          label = `path ${selectedDetailFile.path}`
-        } else if (selected) {
-          value = selected.hash
-          label = `commit ${selected.shortHash}`
-        }
-      }
-    }
-
-    if (!value || !label) {
-      dispatch({ type: 'setStatus', value: 'Nothing to yank in this view', kind: 'warning' })
-      return
-    }
-
-    try {
-      await clipboard(value)
-      dispatch({ type: 'setStatus', value: `Copied ${label}`, kind: 'success' })
-    } catch (error) {
-      dispatch({ type: 'setStatus', value: `Copy failed: ${(error as Error).message}`, kind: 'error' })
-    }
-  }, [
-    clipboardRunner,
-    context.bisect,
-    context.branches,
-    context.stashes,
-    context.submodules,
-    context.tags,
-    dispatch,
-    filteredIssueList,
-    filteredPullRequestTriageList,
-    filteredRemoteList,
-    selected,
-    selectedDetailFile,
-    stashDiffLines,
-    stashDiffParsedFiles,
-    state.activeView,
-    state.branchSort,
-    state.diffPreviewOffset,
-    state.diffSource,
-    state.filter,
-    state.filteredCommits,
-    state.selectedBranchIndex,
-    state.selectedIndex,
-    state.selectedIssueIndex,
-    state.selectedPullRequestTriageIndex,
-    state.selectedRemoteIndex,
-    state.selectedStashIndex,
-    state.selectedSubmoduleIndex,
-    state.selectedTagIndex,
-    state.selectedWorktreeFileIndex,
-    state.tagSort,
-    visibleWorktreeFilesGrouped,
-  ])
 
   // Lifted verbatim into `useCommitFilePreviewHydration` (0.72 app.ts
   // decomposition, PR 8) — guard, `active` flag, `safe()` wrapper, loading
