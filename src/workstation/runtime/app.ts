@@ -59,15 +59,13 @@ import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
 import {GitCommitDetail, GitCommitFilePreview, LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitDetail, getCommitRows, getLogRows} from '../../commands/log/data'
 import {LogInkContextKey, LogInkContextStatus, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
-import {LogInkInputKey, getInspectorActionsForState, getLogInkInputEvents} from '../../workstation/runtime/inkInput'
 import {hasSeenOnboarding, markOnboardingSeen} from '../chrome/onboarding'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
 import {createInitialContextStatus, createRepoFrameRuntime} from './repoFrameFactory'
-import {resolveCommitDiffDrillInTarget, resolveSubmoduleViewDrillInTarget} from './repoFrameDrillIn'
 import {getActiveRepoFrameRuntime, syncRepoStackRuntimes, updateRepoFrameRuntime, type RepoFrameRuntime, type RepoStackRuntimes} from './repoStackRuntime'
 import {PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex} from '../chrome/selectionRectify'
-import {LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LAYOUT_SINGLE_PANE_BELOW, LOG_INK_MIN_ROWS, getLogInkLayout} from '../chrome/layout'
+import {LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout} from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
 import {LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getThemePickerSelection} from '../../workstation/runtime/inkViewModel'
 import {getGitOperationOverview} from '../../git/operationData'
@@ -75,10 +73,10 @@ import {getProviderOverview} from '../../git/providerData'
 import {highlightDiffCode, type SyntaxSpan} from '../../lib/syntax/highlightEngine'
 import {getForgeActions, getForgePullRequestOverview} from '../../git/forgeActions'
 import {issueFilterForPreset, pullRequestFilterForPreset} from '../../git/triageFilterPresets'
-import {findStashFileForOffset, getStashCommitHashes, getStashOverview} from '../../git/stashData'
+import {getStashCommitHashes, getStashOverview} from '../../git/stashData'
 import {getWorktreeOverview} from '../../git/statusData'
 import {WorktreeHunkOverview} from '../../git/statusHunks'
-import {getBisectCompletion, getBisectStatus} from '../../git/bisectData'
+import {getBisectStatus} from '../../git/bisectData'
 import {getReflogOverview} from '../../git/reflogData'
 import {getTagOverview} from '../../git/tagData'
 import {getWorktreeListOverview} from '../../git/worktreeData'
@@ -224,6 +222,7 @@ import {useEditorActions} from './hooks/useEditorActions'
 import {useYankActions} from './hooks/useYankActions'
 import {useChangelogActions} from './hooks/useChangelogActions'
 import {useWorkflowAction} from './hooks/useWorkflowAction'
+import {useInputHandler} from './hooks/useInputHandler'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
 // per-surface and detail renderers are consumed internally by mainPanel /
@@ -1570,292 +1569,75 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
   )
 
-  useInput((inputValue: string, key: LogInkInputKey) => {
-    // First-launch onboarding (P1.3): any keystroke dismisses the overlay
-    // and writes the seen-marker. Swallow the keystroke so the same key
-    // doesn't also trigger normal input dispatch.
-    if (showOnboarding) {
-      setShowOnboarding(false)
-      markOnboardingSeen()
-      return
-    }
-
-    // P4.5: navigation in branches/tags/stash uses the FILTERED list
-    // length when a filter is active so j/k stay live instead of getting
-    // stuck against a full-list count that no longer matches what's on
-    // screen. The filtered lists are memoized at LogInkApp scope (#808
-    // perf pass) — reading them here is O(1) instead of O(branches +
-    // tags + stashes + worktrees) per keystroke.
-    const branchVisibleCount = filteredBranchList.length
-    const branchSelectedShortName = filteredBranchList[
-      Math.min(state.selectedBranchIndex, Math.max(0, filteredBranchList.length - 1))
-    ]?.shortName
-    const tagVisibleCount = filteredTagList.length
-    const tagSelectedName = filteredTagList[
-      Math.min(state.selectedTagIndex, Math.max(0, filteredTagList.length - 1))
-    ]?.name
-    const stashVisibleCount = filteredStashList.length
-    const stashSelectedRef = filteredStashList[
-      Math.min(state.selectedStashIndex, Math.max(0, filteredStashList.length - 1))
-    ]?.ref
-    const reflogVisibleCount = filteredReflogList.length
-    const reflogSelectedHash = filteredReflogList[
-      Math.min(state.selectedReflogIndex, Math.max(0, filteredReflogList.length - 1))
-    ]?.hash
-    const submoduleVisibleCount = filteredSubmoduleList.length
-    const submoduleSelectedPath = filteredSubmoduleList[
-      Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
-    ]?.path
-    const remoteVisibleCount = filteredRemoteList.length
-    const remoteSelectedName = filteredRemoteList[
-      Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
-    ]?.name
-    const issueVisibleCount = filteredIssueList.length
-    const issueSelectedUrl = filteredIssueList[
-      Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-    ]?.url
-    const pullRequestTriageVisibleCount = filteredPullRequestTriageList.length
-    const pullRequestTriageSelectedUrl = filteredPullRequestTriageList[
-      Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-    ]?.url
-    const worktreeVisibleCount = filteredWorktreeList.length
-
-    // When the diff view is showing a stash patch, swap the previewLineCount
-    // to the stash diff length so the existing pageDetailPreview path
-    // (j/k, PgUp/PgDn) scrolls through it without a parallel pipeline.
-    const diffPreviewLineCount = state.diffSource === 'stash'
-      ? stashDiffLines?.length
-      : filePreview?.hunks.length
-
-    // Per-file segmentation for stash diffs reads the LogInkApp-scoped
-    // memo so navigation keys + the input-context derivation share a
-    // single parse pass per stash patch instead of re-walking the
-    // entire patch text on every keystroke.
-    const stashDiffFiles = state.diffSource === 'stash' ? stashDiffParsedFiles : []
-    const stashDiffFileOffsets = stashDiffFiles.map((file) => file.startLine)
-    const stashDiffSelectedPath = state.diffSource === 'stash'
-      ? findStashFileForOffset(stashDiffFiles, state.diffPreviewOffset)?.path
-      : undefined
-
-    getLogInkInputEvents(state, inputValue, key, {
-      // Narrow terminals show one pane at a time (#1135) — gates the `v`
-      // peek key. Derived the same way the layout does, since `layout`
-      // is computed later in the render path (not in this callback).
-      singlePane:
-        (windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS) <
-        LAYOUT_SINGLE_PANE_BELOW,
-      detailFileCount: detail?.files.length,
-      previewLineCount: diffPreviewLineCount,
-      worktreeDiffLineCount: worktreeDiff?.lines.length,
-      worktreeFileCount: visibleWorktreeFilesGrouped.length,
-      worktreeHunkOffsets: worktreeDiff?.hunkOffsets,
-      commitDiffHunkOffsets,
-      branchCount: branchVisibleCount,
-      branchSelectedShortName,
-      // Current branch for the `r` rebase-onto guard + warning (#0.71).
-      // Undefined on a detached HEAD, which the handler treats as "no
-      // branch to rebase".
-      currentBranch: context.branches?.currentBranch,
-      tagCount: tagVisibleCount,
-      tagSelectedName,
-      stashCount: stashVisibleCount,
-      reflogCount: reflogVisibleCount,
-      reflogSelectedHash,
-      submoduleCount: submoduleVisibleCount,
-      submoduleSelectedPath,
-      remoteCount: remoteVisibleCount,
-      remoteSelectedName,
-      // Drive j/k on the blame view off the cached line count for the
-      // active path (#0.71); 0 while hydrating or on a failed blame, so
-      // the nav handlers no-op until lines exist.
-      blameLineCount: (() => {
-        const blame = state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined
-        return blame && blame.ok ? blame.lines.length : 0
-      })(),
-      issueCount: issueVisibleCount,
-      issueSelectedUrl,
-      pullRequestTriageCount: pullRequestTriageVisibleCount,
-      pullRequestTriageSelectedUrl,
-      stashSelectedRef,
-      stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
-      stashDiffSelectedPath,
-      worktreeListCount: worktreeVisibleCount,
-      worktreeSelectedPath: visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path,
-      statusGroups: visibleWorktreeGroups.map((group) => ({
-        state: group.state as 'staged' | 'unstaged' | 'untracked',
-        count: group.files.length,
-        startIndex: group.startIndex,
-      })),
-      inspectorActionCount: getInspectorActionsForState(state).length,
-      commitDiffSelectedPath: state.diffSource === 'commit'
-        ? selectedDetailFile?.path
-        : undefined,
-      commitDiffSelectedSha: state.diffSource === 'commit'
-        ? selected?.hash
-        : undefined,
-      // #931 PR 3b — Submodule drill-in target for the cursored file
-      // in a commit diff. Resolved per-render so the Enter handler in
-      // `inkInput.ts` doesn't have to re-walk the submodule overview;
-      // undefined whenever the cursored file isn't a registered
-      // submodule (or the overview / repo root haven't loaded yet).
-      commitDiffSubmoduleDrillIn: state.diffSource === 'commit' && selectedDetailFile
-        ? resolveCommitDiffDrillInTarget({
-            selectedFile: {
-              path: selectedDetailFile.path,
-              submoduleChange: filePreview?.path === selectedDetailFile.path
-                ? filePreview.submoduleChange
-                : undefined,
-            },
-            submodules: context.submodules,
-            activeRepoRoot,
-          })
-        : undefined,
-      // #931 PR 4 / #932 — Submodule drill-in target for the cursored
-      // row in the dedicated submodules view. Resolved per-render so
-      // the Enter handler in `inkInput.ts` doesn't have to re-walk the
-      // submodule overview. Gated on `activeView === 'submodules'` so
-      // a stale resolution from a different view can't accidentally
-      // fire — the runtime only ever populates it when the user is
-      // actually on the view.
-      submoduleViewDrillIn: state.activeView === 'submodules'
-        ? resolveSubmoduleViewDrillInTarget({
-            selectedIndex: state.selectedSubmoduleIndex,
-            submodules: context.submodules,
-            activeRepoRoot,
-          })
-        : undefined,
-      worktreeDirty,
-      conflictFileCount: context.operation?.conflictedFiles.length,
-      conflictSelectedPath: (() => {
-        const files = context.operation?.conflictedFiles
-        if (!files || files.length === 0) return undefined
-        const clamped = Math.min(state.selectedConflictFileIndex, files.length - 1)
-        return files[clamped]?.path
-      })(),
-      // H / gH need the actual diff text (not just hunk offsets) to
-      // slice the cursored hunk into a `git apply` patch. Stash uses
-      // the full `git stash show -p` output; commit-diff uses the
-      // per-file `filePreview.hunks` array. Either way, extractDiffHunk
-      // walks `@@` headers and synthesizes a fresh diff --git / --- /
-      // +++ header set using the path the caller already resolved.
-      diffLinesForHunkApply: state.diffSource === 'stash'
-        ? stashDiffLines
-        : state.diffSource === 'commit'
-          ? filePreview?.hunks
-          : undefined,
-      // Line count of the changelog text, used by the changelog view's
-      // j/k/PgUp/PgDn scroll bindings to clamp `pageChangelog` deltas.
-      // Computed from view state rather than threaded through context
-      // because the surface owns its own content — no external loader.
-      changelogLineCount: state.changelogView.text?.split('\n').length,
-      // Approximate line count for the split-plan overlay. Each group
-      // renders as a header + (body if any) + files block + (rationale
-      // if any) + blank separator. Used by j/k/PgUp/PgDn to clamp the
-      // scroll offset. The exact render math lives in the overlay
-      // module — this is a close-enough heuristic for clamping.
-      // #879 item 3 — short sha of the bisect terminator (if any).
-      // Gates `y`/`Y` yank on the completion panel and lets the
-      // runtime resolve the value without re-parsing the log.
-      bisectCompletionSha: context.bisect?.active
-        ? getBisectCompletion(context.bisect.log)?.sha
-        : undefined,
-      // #879 item 4 — disambiguates the bisect view's `s` keystroke
-      // (skip current candidate vs. start the wizard).
-      bisectActive: Boolean(context.bisect?.active),
-      splitPlanLineCount: state.splitPlan?.plan
-        ? state.splitPlan.plan.groups.reduce((sum, group) => {
-          let lines = 2 // title + separator
-          if (group.body) lines += group.body.split('\n').length + 1
-          if (group.rationale) lines += 2
-          lines += (group.files?.length || 0) + 1
-          const hunkCount = group.hunks?.length || 0
-          if (hunkCount > 0) lines += hunkCount + 1
-          return sum + lines
-        }, 0)
-        : undefined,
-    }).forEach((event) => {
-      if (event.type === 'exit') {
-        exit()
-      } else if (event.type === 'refreshContext') {
-        // The user-initiated refresh (`r`) refreshes BOTH the metadata
-        // context (branches/tags/worktree) AND the commit rows. Without
-        // the row re-fetch the history graph stays pinned to whatever
-        // commits existed at boot — new commits (made in another
-        // terminal, or remote commits brought in by a fetch) never
-        // appear until relaunch, which reads as "the history is stuck."
-        void refreshContext()
-        void refreshHistoryRows()
-      } else if (event.type === 'toggleSelectedFileStage') {
-        void toggleSelectedFileStage()
-      } else if (event.type === 'toggleSelectedHunkStage') {
-        void toggleSelectedHunkStage()
-      } else if (event.type === 'revertSelectedFile') {
-        void revertSelectedFile()
-      } else if (event.type === 'revertSelectedHunk') {
-        void revertSelectedHunk()
-      } else if (event.type === 'createManualCommit') {
-        void createCommitFromCompose()
-      } else if (event.type === 'runAiCommitDraft') {
-        void runAiCommitDraft()
-      } else if (event.type === 'cancelAiCommitDraft') {
-        cancelAiCommitDraft()
-      } else if (event.type === 'startCreatePullRequest') {
-        void startCreatePullRequest()
-      } else if (event.type === 'cancelPullRequestBodyDraft') {
-        cancelPullRequestBodyDraft()
-      } else if (event.type === 'startChangelogView') {
-        void startChangelogView()
-      } else if (event.type === 'regenerateChangelog') {
-        regenerateChangelog()
-      } else if (event.type === 'yankChangelog') {
-        yankChangelog()
-      } else if (event.type === 'openChangelogInEditor') {
-        openChangelogInEditor()
-      } else if (event.type === 'openComposeInEditor') {
-        openComposeInEditor()
-      } else if (event.type === 'startCommitSplit') {
-        void startCommitSplit()
-      } else if (event.type === 'applyCommitSplit') {
-        void applyCommitSplit()
-      } else if (event.type === 'cancelCommitSplit') {
-        cancelCommitSplit()
-      } else if (event.type === 'yankText') {
-        void yankText(event.value, event.label)
-      } else if (event.type === 'runWorkflowAction') {
-        void runWorkflowAction(event.id, event.payload)
-      } else if (event.type === 'openFileInEditor') {
-        openInEditor(event.path)
-      } else if (event.type === 'openConfigInEditor') {
-        openConfigInEditor(event.scope)
-      } else if (event.type === 'yankFromActiveView') {
-        void yankFromActiveView(event.short)
-      } else if (event.type === 'openGitignorePicker') {
-        // Resolve the cursored worktree file here (the runtime owns the
-        // selection→file mapping) and open the picker over its path.
-        if (selectedWorktreeFile?.path) {
-          dispatch({ type: 'openGitignorePicker', file: selectedWorktreeFile.path })
-        } else {
-          dispatch({ type: 'setStatus', value: 'No file under the cursor to ignore.', kind: 'warning' })
-        }
-      } else if (event.type === 'applyThemePreset') {
-        // Apply for the session immediately, and best-effort persist to the
-        // global config so it sticks across launches. The picker has already
-        // dispatched `toggleThemePicker` (closing it), which clears the
-        // preview via the sync effect below — the session preset takes over.
-        const preset = event.preset as LogInkThemePreset
-        setThemeSessionPreset(preset)
-        saveThemePreset(preset)
-      } else {
-        // P4.5: enrich filter-mutating actions with a precomputed
-        // selection snapshot so the reducer can preserve the cursor on
-        // the same item when it's still in the filtered result, only
-        // snapping to result[0] when the previously selected item drops
-        // out. The snapshot lives in the action so the reducer never
-        // needs context items.
-        const enriched = enrichFilterActionWithRectification(event.action, state, context)
-        dispatch(enriched)
-      }
-    })
+  // Lifted verbatim into `useInputHandler` (0.72 app.ts decomposition, the
+  // final big cluster). The single `useInput(…)` keyboard handler — the
+  // component's largest reader — moves wholesale: it derives the per-keystroke
+  // filtered-list snapshots, assembles the ~60-field input-context object for
+  // `getLogInkInputEvents`, and dispatches the returned events into the
+  // extracted action callbacks + the reducer. `useInput` (ink's hook) is
+  // injected so the hook can call it unconditionally at this exact slot,
+  // preserving ink's hook order. `context` and `state` are passed WHOLE so the
+  // handler body stays byte-identical; the six pure helpers it calls move into
+  // the hook (used nowhere else here). The original had NO `useInput` options
+  // argument, so none is threaded.
+  useInputHandler(useInput, {
+    state,
+    context,
+    dispatch,
+    showOnboarding,
+    setShowOnboarding,
+    markOnboardingSeen,
+    filteredBranchList,
+    filteredTagList,
+    filteredStashList,
+    filteredWorktreeList,
+    filteredReflogList,
+    filteredSubmoduleList,
+    filteredRemoteList,
+    filteredIssueList,
+    filteredPullRequestTriageList,
+    visibleWorktreeGroups,
+    visibleWorktreeFilesGrouped,
+    selectedWorktreeFile,
+    stashDiffParsedFiles,
+    stashDiffLines,
+    filePreview,
+    commitDiffHunkOffsets,
+    detail,
+    selectedDetailFile,
+    selected,
+    worktreeDiff,
+    activeRepoRoot,
+    worktreeDirty,
+    windowSize,
+    exit,
+    refreshContext,
+    refreshHistoryRows,
+    toggleSelectedFileStage,
+    toggleSelectedHunkStage,
+    revertSelectedFile,
+    revertSelectedHunk,
+    createCommitFromCompose,
+    openComposeInEditor,
+    runAiCommitDraft,
+    cancelAiCommitDraft,
+    startCreatePullRequest,
+    cancelPullRequestBodyDraft,
+    startChangelogView,
+    regenerateChangelog,
+    yankChangelog,
+    openChangelogInEditor,
+    yankText,
+    yankFromActiveView,
+    openInEditor,
+    openConfigInEditor,
+    startCommitSplit,
+    applyCommitSplit,
+    cancelCommitSplit,
+    runWorkflowAction,
+    setThemeSessionPreset,
+    saveThemePreset,
+    enrichFilterActionWithRectification,
   })
 
   // In single-pane mode (narrow terminals) only one pane renders, so an
