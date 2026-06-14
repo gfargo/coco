@@ -1270,8 +1270,8 @@ export const RECIPES: ScreenshotRecipe[] = [
   },
   {
     name: 'demo-commit-flow',
-    description: 'coco commit: AI drafts a Conventional Commit message from staged changes',
-    scenario: 'single-staged-file',
+    description: 'coco commit: AI drafts a Conventional Commit message from staged code changes',
+    scenario: 'partial-stage',
     command: 'commit --dry-run --conventional',
     emitGif: true,
     dimensions: { cols: 100, rows: 28 },
