@@ -1,5 +1,13 @@
+import chalk from 'chalk'
+
 import { ANTHROPIC_MODELS, BEDROCK_MODELS, GEMINI_MODELS, MISTRAL_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
+import {
+  getOllamaStatus,
+  OllamaNotReadyError,
+  pullOllamaModel,
+  RECOMMENDED_STARTER_MODEL,
+} from '../../lib/langchain/utils/ollamaStatus'
 import {
     confirmPrompt,
     editorPrompt,
@@ -7,11 +15,72 @@ import {
     passwordPrompt,
     selectPrompt,
 } from '../../lib/ui/inquirerPrompts'
-import { commandExit } from '../../lib/utils/commandExit'
-import { execPromise } from '../../lib/utils/execPromise'
 import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
 import { COMMIT_PROMPT } from '../commit/prompt'
 import { InstallationScope } from './config'
+
+/**
+ * Resolve the list of locally-available Ollama models for the init picker,
+ * guiding the user through the common first-run states instead of crashing:
+ *
+ *   - not installed       → install link, then re-run or pick another provider
+ *   - installed, not up   → `ollama serve` hint, then re-run or pick another
+ *   - up, no models       → recommend + optionally pull a starter model
+ *
+ * Throws {@link OllamaNotReadyError} when Ollama can't be used and the user
+ * didn't fix it inline — the handler catches this to re-offer the provider
+ * picker, preserving the rest of the init session.
+ */
+async function ensureOllamaModels(): Promise<string[]> {
+  let status = await getOllamaStatus()
+
+  if (!status.reachable) {
+    if (!status.installed) {
+      console.log(
+        `\n${chalk.yellow('Ollama isn’t installed')} — coco’s local-AI path needs it.\n` +
+          `  Install: ${chalk.cyan('https://ollama.com/download')} ${chalk.dim('(macOS/Linux:')} ${chalk.cyan('brew install ollama')}${chalk.dim(')')}\n` +
+          `  Then run ${chalk.cyan('ollama serve')} and re-run ${chalk.cyan('coco init')}, or pick another provider below.`,
+      )
+    } else {
+      console.log(
+        `\n${chalk.yellow('Ollama is installed but not running.')}\n` +
+          `  Start it with ${chalk.cyan('ollama serve')} (or open the Ollama app), then re-run — or pick another provider below.`,
+      )
+    }
+    throw new OllamaNotReadyError()
+  }
+
+  if (status.models.length === 0) {
+    console.log(
+      `\n${chalk.yellow('No Ollama models are pulled yet.')} ` +
+        `coco recommends ${chalk.cyan(RECOMMENDED_STARTER_MODEL)} to start ${chalk.dim('(~4.7 GB).')}`,
+    )
+    const shouldPull = await confirmPrompt({
+      message: `pull ${RECOMMENDED_STARTER_MODEL} now?`,
+      default: true,
+    })
+    if (!shouldPull) {
+      console.log(
+        `  ${chalk.dim('No problem — pull one yourself with')} ${chalk.cyan(`ollama pull ${RECOMMENDED_STARTER_MODEL}`)}${chalk.dim(', or pick another provider below.')}`,
+      )
+      throw new OllamaNotReadyError()
+    }
+    try {
+      await pullOllamaModel(RECOMMENDED_STARTER_MODEL)
+    } catch {
+      console.log(
+        `  ${chalk.red('Pull failed.')} Run ${chalk.cyan(`ollama pull ${RECOMMENDED_STARTER_MODEL}`)} manually, or pick another provider below.`,
+      )
+      throw new OllamaNotReadyError()
+    }
+    status = await getOllamaStatus()
+    if (status.models.length === 0) {
+      throw new OllamaNotReadyError()
+    }
+  }
+
+  return status.models
+}
 
 export const questions = {
   /**
@@ -134,17 +203,7 @@ export const questions = {
     }
 
     if (provider === 'ollama') {
-      // Check if ollama is installed
-      const { stdout } = await execPromise(
-        `ollama list |  awk '{print $1}' | awk '{if(NR>1)print}'`
-      )
-
-      const availableOllamaModels = stdout.split('\n').filter(Boolean)
-
-      if (availableOllamaModels.length === 0) {
-        console.log('No Ollama models found. Please install one via Ollama CLI.')
-        commandExit(1)
-      }
+      const availableOllamaModels = await ensureOllamaModels()
 
       availableModels = [
         ...availableOllamaModels.map((model) => ({

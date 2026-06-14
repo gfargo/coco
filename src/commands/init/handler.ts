@@ -12,8 +12,9 @@ import { installNpmPackage } from '../../lib/utils/installPackage'
 
 import { ConfigWithServiceObject } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
-import { OllamaLLMService } from '../../lib/langchain/types'
+import { LLMModel, LLMProvider, OllamaLLMService } from '../../lib/langchain/types'
 import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
+import { OllamaNotReadyError } from '../../lib/langchain/utils/ollamaStatus'
 import { CommandHandler } from '../../lib/types'
 import { Logger } from '../../lib/utils/logger'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
@@ -49,8 +50,24 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // Ask about commitlint setup after scope selection
   shouldSetupCommitlint = await questions.setupCommitlint()
 
-  const llmProvider = await questions.selectLLMProvider()
-  const llmModel = await questions.selectLLMModel(llmProvider)
+  // Pick provider + model in a loop so an unusable Ollama (not installed /
+  // not running / no models pulled) re-offers the provider picker instead of
+  // hard-exiting and discarding the answers above.
+  let llmProvider: LLMProvider
+  let llmModel: LLMModel
+  for (;;) {
+    llmProvider = await questions.selectLLMProvider()
+    try {
+      llmModel = await questions.selectLLMModel(llmProvider)
+      break
+    } catch (err) {
+      if (err instanceof OllamaNotReadyError) {
+        logger.log(chalk.dim("\nLet's choose a provider again."))
+        continue
+      }
+      throw err
+    }
+  }
 
   const service = getDefaultServiceConfigFromAlias(llmProvider, llmModel)
 
