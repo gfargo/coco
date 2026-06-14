@@ -119,6 +119,35 @@ function formatGenericError(error: Error, logger: Logger): void {
 }
 
 /**
+ * Detect Ollama's "model not pulled" failure and pull out the model name.
+ *
+ * When the daemon is up but the requested model isn't pulled, Ollama returns
+ * `model "<name>" not found, try pulling it first`. We gate on both `not found`
+ * **and** `pull` so an OpenAI/Anthropic "model does not exist" error doesn't get
+ * mis-advised toward `ollama pull`. Returns the model name, or null when the
+ * error isn't this case.
+ */
+export function extractMissingOllamaModel(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : ''
+  if (!message) return null
+  if (!/not found/i.test(message) || !/pull/i.test(message)) return null
+  const match = message.match(/model\s+["']?([^"'\s]+)["']?\s+not found/i)
+  return match ? match[1] : null
+}
+
+/**
+ * Render an actionable hint for a not-yet-pulled Ollama model, instead of
+ * letting the raw "model not found" bubble through the generic formatter.
+ */
+function formatModelNotFoundError(model: string, logger: Logger): void {
+  logger.log(`\nError: Ollama model "${model}" isn't available locally`, { color: 'red' })
+  logger.log('\nLikely fixes:', { color: 'yellow' })
+  logger.log(`  • Pull it: ollama pull ${model}`, { color: 'white' })
+  logger.log('  • See what you have: ollama list', { color: 'white' })
+  logger.log('  • Run `coco doctor` to check your provider + model', { color: 'white' })
+}
+
+/**
  * Resolve the local usage-stats recording preference for this run (#0.69) and
  * arm the ledger. Recording is opt-out: a first interactive run with no
  * preference set anywhere defaults on, persists the choice to the global
@@ -174,10 +203,13 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
       }
 
       // Handle specific error types with helpful messages
+      const missingOllamaModel = extractMissingOllamaModel(error)
       if (error instanceof LangChainNetworkError) {
         formatNetworkError(error, logger)
       } else if (error instanceof LangChainAuthenticationError) {
         formatAuthenticationError(error, logger)
+      } else if (missingOllamaModel) {
+        formatModelNotFoundError(missingOllamaModel, logger)
       } else {
         formatGenericError(error as Error, logger)
       }
