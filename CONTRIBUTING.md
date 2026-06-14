@@ -15,6 +15,22 @@ Thank you for considering contributing to Commit Copilot! We appreciate your int
   - [Community](#community)
   - [Acknowledgements](#acknowledgements)
 
+## Quick start
+
+```bash
+git clone https://github.com/<your-fork>/coco && cd coco
+npm install
+npm run dev          # watch mode (use `npm run dev:tui` for coco ui / log -i / workspace)
+```
+
+Before opening a PR, run the full validation suite — the same gates CI runs:
+
+```bash
+npm test             # lint + jest + build + packaged-CLI smoke
+```
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (this project dogfoods `coco commit`). Keep each PR small and focused, and make sure it passes the suite above on its own.
+
 ## How Can I Contribute?
 
 There are several ways in which you can contribute to Commit Copilot (coco):
@@ -34,7 +50,7 @@ If you encounter a bug, have a feature request, or need assistance, please [subm
 
 ## Submitting Feature Requests
 
-If you have an idea for a new feature or an improvement to an existing feature, we would love to hear it! You can [submit a feature request](https://github.com/gfargo/coco/issues/new?assignees=&labels=feature+request&template=feature_request.md) on our GitHub repository. Please provide a clear and concise description of the feature you would like to see and any relevant use cases.
+If you have an idea for a new feature or an improvement to an existing feature, we would love to hear it! You can [submit a feature request](https://github.com/gfargo/coco/issues/new?template=feature_request.yml) on our GitHub repository. Please provide a clear and concise description of the feature you would like to see and any relevant use cases.
 
 ## Development Setup
 
@@ -121,7 +137,15 @@ We welcome and encourage pull requests from the community. To submit a pull requ
 6. Commit your changes and push them to your forked repository.
 7. Submit a pull request to the `main` branch of the Commit Copilot repository.
 
-Please provide a clear and detailed description of the changes you have made in your pull request. We will review your contribution as soon as possible.
+Please provide a clear and detailed description of the changes you have made in your pull request (the PR template will prompt you). We will review your contribution as soon as possible.
+
+**Before you open the PR, confirm:**
+
+- [ ] `npm test` passes locally (lint + jest + build + CLI smoke).
+- [ ] New behavior has tests; TUI changes carry render coverage (see `src/workstation/README.md`).
+- [ ] `schema.json` is regenerated if config types changed (`npm run build:schema`).
+- [ ] Commit messages follow Conventional Commits.
+- [ ] The PR is focused on one logical change.
 
 ## Community
 
