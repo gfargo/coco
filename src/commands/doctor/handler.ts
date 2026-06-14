@@ -21,7 +21,7 @@ import {
   type UsageAggregate,
 } from '../../lib/langchain/utils/usageLedger'
 import { DoctorArgv, DoctorOptions } from './config'
-import { DiagnosticSeverity, runDiagnostics } from './checks'
+import { checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
 import { Config } from '../../lib/config/types'
 
 function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
@@ -179,8 +179,10 @@ export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
 
   logger.log('')
 
-  // Run diagnostics
+  // Run diagnostics — sync config checks plus live Ollama probes (daemon
+  // reachability + configured-model-pulled), which need a network round-trip.
   const diagnostics = runDiagnostics(config)
+  diagnostics.push(...(await checkOllamaLiveness(config)))
 
   if (diagnostics.length === 0) {
     logger.log(chalk.green(`${PASS()} No issues found. Your configuration looks good!`))
