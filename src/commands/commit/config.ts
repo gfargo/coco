@@ -12,6 +12,12 @@ export interface CommitOptions extends BaseCommandOptions {
   conventional: boolean
   includeBranchName: boolean
   noVerify: boolean
+  /** Free-text appended to the end of the generated commit message. */
+  append?: string
+  /** Append the ticket ID parsed from the branch name to the message. */
+  appendTicket?: boolean
+  /** Extra contextual information injected into the prompt. */
+  additional?: string
   split?: boolean
   plan?: boolean
   apply?: boolean
@@ -72,9 +78,10 @@ export const options = {
     type: 'string',
   },
   appendTicket: {
+    // No short alias: `-t` is reserved for `--tag` (changelog) to keep the
+    // letter consistent across commands (#1245).
     description: 'Append ticket ID from branch name to the commit message',
     type: 'boolean',
-    alias: 't',
   },
   additional: {
     description: 'Add extra contextual information to the prompt',
