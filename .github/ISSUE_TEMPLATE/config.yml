@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discord
+    url: https://discord.gg/KGu9nE9Ejx
+    about: Questions, help, and general chat — fastest way to reach the community.
+  - name: 🗣️ GitHub Discussions
+    url: https://github.com/gfargo/coco/discussions
+    about: Ideas, Q&A, and show-and-tell that aren't bug reports or concrete feature requests.
+  - name: 📚 Documentation
+    url: https://coco.griffen.codes/docs
+    about: Getting started, configuration, providers, and the workstation guide.
