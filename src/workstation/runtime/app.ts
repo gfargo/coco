@@ -73,12 +73,10 @@ import {getForgeActions, getForgePullRequestOverview} from '../../git/forgeActio
 import {issueFilterForPreset, pullRequestFilterForPreset} from '../../git/triageFilterPresets'
 import {getStashCommitHashes, getStashOverview} from '../../git/stashData'
 import {getWorktreeOverview} from '../../git/statusData'
-import {WorktreeHunkOverview} from '../../git/statusHunks'
 import {getBisectStatus} from '../../git/bisectData'
 import {getReflogOverview} from '../../git/reflogData'
 import {getTagOverview} from '../../git/tagData'
 import {getWorktreeListOverview} from '../../git/worktreeData'
-import {WorktreeFileDiff} from '../../git/worktreeDiffData'
 
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -204,7 +202,7 @@ import {useBisectCandidateHydration, useBisectCandidateState} from './hooks/useB
 import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
 import {useBlameLoadingState, useDetailHydration} from './hooks/useDetailHydration'
-import {useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useStashDiffHydration, useWorktreeDiffHydration, useWorktreeHunksHydration} from './hooks/useDiffHydration'
+import {useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState} from './hooks/useDiffHydration'
 import {useDiffSyntaxHighlight, useDiffSyntaxState} from './hooks/useDiffSyntaxHighlight'
 import {useIdleTip} from './hooks/useIdleTip'
 import {useRefreshWatcher} from './hooks/useRefreshWatcher'
@@ -514,12 +512,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // `useCommitFilePreviewHydration`, in its original position — a two-hook split
   // to preserve React hook ordering. See `useDiffHydration`'s header.
   const {filePreview, setFilePreview, filePreviewLoading, setFilePreviewLoading} = useCommitFilePreviewState(React)
-  const [worktreeDiff, setWorktreeDiff] = React.useState<WorktreeFileDiff | undefined>(undefined)
-  const [worktreeDiffLoading, setWorktreeDiffLoading] = React.useState(false)
-  const [worktreeHunks, setWorktreeHunks] = React.useState<WorktreeHunkOverview | undefined>(
-    undefined
-  )
-  const [worktreeHunksLoading, setWorktreeHunksLoading] = React.useState(false)
+  // Worktree diff / hunks hydration state, owned by `useWorktreeDiffState` /
+  // `useWorktreeHunksState` (app.ts decomposition #1237). The `setWorktreeDiff`
+  // / `setWorktreeHunks` setters are shared with the staging callbacks
+  // (`useWorktreeStageActions`), so the hooks own the slots and hand the values
+  // + setters back here; the consumer call sites are unchanged. See
+  // `useDiffHydration`'s header.
+  const {worktreeDiff, setWorktreeDiff, worktreeDiffLoading, setWorktreeDiffLoading} = useWorktreeDiffState(React)
+  const {worktreeHunks, setWorktreeHunks, worktreeHunksLoading, setWorktreeHunksLoading} = useWorktreeHunksState(React)
   // Syntax-highlight spans for the diff currently in view (#1117
   // follow-up). Owned by `useDiffSyntaxState` (app.ts decomposition item 2 /
   // #1237); the `useState` stays in this exact slot while the effect that
@@ -532,12 +532,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // with diffSource='stash'. Lines are stored as a flat string[] —
   // renderDiffSurface paints each line through diffLineProps so +/-
   // colors match the commit-diff path.
-  const [stashDiffLines, setStashDiffLines] = React.useState<string[] | undefined>(undefined)
-  const [stashDiffLoading, setStashDiffLoading] = React.useState(false)
+  const {stashDiffLines, setStashDiffLines, stashDiffLoading, setStashDiffLoading} = useStashDiffState(React)
   // #779 — compare-two-refs diff state. Loaded lazily when the diff
   // view becomes active with `diffSource === 'compare'`.
-  const [compareDiffLines, setCompareDiffLines] = React.useState<string[] | undefined>(undefined)
-  const [compareDiffLoading, setCompareDiffLoading] = React.useState(false)
+  const {compareDiffLines, setCompareDiffLines, compareDiffLoading, setCompareDiffLoading} = useCompareDiffState(React)
   // Load-more pagination state, owned by `useHistoryPaginationState` (app.ts
   // decomposition item 3 / #1237). The `useState` pair stays in this exact
   // slot; the setters are shared (the loader `useLoadMoreHistory` below plus
