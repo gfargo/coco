@@ -2,6 +2,8 @@ import * as fs from 'fs'
 import { Config } from '../../lib/config/types'
 import { resolveDynamicModel } from '../../lib/langchain/utils/dynamicModels'
 import { DEFAULT_OLLAMA_ENDPOINT, getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
+import { DEPRECATED_MODELS, detectProviderMismatch } from '../../lib/langchain/modelValidity'
+import { LLMProvider } from '../../lib/langchain/types'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
 
@@ -10,21 +12,6 @@ export interface Diagnostic {
   message: string
   fix?: string
   autoFix?: (config: Record<string, unknown>) => void
-}
-
-/**
- * Deprecated or renamed model identifiers that should be updated.
- */
-const MODEL_UPGRADES: Record<string, string> = {
-  'gpt-4-turbo-preview': 'gpt-4o',
-  'gpt-4-0125-preview': 'gpt-4o',
-  'gpt-4-1106-preview': 'gpt-4o',
-  'gpt-3.5-turbo-0125': 'gpt-4o-mini',
-  'gpt-3.5-turbo-1106': 'gpt-4o-mini',
-  'gpt-3.5-turbo-16k': 'gpt-4o-mini',
-  'claude-3-opus-20240229': 'claude-sonnet-4-0',
-  'claude-3-sonnet-20240229': 'claude-3-5-sonnet-latest',
-  'claude-3-haiku-20240307': 'claude-3-5-haiku-latest',
 }
 
 export function runDiagnostics(config: Config): Diagnostic[] {
@@ -151,7 +138,20 @@ function checkModelCurrency(config: Config, diagnostics: Diagnostic[]) {
   if (!config.service?.model || config.service.model === 'dynamic') return
 
   const model = String(config.service.model)
-  const upgrade = MODEL_UPGRADES[model]
+  const provider = config.service.provider as LLMProvider
+
+  // Per-provider validity: flag a model that belongs to a different provider's
+  // namespace (e.g. a `claude-…` model configured under provider `openai`).
+  const mismatchOwner = detectProviderMismatch(model, provider)
+  if (mismatchOwner) {
+    diagnostics.push({
+      severity: 'error',
+      message: `Model "${model}" is a ${mismatchOwner} model, but service.provider is "${provider}".`,
+      fix: `Set service.model to a ${provider} model, or change service.provider to "${mismatchOwner}".`,
+    })
+  }
+
+  const upgrade = DEPRECATED_MODELS[model]
 
   if (upgrade) {
     diagnostics.push({

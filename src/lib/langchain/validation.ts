@@ -1,6 +1,7 @@
 import { LangChainValidationError, LangChainConfigurationError } from './errors'
 import { LLMProvider, LLMModel, LLMService } from './types'
 import { LLM_PROVIDER_IDS } from './providers/registry'
+import { detectProviderMismatch } from './modelValidity'
 
 /**
  * Validates that a required parameter is not null or undefined
@@ -87,9 +88,20 @@ export function validateModel(
       { model, provider, functionName }
     )
   }
-  
-  // Additional provider-specific validation could be added here
-  // For now, we trust the TypeScript types
+
+  // Per-provider validity: fail fast on a *definite* cross-provider mismatch
+  // (the model is exactly a known model of a different provider, e.g.
+  // `claude-…` under provider `openai`). This would otherwise surface as a
+  // cryptic API error mid-run. Exact-membership only — unrecognized/new models
+  // and open-namespace providers (ollama) pass untouched.
+  const mismatchOwner = detectProviderMismatch(model, provider)
+  if (mismatchOwner) {
+    throw new LangChainValidationError(
+      `${functionName ? `${functionName}: ` : ''}Model '${model}' is a ${mismatchOwner} model, not a ${provider} model. ` +
+        `Set service.model to a ${provider} model, or change service.provider to '${mismatchOwner}'.`,
+      { model, provider, owner: mismatchOwner, functionName }
+    )
+  }
 }
 
 /**
