@@ -227,7 +227,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const parser: any = createSchemaParser(RecapLlmResponseSchema, llm)
+        const parser: any = createSchemaParser(RecapLlmResponseSchema)
         
         const variables = {
           changes: context,

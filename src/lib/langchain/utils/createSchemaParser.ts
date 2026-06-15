@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { handleLangChainError } from '../errorHandler'
 import { LangChainExecutionError } from '../errors'
 import { validateRequired } from '../validation'
-import { getLlm } from './getLlm'
 
 export interface SchemaParserOptions {
   maxRetries?: number
@@ -11,22 +10,18 @@ export interface SchemaParserOptions {
 }
 
 /**
- * Creates a StructuredOutputParser for schema-based generation
+ * Creates a StructuredOutputParser for schema-based generation.
+ *
  * @param schema - Zod schema for the expected output structure
- * @param llm - LLM instance (kept for API compatibility)
  * @param options - Configuration options
  * @returns StructuredOutputParser configured with the provided schema
  * @throws LangChainExecutionError if parser creation fails
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createSchemaParser(
   schema: z.ZodType,
-  llm: ReturnType<typeof getLlm>,
   options: SchemaParserOptions = {}
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): any {
+): StructuredOutputParser<z.ZodType> {
   validateRequired(schema, 'schema', 'createSchemaParser')
-  validateRequired(llm, 'llm', 'createSchemaParser')
   validateRequired(options, 'options', 'createSchemaParser')
 
   if (typeof schema.parse !== 'function') {
@@ -54,12 +49,12 @@ export function createSchemaParser(
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return StructuredOutputParser.fromZodSchema(schema as any)
+    // `as never`: @langchain/core bundles its own zod copy, so the project's
+    // `z.ZodType` isn't structurally identical to the one fromZodSchema expects.
+    return StructuredOutputParser.fromZodSchema(schema as never)
   } catch (error) {
     handleLangChainError(error, 'createSchemaParser: Failed to create schema parser', {
       schemaName: schema.constructor.name,
-      llmType: llm.constructor.name,
       hasRetryTemplate: !!retryTemplate,
     })
   }
