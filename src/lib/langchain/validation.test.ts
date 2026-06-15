@@ -1,0 +1,31 @@
+import { validateModel } from './validation'
+import { LangChainValidationError } from './errors'
+
+describe('validateModel (#1243 — per-provider validity)', () => {
+  it('accepts a model that matches its provider', () => {
+    expect(() => validateModel('gpt-4o', 'openai')).not.toThrow()
+    expect(() => validateModel('claude-3-5-sonnet-latest', 'anthropic')).not.toThrow()
+  })
+
+  it('accepts the dynamic sentinel and open-namespace providers', () => {
+    expect(() => validateModel('dynamic', 'openai')).not.toThrow()
+    expect(() => validateModel('llama3.1:8b', 'ollama')).not.toThrow()
+    expect(() => validateModel('gpt-4o', 'azure')).not.toThrow() // azure shares openai ids
+  })
+
+  it('accepts unrecognized / new models for the right provider', () => {
+    expect(() => validateModel('gpt-5-ultra-turbo', 'openai')).not.toThrow()
+  })
+
+  it('throws on a definite cross-provider mismatch', () => {
+    expect(() => validateModel('claude-3-5-sonnet-latest', 'openai')).toThrow(
+      LangChainValidationError,
+    )
+    expect(() => validateModel('gpt-4o', 'anthropic')).toThrow(/is a openai model, not a anthropic/)
+  })
+
+  it('still rejects empty / non-string models', () => {
+    expect(() => validateModel('', 'openai')).toThrow(LangChainValidationError)
+    expect(() => validateModel('   ', 'openai')).toThrow(/non-empty string/)
+  })
+})
