@@ -45,19 +45,22 @@
  * exactly, this module exports *five* hooks, each called at its original
  * slot in `app.ts`. Order correctness wins over tidiness.
  *
- * Most dedicated `useState` slots stay in `app.ts` because their diff setters
- * are also called from staging callbacks (`toggleSelectedFileStage`, the
- * hunk-stage callbacks) and the compare-reset effect — they are not owned by
- * these loaders. Each hook is handed the setter(s) it needs.
- *
- * The **commit file-preview** slot is the exception: `setFilePreview` /
- * `setFilePreviewLoading` are written *only* by its loader, so that pair's
- * `useState` is owned here via {@link useCommitFilePreviewState} (app.ts
- * decomposition item 2 / #1237). It is a position-preserving split — the state
- * hook is called at the original `useState` slot near the top of `app.ts`, and
- * `useCommitFilePreviewHydration` (the effect) stays at its original slot far
- * below, handed the setters — mirroring the `useCommitDetailState` +
- * `useCommitDetailHydration` split (item 1a).
+ * State ownership. Each diff slot's `useState` is owned here by a dedicated
+ * *state hook* (`useStashDiffState`, `useCompareDiffState`,
+ * `useWorktreeHunksState`, `useWorktreeDiffState`, `useCommitFilePreviewState`),
+ * each called at the slot's original position near the top of `app.ts` so React
+ * hook order is preserved (a position-preserving split — the loaders stay at
+ * their own original slots far below). The state hook returns the value(s) +
+ * setter(s); `app.ts` threads them into the matching loader **and** into any
+ * other consumer that writes the setter:
+ *   - `setWorktreeDiff` / `setWorktreeHunks` are also called by the staging
+ *     callbacks (`useWorktreeStageActions`);
+ *   - `setCompareDiffLines` / `setCompareDiffLoading` are also called by the
+ *     compare-reset effect.
+ * Because the returned setters keep the same names, those consumer call sites
+ * are unchanged — only the bare `useState` declarations became hook calls
+ * (app.ts decomposition items 1a / 2 / #1237). Mirrors the `useCommitDetailState`
+ * + `useCommitDetailHydration` split (item 1a).
  *
  * `React` is injected (per the runtime's `getLogInkRuntimeContext(React)`
  * convention) because the workstation never statically imports React.
@@ -106,6 +109,27 @@ export function shouldLoadWorktreeDiff(
   selectedWorktreeFile: WorktreeFile | undefined,
 ): boolean {
   return activeView === 'diff' && Boolean(selectedWorktreeFile)
+}
+
+/**
+ * Owns the stash-diff `useState` pair, in its original `app.ts` slot. Both
+ * setters are written only by {@link useStashDiffHydration}. Returns the
+ * values (read by the render) + setters (threaded into the loader). A
+ * position-preserving split; see the module header.
+ */
+export function useStashDiffState(React: typeof ReactTypes): {
+  stashDiffLines: string[] | undefined
+  setStashDiffLines: ReactTypes.Dispatch<
+    ReactTypes.SetStateAction<string[] | undefined>
+  >
+  stashDiffLoading: boolean
+  setStashDiffLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+} {
+  const [stashDiffLines, setStashDiffLines] = React.useState<
+    string[] | undefined
+  >(undefined)
+  const [stashDiffLoading, setStashDiffLoading] = React.useState(false)
+  return { stashDiffLines, setStashDiffLines, stashDiffLoading, setStashDiffLoading }
 }
 
 export type UseStashDiffHydrationDeps = {
@@ -157,6 +181,33 @@ export function useStashDiffHydration(
     })()
     return () => { active = false }
   }, [git, activeView, diffSource, stashDiffRef])
+}
+
+/**
+ * Owns the compare-diff `useState` pair, in its original `app.ts` slot. Both
+ * setters are shared — {@link useCompareDiffHydration} *and* the compare-reset
+ * effect in `app.ts` write them — so this hook owns the slots and returns the
+ * values + setters, which `app.ts` threads into both. A position-preserving
+ * split; see the module header.
+ */
+export function useCompareDiffState(React: typeof ReactTypes): {
+  compareDiffLines: string[] | undefined
+  setCompareDiffLines: ReactTypes.Dispatch<
+    ReactTypes.SetStateAction<string[] | undefined>
+  >
+  compareDiffLoading: boolean
+  setCompareDiffLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+} {
+  const [compareDiffLines, setCompareDiffLines] = React.useState<
+    string[] | undefined
+  >(undefined)
+  const [compareDiffLoading, setCompareDiffLoading] = React.useState(false)
+  return {
+    compareDiffLines,
+    setCompareDiffLines,
+    compareDiffLoading,
+    setCompareDiffLoading,
+  }
 }
 
 export type UseCompareDiffHydrationDeps = {
@@ -216,6 +267,34 @@ export function useCompareDiffHydration(
     })()
     return () => { active = false }
   }, [git, activeView, diffSource, compareBaseRef, compareHeadRef])
+}
+
+/**
+ * Owns the worktree-hunks `useState` pair, in its original `app.ts` slot.
+ * `setWorktreeHunks` is shared — {@link useWorktreeHunksHydration} *and* the
+ * staging callbacks (`useWorktreeStageActions`) write it — so this hook owns
+ * the slots and returns the values + setters, which `app.ts` threads into both.
+ * `setWorktreeHunksLoading` is loader-only. A position-preserving split; see
+ * the module header.
+ */
+export function useWorktreeHunksState(React: typeof ReactTypes): {
+  worktreeHunks: WorktreeHunkOverview | undefined
+  setWorktreeHunks: ReactTypes.Dispatch<
+    ReactTypes.SetStateAction<WorktreeHunkOverview | undefined>
+  >
+  worktreeHunksLoading: boolean
+  setWorktreeHunksLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+} {
+  const [worktreeHunks, setWorktreeHunks] = React.useState<
+    WorktreeHunkOverview | undefined
+  >(undefined)
+  const [worktreeHunksLoading, setWorktreeHunksLoading] = React.useState(false)
+  return {
+    worktreeHunks,
+    setWorktreeHunks,
+    worktreeHunksLoading,
+    setWorktreeHunksLoading,
+  }
 }
 
 export type UseWorktreeHunksHydrationDeps = {
@@ -280,6 +359,34 @@ export function useWorktreeHunksHydration(
     selectedWorktreeFile?.worktreeStatus,
     activeView,
   ])
+}
+
+/**
+ * Owns the worktree-file-diff `useState` pair, in its original `app.ts` slot.
+ * `setWorktreeDiff` is shared — {@link useWorktreeDiffHydration} *and* the
+ * staging callbacks (`useWorktreeStageActions`) write it — so this hook owns
+ * the slots and returns the values + setters, which `app.ts` threads into both.
+ * `setWorktreeDiffLoading` is loader-only. A position-preserving split; see the
+ * module header.
+ */
+export function useWorktreeDiffState(React: typeof ReactTypes): {
+  worktreeDiff: WorktreeFileDiff | undefined
+  setWorktreeDiff: ReactTypes.Dispatch<
+    ReactTypes.SetStateAction<WorktreeFileDiff | undefined>
+  >
+  worktreeDiffLoading: boolean
+  setWorktreeDiffLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+} {
+  const [worktreeDiff, setWorktreeDiff] = React.useState<
+    WorktreeFileDiff | undefined
+  >(undefined)
+  const [worktreeDiffLoading, setWorktreeDiffLoading] = React.useState(false)
+  return {
+    worktreeDiff,
+    setWorktreeDiff,
+    worktreeDiffLoading,
+    setWorktreeDiffLoading,
+  }
 }
 
 export type UseWorktreeDiffHydrationDeps = {

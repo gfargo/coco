@@ -1,8 +1,24 @@
 import {
   shouldLoadWorktreeDiff,
   useCommitFilePreviewState,
+  useCompareDiffState,
+  useStashDiffState,
+  useWorktreeDiffState,
+  useWorktreeHunksState,
 } from './useDiffHydration'
 import type { WorktreeFile } from '../../../git/statusData'
+
+/**
+ * Fake React whose `useState` runs the lazy initializer (if any) and returns a
+ * jest setter, so the state hooks can be exercised without a renderer.
+ */
+const fakeReact = () =>
+  ({
+    useState: (init: unknown) => [
+      typeof init === 'function' ? (init as () => unknown)() : init,
+      jest.fn(),
+    ],
+  }) as unknown as typeof import('react')
 
 /**
  * Unit tests for the pure `shouldLoadWorktreeDiff` core (0.72 app.ts
@@ -42,18 +58,58 @@ describe('shouldLoadWorktreeDiff', () => {
  */
 describe('useCommitFilePreviewState', () => {
   it('seeds filePreview undefined and filePreviewLoading false, exposing both setters', () => {
-    const React = {
-      useState: (init: unknown) => {
-        const value = typeof init === 'function' ? (init as () => unknown)() : init
-        return [value, jest.fn()]
-      },
-    } as unknown as typeof import('react')
-
-    const result = useCommitFilePreviewState(React)
+    const result = useCommitFilePreviewState(fakeReact())
 
     expect(result.filePreview).toBeUndefined()
     expect(result.filePreviewLoading).toBe(false)
     expect(typeof result.setFilePreview).toBe('function')
     expect(typeof result.setFilePreviewLoading).toBe('function')
+  })
+})
+
+/**
+ * The remaining diff-hydration state hooks (app.ts decomposition #1237) each
+ * own one `useState` pair and surface its values + setters. The setters for
+ * worktree-diff / worktree-hunks (staging) and compare (compare-reset effect)
+ * are shared, so app.ts threads them to multiple consumers — verified here only
+ * that each hook seeds empty and exposes both setters.
+ */
+describe('useStashDiffState', () => {
+  it('seeds lines undefined + loading false and exposes both setters', () => {
+    const result = useStashDiffState(fakeReact())
+    expect(result.stashDiffLines).toBeUndefined()
+    expect(result.stashDiffLoading).toBe(false)
+    expect(typeof result.setStashDiffLines).toBe('function')
+    expect(typeof result.setStashDiffLoading).toBe('function')
+  })
+})
+
+describe('useCompareDiffState', () => {
+  it('seeds lines undefined + loading false and exposes both setters', () => {
+    const result = useCompareDiffState(fakeReact())
+    expect(result.compareDiffLines).toBeUndefined()
+    expect(result.compareDiffLoading).toBe(false)
+    expect(typeof result.setCompareDiffLines).toBe('function')
+    expect(typeof result.setCompareDiffLoading).toBe('function')
+  })
+})
+
+describe('useWorktreeHunksState', () => {
+  it('seeds hunks undefined + loading false and exposes both setters', () => {
+    const result = useWorktreeHunksState(fakeReact())
+    expect(result.worktreeHunks).toBeUndefined()
+    expect(result.worktreeHunksLoading).toBe(false)
+    expect(typeof result.setWorktreeHunks).toBe('function')
+    expect(typeof result.setWorktreeHunksLoading).toBe('function')
+  })
+})
+
+describe('useWorktreeDiffState', () => {
+  it('seeds diff undefined + loading false and exposes both setters', () => {
+    const result = useWorktreeDiffState(fakeReact())
+    expect(result.worktreeDiff).toBeUndefined()
+    expect(result.worktreeDiffLoading).toBe(false)
+    expect(typeof result.setWorktreeDiff).toBe('function')
+    expect(typeof result.setWorktreeDiffLoading).toBe('function')
   })
 })
