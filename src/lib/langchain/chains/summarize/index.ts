@@ -8,6 +8,7 @@ import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import { Logger } from '../../../utils/logger'
 import { TokenCounter } from '../../../utils/tokenizer'
 import { LlmCallMetadata, logLlmCall } from '../../utils/observability'
+import { isRetryableError } from '../../errorHandler'
 
 export type SummarizeContext = {
   textSplitter: RecursiveCharacterTextSplitter
@@ -37,20 +38,8 @@ const BACKOFF_RETRIES = 3
 const BACKOFF_BASE_MS = 1000
 const BACKOFF_CAP_MS = 5000
 
-function isRetryableError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const err = error as { status?: number; code?: string | number; message?: string }
-  if (err.status === 429 || err.status === 503 || err.status === 502 || err.status === 504) {
-    return true
-  }
-  if (err.code === 429 || err.code === 'rate_limit_exceeded' || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
-    return true
-  }
-  if (typeof err.message === 'string' && /(rate.?limit|429|too many requests|timeout|temporarily unavailable)/i.test(err.message)) {
-    return true
-  }
-  return false
-}
+// Retryability uses the shared transient-error predicate (errorHandler), so the
+// summarize backoff and the rest of the codebase agree on what's retryable.
 
 async function invokeWithBackoff(
   chain: SummarizeContext['chain'],

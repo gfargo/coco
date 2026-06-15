@@ -17,7 +17,13 @@ export interface RetryOptions {
 }
 
 /**
- * Default retry predicate - retries on non-validation errors
+ * Default retry predicate — retries any *non-permanent* error: everything
+ * except validation / configuration / authentication failures. This is
+ * intentionally broader than `errorHandler.isRetryableError` (the shared
+ * *transient* predicate): generic retries here re-roll on e.g. unparseable
+ * schema output, not just network/rate-limit blips. Transient ⊂ this set.
+ * Callers that only want to retry transient errors should pass
+ * `shouldRetry: isRetryableError` explicitly.
  */
 function defaultShouldRetry(error: Error): boolean {
   // Don't retry validation errors or configuration errors
