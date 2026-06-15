@@ -70,7 +70,6 @@ import type { LogInkVisiblePane } from '../chrome/layout'
 import {LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getThemePickerSelection} from '../../workstation/runtime/inkViewModel'
 import {getGitOperationOverview} from '../../git/operationData'
 import {getProviderOverview} from '../../git/providerData'
-import {highlightDiffCode, type SyntaxSpan} from '../../lib/syntax/highlightEngine'
 import {getForgeActions, getForgePullRequestOverview} from '../../git/forgeActions'
 import {issueFilterForPreset, pullRequestFilterForPreset} from '../../git/triageFilterPresets'
 import {getStashCommitHashes, getStashOverview} from '../../git/stashData'
@@ -206,6 +205,7 @@ import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitD
 import {useContextHydration} from './hooks/useContextHydration'
 import {useBlameLoadingState, useDetailHydration} from './hooks/useDetailHydration'
 import {useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useStashDiffHydration, useWorktreeDiffHydration, useWorktreeHunksHydration} from './hooks/useDiffHydration'
+import {useDiffSyntaxHighlight, useDiffSyntaxState} from './hooks/useDiffSyntaxHighlight'
 import {useIdleTip} from './hooks/useIdleTip'
 import {useRefreshWatcher} from './hooks/useRefreshWatcher'
 import {useActiveRepoRoot, useViewModePersistence} from './hooks/useRepoPersistence'
@@ -521,12 +521,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   )
   const [worktreeHunksLoading, setWorktreeHunksLoading] = React.useState(false)
   // Syntax-highlight spans for the diff currently in view (#1117
-  // follow-up). Computed off the render path by the effect below;
-  // keyed by marker-stripped code line so the diff renderer looks
-  // spans up directly. `undefined` = no highlighting (renders plain).
-  const [diffSyntaxSpans, setDiffSyntaxSpans] = React.useState<
-    Map<string, SyntaxSpan[]> | undefined
-  >(undefined)
+  // follow-up). Owned by `useDiffSyntaxState` (app.ts decomposition item 2 /
+  // #1237); the `useState` stays in this exact slot while the effect that
+  // computes the spans is issued ~600 lines below by `useDiffSyntaxHighlight`,
+  // in its original position — a two-hook split to preserve hook ordering.
+  // `undefined` = no highlighting (renders plain).
+  const {diffSyntaxSpans, setDiffSyntaxSpans} = useDiffSyntaxState(React)
   // Stash diff explorer (Enter on a stash row): the runtime fetches
   // `git stash show -p <ref>` lazily once the diff view becomes active
   // with diffSource='stash'. Lines are stored as a flat string[] —
@@ -1151,49 +1151,22 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   })
 
   // Syntax-highlight the diff currently in view, off the render path
-  // (#1117 follow-up). Mirrors the worktree-diff effect: detect the
-  // active file + its diff lines (worktree or commit source), tokenize
-  // via tree-sitter, and store the per-line spans for the renderer.
-  // Stash / compare sources aren't highlighted yet (multi-file patch /
-  // no single path). Gated on the config flag + a color terminal.
-  React.useEffect(() => {
-    if (!syntaxHighlightEnabled || theme.noColor || state.activeView !== 'diff') {
-      setDiffSyntaxSpans(undefined)
-      return
-    }
-    let filePath: string | undefined
-    let lines: string[] | undefined
-    if (state.diffSource === 'commit') {
-      filePath = selectedDetailFile?.path
-      lines = filePreview?.hunks
-    } else if (worktreeDiff && !worktreeDiff.untracked) {
-      filePath = worktreeDiff.filePath
-      lines = worktreeDiff.lines
-    }
-    if (!filePath || !lines || lines.length === 0) {
-      setDiffSyntaxSpans(undefined)
-      return
-    }
-    let active = true
-    void highlightDiffCode(filePath, lines)
-      .then((map) => {
-        if (active) setDiffSyntaxSpans(map.size > 0 ? map : undefined)
-      })
-      .catch(() => {
-        if (active) setDiffSyntaxSpans(undefined)
-      })
-    return () => {
-      active = false
-    }
-  }, [
+  // (#1117 follow-up). Lifted verbatim into `useDiffSyntaxHighlight` (app.ts
+  // decomposition item 2 / #1237) — the gate, the commit-vs-worktree source
+  // detection, the `active` cancellation flag, the `highlightDiffCode` call,
+  // and the dependency array carry over byte-for-byte. Issued here, in its
+  // original slot; the `useState` it writes is owned by `useDiffSyntaxState`
+  // above.
+  useDiffSyntaxHighlight(React, {
     syntaxHighlightEnabled,
-    theme.noColor,
-    state.activeView,
-    state.diffSource,
-    selectedDetailFile?.path,
+    noColor: theme.noColor,
+    activeView: state.activeView,
+    diffSource: state.diffSource,
+    selectedDetailFile,
     filePreview,
     worktreeDiff,
-  ])
+    setDiffSyntaxSpans,
+  })
 
   // Lifted verbatim into `useWorktreeStageActions` (0.72 app.ts
   // decomposition — the first extraction of action callbacks). The four
