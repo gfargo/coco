@@ -215,6 +215,7 @@ import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
 import {useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
 import {useOnboarding} from './hooks/useOnboarding'
+import {useResumeTick} from './hooks/useResumeTick'
 import {useWorktreeStageActions} from './hooks/useWorktreeStageActions'
 import {useCommitComposeActions} from './hooks/useCommitComposeActions'
 import {useCommitSplitActions} from './hooks/useCommitSplitActions'
@@ -358,18 +359,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   )
   const { exit } = useApp()
   const windowSize = useWindowSize()
-  // Bumping this on SIGCONT forces the existing tree to repaint so users
-  // land on a drawn screen after `fg` instead of an empty alt buffer.
-  const [, setResumeTick] = React.useState(0)
-  React.useEffect(() => {
-    if (!resumeRef) {
-      return
-    }
-    resumeRef.current = () => setResumeTick((tick) => tick + 1)
-    return () => {
-      resumeRef.current = null
-    }
-  }, [resumeRef])
+  // Resume-repaint tick (SIGCONT → `fg`), owned by `useResumeTick` (app.ts
+  // decomposition item 5 / #1237). The throwaway `useState` and its effect are
+  // adjacent, so they move together into the hook at this exact slot; the
+  // effect wires `resumeRef.current` to a tick-bump that forces a repaint.
+  useResumeTick(React, {resumeRef})
   // First-launch onboarding (P1.3). Persisted via a marker file in the
   // user's cache dir so the tip never reappears once dismissed. Lazy
   // initializer so the fs check only runs on mount, not every render.
