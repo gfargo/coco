@@ -202,6 +202,7 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import {matchesPromotedFilter} from '../runtime/promotedFilter'
 import {useFilteredLists} from './hooks/buildFilteredLists'
+import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
 import {useBlameLoadingState, useDetailHydration} from './hooks/useDetailHydration'
 import {useCommitFilePreviewHydration, useCompareDiffHydration, useStashDiffHydration, useWorktreeDiffHydration, useWorktreeHunksHydration} from './hooks/useDiffHydration'
@@ -501,8 +502,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // closure, so each effect run resolves against the right binding.
   // No additional depth tagging is needed.
   const activeRepoRoot = useActiveRepoRoot(React, git)
-  const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
-  const [detailLoading, setDetailLoading] = React.useState(false)
+  // Commit-detail hydration state, lifted into `useCommitDetailState`
+  // (app.ts decomposition item 1a / #1237). The `useState` pair stays in this
+  // exact slot; the loader effect that toggles it is issued ~600 lines below
+  // by `useCommitDetailHydration`, in its original position — a two-hook
+  // split to preserve React hook ordering. See that module's header.
+  const {detail, setDetail, detailLoading, setDetailLoading} = useCommitDetailState(React)
   const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
   const [filePreviewLoading, setFilePreviewLoading] = React.useState(false)
   const [worktreeDiff, setWorktreeDiff] = React.useState<WorktreeFileDiff | undefined>(undefined)
@@ -1101,30 +1106,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setBlameLoading,
   })
 
-  React.useEffect(() => {
-    let active = true
-
-    async function loadDetail(): Promise<void> {
-      if (!selected) {
-        setDetail(undefined)
-        return
-      }
-
-      setDetailLoading(true)
-      const nextDetail = await safe(getCommitDetail(git, selected.hash))
-
-      if (active) {
-        setDetail(nextDetail)
-        setDetailLoading(false)
-      }
-    }
-
-    void loadDetail()
-
-    return () => {
-      active = false
-    }
-  }, [git, selected?.hash])
+  // Commit-detail loader, lifted verbatim into `useCommitDetailHydration`
+  // (app.ts decomposition item 1a / #1237) — guard, `active` cancellation
+  // flag, `safe()` wrapper, `detailLoading` toggles, and `[git, selected?.hash]`
+  // dependency array carry over byte-for-byte. Issued here, in its original
+  // slot; the `useState` it toggles is owned by `useCommitDetailState` above.
+  useCommitDetailHydration(React, {
+    git,
+    selected,
+    setDetail,
+    setDetailLoading,
+  })
 
   // #806 follow-up — auto-jump the history view to whichever branch /
   // tag / stash the user is cursoring (cluster N). Lifted verbatim into
