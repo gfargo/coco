@@ -7,7 +7,7 @@ import { join } from 'node:path'
 // BEFORE the cache module is imported so its first read picks it up.
 process.env.COCO_CACHE_DIR = mkdtempSync(join(tmpdir(), 'coco-cache-download-test-'))
 
-import { downloadTreeSitterParser, formatDownloadOutcome } from './download'
+import { downloadTreeSitterParser, formatDownloadOutcome, treeSitterMirrorUrls } from './download'
 import { getCachedWasmPath, getTreeSitterCacheDir } from './cache'
 import { TREE_SITTER_MANIFEST } from './manifest'
 
@@ -105,6 +105,63 @@ describe('downloadTreeSitterParser', () => {
     if (outcome.ok) throw new Error('expected failure')
     if (outcome.reason !== 'network') throw new Error('expected network reason')
     expect(outcome.message).toBe('ECONNREFUSED')
+  })
+
+  it('falls back to a mirror when the primary CDN fails (#1247)', async () => {
+    const tried: string[] = []
+    const fakeFetch: typeof globalThis.fetch = async (input) => {
+      const url = String(input)
+      tried.push(url)
+      // jsdelivr (primary) is down; a mirror serves the bytes.
+      if (url.startsWith('https://cdn.jsdelivr.net/')) {
+        throw new Error('ENOTFOUND cdn.jsdelivr.net')
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        arrayBuffer: async () => PY_BYTES.buffer,
+      } as unknown as Response
+    }
+
+    const outcome = await downloadTreeSitterParser('python', { fetchImpl: fakeFetch })
+    expect(outcome.ok).toBe(true)
+    // primary attempted first, then a mirror
+    expect(tried[0]).toContain('cdn.jsdelivr.net')
+    expect(tried.length).toBeGreaterThanOrEqual(2)
+    expect(tried[1]).toMatch(/fastly\.jsdelivr\.net|unpkg\.com/)
+  })
+
+  it('tries every mirror before giving up, surfacing the last failure', async () => {
+    const tried: string[] = []
+    const fakeFetch: typeof globalThis.fetch = async (input) => {
+      tried.push(String(input))
+      throw new Error('ECONNREFUSED')
+    }
+
+    const outcome = await downloadTreeSitterParser('python', { fetchImpl: fakeFetch })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok || outcome.reason !== 'network') throw new Error('expected network failure')
+    // all three sources attempted
+    expect(tried).toHaveLength(3)
+  })
+})
+
+describe('treeSitterMirrorUrls', () => {
+  it('derives Fastly + unpkg mirrors from a jsdelivr npm URL', () => {
+    const urls = treeSitterMirrorUrls(
+      'https://cdn.jsdelivr.net/npm/tree-sitter-python@0.23.6/tree-sitter-python.wasm',
+    )
+    expect(urls).toEqual([
+      'https://cdn.jsdelivr.net/npm/tree-sitter-python@0.23.6/tree-sitter-python.wasm',
+      'https://fastly.jsdelivr.net/npm/tree-sitter-python@0.23.6/tree-sitter-python.wasm',
+      'https://unpkg.com/tree-sitter-python@0.23.6/tree-sitter-python.wasm',
+    ])
+  })
+
+  it('returns just the original for a non-jsdelivr URL', () => {
+    const urls = treeSitterMirrorUrls('https://example.com/custom.wasm')
+    expect(urls).toEqual(['https://example.com/custom.wasm'])
   })
 })
 

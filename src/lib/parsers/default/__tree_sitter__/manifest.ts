@@ -13,8 +13,9 @@
  * (~450 KB for Python) from a globally-distributed CDN, without
  * pulling the full npm tarball (which would be 10× larger for the
  * same content). The URL pattern is stable across versions; only
- * the version segment changes. Mirrors (unpkg, fastly) are options
- * if jsdelivr proves unreliable in practice.
+ * the version segment changes. If jsdelivr is unreachable, the
+ * download module falls back to its Fastly edge and then unpkg —
+ * the same byte-for-byte file (see `treeSitterMirrorUrls`).
  *
  * SHA-256s are computed at manifest-edit time by downloading the
  * file once and running `shasum -a 256`. The download module

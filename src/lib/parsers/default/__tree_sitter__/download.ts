@@ -3,7 +3,9 @@
  *
  * Owns the contract:
  *
- *   1. Fetch the manifest-pinned `.wasm` from the CDN URL
+ *   1. Fetch the manifest-pinned `.wasm` from the CDN URL, falling back
+ *      through mirror CDNs (jsdelivr → jsdelivr-Fastly → unpkg) if a
+ *      source is unreachable (#1247)
  *   2. Compute SHA-256 over the bytes
  *   3. Compare against the manifest-pinned hash; refuse to write
  *      on mismatch
@@ -49,6 +51,23 @@ export type DownloadOutcome =
  * The orchestrator handles `ok: false` cases by surrendering to
  * the regex fallback and (optionally) logging.
  */
+/**
+ * Mirror chain for a manifest `.wasm` URL. The manifest pins jsdelivr's
+ * canonical npm path; the same file is served byte-for-byte by jsdelivr's
+ * Fastly edge and by unpkg, so if one CDN is down or blocked we fall through
+ * to the next. SHA-256 verification in {@link downloadTreeSitterParser} guards
+ * integrity regardless of which mirror answered, so adding sources is safe.
+ */
+export function treeSitterMirrorUrls(wasmUrl: string): string[] {
+  const urls = [wasmUrl]
+  const npmPath = wasmUrl.match(/^https:\/\/cdn\.jsdelivr\.net\/npm\/(.+)$/)?.[1]
+  if (npmPath) {
+    urls.push(`https://fastly.jsdelivr.net/npm/${npmPath}`)
+    urls.push(`https://unpkg.com/${npmPath}`)
+  }
+  return urls
+}
+
 export async function downloadTreeSitterParser(
   language: LazyTreeSitterLanguageId,
   options?: { fetchImpl?: typeof globalThis.fetch },
@@ -56,39 +75,51 @@ export async function downloadTreeSitterParser(
   const entry: TreeSitterManifestEntry = TREE_SITTER_MANIFEST[language]
   const fetchImpl = options?.fetchImpl || globalThis.fetch
 
-  let body: ArrayBuffer
-  try {
-    const response = await fetchImpl(entry.wasmUrl)
-    if (!response.ok) {
-      return { ok: false, reason: 'network', message: `HTTP ${response.status} ${response.statusText}` }
+  let lastFailure: DownloadOutcome = {
+    ok: false,
+    reason: 'network',
+    message: 'no download URLs available',
+  }
+
+  // Try each mirror in order; advance to the next on a network failure, a
+  // non-2xx response, or a SHA mismatch (a mirror serving unexpected bytes).
+  for (const url of treeSitterMirrorUrls(entry.wasmUrl)) {
+    let body: ArrayBuffer
+    try {
+      const response = await fetchImpl(url)
+      if (!response.ok) {
+        lastFailure = { ok: false, reason: 'network', message: `HTTP ${response.status} ${response.statusText}` }
+        continue
+      }
+      body = await response.arrayBuffer()
+    } catch (error) {
+      lastFailure = { ok: false, reason: 'network', message: (error as Error).message }
+      continue
     }
-    body = await response.arrayBuffer()
-  } catch (error) {
-    return { ok: false, reason: 'network', message: (error as Error).message }
-  }
 
-  const bytes = new Uint8Array(body)
-  const actualHash = createHash('sha256').update(bytes).digest('hex')
-  if (actualHash !== entry.sha256) {
-    return {
-      ok: false,
-      reason: 'sha-mismatch',
-      expected: entry.sha256,
-      actual: actualHash,
+    const bytes = new Uint8Array(body)
+    const actualHash = createHash('sha256').update(bytes).digest('hex')
+    if (actualHash !== entry.sha256) {
+      lastFailure = { ok: false, reason: 'sha-mismatch', expected: entry.sha256, actual: actualHash }
+      continue
     }
+
+    const cacheDir = ensureTreeSitterCacheDir()
+    const finalPath = getCachedWasmPath(language)
+    const tempPath = join(cacheDir, `tree-sitter-${language}.wasm.tmp-${process.pid}-${Date.now()}`)
+    try {
+      writeFileSync(tempPath, bytes)
+      renameSync(tempPath, finalPath)
+    } catch (error) {
+      // A write failure is local, not mirror-specific — retrying other
+      // sources won't help, so surface it immediately.
+      return { ok: false, reason: 'write-failed', message: (error as Error).message }
+    }
+
+    return { ok: true, path: finalPath, bytes: bytes.byteLength }
   }
 
-  const cacheDir = ensureTreeSitterCacheDir()
-  const finalPath = getCachedWasmPath(language)
-  const tempPath = join(cacheDir, `tree-sitter-${language}.wasm.tmp-${process.pid}-${Date.now()}`)
-  try {
-    writeFileSync(tempPath, bytes)
-    renameSync(tempPath, finalPath)
-  } catch (error) {
-    return { ok: false, reason: 'write-failed', message: (error as Error).message }
-  }
-
-  return { ok: true, path: finalPath, bytes: bytes.byteLength }
+  return lastFailure
 }
 
 /**
