@@ -45,10 +45,19 @@
  * exactly, this module exports *five* hooks, each called at its original
  * slot in `app.ts`. Order correctness wins over tidiness.
  *
- * The dedicated `useState` slots stay in `app.ts` because the diff setters
+ * Most dedicated `useState` slots stay in `app.ts` because their diff setters
  * are also called from staging callbacks (`toggleSelectedFileStage`, the
  * hunk-stage callbacks) and the compare-reset effect — they are not owned by
  * these loaders. Each hook is handed the setter(s) it needs.
+ *
+ * The **commit file-preview** slot is the exception: `setFilePreview` /
+ * `setFilePreviewLoading` are written *only* by its loader, so that pair's
+ * `useState` is owned here via {@link useCommitFilePreviewState} (app.ts
+ * decomposition item 2 / #1237). It is a position-preserving split — the state
+ * hook is called at the original `useState` slot near the top of `app.ts`, and
+ * `useCommitFilePreviewHydration` (the effect) stays at its original slot far
+ * below, handed the setters — mirroring the `useCommitDetailState` +
+ * `useCommitDetailHydration` split (item 1a).
  *
  * `React` is injected (per the runtime's `getLogInkRuntimeContext(React)`
  * convention) because the workstation never statically imports React.
@@ -339,6 +348,32 @@ export function useWorktreeDiffHydration(
 
 /** The cursored commit's selected detail file, as fed to the preview load. */
 type SelectedDetailFile = GitCommitDetail['files'][number] | undefined
+
+/**
+ * Issues the commit file-preview `useState` pair, in its original `app.ts`
+ * position (top of the hydration-state block, ~900 lines above the loader
+ * effect). `setFilePreview` / `setFilePreviewLoading` are written *only* by
+ * {@link useCommitFilePreviewHydration}, so — unlike the worktree / stash /
+ * compare slots whose setters are shared with staging callbacks and the
+ * compare-reset effect — this pair can be owned here. Returns the values (the
+ * preview drives the syntax-highlight effect and the diff render surfaces) and
+ * the setters (threaded into the loader). A position-preserving split that
+ * keeps every hook in its original slot; see the module header.
+ */
+export function useCommitFilePreviewState(React: typeof ReactTypes): {
+  filePreview: GitCommitFilePreview | undefined
+  setFilePreview: ReactTypes.Dispatch<
+    ReactTypes.SetStateAction<GitCommitFilePreview | undefined>
+  >
+  filePreviewLoading: boolean
+  setFilePreviewLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+} {
+  const [filePreview, setFilePreview] = React.useState<
+    GitCommitFilePreview | undefined
+  >(undefined)
+  const [filePreviewLoading, setFilePreviewLoading] = React.useState(false)
+  return { filePreview, setFilePreview, filePreviewLoading, setFilePreviewLoading }
+}
 
 export type UseCommitFilePreviewHydrationDeps = {
   /** The active frame's `git`. */
