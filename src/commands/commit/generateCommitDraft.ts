@@ -366,7 +366,7 @@ export async function generateCommitDraft({
       // fall through to executeChainWithSchema below for a real
       // schema-validated retry — paying for a second LLM call only
       // on the edge case where the streamed output is unsalvageable.
-      const streamingParser = createSchemaParser(schema, llm)
+      const streamingParser = createSchemaParser(schema)
       // Capture the final accumulated text out-of-band so we can
       // attempt salvage if the parser throws on completion (audit
       // finding #1). Updated on every chunk; the last value is

@@ -223,7 +223,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     parser,
     agent: async (context, options) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parser: any = createSchemaParser(ReviewFeedbackResponseSchema, llm)
+      const parser: any = createSchemaParser(ReviewFeedbackResponseSchema)
 
       const formatInstructions =
         "Respond with a valid JSON object, containing four fields:'title' a string, 'summary' a short summary of the problem (include line number if big file), 'severity' a numeric enum up to ten, 'category' an enum string, and 'filePath' a relative filepath to file as string."

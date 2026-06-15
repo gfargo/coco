@@ -252,7 +252,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
     parser,
     agent: async (context, options) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parser: any = createSchemaParser(ChangelogResponseSchema, llm)
+      const parser: any = createSchemaParser(ChangelogResponseSchema)
 
       const prompt = getPrompt({
         template: options.prompt,
