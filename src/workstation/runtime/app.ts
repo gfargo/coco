@@ -57,7 +57,7 @@ import {getBranchOverview} from '../../git/branchData'
 import {getLfsAttributeStatus} from '../../git/lfsAttributes'
 import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
-import {GitCommitDetail, GitCommitFilePreview, LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitDetail, getCommitRows, getLogRows} from '../../commands/log/data'
+import {GitCommitDetail, LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitDetail, getCommitRows, getLogRows} from '../../commands/log/data'
 import {LogInkContextKey, LogInkContextStatus, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
 import {hasSeenOnboarding, markOnboardingSeen} from '../chrome/onboarding'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
@@ -205,7 +205,7 @@ import {useFilteredLists} from './hooks/buildFilteredLists'
 import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
 import {useBlameLoadingState, useDetailHydration} from './hooks/useDetailHydration'
-import {useCommitFilePreviewHydration, useCompareDiffHydration, useStashDiffHydration, useWorktreeDiffHydration, useWorktreeHunksHydration} from './hooks/useDiffHydration'
+import {useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useStashDiffHydration, useWorktreeDiffHydration, useWorktreeHunksHydration} from './hooks/useDiffHydration'
 import {useIdleTip} from './hooks/useIdleTip'
 import {useRefreshWatcher} from './hooks/useRefreshWatcher'
 import {useActiveRepoRoot, useViewModePersistence} from './hooks/useRepoPersistence'
@@ -508,8 +508,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // by `useCommitDetailHydration`, in its original position — a two-hook
   // split to preserve React hook ordering. See that module's header.
   const {detail, setDetail, detailLoading, setDetailLoading} = useCommitDetailState(React)
-  const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
-  const [filePreviewLoading, setFilePreviewLoading] = React.useState(false)
+  // Commit file-preview hydration state, lifted into `useCommitFilePreviewState`
+  // (app.ts decomposition item 2 / #1237). The `useState` pair stays in this
+  // exact slot; the loader effect that toggles it is issued ~900 lines below by
+  // `useCommitFilePreviewHydration`, in its original position — a two-hook split
+  // to preserve React hook ordering. See `useDiffHydration`'s header.
+  const {filePreview, setFilePreview, filePreviewLoading, setFilePreviewLoading} = useCommitFilePreviewState(React)
   const [worktreeDiff, setWorktreeDiff] = React.useState<WorktreeFileDiff | undefined>(undefined)
   const [worktreeDiffLoading, setWorktreeDiffLoading] = React.useState(false)
   const [worktreeHunks, setWorktreeHunks] = React.useState<WorktreeHunkOverview | undefined>(
