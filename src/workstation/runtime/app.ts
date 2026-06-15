@@ -57,7 +57,7 @@ import {getBranchOverview} from '../../git/branchData'
 import {getLfsAttributeStatus} from '../../git/lfsAttributes'
 import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
-import {GitCommitDetail, LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitDetail, getCommitRows, getLogRows} from '../../commands/log/data'
+import {LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitRows, getLogRows} from '../../commands/log/data'
 import {LogInkContextKey, LogInkContextStatus, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
 import {hasSeenOnboarding, markOnboardingSeen} from '../chrome/onboarding'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
@@ -201,6 +201,7 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import {matchesPromotedFilter} from '../runtime/promotedFilter'
 import {useFilteredLists} from './hooks/buildFilteredLists'
+import {useBisectCandidateHydration, useBisectCandidateState} from './hooks/useBisectCandidateHydration'
 import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
 import {useBlameLoadingState, useDetailHydration} from './hooks/useDetailHydration'
@@ -855,8 +856,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // when the bisect view is active. Best-effort: any failure leaves
   // the surface in its non-detail mode (decision log only) — never
   // crash the workstation because git couldn't resolve a sha.
-  const [bisectCandidateDetail, setBisectCandidateDetail] = React.useState<GitCommitDetail | undefined>(undefined)
-  const [bisectCandidateLoading, setBisectCandidateLoading] = React.useState(false)
+  // Owned by `useBisectCandidateState` (app.ts decomposition item 2 / #1237).
+  // The `useState` pair stays in this exact slot (just above the
+  // `useBlameLoadingState` call); the loader effect that toggles it is issued
+  // a few lines below by `useBisectCandidateHydration`, in its original
+  // position — a two-hook split to preserve React hook ordering.
+  const {
+    bisectCandidateDetail,
+    setBisectCandidateDetail,
+    bisectCandidateLoading,
+    setBisectCandidateLoading,
+  } = useBisectCandidateState(React)
   // On-demand blame hydration flag (#0.71). True while the debounced
   // `getBlame` for the active `state.blamePath` is in flight; the blame
   // surface shows a loading placeholder until the parse lands in the
@@ -868,23 +878,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const bisectCandidateSha = state.activeView === 'bisect' && context.bisect?.active
     ? context.bisect.currentSha
     : ''
-  React.useEffect(() => {
-    if (!bisectCandidateSha) {
-      setBisectCandidateDetail(undefined)
-      setBisectCandidateLoading(false)
-      return
-    }
-    let active = true
-    setBisectCandidateLoading(true)
-    void (async () => {
-      const next = await safe(getCommitDetail(git, bisectCandidateSha))
-      if (active) {
-        setBisectCandidateDetail(next)
-        setBisectCandidateLoading(false)
-      }
-    })()
-    return () => { active = false }
-  }, [git, bisectCandidateSha])
+  // Lifted verbatim into `useBisectCandidateHydration` (app.ts decomposition
+  // item 2 / #1237) — the empty-sha guard, `active` cancellation flag, `safe()`
+  // wrapper, loading toggles, and `[git, bisectCandidateSha]` dependency array
+  // carry over byte-for-byte. Issued here, in its original slot; the `useState`
+  // pair it writes is owned by `useBisectCandidateState` above.
+  useBisectCandidateHydration(React, {
+    git,
+    bisectCandidateSha,
+    setBisectCandidateDetail,
+    setBisectCandidateLoading,
+  })
 
   // #779 — load `git diff <base>..<head>` once the diff view becomes
   // active with diffSource='compare'. Mirrors the stash loader's
