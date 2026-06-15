@@ -58,11 +58,9 @@ import {getLfsAttributeStatus} from '../../git/lfsAttributes'
 import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
 import {LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitRows, getLogRows} from '../../commands/log/data'
-import {LogInkContextKey, LogInkContextStatus, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
+import {LogInkContextKey, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
-import {createInitialContextStatus, createRepoFrameRuntime} from './repoFrameFactory'
-import {getActiveRepoFrameRuntime, syncRepoStackRuntimes, updateRepoFrameRuntime, type RepoFrameRuntime, type RepoStackRuntimes} from './repoStackRuntime'
 import {PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex} from '../chrome/selectionRectify'
 import {LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout} from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
@@ -213,6 +211,7 @@ import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
 import {useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
 import {useOnboarding} from './hooks/useOnboarding'
+import {useRepoStackRuntimes} from './hooks/useRepoStackRuntimes'
 import {useResumeTick} from './hooks/useResumeTick'
 import {useWorktreeStageActions} from './hooks/useWorktreeStageActions'
 import {useCommitComposeActions} from './hooks/useCommitComposeActions'
@@ -403,88 +402,21 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // cached entry so a drill-in / drill-out round trip doesn't re-pay
   // the context load cost. Seeded with a single root runtime against
   // the cwd `coco ui` was launched in.
-  const [runtimes, setRuntimes] = React.useState<RepoStackRuntimes>(() => [{
-    git: rootGit,
-    context: {},
-    contextStatus: createInitialContextStatus(),
-  }])
-  // Sync `runtimes` against the view-model stack on every push / pop.
-  // The sync is monotone — push appends a new runtime via the factory,
-  // pop slices off the top runtime; the parent's cached state survives.
-  // The factory is wrapped to capture `rootGit` so a defensively-pushed
-  // frame without a workdir still has a working `SimpleGit` bound.
-  React.useEffect(() => {
-    setRuntimes((prev) => {
-      const { runtimes: next } = syncRepoStackRuntimes(
-        prev,
-        state.repoStack,
-        (frame) => createRepoFrameRuntime(frame, rootGit),
-      )
-      return next
-    })
-  }, [state.repoStack, rootGit])
-  // Active-frame projection (#931). `git`, `context`, `contextStatus`
-  // — every existing closure / effect / surface reads these names; the
-  // only thing this PR changes is where they come from. When the user
-  // drills into a submodule, the top-of-stack runtime swaps, every
-  // dep array that lists `git` re-fires, and the loaders refetch
-  // against the submodule's working tree.
-  const activeRuntime: RepoFrameRuntime = getActiveRepoFrameRuntime(runtimes) ?? {
-    git: rootGit,
-    context: {},
-    contextStatus: createInitialContextStatus(),
-  }
-  const git = activeRuntime.git
-  const context = activeRuntime.context
-  const contextStatus = activeRuntime.contextStatus
-  // Wrappers that delegate to the active frame's runtime entry so the
-  // existing call sites stay byte-identical. Support both function-
-  // updater and value-updater forms (the codebase uses both).
-  //
-  // `targetDepth` (#994) routes the write to a specific frame instead
-  // of the currently-active one. Loaders that capture the depth at
-  // issue-time and pass it here are robust against frame-stack
-  // mutations (push / pop) that happen while the load is in flight —
-  // the write lands on the frame that issued it, or silently drops
-  // if that frame has been popped (`updateRepoFrameRuntime` no-ops on
-  // out-of-range indices). Without the tag, an in-flight refresh on
-  // the parent would clobber a freshly-pushed submodule frame.
-  const setContext = React.useCallback(
-    (
-      arg: LogInkContext | ((prev: LogInkContext) => LogInkContext),
-      targetDepth?: number,
-    ) => {
-      setRuntimes((prev) => {
-        const depth = targetDepth ?? prev.length - 1
-        if (depth < 0) return prev
-        return updateRepoFrameRuntime(prev, depth, (frame) => ({
-          ...frame,
-          context: typeof arg === 'function'
-            ? (arg as (p: LogInkContext) => LogInkContext)(frame.context)
-            : arg,
-        }))
-      })
-    },
-    [],
-  )
-  const setContextStatus = React.useCallback(
-    (
-      arg: LogInkContextStatus | ((prev: LogInkContextStatus) => LogInkContextStatus),
-      targetDepth?: number,
-    ) => {
-      setRuntimes((prev) => {
-        const depth = targetDepth ?? prev.length - 1
-        if (depth < 0) return prev
-        return updateRepoFrameRuntime(prev, depth, (frame) => ({
-          ...frame,
-          contextStatus: typeof arg === 'function'
-            ? (arg as (p: LogInkContextStatus) => LogInkContextStatus)(frame.contextStatus)
-            : arg,
-        }))
-      })
-    },
-    [],
-  )
+  // Repo-stack runtimes (#931 / #994), owned by `useRepoStackRuntimes` (app.ts
+  // decomposition item 6 / #1237). The contiguous cluster — the `runtimes`
+  // `useState`, the push/pop sync effect, the active-frame `git` / `context` /
+  // `contextStatus` projection, and the frame-tagged `setContext` /
+  // `setContextStatus` writers — moves wholesale into the hook at this exact
+  // slot, preserving React hook order. Every downstream consumer reads the same
+  // returned names, so nothing else changes. See the hook's header.
+  const {
+    runtimes,
+    git,
+    context,
+    contextStatus,
+    setContext,
+    setContextStatus,
+  } = useRepoStackRuntimes(React, {rootGit, repoStack: state.repoStack})
   // #931 PR 3b — Absolute repo root for the active frame's `git`.
   // Resolved asynchronously after every `git` swap (push / pop /
   // boot) so the commit-diff drill-in helper can construct absolute
