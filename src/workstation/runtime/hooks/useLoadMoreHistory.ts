@@ -48,10 +48,17 @@
  *
  * `mountedRef`, `loadingMoreCommitsRef`, and `loadMoreRequestRef` stay
  * declared in `app.ts` (they are shared with — or, for `mountedRef`, read
- * by — many other clusters) and are passed in. `hasMoreCommits` /
- * `loadingMoreCommits` state and their setters also stay in `app.ts`
- * because the render and the history-filter / graph-toggle effects read
- * and write them; this hook receives the values and setters.
+ * by — many other clusters) and are passed in.
+ *
+ * The `hasMoreCommits` / `loadingMoreCommits` `useState` pair is owned by
+ * {@link useHistoryPaginationState} (app.ts decomposition item 3 / #1237),
+ * which issues the pair in its original `app.ts` slot near the top of the
+ * component. The setters are shared — the render and the history-filter /
+ * graph-toggle effects also read and write them — so the state hook only
+ * *owns* the slots and hands the values + setters back to `app.ts`, which
+ * threads them into this loader (and the filter / graph effects) exactly as
+ * before. A position-preserving split: the state hook is called where the
+ * `useState`s were, this loader stays at its original slot far below.
  *
  * `React` is injected (per the runtime's `getLogInkRuntimeContext(React)`
  * convention) because the workstation never statically imports React.
@@ -61,6 +68,7 @@ import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import type { LogArgv } from '../../../commands/log/config'
 import {
+  GitLogRow,
   LOG_INTERACTIVE_DEFAULT_LIMIT,
   getCommitRows,
   getLogRows,
@@ -80,6 +88,46 @@ async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
     return await promise
   } catch {
     return undefined
+  }
+}
+
+export type UseHistoryPaginationStateDeps = {
+  /** The interactive log argv, or undefined when not in interactive log mode. */
+  logArgv: LogArgv | undefined
+  /** The initial commit-log rows the component mounted with. */
+  rows: GitLogRow[]
+}
+
+/**
+ * Issues the `hasMoreCommits` / `loadingMoreCommits` `useState` pair, in its
+ * original `app.ts` position. `hasMoreCommits` keeps its verbatim lazy seed —
+ * true only in interactive log mode without an explicit `--limit` when the
+ * initial window already filled the default page — so the first render's
+ * pagination affordance is unchanged. Returns the values (read by the render)
+ * and the setters (shared: threaded into {@link useLoadMoreHistory} and the
+ * history-filter / graph-toggle effects, which also write them). A
+ * position-preserving split; see the module header.
+ */
+export function useHistoryPaginationState(
+  React: typeof ReactTypes,
+  deps: UseHistoryPaginationStateDeps,
+): {
+  hasMoreCommits: boolean
+  setHasMoreCommits: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+  loadingMoreCommits: boolean
+  setLoadingMoreCommits: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+} {
+  const { logArgv, rows } = deps
+  const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
+    Boolean(logArgv?.interactive && !logArgv.limit) &&
+    getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
+  ))
+  const [loadingMoreCommits, setLoadingMoreCommits] = React.useState(false)
+  return {
+    hasMoreCommits,
+    setHasMoreCommits,
+    loadingMoreCommits,
+    setLoadingMoreCommits,
   }
 }
 

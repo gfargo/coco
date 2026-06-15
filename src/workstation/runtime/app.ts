@@ -214,7 +214,7 @@ import {useSpinnerFrame} from './hooks/useSpinnerFrame'
 import {useStatusSurfaceData} from './hooks/buildStatusSurfaceData'
 import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
-import {useLoadMoreHistory} from './hooks/useLoadMoreHistory'
+import {useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
 import {useWorktreeStageActions} from './hooks/useWorktreeStageActions'
 import {useCommitComposeActions} from './hooks/useCommitComposeActions'
 import {useCommitSplitActions} from './hooks/useCommitSplitActions'
@@ -539,11 +539,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // view becomes active with `diffSource === 'compare'`.
   const [compareDiffLines, setCompareDiffLines] = React.useState<string[] | undefined>(undefined)
   const [compareDiffLoading, setCompareDiffLoading] = React.useState(false)
-  const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
-    Boolean(logArgv?.interactive && !logArgv.limit) &&
-    getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
-  ))
-  const [loadingMoreCommits, setLoadingMoreCommits] = React.useState(false)
+  // Load-more pagination state, owned by `useHistoryPaginationState` (app.ts
+  // decomposition item 3 / #1237). The `useState` pair stays in this exact
+  // slot; the setters are shared (the loader `useLoadMoreHistory` below plus
+  // the history-filter / graph-toggle effects all write them), so the hook
+  // owns the slots and hands values + setters back here. The lazy seed for
+  // `hasMoreCommits` is preserved verbatim inside the hook.
+  const {
+    hasMoreCommits,
+    setHasMoreCommits,
+    loadingMoreCommits,
+    setLoadingMoreCommits,
+  } = useHistoryPaginationState(React, {logArgv, rows})
   const loadingMoreCommitsRef = React.useRef(false)
   const loadMoreRequestRef = React.useRef(0)
   const mountedRef = React.useRef(true)
