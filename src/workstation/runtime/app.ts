@@ -59,7 +59,6 @@ import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
 import {LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitRows, getLogRows} from '../../commands/log/data'
 import {LogInkContextKey, LogInkContextStatus, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
-import {hasSeenOnboarding, markOnboardingSeen} from '../chrome/onboarding'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
 import {createInitialContextStatus, createRepoFrameRuntime} from './repoFrameFactory'
@@ -215,6 +214,7 @@ import {useStatusSurfaceData} from './hooks/buildStatusSurfaceData'
 import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
 import {useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
+import {useOnboarding} from './hooks/useOnboarding'
 import {useWorktreeStageActions} from './hooks/useWorktreeStageActions'
 import {useCommitComposeActions} from './hooks/useCommitComposeActions'
 import {useCommitSplitActions} from './hooks/useCommitSplitActions'
@@ -373,7 +373,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // First-launch onboarding (P1.3). Persisted via a marker file in the
   // user's cache dir so the tip never reappears once dismissed. Lazy
   // initializer so the fs check only runs on mount, not every render.
-  const [showOnboarding, setShowOnboarding] = React.useState<boolean>(() => !hasSeenOnboarding())
+  // First-run onboarding overlay, owned by `useOnboarding` (app.ts
+  // decomposition item 4 / #1237). The hook seeds `showOnboarding` from
+  // `!hasSeenOnboarding()` and returns `dismissOnboarding`, which clears the
+  // overlay and writes the seen-marker; the input handler calls it on the
+  // first keystroke.
+  const {showOnboarding, dismissOnboarding} = useOnboarding(React)
   const [state, setState] = React.useState<LogInkState>(() =>
     createLogInkState(rows, {
       activeView: initialView,
@@ -1577,8 +1582,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context,
     dispatch,
     showOnboarding,
-    setShowOnboarding,
-    markOnboardingSeen,
+    dismissOnboarding,
     filteredBranchList,
     filteredTagList,
     filteredStashList,
