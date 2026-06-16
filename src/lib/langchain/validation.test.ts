@@ -4,7 +4,7 @@ import { LangChainValidationError } from './errors'
 describe('validateModel (#1243 — per-provider validity)', () => {
   it('accepts a model that matches its provider', () => {
     expect(() => validateModel('gpt-4o', 'openai')).not.toThrow()
-    expect(() => validateModel('claude-3-5-sonnet-latest', 'anthropic')).not.toThrow()
+    expect(() => validateModel('claude-sonnet-4-6', 'anthropic')).not.toThrow()
   })
 
   it('accepts the dynamic sentinel and open-namespace providers', () => {
@@ -18,7 +18,7 @@ describe('validateModel (#1243 — per-provider validity)', () => {
   })
 
   it('throws on a definite cross-provider mismatch', () => {
-    expect(() => validateModel('claude-3-5-sonnet-latest', 'openai')).toThrow(
+    expect(() => validateModel('claude-sonnet-4-6', 'openai')).toThrow(
       LangChainValidationError,
     )
     expect(() => validateModel('gpt-4o', 'anthropic')).toThrow(/is a openai model, not a anthropic/)

@@ -26,9 +26,18 @@ export const DEPRECATED_MODELS: Record<string, string> = {
   'gpt-3.5-turbo-0125': 'gpt-4o-mini',
   'gpt-3.5-turbo-1106': 'gpt-4o-mini',
   'gpt-3.5-turbo-16k': 'gpt-4o-mini',
-  'claude-3-opus-20240229': 'claude-sonnet-4-0',
-  'claude-3-sonnet-20240229': 'claude-3-5-sonnet-latest',
-  'claude-3-haiku-20240307': 'claude-3-5-haiku-latest',
+  // The pre-4.x / 4.0 Claude lineup is retired (404 against the API). Map each
+  // to its current first-party replacement so `coco doctor` and validation
+  // steer users off a dead id instead of letting a request fail.
+  'claude-3-opus-20240229': 'claude-opus-4-8',
+  'claude-3-sonnet-20240229': 'claude-sonnet-4-6',
+  'claude-3-haiku-20240307': 'claude-haiku-4-5',
+  'claude-3-5-sonnet-20240620': 'claude-sonnet-4-6',
+  'claude-3-5-sonnet-20241022': 'claude-sonnet-4-6',
+  'claude-3-5-sonnet-latest': 'claude-sonnet-4-6',
+  'claude-3-5-haiku-latest': 'claude-haiku-4-5',
+  'claude-3-7-sonnet-latest': 'claude-sonnet-4-6',
+  'claude-sonnet-4-0': 'claude-sonnet-4-6',
 }
 
 /**
