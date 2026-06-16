@@ -11,40 +11,42 @@ import { LangChainConfigurationError } from '../errors'
 type ProviderDynamicDefaults = Record<DynamicModelPreference, Record<DynamicModelTask, LLMModel>>
 
 const OPENAI_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  // The gpt-4.1 family retired from the API in early 2026 and now 404s.
+  // Re-pinned to the current gpt-5 generation (nano → mini → 5.4 → 5.5).
   cost: {
-    summarize: 'gpt-4.1-nano',
-    commit: 'gpt-4.1-mini',
+    summarize: 'gpt-5.4-nano',
+    commit: 'gpt-5.4-mini',
     // `commitSplit` floors at mini even in cost mode. The split
     // planner emits structured JSON with strict cross-group
     // constraints (files appear exactly once, hunks fully cover or
     // not at all). Nano-class models fail those constraints often
     // enough that the cost win is eaten by the 3-retry budget.
-    commitSplit: 'gpt-4.1-mini',
-    changelog: 'gpt-4.1-mini',
-    review: 'gpt-4.1-mini',
-    recap: 'gpt-4.1-nano',
-    repair: 'gpt-4.1-mini',
-    largeDiff: 'gpt-4.1',
+    commitSplit: 'gpt-5.4-mini',
+    changelog: 'gpt-5.4-mini',
+    review: 'gpt-5.4-mini',
+    recap: 'gpt-5.4-nano',
+    repair: 'gpt-5.4-mini',
+    largeDiff: 'gpt-5.4',
   },
   balanced: {
-    summarize: 'gpt-4.1-mini',
-    commit: 'gpt-4.1-mini',
-    commitSplit: 'gpt-4.1',
-    changelog: 'gpt-4.1',
-    review: 'gpt-4.1',
-    recap: 'gpt-4.1-mini',
-    repair: 'gpt-4.1',
-    largeDiff: 'gpt-4.1',
+    summarize: 'gpt-5.4-mini',
+    commit: 'gpt-5.4-mini',
+    commitSplit: 'gpt-5.4',
+    changelog: 'gpt-5.4',
+    review: 'gpt-5.4',
+    recap: 'gpt-5.4-mini',
+    repair: 'gpt-5.4',
+    largeDiff: 'gpt-5.4',
   },
   quality: {
-    summarize: 'gpt-4.1-mini',
-    commit: 'gpt-4.1',
-    commitSplit: 'gpt-4.1',
-    changelog: 'gpt-4.1',
-    review: 'gpt-4.1',
-    recap: 'gpt-4.1',
-    repair: 'gpt-4.1',
-    largeDiff: 'gpt-4.1',
+    summarize: 'gpt-5.4-mini',
+    commit: 'gpt-5.5',
+    commitSplit: 'gpt-5.5',
+    changelog: 'gpt-5.5',
+    review: 'gpt-5.5',
+    recap: 'gpt-5.5',
+    repair: 'gpt-5.5',
+    largeDiff: 'gpt-5.5',
   },
 }
 

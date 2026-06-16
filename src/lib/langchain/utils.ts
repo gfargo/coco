@@ -122,7 +122,7 @@ export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   // tier is the right default for it; quality is on par for this
   // class of task. Users who want the older 4o-mini can still
   // override via service config.
-  model: 'gpt-4.1-nano',
+  model: 'gpt-5.4-nano',
   tokenLimit: 4096,
   temperature: 0.32,
   // Bumped 12 → 24 (#845, PR 3). The OpenAI fast tier comfortably

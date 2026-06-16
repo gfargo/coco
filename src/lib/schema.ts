@@ -603,7 +603,11 @@ export const schema = {
         "gpt-5-nano-2025-08-07",
         "gpt-5-mini",
         "gpt-5-mini-2025-08-07",
-        "gpt-5-chat-latest"
+        "gpt-5-chat-latest",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano"
       ]
     },
     "OllamaModel": {
@@ -700,6 +704,8 @@ export const schema = {
     "GeminiModel": {
       "type": "string",
       "enum": [
+        "gemini-3.5-flash",
+        "gemini-3.1-flash-lite",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",

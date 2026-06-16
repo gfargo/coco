@@ -1,21 +1,24 @@
 import { TiktokenModel } from '@langchain/openai'
 import { AnthropicModel, BedrockModel, GeminiModel, MistralModel } from './types'
 
+// gpt-4o and the gpt-4.1 family retired from the API in early 2026 (see
+// DEPRECATED_MODELS). The gpt-4 / o-series entries below are deprecated but
+// still served (shutting down late 2026); the gpt-5 family is current.
 export const OPEN_AI_MODELS = [
-  'gpt-4.5',
-  'gpt-4o',
+  // Current generation
+  'gpt-5.5',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.4-nano',
+  // Still served (deprecated, retiring late 2026)
   'gpt-4o-mini',
-  'gpt-4.1',
-  'gpt-4.1-mini',
-  'gpt-4.1-nano',
-  'gpt-4-32k',
   'gpt-4-turbo',
   'gpt-4',
   'gpt-3.5-turbo',
+  'o3',
+  'o3-mini',
   'o1',
   'o1-mini',
-  'o3-mini',
-  'o3',
   'o4-mini',
 ] as TiktokenModel[]
 
@@ -37,15 +40,16 @@ export const ANTHROPIC_MODELS = [
   'claude-sonnet-4-5',
 ] as AnthropicModel[]
 
+// Gemini 1.5 and 2.0 shut down (404) in 2026 — see DEPRECATED_MODELS. Current
+// is the Gemini 3 (3.5 Flash / 3.1 Flash-Lite) + still-active 2.5 generation.
 export const GEMINI_MODELS = [
+  // Current generation
+  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
+  // Still active
   'gemini-2.5-pro',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-pro',
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
 ] as GeminiModel[]
 
 export const MISTRAL_MODELS = [
