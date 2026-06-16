@@ -14,10 +14,17 @@ export type DynamicModelPreference = 'cost' | 'balanced' | 'quality'
 
 export type OpenAIModel =
   | TiktokenModel
+  // Current generation
+  | 'gpt-5.5'
+  | 'gpt-5.4'
+  | 'gpt-5.4-mini'
+  | 'gpt-5.4-nano'
   | 'gpt-4o-mini'
+  // Retired — kept for back-compat config typing (dropped from OPEN_AI_MODELS,
+  // flagged via DEPRECATED_MODELS)
   | 'gpt-4o'
   | 'gpt-4.1'
-  | 'gpt-4.1-mini' 
+  | 'gpt-4.1-mini'
   | 'gpt-4.1-nano'
 
 export type AnthropicModel =
@@ -47,9 +54,14 @@ export type AnthropicModel =
   | 'claude-3-haiku-20240307'
 
 export type GeminiModel =
+  // Current generation
+  | 'gemini-3.5-flash'
+  | 'gemini-3.1-flash-lite'
   | 'gemini-2.5-pro'
   | 'gemini-2.5-flash'
   | 'gemini-2.5-flash-lite'
+  // Retired — kept for back-compat config typing (dropped from GEMINI_MODELS,
+  // flagged via DEPRECATED_MODELS)
   | 'gemini-2.0-flash'
   | 'gemini-2.0-flash-lite'
   | 'gemini-1.5-pro'

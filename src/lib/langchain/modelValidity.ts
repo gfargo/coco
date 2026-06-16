@@ -20,12 +20,20 @@ import { LLMProvider } from './types'
  * command) so the runtime layer can reference the same list.
  */
 export const DEPRECATED_MODELS: Record<string, string> = {
-  'gpt-4-turbo-preview': 'gpt-4o',
-  'gpt-4-0125-preview': 'gpt-4o',
-  'gpt-4-1106-preview': 'gpt-4o',
-  'gpt-3.5-turbo-0125': 'gpt-4o-mini',
-  'gpt-3.5-turbo-1106': 'gpt-4o-mini',
-  'gpt-3.5-turbo-16k': 'gpt-4o-mini',
+  // OpenAI: gpt-4o and the gpt-4.1 family retired from the API in early 2026;
+  // the gpt-4-*-preview / gpt-3.5-turbo-* snapshots before them. Map to the
+  // current gpt-5 generation (the old gpt-4o target is itself retired now).
+  'gpt-4o': 'gpt-5.4-mini',
+  'gpt-4.5': 'gpt-5.5',
+  'gpt-4.1': 'gpt-5.4-mini',
+  'gpt-4.1-mini': 'gpt-5.4-mini',
+  'gpt-4.1-nano': 'gpt-5.4-nano',
+  'gpt-4-turbo-preview': 'gpt-5.4-mini',
+  'gpt-4-0125-preview': 'gpt-5.4-mini',
+  'gpt-4-1106-preview': 'gpt-5.4-mini',
+  'gpt-3.5-turbo-0125': 'gpt-5.4-nano',
+  'gpt-3.5-turbo-1106': 'gpt-5.4-nano',
+  'gpt-3.5-turbo-16k': 'gpt-5.4-nano',
   // The pre-4.x / 4.0 Claude lineup is retired (404 against the API). Map each
   // to its current first-party replacement so `coco doctor` and validation
   // steer users off a dead id instead of letting a request fail.
@@ -38,6 +46,12 @@ export const DEPRECATED_MODELS: Record<string, string> = {
   'claude-3-5-haiku-latest': 'claude-haiku-4-5',
   'claude-3-7-sonnet-latest': 'claude-sonnet-4-6',
   'claude-sonnet-4-0': 'claude-sonnet-4-6',
+  // Gemini 1.5 and 2.0 shut down (404) in 2026 → current 3.x / 2.5 generation.
+  'gemini-2.0-flash': 'gemini-2.5-flash',
+  'gemini-2.0-flash-lite': 'gemini-2.5-flash-lite',
+  'gemini-1.5-pro': 'gemini-2.5-pro',
+  'gemini-1.5-flash': 'gemini-2.5-flash',
+  'gemini-1.5-flash-8b': 'gemini-2.5-flash-lite',
 }
 
 /**
