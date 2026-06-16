@@ -486,9 +486,9 @@ export async function generateCommitDraft({
 
     const ticketId = extractTicketIdFromBranchName(branchName)
     const fullMessage = formatCommitMessage(commitMsg, {
-      append: argv.append as string | undefined,
+      append: argv.append,
       ticketId: ticketId || undefined,
-      appendTicket: argv.appendTicket as boolean | undefined,
+      appendTicket: argv.appendTicket,
     })
     lastDraft = fullMessage
 
