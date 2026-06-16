@@ -6,7 +6,6 @@ export const OPEN_AI_MODELS = [
   'gpt-4o',
   'gpt-4o-mini',
   'gpt-4.1',
-  'gpt-4.1',
   'gpt-4.1-mini',
   'gpt-4.1-nano',
   'gpt-4-32k',
@@ -15,8 +14,8 @@ export const OPEN_AI_MODELS = [
   'gpt-3.5-turbo',
   'o1',
   'o1-mini',
-  '03-mini',
-  '03',
+  'o3-mini',
+  'o3',
   'o4-mini',
 ] as TiktokenModel[]
 
