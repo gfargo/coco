@@ -238,8 +238,22 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       await appendToGitConfig(configFilePath, config)
     } else if (configFilePath.endsWith('.env')) {
       await appendToEnvFile(configFilePath, config)
-    } else if (configFilePath.endsWith('.coco.config.json')) {
+    } else if (
+      // Both JSON project-config formats route to the same writer. The
+      // recommended `.coco.json` was previously missing here, so selecting it
+      // silently wrote nothing while still reporting "init successful". Check
+      // the more-specific legacy name first (`.coco.json` is a suffix of
+      // neither, so order is not strictly required, but keep it explicit).
+      configFilePath.endsWith('.coco.config.json') ||
+      configFilePath.endsWith('.coco.json')
+    ) {
       appendToProjectJsonConfig(configFilePath, config)
+    } else {
+      // Fail loud rather than silently no-op: any config-file type without a
+      // writer branch is a bug, and a silent skip here looks like success.
+      throw new Error(
+        `init: no config writer for "${configFilePath}" — this is a bug`,
+      )
     }
 
     // Persist the usage-stats choice to the global (per-machine) config.

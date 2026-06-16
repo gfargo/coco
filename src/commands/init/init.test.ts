@@ -171,6 +171,23 @@ describe('init command', () => {
     })
   })
 
+  it('writes project json config for the recommended .coco.json format', async () => {
+    // Regression: `.coco.json` (the recommended option) previously matched no
+    // write branch, so init reported success but persisted nothing.
+    jest.spyOn(questions, 'selectProjectConfigFileType').mockResolvedValue('.coco.json')
+    mockGetProjectConfigFilePath.mockResolvedValue('/repo/.coco.json')
+
+    await handler(createArgv({ scope: 'project' }), logger)
+
+    expect(mockAppendToProjectJsonConfig).toHaveBeenCalledWith(
+      '/repo/.coco.json',
+      expect.any(Object),
+    )
+    expect(logger.log).toHaveBeenCalledWith('\ninit successful! 🦾🤖🎉', {
+      color: 'green',
+    })
+  })
+
   it('writes env config when selected for a project config', async () => {
     jest.spyOn(questions, 'selectProjectConfigFileType').mockResolvedValue('.env')
     mockGetProjectConfigFilePath.mockResolvedValue('/repo/.env')
