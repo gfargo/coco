@@ -1,12 +1,31 @@
 import {
   shouldLoadWorktreeDiff,
+  useCommitFilePreviewHydration,
   useCommitFilePreviewState,
+  useCompareDiffHydration,
   useCompareDiffState,
+  useStashDiffHydration,
   useStashDiffState,
   useWorktreeDiffState,
   useWorktreeHunksState,
 } from './useDiffHydration'
 import type { WorktreeFile } from '../../../git/statusData'
+
+type EffectFn = () => void | (() => void)
+
+/** Fake React that records the single `useEffect` so the test can run it. */
+function effectReact(): {
+  React: typeof import('react')
+  runEffect: () => void | (() => void)
+} {
+  const effects: EffectFn[] = []
+  const React = {
+    useEffect: (fn: EffectFn) => {
+      effects.push(fn)
+    },
+  } as unknown as typeof import('react')
+  return { React, runEffect: () => effects[0]() }
+}
 
 /**
  * Fake React whose `useState` runs the lazy initializer (if any) and returns a
@@ -111,5 +130,63 @@ describe('useWorktreeDiffState', () => {
     expect(result.worktreeDiffLoading).toBe(false)
     expect(typeof result.setWorktreeDiff).toBe('function')
     expect(typeof result.setWorktreeDiffLoading).toBe('function')
+  })
+})
+
+/**
+ * Loader bail must clear the `*Loading` flag, not just return. If the view /
+ * selection changes away while a fetch is in flight, the effect cleanup flips
+ * `active` false so the in-flight branch never resets the flag — without the
+ * reset on the bail, the surface is left stuck on "Loading…". (No data fetch
+ * happens on the bail, so no data-layer mock is needed.)
+ */
+describe('loader bail clears its loading flag', () => {
+  const git = {} as never
+
+  it('stash: guard-fail bail resets setStashDiffLoading(false)', () => {
+    const setStashDiffLoading = jest.fn()
+    const { React, runEffect } = effectReact()
+    useStashDiffHydration(React, {
+      git,
+      activeView: 'history', // not 'diff' → guard fails
+      diffSource: 'stash',
+      stashDiffRef: 'stash@{0}',
+      setStashDiffLines: jest.fn(),
+      setStashDiffLoading,
+    })
+    runEffect()
+    expect(setStashDiffLoading).toHaveBeenCalledWith(false)
+  })
+
+  it('compare: guard-fail bail resets setCompareDiffLoading(false)', () => {
+    const setCompareDiffLoading = jest.fn()
+    const { React, runEffect } = effectReact()
+    useCompareDiffHydration(React, {
+      git,
+      activeView: 'diff',
+      diffSource: 'compare',
+      compareBaseRef: undefined, // missing ref → guard fails
+      compareHeadRef: 'HEAD',
+      setCompareDiffLines: jest.fn(),
+      setCompareDiffLoading,
+    })
+    runEffect()
+    expect(setCompareDiffLoading).toHaveBeenCalledWith(false)
+  })
+
+  it('commit file preview: no-selection bail resets setFilePreviewLoading(false)', () => {
+    const setFilePreview = jest.fn()
+    const setFilePreviewLoading = jest.fn()
+    const { React, runEffect } = effectReact()
+    useCommitFilePreviewHydration(React, {
+      git,
+      selected: undefined, // no commit → bail
+      selectedDetailFile: undefined,
+      setFilePreview,
+      setFilePreviewLoading,
+    })
+    runEffect()
+    expect(setFilePreview).toHaveBeenCalledWith(undefined)
+    expect(setFilePreviewLoading).toHaveBeenCalledWith(false)
   })
 })

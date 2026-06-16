@@ -168,6 +168,11 @@ export function useStashDiffHydration(
 
   React.useEffect(() => {
     if (activeView !== 'diff' || diffSource !== 'stash' || !stashDiffRef) {
+      // Clear the loading flag on the guard-fail bail: if the view changes
+      // away from the stash diff while a fetch is in flight, the cleanup flips
+      // `active` false so the in-flight branch never resets it — without this
+      // the flag stays stuck `true`.
+      setStashDiffLoading(false)
       return
     }
     let active = true
@@ -254,6 +259,10 @@ export function useCompareDiffHydration(
       !compareBaseRef ||
       !compareHeadRef
     ) {
+      // Clear the loading flag on the guard-fail bail (see the stash loader):
+      // a view change while a compare fetch is in flight would otherwise leave
+      // it stuck `true`.
+      setCompareDiffLoading(false)
       return
     }
     let active = true
@@ -519,6 +528,10 @@ export function useCommitFilePreviewHydration(
     async function loadPreview(): Promise<void> {
       if (!selected || !selectedDetailFile) {
         setFilePreview(undefined)
+        // Reset the loading flag too (see the commit-detail loader): if the
+        // selection / file clears mid-fetch, the `active` guard suppresses the
+        // in-flight reset, leaving the preview stuck on "Loading…".
+        setFilePreviewLoading(false)
         return
       }
 
