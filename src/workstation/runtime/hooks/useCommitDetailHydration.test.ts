@@ -80,7 +80,7 @@ describe('useCommitDetailState', () => {
 })
 
 describe('useCommitDetailHydration', () => {
-  it('resets detail to undefined and never fetches when no commit is cursored', async () => {
+  it('resets detail + loading to a clean state and never fetches when no commit is cursored', async () => {
     const setDetail = jest.fn()
     const setDetailLoading = jest.fn()
     const { React, runEffect } = makeReact()
@@ -95,7 +95,9 @@ describe('useCommitDetailHydration', () => {
     await flush()
 
     expect(setDetail).toHaveBeenCalledWith(undefined)
-    expect(setDetailLoading).not.toHaveBeenCalled()
+    // The bail must also clear the loading flag — otherwise a selection that
+    // clears mid-fetch leaves the inspector stuck on "Loading commit details…".
+    expect(setDetailLoading).toHaveBeenCalledWith(false)
     expect(getCommitDetailMock).not.toHaveBeenCalled()
   })
 

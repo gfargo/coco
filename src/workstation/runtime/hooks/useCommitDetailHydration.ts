@@ -111,6 +111,11 @@ export function useCommitDetailHydration(
     async function loadDetail(): Promise<void> {
       if (!selected) {
         setDetail(undefined)
+        // Reset the loading flag too: if the selection clears while a fetch is
+        // in flight, the cleanup flips `active` false so the in-flight branch
+        // below never runs `setDetailLoading(false)` — without this the
+        // inspector is left showing "Loading commit details…" indefinitely.
+        setDetailLoading(false)
         return
       }
 
