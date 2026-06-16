@@ -49,36 +49,39 @@ const OPENAI_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
 }
 
 const ANTHROPIC_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  // The prior Claude defaults (claude-3-5/3-7-sonnet, claude-sonnet-4-0) all
+  // retired in 2025–2026 and now 404. Re-pinned to the current generation:
+  // Haiku 4.5 → Sonnet 4.6 → Opus (4.6 balanced, 4.8 quality) for the gradient.
   cost: {
-    summarize: 'claude-3-5-haiku-latest',
-    commit: 'claude-3-5-haiku-latest',
+    summarize: 'claude-haiku-4-5',
+    commit: 'claude-haiku-4-5',
     // Floor at sonnet — see note on OpenAI commitSplit above.
-    commitSplit: 'claude-3-5-sonnet-latest',
-    changelog: 'claude-3-5-sonnet-latest',
-    review: 'claude-3-5-sonnet-latest',
-    recap: 'claude-3-5-haiku-latest',
-    repair: 'claude-3-5-sonnet-latest',
-    largeDiff: 'claude-3-5-sonnet-latest',
+    commitSplit: 'claude-sonnet-4-6',
+    changelog: 'claude-sonnet-4-6',
+    review: 'claude-sonnet-4-6',
+    recap: 'claude-haiku-4-5',
+    repair: 'claude-sonnet-4-6',
+    largeDiff: 'claude-sonnet-4-6',
   },
   balanced: {
-    summarize: 'claude-3-5-haiku-latest',
-    commit: 'claude-3-5-sonnet-latest',
-    commitSplit: 'claude-3-7-sonnet-latest',
-    changelog: 'claude-3-5-sonnet-latest',
-    review: 'claude-3-7-sonnet-latest',
-    recap: 'claude-3-5-sonnet-latest',
-    repair: 'claude-3-7-sonnet-latest',
-    largeDiff: 'claude-3-7-sonnet-latest',
+    summarize: 'claude-haiku-4-5',
+    commit: 'claude-sonnet-4-6',
+    commitSplit: 'claude-opus-4-6',
+    changelog: 'claude-sonnet-4-6',
+    review: 'claude-opus-4-6',
+    recap: 'claude-sonnet-4-6',
+    repair: 'claude-opus-4-6',
+    largeDiff: 'claude-opus-4-6',
   },
   quality: {
-    summarize: 'claude-3-5-sonnet-latest',
-    commit: 'claude-3-7-sonnet-latest',
-    commitSplit: 'claude-sonnet-4-0',
-    changelog: 'claude-3-7-sonnet-latest',
-    review: 'claude-sonnet-4-0',
-    recap: 'claude-3-7-sonnet-latest',
-    repair: 'claude-sonnet-4-0',
-    largeDiff: 'claude-sonnet-4-0',
+    summarize: 'claude-sonnet-4-6',
+    commit: 'claude-opus-4-8',
+    commitSplit: 'claude-opus-4-8',
+    changelog: 'claude-opus-4-8',
+    review: 'claude-opus-4-8',
+    recap: 'claude-opus-4-8',
+    repair: 'claude-opus-4-8',
+    largeDiff: 'claude-opus-4-8',
   },
 }
 

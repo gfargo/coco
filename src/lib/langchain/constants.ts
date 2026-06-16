@@ -19,16 +19,22 @@ export const OPEN_AI_MODELS = [
   'o4-mini',
 ] as TiktokenModel[]
 
+// Offered in the init picker and treated as current by validation. The entire
+// pre-4.x / 4.0 Claude lineup retired through 2025–2026 (see DEPRECATED_MODELS
+// in modelValidity.ts for the retired ids → current replacements), so this list
+// is the current + still-active generation only.
 export const ANTHROPIC_MODELS = [
-  'claude-sonnet-4-0',
-  'claude-3-7-sonnet-latest',
-  'claude-3-5-haiku-latest',
-  'claude-3-5-sonnet-latest',
-  'claude-3-5-sonnet-20241022',
-  'claude-3-5-sonnet-20240620',
-  'claude-3-opus-20240229',
-  'claude-3-sonnet-20240229',
-  'claude-3-haiku-20240307',
+  // Current generation
+  'claude-fable-5',
+  'claude-opus-4-8',
+  'claude-opus-4-7',
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5',
+  // Earlier 4.x line (still active)
+  'claude-opus-4-5',
+  'claude-opus-4-1',
+  'claude-sonnet-4-5',
 ] as AnthropicModel[]
 
 export const GEMINI_MODELS = [

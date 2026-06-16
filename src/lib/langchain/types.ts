@@ -22,13 +22,21 @@ export type OpenAIModel =
 
 export type AnthropicModel =
   // Current generation (recommended for new users)
-  | 'claude-sonnet-4-6'
-  | 'claude-haiku-4-5-20251001'
-  | 'claude-haiku-4-5'
+  | 'claude-fable-5'
+  | 'claude-opus-4-8'
   | 'claude-opus-4-7'
-  // Earlier 4.x line
+  | 'claude-opus-4-6'
+  | 'claude-sonnet-4-6'
+  | 'claude-haiku-4-5'
+  | 'claude-haiku-4-5-20251001'
+  // Earlier 4.x line (still active)
+  | 'claude-opus-4-5'
+  | 'claude-opus-4-1'
+  | 'claude-sonnet-4-5'
+  // Retired — NOT offered or treated as current (dropped from ANTHROPIC_MODELS
+  // and flagged via DEPRECATED_MODELS), retained in the union only so existing
+  // service configs pinned to these still type-check.
   | 'claude-sonnet-4-0'
-  // Pre-4.x (kept for users with existing service config pinned to these)
   | 'claude-3-7-sonnet-latest'
   | 'claude-3-5-haiku-latest'
   | 'claude-3-5-sonnet-latest'
