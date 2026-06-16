@@ -52,6 +52,12 @@ export const DEPRECATED_MODELS: Record<string, string> = {
   'gemini-1.5-pro': 'gemini-2.5-pro',
   'gemini-1.5-flash': 'gemini-2.5-flash',
   'gemini-1.5-flash-8b': 'gemini-2.5-flash-lite',
+  // Claude-on-Bedrock: the claude-3-5 / sonnet-4-0 ids mirror retired
+  // first-party models → current Claude generation on Bedrock.
+  'anthropic.claude-3-5-sonnet-20241022-v2:0': 'anthropic.claude-sonnet-4-6',
+  'anthropic.claude-3-5-haiku-20241022-v1:0': 'anthropic.claude-haiku-4-5',
+  'anthropic.claude-3-haiku-20240307-v1:0': 'anthropic.claude-haiku-4-5',
+  'anthropic.claude-sonnet-4-20250514-v1:0': 'anthropic.claude-sonnet-4-6',
 }
 
 /**

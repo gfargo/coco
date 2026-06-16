@@ -10,7 +10,7 @@ describe('findModelOwner', () => {
     expect(findModelOwner('claude-sonnet-4-6')).toBe('anthropic')
     expect(findModelOwner('gemini-2.5-pro')).toBe('gemini')
     expect(findModelOwner('mistral-large-latest')).toBe('mistral')
-    expect(findModelOwner('anthropic.claude-3-5-sonnet-20241022-v2:0')).toBe('bedrock')
+    expect(findModelOwner('anthropic.claude-sonnet-4-6')).toBe('bedrock')
   })
 
   it('returns null for unrecognized / open-namespace models', () => {
@@ -55,7 +55,7 @@ describe('detectProviderMismatch', () => {
     expect(detectProviderMismatch('claude-sonnet-4-6', 'openai')).toBe('anthropic')
     expect(detectProviderMismatch('gpt-5.5', 'anthropic')).toBe('openai')
     // a bedrock model under plain anthropic is a mismatch (owner: bedrock)
-    expect(detectProviderMismatch('anthropic.claude-3-5-sonnet-20241022-v2:0', 'anthropic')).toBe(
+    expect(detectProviderMismatch('anthropic.claude-sonnet-4-6', 'anthropic')).toBe(
       'bedrock',
     )
   })
