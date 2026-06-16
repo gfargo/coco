@@ -18,6 +18,17 @@ describe('findModelOwner', () => {
     expect(findModelOwner('gpt-5-ultra-turbo')).toBeNull()
     expect(findModelOwner('dynamic')).toBeNull()
   })
+
+  it('recognizes the o-series reasoning models (regression: o3 typo)', () => {
+    // `OPEN_AI_MODELS` previously listed these as `'03'` / `'03-mini'` (zero,
+    // not the letter o), so the real models went unrecognized and the typo'd
+    // ids were offered in the init picker.
+    expect(findModelOwner('o3')).toBe('openai')
+    expect(findModelOwner('o3-mini')).toBe('openai')
+    expect(findModelOwner('o4-mini')).toBe('openai')
+    expect(findModelOwner('03')).toBeNull()
+    expect(findModelOwner('03-mini')).toBeNull()
+  })
 })
 
 describe('getDeprecatedReplacement', () => {
