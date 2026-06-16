@@ -149,12 +149,20 @@ export type OllamaModel =
  * `(string & {})` preserves the literal union members of the other providers.
  */
 export type BedrockModel =
+  // Current Claude generation on Bedrock
+  | 'anthropic.claude-opus-4-8'
+  | 'anthropic.claude-opus-4-7'
+  | 'anthropic.claude-sonnet-4-6'
+  | 'anthropic.claude-haiku-4-5'
+  // Other foundation models
+  | 'meta.llama3-1-70b-instruct-v1:0'
+  | 'mistral.mistral-large-2407-v1:0'
+  // Retired Claude-on-Bedrock — kept for back-compat suggestions, flagged via
+  // DEPRECATED_MODELS
   | 'anthropic.claude-3-5-sonnet-20241022-v2:0'
   | 'anthropic.claude-3-5-haiku-20241022-v1:0'
   | 'anthropic.claude-sonnet-4-20250514-v1:0'
   | 'anthropic.claude-3-haiku-20240307-v1:0'
-  | 'meta.llama3-1-70b-instruct-v1:0'
-  | 'mistral.mistral-large-2407-v1:0'
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {})
 

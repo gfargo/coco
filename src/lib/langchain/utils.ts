@@ -219,7 +219,9 @@ export const DEFAULT_AZURE_LLM_SERVICE: AzureLLMService = {
 
 export const DEFAULT_BEDROCK_LLM_SERVICE: BedrockLLMService = {
   provider: 'bedrock',
-  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  // claude-3-5-sonnet on Bedrock mirrored a now-retired first-party model;
+  // default to the current fast tier (Haiku 4.5) for diff summarization.
+  model: 'anthropic.claude-haiku-4-5',
   region: 'us-east-1',
   maxConcurrent: 8,
   tokenLimit: 4096,

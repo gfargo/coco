@@ -156,36 +156,39 @@ const MISTRAL_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
 }
 
 const BEDROCK_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  // The claude-3-5 / sonnet-4-0 Bedrock ids mirrored first-party models that
+  // retired in 2025–2026. Re-pinned to the current Claude generation on Bedrock
+  // (Haiku 4.5 → Sonnet 4.6 → Opus 4.7 balanced / 4.8 quality).
   cost: {
-    summarize: 'anthropic.claude-3-5-haiku-20241022-v1:0',
-    commit: 'anthropic.claude-3-5-haiku-20241022-v1:0',
+    summarize: 'anthropic.claude-haiku-4-5',
+    commit: 'anthropic.claude-haiku-4-5',
     // Floor at sonnet — see note on OpenAI commitSplit above.
-    commitSplit: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    changelog: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    review: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    recap: 'anthropic.claude-3-5-haiku-20241022-v1:0',
-    repair: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    largeDiff: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    commitSplit: 'anthropic.claude-sonnet-4-6',
+    changelog: 'anthropic.claude-sonnet-4-6',
+    review: 'anthropic.claude-sonnet-4-6',
+    recap: 'anthropic.claude-haiku-4-5',
+    repair: 'anthropic.claude-sonnet-4-6',
+    largeDiff: 'anthropic.claude-sonnet-4-6',
   },
   balanced: {
-    summarize: 'anthropic.claude-3-5-haiku-20241022-v1:0',
-    commit: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    commitSplit: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    changelog: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    review: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    recap: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    repair: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    largeDiff: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    summarize: 'anthropic.claude-haiku-4-5',
+    commit: 'anthropic.claude-sonnet-4-6',
+    commitSplit: 'anthropic.claude-opus-4-7',
+    changelog: 'anthropic.claude-sonnet-4-6',
+    review: 'anthropic.claude-opus-4-7',
+    recap: 'anthropic.claude-sonnet-4-6',
+    repair: 'anthropic.claude-opus-4-7',
+    largeDiff: 'anthropic.claude-opus-4-7',
   },
   quality: {
-    summarize: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    commit: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    commitSplit: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    changelog: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    review: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    recap: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    repair: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    largeDiff: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    summarize: 'anthropic.claude-sonnet-4-6',
+    commit: 'anthropic.claude-opus-4-8',
+    commitSplit: 'anthropic.claude-opus-4-8',
+    changelog: 'anthropic.claude-opus-4-8',
+    review: 'anthropic.claude-opus-4-8',
+    recap: 'anthropic.claude-opus-4-8',
+    repair: 'anthropic.claude-opus-4-8',
+    largeDiff: 'anthropic.claude-opus-4-8',
   },
 }
 
