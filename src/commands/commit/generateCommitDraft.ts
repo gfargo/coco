@@ -366,7 +366,17 @@ export async function generateCommitDraft({
       // fall through to executeChainWithSchema below for a real
       // schema-validated retry — paying for a second LLM call only
       // on the edge case where the streamed output is unsalvageable.
-      const streamingParser = createSchemaParser(schema)
+      //
+      // `: any` matches every other `createSchemaParser` call site
+      // (recap / changelog / review / executeChainWithSchema): since
+      // @langchain/core 1.1.48, `StructuredOutputParser.fromZodSchema`
+      // returns a parser whose output type is erased to `unknown` (the
+      // bundled Zod 4 types no longer flow through), so a strictly-typed
+      // assignment no longer satisfies `executeChainStreaming`'s
+      // `Runnable<…, { title, body }>` parser param. The runtime parser
+      // is unchanged; only its inferred TS type regressed.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const streamingParser: any = createSchemaParser(schema)
       // Capture the final accumulated text out-of-band so we can
       // attempt salvage if the parser throws on completion (audit
       // finding #1). Updated on every chunk; the last value is
