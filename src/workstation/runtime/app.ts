@@ -1605,6 +1605,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     theme,
     layout,
     context,
+    contextStatus,
+    h,
+    components: { Box, Text },
   }
 
   if (layout.tooSmall) {
