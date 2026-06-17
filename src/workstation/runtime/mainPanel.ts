@@ -153,6 +153,41 @@ function blameSurfaceComponent(React: typeof ReactTypes): ReactTypes.FC<{ data: 
 }
 
 /**
+ * History surface (#1237) — the dispatcher's default view and its highest
+ * fan-in: pagination flags, layout density / row mode, date-bucketing, and
+ * the spinner frame. All ride as component props; the rest is read from
+ * context. `now` keeps its render-time default (the component doesn't
+ * thread it), matching the previous `undefined` positional arg.
+ */
+type HistoryComponentProps = {
+  hasMoreCommits: boolean
+  loadingMoreCommits: boolean
+  density: LogInkLayoutDensity
+  rowMode: 'single' | 'stacked'
+  dateBucketingEnabled: boolean
+  spinnerFrame: number
+}
+let cachedHistoryComponent: ReactTypes.FC<HistoryComponentProps> | null = null
+function historySurfaceComponent(React: typeof ReactTypes): ReactTypes.FC<HistoryComponentProps> {
+  if (!cachedHistoryComponent) {
+    const Component: ReactTypes.FC<HistoryComponentProps> = (props) =>
+      renderHistoryPanel(
+        useSurfaceRenderContext(React, 'main'),
+        props.hasMoreCommits,
+        props.loadingMoreCommits,
+        props.density,
+        props.rowMode,
+        props.dateBucketingEnabled,
+        undefined,
+        props.spinnerFrame
+      )
+    Component.displayName = 'HistorySurface'
+    cachedHistoryComponent = Component
+  }
+  return cachedHistoryComponent
+}
+
+/**
  * The per-surface render slices the main-panel dispatcher threads through to
  * the active surface. Bundled into one object (#0.68) so `renderMainPanel` is a
  * two-argument call (`surface` + `extras`) instead of 22 positional params — the
@@ -320,14 +355,12 @@ export function renderMainPanel(
     return h(zeroExtraComponent(React, 'changelog')!)
   }
 
-  return renderHistoryPanel(
-    surface,
+  return h(historySurfaceComponent(React), {
     hasMoreCommits,
     loadingMoreCommits,
     density,
     rowMode,
     dateBucketingEnabled,
-    undefined,
-    spinnerFrame
-  )
+    spinnerFrame,
+  })
 }
