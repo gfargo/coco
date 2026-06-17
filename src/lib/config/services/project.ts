@@ -39,11 +39,32 @@ export function loadProjectJsonConfig<ConfigType = Config>(
   }
 
   if (resolvedPath) {
+    // Parse defensively. A malformed config file (a stray comma, an
+    // unquoted key) must NOT crash the whole tool — that's the same
+    // philosophy the validation path below spells out: a recoverable
+    // config problem should warn, not blow up at load time (which, since
+    // config loads early, took down every command with a raw stack trace).
+    // On a parse error we warn loudly with the file + the reason, then
+    // fall back to the other config sources so coco still runs.
+    let parsed: (Partial<Config> & { $schema?: string }) | undefined
+    try {
+      parsed = JSON.parse(fs.readFileSync(resolvedPath, 'utf-8')) as Partial<Config> & {
+        $schema?: string
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      console.warn(
+        `[coco] Warning: could not parse ${resolvedPath} as JSON — ignoring it.\n` +
+        `  Parse error: ${reason}\n` +
+        `  Fix the file's syntax (or run \`coco init\` to regenerate it). ` +
+        `Other config sources (defaults, XDG, git, env) still apply.`
+      )
+    }
+
+    if (parsed) {
     // Removing $schema from the project config to avoid validation errors.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { $schema, ...projectConfig } = JSON.parse(
-      fs.readFileSync(resolvedPath, 'utf-8')
-    ) as Partial<Config> & { $schema: string }
+    const { $schema, ...projectConfig } = parsed
 
     const merged = { ...config, ...projectConfig } as Config
 
@@ -85,6 +106,7 @@ export function loadProjectJsonConfig<ConfigType = Config>(
       )
     }
     config = merged
+    }
   }
 
   if (opts?.returnSource) {
