@@ -9,23 +9,30 @@ import type { RepoFrameRuntime } from './repoStackRuntime'
 
 /**
  * Build the initial `LogInkContextStatus` for a freshly-created frame
- * (#931). Every fetched key starts in `'loading'` so surfaces show the
- * loading hint immediately; `pullRequest` is the exception (#808) —
- * it's lazy-loaded on entry to the PR view, so we seed it `'idle'`
- * instead of leaving it stuck as a permanent "loading" flag in the
- * chrome.
+ * (#931). Every *boot-fetched* key starts in `'loading'` so surfaces show
+ * the loading hint immediately.
  *
- * Extracted so the root runtime (built at boot inside `LogInkApp`) and
- * the per-frame factory below share one canonical seed. The status
- * surfaces depend on the exact `'pullRequest' = 'idle'` initialization
- * to avoid spurious loading hints; locking it down in one helper means
- * the two code paths can't drift.
+ * The three **lazy-loaded** keys are the exception — they're hydrated on
+ * entry to their dedicated view, not at boot (see `loadLogInkContextEntries`,
+ * which deliberately omits them), so they're seeded `'idle'`. Leaving them
+ * `'loading'` made the chrome's context indicator ("loading context") stick
+ * forever, since nothing flips them to `'ready'` until the user actually
+ * navigates there:
+ *   - `pullRequest`      — full PR overview, lazy on the PR view (#808)
+ *   - `issueList`        — issue triage list, lazy on the issues view (#882)
+ *   - `pullRequestList`  — PR triage list, lazy on the PR-triage view (#882)
+ *
+ * Extracted so the root runtime (built at boot inside `LogInkApp`) and the
+ * per-frame factory below share one canonical seed; the status surfaces
+ * depend on the exact lazy-key `'idle'` seeding to avoid spurious loading
+ * hints, so locking it down in one helper means the two paths can't drift.
  */
+const LAZY_CONTEXT_KEYS = ['pullRequest', 'issueList', 'pullRequestList'] as const
+
 export function createInitialContextStatus(): LogInkContextStatus {
-  return updateLogInkContextStatus(
+  return LAZY_CONTEXT_KEYS.reduce(
+    (status, key) => updateLogInkContextStatus(status, key, 'idle'),
     createLogInkContextStatus('loading'),
-    'pullRequest',
-    'idle',
   )
 }
 
