@@ -36,7 +36,46 @@ import { renderStatusSurface } from '../surfaces/status'
 import { renderSubmodulesSurface } from '../surfaces/submodules'
 import { renderTagsSurface } from '../surfaces/tags'
 import { renderWorktreesSurface } from '../surfaces/worktrees'
+import { defineSurfaceComponent } from './runtimeContext'
 import type { SurfaceRenderContext } from './types'
+
+/**
+ * Zero-extra surfaces (#1237 surface migration) — those whose renderer
+ * needs only the base {@link SurfaceRenderContext}, no per-render async
+ * slice. Each is wrapped once into a thin component that self-serves
+ * state / theme / context from `LogInkRuntimeContext`, so the dispatcher
+ * mounts `h(Component)` instead of calling the render fn inline and
+ * threading `surface` down. Cached per process (one React instance), so
+ * the component identity stays stable across renders.
+ *
+ * Keyed by `state.activeView`. Surfaces that also need an async slice
+ * (diff data, spinner frames, pagination) are not here — they migrate to
+ * bespoke components in later PRs and stay regular calls for now.
+ */
+let cachedZeroExtraComponents: Partial<Record<string, ReactTypes.FC>> | null = null
+function zeroExtraComponent(
+  React: typeof ReactTypes,
+  view: string
+): ReactTypes.FC | undefined {
+  if (!cachedZeroExtraComponents) {
+    const define = (
+      renderSurface: (ctx: SurfaceRenderContext) => ReactTypes.ReactElement,
+      displayName: string
+    ): ReactTypes.FC => defineSurfaceComponent(React, renderSurface, { displayName })
+    cachedZeroExtraComponents = {
+      status: define(renderStatusSurface, 'StatusSurface'),
+      reflog: define(renderReflogSurface, 'ReflogSurface'),
+      submodules: define(renderSubmodulesSurface, 'SubmodulesSurface'),
+      remotes: define(renderRemotesSurface, 'RemotesSurface'),
+      'pull-request': define(renderPullRequestSurface, 'PullRequestSurface'),
+      'pull-request-triage': define(renderPullRequestTriageSurface, 'PullRequestTriageSurface'),
+      issues: define(renderIssuesTriageSurface, 'IssuesTriageSurface'),
+      conflicts: define(renderConflictsSurface, 'ConflictsSurface'),
+      changelog: define(renderChangelogSurface, 'ChangelogSurface'),
+    }
+  }
+  return cachedZeroExtraComponents[view]
+}
 
 /**
  * The per-surface render slices the main-panel dispatcher threads through to
@@ -74,6 +113,7 @@ export type MainPanelExtras = {
 }
 
 export function renderMainPanel(
+  React: typeof ReactTypes,
   surface: SurfaceRenderContext,
   extras: MainPanelExtras
 ): ReactTypes.ReactElement {
@@ -120,7 +160,7 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'status') {
-    return renderStatusSurface(surface)
+    return h(zeroExtraComponent(React, 'status')!)
   }
 
   if (state.activeView === 'diff') {
@@ -155,7 +195,7 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'reflog') {
-    return renderReflogSurface(surface)
+    return h(zeroExtraComponent(React, 'reflog')!)
   }
 
   if (state.activeView === 'bisect') {
@@ -171,11 +211,11 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'submodules') {
-    return renderSubmodulesSurface(surface)
+    return h(zeroExtraComponent(React, 'submodules')!)
   }
 
   if (state.activeView === 'remotes') {
-    return renderRemotesSurface(surface)
+    return h(zeroExtraComponent(React, 'remotes')!)
   }
 
   if (state.activeView === 'blame') {
@@ -183,23 +223,23 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'pull-request') {
-    return renderPullRequestSurface(surface)
+    return h(zeroExtraComponent(React, 'pull-request')!)
   }
 
   if (state.activeView === 'pull-request-triage') {
-    return renderPullRequestTriageSurface(surface)
+    return h(zeroExtraComponent(React, 'pull-request-triage')!)
   }
 
   if (state.activeView === 'issues') {
-    return renderIssuesTriageSurface(surface)
+    return h(zeroExtraComponent(React, 'issues')!)
   }
 
   if (state.activeView === 'conflicts') {
-    return renderConflictsSurface(surface)
+    return h(zeroExtraComponent(React, 'conflicts')!)
   }
 
   if (state.activeView === 'changelog') {
-    return renderChangelogSurface(surface)
+    return h(zeroExtraComponent(React, 'changelog')!)
   }
 
   return renderHistoryPanel(
