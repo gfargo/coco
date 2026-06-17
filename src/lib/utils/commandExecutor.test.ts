@@ -1,4 +1,4 @@
-import commandExecutor, { extractMissingOllamaModel } from './commandExecutor'
+import commandExecutor, { extractMissingOllamaModel, isPromptCancellation } from './commandExecutor'
 import { loadConfig } from '../config/utils/loadConfig'
 import { Logger } from './logger'
 import { CommandHandler } from '../types'
@@ -63,5 +63,23 @@ describe('extractMissingOllamaModel', () => {
     expect(extractMissingOllamaModel(new Error('ECONNREFUSED'))).toBeNull()
     expect(extractMissingOllamaModel('not an error')).toBeNull()
     expect(extractMissingOllamaModel(undefined)).toBeNull()
+  })
+})
+
+describe('isPromptCancellation', () => {
+  it('detects @inquirer/prompts ExitPromptError by name', () => {
+    const err = new Error('User force closed the prompt with 0 null')
+    err.name = 'ExitPromptError'
+    expect(isPromptCancellation(err)).toBe(true)
+  })
+
+  it('detects the cancel via the message even if the name drifts', () => {
+    expect(isPromptCancellation(new Error('User force closed the prompt with SIGINT'))).toBe(true)
+  })
+
+  it('is false for ordinary errors and non-Errors', () => {
+    expect(isPromptCancellation(new Error('Something else failed'))).toBe(false)
+    expect(isPromptCancellation('force closed the prompt')).toBe(false)
+    expect(isPromptCancellation(undefined)).toBe(false)
   })
 })
