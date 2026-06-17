@@ -1645,7 +1645,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     theme,
   }
   const mainPanel = () =>
-    renderMainPanel(mainSurface, {
+    renderMainPanel(React, mainSurface, {
       worktreeDiff,
       worktreeDiffLoading,
       worktreeHunks,
