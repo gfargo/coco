@@ -119,6 +119,21 @@ function formatGenericError(error: Error, logger: Logger): void {
 }
 
 /**
+ * Detect a user-cancelled interactive prompt. `@inquirer/prompts` throws an
+ * `ExitPromptError` (message: "User force closed the prompt …") when the user
+ * hits Ctrl-C — or when there's no TTY and stdin is closed (e.g. a piped run).
+ * Without this it fell through to {@link formatGenericError} and surfaced as a
+ * scary "Failed to execute command / Error: User force closed the prompt with
+ * 0 null" — a rough first-run moment for anyone who Ctrl-C's out of `coco init`.
+ * Matched by name (not an `instanceof` import) to stay decoupled from the
+ * prompt lib's version, with a message fallback for older variants.
+ */
+export function isPromptCancellation(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.name === 'ExitPromptError' || /force closed the prompt/i.test(error.message)
+}
+
+/**
  * Detect Ollama's "model not pulled" failure and pull out the model name.
  *
  * When the daemon is up but the requested model isn't pulled, Ollama returns
@@ -199,6 +214,15 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
     } catch (error) {
       if (isCommandExitError(error)) {
         process.exitCode = error.code
+        return
+      }
+
+      // A user-cancelled prompt (Ctrl-C out of `coco init`, or a non-TTY
+      // run) is a normal action, not a crash — exit cleanly with a gentle
+      // note instead of the generic "Failed to execute command" path.
+      if (isPromptCancellation(error)) {
+        logger.log('\nCancelled.', { color: 'yellow' })
+        process.exitCode = 130 // 128 + SIGINT, the conventional "interrupted" code
         return
       }
 
