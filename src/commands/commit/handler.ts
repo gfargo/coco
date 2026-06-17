@@ -391,9 +391,9 @@ IMPORTANT RULES:
         const ticketId = extractTicketIdFromBranchName(branchName)
 
         const fullMessage = formatCommitMessage(commitMsg, {
-          append: argv.append as string | undefined,
+          append: argv.append,
           ticketId: ticketId || undefined,
-          appendTicket: argv.appendTicket as boolean | undefined,
+          appendTicket: argv.appendTicket,
         })
 
         // If commitlint validation is needed and not skipped, validate the message

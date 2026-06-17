@@ -73,10 +73,9 @@ export type UseInputHandlerDeps = {
   /** Reducer dispatch — drives the catch-all filter / navigation events. */
   dispatch: (action: LogInkAction) => void
 
-  /** First-launch onboarding overlay flag + setter. */
+  /** First-launch onboarding overlay flag + its dismiss (clears + persists). */
   showOnboarding: boolean
-  setShowOnboarding: (value: boolean) => void
-  markOnboardingSeen: () => void
+  dismissOnboarding: () => void
 
   /** Memoized filtered promoted-view lists (per-keystroke selection snapshots). */
   filteredBranchList: FilteredLists['filteredBranchList']
@@ -194,8 +193,7 @@ export function useInputHandler(
     context,
     dispatch,
     showOnboarding,
-    setShowOnboarding,
-    markOnboardingSeen,
+    dismissOnboarding,
     filteredBranchList,
     filteredTagList,
     filteredStashList,
@@ -254,8 +252,7 @@ export function useInputHandler(
     // and writes the seen-marker. Swallow the keystroke so the same key
     // doesn't also trigger normal input dispatch.
     if (showOnboarding) {
-      setShowOnboarding(false)
-      markOnboardingSeen()
+      dismissOnboarding()
       return
     }
 

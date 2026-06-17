@@ -122,7 +122,7 @@ export const DEFAULT_OPENAI_LLM_SERVICE: OpenAILLMService = {
   // tier is the right default for it; quality is on par for this
   // class of task. Users who want the older 4o-mini can still
   // override via service config.
-  model: 'gpt-4.1-nano',
+  model: 'gpt-5.4-nano',
   tokenLimit: 4096,
   temperature: 0.32,
   // Bumped 12 → 24 (#845, PR 3). The OpenAI fast tier comfortably
@@ -219,7 +219,9 @@ export const DEFAULT_AZURE_LLM_SERVICE: AzureLLMService = {
 
 export const DEFAULT_BEDROCK_LLM_SERVICE: BedrockLLMService = {
   provider: 'bedrock',
-  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  // claude-3-5-sonnet on Bedrock mirrored a now-retired first-party model;
+  // default to the current fast tier (Haiku 4.5) for diff summarization.
+  model: 'anthropic.claude-haiku-4-5',
   region: 'us-east-1',
   maxConcurrent: 8,
   tokenLimit: 4096,

@@ -1,0 +1,92 @@
+name: Update Homebrew tap
+
+# Regenerates the Homebrew formula (url + sha256) from the freshly published
+# npm package and pushes it to gfargo/homebrew-tap, so `brew install gfargo/tap/coco`
+# always tracks the latest release.
+#
+# Setup (one time):
+#   1. Create the public tap repo gfargo/homebrew-tap with Formula/coco.rb.
+#   2. Add a repo secret HOMEBREW_TAP_TOKEN — a fine-grained PAT (or classic PAT
+#      with `repo` scope) that can push to gfargo/homebrew-tap.
+# After that this runs automatically on every published release.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.71.0). Blank = latest on npm."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  update-tap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout coco
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            V="${{ github.event.inputs.version }}"
+          elif [ -n "${{ github.event.release.tag_name }}" ]; then
+            V="${{ github.event.release.tag_name }}"
+          else
+            V="latest"
+          fi
+          V="${V#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $V"
+
+      - name: Wait for npm to publish
+        if: steps.ver.outputs.version != 'latest'
+        run: |
+          for i in $(seq 1 30); do
+            if npm view "git-coco@${{ steps.ver.outputs.version }}" version >/dev/null 2>&1; then
+              echo "Found git-coco@${{ steps.ver.outputs.version }} on npm."
+              exit 0
+            fi
+            echo "Not on npm yet, waiting… ($i/30)"
+            sleep 10
+          done
+          echo "::error::git-coco@${{ steps.ver.outputs.version }} did not appear on npm in time."
+          exit 1
+
+      - name: Regenerate formula
+        run: node bin/genHomebrewFormula.mjs "${{ steps.ver.outputs.version }}"
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: gfargo/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Copy formula into tap
+        run: |
+          mkdir -p tap/Formula
+          cp packaging/homebrew/coco.rb tap/Formula/coco.rb
+
+      - name: Commit & push to tap
+        working-directory: tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Formula already up to date — nothing to push."
+            exit 0
+          fi
+          git add Formula/coco.rb
+          git commit -m "coco ${{ steps.ver.outputs.version }}"
+          git push

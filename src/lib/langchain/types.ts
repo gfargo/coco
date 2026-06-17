@@ -14,21 +14,36 @@ export type DynamicModelPreference = 'cost' | 'balanced' | 'quality'
 
 export type OpenAIModel =
   | TiktokenModel
+  // Current generation
+  | 'gpt-5.5'
+  | 'gpt-5.4'
+  | 'gpt-5.4-mini'
+  | 'gpt-5.4-nano'
   | 'gpt-4o-mini'
+  // Retired — kept for back-compat config typing (dropped from OPEN_AI_MODELS,
+  // flagged via DEPRECATED_MODELS)
   | 'gpt-4o'
   | 'gpt-4.1'
-  | 'gpt-4.1-mini' 
+  | 'gpt-4.1-mini'
   | 'gpt-4.1-nano'
 
 export type AnthropicModel =
   // Current generation (recommended for new users)
-  | 'claude-sonnet-4-6'
-  | 'claude-haiku-4-5-20251001'
-  | 'claude-haiku-4-5'
+  | 'claude-fable-5'
+  | 'claude-opus-4-8'
   | 'claude-opus-4-7'
-  // Earlier 4.x line
+  | 'claude-opus-4-6'
+  | 'claude-sonnet-4-6'
+  | 'claude-haiku-4-5'
+  | 'claude-haiku-4-5-20251001'
+  // Earlier 4.x line (still active)
+  | 'claude-opus-4-5'
+  | 'claude-opus-4-1'
+  | 'claude-sonnet-4-5'
+  // Retired — NOT offered or treated as current (dropped from ANTHROPIC_MODELS
+  // and flagged via DEPRECATED_MODELS), retained in the union only so existing
+  // service configs pinned to these still type-check.
   | 'claude-sonnet-4-0'
-  // Pre-4.x (kept for users with existing service config pinned to these)
   | 'claude-3-7-sonnet-latest'
   | 'claude-3-5-haiku-latest'
   | 'claude-3-5-sonnet-latest'
@@ -39,9 +54,14 @@ export type AnthropicModel =
   | 'claude-3-haiku-20240307'
 
 export type GeminiModel =
+  // Current generation
+  | 'gemini-3.5-flash'
+  | 'gemini-3.1-flash-lite'
   | 'gemini-2.5-pro'
   | 'gemini-2.5-flash'
   | 'gemini-2.5-flash-lite'
+  // Retired — kept for back-compat config typing (dropped from GEMINI_MODELS,
+  // flagged via DEPRECATED_MODELS)
   | 'gemini-2.0-flash'
   | 'gemini-2.0-flash-lite'
   | 'gemini-1.5-pro'
@@ -129,12 +149,20 @@ export type OllamaModel =
  * `(string & {})` preserves the literal union members of the other providers.
  */
 export type BedrockModel =
+  // Current Claude generation on Bedrock
+  | 'anthropic.claude-opus-4-8'
+  | 'anthropic.claude-opus-4-7'
+  | 'anthropic.claude-sonnet-4-6'
+  | 'anthropic.claude-haiku-4-5'
+  // Other foundation models
+  | 'meta.llama3-1-70b-instruct-v1:0'
+  | 'mistral.mistral-large-2407-v1:0'
+  // Retired Claude-on-Bedrock — kept for back-compat suggestions, flagged via
+  // DEPRECATED_MODELS
   | 'anthropic.claude-3-5-sonnet-20241022-v2:0'
   | 'anthropic.claude-3-5-haiku-20241022-v1:0'
   | 'anthropic.claude-sonnet-4-20250514-v1:0'
   | 'anthropic.claude-3-haiku-20240307-v1:0'
-  | 'meta.llama3-1-70b-instruct-v1:0'
-  | 'mistral.mistral-large-2407-v1:0'
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {})
 

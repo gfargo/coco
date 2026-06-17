@@ -42,16 +42,16 @@ const providerServices: Record<LLMProvider, LLMService> = {
 }
 const providerOverrides = {
   openai: {
-    summarize: 'gpt-4.1-nano',
-    largeDiff: 'gpt-4.1-mini',
+    summarize: 'gpt-5.4-nano',
+    largeDiff: 'gpt-5.4-mini',
   },
   azure: {
-    summarize: 'gpt-4.1-nano',
-    largeDiff: 'gpt-4.1-mini',
+    summarize: 'gpt-5.4-nano',
+    largeDiff: 'gpt-5.4-mini',
   },
   anthropic: {
-    summarize: 'claude-3-5-haiku-latest',
-    largeDiff: 'claude-3-7-sonnet-latest',
+    summarize: 'claude-haiku-4-5',
+    largeDiff: 'claude-sonnet-4-6',
   },
   gemini: {
     summarize: 'gemini-2.5-flash-lite',
@@ -96,17 +96,17 @@ describe('dynamic model routing', () => {
   })
 
   it('uses provider defaults when model is dynamic', () => {
-    expect(resolveDynamicModel(baseConfig, 'summarize')).toBe('gpt-4.1-mini')
-    expect(resolveDynamicModel(baseConfig, 'review')).toBe('gpt-4.1')
+    expect(resolveDynamicModel(baseConfig, 'summarize')).toBe('gpt-5.4-mini')
+    expect(resolveDynamicModel(baseConfig, 'review')).toBe('gpt-5.4')
   })
 
   it.each([
-    ['openai', 'cost', 'gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1'] as const,
-    ['openai', 'balanced', 'gpt-4.1-mini', 'gpt-4.1-mini', 'gpt-4.1'] as const,
-    ['openai', 'quality', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1'] as const,
-    ['anthropic', 'cost', 'claude-3-5-haiku-latest', 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest'] as const,
-    ['anthropic', 'balanced', 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest'] as const,
-    ['anthropic', 'quality', 'claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-sonnet-4-0'] as const,
+    ['openai', 'cost', 'gpt-5.4-nano', 'gpt-5.4-mini', 'gpt-5.4'] as const,
+    ['openai', 'balanced', 'gpt-5.4-mini', 'gpt-5.4-mini', 'gpt-5.4'] as const,
+    ['openai', 'quality', 'gpt-5.4-mini', 'gpt-5.5', 'gpt-5.5'] as const,
+    ['anthropic', 'cost', 'claude-haiku-4-5', 'claude-haiku-4-5', 'claude-sonnet-4-6'] as const,
+    ['anthropic', 'balanced', 'claude-haiku-4-5', 'claude-sonnet-4-6', 'claude-opus-4-6'] as const,
+    ['anthropic', 'quality', 'claude-sonnet-4-6', 'claude-opus-4-8', 'claude-opus-4-8'] as const,
     ['mistral', 'cost', 'ministral-8b-latest', 'ministral-8b-latest', 'mistral-small-latest'] as const,
     ['mistral', 'balanced', 'ministral-8b-latest', 'mistral-small-latest', 'mistral-medium-latest'] as const,
     ['mistral', 'quality', 'mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest'] as const,
@@ -130,15 +130,15 @@ describe('dynamic model routing', () => {
       service: {
         ...baseConfig.service,
         dynamicModels: {
-          summarize: 'gpt-4.1-nano',
-          commit: 'gpt-4o',
+          summarize: 'gpt-5.4-nano',
+          commit: 'gpt-5.5',
         },
       },
     } as Config
 
-    expect(resolveDynamicModel(config, 'summarize')).toBe('gpt-4.1-nano')
-    expect(resolveDynamicModel(config, 'commit')).toBe('gpt-4o')
-    expect(resolveDynamicModel(config, 'review')).toBe('gpt-4.1')
+    expect(resolveDynamicModel(config, 'summarize')).toBe('gpt-5.4-nano')
+    expect(resolveDynamicModel(config, 'commit')).toBe('gpt-5.5')
+    expect(resolveDynamicModel(config, 'review')).toBe('gpt-5.4')
   })
 
   it.each(['openai', 'anthropic', 'gemini', 'mistral', 'ollama'] as const)(
@@ -163,12 +163,12 @@ describe('dynamic model routing', () => {
   )
 
   it.each([
-    ['openai', 'cost', 'gpt-4.1-mini'] as const,
-    ['openai', 'balanced', 'gpt-4.1'] as const,
-    ['openai', 'quality', 'gpt-4.1'] as const,
-    ['anthropic', 'cost', 'claude-3-5-sonnet-latest'] as const,
-    ['anthropic', 'balanced', 'claude-3-7-sonnet-latest'] as const,
-    ['anthropic', 'quality', 'claude-sonnet-4-0'] as const,
+    ['openai', 'cost', 'gpt-5.4-mini'] as const,
+    ['openai', 'balanced', 'gpt-5.4'] as const,
+    ['openai', 'quality', 'gpt-5.5'] as const,
+    ['anthropic', 'cost', 'claude-sonnet-4-6'] as const,
+    ['anthropic', 'balanced', 'claude-opus-4-6'] as const,
+    ['anthropic', 'quality', 'claude-opus-4-8'] as const,
     ['gemini', 'cost', 'gemini-2.5-flash'] as const,
     ['gemini', 'balanced', 'gemini-2.5-pro'] as const,
     ['gemini', 'quality', 'gemini-2.5-pro'] as const,
@@ -195,14 +195,14 @@ describe('dynamic model routing', () => {
       },
     } as Config
 
-    expect(resolveDynamicModel(config, 'summarize')).toBe('gpt-4.1-nano')
+    expect(resolveDynamicModel(config, 'summarize')).toBe('gpt-5.4-nano')
   })
 
   it('returns a concrete service config for a task', () => {
     const service = resolveDynamicService(baseConfig, 'commit')
 
     expect(service.provider).toBe('openai')
-    expect(service.model).toBe('gpt-4.1-mini')
+    expect(service.model).toBe('gpt-5.4-mini')
   })
 
   it('rejects unknown dynamic task keys', () => {
@@ -211,7 +211,7 @@ describe('dynamic model routing', () => {
       service: {
         ...baseConfig.service,
         dynamicModels: {
-          unknownTask: 'gpt-4o',
+          unknownTask: 'gpt-5.5',
         },
       },
     } as unknown as Config

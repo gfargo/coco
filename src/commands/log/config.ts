@@ -47,9 +47,10 @@ export const options = {
     alias: 'b',
   },
   commit: {
+    // No short alias: `-c` is reserved for `--conventional` (commit) to keep
+    // the letter consistent across commands (#1245).
     description: 'Show details and changed files for a single commit',
     type: 'string',
-    alias: 'c',
   },
   format: {
     description: 'Output format',

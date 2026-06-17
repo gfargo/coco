@@ -11,74 +11,79 @@ import { LangChainConfigurationError } from '../errors'
 type ProviderDynamicDefaults = Record<DynamicModelPreference, Record<DynamicModelTask, LLMModel>>
 
 const OPENAI_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  // The gpt-4.1 family retired from the API in early 2026 and now 404s.
+  // Re-pinned to the current gpt-5 generation (nano → mini → 5.4 → 5.5).
   cost: {
-    summarize: 'gpt-4.1-nano',
-    commit: 'gpt-4.1-mini',
+    summarize: 'gpt-5.4-nano',
+    commit: 'gpt-5.4-mini',
     // `commitSplit` floors at mini even in cost mode. The split
     // planner emits structured JSON with strict cross-group
     // constraints (files appear exactly once, hunks fully cover or
     // not at all). Nano-class models fail those constraints often
     // enough that the cost win is eaten by the 3-retry budget.
-    commitSplit: 'gpt-4.1-mini',
-    changelog: 'gpt-4.1-mini',
-    review: 'gpt-4.1-mini',
-    recap: 'gpt-4.1-nano',
-    repair: 'gpt-4.1-mini',
-    largeDiff: 'gpt-4.1',
+    commitSplit: 'gpt-5.4-mini',
+    changelog: 'gpt-5.4-mini',
+    review: 'gpt-5.4-mini',
+    recap: 'gpt-5.4-nano',
+    repair: 'gpt-5.4-mini',
+    largeDiff: 'gpt-5.4',
   },
   balanced: {
-    summarize: 'gpt-4.1-mini',
-    commit: 'gpt-4.1-mini',
-    commitSplit: 'gpt-4.1',
-    changelog: 'gpt-4.1',
-    review: 'gpt-4.1',
-    recap: 'gpt-4.1-mini',
-    repair: 'gpt-4.1',
-    largeDiff: 'gpt-4.1',
+    summarize: 'gpt-5.4-mini',
+    commit: 'gpt-5.4-mini',
+    commitSplit: 'gpt-5.4',
+    changelog: 'gpt-5.4',
+    review: 'gpt-5.4',
+    recap: 'gpt-5.4-mini',
+    repair: 'gpt-5.4',
+    largeDiff: 'gpt-5.4',
   },
   quality: {
-    summarize: 'gpt-4.1-mini',
-    commit: 'gpt-4.1',
-    commitSplit: 'gpt-4.1',
-    changelog: 'gpt-4.1',
-    review: 'gpt-4.1',
-    recap: 'gpt-4.1',
-    repair: 'gpt-4.1',
-    largeDiff: 'gpt-4.1',
+    summarize: 'gpt-5.4-mini',
+    commit: 'gpt-5.5',
+    commitSplit: 'gpt-5.5',
+    changelog: 'gpt-5.5',
+    review: 'gpt-5.5',
+    recap: 'gpt-5.5',
+    repair: 'gpt-5.5',
+    largeDiff: 'gpt-5.5',
   },
 }
 
 const ANTHROPIC_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  // The prior Claude defaults (claude-3-5/3-7-sonnet, claude-sonnet-4-0) all
+  // retired in 2025–2026 and now 404. Re-pinned to the current generation:
+  // Haiku 4.5 → Sonnet 4.6 → Opus (4.6 balanced, 4.8 quality) for the gradient.
   cost: {
-    summarize: 'claude-3-5-haiku-latest',
-    commit: 'claude-3-5-haiku-latest',
+    summarize: 'claude-haiku-4-5',
+    commit: 'claude-haiku-4-5',
     // Floor at sonnet — see note on OpenAI commitSplit above.
-    commitSplit: 'claude-3-5-sonnet-latest',
-    changelog: 'claude-3-5-sonnet-latest',
-    review: 'claude-3-5-sonnet-latest',
-    recap: 'claude-3-5-haiku-latest',
-    repair: 'claude-3-5-sonnet-latest',
-    largeDiff: 'claude-3-5-sonnet-latest',
+    commitSplit: 'claude-sonnet-4-6',
+    changelog: 'claude-sonnet-4-6',
+    review: 'claude-sonnet-4-6',
+    recap: 'claude-haiku-4-5',
+    repair: 'claude-sonnet-4-6',
+    largeDiff: 'claude-sonnet-4-6',
   },
   balanced: {
-    summarize: 'claude-3-5-haiku-latest',
-    commit: 'claude-3-5-sonnet-latest',
-    commitSplit: 'claude-3-7-sonnet-latest',
-    changelog: 'claude-3-5-sonnet-latest',
-    review: 'claude-3-7-sonnet-latest',
-    recap: 'claude-3-5-sonnet-latest',
-    repair: 'claude-3-7-sonnet-latest',
-    largeDiff: 'claude-3-7-sonnet-latest',
+    summarize: 'claude-haiku-4-5',
+    commit: 'claude-sonnet-4-6',
+    commitSplit: 'claude-opus-4-6',
+    changelog: 'claude-sonnet-4-6',
+    review: 'claude-opus-4-6',
+    recap: 'claude-sonnet-4-6',
+    repair: 'claude-opus-4-6',
+    largeDiff: 'claude-opus-4-6',
   },
   quality: {
-    summarize: 'claude-3-5-sonnet-latest',
-    commit: 'claude-3-7-sonnet-latest',
-    commitSplit: 'claude-sonnet-4-0',
-    changelog: 'claude-3-7-sonnet-latest',
-    review: 'claude-sonnet-4-0',
-    recap: 'claude-3-7-sonnet-latest',
-    repair: 'claude-sonnet-4-0',
-    largeDiff: 'claude-sonnet-4-0',
+    summarize: 'claude-sonnet-4-6',
+    commit: 'claude-opus-4-8',
+    commitSplit: 'claude-opus-4-8',
+    changelog: 'claude-opus-4-8',
+    review: 'claude-opus-4-8',
+    recap: 'claude-opus-4-8',
+    repair: 'claude-opus-4-8',
+    largeDiff: 'claude-opus-4-8',
   },
 }
 
@@ -151,36 +156,39 @@ const MISTRAL_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
 }
 
 const BEDROCK_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
+  // The claude-3-5 / sonnet-4-0 Bedrock ids mirrored first-party models that
+  // retired in 2025–2026. Re-pinned to the current Claude generation on Bedrock
+  // (Haiku 4.5 → Sonnet 4.6 → Opus 4.7 balanced / 4.8 quality).
   cost: {
-    summarize: 'anthropic.claude-3-5-haiku-20241022-v1:0',
-    commit: 'anthropic.claude-3-5-haiku-20241022-v1:0',
+    summarize: 'anthropic.claude-haiku-4-5',
+    commit: 'anthropic.claude-haiku-4-5',
     // Floor at sonnet — see note on OpenAI commitSplit above.
-    commitSplit: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    changelog: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    review: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    recap: 'anthropic.claude-3-5-haiku-20241022-v1:0',
-    repair: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    largeDiff: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    commitSplit: 'anthropic.claude-sonnet-4-6',
+    changelog: 'anthropic.claude-sonnet-4-6',
+    review: 'anthropic.claude-sonnet-4-6',
+    recap: 'anthropic.claude-haiku-4-5',
+    repair: 'anthropic.claude-sonnet-4-6',
+    largeDiff: 'anthropic.claude-sonnet-4-6',
   },
   balanced: {
-    summarize: 'anthropic.claude-3-5-haiku-20241022-v1:0',
-    commit: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    commitSplit: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    changelog: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    review: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    recap: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    repair: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    largeDiff: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    summarize: 'anthropic.claude-haiku-4-5',
+    commit: 'anthropic.claude-sonnet-4-6',
+    commitSplit: 'anthropic.claude-opus-4-7',
+    changelog: 'anthropic.claude-sonnet-4-6',
+    review: 'anthropic.claude-opus-4-7',
+    recap: 'anthropic.claude-sonnet-4-6',
+    repair: 'anthropic.claude-opus-4-7',
+    largeDiff: 'anthropic.claude-opus-4-7',
   },
   quality: {
-    summarize: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    commit: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    commitSplit: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    changelog: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    review: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    recap: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    repair: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    largeDiff: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    summarize: 'anthropic.claude-sonnet-4-6',
+    commit: 'anthropic.claude-opus-4-8',
+    commitSplit: 'anthropic.claude-opus-4-8',
+    changelog: 'anthropic.claude-opus-4-8',
+    review: 'anthropic.claude-opus-4-8',
+    recap: 'anthropic.claude-opus-4-8',
+    repair: 'anthropic.claude-opus-4-8',
+    largeDiff: 'anthropic.claude-opus-4-8',
   },
 }
 

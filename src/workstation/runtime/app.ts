@@ -57,30 +57,24 @@ import {getBranchOverview} from '../../git/branchData'
 import {getLfsAttributeStatus} from '../../git/lfsAttributes'
 import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
-import {GitCommitDetail, GitCommitFilePreview, LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitDetail, getCommitRows, getLogRows} from '../../commands/log/data'
-import {LogInkContextKey, LogInkContextStatus, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
-import {hasSeenOnboarding, markOnboardingSeen} from '../chrome/onboarding'
+import {LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitRows, getLogRows} from '../../commands/log/data'
+import {LogInkContextKey, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
-import {createInitialContextStatus, createRepoFrameRuntime} from './repoFrameFactory'
-import {getActiveRepoFrameRuntime, syncRepoStackRuntimes, updateRepoFrameRuntime, type RepoFrameRuntime, type RepoStackRuntimes} from './repoStackRuntime'
 import {PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex} from '../chrome/selectionRectify'
 import {LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout} from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
 import {LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getThemePickerSelection} from '../../workstation/runtime/inkViewModel'
 import {getGitOperationOverview} from '../../git/operationData'
 import {getProviderOverview} from '../../git/providerData'
-import {highlightDiffCode, type SyntaxSpan} from '../../lib/syntax/highlightEngine'
 import {getForgeActions, getForgePullRequestOverview} from '../../git/forgeActions'
 import {issueFilterForPreset, pullRequestFilterForPreset} from '../../git/triageFilterPresets'
 import {getStashCommitHashes, getStashOverview} from '../../git/stashData'
 import {getWorktreeOverview} from '../../git/statusData'
-import {WorktreeHunkOverview} from '../../git/statusHunks'
 import {getBisectStatus} from '../../git/bisectData'
 import {getReflogOverview} from '../../git/reflogData'
 import {getTagOverview} from '../../git/tagData'
 import {getWorktreeListOverview} from '../../git/worktreeData'
-import {WorktreeFileDiff} from '../../git/worktreeDiffData'
 
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -202,9 +196,12 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import {matchesPromotedFilter} from '../runtime/promotedFilter'
 import {useFilteredLists} from './hooks/buildFilteredLists'
+import {useBisectCandidateHydration, useBisectCandidateState} from './hooks/useBisectCandidateHydration'
+import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
 import {useBlameLoadingState, useDetailHydration} from './hooks/useDetailHydration'
-import {useCommitFilePreviewHydration, useCompareDiffHydration, useStashDiffHydration, useWorktreeDiffHydration, useWorktreeHunksHydration} from './hooks/useDiffHydration'
+import {useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState} from './hooks/useDiffHydration'
+import {useDiffSyntaxHighlight, useDiffSyntaxState} from './hooks/useDiffSyntaxHighlight'
 import {useIdleTip} from './hooks/useIdleTip'
 import {useRefreshWatcher} from './hooks/useRefreshWatcher'
 import {useActiveRepoRoot, useViewModePersistence} from './hooks/useRepoPersistence'
@@ -212,7 +209,10 @@ import {useSpinnerFrame} from './hooks/useSpinnerFrame'
 import {useStatusSurfaceData} from './hooks/buildStatusSurfaceData'
 import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
-import {useLoadMoreHistory} from './hooks/useLoadMoreHistory'
+import {useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
+import {useOnboarding} from './hooks/useOnboarding'
+import {useRepoStackRuntimes} from './hooks/useRepoStackRuntimes'
+import {useResumeTick} from './hooks/useResumeTick'
 import {useWorktreeStageActions} from './hooks/useWorktreeStageActions'
 import {useCommitComposeActions} from './hooks/useCommitComposeActions'
 import {useCommitSplitActions} from './hooks/useCommitSplitActions'
@@ -356,22 +356,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   )
   const { exit } = useApp()
   const windowSize = useWindowSize()
-  // Bumping this on SIGCONT forces the existing tree to repaint so users
-  // land on a drawn screen after `fg` instead of an empty alt buffer.
-  const [, setResumeTick] = React.useState(0)
-  React.useEffect(() => {
-    if (!resumeRef) {
-      return
-    }
-    resumeRef.current = () => setResumeTick((tick) => tick + 1)
-    return () => {
-      resumeRef.current = null
-    }
-  }, [resumeRef])
+  // Resume-repaint tick (SIGCONT → `fg`), owned by `useResumeTick` (app.ts
+  // decomposition item 5 / #1237). The throwaway `useState` and its effect are
+  // adjacent, so they move together into the hook at this exact slot; the
+  // effect wires `resumeRef.current` to a tick-bump that forces a repaint.
+  useResumeTick(React, {resumeRef})
   // First-launch onboarding (P1.3). Persisted via a marker file in the
   // user's cache dir so the tip never reappears once dismissed. Lazy
   // initializer so the fs check only runs on mount, not every render.
-  const [showOnboarding, setShowOnboarding] = React.useState<boolean>(() => !hasSeenOnboarding())
+  // First-run onboarding overlay, owned by `useOnboarding` (app.ts
+  // decomposition item 4 / #1237). The hook seeds `showOnboarding` from
+  // `!hasSeenOnboarding()` and returns `dismissOnboarding`, which clears the
+  // overlay and writes the seen-marker; the input handler calls it on the
+  // first keystroke.
+  const {showOnboarding, dismissOnboarding} = useOnboarding(React)
   const [state, setState] = React.useState<LogInkState>(() =>
     createLogInkState(rows, {
       activeView: initialView,
@@ -404,88 +402,21 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // cached entry so a drill-in / drill-out round trip doesn't re-pay
   // the context load cost. Seeded with a single root runtime against
   // the cwd `coco ui` was launched in.
-  const [runtimes, setRuntimes] = React.useState<RepoStackRuntimes>(() => [{
-    git: rootGit,
-    context: {},
-    contextStatus: createInitialContextStatus(),
-  }])
-  // Sync `runtimes` against the view-model stack on every push / pop.
-  // The sync is monotone — push appends a new runtime via the factory,
-  // pop slices off the top runtime; the parent's cached state survives.
-  // The factory is wrapped to capture `rootGit` so a defensively-pushed
-  // frame without a workdir still has a working `SimpleGit` bound.
-  React.useEffect(() => {
-    setRuntimes((prev) => {
-      const { runtimes: next } = syncRepoStackRuntimes(
-        prev,
-        state.repoStack,
-        (frame) => createRepoFrameRuntime(frame, rootGit),
-      )
-      return next
-    })
-  }, [state.repoStack, rootGit])
-  // Active-frame projection (#931). `git`, `context`, `contextStatus`
-  // — every existing closure / effect / surface reads these names; the
-  // only thing this PR changes is where they come from. When the user
-  // drills into a submodule, the top-of-stack runtime swaps, every
-  // dep array that lists `git` re-fires, and the loaders refetch
-  // against the submodule's working tree.
-  const activeRuntime: RepoFrameRuntime = getActiveRepoFrameRuntime(runtimes) ?? {
-    git: rootGit,
-    context: {},
-    contextStatus: createInitialContextStatus(),
-  }
-  const git = activeRuntime.git
-  const context = activeRuntime.context
-  const contextStatus = activeRuntime.contextStatus
-  // Wrappers that delegate to the active frame's runtime entry so the
-  // existing call sites stay byte-identical. Support both function-
-  // updater and value-updater forms (the codebase uses both).
-  //
-  // `targetDepth` (#994) routes the write to a specific frame instead
-  // of the currently-active one. Loaders that capture the depth at
-  // issue-time and pass it here are robust against frame-stack
-  // mutations (push / pop) that happen while the load is in flight —
-  // the write lands on the frame that issued it, or silently drops
-  // if that frame has been popped (`updateRepoFrameRuntime` no-ops on
-  // out-of-range indices). Without the tag, an in-flight refresh on
-  // the parent would clobber a freshly-pushed submodule frame.
-  const setContext = React.useCallback(
-    (
-      arg: LogInkContext | ((prev: LogInkContext) => LogInkContext),
-      targetDepth?: number,
-    ) => {
-      setRuntimes((prev) => {
-        const depth = targetDepth ?? prev.length - 1
-        if (depth < 0) return prev
-        return updateRepoFrameRuntime(prev, depth, (frame) => ({
-          ...frame,
-          context: typeof arg === 'function'
-            ? (arg as (p: LogInkContext) => LogInkContext)(frame.context)
-            : arg,
-        }))
-      })
-    },
-    [],
-  )
-  const setContextStatus = React.useCallback(
-    (
-      arg: LogInkContextStatus | ((prev: LogInkContextStatus) => LogInkContextStatus),
-      targetDepth?: number,
-    ) => {
-      setRuntimes((prev) => {
-        const depth = targetDepth ?? prev.length - 1
-        if (depth < 0) return prev
-        return updateRepoFrameRuntime(prev, depth, (frame) => ({
-          ...frame,
-          contextStatus: typeof arg === 'function'
-            ? (arg as (p: LogInkContextStatus) => LogInkContextStatus)(frame.contextStatus)
-            : arg,
-        }))
-      })
-    },
-    [],
-  )
+  // Repo-stack runtimes (#931 / #994), owned by `useRepoStackRuntimes` (app.ts
+  // decomposition item 6 / #1237). The contiguous cluster — the `runtimes`
+  // `useState`, the push/pop sync effect, the active-frame `git` / `context` /
+  // `contextStatus` projection, and the frame-tagged `setContext` /
+  // `setContextStatus` writers — moves wholesale into the hook at this exact
+  // slot, preserving React hook order. Every downstream consumer reads the same
+  // returned names, so nothing else changes. See the hook's header.
+  const {
+    runtimes,
+    git,
+    context,
+    contextStatus,
+    setContext,
+    setContextStatus,
+  } = useRepoStackRuntimes(React, {rootGit, repoStack: state.repoStack})
   // #931 PR 3b — Absolute repo root for the active frame's `git`.
   // Resolved asynchronously after every `git` swap (push / pop /
   // boot) so the commit-diff drill-in helper can construct absolute
@@ -501,39 +432,54 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // closure, so each effect run resolves against the right binding.
   // No additional depth tagging is needed.
   const activeRepoRoot = useActiveRepoRoot(React, git)
-  const [detail, setDetail] = React.useState<GitCommitDetail | undefined>(undefined)
-  const [detailLoading, setDetailLoading] = React.useState(false)
-  const [filePreview, setFilePreview] = React.useState<GitCommitFilePreview | undefined>(undefined)
-  const [filePreviewLoading, setFilePreviewLoading] = React.useState(false)
-  const [worktreeDiff, setWorktreeDiff] = React.useState<WorktreeFileDiff | undefined>(undefined)
-  const [worktreeDiffLoading, setWorktreeDiffLoading] = React.useState(false)
-  const [worktreeHunks, setWorktreeHunks] = React.useState<WorktreeHunkOverview | undefined>(
-    undefined
-  )
-  const [worktreeHunksLoading, setWorktreeHunksLoading] = React.useState(false)
+  // Commit-detail hydration state, lifted into `useCommitDetailState`
+  // (app.ts decomposition item 1a / #1237). The `useState` pair stays in this
+  // exact slot; the loader effect that toggles it is issued ~600 lines below
+  // by `useCommitDetailHydration`, in its original position — a two-hook
+  // split to preserve React hook ordering. See that module's header.
+  const {detail, setDetail, detailLoading, setDetailLoading} = useCommitDetailState(React)
+  // Commit file-preview hydration state, lifted into `useCommitFilePreviewState`
+  // (app.ts decomposition item 2 / #1237). The `useState` pair stays in this
+  // exact slot; the loader effect that toggles it is issued ~900 lines below by
+  // `useCommitFilePreviewHydration`, in its original position — a two-hook split
+  // to preserve React hook ordering. See `useDiffHydration`'s header.
+  const {filePreview, setFilePreview, filePreviewLoading, setFilePreviewLoading} = useCommitFilePreviewState(React)
+  // Worktree diff / hunks hydration state, owned by `useWorktreeDiffState` /
+  // `useWorktreeHunksState` (app.ts decomposition #1237). The `setWorktreeDiff`
+  // / `setWorktreeHunks` setters are shared with the staging callbacks
+  // (`useWorktreeStageActions`), so the hooks own the slots and hand the values
+  // + setters back here; the consumer call sites are unchanged. See
+  // `useDiffHydration`'s header.
+  const {worktreeDiff, setWorktreeDiff, worktreeDiffLoading, setWorktreeDiffLoading} = useWorktreeDiffState(React)
+  const {worktreeHunks, setWorktreeHunks, worktreeHunksLoading, setWorktreeHunksLoading} = useWorktreeHunksState(React)
   // Syntax-highlight spans for the diff currently in view (#1117
-  // follow-up). Computed off the render path by the effect below;
-  // keyed by marker-stripped code line so the diff renderer looks
-  // spans up directly. `undefined` = no highlighting (renders plain).
-  const [diffSyntaxSpans, setDiffSyntaxSpans] = React.useState<
-    Map<string, SyntaxSpan[]> | undefined
-  >(undefined)
+  // follow-up). Owned by `useDiffSyntaxState` (app.ts decomposition item 2 /
+  // #1237); the `useState` stays in this exact slot while the effect that
+  // computes the spans is issued ~600 lines below by `useDiffSyntaxHighlight`,
+  // in its original position — a two-hook split to preserve hook ordering.
+  // `undefined` = no highlighting (renders plain).
+  const {diffSyntaxSpans, setDiffSyntaxSpans} = useDiffSyntaxState(React)
   // Stash diff explorer (Enter on a stash row): the runtime fetches
   // `git stash show -p <ref>` lazily once the diff view becomes active
   // with diffSource='stash'. Lines are stored as a flat string[] —
   // renderDiffSurface paints each line through diffLineProps so +/-
   // colors match the commit-diff path.
-  const [stashDiffLines, setStashDiffLines] = React.useState<string[] | undefined>(undefined)
-  const [stashDiffLoading, setStashDiffLoading] = React.useState(false)
+  const {stashDiffLines, setStashDiffLines, stashDiffLoading, setStashDiffLoading} = useStashDiffState(React)
   // #779 — compare-two-refs diff state. Loaded lazily when the diff
   // view becomes active with `diffSource === 'compare'`.
-  const [compareDiffLines, setCompareDiffLines] = React.useState<string[] | undefined>(undefined)
-  const [compareDiffLoading, setCompareDiffLoading] = React.useState(false)
-  const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
-    Boolean(logArgv?.interactive && !logArgv.limit) &&
-    getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
-  ))
-  const [loadingMoreCommits, setLoadingMoreCommits] = React.useState(false)
+  const {compareDiffLines, setCompareDiffLines, compareDiffLoading, setCompareDiffLoading} = useCompareDiffState(React)
+  // Load-more pagination state, owned by `useHistoryPaginationState` (app.ts
+  // decomposition item 3 / #1237). The `useState` pair stays in this exact
+  // slot; the setters are shared (the loader `useLoadMoreHistory` below plus
+  // the history-filter / graph-toggle effects all write them), so the hook
+  // owns the slots and hands values + setters back here. The lazy seed for
+  // `hasMoreCommits` is preserved verbatim inside the hook.
+  const {
+    hasMoreCommits,
+    setHasMoreCommits,
+    loadingMoreCommits,
+    setLoadingMoreCommits,
+  } = useHistoryPaginationState(React, {logArgv, rows})
   const loadingMoreCommitsRef = React.useRef(false)
   const loadMoreRequestRef = React.useRef(0)
   const mountedRef = React.useRef(true)
@@ -846,8 +792,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // when the bisect view is active. Best-effort: any failure leaves
   // the surface in its non-detail mode (decision log only) — never
   // crash the workstation because git couldn't resolve a sha.
-  const [bisectCandidateDetail, setBisectCandidateDetail] = React.useState<GitCommitDetail | undefined>(undefined)
-  const [bisectCandidateLoading, setBisectCandidateLoading] = React.useState(false)
+  // Owned by `useBisectCandidateState` (app.ts decomposition item 2 / #1237).
+  // The `useState` pair stays in this exact slot (just above the
+  // `useBlameLoadingState` call); the loader effect that toggles it is issued
+  // a few lines below by `useBisectCandidateHydration`, in its original
+  // position — a two-hook split to preserve React hook ordering.
+  const {
+    bisectCandidateDetail,
+    setBisectCandidateDetail,
+    bisectCandidateLoading,
+    setBisectCandidateLoading,
+  } = useBisectCandidateState(React)
   // On-demand blame hydration flag (#0.71). True while the debounced
   // `getBlame` for the active `state.blamePath` is in flight; the blame
   // surface shows a loading placeholder until the parse lands in the
@@ -859,23 +814,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const bisectCandidateSha = state.activeView === 'bisect' && context.bisect?.active
     ? context.bisect.currentSha
     : ''
-  React.useEffect(() => {
-    if (!bisectCandidateSha) {
-      setBisectCandidateDetail(undefined)
-      setBisectCandidateLoading(false)
-      return
-    }
-    let active = true
-    setBisectCandidateLoading(true)
-    void (async () => {
-      const next = await safe(getCommitDetail(git, bisectCandidateSha))
-      if (active) {
-        setBisectCandidateDetail(next)
-        setBisectCandidateLoading(false)
-      }
-    })()
-    return () => { active = false }
-  }, [git, bisectCandidateSha])
+  // Lifted verbatim into `useBisectCandidateHydration` (app.ts decomposition
+  // item 2 / #1237) — the empty-sha guard, `active` cancellation flag, `safe()`
+  // wrapper, loading toggles, and `[git, bisectCandidateSha]` dependency array
+  // carry over byte-for-byte. Issued here, in its original slot; the `useState`
+  // pair it writes is owned by `useBisectCandidateState` above.
+  useBisectCandidateHydration(React, {
+    git,
+    bisectCandidateSha,
+    setBisectCandidateDetail,
+    setBisectCandidateLoading,
+  })
 
   // #779 — load `git diff <base>..<head>` once the diff view becomes
   // active with diffSource='compare'. Mirrors the stash loader's
@@ -1101,30 +1050,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setBlameLoading,
   })
 
-  React.useEffect(() => {
-    let active = true
-
-    async function loadDetail(): Promise<void> {
-      if (!selected) {
-        setDetail(undefined)
-        return
-      }
-
-      setDetailLoading(true)
-      const nextDetail = await safe(getCommitDetail(git, selected.hash))
-
-      if (active) {
-        setDetail(nextDetail)
-        setDetailLoading(false)
-      }
-    }
-
-    void loadDetail()
-
-    return () => {
-      active = false
-    }
-  }, [git, selected?.hash])
+  // Commit-detail loader, lifted verbatim into `useCommitDetailHydration`
+  // (app.ts decomposition item 1a / #1237) — guard, `active` cancellation
+  // flag, `safe()` wrapper, `detailLoading` toggles, and `[git, selected?.hash]`
+  // dependency array carry over byte-for-byte. Issued here, in its original
+  // slot; the `useState` it toggles is owned by `useCommitDetailState` above.
+  useCommitDetailHydration(React, {
+    git,
+    selected,
+    setDetail,
+    setDetailLoading,
+  })
 
   // #806 follow-up — auto-jump the history view to whichever branch /
   // tag / stash the user is cursoring (cluster N). Lifted verbatim into
@@ -1155,49 +1091,22 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   })
 
   // Syntax-highlight the diff currently in view, off the render path
-  // (#1117 follow-up). Mirrors the worktree-diff effect: detect the
-  // active file + its diff lines (worktree or commit source), tokenize
-  // via tree-sitter, and store the per-line spans for the renderer.
-  // Stash / compare sources aren't highlighted yet (multi-file patch /
-  // no single path). Gated on the config flag + a color terminal.
-  React.useEffect(() => {
-    if (!syntaxHighlightEnabled || theme.noColor || state.activeView !== 'diff') {
-      setDiffSyntaxSpans(undefined)
-      return
-    }
-    let filePath: string | undefined
-    let lines: string[] | undefined
-    if (state.diffSource === 'commit') {
-      filePath = selectedDetailFile?.path
-      lines = filePreview?.hunks
-    } else if (worktreeDiff && !worktreeDiff.untracked) {
-      filePath = worktreeDiff.filePath
-      lines = worktreeDiff.lines
-    }
-    if (!filePath || !lines || lines.length === 0) {
-      setDiffSyntaxSpans(undefined)
-      return
-    }
-    let active = true
-    void highlightDiffCode(filePath, lines)
-      .then((map) => {
-        if (active) setDiffSyntaxSpans(map.size > 0 ? map : undefined)
-      })
-      .catch(() => {
-        if (active) setDiffSyntaxSpans(undefined)
-      })
-    return () => {
-      active = false
-    }
-  }, [
+  // (#1117 follow-up). Lifted verbatim into `useDiffSyntaxHighlight` (app.ts
+  // decomposition item 2 / #1237) — the gate, the commit-vs-worktree source
+  // detection, the `active` cancellation flag, the `highlightDiffCode` call,
+  // and the dependency array carry over byte-for-byte. Issued here, in its
+  // original slot; the `useState` it writes is owned by `useDiffSyntaxState`
+  // above.
+  useDiffSyntaxHighlight(React, {
     syntaxHighlightEnabled,
-    theme.noColor,
-    state.activeView,
-    state.diffSource,
-    selectedDetailFile?.path,
+    noColor: theme.noColor,
+    activeView: state.activeView,
+    diffSource: state.diffSource,
+    selectedDetailFile,
     filePreview,
     worktreeDiff,
-  ])
+    setDiffSyntaxSpans,
+  })
 
   // Lifted verbatim into `useWorktreeStageActions` (0.72 app.ts
   // decomposition — the first extraction of action callbacks). The four
@@ -1597,8 +1506,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context,
     dispatch,
     showOnboarding,
-    setShowOnboarding,
-    markOnboardingSeen,
+    dismissOnboarding,
     filteredBranchList,
     filteredTagList,
     filteredStashList,
@@ -1697,6 +1605,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     theme,
     layout,
     context,
+    contextStatus,
+    h,
+    components: { Box, Text },
   }
 
   if (layout.tooSmall) {
@@ -1734,7 +1645,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     theme,
   }
   const mainPanel = () =>
-    renderMainPanel(mainSurface, {
+    renderMainPanel(React, mainSurface, {
       worktreeDiff,
       worktreeDiffLoading,
       worktreeHunks,
@@ -1761,6 +1672,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     })
   const detailPanel = () =>
     renderDetailPanel(
+      React,
       {
         h,
         components: { Box, Text },

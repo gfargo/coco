@@ -23,9 +23,10 @@
 
 import type * as ReactTypes from 'react'
 import type { LogInkAction, LogInkState } from '../../workstation/runtime/inkViewModel'
+import type { LogInkContextStatus } from '../chrome/context'
 import type { LogInkLayout } from '../chrome/layout'
 import type { LogInkTheme } from '../chrome/theme'
-import type { LogInkContext } from './types'
+import type { LogInkComponents, LogInkContext, SurfaceRenderContext } from './types'
 
 /**
  * The value carried by `LogInkRuntimeContext`. Intentionally the exact
@@ -40,6 +41,22 @@ export type LogInkRuntimeContextValue = {
   theme: LogInkTheme
   layout: LogInkLayout
   context: LogInkContext
+  /**
+   * Loading status per context key (#1237 surface migration). Surfaces
+   * read this to render per-slice "loading…" affordances; it was the
+   * `contextStatus` field threaded through every `SurfaceRenderContext`.
+   * App-wide and recomputed each render, like `state`.
+   */
+  contextStatus: LogInkContextStatus
+  /**
+   * Runtime render primitives — `React.createElement` (`h`) and the ink
+   * `{ Box, Text }` pair. The workstation never statically imports
+   * react/ink (both ESM, dynamic-import at boot), so a migrated surface
+   * component can't `import` them; they ride in the context, set once at
+   * the root. Stable for the life of the process.
+   */
+  h: typeof ReactTypes.createElement
+  components: LogInkComponents
 }
 
 type LogInkRuntimeContext = ReactTypes.Context<LogInkRuntimeContextValue | null>
@@ -74,4 +91,59 @@ export function useLogInkRuntime(React: typeof ReactTypes): LogInkRuntimeContext
     throw new Error('useLogInkRuntime must be called inside a LogInkRuntimeContext provider')
   }
   return value
+}
+
+/**
+ * Which panel a surface renders into. The main panel and the detail
+ * inspector have different widths, so a surface reconstructing its
+ * {@link SurfaceRenderContext} from the runtime context must say which.
+ */
+export type SurfacePanel = 'main' | 'detail'
+
+/**
+ * Rebuild the {@link SurfaceRenderContext} a `render*Surface` fn expects
+ * from the runtime context (#1237 surface migration). A migrated surface
+ * component calls this and hands the result to its existing (snapshot-
+ * tested) render fn unchanged — so the proven render logic doesn't move,
+ * only how it sources its inputs. `panel` selects the width.
+ */
+export function useSurfaceRenderContext(
+  React: typeof ReactTypes,
+  panel: SurfacePanel
+): SurfaceRenderContext {
+  const { h, components, state, context, contextStatus, theme, layout } =
+    useLogInkRuntime(React)
+  return {
+    h,
+    components,
+    state,
+    context,
+    contextStatus,
+    bodyRows: layout.bodyRows,
+    width: panel === 'detail' ? layout.detailWidth : layout.mainPanelWidth,
+    theme,
+  }
+}
+
+/**
+ * Wrap a zero-extra `render*Surface` fn — one that needs only the base
+ * {@link SurfaceRenderContext}, no per-render async slice — into a thin
+ * component that reads from the runtime context instead of receiving
+ * props. The caller caches the returned component (a per-surface getter)
+ * so its identity stays stable across renders; remounting it every render
+ * would be wasteful and defeat later memoization. Surfaces that also need
+ * async slices (diff data, spinner frames) write a bespoke component on
+ * top of {@link useSurfaceRenderContext} instead.
+ */
+export function defineSurfaceComponent(
+  React: typeof ReactTypes,
+  renderSurface: (ctx: SurfaceRenderContext) => ReactTypes.ReactElement,
+  options: { displayName: string; panel?: SurfacePanel }
+): ReactTypes.FC {
+  const SurfaceComponent: ReactTypes.FC = () => {
+    const ctx = useSurfaceRenderContext(React, options.panel ?? 'main')
+    return renderSurface(ctx)
+  }
+  SurfaceComponent.displayName = options.displayName
+  return SurfaceComponent
 }

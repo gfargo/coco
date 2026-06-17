@@ -12,8 +12,9 @@ import { installNpmPackage } from '../../lib/utils/installPackage'
 
 import { ConfigWithServiceObject } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
-import { OllamaLLMService } from '../../lib/langchain/types'
+import { LLMModel, LLMProvider, OllamaLLMService } from '../../lib/langchain/types'
 import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
+import { OllamaNotReadyError } from '../../lib/langchain/utils/ollamaStatus'
 import { CommandHandler } from '../../lib/types'
 import { Logger } from '../../lib/utils/logger'
 import { getPathToUsersGitConfig } from '../../lib/utils/getPathToUsersGitConfig'
@@ -49,8 +50,24 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // Ask about commitlint setup after scope selection
   shouldSetupCommitlint = await questions.setupCommitlint()
 
-  const llmProvider = await questions.selectLLMProvider()
-  const llmModel = await questions.selectLLMModel(llmProvider)
+  // Pick provider + model in a loop so an unusable Ollama (not installed /
+  // not running / no models pulled) re-offers the provider picker instead of
+  // hard-exiting and discarding the answers above.
+  let llmProvider: LLMProvider
+  let llmModel: LLMModel
+  for (;;) {
+    llmProvider = await questions.selectLLMProvider()
+    try {
+      llmModel = await questions.selectLLMModel(llmProvider)
+      break
+    } catch (err) {
+      if (err instanceof OllamaNotReadyError) {
+        logger.log(chalk.dim("\nLet's choose a provider again."))
+        continue
+      }
+      throw err
+    }
+  }
 
   const service = getDefaultServiceConfigFromAlias(llmProvider, llmModel)
 
@@ -221,8 +238,22 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       await appendToGitConfig(configFilePath, config)
     } else if (configFilePath.endsWith('.env')) {
       await appendToEnvFile(configFilePath, config)
-    } else if (configFilePath.endsWith('.coco.config.json')) {
+    } else if (
+      // Both JSON project-config formats route to the same writer. The
+      // recommended `.coco.json` was previously missing here, so selecting it
+      // silently wrote nothing while still reporting "init successful". Check
+      // the more-specific legacy name first (`.coco.json` is a suffix of
+      // neither, so order is not strictly required, but keep it explicit).
+      configFilePath.endsWith('.coco.config.json') ||
+      configFilePath.endsWith('.coco.json')
+    ) {
       appendToProjectJsonConfig(configFilePath, config)
+    } else {
+      // Fail loud rather than silently no-op: any config-file type without a
+      // writer branch is a bug, and a silent skip here looks like success.
+      throw new Error(
+        `init: no config writer for "${configFilePath}" — this is a bug`,
+      )
     }
 
     // Persist the usage-stats choice to the global (per-machine) config.

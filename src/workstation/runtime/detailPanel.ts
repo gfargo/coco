@@ -41,6 +41,7 @@ import {
     renderThemePickerOverlay,
     renderViewKeysOverlay,
 } from './overlays'
+import { useSurfaceRenderContext } from './runtimeContext'
 import type { SurfaceRenderContext } from './types'
 
 /**
@@ -57,11 +58,103 @@ export type DetailPanelExtras = {
   tabbed: boolean
 }
 
+/**
+ * Detail-panel surface components (#1237 surface migration). The detail
+ * renderers keep their positional signatures (and their colocated
+ * render-snapshot suites) unchanged; these thin wrappers read the base
+ * context via {@link useSurfaceRenderContext} (panel `'detail'`, so the
+ * detail width resolves correctly) and call the renderer, deriving
+ * `focused` from `state.focus === 'detail'` exactly as the dispatcher did.
+ * The overlays (help / palette / pickers / confirmation / chord) stay
+ * positional — a separate, transient concern. All cached per process.
+ */
+
+// The eight preview/context panels share one positional signature, so they
+// group like the main panel's zero-extra set.
+type CoreDetailRenderer = (
+  h: typeof ReactTypes.createElement,
+  components: SurfaceRenderContext['components'],
+  state: SurfaceRenderContext['state'],
+  context: SurfaceRenderContext['context'],
+  contextStatus: SurfaceRenderContext['contextStatus'],
+  width: number,
+  theme: SurfaceRenderContext['theme'],
+  focused: boolean
+) => ReactTypes.ReactElement
+
+let cachedCoreDetailComponents: Partial<Record<string, ReactTypes.FC>> | null = null
+function coreDetailComponent(React: typeof ReactTypes, key: string): ReactTypes.FC | undefined {
+  if (!cachedCoreDetailComponents) {
+    const make = (render: CoreDetailRenderer, displayName: string): ReactTypes.FC => {
+      const Component: ReactTypes.FC = () => {
+        const { h, components, state, context, contextStatus, width, theme } =
+          useSurfaceRenderContext(React, 'detail')
+        return render(h, components, state, context, contextStatus, width, theme, state.focus === 'detail')
+      }
+      Component.displayName = displayName
+      return Component
+    }
+    cachedCoreDetailComponents = {
+      commit: make(renderCommitPanel, 'CommitPanel'),
+      composeContext: make(renderComposeContextPanel, 'ComposeContextPanel'),
+      branchPreview: make(renderBranchPreviewPanel, 'BranchPreviewPanel'),
+      tagPreview: make(renderTagPreviewPanel, 'TagPreviewPanel'),
+      stashPreview: make(renderStashPreviewPanel, 'StashPreviewPanel'),
+      submodulePreview: make(renderSubmodulePreviewPanel, 'SubmodulePreviewPanel'),
+      issuePreview: make(renderIssueTriagePreviewPanel, 'IssueTriagePreviewPanel'),
+      prPreview: make(renderPullRequestTriagePreviewPanel, 'PullRequestTriagePreviewPanel'),
+    }
+  }
+  return cachedCoreDetailComponents[key]
+}
+
+type CommitDiffProps = { detail: GitCommitDetail | undefined; loading: boolean }
+let cachedCommitDiffComponent: ReactTypes.FC<CommitDiffProps> | null = null
+function commitDiffDetailComponent(React: typeof ReactTypes): ReactTypes.FC<CommitDiffProps> {
+  if (!cachedCommitDiffComponent) {
+    const Component: ReactTypes.FC<CommitDiffProps> = ({ detail, loading }) => {
+      const { h, components, state, width, theme } = useSurfaceRenderContext(React, 'detail')
+      return renderCommitDiffDetail(h, components, state, detail, loading, width, theme, state.focus === 'detail')
+    }
+    Component.displayName = 'CommitDiffDetail'
+    cachedCommitDiffComponent = Component
+  }
+  return cachedCommitDiffComponent
+}
+
+type HistoryInspectorProps = {
+  detail: GitCommitDetail | undefined
+  loading: boolean
+  filePreview: GitCommitFilePreview | undefined
+  filePreviewLoading: boolean
+  tabbed: boolean
+}
+let cachedHistoryInspectorComponent: ReactTypes.FC<HistoryInspectorProps> | null = null
+function historyInspectorComponent(React: typeof ReactTypes): ReactTypes.FC<HistoryInspectorProps> {
+  if (!cachedHistoryInspectorComponent) {
+    const Component: ReactTypes.FC<HistoryInspectorProps> = (props) => {
+      const { h, components, state, context, contextStatus, width, theme } =
+        useSurfaceRenderContext(React, 'detail')
+      return renderHistoryInspector(
+        h, components, state, context, contextStatus, props.detail, props.loading,
+        props.filePreview, props.filePreviewLoading, width, props.tabbed, theme, state.focus === 'detail'
+      )
+    }
+    Component.displayName = 'HistoryInspector'
+    cachedHistoryInspectorComponent = Component
+  }
+  return cachedHistoryInspectorComponent
+}
+
 export function renderDetailPanel(
+  React: typeof ReactTypes,
   surface: SurfaceRenderContext,
   extras: DetailPanelExtras
 ): ReactTypes.ReactElement {
-  const { h, components, state, context, contextStatus, bodyRows, width, theme } = surface
+  // Only the values the overlay branches still need positionally are
+  // destructured here; the per-view detail surfaces self-serve the rest
+  // from LogInkRuntimeContext via their components (#1237).
+  const { h, components, state, bodyRows, width, theme } = surface
   const { detail, loading, filePreview, filePreviewLoading, tabbed } = extras
   const focused = state.focus === 'detail'
 
@@ -121,7 +214,7 @@ export function renderDetailPanel(
   // worktree summary so the user sees what's staged / unstaged at a glance
   // — same surface as the compose view's right panel.
   if (state.activeView === 'history' && state.pendingCommitFocused) {
-    return renderComposeContextPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'composeContext')!)
   }
 
   // Status + worktree-sourced diff keep the staging compose panel — it's
@@ -129,50 +222,53 @@ export function renderDetailPanel(
   // history → Enter) gets a dedicated explore panel: subject, body, and a
   // navigable file list whose selection swaps the center diff.
   if (state.activeView === 'status') {
-    return renderCommitPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'commit')!)
   }
 
   if (state.activeView === 'diff') {
     if (state.diffSource === 'commit') {
-      return renderCommitDiffDetail(h, components, state, detail, loading, width, theme, focused)
+      return h(commitDiffDetailComponent(React), { detail, loading })
     }
-    return renderCommitPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'commit')!)
   }
 
   // Compose view: the right panel had been falling through to the inspector
   // and showing the last selected commit's data, which is wrong context for
   // an in-progress commit. Show the worktree summary instead.
   if (state.activeView === 'compose') {
-    return renderComposeContextPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'composeContext')!)
   }
 
   // Preview pane (P4.1) — fzf / yazi / lazygit style: branches, tags, and
   // stash views each get a tailored summary of the selected entry instead
   // of falling through to the (stale) history inspector.
   if (state.activeView === 'branches') {
-    return renderBranchPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'branchPreview')!)
   }
   if (state.activeView === 'tags') {
-    return renderTagPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'tagPreview')!)
   }
   if (state.activeView === 'stash') {
-    return renderStashPreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'stashPreview')!)
   }
 
   if (state.activeView === 'submodules') {
-    return renderSubmodulePreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'submodulePreview')!)
   }
 
   if (state.activeView === 'issues') {
-    return renderIssueTriagePreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'issuePreview')!)
   }
 
   if (state.activeView === 'pull-request-triage') {
-    return renderPullRequestTriagePreviewPanel(h, components, state, context, contextStatus, width, theme, focused)
+    return h(coreDetailComponent(React, 'prPreview')!)
   }
 
-  return renderHistoryInspector(
-    h, components, state, context, contextStatus, detail, loading,
-    filePreview, filePreviewLoading, width, tabbed, theme, focused
-  )
+  return h(historyInspectorComponent(React), {
+    detail,
+    loading,
+    filePreview,
+    filePreviewLoading,
+    tabbed,
+  })
 }

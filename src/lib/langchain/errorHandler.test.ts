@@ -1,4 +1,4 @@
-import { isNetworkError, handleLangChainError } from './errorHandler'
+import { isNetworkError, isRetryableError, handleLangChainError } from './errorHandler'
 import { LangChainNetworkError, LangChainExecutionError } from './errors'
 
 describe('isNetworkError', () => {
@@ -52,6 +52,44 @@ describe('isNetworkError', () => {
   it('should be case-insensitive', () => {
     const error = new Error('FETCH FAILED')
     expect(isNetworkError(error)).toBe(true)
+  })
+})
+
+describe('isRetryableError (#1242 — shared transient predicate)', () => {
+  it('treats connection failures (network errors) as retryable', () => {
+    expect(isRetryableError(new Error('fetch failed'))).toBe(true)
+    expect(isRetryableError(new Error('connect ECONNREFUSED 127.0.0.1:11434'))).toBe(true)
+  })
+
+  it('retries transient HTTP statuses', () => {
+    for (const status of [429, 502, 503, 504]) {
+      expect(isRetryableError({ status })).toBe(true)
+    }
+    expect(isRetryableError({ status: 400 })).toBe(false)
+    expect(isRetryableError({ status: 404 })).toBe(false)
+  })
+
+  it('retries rate-limit / timeout error codes', () => {
+    expect(isRetryableError({ code: 429 })).toBe(true)
+    expect(isRetryableError({ code: 'rate_limit_exceeded' })).toBe(true)
+    expect(isRetryableError({ code: 'ECONNRESET' })).toBe(true)
+    expect(isRetryableError({ code: 'ETIMEDOUT' })).toBe(true)
+    expect(isRetryableError({ code: 'EPERM' })).toBe(false)
+  })
+
+  it('retries on transient message signals (case-insensitive)', () => {
+    expect(isRetryableError({ message: 'Rate limit exceeded' })).toBe(true)
+    expect(isRetryableError({ message: '429 Too Many Requests' })).toBe(true)
+    expect(isRetryableError({ message: 'Service temporarily unavailable' })).toBe(true)
+    expect(isRetryableError({ message: 'request timeout' })).toBe(true)
+    expect(isRetryableError({ message: 'Invalid JSON' })).toBe(false)
+  })
+
+  it('returns false for non-transient / non-object inputs', () => {
+    expect(isRetryableError(new Error('Validation failed'))).toBe(false)
+    expect(isRetryableError(null)).toBe(false)
+    expect(isRetryableError(undefined)).toBe(false)
+    expect(isRetryableError('boom')).toBe(false)
   })
 })
 

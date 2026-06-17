@@ -14,6 +14,7 @@ import { getProjectConfigFilePath } from '../../lib/utils/getProjectConfigFilePa
 import { installNpmPackage } from '../../lib/utils/installPackage'
 import { Logger } from '../../lib/utils/logger'
 import { confirmPrompt } from '../../lib/ui/inquirerPrompts'
+import { OllamaNotReadyError } from '../../lib/langchain/utils/ollamaStatus'
 
 jest.mock('../../lib/ui/inquirerPrompts', () => ({
   confirmPrompt: jest.fn(),
@@ -170,6 +171,23 @@ describe('init command', () => {
     })
   })
 
+  it('writes project json config for the recommended .coco.json format', async () => {
+    // Regression: `.coco.json` (the recommended option) previously matched no
+    // write branch, so init reported success but persisted nothing.
+    jest.spyOn(questions, 'selectProjectConfigFileType').mockResolvedValue('.coco.json')
+    mockGetProjectConfigFilePath.mockResolvedValue('/repo/.coco.json')
+
+    await handler(createArgv({ scope: 'project' }), logger)
+
+    expect(mockAppendToProjectJsonConfig).toHaveBeenCalledWith(
+      '/repo/.coco.json',
+      expect.any(Object),
+    )
+    expect(logger.log).toHaveBeenCalledWith('\ninit successful! 🦾🤖🎉', {
+      color: 'green',
+    })
+  })
+
   it('writes env config when selected for a project config', async () => {
     jest.spyOn(questions, 'selectProjectConfigFileType').mockResolvedValue('.env')
     mockGetProjectConfigFilePath.mockResolvedValue('/repo/.env')
@@ -239,5 +257,30 @@ describe('init command', () => {
     })
     expect(mockLogResult).toHaveBeenCalled()
     expect(mockAppendToProjectJsonConfig).toHaveBeenCalled()
+  })
+
+  it('re-offers the provider picker when Ollama is not ready, preserving the session', async () => {
+    // First pass: user picks Ollama, but it isn't ready, so selectLLMModel
+    // throws OllamaNotReadyError. The handler should catch it and re-prompt
+    // the provider rather than aborting the whole init session.
+    jest
+      .spyOn(questions, 'selectLLMProvider')
+      .mockResolvedValueOnce('ollama')
+      .mockResolvedValueOnce('openai')
+    jest
+      .spyOn(questions, 'selectLLMModel')
+      .mockRejectedValueOnce(new OllamaNotReadyError())
+      .mockResolvedValueOnce('gpt-4o')
+    mockApiKeyService('openai')
+
+    await handler(createArgv({ scope: 'project' }), logger)
+
+    expect(questions.selectLLMProvider).toHaveBeenCalledTimes(2)
+    expect(mockAppendToProjectJsonConfig).toHaveBeenCalledWith(
+      '/repo/.coco.config.json',
+      expect.objectContaining({
+        service: expect.objectContaining({ provider: 'openai' }),
+      })
+    )
   })
 })

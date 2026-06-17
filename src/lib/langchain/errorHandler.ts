@@ -41,6 +41,52 @@ export function isNetworkError(error: unknown): boolean {
   )
 }
 
+/** HTTP statuses worth retrying with backoff (rate limit + transient 5xx). */
+const RETRYABLE_HTTP_STATUS = new Set([429, 502, 503, 504])
+
+/** Substrings that signal a transient, retryable provider error. */
+const TRANSIENT_ERROR_PATTERNS = [
+  'rate limit',
+  'rate-limit',
+  'ratelimit',
+  '429',
+  'too many requests',
+  'timeout',
+  'temporarily unavailable',
+]
+
+/**
+ * The single shared notion of a *retryable* (transient) error: a connection
+ * failure (see {@link isNetworkError}) OR a transient HTTP status / rate-limit /
+ * timeout signal from a provider. Callers that back off and retry (e.g. the
+ * summarize chain) should use this rather than re-deriving their own predicate.
+ *
+ * Deliberately distinct from `utils/retry`'s `defaultShouldRetry`, which is
+ * broader: that one retries *any* non-permanent error (anything that isn't a
+ * validation / configuration / authentication failure) so schema-output retries
+ * can re-roll on e.g. unparseable model output. Transient ⊂ defaultShouldRetry.
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (isNetworkError(error)) return true
+  if (!error || typeof error !== 'object') return false
+
+  const err = error as { status?: number; code?: string | number; message?: string }
+  if (typeof err.status === 'number' && RETRYABLE_HTTP_STATUS.has(err.status)) return true
+  if (
+    err.code === 429 ||
+    err.code === 'rate_limit_exceeded' ||
+    err.code === 'ECONNRESET' ||
+    err.code === 'ETIMEDOUT'
+  ) {
+    return true
+  }
+  if (typeof err.message === 'string') {
+    const message = err.message.toLowerCase()
+    if (TRANSIENT_ERROR_PATTERNS.some((pattern) => message.includes(pattern))) return true
+  }
+  return false
+}
+
 /**
  * Wraps errors with additional context and converts them to LangChain errors
  */

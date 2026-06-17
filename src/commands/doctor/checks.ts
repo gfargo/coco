@@ -1,5 +1,9 @@
 import * as fs from 'fs'
 import { Config } from '../../lib/config/types'
+import { resolveDynamicModel } from '../../lib/langchain/utils/dynamicModels'
+import { DEFAULT_OLLAMA_ENDPOINT, getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
+import { DEPRECATED_MODELS, detectProviderMismatch } from '../../lib/langchain/modelValidity'
+import { LLMProvider } from '../../lib/langchain/types'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
 
@@ -8,21 +12,6 @@ export interface Diagnostic {
   message: string
   fix?: string
   autoFix?: (config: Record<string, unknown>) => void
-}
-
-/**
- * Deprecated or renamed model identifiers that should be updated.
- */
-const MODEL_UPGRADES: Record<string, string> = {
-  'gpt-4-turbo-preview': 'gpt-4o',
-  'gpt-4-0125-preview': 'gpt-4o',
-  'gpt-4-1106-preview': 'gpt-4o',
-  'gpt-3.5-turbo-0125': 'gpt-4o-mini',
-  'gpt-3.5-turbo-1106': 'gpt-4o-mini',
-  'gpt-3.5-turbo-16k': 'gpt-4o-mini',
-  'claude-3-opus-20240229': 'claude-sonnet-4-0',
-  'claude-3-sonnet-20240229': 'claude-3-5-sonnet-latest',
-  'claude-3-haiku-20240307': 'claude-3-5-haiku-latest',
 }
 
 export function runDiagnostics(config: Config): Diagnostic[] {
@@ -149,7 +138,20 @@ function checkModelCurrency(config: Config, diagnostics: Diagnostic[]) {
   if (!config.service?.model || config.service.model === 'dynamic') return
 
   const model = String(config.service.model)
-  const upgrade = MODEL_UPGRADES[model]
+  const provider = config.service.provider as LLMProvider
+
+  // Per-provider validity: flag a model that belongs to a different provider's
+  // namespace (e.g. a `claude-…` model configured under provider `openai`).
+  const mismatchOwner = detectProviderMismatch(model, provider)
+  if (mismatchOwner) {
+    diagnostics.push({
+      severity: 'error',
+      message: `Model "${model}" is a ${mismatchOwner} model, but service.provider is "${provider}".`,
+      fix: `Set service.model to a ${provider} model, or change service.provider to "${mismatchOwner}".`,
+    })
+  }
+
+  const upgrade = DEPRECATED_MODELS[model]
 
   if (upgrade) {
     diagnostics.push({
@@ -299,4 +301,61 @@ function checkProjectConfigFile(diagnostics: Diagnostic[]) {
       fix: `Fix the JSON syntax in ${configPath} or regenerate it with \`coco init --scope project\`.`,
     })
   }
+}
+
+/** Does the Ollama daemon report `model` as pulled? Tolerant of the implicit
+ * `:latest` tag Ollama applies when a model is referenced without one. */
+function isModelPulled(model: string, pulled: string[]): boolean {
+  if (pulled.includes(model)) return true
+  if (!model.includes(':')) return pulled.includes(`${model}:latest`)
+  if (model.endsWith(':latest')) return pulled.includes(model.slice(0, -':latest'.length))
+  return false
+}
+
+/**
+ * Live Ollama checks that need a network round-trip — kept out of the
+ * synchronous {@link runDiagnostics} (which `coco init` runs inline) so only
+ * `coco doctor` pays the cost. No-op for non-Ollama providers.
+ *
+ * Surfaces the two first-run cliffs the config checks can't see:
+ *   - the daemon isn't reachable at the configured endpoint, and
+ *   - the model coco will actually call isn't pulled (for `dynamic`, the
+ *     resolved commit-tier model is checked).
+ */
+export async function checkOllamaLiveness(config: Config): Promise<Diagnostic[]> {
+  const diagnostics: Diagnostic[] = []
+  if (config.service?.provider !== 'ollama') return diagnostics
+
+  const endpoint =
+    ('endpoint' in config.service && config.service.endpoint) || DEFAULT_OLLAMA_ENDPOINT
+  const status = await getOllamaStatus(endpoint)
+
+  if (!status.reachable) {
+    diagnostics.push({
+      severity: 'error',
+      message: `Ollama daemon is not reachable at ${endpoint}.`,
+      fix: status.installed
+        ? 'Start it with `ollama serve` (or open the Ollama app).'
+        : 'Install Ollama (https://ollama.com/download), then run `ollama serve`.',
+    })
+    return diagnostics
+  }
+
+  const configuredModel = config.service.model
+  const modelToCheck =
+    configuredModel === 'dynamic' ? resolveDynamicModel(config, 'commit') : configuredModel
+
+  if (modelToCheck && !isModelPulled(modelToCheck, status.models)) {
+    const dynamicNote = configuredModel === 'dynamic' ? ' (dynamic → commit)' : ''
+    const have = status.models.length
+      ? ` Pulled: ${status.models.slice(0, 4).join(', ')}${status.models.length > 4 ? '…' : ''}.`
+      : ''
+    diagnostics.push({
+      severity: 'warn',
+      message: `Ollama model '${modelToCheck}'${dynamicNote} isn't pulled.${have}`,
+      fix: `Pull it with \`ollama pull ${modelToCheck}\`.`,
+    })
+  }
+
+  return diagnostics
 }
