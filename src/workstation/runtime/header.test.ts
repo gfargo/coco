@@ -24,6 +24,7 @@
  */
 import { createElement, type ReactElement } from 'react'
 import * as React from 'react'
+import { createLogInkContextStatus } from '../chrome/context'
 import { getLogInkLayout } from '../chrome/layout'
 import { createLogInkTheme } from '../chrome/theme'
 import { createLogInkState } from '../../workstation/runtime/inkViewModel'
@@ -70,6 +71,11 @@ function makeRuntimeValue(
     // fallback path — we want the per-chip labels in the output.
     layout: getLogInkLayout({ columns: 160, rows: 40 }),
     context,
+    // The header doesn't read these, but the runtime context value now
+    // also carries them (#1237 surface migration) so the type requires them.
+    contextStatus: createLogInkContextStatus('idle'),
+    h: createElement,
+    components: { Box, Text },
     ...overrides,
   }
 }
