@@ -36,7 +36,7 @@ import { renderStatusSurface } from '../surfaces/status'
 import { renderSubmodulesSurface } from '../surfaces/submodules'
 import { renderTagsSurface } from '../surfaces/tags'
 import { renderWorktreesSurface } from '../surfaces/worktrees'
-import { defineSurfaceComponent } from './runtimeContext'
+import { defineSurfaceComponent, useSurfaceRenderContext } from './runtimeContext'
 import type { SurfaceRenderContext } from './types'
 
 /**
@@ -75,6 +75,81 @@ function zeroExtraComponent(
     }
   }
   return cachedZeroExtraComponents[view]
+}
+
+/**
+ * Single-extra surfaces (#1237 surface migration) — their renderer needs
+ * the base {@link SurfaceRenderContext} plus exactly one per-render async
+ * slice (a spinner frame, diff data, blame data, a bisect candidate). The
+ * slice stays a component **prop** rather than moving into context, so it
+ * remains the per-surface boundary; the rest is read from
+ * `LogInkRuntimeContext` via {@link useSurfaceRenderContext}. All cached
+ * per process, like the zero-extra set.
+ */
+
+// Spinner-driven surfaces all share the `{ spinnerFrame }` prop shape, so
+// they group like the zero-extra set (keyed by `state.activeView`).
+let cachedSpinnerComponents: Partial<Record<string, ReactTypes.FC<{ spinnerFrame: number }>>> | null = null
+function spinnerSurfaceComponent(
+  React: typeof ReactTypes,
+  view: string
+): ReactTypes.FC<{ spinnerFrame: number }> | undefined {
+  if (!cachedSpinnerComponents) {
+    const make = (
+      renderSurface: (ctx: SurfaceRenderContext, spinnerFrame: number) => ReactTypes.ReactElement,
+      displayName: string
+    ): ReactTypes.FC<{ spinnerFrame: number }> => {
+      const Component: ReactTypes.FC<{ spinnerFrame: number }> = ({ spinnerFrame }) =>
+        renderSurface(useSurfaceRenderContext(React, 'main'), spinnerFrame)
+      Component.displayName = displayName
+      return Component
+    }
+    cachedSpinnerComponents = {
+      compose: make(renderComposeSurface, 'ComposeSurface'),
+      branches: make(renderBranchesSurface, 'BranchesSurface'),
+      tags: make(renderTagsSurface, 'TagsSurface'),
+      stash: make(renderStashSurface, 'StashSurface'),
+      worktrees: make(renderWorktreesSurface, 'WorktreesSurface'),
+    }
+  }
+  return cachedSpinnerComponents[view]
+}
+
+let cachedDiffComponent: ReactTypes.FC<{ diff: DiffSurfaceData }> | null = null
+function diffSurfaceComponent(React: typeof ReactTypes): ReactTypes.FC<{ diff: DiffSurfaceData }> {
+  if (!cachedDiffComponent) {
+    const Component: ReactTypes.FC<{ diff: DiffSurfaceData }> = ({ diff }) =>
+      renderDiffSurface(useSurfaceRenderContext(React, 'main'), diff)
+    Component.displayName = 'DiffSurface'
+    cachedDiffComponent = Component
+  }
+  return cachedDiffComponent
+}
+
+type BisectComponentProps = {
+  candidateDetail: GitCommitDetail | undefined
+  candidateLoading: boolean
+}
+let cachedBisectComponent: ReactTypes.FC<BisectComponentProps> | null = null
+function bisectSurfaceComponent(React: typeof ReactTypes): ReactTypes.FC<BisectComponentProps> {
+  if (!cachedBisectComponent) {
+    const Component: ReactTypes.FC<BisectComponentProps> = ({ candidateDetail, candidateLoading }) =>
+      renderBisectSurface(useSurfaceRenderContext(React, 'main'), candidateDetail, candidateLoading)
+    Component.displayName = 'BisectSurface'
+    cachedBisectComponent = Component
+  }
+  return cachedBisectComponent
+}
+
+let cachedBlameComponent: ReactTypes.FC<{ data: BlameSurfaceData }> | null = null
+function blameSurfaceComponent(React: typeof ReactTypes): ReactTypes.FC<{ data: BlameSurfaceData }> {
+  if (!cachedBlameComponent) {
+    const Component: ReactTypes.FC<{ data: BlameSurfaceData }> = ({ data }) =>
+      renderBlameSurface(useSurfaceRenderContext(React, 'main'), data)
+    Component.displayName = 'BlameSurface'
+    cachedBlameComponent = Component
+  }
+  return cachedBlameComponent
 }
 
 /**
@@ -179,19 +254,19 @@ export function renderMainPanel(
       compareDiffLoading,
       syntaxSpans,
     }
-    return renderDiffSurface(surface, diffData)
+    return h(diffSurfaceComponent(React), { diff: diffData })
   }
 
   if (state.activeView === 'compose') {
-    return renderComposeSurface(surface, spinnerFrame)
+    return h(spinnerSurfaceComponent(React, 'compose')!, { spinnerFrame })
   }
 
   if (state.activeView === 'branches') {
-    return renderBranchesSurface(surface, spinnerFrame)
+    return h(spinnerSurfaceComponent(React, 'branches')!, { spinnerFrame })
   }
 
   if (state.activeView === 'tags') {
-    return renderTagsSurface(surface, spinnerFrame)
+    return h(spinnerSurfaceComponent(React, 'tags')!, { spinnerFrame })
   }
 
   if (state.activeView === 'reflog') {
@@ -199,15 +274,18 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'bisect') {
-    return renderBisectSurface(surface, bisectCandidateDetail, bisectCandidateLoading)
+    return h(bisectSurfaceComponent(React), {
+      candidateDetail: bisectCandidateDetail,
+      candidateLoading: bisectCandidateLoading,
+    })
   }
 
   if (state.activeView === 'stash') {
-    return renderStashSurface(surface, spinnerFrame)
+    return h(spinnerSurfaceComponent(React, 'stash')!, { spinnerFrame })
   }
 
   if (state.activeView === 'worktrees') {
-    return renderWorktreesSurface(surface, spinnerFrame)
+    return h(spinnerSurfaceComponent(React, 'worktrees')!, { spinnerFrame })
   }
 
   if (state.activeView === 'submodules') {
@@ -219,7 +297,7 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'blame') {
-    return renderBlameSurface(surface, { blame, loading: blameLoading })
+    return h(blameSurfaceComponent(React), { data: { blame, loading: blameLoading } })
   }
 
   if (state.activeView === 'pull-request') {
