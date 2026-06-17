@@ -33,9 +33,15 @@ describe('createInitialContextStatus', () => {
     expect(status.submodules).toBe('loading')
   })
 
-  it('seeds pullRequest as idle so the chrome does not stick on loading (#808)', () => {
+  it('seeds every lazy-loaded key as idle so the chrome does not stick on "loading context"', () => {
     const status = createInitialContextStatus()
+    // These three are hydrated on entry to their view, not at boot, so
+    // leaving them 'loading' kept the header's context indicator stuck
+    // forever (#808 fixed pullRequest; issueList / pullRequestList were
+    // the missed siblings).
     expect(status.pullRequest).toBe('idle')
+    expect(status.issueList).toBe('idle')
+    expect(status.pullRequestList).toBe('idle')
   })
 
   it('returns a fresh object on each call', () => {
