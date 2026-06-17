@@ -6,6 +6,34 @@ import { ajv } from '../../ajv'
 const validate = ajv.compile(schema)
 
 /**
+ * Config is loaded many times per command run — `loadConfig` is called
+ * independently from the command handler, the command executor, the
+ * default router, doctor, etc. Each call re-runs `loadProjectJsonConfig`,
+ * so a single malformed `.coco.json` used to print the same warning 3×
+ * for one invocation. We can't cheaply memoize the whole load (argv
+ * differs per call and `applyRepoFlag` changes cwd between calls, which
+ * changes how the relative `.coco.json` path resolves), so instead we
+ * guard the warnings: each distinct (kind + file) warning fires at most
+ * once for the lifetime of the process.
+ */
+const warnedKeys = new Set<string>()
+
+function warnOnce(kind: 'parse' | 'validation', resolvedPath: string, message: string): void {
+  const key = `${kind}:${resolvedPath}`
+  if (warnedKeys.has(key)) return
+  warnedKeys.add(key)
+  console.warn(message)
+}
+
+/**
+ * Clears the warn-once guard. Intended for tests that exercise the
+ * warning paths in isolation — production code never needs to reset it.
+ */
+export function resetConfigLoadWarnings(): void {
+  warnedKeys.clear()
+}
+
+/**
  * Load project config
  *
  * Looks for `.coco.json` first (preferred), then falls back to `.coco.config.json`
@@ -53,7 +81,9 @@ export function loadProjectJsonConfig<ConfigType = Config>(
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      console.warn(
+      warnOnce(
+        'parse',
+        resolvedPath,
         `[coco] Warning: could not parse ${resolvedPath} as JSON — ignoring it.\n` +
         `  Parse error: ${reason}\n` +
         `  Fix the file's syntax (or run \`coco init\` to regenerate it). ` +
@@ -96,7 +126,9 @@ export function loadProjectJsonConfig<ConfigType = Config>(
     const isProjectConfigValid = validate(merged)
     if (!isProjectConfigValid) {
       const errors = ajv.errorsText(validate.errors)
-      console.warn(
+      warnOnce(
+        'validation',
+        resolvedPath,
         `[coco] Warning: config validation issues detected (continuing with merged config).\n` +
         `  Local file:   ${resolvedPath}\n` +
         `  Schema issues: ${errors}\n` +

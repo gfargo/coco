@@ -1,5 +1,5 @@
 import * as fs from 'fs'
-import { loadProjectJsonConfig } from './project'
+import { loadProjectJsonConfig, resetConfigLoadWarnings } from './project'
 import { Config } from '../types'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 
@@ -32,6 +32,9 @@ const ollamaAliasConfig: Config = {
 describe('loadProjectConfig', () => {
   afterEach(() => {
     jest.resetAllMocks()
+    // The warn-once guard is process-scoped; reset it so each test
+    // exercises the warning paths from a clean slate.
+    resetConfigLoadWarnings()
   })
 
   it('should load project config', () => {
@@ -60,6 +63,26 @@ describe('loadProjectConfig', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0][0]).toContain('could not parse')
     expect(warn.mock.calls[0][0]).toContain('.coco.json')
+    warn.mockRestore()
+  })
+
+  it('warns at most once about a malformed config across repeated loads', () => {
+    // Config is loaded several times per command run (command handler,
+    // command executor, default router, doctor, …). Each load re-runs
+    // loadProjectJsonConfig, which used to print the same parse warning
+    // once per load — 3× for a single `coco doctor` invocation. The
+    // warn-once guard collapses those to a single warning per run.
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('{ this is not valid json ]')
+
+    // Simulate the multiple loads a single command performs.
+    loadProjectJsonConfig(openAIAliasConfig)
+    loadProjectJsonConfig(openAIAliasConfig)
+    loadProjectJsonConfig(openAIAliasConfig)
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('could not parse')
     warn.mockRestore()
   })
 
