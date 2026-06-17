@@ -12,11 +12,13 @@
  * Ink (ESM) into ts-jest. Same trick as `footer.test.ts`.
  */
 import { createElement } from 'react'
+import * as React from 'react'
 import { createLogInkState } from '../../workstation/runtime/inkViewModel'
 import { createLogInkContextStatus } from '../chrome/context'
 import { getLogInkLayout } from '../chrome/layout'
 import { createLogInkTheme } from '../chrome/theme'
 import { renderDetailPanel } from './detailPanel'
+import type { LogInkRuntimeContextValue } from './runtimeContext'
 import { renderSidebar } from './sidebar'
 import type { LogInkContext } from './types'
 
@@ -30,6 +32,19 @@ const Box = ((props: StubProps) =>
 
 type Node = { props: StubProps }
 const asNode = (value: unknown): Node => value as Node
+
+// The detail surfaces now mount as components that read width/etc. from
+// LogInkRuntimeContext (#1237). A thin React shim whose `useContext`
+// returns a fixed runtime value lets us render the inspector component
+// without a renderer (same trick as header.test.ts).
+function reactWithRuntime(value: LogInkRuntimeContextValue): typeof React {
+  return new Proxy(React, {
+    get(target, prop, receiver) {
+      if (prop === 'useContext') return () => value
+      return Reflect.get(target, prop, receiver)
+    },
+  }) as typeof React
+}
 
 const theme = createLogInkTheme({ noColor: false })
 const context: LogInkContext = {}
@@ -67,27 +82,42 @@ describe('single-pane render smoke (80×24 floor)', () => {
     expect(layout.singlePane).toBe(true)
     expect(layout.visiblePane).toBe('inspector')
 
-    const tree = asNode(
-      renderDetailPanel(
-        {
-          h: createElement,
-          components: { Box, Text },
-          state,
-          context,
-          contextStatus,
-          bodyRows: layout.bodyRows,
-          width: layout.detailWidth,
-          theme,
-        },
-        {
-          detail: undefined,
-          loading: false,
-          filePreview: undefined,
-          filePreviewLoading: false,
-          tabbed: false,
-        }
-      )
-    )
+    // The inspector mounts as the HistoryInspector component; it reads its
+    // width from the runtime context's `layout.detailWidth` (80 here).
+    const runtimeValue: LogInkRuntimeContextValue = {
+      state,
+      dispatch: () => {},
+      theme,
+      layout,
+      context,
+      contextStatus,
+      h: createElement,
+      components: { Box, Text },
+    }
+    const shim = reactWithRuntime(runtimeValue)
+    const element = renderDetailPanel(
+      shim,
+      {
+        h: createElement,
+        components: { Box, Text },
+        state,
+        context,
+        contextStatus,
+        bodyRows: layout.bodyRows,
+        width: layout.detailWidth,
+        theme,
+      },
+      {
+        detail: undefined,
+        loading: false,
+        filePreview: undefined,
+        filePreviewLoading: false,
+        tabbed: false,
+      }
+    ) as unknown as { type: (props: unknown) => unknown; props: unknown }
+
+    // Render the returned component through the shim to reach the surface.
+    const tree = asNode(element.type(element.props))
     expect(tree.props.width).toBe(80)
   })
 })

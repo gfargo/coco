@@ -1672,6 +1672,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     })
   const detailPanel = () =>
     renderDetailPanel(
+      React,
       {
         h,
         components: { Box, Text },

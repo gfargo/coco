@@ -6,6 +6,7 @@
  * pulling Ink (ESM) into ts-jest. Same trick as `singlePane.test.ts`.
  */
 import { createElement } from 'react'
+import * as React from 'react'
 import { createLogInkContextStatus } from '../chrome/context'
 import { createLogInkTheme } from '../chrome/theme'
 import { createLogInkState } from '../../workstation/runtime/inkViewModel'
@@ -44,7 +45,10 @@ function renderViewKeys(activeView: string) {
     showViewKeys: true,
     activeView: activeView as never,
   }
+  // The view-keys overlay returns before any per-view detail surface, so
+  // the `React` arg is unused here — pass the real instance for shape.
   return renderDetailPanel(
+    React,
     {
       h: createElement,
       components: { Box, Text },
