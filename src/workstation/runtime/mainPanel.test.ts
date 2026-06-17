@@ -47,6 +47,19 @@ function makeSurface(activeView: string): SurfaceRenderContext {
 // Minimal extras — the zero-extra branches don't read any of these.
 const EXTRAS = {} as unknown as MainPanelExtras
 
+// Extras with the slices the single-extra branches thread to their
+// components, so we can assert the dispatcher passes them through.
+const SPINNER = 7
+function makeExtras(): MainPanelExtras {
+  return {
+    spinnerFrame: SPINNER,
+    bisectCandidateDetail: { hash: 'abc' } as unknown,
+    bisectCandidateLoading: true,
+    blame: { lines: [] } as unknown,
+    blameLoading: true,
+  } as unknown as MainPanelExtras
+}
+
 const ZERO_EXTRA_VIEWS: Array<[view: string, displayName: string]> = [
   ['status', 'StatusSurface'],
   ['reflog', 'ReflogSurface'],
@@ -79,5 +92,44 @@ describe('renderMainPanel — zero-extra surface wiring', () => {
     // Same component object each render — remounting a fresh type every
     // render would be wasteful and defeat later memoization.
     expect(second.type).toBe(first.type)
+  })
+})
+
+describe('renderMainPanel — single-extra surface wiring', () => {
+  it.each([
+    ['compose', 'ComposeSurface'],
+    ['branches', 'BranchesSurface'],
+    ['tags', 'TagsSurface'],
+    ['stash', 'StashSurface'],
+    ['worktrees', 'WorktreesSurface'],
+  ])('mounts the %s view as %s and threads the spinner frame', (view, displayName) => {
+    const React = makeReact()
+    const el = renderMainPanel(React, makeSurface(view), makeExtras()) as unknown as CapturedElement
+    expect(el.type.displayName).toBe(displayName)
+    expect((el.props as { spinnerFrame: number }).spinnerFrame).toBe(SPINNER)
+  })
+
+  it('mounts diff as DiffSurface with the assembled diff slice as a prop', () => {
+    const React = makeReact()
+    const el = renderMainPanel(React, makeSurface('diff'), makeExtras()) as unknown as CapturedElement
+    expect(el.type.displayName).toBe('DiffSurface')
+    expect((el.props as { diff: unknown }).diff).toBeDefined()
+  })
+
+  it('mounts bisect as BisectSurface with candidate detail + loading props', () => {
+    const React = makeReact()
+    const el = renderMainPanel(React, makeSurface('bisect'), makeExtras()) as unknown as CapturedElement
+    expect(el.type.displayName).toBe('BisectSurface')
+    const props = el.props as { candidateDetail: unknown; candidateLoading: boolean }
+    expect(props.candidateDetail).toEqual({ hash: 'abc' })
+    expect(props.candidateLoading).toBe(true)
+  })
+
+  it('mounts blame as BlameSurface with the { blame, loading } data prop', () => {
+    const React = makeReact()
+    const el = renderMainPanel(React, makeSurface('blame'), makeExtras()) as unknown as CapturedElement
+    expect(el.type.displayName).toBe('BlameSurface')
+    const props = el.props as { data: { loading: boolean } }
+    expect(props.data.loading).toBe(true)
   })
 })
