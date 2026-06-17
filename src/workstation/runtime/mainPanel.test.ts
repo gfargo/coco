@@ -57,6 +57,11 @@ function makeExtras(): MainPanelExtras {
     bisectCandidateLoading: true,
     blame: { lines: [] } as unknown,
     blameLoading: true,
+    hasMoreCommits: true,
+    loadingMoreCommits: false,
+    density: 'comfortable',
+    rowMode: 'single',
+    dateBucketingEnabled: true,
   } as unknown as MainPanelExtras
 }
 
@@ -131,5 +136,17 @@ describe('renderMainPanel — single-extra surface wiring', () => {
     expect(el.type.displayName).toBe('BlameSurface')
     const props = el.props as { data: { loading: boolean } }
     expect(props.data.loading).toBe(true)
+  })
+
+  it('falls through to HistorySurface for the default view, threading its props', () => {
+    const React = makeReact()
+    // No explicit branch matches `history`, so the dispatcher's default
+    // returns the history component.
+    const el = renderMainPanel(React, makeSurface('history'), makeExtras()) as unknown as CapturedElement
+    expect(el.type.displayName).toBe('HistorySurface')
+    const props = el.props as { hasMoreCommits: boolean; rowMode: string; spinnerFrame: number }
+    expect(props.hasMoreCommits).toBe(true)
+    expect(props.rowMode).toBe('single')
+    expect(props.spinnerFrame).toBe(SPINNER)
   })
 })
