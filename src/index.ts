@@ -32,6 +32,7 @@ import { UiOptions } from './commands/ui/config'
 import { WorkspaceOptions } from './commands/workspace/config'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
+import { handleFatalError } from './lib/ui/handleFatalError'
 import commandExecutor from './lib/utils/commandExecutor'
 
 const y = yargs()
@@ -223,8 +224,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error(error)
-  process.exit(1)
+  process.exit(handleFatalError(error))
 })
 
 export {
