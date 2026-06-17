@@ -43,6 +43,26 @@ describe('loadProjectConfig', () => {
     expect(config.service.provider).toBe('openai')
   })
 
+  it('does not crash on a malformed JSON config — warns and falls back', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockFs.existsSync.mockReturnValue(true)
+    // A stray token — exactly the kind of hand-edit typo a user makes.
+    mockFs.readFileSync.mockReturnValue('{ "service": { bad json ]')
+
+    let config: Config | undefined
+    expect(() => {
+      config = loadProjectJsonConfig(openAIAliasConfig) as Config
+    }).not.toThrow()
+
+    // Falls back to the other config sources (here, the passed-in base).
+    expect(config?.service.provider).toBe('openai')
+    // Warns loudly with the file + the parse reason.
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('could not parse')
+    expect(warn.mock.calls[0][0]).toContain('.coco.json')
+    warn.mockRestore()
+  })
+
   it('should load project config with service alias', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(
