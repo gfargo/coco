@@ -1485,10 +1485,10 @@
   optionalDependencies:
     langsmith ">=0.4.0 <1.0.0"
 
-"@langchain/community@^1.0.0":
-  version "1.1.28"
-  resolved "https://registry.npmjs.org/@langchain/community/-/community-1.1.28.tgz"
-  integrity sha512-Mb6vmLE4a7LLkH/flxNJgzNXCbrLH/osAvuplXTRqfsysfL8/EjtN7B98kuj/4HwLtBpn8pUQ5HbJIRXLrhP8Q==
+"@langchain/community@^1.1.29":
+  version "1.1.29"
+  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-1.1.29.tgz#b4570301b7080e51594eaaa48d3465ed465d0220"
+  integrity sha512-eJbE0IARueEg+Lljk7SIGGeiSnu5u0mcT0MPIF7UG6jYPNXOpSebwiXsS3aIKOyJZSj0DlmBPv7q0hkLrxDtHA==
   dependencies:
     "@langchain/classic" "^1.0.27"
     "@langchain/openai" "^1.4.1"
