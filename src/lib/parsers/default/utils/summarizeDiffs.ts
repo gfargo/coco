@@ -197,6 +197,8 @@ export type SummarizeDiffsOptions = {
         | 'cs'
         | 'rb'
         | 'php'
+        | 'kt'
+        | 'swift'
       )[]
     }
   }

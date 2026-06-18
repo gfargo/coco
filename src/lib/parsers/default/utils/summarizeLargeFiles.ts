@@ -14,10 +14,12 @@ import { isCppFile } from './cppStructuralDiff'
 import { isCsFile } from './csStructuralDiff'
 import { isGoFile } from './goStructuralDiff'
 import { isJavaFile } from './javaStructuralDiff'
+import { isKotlinFile } from './ktStructuralDiff'
 import { isPhpFile } from './phpStructuralDiff'
 import { isPythonFile } from './pythonStructuralDiff'
 import { isRubyFile } from './rbStructuralDiff'
 import { isRustFile } from './rustStructuralDiff'
+import { isSwiftFile } from './swiftStructuralDiff'
 import {
   dispatchStructuralParser,
   hasTreeSitterParser,
@@ -45,6 +47,8 @@ function detectStructuralLanguageId(path: string): StructuralLanguageId | undefi
   if (isCsFile(path)) return 'cs'
   if (isRubyFile(path)) return 'rb'
   if (isPhpFile(path)) return 'php'
+  if (isKotlinFile(path)) return 'kt'
+  if (isSwiftFile(path)) return 'swift'
   return undefined
 }
 
@@ -106,6 +110,8 @@ export type SummarizeLargeFilesOptions = {
         | 'cs'
         | 'rb'
         | 'php'
+        | 'kt'
+        | 'swift'
       )[]
     }
   }

@@ -430,14 +430,16 @@ export const schema = {
                       "cpp",
                       "cs",
                       "rb",
-                      "php"
+                      "php",
+                      "kt",
+                      "swift"
                     ]
                   },
                   "description": "Languages to opt in. Omit / empty to enable all supported languages."
                 }
               },
               "additionalProperties": false,
-              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`"
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`"
             }
           },
           "additionalProperties": false,
@@ -974,14 +976,16 @@ export const schema = {
                       "cpp",
                       "cs",
                       "rb",
-                      "php"
+                      "php",
+                      "kt",
+                      "swift"
                     ]
                   },
                   "description": "Languages to opt in. Omit / empty to enable all supported languages."
                 }
               },
               "additionalProperties": false,
-              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`"
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`"
             }
           },
           "additionalProperties": false,
@@ -1189,14 +1193,16 @@ export const schema = {
                       "cpp",
                       "cs",
                       "rb",
-                      "php"
+                      "php",
+                      "kt",
+                      "swift"
                     ]
                   },
                   "description": "Languages to opt in. Omit / empty to enable all supported languages."
                 }
               },
               "additionalProperties": false,
-              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`"
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`"
             }
           },
           "additionalProperties": false,
@@ -1391,14 +1397,16 @@ export const schema = {
                       "cpp",
                       "cs",
                       "rb",
-                      "php"
+                      "php",
+                      "kt",
+                      "swift"
                     ]
                   },
                   "description": "Languages to opt in. Omit / empty to enable all supported languages."
                 }
               },
               "additionalProperties": false,
-              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`"
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`"
             }
           },
           "additionalProperties": false,
@@ -1593,14 +1601,16 @@ export const schema = {
                       "cpp",
                       "cs",
                       "rb",
-                      "php"
+                      "php",
+                      "kt",
+                      "swift"
                     ]
                   },
                   "description": "Languages to opt in. Omit / empty to enable all supported languages."
                 }
               },
               "additionalProperties": false,
-              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`"
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`"
             }
           },
           "additionalProperties": false,
@@ -1804,14 +1814,16 @@ export const schema = {
                       "cpp",
                       "cs",
                       "rb",
-                      "php"
+                      "php",
+                      "kt",
+                      "swift"
                     ]
                   },
                   "description": "Languages to opt in. Omit / empty to enable all supported languages."
                 }
               },
               "additionalProperties": false,
-              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`"
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`"
             }
           },
           "additionalProperties": false,
@@ -2018,14 +2030,16 @@ export const schema = {
                       "cpp",
                       "cs",
                       "rb",
-                      "php"
+                      "php",
+                      "kt",
+                      "swift"
                     ]
                   },
                   "description": "Languages to opt in. Omit / empty to enable all supported languages."
                 }
               },
               "additionalProperties": false,
-              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`"
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`"
             }
           },
           "additionalProperties": false,

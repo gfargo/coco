@@ -309,6 +309,8 @@ export type BaseLLMService = {
      *   - 'cs' : `.cs`
      *   - 'rb' : `.rb`
      *   - 'php' : `.php`
+     *   - 'kt' : `.kt` / `.kts`
+     *   - 'swift' : `.swift`
      */
     languageAware?: {
       /**
@@ -333,6 +335,8 @@ export type BaseLLMService = {
         | 'cs'
         | 'rb'
         | 'php'
+        | 'kt'
+        | 'swift'
       )[]
     }
   }
