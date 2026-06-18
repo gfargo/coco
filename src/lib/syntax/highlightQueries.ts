@@ -186,6 +186,43 @@ export const GO_HIGHLIGHT_QUERY = `
 ] @keyword
 `.trim()
 
+/**
+ * JSON (validated against tree-sitter-json 0.24.8).
+ *
+ * The highlighter tokenizes one diff line at a time, and a bare
+ * `"key": "value",` line is NOT a valid JSON document — tree-sitter
+ * recovers it as `(string) (ERROR) (string) (ERROR)`, so the `pair`
+ * node never forms and keys can't be told apart from values on a
+ * fragment. We therefore tag every `(string)` uniformly; numbers,
+ * literals, and comments (JSONC) still stand out.
+ */
+export const JSON_HIGHLIGHT_QUERY = `
+(comment) @comment
+(string) @string
+(number) @number
+[ (true) (false) (null) ] @constant
+`.trim()
+
+/**
+ * YAML (validated against @tree-sitter-grammars/tree-sitter-yaml 0.7.1).
+ *
+ * Unlike JSON, YAML is line-oriented: a single `key: value` line parses
+ * into a complete `block_mapping_pair`, so we CAN distinguish keys
+ * (`@property`) from value scalars by type. Block-sequence items and
+ * flow collections render plain — a deliberate v1 scope; the common
+ * `key: value` config shape is what carries the visual signal.
+ */
+export const YAML_HIGHLIGHT_QUERY = `
+(comment) @comment
+(integer_scalar) @number
+(float_scalar) @number
+(boolean_scalar) @constant
+(null_scalar) @constant
+[ (double_quote_scalar) (single_quote_scalar) ] @string
+(block_mapping_pair key: (flow_node (plain_scalar) @property))
+(block_mapping_pair value: (flow_node (plain_scalar (string_scalar) @string)))
+`.trim()
+
 /** Highlight query keyed by tree-sitter language id. */
 export const HIGHLIGHT_QUERIES: Record<string, string> = {
   typescript: TS_HIGHLIGHT_QUERY,
@@ -193,4 +230,6 @@ export const HIGHLIGHT_QUERIES: Record<string, string> = {
   python: PYTHON_HIGHLIGHT_QUERY,
   rust: RUST_HIGHLIGHT_QUERY,
   go: GO_HIGHLIGHT_QUERY,
+  json: JSON_HIGHLIGHT_QUERY,
+  yaml: YAML_HIGHLIGHT_QUERY,
 }

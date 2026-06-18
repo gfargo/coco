@@ -36,7 +36,7 @@ import { join } from 'node:path'
  * copy step. Adding a lazy-loaded language: extend this union AND
  * add the matching entry to `TREE_SITTER_MANIFEST`.
  */
-export type LazyTreeSitterLanguageId = 'python' | 'rust' | 'go'
+export type LazyTreeSitterLanguageId = 'python' | 'rust' | 'go' | 'json' | 'yaml'
 
 /**
  * Resolve the root cache directory for coco. Honors three env-var

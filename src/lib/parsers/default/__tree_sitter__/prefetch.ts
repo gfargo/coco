@@ -53,6 +53,9 @@ const ALIASES: Record<string, LazyTreeSitterLanguageId> = {
   rust: 'rust',
   go: 'go',
   golang: 'go',
+  json: 'json',
+  yaml: 'yaml',
+  yml: 'yaml',
 }
 
 export type PrefetchResult = {
