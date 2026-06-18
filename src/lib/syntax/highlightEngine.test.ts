@@ -33,9 +33,15 @@ describe('detectSyntaxLanguage', () => {
     expect(detectSyntaxLanguage('cmd/main.go')).toBe('go')
   })
 
+  it('maps JSON / YAML extensions to their grammars', () => {
+    expect(detectSyntaxLanguage('package.json')).toBe('json')
+    expect(detectSyntaxLanguage('.github/workflows/ci.yaml')).toBe('yaml')
+    expect(detectSyntaxLanguage('docker-compose.yml')).toBe('yaml')
+  })
+
   it('returns undefined for unsupported files', () => {
     expect(detectSyntaxLanguage('README.md')).toBeUndefined()
-    expect(detectSyntaxLanguage('data.json')).toBeUndefined()
+    expect(detectSyntaxLanguage('data.csv')).toBeUndefined()
     expect(detectSyntaxLanguage('Makefile')).toBeUndefined()
   })
 })

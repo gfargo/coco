@@ -73,6 +73,26 @@ export const TREE_SITTER_MANIFEST: Record<LazyTreeSitterLanguageId, TreeSitterMa
     sha256: '9504573f352b20be7f2f1911754d710622aedc15afff16d5ed8fb5645681aee7',
     approxBytes: 217_182,
   },
+  json: {
+    language: 'json',
+    displayName: 'JSON',
+    version: '0.24.8',
+    wasmUrl: 'https://cdn.jsdelivr.net/npm/tree-sitter-json@0.24.8/tree-sitter-json.wasm',
+    sha256: 'd2119fb98d5912719b13f9458574f8608d2d29dfbe45f6be1f860ea1fe2a2405',
+    approxBytes: 5_596,
+  },
+  yaml: {
+    language: 'yaml',
+    displayName: 'YAML',
+    version: '0.7.1',
+    // Maintained under the @tree-sitter-grammars scope (the unscoped
+    // tree-sitter-yaml is stale). jsdelivr serves scoped npm paths, and
+    // the mirror chain (fastly / unpkg) handles the scope transparently.
+    wasmUrl:
+      'https://cdn.jsdelivr.net/npm/@tree-sitter-grammars/tree-sitter-yaml@0.7.1/tree-sitter-yaml.wasm',
+    sha256: 'e752dc21c3591df9b45692fe417d101f45d1828c28c44d79005f4066dc7e4e91',
+    approxBytes: 189_255,
+  },
 }
 
 /**
