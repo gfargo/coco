@@ -107,6 +107,8 @@ export interface BaseParserOptions {
         | 'php'
         | 'kt'
         | 'swift'
+        | 'lua'
+        | 'bash'
       )[]
     }
   }

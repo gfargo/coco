@@ -29,11 +29,13 @@ import { treeSitterGoParser } from '../__tree_sitter__/goTreeSitterParser'
 import { treeSitterPythonParser } from '../__tree_sitter__/pythonTreeSitterParser'
 import { treeSitterRustParser } from '../__tree_sitter__/rustTreeSitterParser'
 import { treeSitterTsParser } from '../__tree_sitter__/tsTreeSitterParser'
+import { summarizeBashStructuralDiff } from './bashStructuralDiff'
 import { summarizeCppStructuralDiff } from './cppStructuralDiff'
 import { summarizeCsStructuralDiff } from './csStructuralDiff'
 import { summarizeGoStructuralDiff } from './goStructuralDiff'
 import { summarizeJavaStructuralDiff } from './javaStructuralDiff'
 import { summarizeKotlinStructuralDiff } from './ktStructuralDiff'
+import { summarizeLuaStructuralDiff } from './luaStructuralDiff'
 import { summarizePhpStructuralDiff } from './phpStructuralDiff'
 import { summarizePythonStructuralDiff } from './pythonStructuralDiff'
 import { summarizeRubyStructuralDiff } from './rbStructuralDiff'
@@ -58,6 +60,8 @@ export type StructuralLanguageId =
   | 'php'
   | 'kt'
   | 'swift'
+  | 'lua'
+  | 'bash'
 
 /**
  * A structural parser is a strategy for producing a templated
@@ -113,6 +117,8 @@ const regexRb = regexParser(summarizeRubyStructuralDiff)
 const regexPhp = regexParser(summarizePhpStructuralDiff)
 const regexKt = regexParser(summarizeKotlinStructuralDiff)
 const regexSwift = regexParser(summarizeSwiftStructuralDiff)
+const regexLua = regexParser(summarizeLuaStructuralDiff)
+const regexBash = regexParser(summarizeBashStructuralDiff)
 
 /**
  * Per-language parser chains, in priority order. Tree-sitter is
@@ -135,6 +141,8 @@ const REGISTRY: Record<StructuralLanguageId, StructuralParser[]> = {
   php: [regexPhp],
   kt: [regexKt],
   swift: [regexSwift],
+  lua: [regexLua],
+  bash: [regexBash],
 }
 
 /**

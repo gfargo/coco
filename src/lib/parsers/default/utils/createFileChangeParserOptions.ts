@@ -27,6 +27,8 @@ export type FileChangeParserServiceBudget = {
         | 'php'
         | 'kt'
         | 'swift'
+        | 'lua'
+        | 'bash'
       )[]
     }
   }

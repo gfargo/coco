@@ -10,11 +10,13 @@ import {
   writeDiffSummary,
 } from './diffSummaryCache'
 import { summarizeMarkdownDiff } from './markdownDiff'
+import { isBashFile } from './bashStructuralDiff'
 import { isCppFile } from './cppStructuralDiff'
 import { isCsFile } from './csStructuralDiff'
 import { isGoFile } from './goStructuralDiff'
 import { isJavaFile } from './javaStructuralDiff'
 import { isKotlinFile } from './ktStructuralDiff'
+import { isLuaFile } from './luaStructuralDiff'
 import { isPhpFile } from './phpStructuralDiff'
 import { isPythonFile } from './pythonStructuralDiff'
 import { isRubyFile } from './rbStructuralDiff'
@@ -49,6 +51,8 @@ function detectStructuralLanguageId(path: string): StructuralLanguageId | undefi
   if (isPhpFile(path)) return 'php'
   if (isKotlinFile(path)) return 'kt'
   if (isSwiftFile(path)) return 'swift'
+  if (isLuaFile(path)) return 'lua'
+  if (isBashFile(path)) return 'bash'
   return undefined
 }
 
@@ -112,6 +116,8 @@ export type SummarizeLargeFilesOptions = {
         | 'php'
         | 'kt'
         | 'swift'
+        | 'lua'
+        | 'bash'
       )[]
     }
   }
