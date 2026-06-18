@@ -311,6 +311,8 @@ export type BaseLLMService = {
      *   - 'php' : `.php`
      *   - 'kt' : `.kt` / `.kts`
      *   - 'swift' : `.swift`
+     *   - 'lua' : `.lua`
+     *   - 'bash' : `.sh` / `.bash`
      */
     languageAware?: {
       /**
@@ -337,6 +339,8 @@ export type BaseLLMService = {
         | 'php'
         | 'kt'
         | 'swift'
+        | 'lua'
+        | 'bash'
       )[]
     }
   }

@@ -199,6 +199,8 @@ export type SummarizeDiffsOptions = {
         | 'php'
         | 'kt'
         | 'swift'
+        | 'lua'
+        | 'bash'
       )[]
     }
   }
