@@ -105,6 +105,8 @@ export interface BaseParserOptions {
         | 'cs'
         | 'rb'
         | 'php'
+        | 'kt'
+        | 'swift'
       )[]
     }
   }

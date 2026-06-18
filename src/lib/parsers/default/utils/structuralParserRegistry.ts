@@ -33,10 +33,12 @@ import { summarizeCppStructuralDiff } from './cppStructuralDiff'
 import { summarizeCsStructuralDiff } from './csStructuralDiff'
 import { summarizeGoStructuralDiff } from './goStructuralDiff'
 import { summarizeJavaStructuralDiff } from './javaStructuralDiff'
+import { summarizeKotlinStructuralDiff } from './ktStructuralDiff'
 import { summarizePhpStructuralDiff } from './phpStructuralDiff'
 import { summarizePythonStructuralDiff } from './pythonStructuralDiff'
 import { summarizeRubyStructuralDiff } from './rbStructuralDiff'
 import { summarizeRustStructuralDiff } from './rustStructuralDiff'
+import { summarizeSwiftStructuralDiff } from './swiftStructuralDiff'
 import { summarizeTsStructuralDiff } from './tsStructuralDiff'
 
 /** Identifier reported by each parser for telemetry / debugging. */
@@ -54,6 +56,8 @@ export type StructuralLanguageId =
   | 'cs'
   | 'rb'
   | 'php'
+  | 'kt'
+  | 'swift'
 
 /**
  * A structural parser is a strategy for producing a templated
@@ -107,6 +111,8 @@ const regexCpp = regexParser(summarizeCppStructuralDiff)
 const regexCs = regexParser(summarizeCsStructuralDiff)
 const regexRb = regexParser(summarizeRubyStructuralDiff)
 const regexPhp = regexParser(summarizePhpStructuralDiff)
+const regexKt = regexParser(summarizeKotlinStructuralDiff)
+const regexSwift = regexParser(summarizeSwiftStructuralDiff)
 
 /**
  * Per-language parser chains, in priority order. Tree-sitter is
@@ -127,6 +133,8 @@ const REGISTRY: Record<StructuralLanguageId, StructuralParser[]> = {
   cs: [regexCs],
   rb: [regexRb],
   php: [regexPhp],
+  kt: [regexKt],
+  swift: [regexSwift],
 }
 
 /**

@@ -25,6 +25,8 @@ export type FileChangeParserServiceBudget = {
         | 'cs'
         | 'rb'
         | 'php'
+        | 'kt'
+        | 'swift'
       )[]
     }
   }
