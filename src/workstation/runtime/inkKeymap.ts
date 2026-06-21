@@ -383,7 +383,7 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     id: 'navigateFileHistory',
     keys: ['L'],
     label: 'file history',
-    description: 'Open the file-history drill-down (`git log --follow`) for the cursored file (#COCO-14). Available from the status view, the worktree diff, and the blame view (drill from blame into the commit log). Tracks renames; j/k scrolls, Enter opens the commit diff, esc returns.',
+    description: 'Open the file-history drill-down (`git log --follow`) for the cursored file. Tracks renames; j/k scrolls, Enter opens the diff, Esc returns.',
     contexts: ['status', 'diff', 'blame'],
   },
   {
