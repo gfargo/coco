@@ -58,6 +58,18 @@ function render(state: LogInkState, data: FileHistorySurfaceData): ReactElement 
   )
 }
 
+function collectText(node: unknown): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return ''
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(collectText).join(' ')
+  if (typeof node === 'object' && 'props' in (node as object)) {
+    const el = node as { props?: { children?: unknown } }
+    return collectText(el.props?.children)
+  }
+  return ''
+}
+
 describe('renderFileHistorySurface', () => {
   it('renders a loading placeholder while history hydrates', () => {
     const tree = render(makeState(), { history: undefined, loading: true })
@@ -100,13 +112,26 @@ describe('renderFileHistorySurface', () => {
   })
 
   it('structural snapshot — loading', () => {
-    expect(render(makeState(), { history: undefined, loading: true })).toMatchSnapshot()
+    const tree = render(makeState(), { history: undefined, loading: true })
+    expect(tree.type).toBe(Box)
+    expect(tree.props.flexDirection).toBe('column')
+    expect(tree.props.width).toBe(120)
+    const text = collectText(tree)
+    expect(text).toContain('File History')
+    expect(text).toContain('loading history')
+    expect(text).toContain('Loading file history')
+    expect(text).toContain('src/example.ts')
   })
 
   it('structural snapshot — error state', () => {
     const failed: FileHistoryResult = { ok: false, path: 'bin.exe', message: 'not a git repo' }
-    expect(render(makeState({ fileHistoryPath: 'bin.exe' }), { history: failed, loading: false }))
-      .toMatchSnapshot()
+    const tree = render(makeState({ fileHistoryPath: 'bin.exe' }), { history: failed, loading: false })
+    expect(tree.type).toBe(Box)
+    const text = collectText(tree)
+    expect(text).toContain('File History')
+    expect(text).toContain('0 commits')
+    expect(text).toContain('error: not a git repo')
+    expect(text).toContain('bin.exe')
   })
 
   it('structural snapshot — populated', () => {
@@ -124,7 +149,17 @@ describe('renderFileHistorySurface', () => {
         }),
       ],
     }
-    expect(render(makeState(), { history, loading: false })).toMatchSnapshot()
+    const tree = render(makeState(), { history, loading: false })
+    expect(tree.type).toBe(Box)
+    const text = collectText(tree)
+    expect(text).toContain('File History')
+    expect(text).toContain('1/2 commits')
+    expect(text).toContain('a1b2c3d4')
+    expect(text).toContain('Ada Lovelace')
+    expect(text).toContain('feat: add example file')
+    expect(text).toContain('99887766')
+    expect(text).toContain('Grace Hopper')
+    expect(text).toContain('fix: correct calculation')
   })
 })
 
