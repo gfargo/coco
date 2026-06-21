@@ -114,8 +114,8 @@ describe('renderFileHistorySurface', () => {
   it('structural snapshot — loading', () => {
     const tree = render(makeState(), { history: undefined, loading: true })
     expect(tree.type).toBe(Box)
-    expect(tree.props.flexDirection).toBe('column')
-    expect(tree.props.width).toBe(120)
+    expect((tree.props as StubProps).flexDirection).toBe('column')
+    expect((tree.props as StubProps).width).toBe(120)
     const text = collectText(tree)
     expect(text).toContain('File History')
     expect(text).toContain('loading history')
