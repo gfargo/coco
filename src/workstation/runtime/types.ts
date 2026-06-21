@@ -16,6 +16,7 @@ import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import type { BisectStatus } from '../../git/bisectData'
 import type { BlameResult } from '../../git/blameData'
+import type { FileHistoryResult } from '../../git/fileHistoryData'
 import type { BranchOverview } from '../../git/branchData'
 import type { LfsAttributeStatus } from '../../git/lfsAttributes'
 import type { RemoteOverview } from '../../git/remoteData'
@@ -52,6 +53,13 @@ export type LogInkContext = {
    * refreshes so stale attributions don't linger after a commit.
    */
   blameByPath?: Map<string, BlameResult>
+  /**
+   * Per-path file-history cache keyed by repo-relative path (#COCO-14).
+   * Mirrors `blameByPath`: hydrated on demand when the file-history view
+   * opens, keyed by path, and invalidated when the worktree refreshes so
+   * stale logs don't outlive a commit.
+   */
+  fileHistoryByPath?: Map<string, FileHistoryResult>
   branches?: BranchOverview
   /**
    * Repository-wide LFS attribute status (#884). When present, the

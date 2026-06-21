@@ -379,6 +379,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['status', 'diff'],
   },
   {
+    id: 'navigateFileHistory',
+    keys: ['L'],
+    label: 'file history',
+    description: 'Open the file-history drill-down (`git log --follow`) for the cursored file (#COCO-14). Available from the status view, the worktree diff, and the blame view (drill from blame into the commit log). Tracks renames; j/k scrolls, Enter opens the commit diff, esc returns.',
+    contexts: ['status', 'diff', 'blame'],
+  },
+  {
     id: 'markForCompare',
     keys: ['m'],
     label: 'mark compare',
@@ -1380,7 +1387,17 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     return {
       // #0.71 — on-demand blame drill-down. Read-only: j/k scroll the
       // windowed line list, esc pops back to the file list.
-      contextual: ['↑/↓ lines', 'gg/G top/bottom', 'esc back'],
+      // #COCO-14 — L drills from blame into the file-history log.
+      contextual: ['↑/↓ lines', 'gg/G top/bottom', 'L file log', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
+  if (options.activeView === 'file-history') {
+    return {
+      // #COCO-14 — file-history drill-down. j/k scroll the commit list,
+      // enter opens the diff for the cursored commit, esc returns.
+      contextual: ['↑/↓ commits', 'gg/G top/bottom', 'enter diff', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

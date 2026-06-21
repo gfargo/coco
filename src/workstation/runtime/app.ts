@@ -199,7 +199,7 @@ import {useFilteredLists} from './hooks/buildFilteredLists'
 import {useBisectCandidateHydration, useBisectCandidateState} from './hooks/useBisectCandidateHydration'
 import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
-import {useBlameLoadingState, useDetailHydration} from './hooks/useDetailHydration'
+import {useBlameLoadingState, useDetailHydration, useFileHistoryLoadingState} from './hooks/useDetailHydration'
 import {useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState} from './hooks/useDiffHydration'
 import {useDiffSyntaxHighlight, useDiffSyntaxState} from './hooks/useDiffSyntaxHighlight'
 import {useIdleTip} from './hooks/useIdleTip'
@@ -723,6 +723,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         // potentially stale. Re-opening blame re-hydrates from the
         // fresh tree.
         blameByPath: undefined,
+        // Drop the file-history cache on worktree refresh for the same
+        // reason: a new commit changes the file log, so stale entries
+        // should be re-fetched when the view is re-opened.
+        fileHistoryByPath: undefined,
       }),
       issuedAtDepth,
     )
@@ -811,6 +815,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // to preserve hook ordering; the debounced effects that toggle it live in
   // `useDetailHydration` further down (0.72 app.ts decomposition, PR 7).
   const { blameLoading, setBlameLoading } = useBlameLoadingState(React)
+  // On-demand file-history hydration flag (#COCO-14). Mirrors blameLoading —
+  // issued here (hook ordering) and toggled by the hydration effect below.
+  const { fileHistoryLoading, setFileHistoryLoading } = useFileHistoryLoadingState(React)
   const bisectCandidateSha = state.activeView === 'bisect' && context.bisect?.active
     ? context.bisect.currentSha
     : ''
@@ -1048,6 +1055,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     filteredPullRequestTriageList,
     setContext,
     setBlameLoading,
+    setFileHistoryLoading,
   })
 
   // Commit-detail loader, lifted verbatim into `useCommitDetailHydration`
@@ -1662,6 +1670,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       bisectCandidateLoading,
       blame: state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined,
       blameLoading,
+      fileHistory: state.fileHistoryPath
+        ? context.fileHistoryByPath?.get(state.fileHistoryPath)
+        : undefined,
+      fileHistoryLoading,
       hasMoreCommits,
       loadingMoreCommits,
       spinnerFrame,
