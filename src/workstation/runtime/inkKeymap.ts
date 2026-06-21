@@ -39,6 +39,7 @@ export type LogInkCommandId =
   | 'navigatePullRequest'
   | 'navigatePullRequestTriage'
   | 'navigateBlame'
+  | 'navigateFileHistory'
   | 'navigateReflog'
   | 'navigateRemotes'
   | 'navigateStash'
