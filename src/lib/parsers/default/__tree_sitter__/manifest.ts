@@ -47,6 +47,7 @@ export type TreeSitterManifestEntry = {
  * Per-language manifest. Every `LazyTreeSitterLanguageId` MUST
  * have an entry here — that's enforced by the `Record` typing.
  * Phase 3 shipped Python; phases 5 + 6 add Rust + Go.
+ * Phase 7 adds Java, C, C++, C#, Ruby, PHP.
  */
 export const TREE_SITTER_MANIFEST: Record<LazyTreeSitterLanguageId, TreeSitterManifestEntry> = {
   python: {
@@ -92,6 +93,59 @@ export const TREE_SITTER_MANIFEST: Record<LazyTreeSitterLanguageId, TreeSitterMa
       'https://cdn.jsdelivr.net/npm/@tree-sitter-grammars/tree-sitter-yaml@0.7.1/tree-sitter-yaml.wasm',
     sha256: 'e752dc21c3591df9b45692fe417d101f45d1828c28c44d79005f4066dc7e4e91',
     approxBytes: 189_255,
+  },
+  java: {
+    language: 'java',
+    displayName: 'Java',
+    version: '0.23.5',
+    wasmUrl: 'https://cdn.jsdelivr.net/npm/tree-sitter-java@0.23.5/tree-sitter-java.wasm',
+    sha256: '4fdeac4ca6ca089f06c6f7e562abcac1733cd465728cc7031ebb73c2019122c4',
+    approxBytes: 414_641,
+  },
+  c: {
+    language: 'c',
+    displayName: 'C',
+    version: '0.24.1',
+    wasmUrl: 'https://cdn.jsdelivr.net/npm/tree-sitter-c@0.24.1/tree-sitter-c.wasm',
+    sha256: 'c852c2a85ebf2beb636aa3b0ef7f7e70458684d74f6741b20dcb296885bed9f9',
+    approxBytes: 625_918,
+  },
+  cpp: {
+    language: 'cpp',
+    displayName: 'C++',
+    version: '0.23.4',
+    wasmUrl: 'https://cdn.jsdelivr.net/npm/tree-sitter-cpp@0.23.4/tree-sitter-cpp.wasm',
+    sha256: '174eb0deb75b2ec7881bcacda9f995648d8e683956e5c2267e69ab6dc503fcbf',
+    approxBytes: 3_434_931,
+  },
+  csharp: {
+    language: 'csharp',
+    displayName: 'C#',
+    version: '0.23.5',
+    // npm package is tree-sitter-c-sharp; the .wasm filename uses an underscore.
+    wasmUrl:
+      'https://cdn.jsdelivr.net/npm/tree-sitter-c-sharp@0.23.5/tree-sitter-c_sharp.wasm',
+    sha256: '6f69e1cae44e1c32c1eccc170dc5a9778fb94ff716f71113fe1f8c4299aa2f40',
+    approxBytes: 5_350_581,
+  },
+  ruby: {
+    language: 'ruby',
+    displayName: 'Ruby',
+    version: '0.23.1',
+    wasmUrl: 'https://cdn.jsdelivr.net/npm/tree-sitter-ruby@0.23.1/tree-sitter-ruby.wasm',
+    sha256: '09a96427d7c72f0613ed470cd9812223fc4a91d6a9c025c0235cc6bd59ff96f4',
+    approxBytes: 2_106_352,
+  },
+  php: {
+    language: 'php',
+    displayName: 'PHP',
+    version: '0.24.2',
+    // Use the php_only grammar (no HTML embedding) so we can parse bare PHP
+    // code snippets in diff lines without a leading <?php tag.
+    wasmUrl:
+      'https://cdn.jsdelivr.net/npm/tree-sitter-php@0.24.2/tree-sitter-php_only.wasm',
+    sha256: 'fd1bcff3ac7699be20012089f6af81e6829cd73d640ab13d16adef236cc4b2af',
+    approxBytes: 1_002_407,
   },
 }
 

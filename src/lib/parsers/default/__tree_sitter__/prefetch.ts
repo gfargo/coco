@@ -56,6 +56,17 @@ const ALIASES: Record<string, LazyTreeSitterLanguageId> = {
   json: 'json',
   yaml: 'yaml',
   yml: 'yaml',
+  java: 'java',
+  c: 'c',
+  cpp: 'cpp',
+  'c++': 'cpp',
+  cxx: 'cpp',
+  cs: 'csharp',
+  csharp: 'csharp',
+  'c#': 'csharp',
+  rb: 'ruby',
+  ruby: 'ruby',
+  php: 'php',
 }
 
 export type PrefetchResult = {
