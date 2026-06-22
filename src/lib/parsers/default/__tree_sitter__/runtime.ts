@@ -79,7 +79,20 @@ async function loadTreeSitterModule(): Promise<TreeSitterModule> {
  * the only difference is where it's resolved from. `resolveWasmLocations`
  * below handles the lookup priority.
  */
-export type TreeSitterLanguageId = 'typescript' | 'tsx' | 'python' | 'rust' | 'go' | 'json' | 'yaml'
+export type TreeSitterLanguageId =
+  | 'typescript'
+  | 'tsx'
+  | 'python'
+  | 'rust'
+  | 'go'
+  | 'json'
+  | 'yaml'
+  | 'java'
+  | 'c'
+  | 'cpp'
+  | 'csharp'
+  | 'ruby'
+  | 'php'
 
 type ResolvedWasmLocations = {
   enginePath: string
@@ -140,6 +153,12 @@ function resolveWasmLocations(): ResolvedWasmLocations | undefined {
         go: getCachedWasmPath('go'),
         json: getCachedWasmPath('json'),
         yaml: getCachedWasmPath('yaml'),
+        java: getCachedWasmPath('java'),
+        c: getCachedWasmPath('c'),
+        cpp: getCachedWasmPath('cpp'),
+        csharp: getCachedWasmPath('csharp'),
+        ruby: getCachedWasmPath('ruby'),
+        php: getCachedWasmPath('php'),
       },
     }
   }

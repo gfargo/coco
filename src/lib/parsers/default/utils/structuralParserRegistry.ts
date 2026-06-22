@@ -25,8 +25,13 @@
  */
 
 import type { FileDiff } from '../../../types'
+import { treeSitterCCppParser } from '../__tree_sitter__/cCppTreeSitterParser'
+import { treeSitterCsParser } from '../__tree_sitter__/csTreeSitterParser'
 import { treeSitterGoParser } from '../__tree_sitter__/goTreeSitterParser'
+import { treeSitterJavaParser } from '../__tree_sitter__/javaTreeSitterParser'
+import { treeSitterPhpParser } from '../__tree_sitter__/phpTreeSitterParser'
 import { treeSitterPythonParser } from '../__tree_sitter__/pythonTreeSitterParser'
+import { treeSitterRubyParser } from '../__tree_sitter__/rubyTreeSitterParser'
 import { treeSitterRustParser } from '../__tree_sitter__/rustTreeSitterParser'
 import { treeSitterTsParser } from '../__tree_sitter__/tsTreeSitterParser'
 import { summarizeBashStructuralDiff } from './bashStructuralDiff'
@@ -122,11 +127,10 @@ const regexBash = regexParser(summarizeBashStructuralDiff)
 
 /**
  * Per-language parser chains, in priority order. Tree-sitter is
- * preferred for `ts` and `js` (phase 1.1); when the .wasm files
- * aren't loaded the tree-sitter parser surrenders to the regex
- * parser without any caller-visible change. Lazy-loaded languages
- * (Python / Rust / Go) get their tree-sitter parsers prepended in
- * phase 4–6 as their lazy-load infrastructure lands.
+ * preferred when the .wasm is cached; the parser surrenders to the
+ * regex fallback without any caller-visible change when it isn't.
+ * Lazy-loaded languages (Java / C / C++ / C# / Ruby / PHP) added
+ * in COCO-1239.
  */
 const REGISTRY: Record<StructuralLanguageId, StructuralParser[]> = {
   ts: [treeSitterTsParser, regexTs],
@@ -134,11 +138,11 @@ const REGISTRY: Record<StructuralLanguageId, StructuralParser[]> = {
   py: [treeSitterPythonParser, regexPy],
   rs: [treeSitterRustParser, regexRs],
   go: [treeSitterGoParser, regexGo],
-  java: [regexJava],
-  cpp: [regexCpp],
-  cs: [regexCs],
-  rb: [regexRb],
-  php: [regexPhp],
+  java: [treeSitterJavaParser, regexJava],
+  cpp: [treeSitterCCppParser, regexCpp],
+  cs: [treeSitterCsParser, regexCs],
+  rb: [treeSitterRubyParser, regexRb],
+  php: [treeSitterPhpParser, regexPhp],
   kt: [regexKt],
   swift: [regexSwift],
   lua: [regexLua],
