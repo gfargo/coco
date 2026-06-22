@@ -27,7 +27,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame' | 'file-history'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 
 /**
@@ -329,6 +329,20 @@ export type LogInkState = {
    * Undefined when the blame view has never been opened.
    */
   blamePath?: string
+  /**
+   * Cursor for the file-history view (#COCO-14). Indexes into the
+   * `FileHistoryCommit[]` for the active path; windowed-rendered around
+   * this index so long histories stay responsive. Reset to 0 each time a
+   * fresh path is opened (`navigateOpenFileHistoryForPath`); preserved
+   * when re-opening the same path (cached result + user's place).
+   */
+  selectedFileHistoryIndex: number
+  /**
+   * Repo-relative path the file-history view is currently showing (#COCO-14).
+   * Hydrated on demand via `git log --follow -- <path>` into
+   * `fileHistoryByPath`. Undefined when the view has never been opened.
+   */
+  fileHistoryPath?: string
   /**
    * Cursor for the issues triage view (#882). Same lifecycle as the
    * other promoted-view indices — preserved across navigations so
@@ -930,6 +944,8 @@ export type LogInkAction =
   | { type: 'navigateOpenDiffForCommit'; sha: string; commitIndex: number; fileIndex?: number }
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
   | { type: 'navigateOpenBlameForPath'; path: string }
+  | { type: 'navigateOpenFileHistoryForPath'; path: string }
+  | { type: 'moveFileHistory'; delta: number; count: number }
   | { type: 'navigateOpenDiffForStash'; ref: string; stashIndex?: number }
   | { type: 'navigateOpenDiffForCompare'; base: LogInkCompareRef; head: LogInkCompareRef }
   | { type: 'setCompareBase'; value: LogInkCompareRef }
@@ -1519,6 +1535,7 @@ export function createLogInkState(
     selectedSubmoduleIndex: 0,
     selectedRemoteIndex: 0,
     selectedBlameIndex: 0,
+    selectedFileHistoryIndex: 0,
     selectedIssueIndex: 0,
     selectedPullRequestTriageIndex: 0,
     selectedIssueFilter: 'open',
@@ -1872,6 +1889,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedBlameIndex: clampIndex(state.selectedBlameIndex + action.delta, action.count),
         pendingKey: undefined,
       }
+    case 'moveFileHistory':
+      return {
+        ...state,
+        selectedFileHistoryIndex: clampIndex(state.selectedFileHistoryIndex + action.delta, action.count),
+        pendingKey: undefined,
+      }
     case 'moveIssue':
       return {
         ...state,
@@ -2162,6 +2185,18 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...next,
         blamePath: action.path,
         selectedBlameIndex: samePath ? state.selectedBlameIndex : 0,
+      }
+    }
+    case 'navigateOpenFileHistoryForPath': {
+      // Open the file-history drill-down (#COCO-14). Reset the cursor
+      // to the top for a fresh path; preserve position when re-opening
+      // the same path (cached result + user's place in the log).
+      const next = withPushedView(state, 'file-history')
+      const samePath = state.fileHistoryPath === action.path
+      return {
+        ...next,
+        fileHistoryPath: action.path,
+        selectedFileHistoryIndex: samePath ? state.selectedFileHistoryIndex : 0,
       }
     }
     case 'navigateOpenDiffForStash': {

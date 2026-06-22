@@ -348,6 +348,23 @@ export function useInputHandler(
         const blame = state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined
         return blame && blame.ok ? blame.lines.length : 0
       })(),
+      // File-history navigation context (#COCO-14). Commit count drives
+      // j/k bounds; selectedHash carries the cursored commit's sha to
+      // the Enter handler so it can call `navigateOpenDiffForCommit`.
+      fileHistoryCommitCount: (() => {
+        const fh = state.fileHistoryPath
+          ? context.fileHistoryByPath?.get(state.fileHistoryPath)
+          : undefined
+        return fh && fh.ok ? fh.commits.length : 0
+      })(),
+      fileHistorySelectedHash: (() => {
+        const fh = state.fileHistoryPath
+          ? context.fileHistoryByPath?.get(state.fileHistoryPath)
+          : undefined
+        if (!fh || !fh.ok || fh.commits.length === 0) return undefined
+        const idx = Math.max(0, Math.min(state.selectedFileHistoryIndex, fh.commits.length - 1))
+        return fh.commits[idx]?.hash
+      })(),
       issueCount: issueVisibleCount,
       issueSelectedUrl,
       pullRequestTriageCount: pullRequestTriageVisibleCount,
