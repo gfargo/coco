@@ -147,6 +147,15 @@ const TERMINAL_SURFACES: Record<string, Surface> = {
   bamboo: { bg: '#252623', fg: '#f1e9d2', cursor: '#f1e9d2', selection: '#383b35' },
   citylights: { bg: '#1f252b', fg: '#b7c5d3', cursor: '#b7c5d3', selection: '#363c43' },
   'oxocarbon-light': { bg: '#ffffff', fg: '#161616', cursor: '#161616', selection: '#dde1e6' },
+  'vscode-dark': { bg: '#1e1e1e', fg: '#d4d4d4', cursor: '#d4d4d4', selection: '#264f78' },
+  'vscode-light': { bg: '#ffffff', fg: '#383838', cursor: '#007acc', selection: '#add6ff' },
+  'xcode-dark': { bg: '#1c1c1e', fg: '#e5e5e5', cursor: '#5dd8ff', selection: '#646f83' },
+  'xcode-light': { bg: '#ffffff', fg: '#000000', cursor: '#0b4f79', selection: '#b5d5fd' },
+  'sublime-mariana': { bg: '#1f2b38', fg: '#c0c5ce', cursor: '#c0c5ce', selection: '#2d4e69' },
+  'github-dark-high-contrast': { bg: '#010409', fg: '#f0f3f6', cursor: '#f0f3f6', selection: '#143d79' },
+  noctis: { bg: '#1b2932', fg: '#e4f2f7', cursor: '#2bbbad', selection: '#253b47' },
+  'shades-of-purple': { bg: '#2d2b55', fg: '#e4e3fc', cursor: '#fad000', selection: '#a599e9' },
+  'winter-is-coming': { bg: '#011627', fg: '#d6deeb', cursor: '#80a4c2', selection: '#0a2533' },
 }
 
 /**
