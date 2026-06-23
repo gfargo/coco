@@ -1,5 +1,5 @@
 import { defaultBitbucketRunner, resolveBitbucketActionError, type BitbucketRunner } from './bitbucketCli'
-import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
+import { rejectUnsafeUsername } from './forgeArgGuards'
 import type { IssueActionResult } from './issueActions'
 
 /**

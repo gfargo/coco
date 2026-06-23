@@ -7,7 +7,6 @@ import {
   commentBitbucketPullRequestByNumber,
   requestChangesBitbucketPullRequestByNumber,
   addBitbucketPullRequestLabel,
-  addBitbucketPullRequestReviewer,
   mergeBitbucketPullRequest,
   closeBitbucketPullRequest,
 } from './bitbucketPullRequestActions'
