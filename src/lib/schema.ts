@@ -2274,7 +2274,24 @@ export const schema = {
         "spacemacs-dark",
         "bamboo",
         "citylights",
-        "oxocarbon-light"
+        "oxocarbon-light",
+        "vscode-dark",
+        "vscode-light",
+        "xcode-dark",
+        "xcode-light",
+        "sublime-mariana",
+        "github-dark-high-contrast",
+        "noctis",
+        "shades-of-purple",
+        "winter-is-coming",
+        "tomorrow-night-bright",
+        "tomorrow-night-eighties",
+        "molokai",
+        "jellybeans",
+        "railscasts",
+        "spacegray",
+        "srcery",
+        "alabaster"
       ]
     }
   }
