@@ -156,6 +156,14 @@ const TERMINAL_SURFACES: Record<string, Surface> = {
   noctis: { bg: '#1b2932', fg: '#e4f2f7', cursor: '#2bbbad', selection: '#253b47' },
   'shades-of-purple': { bg: '#2d2b55', fg: '#e4e3fc', cursor: '#fad000', selection: '#a599e9' },
   'winter-is-coming': { bg: '#011627', fg: '#d6deeb', cursor: '#80a4c2', selection: '#0a2533' },
+  'tomorrow-night-bright': { bg: '#000000', fg: '#eaeaea', cursor: '#ffffff', selection: '#2a2a2a' },
+  'tomorrow-night-eighties': { bg: '#2d2d2d', fg: '#cccccc', cursor: '#999999', selection: '#393939' },
+  molokai: { bg: '#1b1d1e', fg: '#f8f8f2', cursor: '#f8f8f0', selection: '#403d3d' },
+  jellybeans: { bg: '#121212', fg: '#e8e8d3', cursor: '#888888', selection: '#4a4a59' },
+  railscasts: { bg: '#2b2b2b', fg: '#e6e1dc', cursor: '#e6e1dc', selection: '#494847' },
+  spacegray: { bg: '#20242c', fg: '#c0c5ce', cursor: '#c0c5ce', selection: '#2e3443' },
+  srcery: { bg: '#1c1b19', fg: '#fce8c3', cursor: '#fce8c3', selection: '#2d2b28' },
+  alabaster: { bg: '#f7f7f7', fg: '#434343', cursor: '#007acc', selection: '#d4e8fd' },
 }
 
 /**
