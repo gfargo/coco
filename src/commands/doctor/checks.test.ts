@@ -1,6 +1,6 @@
 import { Config } from '../../lib/config/types'
 import { getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
-import { checkOllamaLiveness, checkProviderValidity, Diagnostic } from './checks'
+import { checkEndpointSupport, checkOllamaLiveness, checkProviderValidity, Diagnostic } from './checks'
 
 jest.mock('../../lib/langchain/utils/ollamaStatus', () => ({
   DEFAULT_OLLAMA_ENDPOINT: 'http://localhost:11434',
@@ -92,6 +92,69 @@ describe('checkProviderValidity', () => {
     const diagnostics: Diagnostic[] = []
     checkProviderValidity(configWithProvider('aws'), diagnostics)
     expect(diagnostics[0].message).toContain('"bedrock"')
+  })
+})
+
+describe('checkEndpointSupport', () => {
+  function configWith(provider: string, extra: Record<string, unknown> = {}): Config {
+    return { service: { provider, model: 'some-model', ...extra } } as unknown as Config
+  }
+
+  it('produces no diagnostic when endpoint is not set', () => {
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport(configWith('openai'), diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('produces no diagnostic when provider is ollama and endpoint is set', () => {
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport(configWith('ollama', { endpoint: 'http://localhost:11434' }), diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('warns when endpoint is set for openai (ignores it)', () => {
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport(configWith('openai', { endpoint: 'http://custom-host:8080' }), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].message).toContain('"openai"')
+    expect(diagnostics[0].fix).toContain('baseURL')
+  })
+
+  it('warns when endpoint is set for anthropic (ignores it)', () => {
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport(configWith('anthropic', { endpoint: 'http://custom-host:8080' }), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].message).toContain('"anthropic"')
+    expect(diagnostics[0].fix).toContain('baseURL')
+  })
+
+  it('warns when endpoint is set for a provider with no custom-host support', () => {
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport(configWith('gemini', { endpoint: 'http://custom-host:8080' }), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].message).toContain('"gemini"')
+    expect(diagnostics[0].fix).not.toContain('baseURL')
+  })
+
+  it('autoFix removes the stray endpoint field', () => {
+    const raw = { service: { provider: 'openai', model: 'gpt-4o', endpoint: 'http://custom-host' } }
+    const config = raw as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(typeof diagnostics[0].autoFix).toBe('function')
+    diagnostics[0].autoFix!(raw as Record<string, unknown>)
+    expect((raw.service as Record<string, unknown>).endpoint).toBeUndefined()
+  })
+
+  it('produces no diagnostic when provider is absent', () => {
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport({ service: { model: 'gpt-4o', endpoint: 'http://x' } } as unknown as Config, diagnostics)
+    expect(diagnostics).toEqual([])
   })
 })
 
