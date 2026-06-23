@@ -164,6 +164,8 @@ const TERMINAL_SURFACES: Record<string, Surface> = {
   spacegray: { bg: '#20242c', fg: '#c0c5ce', cursor: '#c0c5ce', selection: '#2e3443' },
   srcery: { bg: '#1c1b19', fg: '#fce8c3', cursor: '#fce8c3', selection: '#2d2b28' },
   alabaster: { bg: '#f7f7f7', fg: '#434343', cursor: '#007acc', selection: '#d4e8fd' },
+  'challenger-deep': { bg: '#1b182c', fg: '#cbe3e7', cursor: '#cbe3e7', selection: '#2b2a3e' },
+  moonfly: { bg: '#080808', fg: '#b2b2b2', cursor: '#b2b2b2', selection: '#1c1c1c' },
 }
 
 /**

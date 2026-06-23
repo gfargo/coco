@@ -132,6 +132,7 @@ const NEW_THEME_GALLERY_PRESETS = [
   'github-dark-high-contrast', 'noctis', 'shades-of-purple', 'winter-is-coming',
   'tomorrow-night-bright', 'tomorrow-night-eighties', 'molokai', 'jellybeans',
   'railscasts', 'spacegray', 'srcery', 'alabaster',
+  'challenger-deep', 'moonfly',
 ] as const
 
 export const RECIPES: ScreenshotRecipe[] = [
