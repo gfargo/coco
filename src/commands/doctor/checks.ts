@@ -14,10 +14,29 @@ export interface Diagnostic {
   autoFix?: (config: Record<string, unknown>) => void
 }
 
+const SUPPORTED_PROVIDERS: LLMProvider[] = [
+  'openai',
+  'anthropic',
+  'azure',
+  'gemini',
+  'mistral',
+  'bedrock',
+  'ollama',
+]
+
+const PROVIDER_ALIASES: Record<string, LLMProvider> = {
+  claude: 'anthropic',
+  gpt: 'openai',
+  chatgpt: 'openai',
+  google: 'gemini',
+  aws: 'bedrock',
+}
+
 export function runDiagnostics(config: Config): Diagnostic[] {
   const diagnostics: Diagnostic[] = []
 
   checkServiceBlock(config, diagnostics)
+  checkProviderValidity(config, diagnostics)
   checkAuthentication(config, diagnostics)
   checkModelCurrency(config, diagnostics)
   checkModeConfig(config, diagnostics)
@@ -52,6 +71,33 @@ function checkServiceBlock(config: Config, diagnostics: Diagnostic[]) {
       severity: 'error',
       message: 'No model set in service config.',
       fix: 'Set service.model to a valid model name (e.g. "gpt-4o") or "dynamic" for task-based routing.',
+    })
+  }
+}
+
+export function checkProviderValidity(config: Config, diagnostics: Diagnostic[]) {
+  const provider = config.service?.provider
+  if (!provider) return
+  if (SUPPORTED_PROVIDERS.includes(provider as LLMProvider)) return
+
+  const suggestion = PROVIDER_ALIASES[String(provider).toLowerCase()]
+  const validList = SUPPORTED_PROVIDERS.map((p) => `"${p}"`).join(', ')
+
+  if (suggestion) {
+    diagnostics.push({
+      severity: 'error',
+      message: `Unknown service.provider "${provider}". Did you mean "${suggestion}"?`,
+      fix: `Set service.provider to "${suggestion}". Valid providers: ${validList}.`,
+      autoFix: (raw) => {
+        const svc = raw.service as Record<string, unknown>
+        if (svc) svc.provider = suggestion
+      },
+    })
+  } else {
+    diagnostics.push({
+      severity: 'error',
+      message: `Unknown service.provider "${provider}".`,
+      fix: `Set service.provider to one of: ${validList}.`,
     })
   }
 }
