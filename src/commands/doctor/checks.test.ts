@@ -1,6 +1,6 @@
 import { Config } from '../../lib/config/types'
 import { getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
-import { checkOllamaLiveness } from './checks'
+import { checkOllamaLiveness, checkProviderValidity, Diagnostic } from './checks'
 
 jest.mock('../../lib/langchain/utils/ollamaStatus', () => ({
   DEFAULT_OLLAMA_ENDPOINT: 'http://localhost:11434',
@@ -19,6 +19,81 @@ function ollamaConfig(overrides: Record<string, unknown> = {}): Config {
     },
   } as unknown as Config
 }
+
+describe('checkProviderValidity', () => {
+  function configWithProvider(provider: string): Config {
+    return { service: { provider, model: 'some-model' } } as unknown as Config
+  }
+
+  it('produces no diagnostic for a valid provider', () => {
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity(configWithProvider('anthropic'), diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('produces no diagnostic when provider is absent', () => {
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity({ service: { model: 'gpt-4o' } } as unknown as Config, diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('produces no diagnostic when service block is absent', () => {
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity({} as Config, diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('flags an unknown provider with an error diagnostic', () => {
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity(configWithProvider('typo-provider'), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('error')
+    expect(diagnostics[0].message).toContain('"typo-provider"')
+    expect(diagnostics[0].autoFix).toBeUndefined()
+  })
+
+  it('suggests anthropic and provides autoFix for alias "claude"', () => {
+    const raw = { service: { provider: 'claude', model: 'claude-opus-4-8' } }
+    const config = raw as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    const [d] = diagnostics
+    expect(d.severity).toBe('error')
+    expect(d.message).toContain('"claude"')
+    expect(d.message).toContain('"anthropic"')
+    expect(d.fix).toContain('"anthropic"')
+    expect(typeof d.autoFix).toBe('function')
+
+    d.autoFix!(raw as Record<string, unknown>)
+    expect((raw.service as Record<string, unknown>).provider).toBe('anthropic')
+  })
+
+  it('suggests openai for alias "gpt"', () => {
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity(configWithProvider('gpt'), diagnostics)
+    expect(diagnostics[0].message).toContain('"openai"')
+  })
+
+  it('suggests openai for alias "chatgpt"', () => {
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity(configWithProvider('chatgpt'), diagnostics)
+    expect(diagnostics[0].message).toContain('"openai"')
+  })
+
+  it('suggests gemini for alias "google"', () => {
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity(configWithProvider('google'), diagnostics)
+    expect(diagnostics[0].message).toContain('"gemini"')
+  })
+
+  it('suggests bedrock for alias "aws"', () => {
+    const diagnostics: Diagnostic[] = []
+    checkProviderValidity(configWithProvider('aws'), diagnostics)
+    expect(diagnostics[0].message).toContain('"bedrock"')
+  })
+})
 
 describe('checkOllamaLiveness', () => {
   afterEach(() => jest.clearAllMocks())
