@@ -1,7 +1,7 @@
 import { ColorEnv, getColorLevel, presetUsesTrueColor, readableForegroundFor } from './colorSupport'
 
 export type LogInkBorderStyle = 'round' | 'single' | 'classic'
-export type LogInkThemePreset = 'default' | 'monochrome' | 'catppuccin' | 'gruvbox' | 'dracula' | 'nord' | 'solarized-dark' | 'tokyo-night' | 'one-dark' | 'rose-pine' | 'kanagawa' | 'everforest' | 'monokai' | 'synthwave' | 'ayu-dark' | 'palenight' | 'github-dark' | 'horizon' | 'nightfox' | 'carbonfox' | 'tokyonight-storm' | 'catppuccin-latte' | 'solarized-light' | 'github-light' | 'iceberg' | 'material-ocean' | 'moonlight' | 'poimandres' | 'vitesse-dark' | 'vesper' | 'flexoki' | 'mellow' | 'night-owl' | 'cobalt2' | 'oceanic-next' | 'catppuccin-macchiato' | 'gruvbox-light' | 'tokyo-night-day' | 'one-light' | 'ayu-light' | 'rose-pine-dawn' | 'everforest-light' | 'vitesse-light' | 'dayfox' | 'night-owl-light' | 'flexoki-light' | 'material-lighter' | 'papercolor-light' | 'modus-operandi' | 'quiet-light' | 'catppuccin-frappe' | 'rose-pine-moon' | 'kanagawa-dragon' | 'kanagawa-lotus' | 'nordfox' | 'duskfox' | 'terafox' | 'dawnfox' | 'ayu-mirage' | 'material-darker' | 'tokyo-night-moon' | 'gruvbox-material' | 'gruvbox-material-light' | 'modus-vivendi' | 'zenburn' | 'oxocarbon' | 'tomorrow-night' | 'monokai-pro' | 'sonokai' | 'doom-one' | 'andromeda' | 'aura' | 'cyberdream' | 'nightfly' | 'panda' | 'hyper-snazzy' | 'apprentice' | 'melange' | 'melange-light' | 'spaceduck' | 'embark' | 'bluloco-dark' | 'bluloco-light' | 'papercolor-dark' | 'base16-ocean' | 'base16-eighties' | 'everblush' | 'darcula' | 'eldritch' | 'edge-light' | 'zenbones' | 'iceberg-light' | 'github-dark-dimmed' | 'edge-dark' | 'selenized-dark' | 'selenized-black' | 'selenized-light' | 'monokai-pro-machine' | 'monokai-pro-octagon' | 'monokai-pro-ristretto' | 'monokai-pro-spectrum' | 'base16-default-dark' | 'base16-default-light' | 'tomorrow' | 'tokyodark' | 'spacemacs-dark' | 'bamboo' | 'citylights' | 'oxocarbon-light'
+export type LogInkThemePreset = 'default' | 'monochrome' | 'catppuccin' | 'gruvbox' | 'dracula' | 'nord' | 'solarized-dark' | 'tokyo-night' | 'one-dark' | 'rose-pine' | 'kanagawa' | 'everforest' | 'monokai' | 'synthwave' | 'ayu-dark' | 'palenight' | 'github-dark' | 'horizon' | 'nightfox' | 'carbonfox' | 'tokyonight-storm' | 'catppuccin-latte' | 'solarized-light' | 'github-light' | 'iceberg' | 'material-ocean' | 'moonlight' | 'poimandres' | 'vitesse-dark' | 'vesper' | 'flexoki' | 'mellow' | 'night-owl' | 'cobalt2' | 'oceanic-next' | 'catppuccin-macchiato' | 'gruvbox-light' | 'tokyo-night-day' | 'one-light' | 'ayu-light' | 'rose-pine-dawn' | 'everforest-light' | 'vitesse-light' | 'dayfox' | 'night-owl-light' | 'flexoki-light' | 'material-lighter' | 'papercolor-light' | 'modus-operandi' | 'quiet-light' | 'catppuccin-frappe' | 'rose-pine-moon' | 'kanagawa-dragon' | 'kanagawa-lotus' | 'nordfox' | 'duskfox' | 'terafox' | 'dawnfox' | 'ayu-mirage' | 'material-darker' | 'tokyo-night-moon' | 'gruvbox-material' | 'gruvbox-material-light' | 'modus-vivendi' | 'zenburn' | 'oxocarbon' | 'tomorrow-night' | 'monokai-pro' | 'sonokai' | 'doom-one' | 'andromeda' | 'aura' | 'cyberdream' | 'nightfly' | 'panda' | 'hyper-snazzy' | 'apprentice' | 'melange' | 'melange-light' | 'spaceduck' | 'embark' | 'bluloco-dark' | 'bluloco-light' | 'papercolor-dark' | 'base16-ocean' | 'base16-eighties' | 'everblush' | 'darcula' | 'eldritch' | 'edge-light' | 'zenbones' | 'iceberg-light' | 'github-dark-dimmed' | 'edge-dark' | 'selenized-dark' | 'selenized-black' | 'selenized-light' | 'monokai-pro-machine' | 'monokai-pro-octagon' | 'monokai-pro-ristretto' | 'monokai-pro-spectrum' | 'base16-default-dark' | 'base16-default-light' | 'tomorrow' | 'tokyodark' | 'spacemacs-dark' | 'bamboo' | 'citylights' | 'oxocarbon-light' | 'vscode-dark' | 'vscode-light' | 'xcode-dark' | 'xcode-light' | 'sublime-mariana' | 'github-dark-high-contrast' | 'noctis' | 'shades-of-purple' | 'winter-is-coming' | 'tomorrow-night-bright' | 'tomorrow-night-eighties' | 'molokai' | 'jellybeans' | 'railscasts' | 'spacegray' | 'srcery' | 'alabaster' | 'challenger-deep' | 'moonfly'
 
 export type LogInkThemeColors = {
   accent?: string
@@ -66,6 +66,10 @@ export type CreateLogInkThemeOptions = LogInkThemeConfig & {
 }
 
 export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'>, LogInkThemeColors> = {
+  /**
+   * coco default — coco contributors
+   * @see https://github.com/gfargo/coco
+   */
   default: {
     accent: 'cyan',
     border: 'gray',
@@ -80,6 +84,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: 'green',
     warning: 'yellow',
   },
+  /**
+   * Catppuccin (Mocha) — Catppuccin Org
+   * @see https://github.com/catppuccin/catppuccin
+   */
   catppuccin: {
     accent: '#89b4fa',
     border: '#585b70',
@@ -94,6 +102,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a6e3a1',
     warning: '#f9e2af',
   },
+  /**
+   * Gruvbox — Pavel Pertsev
+   * @see https://github.com/morhetz/gruvbox
+   */
   gruvbox: {
     accent: '#83a598',
     border: '#665c54',
@@ -108,6 +120,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#b8bb26',
     warning: '#fabd2f',
   },
+  /**
+   * Dracula — Zeno Rocha
+   * @see https://github.com/dracula/dracula-theme
+   */
   dracula: {
     accent: '#bd93f9',
     border: '#44475a',
@@ -122,6 +138,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#50fa7b',
     warning: '#f1fa8c',
   },
+  /**
+   * Nord — Arctic Ice Studio
+   * @see https://github.com/nordtheme/nord
+   */
   nord: {
     accent: '#88c0d0',
     border: '#3b4252',
@@ -136,6 +156,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a3be8c',
     warning: '#ebcb8b',
   },
+  /**
+   * Solarized Dark — Ethan Schoonover
+   * @see https://github.com/altercation/solarized
+   */
   'solarized-dark': {
     accent: '#268bd2',
     border: '#073642',
@@ -150,6 +174,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#859900',
     warning: '#b58900',
   },
+  /**
+   * Tokyo Night — Enkia
+   * @see https://github.com/enkia/tokyo-night-vscode-theme
+   */
   'tokyo-night': {
     accent: '#7aa2f7',
     border: '#3b4261',
@@ -164,6 +192,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#9ece6a',
     warning: '#e0af68',
   },
+  /**
+   * One Dark Pro — Bram de Haan
+   * @see https://github.com/Binaryify/OneDark-Pro
+   */
   'one-dark': {
     accent: '#61afef',
     border: '#3e4452',
@@ -178,6 +210,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#98c379',
     warning: '#e5c07b',
   },
+  /**
+   * Rosé Pine (Main) — Rosé Pine team
+   * @see https://github.com/rose-pine/rose-pine-theme
+   */
   'rose-pine': {
     accent: '#c4a7e7',
     border: '#26233a',
@@ -192,6 +228,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#31748f',
     warning: '#f6c177',
   },
+  /**
+   * Kanagawa — rebelot
+   * @see https://github.com/rebelot/kanagawa.nvim
+   */
   kanagawa: {
     accent: '#7e9cd8',
     border: '#2a2a37',
@@ -206,6 +246,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#76946a',
     warning: '#dca561',
   },
+  /**
+   * Everforest — sainnhe
+   * @see https://github.com/sainnhe/everforest
+   */
   everforest: {
     accent: '#a7c080',
     border: '#374145',
@@ -220,6 +264,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a7c080',
     warning: '#dbbc7f',
   },
+  /**
+   * Monokai — Wimer Hazenberg
+   * @see https://monokai.pro
+   */
   monokai: {
     accent: '#66d9ef',
     border: '#49483e',
@@ -234,6 +282,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a6e22e',
     warning: '#e6db74',
   },
+  /**
+   * SynthWave '84 — Robb Owen
+   * @see https://github.com/robb0wen/synthwave-vscode
+   */
   synthwave: {
     accent: '#f97e72',
     border: '#34294f',
@@ -248,6 +300,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#72f1b8',
     warning: '#fede5d',
   },
+  /**
+   * Ayu Dark — Ike Ku
+   * @see https://github.com/dempfi/ayu
+   */
   'ayu-dark': {
     accent: '#e6b450',
     border: '#11151c',
@@ -262,6 +318,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#7fd962',
     warning: '#e6b450',
   },
+  /**
+   * Palenight — whizkydee
+   * @see https://github.com/whizkydee/vscode-palenight-theme
+   */
   palenight: {
     accent: '#82aaff',
     border: '#3a3f58',
@@ -276,6 +336,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#c3e88d',
     warning: '#ffcb6b',
   },
+  /**
+   * GitHub Dark — GitHub
+   * @see https://github.com/primer/github-vscode-theme
+   */
   'github-dark': {
     accent: '#58a6ff',
     border: '#30363d',
@@ -290,6 +354,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#3fb950',
     warning: '#d29922',
   },
+  /**
+   * Horizon — Jonathan Olaleye
+   * @see https://github.com/jolaleye/horizon-theme-vscode
+   */
   horizon: {
     accent: '#e95678',
     border: '#2e303e',
@@ -304,6 +372,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#09f7a0',
     warning: '#fab795',
   },
+  /**
+   * Nightfox — EdenEast
+   * @see https://github.com/EdenEast/nightfox.nvim
+   */
   nightfox: {
     accent: '#719cd6',
     border: '#2b3b51',
@@ -318,6 +390,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#81b29a',
     warning: '#dbc074',
   },
+  /**
+   * Carbonfox — EdenEast
+   * @see https://github.com/EdenEast/nightfox.nvim
+   */
   carbonfox: {
     accent: '#78a9ff',
     border: '#353535',
@@ -332,6 +408,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#42be65',
     warning: '#ffe97b',
   },
+  /**
+   * Tokyo Night Storm — Folke Lemaitre
+   * @see https://github.com/folke/tokyonight.nvim
+   */
   'tokyonight-storm': {
     accent: '#7aa2f7',
     border: '#2f334d',
@@ -346,6 +426,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#9ece6a',
     warning: '#e0af68',
   },
+  /**
+   * Catppuccin Latte — Catppuccin Org
+   * @see https://github.com/catppuccin/catppuccin
+   */
   'catppuccin-latte': {
     accent: '#1e66f5',
     border: '#ccd0da',
@@ -360,6 +444,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#40a02b',
     warning: '#df8e1d',
   },
+  /**
+   * Solarized Light — Ethan Schoonover
+   * @see https://github.com/altercation/solarized
+   */
   'solarized-light': {
     accent: '#268bd2',
     border: '#eee8d5',
@@ -374,6 +462,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#859900',
     warning: '#b58900',
   },
+  /**
+   * GitHub Light — GitHub
+   * @see https://github.com/primer/github-vscode-theme
+   */
   'github-light': {
     accent: '#0969da',
     border: '#d0d7de',
@@ -388,6 +480,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#1a7f37',
     warning: '#9a6700',
   },
+  /**
+   * Iceberg — cocopon
+   * @see https://github.com/cocopon/iceberg.vim
+   */
   iceberg: {
     accent: '#84a0c6',
     border: '#1e2132',
@@ -402,6 +498,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#b4be82',
     warning: '#e2a478',
   },
+  /**
+   * Material Ocean — Mattia Astorino
+   * @see https://github.com/material-theme/vsc-material-theme
+   */
   'material-ocean': {
     accent: '#82aaff',
     border: '#2b2f3a',
@@ -416,6 +516,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#c3e88d',
     warning: '#ffcb6b',
   },
+  /**
+   * Moonlight — atomiks
+   * @see https://github.com/atomiks/moonlight-vscode-theme
+   */
   moonlight: {
     accent: '#82aaff',
     border: '#2f334d',
@@ -430,6 +534,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#c3e88d',
     warning: '#ffc777',
   },
+  /**
+   * Poimandres — drcmda
+   * @see https://github.com/drcmda/poimandres-theme
+   */
   poimandres: {
     accent: '#add7ff',
     border: '#1b1e28',
@@ -444,6 +552,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#5de4c7',
     warning: '#fffac2',
   },
+  /**
+   * Vitesse Dark — Anthony Fu
+   * @see https://github.com/antfu/vscode-theme-vitesse
+   */
   'vitesse-dark': {
     accent: '#4d9375',
     border: '#282828',
@@ -458,6 +570,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#4d9375',
     warning: '#e6cc77',
   },
+  /**
+   * Vesper — Raunó Freiberg
+   * @see https://github.com/raunofreiberg/vesper
+   */
   vesper: {
     accent: '#ffc799',
     border: '#232323',
@@ -472,6 +588,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#99ffe4',
     warning: '#ffc799',
   },
+  /**
+   * Flexoki Dark — Steph Ango
+   * @see https://github.com/kepano/flexoki
+   */
   flexoki: {
     accent: '#205ea6',
     border: '#343331',
@@ -486,6 +606,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#66800b',
     warning: '#ad8301',
   },
+  /**
+   * Mellow — mellow-theme
+   * @see https://github.com/mellow-theme/mellow.nvim
+   */
   mellow: {
     accent: '#7eb8da',
     border: '#2a2a2a',
@@ -500,6 +624,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a3d4a0',
     warning: '#f0c674',
   },
+  /**
+   * Night Owl — Sarah Drasner
+   * @see https://github.com/sdras/night-owl-vscode-theme
+   */
   'night-owl': {
     accent: '#82aaff',
     border: '#1d3b53',
@@ -514,6 +642,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#addb67',
     warning: '#ecc48d',
   },
+  /**
+   * Cobalt2 — Wes Bos
+   * @see https://github.com/wesbos/cobalt2-vscode
+   */
   cobalt2: {
     accent: '#ffc600',
     border: '#234e6d',
@@ -528,6 +660,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#3ad900',
     warning: '#ffc600',
   },
+  /**
+   * Oceanic Next — mhartington
+   * @see https://github.com/mhartington/oceanic-next
+   */
   'oceanic-next': {
     accent: '#6699cc',
     border: '#343d46',
@@ -542,6 +678,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#99c794',
     warning: '#fac863',
   },
+  /**
+   * Catppuccin Macchiato — Catppuccin Org
+   * @see https://github.com/catppuccin/catppuccin
+   */
   'catppuccin-macchiato': {
     accent: '#8aadf4',
     border: '#494d64',
@@ -556,6 +696,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a6da95',
     warning: '#eed49f',
   },
+  /**
+   * Gruvbox Light — Pavel Pertsev
+   * @see https://github.com/morhetz/gruvbox
+   */
   'gruvbox-light': {
     accent: '#076678',
     border: '#bdae93',
@@ -570,6 +714,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#79740e',
     warning: '#b57614',
   },
+  /**
+   * Tokyo Night Day — Folke Lemaitre
+   * @see https://github.com/folke/tokyonight.nvim
+   */
   'tokyo-night-day': {
     accent: '#2e7de9',
     border: '#b7c1e3',
@@ -584,6 +732,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#587539',
     warning: '#8c6c3e',
   },
+  /**
+   * One Light — Atom team
+   * @see https://github.com/atom/atom
+   */
   'one-light': {
     accent: '#4078f2',
     border: '#d4d4d4',
@@ -598,6 +750,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#50a14f',
     warning: '#c18401',
   },
+  /**
+   * Ayu Light — Ike Ku
+   * @see https://github.com/dempfi/ayu
+   */
   'ayu-light': {
     accent: '#fa8d3e',
     border: '#e6e6e6',
@@ -612,6 +768,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#6cbf43',
     warning: '#f2ae49',
   },
+  /**
+   * Rosé Pine Dawn — Rosé Pine team
+   * @see https://github.com/rose-pine/rose-pine-theme
+   */
   'rose-pine-dawn': {
     accent: '#907aa9',
     border: '#dfdad9',
@@ -626,6 +786,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#286983',
     warning: '#ea9d34',
   },
+  /**
+   * Everforest Light — sainnhe
+   * @see https://github.com/sainnhe/everforest
+   */
   'everforest-light': {
     accent: '#8da101',
     border: '#ddd8be',
@@ -640,6 +804,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#8da101',
     warning: '#dfa000',
   },
+  /**
+   * Vitesse Light — Anthony Fu
+   * @see https://github.com/antfu/vscode-theme-vitesse
+   */
   'vitesse-light': {
     accent: '#1e754f',
     border: '#e0e0e0',
@@ -654,6 +822,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#1e754f',
     warning: '#b07d48',
   },
+  /**
+   * Dayfox — EdenEast
+   * @see https://github.com/EdenEast/nightfox.nvim
+   */
   dayfox: {
     accent: '#2848a9',
     border: '#e4dcd4',
@@ -668,6 +840,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#396847',
     warning: '#ac5402',
   },
+  /**
+   * Night Owl Light — Sarah Drasner
+   * @see https://github.com/sdras/night-owl-vscode-theme
+   */
   'night-owl-light': {
     accent: '#288ed7',
     border: '#d9d9d9',
@@ -682,6 +858,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#08916a',
     warning: '#daaa01',
   },
+  /**
+   * Flexoki Light — Steph Ango
+   * @see https://github.com/kepano/flexoki
+   */
   'flexoki-light': {
     accent: '#205ea6',
     border: '#cecdc3',
@@ -696,6 +876,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#66800b',
     warning: '#ad8301',
   },
+  /**
+   * Material Lighter — Mattia Astorino
+   * @see https://github.com/material-theme/vsc-material-theme
+   */
   'material-lighter': {
     accent: '#39adb5',
     border: '#e7eaec',
@@ -710,6 +894,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#91b859',
     warning: '#f6a434',
   },
+  /**
+   * PaperColor Light — nlknguyen
+   * @see https://github.com/nlknguyen/papercolor-theme
+   */
   'papercolor-light': {
     accent: '#0087af',
     border: '#d7d7d7',
@@ -724,6 +912,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#008700',
     warning: '#d75f00',
   },
+  /**
+   * Modus Operandi — Protesilaos Stavrou
+   * @see https://github.com/protesilaos/modus-themes
+   */
   'modus-operandi': {
     accent: '#0031a9',
     border: '#d7d7d7',
@@ -738,6 +930,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#006800',
     warning: '#6f5500',
   },
+  /**
+   * Quiet Light — Microsoft
+   * @see https://github.com/microsoft/vscode
+   */
   'quiet-light': {
     accent: '#4b83cd',
     border: '#e0e0e0',
@@ -752,6 +948,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#448c27',
     warning: '#a67d00',
   },
+  /**
+   * Catppuccin Frappé — Catppuccin Org
+   * @see https://github.com/catppuccin/catppuccin
+   */
   'catppuccin-frappe': {
     accent: '#8caaee',
     border: '#51576d',
@@ -766,6 +966,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a6d189',
     warning: '#e5c890',
   },
+  /**
+   * Rosé Pine Moon — Rosé Pine team
+   * @see https://github.com/rose-pine/rose-pine-theme
+   */
   'rose-pine-moon': {
     accent: '#c4a7e7',
     border: '#393552',
@@ -780,6 +984,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#3e8fb0',
     warning: '#f6c177',
   },
+  /**
+   * Kanagawa Dragon — rebelot
+   * @see https://github.com/rebelot/kanagawa.nvim
+   */
   'kanagawa-dragon': {
     accent: '#8ba4b0',
     border: '#282727',
@@ -794,6 +1002,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#87a987',
     warning: '#c4b28a',
   },
+  /**
+   * Kanagawa Lotus — rebelot
+   * @see https://github.com/rebelot/kanagawa.nvim
+   */
   'kanagawa-lotus': {
     accent: '#4d699b',
     border: '#e5ddb0',
@@ -808,6 +1020,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#6f894e',
     warning: '#77713f',
   },
+  /**
+   * Nordfox — EdenEast
+   * @see https://github.com/EdenEast/nightfox.nvim
+   */
   nordfox: {
     accent: '#81a1c1',
     border: '#39404f',
@@ -822,6 +1038,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a3be8c',
     warning: '#ebcb8b',
   },
+  /**
+   * Duskfox — EdenEast
+   * @see https://github.com/EdenEast/nightfox.nvim
+   */
   duskfox: {
     accent: '#569fba',
     border: '#2d2a45',
@@ -836,6 +1056,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a3be8c',
     warning: '#f6c177',
   },
+  /**
+   * Terafox — EdenEast
+   * @see https://github.com/EdenEast/nightfox.nvim
+   */
   terafox: {
     accent: '#5a93aa',
     border: '#1d3337',
@@ -850,6 +1074,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#7aa4a1',
     warning: '#fda47f',
   },
+  /**
+   * Dawnfox — EdenEast
+   * @see https://github.com/EdenEast/nightfox.nvim
+   */
   dawnfox: {
     accent: '#286983',
     border: '#ebe0df',
@@ -864,6 +1092,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#618774',
     warning: '#ea9d34',
   },
+  /**
+   * Ayu Mirage — Ike Ku
+   * @see https://github.com/dempfi/ayu
+   */
   'ayu-mirage': {
     accent: '#ffcc66',
     border: '#323843',
@@ -878,6 +1110,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#d5ff80',
     warning: '#ffd173',
   },
+  /**
+   * Material Darker — Mattia Astorino
+   * @see https://github.com/material-theme/vsc-material-theme
+   */
   'material-darker': {
     accent: '#82aaff',
     border: '#343434',
@@ -892,6 +1128,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#c3e88d',
     warning: '#ffcb6b',
   },
+  /**
+   * Tokyo Night Moon — atomiks
+   * @see https://github.com/atomiks/moonlight-vscode-theme
+   */
   'tokyo-night-moon': {
     accent: '#82aaff',
     border: '#2f334d',
@@ -906,6 +1146,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#c3e88d',
     warning: '#ffc777',
   },
+  /**
+   * Gruvbox Material — sainnhe
+   * @see https://github.com/sainnhe/gruvbox-material
+   */
   'gruvbox-material': {
     accent: '#7daea3',
     border: '#504945',
@@ -920,6 +1164,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a9b665',
     warning: '#d8a657',
   },
+  /**
+   * Gruvbox Material Light — sainnhe
+   * @see https://github.com/sainnhe/gruvbox-material
+   */
   'gruvbox-material-light': {
     accent: '#45707a',
     border: '#ddccab',
@@ -934,6 +1182,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#6c782e',
     warning: '#b47109',
   },
+  /**
+   * Modus Vivendi — Protesilaos Stavrou
+   * @see https://github.com/protesilaos/modus-themes
+   */
   'modus-vivendi': {
     accent: '#2fafff',
     border: '#646464',
@@ -948,6 +1200,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#44bc44',
     warning: '#d0bc00',
   },
+  /**
+   * Zenburn — Jani Nurminen
+   * @see https://github.com/jnurmine/Zenburn
+   */
   zenburn: {
     accent: '#8cd0d3',
     border: '#4f4f4f',
@@ -962,6 +1218,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#7f9f7f',
     warning: '#f0dfaf',
   },
+  /**
+   * Oxocarbon — nyoom-engineering
+   * @see https://github.com/nyoom-engineering/oxocarbon.nvim
+   */
   oxocarbon: {
     accent: '#33b1ff',
     border: '#525252',
@@ -976,6 +1236,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#42be65',
     warning: '#ab8e34',
   },
+  /**
+   * Tomorrow Night — Chris Kempson
+   * @see https://github.com/chriskempson/tomorrow-theme
+   */
   'tomorrow-night': {
     accent: '#81a2be',
     border: '#373b41',
@@ -990,6 +1254,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#b5bd68',
     warning: '#f0c674',
   },
+  /**
+   * Monokai Pro — Wimer Hazenberg
+   * @see https://monokai.pro
+   */
   'monokai-pro': {
     accent: '#78dce8',
     border: '#403e41',
@@ -1004,6 +1272,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a9dc76',
     warning: '#ffd866',
   },
+  /**
+   * Sonokai — sainnhe
+   * @see https://github.com/sainnhe/sonokai
+   */
   sonokai: {
     accent: '#76cce0',
     border: '#33353f',
@@ -1018,6 +1290,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#9ed072',
     warning: '#e7c664',
   },
+  /**
+   * Doom One — Henrik Lissner
+   * @see https://github.com/hlissner/emacs-doom-themes
+   */
   'doom-one': {
     accent: '#51afef',
     border: '#3f444a',
@@ -1032,6 +1308,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#98be65',
     warning: '#ecbe7b',
   },
+  /**
+   * Andromeda — EliverLara
+   * @see https://github.com/EliverLara/Andromeda
+   */
   andromeda: {
     accent: '#00e8c6',
     border: '#2b2e36',
@@ -1046,6 +1326,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#96e072',
     warning: '#ffe66d',
   },
+  /**
+   * Aura — Dalton Menezes
+   * @see https://github.com/daltonmenezes/aura-theme
+   */
   aura: {
     accent: '#a277ff',
     border: '#363c49',
@@ -1060,6 +1344,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#61ffca',
     warning: '#ffca85',
   },
+  /**
+   * Cyberdream — Scott McKendry
+   * @see https://github.com/scottmckendry/cyberdream.nvim
+   */
   cyberdream: {
     accent: '#5ea1ff',
     border: '#1e2124',
@@ -1074,6 +1362,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#5eff6c',
     warning: '#f1ff5e',
   },
+  /**
+   * Nightfly — bluz71
+   * @see https://github.com/bluz71/vim-nightfly-colors
+   */
   nightfly: {
     accent: '#82aaff',
     border: '#1d3b53',
@@ -1088,6 +1380,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a1cd5e',
     warning: '#e3d18a',
   },
+  /**
+   * Panda Syntax — Tommaso Negri
+   * @see https://github.com/tinkertrain/panda-syntax
+   */
   panda: {
     accent: '#ff75b5',
     border: '#404954',
@@ -1102,6 +1398,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#19f9d8',
     warning: '#ffb86c',
   },
+  /**
+   * Hyper Snazzy — Sindre Sorhus
+   * @see https://github.com/sindresorhus/hyper-snazzy
+   */
   'hyper-snazzy': {
     accent: '#57c7ff',
     border: '#43454f',
@@ -1116,6 +1416,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#5af78e',
     warning: '#f3f99d',
   },
+  /**
+   * Apprentice — romainl
+   * @see https://github.com/romainl/Apprentice
+   */
   apprentice: {
     accent: '#5f87af',
     border: '#444444',
@@ -1130,6 +1434,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#5f875f',
     warning: '#ffffaf',
   },
+  /**
+   * Melange — savq
+   * @see https://github.com/savq/melange-nvim
+   */
   melange: {
     accent: '#a3a9ce',
     border: '#34302c',
@@ -1144,6 +1452,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#85b695',
     warning: '#ebc06d',
   },
+  /**
+   * Melange Light — savq
+   * @see https://github.com/savq/melange-nvim
+   */
   'melange-light': {
     accent: '#465aa4',
     border: '#e9e1db',
@@ -1158,6 +1470,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#3a684a',
     warning: '#a06d00',
   },
+  /**
+   * Spaceduck — pineapplegiant
+   * @see https://github.com/pineapplegiant/spaceduck
+   */
   spaceduck: {
     accent: '#00a3cc',
     border: '#30365f',
@@ -1172,6 +1488,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#5ccc96',
     warning: '#f2ce00',
   },
+  /**
+   * Embark — Embark Studios
+   * @see https://github.com/embark-theme/vim
+   */
   embark: {
     accent: '#d4bfff',
     border: '#585273',
@@ -1186,6 +1506,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a1efd3',
     warning: '#ffe6b3',
   },
+  /**
+   * Bluloco Dark — uloco
+   * @see https://github.com/uloco/theme-bluloco-dark
+   */
   'bluloco-dark': {
     accent: '#3691ff',
     border: '#3d434f',
@@ -1200,6 +1524,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#3fc56b',
     warning: '#f9c859',
   },
+  /**
+   * Bluloco Light — uloco
+   * @see https://github.com/uloco/theme-bluloco-light
+   */
   'bluloco-light': {
     accent: '#275fe4',
     border: '#d5d7d8',
@@ -1214,6 +1542,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#23974a',
     warning: '#c5a332',
   },
+  /**
+   * PaperColor Dark — nlknguyen
+   * @see https://github.com/nlknguyen/papercolor-theme
+   */
   'papercolor-dark': {
     accent: '#5fafd7',
     border: '#444444',
@@ -1228,6 +1560,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#5faf00',
     warning: '#d7af5f',
   },
+  /**
+   * Base16 Ocean — Chris Kempson
+   * @see https://github.com/chriskempson/base16
+   */
   'base16-ocean': {
     accent: '#8fa1b3',
     border: '#343d46',
@@ -1242,6 +1578,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a3be8c',
     warning: '#ebcb8b',
   },
+  /**
+   * Base16 Eighties — Chris Kempson
+   * @see https://github.com/chriskempson/base16
+   */
   'base16-eighties': {
     accent: '#6699cc',
     border: '#393939',
@@ -1256,6 +1596,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#99cc99',
     warning: '#ffcc66',
   },
+  /**
+   * Everblush — Everblush team
+   * @see https://github.com/Everblush/everblush.nvim
+   */
   everblush: {
     accent: '#67b0e8',
     border: '#232a2d',
@@ -1270,6 +1614,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#8ccf7e',
     warning: '#e5c76b',
   },
+  /**
+   * Darcula — JetBrains
+   * @see https://www.jetbrains.com
+   */
   darcula: {
     accent: '#cc7832',
     border: '#3c3f41',
@@ -1284,6 +1632,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#6a8759',
     warning: '#ffc66d',
   },
+  /**
+   * Eldritch — eldritch-theme
+   * @see https://github.com/eldritch-theme/eldritch.nvim
+   */
   eldritch: {
     accent: '#a48cf2',
     border: '#292e42',
@@ -1298,6 +1650,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#37f499',
     warning: '#f1fc79',
   },
+  /**
+   * Edge Light — sainnhe
+   * @see https://github.com/sainnhe/edge
+   */
   'edge-light': {
     accent: '#5079be',
     border: '#dde2e7',
@@ -1312,6 +1668,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#608e32',
     warning: '#be7e05',
   },
+  /**
+   * Zenbones — zenbones-theme
+   * @see https://github.com/zenbones-theme/zenbones.nvim
+   */
   zenbones: {
     accent: '#286486',
     border: '#cfd1d0',
@@ -1326,6 +1686,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#4f6c31',
     warning: '#944927',
   },
+  /**
+   * Iceberg Light — cocopon
+   * @see https://github.com/cocopon/iceberg.vim
+   */
   'iceberg-light': {
     accent: '#2d539e',
     border: '#cad0de',
@@ -1340,6 +1704,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#668e3d',
     warning: '#c57339',
   },
+  /**
+   * GitHub Dark Dimmed — GitHub
+   * @see https://github.com/primer/github-vscode-theme
+   */
   'github-dark-dimmed': {
     accent: '#539bf5',
     border: '#444c56',
@@ -1354,6 +1722,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#57ab5a',
     warning: '#c69026',
   },
+  /**
+   * Edge Dark — sainnhe
+   * @see https://github.com/sainnhe/edge
+   */
   'edge-dark': {
     accent: '#6cb6eb',
     border: '#414550',
@@ -1368,6 +1740,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a0c980',
     warning: '#deb974',
   },
+  /**
+   * Selenized Dark — Jan Warchoł
+   * @see https://github.com/jan-warchol/selenized
+   */
   'selenized-dark': {
     accent: '#4695f7',
     border: '#2d5b69',
@@ -1382,6 +1758,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#75b938',
     warning: '#dbb32d',
   },
+  /**
+   * Selenized Black — Jan Warchoł
+   * @see https://github.com/jan-warchol/selenized
+   */
   'selenized-black': {
     accent: '#368aeb',
     border: '#3b3b3b',
@@ -1396,6 +1776,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#70b433',
     warning: '#dbb32d',
   },
+  /**
+   * Selenized Light — Jan Warchoł
+   * @see https://github.com/jan-warchol/selenized
+   */
   'selenized-light': {
     accent: '#0072d4',
     border: '#d5cdb6',
@@ -1410,6 +1794,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#489100',
     warning: '#ad8900',
   },
+  /**
+   * Monokai Pro Machine — Wimer Hazenberg
+   * @see https://monokai.pro
+   */
   'monokai-pro-machine': {
     accent: '#7cd5f1',
     border: '#1d2528',
@@ -1424,6 +1812,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a2e57b',
     warning: '#ffed72',
   },
+  /**
+   * Monokai Pro Octagon — Wimer Hazenberg
+   * @see https://monokai.pro
+   */
   'monokai-pro-octagon': {
     accent: '#9cd1bb',
     border: '#1e1f2b',
@@ -1438,6 +1830,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#bad761',
     warning: '#ffd76d',
   },
+  /**
+   * Monokai Pro Ristretto — Wimer Hazenberg
+   * @see https://monokai.pro
+   */
   'monokai-pro-ristretto': {
     accent: '#85dacc',
     border: '#211c1c',
@@ -1452,6 +1848,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#adda78',
     warning: '#f9cc6c',
   },
+  /**
+   * Monokai Pro Spectrum — Wimer Hazenberg
+   * @see https://monokai.pro
+   */
   'monokai-pro-spectrum': {
     accent: '#5ad4e6',
     border: '#191919',
@@ -1466,6 +1866,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#7bd88f',
     warning: '#fce566',
   },
+  /**
+   * Base16 Default Dark — Chris Kempson
+   * @see https://github.com/chriskempson/base16
+   */
   'base16-default-dark': {
     accent: '#7cafc2',
     border: '#282828',
@@ -1480,6 +1884,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a1b56c',
     warning: '#f7ca88',
   },
+  /**
+   * Base16 Default Light — Chris Kempson
+   * @see https://github.com/chriskempson/base16
+   */
   'base16-default-light': {
     accent: '#7cafc2',
     border: '#e8e8e8',
@@ -1494,6 +1902,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#a1b56c',
     warning: '#dc9656',
   },
+  /**
+   * Tomorrow — Chris Kempson
+   * @see https://github.com/chriskempson/tomorrow-theme
+   */
   tomorrow: {
     accent: '#4271ae',
     border: '#efefef',
@@ -1508,6 +1920,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#718c00',
     warning: '#eab700',
   },
+  /**
+   * Tokyo Dark — Tiagovla
+   * @see https://github.com/tiagovla/tokyodark.nvim
+   */
   tokyodark: {
     accent: '#a485dd',
     border: '#2a2c41',
@@ -1522,6 +1938,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#95c561',
     warning: '#d7a65f',
   },
+  /**
+   * Spacemacs Dark — syl20bnr
+   * @see https://github.com/syl20bnr/spacemacs
+   */
   'spacemacs-dark': {
     accent: '#bc6ec5',
     border: '#5d4d7a',
@@ -1536,6 +1956,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#67b11d',
     warning: '#b1951d',
   },
+  /**
+   * Bamboo — ribru17
+   * @see https://github.com/ribru17/bamboo.nvim
+   */
   bamboo: {
     accent: '#8fb573',
     border: '#3a3d37',
@@ -1550,6 +1974,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#8fb573',
     warning: '#dbb651',
   },
+  /**
+   * City Lights — Yummygum
+   * @see https://citylights.xyz
+   */
   citylights: {
     accent: '#5ec4ff',
     border: '#2f3a42',
@@ -1564,6 +1992,10 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     success: '#54af83',
     warning: '#ebda65',
   },
+  /**
+   * Oxocarbon Light — nyoom-engineering
+   * @see https://github.com/nyoom-engineering/oxocarbon.nvim
+   */
   'oxocarbon-light': {
     accent: '#0f62fe',
     border: '#e0e0e0',
@@ -1577,6 +2009,500 @@ export const THEME_PRESET_COLORS: Record<Exclude<LogInkThemePreset, 'monochrome'
     selection: '#dde1e6',
     success: '#42be65',
     warning: '#ff6f00',
+  },
+  /**
+   * VS Code Dark+ — Microsoft
+   * @see https://github.com/microsoft/vscode
+   */
+  'vscode-dark': {
+    accent: '#007acc',
+    border: '#3c3c3c',
+    danger: '#f14c4c',
+    focusBorder: '#007acc',
+    gitAdded: '#73c991',
+    gitDeleted: '#f14c4c',
+    gitModified: '#e2c08d',
+    info: '#75beff',
+    muted: '#6c6c6c',
+    selection: '#264f78',
+    success: '#4ec9b0',
+    warning: '#cca700',
+    syntaxKeyword: '#569cd6',
+    syntaxString: '#ce9178',
+    syntaxComment: '#6a9955',
+    syntaxNumber: '#b5cea8',
+    syntaxType: '#4ec9b0',
+    syntaxFunction: '#dcdcaa',
+    syntaxConstant: '#9cdcfe',
+    syntaxProperty: '#9cdcfe',
+  },
+  /**
+   * VS Code Light+ — Microsoft
+   * @see https://github.com/microsoft/vscode
+   */
+  'vscode-light': {
+    accent: '#0078d7',
+    border: '#d4d4d4',
+    danger: '#cd3131',
+    focusBorder: '#0090f1',
+    gitAdded: '#587c0c',
+    gitDeleted: '#ad0707',
+    gitModified: '#895503',
+    info: '#1a85ff',
+    muted: '#8c8c8c',
+    selection: '#add6ff',
+    success: '#587c0c',
+    warning: '#895503',
+    syntaxKeyword: '#0000ff',
+    syntaxString: '#a31515',
+    syntaxComment: '#008000',
+    syntaxNumber: '#098658',
+    syntaxType: '#267f99',
+    syntaxFunction: '#795e26',
+    syntaxConstant: '#0070c1',
+    syntaxProperty: '#001080',
+  },
+  /**
+   * Xcode Dark — Apple
+   * @see https://developer.apple.com/xcode
+   */
+  'xcode-dark': {
+    accent: '#5dd8ff',
+    border: '#313131',
+    danger: '#fc3d39',
+    focusBorder: '#5dd8ff',
+    gitAdded: '#48ca49',
+    gitDeleted: '#fc3d39',
+    gitModified: '#ffbf00',
+    info: '#5dd8ff',
+    muted: '#6c7986',
+    selection: '#646f83',
+    success: '#48ca49',
+    warning: '#ffbf00',
+    syntaxKeyword: '#fc5fa3',
+    syntaxString: '#fc6a5d',
+    syntaxComment: '#6c7986',
+    syntaxNumber: '#d9c97c',
+    syntaxType: '#5dd8ff',
+    syntaxFunction: '#67b7a4',
+    syntaxConstant: '#d9c97c',
+    syntaxProperty: '#41a1c0',
+  },
+  /**
+   * Xcode Light — Apple
+   * @see https://developer.apple.com/xcode
+   */
+  'xcode-light': {
+    accent: '#0b4f79',
+    border: '#d8dde3',
+    danger: '#d12f1b',
+    focusBorder: '#0b4f79',
+    gitAdded: '#3e8d2e',
+    gitDeleted: '#d12f1b',
+    gitModified: '#b06e00',
+    info: '#0b4f79',
+    muted: '#8c97a0',
+    selection: '#b5d5fd',
+    success: '#3e8d2e',
+    warning: '#b06e00',
+    syntaxKeyword: '#ad3da4',
+    syntaxString: '#c41a16',
+    syntaxComment: '#5d6c79',
+    syntaxNumber: '#1c00cf',
+    syntaxType: '#703daa',
+    syntaxFunction: '#23575c',
+    syntaxConstant: '#1c00cf',
+    syntaxProperty: '#26474b',
+  },
+  /**
+   * Sublime Mariana — Sublimehq
+   * @see https://www.sublimetext.com
+   */
+  'sublime-mariana': {
+    accent: '#6699cc',
+    border: '#1f2b38',
+    danger: '#ec5f67',
+    focusBorder: '#5fb3b3',
+    gitAdded: '#99c794',
+    gitDeleted: '#ec5f67',
+    gitModified: '#fac863',
+    info: '#6699cc',
+    muted: '#626d7a',
+    selection: '#2d4e69',
+    success: '#99c794',
+    warning: '#fac863',
+    syntaxKeyword: '#c594cf',
+    syntaxString: '#99c794',
+    syntaxComment: '#626d7a',
+    syntaxNumber: '#f99157',
+    syntaxType: '#fac863',
+    syntaxFunction: '#6699cc',
+    syntaxConstant: '#f99157',
+    syntaxProperty: '#5fb3b3',
+  },
+  /**
+   * GitHub Dark High Contrast — GitHub
+   * @see https://github.com/primer/github-vscode-theme
+   */
+  'github-dark-high-contrast': {
+    accent: '#71b7ff',
+    border: '#21262d',
+    danger: '#ff9492',
+    focusBorder: '#71b7ff',
+    gitAdded: '#7ce38b',
+    gitDeleted: '#ff9492',
+    gitModified: '#ffdf5d',
+    info: '#71b7ff',
+    muted: '#7d8590',
+    selection: '#143d79',
+    success: '#7ce38b',
+    warning: '#ffdf5d',
+    syntaxKeyword: '#ff7b72',
+    syntaxString: '#96d0ff',
+    syntaxComment: '#8b949e',
+    syntaxNumber: '#79c0ff',
+    syntaxType: '#ffa657',
+    syntaxFunction: '#d2a8ff',
+    syntaxConstant: '#79c0ff',
+    syntaxProperty: '#79c0ff',
+  },
+  /**
+   * Noctis — liviuschera
+   * @see https://github.com/liviuschera/noctis
+   */
+  noctis: {
+    accent: '#2bbbad',
+    border: '#1b2932',
+    danger: '#ef4050',
+    focusBorder: '#2bbbad',
+    gitAdded: '#49e9a6',
+    gitDeleted: '#ef4050',
+    gitModified: '#f5d67d',
+    info: '#76b9ed',
+    muted: '#475d62',
+    selection: '#253b47',
+    success: '#49e9a6',
+    warning: '#f5d67d',
+    syntaxKeyword: '#ff0e83',
+    syntaxString: '#86d3a7',
+    syntaxComment: '#475d62',
+    syntaxNumber: '#f5d67d',
+    syntaxType: '#2bbbad',
+    syntaxFunction: '#76b9ed',
+    syntaxConstant: '#ff9d00',
+    syntaxProperty: '#e4f2f7',
+  },
+  /**
+   * Shades of Purple — Ahmad Awais
+   * @see https://github.com/ahmadawais/shades-of-purple-vscode
+   */
+  'shades-of-purple': {
+    accent: '#fad000',
+    border: '#3d3c6e',
+    danger: '#ff628c',
+    focusBorder: '#fb94ff',
+    gitAdded: '#a5ff90',
+    gitDeleted: '#ff628c',
+    gitModified: '#ffd700',
+    info: '#9effff',
+    muted: '#848396',
+    selection: '#a599e9',
+    success: '#a5ff90',
+    warning: '#ffd700',
+    syntaxKeyword: '#ff9d00',
+    syntaxString: '#fad000',
+    syntaxComment: '#b362ff',
+    syntaxNumber: '#ff628c',
+    syntaxType: '#fb94ff',
+    syntaxFunction: '#fad000',
+    syntaxConstant: '#ff9d00',
+    syntaxProperty: '#9effff',
+  },
+  /**
+   * Winter is Coming — John Papa
+   * @see https://github.com/johnpapa/vscode-winteriscoming
+   */
+  'winter-is-coming': {
+    accent: '#82aaff',
+    border: '#011e3a',
+    danger: '#ff2c6d',
+    focusBorder: '#7fdbca',
+    gitAdded: '#addb67',
+    gitDeleted: '#ff2c6d',
+    gitModified: '#ecc48d',
+    info: '#82aaff',
+    muted: '#637777',
+    selection: '#0a2533',
+    success: '#addb67',
+    warning: '#ecc48d',
+    syntaxKeyword: '#c792ea',
+    syntaxString: '#addb67',
+    syntaxComment: '#637777',
+    syntaxNumber: '#f78c6c',
+    syntaxType: '#ffcb8b',
+    syntaxFunction: '#82aaff',
+    syntaxConstant: '#7fdbca',
+    syntaxProperty: '#7fdbca',
+  },
+  /**
+   * Tomorrow Night Bright — Chris Kempson
+   * @see https://github.com/chriskempson/tomorrow-theme
+   */
+  'tomorrow-night-bright': {
+    accent: '#7aa6da',
+    border: '#373b41',
+    danger: '#d54e53',
+    focusBorder: '#70c0b1',
+    gitAdded: '#b9ca4a',
+    gitDeleted: '#d54e53',
+    gitModified: '#e7c547',
+    info: '#7aa6da',
+    muted: '#969896',
+    selection: '#2a2a2a',
+    success: '#b9ca4a',
+    warning: '#e78c45',
+    syntaxKeyword: '#d54e53',
+    syntaxString: '#b9ca4a',
+    syntaxComment: '#969896',
+    syntaxNumber: '#e78c45',
+    syntaxType: '#c397d8',
+    syntaxFunction: '#7aa6da',
+    syntaxConstant: '#c397d8',
+    syntaxProperty: '#70c0b1',
+  },
+  /**
+   * Tomorrow Night Eighties — Chris Kempson
+   * @see https://github.com/chriskempson/tomorrow-theme
+   */
+  'tomorrow-night-eighties': {
+    accent: '#6699cc',
+    border: '#515151',
+    danger: '#f2777a',
+    focusBorder: '#66cccc',
+    gitAdded: '#99cc99',
+    gitDeleted: '#f2777a',
+    gitModified: '#ffcc66',
+    info: '#6699cc',
+    muted: '#999999',
+    selection: '#393939',
+    success: '#99cc99',
+    warning: '#f99157',
+    syntaxKeyword: '#cc99cc',
+    syntaxString: '#99cc99',
+    syntaxComment: '#999999',
+    syntaxNumber: '#f99157',
+    syntaxType: '#ffcc66',
+    syntaxFunction: '#6699cc',
+    syntaxConstant: '#f2777a',
+    syntaxProperty: '#66cccc',
+  },
+  /**
+   * Molokai — Tomas Restrepo
+   * @see https://github.com/tomasr/molokai
+   */
+  molokai: {
+    accent: '#66d9ef',
+    border: '#2d2e2e',
+    danger: '#f92672',
+    focusBorder: '#66d9ef',
+    gitAdded: '#a6e22e',
+    gitDeleted: '#f92672',
+    gitModified: '#e6db74',
+    info: '#66d9ef',
+    muted: '#7e8e91',
+    selection: '#403d3d',
+    success: '#a6e22e',
+    warning: '#e6db74',
+    syntaxKeyword: '#f92672',
+    syntaxString: '#e6db74',
+    syntaxComment: '#7e8e91',
+    syntaxNumber: '#ae81ff',
+    syntaxType: '#66d9ef',
+    syntaxFunction: '#a6e22e',
+    syntaxConstant: '#ae81ff',
+    syntaxProperty: '#66d9ef',
+  },
+  /**
+   * Jellybeans — nanotech
+   * @see https://github.com/nanotech/jellybeans.vim
+   */
+  jellybeans: {
+    accent: '#8197bf',
+    border: '#262626',
+    danger: '#cf6a4c',
+    focusBorder: '#7ccd7c',
+    gitAdded: '#99ad6a',
+    gitDeleted: '#cf6a4c',
+    gitModified: '#fad07a',
+    info: '#8197bf',
+    muted: '#888888',
+    selection: '#4a4a59',
+    success: '#99ad6a',
+    warning: '#fad07a',
+    syntaxKeyword: '#8197bf',
+    syntaxString: '#99ad6a',
+    syntaxComment: '#888888',
+    syntaxNumber: '#cf6a4c',
+    syntaxType: '#fad07a',
+    syntaxFunction: '#fad07a',
+    syntaxConstant: '#cf6a4c',
+    syntaxProperty: '#c6b6ee',
+  },
+  /**
+   * Railscasts — Ryan Bates
+   * @see https://github.com/ryanb/textmate-themes
+   */
+  railscasts: {
+    accent: '#ffc66d',
+    border: '#353535',
+    danger: '#da4939',
+    focusBorder: '#ffc66d',
+    gitAdded: '#a5c261',
+    gitDeleted: '#da4939',
+    gitModified: '#ffc66d',
+    info: '#6d9cbe',
+    muted: '#bc9458',
+    selection: '#494847',
+    success: '#a5c261',
+    warning: '#cc7833',
+    syntaxKeyword: '#cc7833',
+    syntaxString: '#a5c261',
+    syntaxComment: '#bc9458',
+    syntaxNumber: '#d0d0ff',
+    syntaxType: '#da4939',
+    syntaxFunction: '#ffc66d',
+    syntaxConstant: '#6d9cbe',
+    syntaxProperty: '#d0d0ff',
+  },
+  /**
+   * Spacegray — kkga
+   * @see https://github.com/kkga/spacegray
+   */
+  spacegray: {
+    accent: '#5486c0',
+    border: '#383d4a',
+    danger: '#bf616a',
+    focusBorder: '#5fb3b3',
+    gitAdded: '#96b5b4',
+    gitDeleted: '#bf616a',
+    gitModified: '#ebcb8b',
+    info: '#5486c0',
+    muted: '#6c7a96',
+    selection: '#2e3443',
+    success: '#96b5b4',
+    warning: '#ebcb8b',
+    syntaxKeyword: '#c59bc1',
+    syntaxString: '#8fa1b3',
+    syntaxComment: '#6c7a96',
+    syntaxNumber: '#d08770',
+    syntaxType: '#ebcb8b',
+    syntaxFunction: '#96b5b4',
+    syntaxConstant: '#5486c0',
+    syntaxProperty: '#8fa1b3',
+  },
+  /**
+   * Srcery — roosta
+   * @see https://github.com/srcery-colors/srcery-vim
+   */
+  srcery: {
+    accent: '#0aaeb3',
+    border: '#2d2b28',
+    danger: '#ef2f27',
+    focusBorder: '#53fde9',
+    gitAdded: '#519f50',
+    gitDeleted: '#ef2f27',
+    gitModified: '#fbb829',
+    info: '#2c78bf',
+    muted: '#918175',
+    selection: '#2d2b28',
+    success: '#519f50',
+    warning: '#fbb829',
+    syntaxKeyword: '#ef2f27',
+    syntaxString: '#98bc37',
+    syntaxComment: '#918175',
+    syntaxNumber: '#fed06e',
+    syntaxType: '#68a8e4',
+    syntaxFunction: '#53fde9',
+    syntaxConstant: '#ff5c8f',
+    syntaxProperty: '#0aaeb3',
+  },
+  /**
+   * Alabaster — Nikita Prokopov
+   * @see https://github.com/tonsky/sublime-scheme-alabaster
+   */
+  alabaster: {
+    accent: '#7600ff',
+    border: '#e0e0e0',
+    danger: '#c41e3a',
+    focusBorder: '#7600ff',
+    gitAdded: '#448c27',
+    gitDeleted: '#c41e3a',
+    gitModified: '#9c5d27',
+    info: '#4b69c6',
+    muted: '#aaaaaa',
+    selection: '#d4e8fd',
+    success: '#448c27',
+    warning: '#9c5d27',
+    syntaxKeyword: '#7600ff',
+    syntaxString: '#448c27',
+    syntaxComment: '#aaaaaa',
+    syntaxNumber: '#9c5d27',
+    syntaxType: '#7600ff',
+    syntaxFunction: '#4b69c6',
+    syntaxConstant: '#7600ff',
+    syntaxProperty: '#1c1c1c',
+  },
+  /**
+   * Challenger Deep — Nimit Kalra
+   * @see https://github.com/challenger-deep-theme/vim
+   */
+  'challenger-deep': {
+    accent: '#aaffe4',
+    border: '#565575',
+    danger: '#ff5458',
+    focusBorder: '#62d196',
+    gitAdded: '#95ffa4',
+    gitDeleted: '#ff5458',
+    gitModified: '#ffe9aa',
+    info: '#aaffe4',
+    muted: '#565575',
+    selection: '#2b2a3e',
+    success: '#95ffa4',
+    warning: '#ffe9aa',
+    syntaxKeyword: '#ff8080',
+    syntaxString: '#95ffa4',
+    syntaxComment: '#565575',
+    syntaxNumber: '#aaffe4',
+    syntaxType: '#ffe9aa',
+    syntaxFunction: '#62d196',
+    syntaxConstant: '#ff5458',
+    syntaxProperty: '#cbe3e7',
+  },
+  /**
+   * Moonfly — bluz71
+   * @see https://github.com/bluz71/vim-moonfly-colors
+   */
+  moonfly: {
+    accent: '#80a0ff',
+    border: '#1c1c1c',
+    danger: '#ff5189',
+    focusBorder: '#79dac8',
+    gitAdded: '#8cc85f',
+    gitDeleted: '#ff5189',
+    gitModified: '#e3c78a',
+    info: '#80a0ff',
+    muted: '#717171',
+    selection: '#1c1c1c',
+    success: '#8cc85f',
+    warning: '#e3c78a',
+    syntaxKeyword: '#80a0ff',
+    syntaxString: '#e3c78a',
+    syntaxComment: '#717171',
+    syntaxNumber: '#f09479',
+    syntaxType: '#79dac8',
+    syntaxFunction: '#80a0ff',
+    syntaxConstant: '#d183e8',
+    syntaxProperty: '#79dac8',
   },
 }
 
