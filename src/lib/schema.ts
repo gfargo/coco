@@ -2291,7 +2291,9 @@ export const schema = {
         "railscasts",
         "spacegray",
         "srcery",
-        "alabaster"
+        "alabaster",
+        "challenger-deep",
+        "moonfly"
       ]
     }
   }
