@@ -34,6 +34,7 @@ That's the core. Everything else — changelogs, code review, PRs, and the `coco
 - 🎨 **117 Color Themes** - Catppuccin, Gruvbox, Dracula, Tokyo Night, Monokai Pro, Rosé Pine, Selenized, Solarized, and many more (31 light) — browse and **live-preview** them with the in-app theme picker (`gC`), then apply with one keystroke; or set one via `coco ui --theme <name>` / config. `NO_COLOR` honored
 - 🎯 **`--repo <dir>` global flag** - Drive any coco command against any repository without `cd`-ing first
 - 📦 **Package Manager Friendly** - Works with npm, yarn, and pnpm
+- 🩺 **Config Diagnostics** - `coco doctor` audits your configuration for unknown providers, mismatched endpoints, and API key issues — with auto-fix suggestions and a `--cost` model-routing breakdown
 - 👥 **Team Ready** - Shared configurations and enterprise deployment
 
 ## Install
