@@ -27,9 +27,9 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
 ]
 
 describe('getForgeActions (#0.70)', () => {
-  it('returns a complete facade for github and gitlab', () => {
-    for (const provider of ['github', 'gitlab', 'unsupported', undefined] as const) {
-      const forge = getForgeActions(provider, { gitlabPath: 'g/p' })
+  it('returns a complete facade for github, gitlab, and bitbucket', () => {
+    for (const provider of ['github', 'gitlab', 'bitbucket', 'unsupported', undefined] as const) {
+      const forge = getForgeActions(provider, { gitlabPath: 'g/p', bitbucketPath: 'ws/repo' })
       for (const key of METHOD_KEYS) {
         expect(typeof forge[key]).toBe('function')
       }
@@ -44,6 +44,12 @@ describe('getForgeActions (#0.70)', () => {
 
   it('GitLab detail loaders fail gracefully without a resolved project path', async () => {
     const forge = getForgeActions('gitlab', {})
+    expect((await forge.getPullRequestDetail(1)).ok).toBe(false)
+    expect((await forge.getIssueDetail(1)).ok).toBe(false)
+  })
+
+  it('Bitbucket detail loaders fail gracefully without a resolved project path', async () => {
+    const forge = getForgeActions('bitbucket', {})
     expect((await forge.getPullRequestDetail(1)).ok).toBe(false)
     expect((await forge.getIssueDetail(1)).ok).toBe(false)
   })

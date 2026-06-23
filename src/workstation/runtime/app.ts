@@ -920,16 +920,22 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // from the detected provider, so every list / detail / action below routes
   // to the right CLI without per-call-site branching.
   const forgeProvider = context.provider?.repository.provider
-  const forgeGitlabPath =
+  const forgePath =
     context.provider?.repository.owner && context.provider?.repository.name
       ? `${context.provider.repository.owner}/${context.provider.repository.name}`
       : undefined
   // Remote host (`gitlab.com` or a self-hosted instance) — threaded so the
   // GitLab error-path auth re-probe checks the right server.
   const forgeGitlabHost = context.provider?.repository.host
+  const forgeCurrentBranch = context.provider?.currentBranch
   const forge = React.useMemo(
-    () => getForgeActions(forgeProvider, { gitlabPath: forgeGitlabPath, gitlabHost: forgeGitlabHost }),
-    [forgeProvider, forgeGitlabPath, forgeGitlabHost]
+    () => getForgeActions(forgeProvider, {
+      gitlabPath: forgePath,
+      gitlabHost: forgeGitlabHost,
+      bitbucketPath: forgePath,
+      currentBranch: forgeCurrentBranch,
+    }),
+    [forgeProvider, forgePath, forgeGitlabHost, forgeCurrentBranch]
   )
 
   React.useEffect(() => {

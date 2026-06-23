@@ -6,6 +6,7 @@ import { getProviderOverview } from '../../git/providerData'
 import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import { createPullRequest, openPullRequest } from '../../git/pullRequestActions'
 import { createMergeRequest, openMergeRequest } from '../../git/mergeRequestActions'
+import { createBitbucketPullRequest, openBitbucketPullRequest } from '../../git/bitbucketPullRequestActions'
 import { forgeNouns } from '../../workstation/chrome/forgeNouns'
 import { commandExit } from '../../lib/utils/commandExit'
 import { emitJson } from '../../lib/ui/emitJson'
@@ -33,9 +34,9 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   const provider = overview.repository.provider
   const nouns = forgeNouns(provider)
 
-  if (provider !== 'github' && provider !== 'gitlab') {
+  if (provider !== 'github' && provider !== 'gitlab' && provider !== 'bitbucket') {
     logger.log(
-      overview.repository.message || 'No supported remote (GitHub or GitLab) detected.',
+      overview.repository.message || 'No supported remote (GitHub, GitLab, or Bitbucket) detected.',
       { color: 'red' }
     )
     commandExit(1)
@@ -152,8 +153,19 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   }
 
   const input = { base, head, title, body, draft: Boolean(argv.draft) }
-  const result =
-    provider === 'gitlab' ? await createMergeRequest(input) : await createPullRequest(input)
+  const repoPath =
+    overview.repository.owner && overview.repository.name
+      ? `${overview.repository.owner}/${overview.repository.name}`
+      : undefined
+
+  let result
+  if (provider === 'gitlab') {
+    result = await createMergeRequest(input)
+  } else if (provider === 'bitbucket' && repoPath) {
+    result = await createBitbucketPullRequest(repoPath, input)
+  } else {
+    result = await createPullRequest(input)
+  }
 
   if (!result.ok) {
     logger.log(result.message, { color: 'red' })
@@ -165,6 +177,12 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   logger.log(result.message, { color: 'green' })
 
   if (argv.web && result.url) {
-    await (provider === 'gitlab' ? openMergeRequest(result.url) : openPullRequest(result.url))
+    if (provider === 'gitlab') {
+      await openMergeRequest(result.url)
+    } else if (provider === 'bitbucket') {
+      openBitbucketPullRequest(result.url)
+    } else {
+      await openPullRequest(result.url)
+    }
   }
 }

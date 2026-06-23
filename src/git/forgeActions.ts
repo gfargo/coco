@@ -72,6 +72,33 @@ import {
 } from './gitlabIssueActions'
 import { defaultGlabRunner } from './glabCli'
 
+// Bitbucket implementations.
+import { getBitbucketPullRequestList, getBitbucketIssueList, getBitbucketPullRequestOverview } from './bitbucketListData'
+import { getBitbucketPullRequestDetail, getBitbucketIssueDetail } from './bitbucketDetailData'
+import {
+  createBitbucketPullRequest,
+  openBitbucketPullRequest,
+  mergeBitbucketPullRequestByNumber,
+  approveBitbucketPullRequestByNumber,
+  closeBitbucketPullRequestByNumber,
+  commentBitbucketPullRequestByNumber,
+  requestChangesBitbucketPullRequestByNumber,
+  addBitbucketPullRequestLabel,
+  addBitbucketPullRequestReviewer,
+  mergeBitbucketPullRequest,
+  closeBitbucketPullRequest,
+  approveBitbucketPullRequest,
+  commentBitbucketPullRequest,
+  requestChangesBitbucketPullRequest,
+} from './bitbucketPullRequestActions'
+import {
+  commentBitbucketIssue,
+  addBitbucketIssueLabel,
+  addBitbucketIssueAssignee,
+  closeBitbucketIssue,
+  reopenBitbucketIssue,
+} from './bitbucketIssueActions'
+
 /**
  * Provider-agnostic forge facade. The workstation runtime dispatches every
  * pull-request / issue load and mutation through this interface, so the
@@ -176,20 +203,72 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
 }
 
 /**
+ * Bitbucket facade. `path` is `workspace/repo_slug`; `currentBranch` is the
+ * checked-out branch (required for current-branch mutations that can't infer
+ * the branch from a CLI binary).
+ */
+function bitbucketActions(
+  path: string | undefined,
+  currentBranch?: string
+): ForgeActions {
+  return {
+    getPullRequestList: (git, filter) => getBitbucketPullRequestList(git, filter),
+    getIssueList: (git, filter) => getBitbucketIssueList(git, filter),
+    getPullRequestDetail: (n) =>
+      path
+        ? getBitbucketPullRequestDetail(path, n)
+        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
+    getIssueDetail: (n) =>
+      path
+        ? getBitbucketIssueDetail(path, n)
+        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
+    commentPullRequestByNumber: (n, body) => commentBitbucketPullRequestByNumber(path ?? '', n, body),
+    addPullRequestLabel: () => addBitbucketPullRequestLabel(),
+    addPullRequestAssignee: (n, assignee) => addBitbucketPullRequestReviewer(path ?? '', n, assignee),
+    mergePullRequestByNumber: (n, strategy) => mergeBitbucketPullRequestByNumber(path ?? '', n, strategy),
+    closePullRequestByNumber: (n) => closeBitbucketPullRequestByNumber(path ?? '', n),
+    approvePullRequestByNumber: (n) => approveBitbucketPullRequestByNumber(path ?? '', n),
+    requestChangesPullRequestByNumber: (n, body) => requestChangesBitbucketPullRequestByNumber(path ?? '', n, body),
+    mergePullRequest: (strategy) => mergeBitbucketPullRequest(path, currentBranch, strategy),
+    closePullRequest: () => closeBitbucketPullRequest(path, currentBranch),
+    approvePullRequest: () => approveBitbucketPullRequest(path, currentBranch),
+    commentPullRequest: (body) => commentBitbucketPullRequest(path, currentBranch, body),
+    requestChangesPullRequest: (body) => requestChangesBitbucketPullRequest(path, currentBranch, body),
+    createPullRequest: (input) =>
+      path
+        ? createBitbucketPullRequest(path, input)
+        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
+    openPullRequest: (url) => Promise.resolve(openBitbucketPullRequest(url)),
+    commentIssue: (n, body) => commentBitbucketIssue(path ?? '', n, body),
+    addIssueLabel: () => addBitbucketIssueLabel(),
+    addIssueAssignee: (n, assignee) => addBitbucketIssueAssignee(path ?? '', n, assignee),
+    closeIssue: (n) => closeBitbucketIssue(path ?? '', n),
+    reopenIssue: (n) => reopenBitbucketIssue(path ?? '', n),
+  }
+}
+
+/**
  * Select the forge facade for the detected provider. Anything other than
- * `gitlab` (github, GitHub Enterprise, unsupported) keeps the GitHub `gh`
- * implementations, preserving existing behavior. For GitLab, pass the project
- * path (`owner/name`) so the detail loaders can address `glab api` endpoints,
- * and the remote `gitlabHost` so error-path auth re-probes hit the right
- * instance (self-hosted installs aren't `gitlab.com`).
+ * `gitlab` or `bitbucket` (github, GitHub Enterprise, unsupported) keeps the
+ * GitHub `gh` implementations, preserving existing behavior. For GitLab, pass
+ * the project path (`owner/name`) and remote host so error-path auth re-probes
+ * hit the right instance. For Bitbucket, pass the workspace/repo path and
+ * current branch (needed for current-branch mutations that can't infer the
+ * branch from a CLI binary).
  */
 export function getForgeActions(
   provider: GitProviderType | undefined,
-  options: { gitlabPath?: string; gitlabHost?: string } = {}
+  options: {
+    gitlabPath?: string
+    gitlabHost?: string
+    bitbucketPath?: string
+    /** Current checked-out branch, required for Bitbucket current-branch PR mutations. */
+    currentBranch?: string
+  } = {}
 ): ForgeActions {
-  return provider === 'gitlab'
-    ? gitlabActions(options.gitlabPath, options.gitlabHost)
-    : githubActions
+  if (provider === 'gitlab') return gitlabActions(options.gitlabPath, options.gitlabHost)
+  if (provider === 'bitbucket') return bitbucketActions(options.bitbucketPath, options.currentBranch)
+  return githubActions
 }
 
 /**
@@ -200,5 +279,7 @@ export function getForgeActions(
  */
 export async function getForgePullRequestOverview(git: SimpleGit): Promise<PullRequestOverview> {
   const repo = await getProviderRepositoryForGit(git)
-  return repo?.provider === 'gitlab' ? getMergeRequestOverview(git) : getPullRequestOverview(git)
+  if (repo?.provider === 'gitlab') return getMergeRequestOverview(git)
+  if (repo?.provider === 'bitbucket') return getBitbucketPullRequestOverview(git)
+  return getPullRequestOverview(git)
 }

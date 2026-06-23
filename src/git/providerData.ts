@@ -13,8 +13,14 @@ import {
   getGlabStatus,
   type GlabRunner,
 } from './glabCli'
+import {
+  defaultBitbucketRunner,
+  describeBitbucketStatus,
+  getBitbucketStatus,
+  type BitbucketRunner,
+} from './bitbucketCli'
 
-export type GitProviderType = 'github' | 'gitlab' | 'unsupported'
+export type GitProviderType = 'github' | 'gitlab' | 'bitbucket' | 'unsupported'
 
 export type ProviderRepository = {
   provider: GitProviderType
@@ -82,10 +88,10 @@ export function parseGitHubRemoteUrl(
  * command executor. Lets self-hosted installs on vanity hostnames (no `gitlab`
  * / `github` in the name) be detected explicitly.
  */
-let forgeHostOverrides: Record<string, 'github' | 'gitlab'> = {}
+let forgeHostOverrides: Record<string, 'github' | 'gitlab' | 'bitbucket'> = {}
 
 export function setForgeHostOverrides(
-  overrides: Record<string, 'github' | 'gitlab'> | undefined
+  overrides: Record<string, 'github' | 'gitlab' | 'bitbucket'> | undefined
 ): void {
   forgeHostOverrides = {}
   if (overrides) {
@@ -100,6 +106,7 @@ export function detectProvider(host: string): GitProviderType {
   if (forgeHostOverrides[h]) return forgeHostOverrides[h]
   if (h === 'github.com') return 'github'
   if (h === 'gitlab.com') return 'gitlab'
+  if (h === 'bitbucket.org' || h.includes('bitbucket')) return 'bitbucket'
   if (h.includes('gitlab')) return 'gitlab'
   if (h.includes('github')) return 'github'
   return 'unsupported'
@@ -163,7 +170,8 @@ export function buildProviderUrl(
   }
 
   const base = repository.webUrl
-  // GitLab namespaces every sub-path under `/-/`; GitHub does not.
+  const isBitbucket = repository.provider === 'bitbucket'
+  // GitLab namespaces every sub-path under `/-/`; GitHub and Bitbucket do not.
   const seg = repository.provider === 'gitlab' ? '/-' : ''
 
   if (target.type === 'repo') {
@@ -171,18 +179,25 @@ export function buildProviderUrl(
   }
 
   if (target.type === 'branch') {
-    return `${base}${seg}/tree/${encodeURIComponent(target.branch)}`
+    return isBitbucket
+      ? `${base}/branch/${encodeURIComponent(target.branch)}`
+      : `${base}${seg}/tree/${encodeURIComponent(target.branch)}`
   }
 
   if (target.type === 'commit') {
-    return `${base}${seg}/commit/${encodeURIComponent(target.commit)}`
+    return isBitbucket
+      ? `${base}/commits/${encodeURIComponent(target.commit)}`
+      : `${base}${seg}/commit/${encodeURIComponent(target.commit)}`
   }
 
   if (target.type === 'pull-request') {
-    // GitLab calls them merge requests and routes them differently.
-    return repository.provider === 'gitlab'
-      ? `${base}/-/merge_requests/${target.number}`
-      : `${base}/pull/${target.number}`
+    if (repository.provider === 'gitlab') return `${base}/-/merge_requests/${target.number}`
+    if (isBitbucket) return `${base}/pull-requests/${target.number}`
+    return `${base}/pull/${target.number}`
+  }
+
+  if (isBitbucket) {
+    return `${base}/branches/compare/${encodeURIComponent(target.head)}%0D${encodeURIComponent(target.base)}`
   }
 
   return `${base}${seg}/compare/${encodeURIComponent(target.base)}...${encodeURIComponent(target.head)}`
@@ -333,6 +348,69 @@ async function getCurrentMergeRequest(
   }
 }
 
+/** Bitbucket overview via REST API: auth probe, default branch, current-branch PR. */
+async function getBitbucketProviderOverview(
+  repository: ProviderRepository,
+  currentBranch: string | undefined,
+  localDefaultBranch: string | undefined,
+  runner: BitbucketRunner
+): Promise<ProviderOverview> {
+  const status = await getBitbucketStatus(runner)
+  if (status.kind !== 'ok') {
+    return {
+      repository: { ...repository, defaultBranch: localDefaultBranch },
+      currentBranch,
+      authenticated: false,
+      message: describeBitbucketStatus(status),
+    }
+  }
+
+  const path =
+    repository.owner && repository.name ? `${repository.owner}/${repository.name}` : undefined
+
+  async function getDefaultBranchBitbucket(): Promise<string | undefined> {
+    if (!path) return undefined
+    try {
+      const out = (await runner(`repositories/${path}`)).trim()
+      return out ? (JSON.parse(out) as { mainbranch?: { name?: string } }).mainbranch?.name : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  async function getCurrentPRBitbucket(): Promise<ProviderPullRequestStatus | undefined> {
+    if (!path || !currentBranch) return undefined
+    try {
+      const q = encodeURIComponent(`source.branch.name = "${currentBranch}" AND state = "OPEN"`)
+      const out = (await runner(`repositories/${path}/pullrequests?q=${q}&pagelen=1`)).trim()
+      if (!out) return undefined
+      const page = JSON.parse(out) as { values?: Array<{ id?: number; title?: string; state?: string; draft?: boolean }> }
+      const pr = page?.values?.[0]
+      if (!pr?.id) return undefined
+      return {
+        number: pr.id,
+        title: pr.title || '',
+        state: String(pr.state || '').toUpperCase(),
+        isDraft: Boolean(pr.draft),
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  const [defaultBranch, currentPullRequest] = await Promise.all([
+    getDefaultBranchBitbucket(),
+    getCurrentPRBitbucket(),
+  ])
+
+  return {
+    repository: { ...repository, defaultBranch: defaultBranch || localDefaultBranch },
+    currentBranch,
+    currentPullRequest,
+    authenticated: true,
+  }
+}
+
 /** GitLab overview via glab: auth probe, default branch, current-branch MR. */
 async function getGitLabProviderOverview(
   repository: ProviderRepository,
@@ -372,7 +450,8 @@ async function getGitLabProviderOverview(
 export async function getProviderOverview(
   git: SimpleGit,
   runner: GhRunner = defaultGhRunner,
-  glabRunner: GlabRunner = defaultGlabRunner
+  glabRunner: GlabRunner = defaultGlabRunner,
+  bitbucketRunner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<ProviderOverview> {
   const [remotes, currentBranchOutput, localDefaultBranch] = await Promise.all([
     git.getRemotes(true),
@@ -396,6 +475,10 @@ export async function getProviderOverview(
 
   if (repository.provider === 'gitlab') {
     return getGitLabProviderOverview(repository, currentBranch, localDefaultBranch, glabRunner)
+  }
+
+  if (repository.provider === 'bitbucket') {
+    return getBitbucketProviderOverview(repository, currentBranch, localDefaultBranch, bitbucketRunner)
   }
 
   if (repository.provider !== 'github') {

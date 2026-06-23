@@ -33,6 +33,17 @@ export function forgeNouns(provider: GitProviderType | undefined): ForgeNouns {
       name: 'GitLab',
     }
   }
+  if (provider === 'bitbucket') {
+    return {
+      abbrev: 'PR',
+      singular: 'Pull request',
+      plural: 'Pull requests',
+      singularLower: 'pull request',
+      pluralLower: 'pull requests',
+      cli: 'bb',
+      name: 'Bitbucket',
+    }
+  }
   return {
     abbrev: 'PR',
     singular: 'Pull request',
