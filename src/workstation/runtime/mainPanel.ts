@@ -19,6 +19,7 @@ import type { WorktreeFileDiff } from '../../git/worktreeDiffData'
 import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
 import { renderBisectSurface } from '../surfaces/bisect'
 import { renderBlameSurface, type BlameSurfaceData } from '../surfaces/blame'
+import { renderFileHistorySurface, type FileHistorySurfaceData } from '../surfaces/fileHistory'
 import { renderBranchesSurface } from '../surfaces/branches'
 import { renderChangelogSurface } from '../surfaces/changelog'
 import { renderComposeSurface } from '../surfaces/compose'
@@ -152,6 +153,19 @@ function blameSurfaceComponent(React: typeof ReactTypes): ReactTypes.FC<{ data: 
   return cachedBlameComponent
 }
 
+let cachedFileHistoryComponent: ReactTypes.FC<{ data: FileHistorySurfaceData }> | null = null
+function fileHistorySurfaceComponent(
+  React: typeof ReactTypes,
+): ReactTypes.FC<{ data: FileHistorySurfaceData }> {
+  if (!cachedFileHistoryComponent) {
+    const Component: ReactTypes.FC<{ data: FileHistorySurfaceData }> = ({ data }) =>
+      renderFileHistorySurface(useSurfaceRenderContext(React, 'main'), data)
+    Component.displayName = 'FileHistorySurface'
+    cachedFileHistoryComponent = Component
+  }
+  return cachedFileHistoryComponent
+}
+
 /**
  * History surface (#1237) — the dispatcher's default view and its highest
  * fan-in: pagination flags, layout density / row mode, date-bucketing, and
@@ -213,6 +227,10 @@ export type MainPanelExtras = {
   blame: BlameSurfaceData['blame']
   /** True while the on-demand blame hydration is in flight (#0.71). */
   blameLoading: boolean
+  /** Cached file history for `state.fileHistoryPath` (#COCO-14). Undefined on a cache miss. */
+  fileHistory: FileHistorySurfaceData['history']
+  /** True while the on-demand file-history hydration is in flight (#COCO-14). */
+  fileHistoryLoading: boolean
   hasMoreCommits: boolean
   loadingMoreCommits: boolean
   spinnerFrame: number
@@ -244,6 +262,8 @@ export function renderMainPanel(
     bisectCandidateLoading,
     blame,
     blameLoading,
+    fileHistory,
+    fileHistoryLoading,
     hasMoreCommits,
     loadingMoreCommits,
     spinnerFrame,
@@ -333,6 +353,12 @@ export function renderMainPanel(
 
   if (state.activeView === 'blame') {
     return h(blameSurfaceComponent(React), { data: { blame, loading: blameLoading } })
+  }
+
+  if (state.activeView === 'file-history') {
+    return h(fileHistorySurfaceComponent(React), {
+      data: { history: fileHistory, loading: fileHistoryLoading },
+    })
   }
 
   if (state.activeView === 'pull-request') {

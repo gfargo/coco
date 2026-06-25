@@ -59,6 +59,7 @@
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import { getBlame } from '../../../git/blameData'
+import { getFileHistory } from '../../../git/fileHistoryData'
 import type { ForgeActions } from '../../../git/forgeActions'
 import type { LogInkState } from '../inkViewModel'
 import type { LogInkContext } from '../types'
@@ -67,6 +68,8 @@ import type { LogInkContext } from '../types'
 export const DETAIL_HYDRATION_DELAY_MS = 250
 /** Debounce window for blame hydration. Lifted verbatim. */
 export const BLAME_HYDRATION_DELAY_MS = 150
+/** Debounce window for file-history hydration (#COCO-14). */
+export const FILE_HISTORY_HYDRATION_DELAY_MS = 150
 
 /** The filtered issue-list element type, as derived from the live context. */
 type IssueListItemType = NonNullable<NonNullable<LogInkContext['issueList']>['issues']>[number]
@@ -112,6 +115,20 @@ export function useBlameLoadingState(React: typeof ReactTypes): {
   return { blameLoading, setBlameLoading }
 }
 
+/**
+ * Issues only the `fileHistoryLoading` `useState`, in its `app.ts` position
+ * immediately after `useBlameLoadingState` (hook ordering preserved).
+ * Returns both the flag (for the file-history surface / MainPanelExtras)
+ * and the setter (threaded into {@link useDetailHydration}).
+ */
+export function useFileHistoryLoadingState(React: typeof ReactTypes): {
+  fileHistoryLoading: boolean
+  setFileHistoryLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+} {
+  const [fileHistoryLoading, setFileHistoryLoading] = React.useState(false)
+  return { fileHistoryLoading, setFileHistoryLoading }
+}
+
 export type UseDetailHydrationDeps = {
   /** The active frame's `git`. Drives the blame `getBlame` fetch. */
   git: SimpleGit
@@ -134,6 +151,8 @@ export type UseDetailHydrationDeps = {
   ) => void
   /** Blame loading-flag setter, from {@link useBlameLoadingState}. */
   setBlameLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+  /** File-history loading-flag setter, from {@link useFileHistoryLoadingState}. */
+  setFileHistoryLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
 }
 
 /**
@@ -158,6 +177,7 @@ export function useDetailHydration(
     filteredPullRequestTriageList,
     setContext,
     setBlameLoading,
+    setFileHistoryLoading,
   } = deps
 
   React.useEffect(() => {
@@ -277,6 +297,46 @@ export function useDetailHydration(
     state.activeView,
     state.blamePath,
     context.blameByPath,
+    setContext,
+  ])
+
+  // File-history hydration (#COCO-14). Same debounce / active-flag /
+  // frame-tag / cache-skip shape as the blame effect above.
+  React.useEffect(() => {
+    if (state.activeView !== 'file-history') return
+    const path = state.fileHistoryPath
+    if (!path) return
+    if (context.fileHistoryByPath?.has(path)) {
+      setFileHistoryLoading(false)
+      return
+    }
+
+    const issuedAtDepth = runtimes.length - 1
+    let active = true
+    setFileHistoryLoading(true)
+    const timer = setTimeout(async () => {
+      const result = await getFileHistory(git, path)
+      if (!active) return
+      setContext(
+        (current) => ({
+          ...current,
+          fileHistoryByPath: new Map(current.fileHistoryByPath || []).set(result.path, result),
+        }),
+        issuedAtDepth,
+      )
+      setFileHistoryLoading(false)
+    }, FILE_HISTORY_HYDRATION_DELAY_MS)
+
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [
+    runtimes.length,
+    git,
+    state.activeView,
+    state.fileHistoryPath,
+    context.fileHistoryByPath,
     setContext,
   ])
 }

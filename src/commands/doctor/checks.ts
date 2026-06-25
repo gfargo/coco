@@ -14,15 +14,35 @@ export interface Diagnostic {
   autoFix?: (config: Record<string, unknown>) => void
 }
 
+const SUPPORTED_PROVIDERS: LLMProvider[] = [
+  'openai',
+  'anthropic',
+  'azure',
+  'gemini',
+  'mistral',
+  'bedrock',
+  'ollama',
+]
+
+const PROVIDER_ALIASES: Record<string, LLMProvider> = {
+  claude: 'anthropic',
+  gpt: 'openai',
+  chatgpt: 'openai',
+  google: 'gemini',
+  aws: 'bedrock',
+}
+
 export function runDiagnostics(config: Config): Diagnostic[] {
   const diagnostics: Diagnostic[] = []
 
   checkServiceBlock(config, diagnostics)
+  checkProviderValidity(config, diagnostics)
   checkAuthentication(config, diagnostics)
   checkModelCurrency(config, diagnostics)
   checkModeConfig(config, diagnostics)
   checkDynamicRouting(config, diagnostics)
   checkTokenLimits(config, diagnostics)
+  checkEndpointSupport(config, diagnostics)
   checkIgnoredFiles(config, diagnostics)
   checkProjectConfigFile(diagnostics)
 
@@ -52,6 +72,33 @@ function checkServiceBlock(config: Config, diagnostics: Diagnostic[]) {
       severity: 'error',
       message: 'No model set in service config.',
       fix: 'Set service.model to a valid model name (e.g. "gpt-4o") or "dynamic" for task-based routing.',
+    })
+  }
+}
+
+export function checkProviderValidity(config: Config, diagnostics: Diagnostic[]) {
+  const provider = config.service?.provider
+  if (!provider) return
+  if (SUPPORTED_PROVIDERS.includes(provider as LLMProvider)) return
+
+  const suggestion = PROVIDER_ALIASES[String(provider).toLowerCase()]
+  const validList = SUPPORTED_PROVIDERS.map((p) => `"${p}"`).join(', ')
+
+  if (suggestion) {
+    diagnostics.push({
+      severity: 'error',
+      message: `Unknown service.provider "${provider}". Did you mean "${suggestion}"?`,
+      fix: `Set service.provider to "${suggestion}". Valid providers: ${validList}.`,
+      autoFix: (raw) => {
+        const svc = raw.service as Record<string, unknown>
+        if (svc) svc.provider = suggestion
+      },
+    })
+  } else {
+    diagnostics.push({
+      severity: 'error',
+      message: `Unknown service.provider "${provider}".`,
+      fix: `Set service.provider to one of: ${validList}.`,
     })
   }
 }
@@ -247,6 +294,33 @@ function checkTokenLimits(config: Config, diagnostics: Diagnostic[]) {
       },
     })
   }
+}
+
+// Providers whose client honors a custom host via service.endpoint.
+// Only Ollama reads service.endpoint; openai/anthropic use service.baseURL instead.
+const ENDPOINT_AWARE_PROVIDERS: LLMProvider[] = ['ollama']
+const BASE_URL_PROVIDERS: LLMProvider[] = ['openai', 'anthropic']
+
+export function checkEndpointSupport(config: Config, diagnostics: Diagnostic[]) {
+  const provider = config.service?.provider
+  if (!provider) return
+
+  const endpoint = (config.service as { endpoint?: string }).endpoint
+  if (!endpoint) return
+  if (ENDPOINT_AWARE_PROVIDERS.includes(provider as LLMProvider)) return
+
+  const usesBaseURL = BASE_URL_PROVIDERS.includes(provider as LLMProvider)
+  diagnostics.push({
+    severity: 'warn',
+    message: `service.endpoint is set but provider "${provider}" ignores it. Only Ollama reads service.endpoint.`,
+    fix: usesBaseURL
+      ? `Remove service.endpoint. To point "${provider}" at a custom host, set service.baseURL instead.`
+      : `Remove service.endpoint. Provider "${provider}" does not support a custom endpoint.`,
+    autoFix: (raw) => {
+      const svc = raw.service as Record<string, unknown>
+      if (svc) delete svc.endpoint
+    },
+  })
 }
 
 function checkIgnoredFiles(config: Config, diagnostics: Diagnostic[]) {

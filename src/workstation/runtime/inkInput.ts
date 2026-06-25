@@ -134,6 +134,20 @@ export type LogInkInputContext = {
    * no-op in that case.
    */
   blameLineCount?: number
+  /**
+   * Number of commits in the file-history list for the active path (#COCO-14).
+   * Drives j/k navigation on the file-history view. 0 while hydrating
+   * or on an empty result — the nav handlers no-op in that case.
+   */
+  fileHistoryCommitCount?: number
+  /**
+   * Full sha of the commit under the cursor in the file-history view
+   * (#COCO-14). Resolved in `useInputHandler.ts` from the cached
+   * `FileHistoryResult`; undefined while hydrating or when no commit is
+   * selected. Used by the Enter handler to drive
+   * `navigateOpenDiffForCommit`.
+   */
+  fileHistorySelectedHash?: string
   /** Number of issues in the triage list view (#882 phase 3). Drives j/k navigation. */
   issueCount?: number
   /** URL of the cursored issue (#882 phase 3). Used by `O` to open in the browser. */
@@ -2386,6 +2400,10 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveBlame', delta: -1, count: context.blameLineCount })]
     }
 
+    if (state.activeView === 'file-history' && context.fileHistoryCommitCount) {
+      return [action({ type: 'moveFileHistory', delta: -1, count: context.fileHistoryCommitCount })]
+    }
+
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
       return [action({ type: 'moveSubmodule', delta: -1, count: context.submoduleCount })]
     }
@@ -2512,6 +2530,10 @@ export function getLogInkInputEvents(
 
     if (state.activeView === 'blame' && context.blameLineCount) {
       return [action({ type: 'moveBlame', delta: 1, count: context.blameLineCount })]
+    }
+
+    if (state.activeView === 'file-history' && context.fileHistoryCommitCount) {
+      return [action({ type: 'moveFileHistory', delta: 1, count: context.fileHistoryCommitCount })]
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
@@ -2762,6 +2784,25 @@ export function getLogInkInputEvents(
     context.reflogSelectedHash
   ) {
     const sha = context.reflogSelectedHash
+    const fallbackIndex = state.commits.findIndex((commit) => commit.hash === sha)
+    return [
+      action({
+        type: 'navigateOpenDiffForCommit',
+        sha,
+        commitIndex: fallbackIndex >= 0 ? fallbackIndex : state.selectedIndex,
+      }),
+      action({ type: 'setStatus', value: `viewing diff for ${sha.slice(0, 7)}` }),
+    ]
+  }
+
+  // Enter on a file-history row drills into the diff for that commit
+  // (#COCO-14). Mirrors the reflog drill-in: find the sha in
+  // `filteredCommits` first, fall back to `state.selectedIndex` if the
+  // commit isn't in the currently-loaded history window. The hash is
+  // resolved in `useInputHandler.ts` (from the cached `FileHistoryResult`)
+  // and carried here as `context.fileHistorySelectedHash`.
+  if (key.return && state.activeView === 'file-history' && context.fileHistorySelectedHash) {
+    const sha = context.fileHistorySelectedHash
     const fallbackIndex = state.commits.findIndex((commit) => commit.hash === sha)
     return [
       action({
@@ -3233,6 +3274,29 @@ export function getLogInkInputEvents(
     context.worktreeSelectedPath
   ) {
     return [action({ type: 'navigateOpenBlameForPath', path: context.worktreeSelectedPath })]
+  }
+  // `L` opens the file-history drill-down (#COCO-14) — `git log --follow`
+  // for the cursored path. Available from the status view (a file row),
+  // from the blame view (drill deeper into the file's commit log), and
+  // from the worktree diff view.
+  if (
+    inputValue === 'L' &&
+    state.activeView === 'status' &&
+    context.worktreeFileCount &&
+    context.worktreeSelectedPath
+  ) {
+    return [action({ type: 'navigateOpenFileHistoryForPath', path: context.worktreeSelectedPath })]
+  }
+  if (
+    inputValue === 'L' &&
+    state.activeView === 'diff' &&
+    state.diffSource === 'worktree' &&
+    context.worktreeSelectedPath
+  ) {
+    return [action({ type: 'navigateOpenFileHistoryForPath', path: context.worktreeSelectedPath })]
+  }
+  if (inputValue === 'L' && state.activeView === 'blame' && state.blamePath) {
+    return [action({ type: 'navigateOpenFileHistoryForPath', path: state.blamePath })]
   }
   if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'worktree' && context.worktreeSelectedPath) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
