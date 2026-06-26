@@ -1868,6 +1868,51 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 2400 },
     ],
   },
+
+  // ─── README hero GIFs ───────────────────────────────────────────────
+  // Compact, fast-loading demos sized for GitHub's README renderer.
+  // Smaller dimensions + shorter durations = smaller file size.
+
+  {
+    name: 'readme-commit',
+    description: 'README hero: coco commit generates an AI commit message — compact and fast',
+    scenario: 'partial-stage',
+    command: 'commit --dry-run',
+    emitGif: true,
+    visibleCommand: 'coco commit',
+    dimensions: { cols: 80, rows: 20 },
+    env: {
+      COCO_SERVICE_PROVIDER: 'openai',
+      COCO_SERVICE_MODEL: 'gpt-4o-mini',
+    },
+    actions: [
+      // Wait for the AI response to land, then hold briefly so it's readable.
+      { kind: 'sleep', ms: 5000 },
+    ],
+  },
+  {
+    name: 'readme-workstation',
+    description: 'README hero: coco ui workstation — boot, browse history, open a diff',
+    scenario: 'rich-history-graph',
+    command: 'ui --view history',
+    emitGif: true,
+    recordFromBoot: true,
+    dimensions: { cols: 130, rows: 32 },
+    actions: [
+      // Workstation just painted — let it breathe.
+      { kind: 'sleep', ms: 800 },
+      // Quick walk down the history to show interactivity.
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 500 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 500 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 600 },
+      // Open commit detail — shows the inspector pane.
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 1800 },
+    ],
+  },
 ]
 
 export function findRecipe(name: string): ScreenshotRecipe | undefined {

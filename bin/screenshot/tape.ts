@@ -339,14 +339,16 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // let coco's own theme machinery paint.
     recipe.theme === 'monochrome' ? `Type "export NO_COLOR=1"` : null,
     recipe.theme === 'monochrome' ? `Enter` : null,
-    `Type "clear"`,
-    `Enter`,
-    `Sleep 200ms`,
     // Alias the raw tsx path so the visible command line shows `coco`
     // instead of the full /path/to/node_modules/.bin/tsx .../src/index.ts.
     `Type "alias coco='${quoteTapeString(options.cocoCommand)}'"`,
     `Enter`,
     `Sleep 100ms`,
+    // Clear AFTER all setup (env, alias) so the terminal is pristine
+    // when Show reveals it — no leftover export/alias lines visible.
+    `Type "clear"`,
+    `Enter`,
+    `Sleep 200ms`,
     // For GIF recipes with visibleCommand: Show the terminal, start GIF
     // recording, type the pretty command visibly, then run the real command
     // hidden. The viewer sees "$ coco commit" typed naturally followed by

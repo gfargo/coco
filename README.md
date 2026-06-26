@@ -19,11 +19,11 @@ git add .
 coco commit          # AI writes the message from your staged changes
 ```
 
-![coco commit drafting a Conventional Commit message from a staged diff](https://coco.griffen.codes/screenshots/demo-commit-flow.gif)
+![coco commit drafting a Conventional Commit message from a staged diff](https://coco.griffen.codes/screenshots/readme-commit.gif)
 
 That's the core. Everything else — changelogs, code review, PRs, and the `coco ui` workstation — is the same engine pointed at more of your git workflow.
 
-![coco ui workstation booting up — loading commits into a full three-pane Git TUI](https://coco.griffen.codes/screenshots/demo-boot-workstation.gif)
+![coco ui workstation booting up — loading commits into a full three-pane Git TUI](https://coco.griffen.codes/screenshots/readme-workstation.gif)
 
 **✨ Key Features:**
 
