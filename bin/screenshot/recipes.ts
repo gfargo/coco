@@ -105,6 +105,16 @@ export type ScreenshotRecipe = {
    * predictable and the generated output arrives quickly on camera.
    */
   env?: Record<string, string>
+  /**
+   * GIF-only: show the terminal and type the command visibly at normal
+   * typing speed, so the viewer watches it being typed and executed live.
+   * Use for non-TUI commands (commit, changelog, review) where the output
+   * goes to stdout — TUI commands use the alternate screen so the typed
+   * command disappears anyway. When set, this string is the *visible*
+   * command shown on camera (e.g. `'coco commit'`) while the real command
+   * (with `--repo` and other flags) still runs behind the scenes.
+   */
+  visibleCommand?: string
 }
 
 /**
@@ -1284,19 +1294,18 @@ export const RECIPES: ScreenshotRecipe[] = [
     name: 'demo-commit-flow',
     description: 'coco commit: AI drafts a Conventional Commit message from staged code changes',
     scenario: 'partial-stage',
-    command: 'commit --dry-run --conventional',
+    command: 'commit --dry-run',
     emitGif: true,
     dimensions: { cols: 100, rows: 28 },
+    visibleCommand: 'coco commit',
     env: {
       COCO_SERVICE_PROVIDER: 'openai',
       COCO_SERVICE_MODEL: 'gpt-4o-mini',
     },
     actions: [
-      // The scenario has no commitlint config, so coco asks how to proceed —
-      // accept the default ("continue without validation") and let the model
-      // draft the message.
-      { kind: 'sleep', ms: 3500 },
-      { kind: 'key', key: 'Enter' },
+      // Without --conventional, no commitlint check fires. The model
+      // naturally produces conventional-style messages. Just wait for
+      // the AI response to stream in.
       { kind: 'sleep', ms: 6000 },
     ],
   },

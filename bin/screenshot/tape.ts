@@ -342,18 +342,47 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     `Type "clear"`,
     `Enter`,
     `Sleep 200ms`,
-    // For GIF recipes: keep hidden through boot so the recording
-    // starts with the fully-loaded UI, not the typing/loading phase.
-    // For screenshot-only recipes: Show before the command.
-    ...(recipe.emitGif ? [] : [`Show`, ``]),
-    // Launch coco with --repo pointing at the scenario dir. Keep
-    // TypingSpeed at 0 so the command executes immediately.
-    `Type "${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
+    // Alias the raw tsx path so the visible command line shows `coco`
+    // instead of the full /path/to/node_modules/.bin/tsx .../src/index.ts.
+    `Type "alias coco='${quoteTapeString(options.cocoCommand)}'"`,
     `Enter`,
-    // Settle + (for GIFs) start recording. See buildLaunchSettle for the
-    // three modes — normal GIFs start on the finished UI, recordFromBoot
-    // GIFs start on the boot-up, screenshots just settle.
-    ...buildLaunchSettle(recipe, options),
+    `Sleep 100ms`,
+    // For GIF recipes with visibleCommand: Show the terminal, start GIF
+    // recording, type the pretty command visibly, then run the real command
+    // hidden. The viewer sees "$ coco commit" typed naturally followed by
+    // the output appearing — a polished demo without ugly paths or flags.
+    ...(recipe.emitGif && recipe.visibleCommand ? [
+      `Show`,
+      `Sleep 500ms`,
+      `Output "${options.outputGif}"`,
+      `Set TypingSpeed 80ms`,
+      `Type "${quoteTapeString(recipe.visibleCommand)}"`,
+      `Sleep 400ms`,
+      `Hide`,
+      // Erase the cosmetic command, type the real one, execute it.
+      `Set TypingSpeed 0ms`,
+      // Ctrl+U clears the current line in bash.
+      `Ctrl+U`,
+      `Type "coco ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
+      `Enter`,
+      // Wait for coco to finish producing output, then reveal.
+      `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
+      `Show`,
+      ``,
+    ] : [
+      // For GIF recipes: keep hidden through boot so the recording
+      // starts with the fully-loaded UI, not the typing/loading phase.
+      // For screenshot-only recipes: Show before the command.
+      ...(recipe.emitGif ? [] : [`Show`, ``]),
+      // Launch coco with --repo pointing at the scenario dir. Keep
+      // TypingSpeed at 0 so the command executes immediately.
+      `Type "coco ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
+      `Enter`,
+      // Settle + (for GIFs) start recording. See buildLaunchSettle for the
+      // three modes — normal GIFs start on the finished UI, recordFromBoot
+      // GIFs start on the boot-up, screenshots just settle.
+      ...buildLaunchSettle(recipe, options),
+    ]),
   ]
 
   // For GIF recipes, strip any trailing quit (`q`) the recipe baked into
