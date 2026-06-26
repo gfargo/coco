@@ -6,6 +6,7 @@ High-fidelity PNG / GIF captures of the coco TUI for documentation, marketing, a
 
 ```bash
 brew install vhs                          # one-time setup
+npm run build                             # ensure dist/ is current
 npm run screenshot                        # capture every recipe
 npm run screenshot -- --list              # list available recipes
 npm run screenshot -- --recipe ui-history-pr-ready
@@ -39,7 +40,7 @@ VHS spawns a fresh `bash` shell that does NOT inherit the parent process's envir
 
 1. **PATH must use unquoted `$PATH`** — VHS's `Type "..."` command types literal characters. If you single-quote the PATH export (`'...:$PATH'`), bash treats `$PATH` as a literal string and the shell loses access to `git`, `sleep`, and all system binaries. The tape uses `export PATH=.../node_modules/.bin:.../node/bin:$PATH` (no quotes around the value) so `$PATH` expands correctly.
 
-2. **Settle time must account for tsx cold-start** — Inside VHS, tsx takes 2-3 seconds to cold-start (vs ~500ms in a warm terminal). The `POST_LAUNCH_SETTLE_MS` constant (currently 5000ms) gives enough time for tsx boot + the workstation's async git data load. If screenshots show "loading commits" or empty state, increase this value.
+2. **Settle time must account for git data load** — The dist/ build starts in <200ms, but the workstation's async git data load takes ~1-2s. The `POST_LAUNCH_SETTLE_MS` constant (currently 2500ms) gives enough time for the full view to paint. If screenshots show "loading commits" or empty state, increase this value.
 
 3. **macOS `/var` → `/private/var` symlink** — Temp dirs created by Node live at `/var/folders/...` but the real path is `/private/var/folders/...`. Git's `safe.directory` checks can fail on the symlinked path. The driver resolves symlinks via `realpathSync()` and the tape runs `git config --global --add safe.directory '*'` in the hidden setup.
 

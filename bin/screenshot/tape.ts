@@ -67,12 +67,12 @@ type TapeOptions = {
 const DEFAULT_DIMENSIONS = { cols: 140, rows: 40 } as const
 
 /**
- * How long to wait after the command launches before capturing. The
- * workstation's three-stage boot (cache read → mount → background
- * fetch) needs time for tsx cold-start (~2-3s inside VHS) plus the
- * async git data load (~1-2s). 5000ms gives comfortable headroom.
+ * How long to wait after the command launches before capturing. With the
+ * dist/ build (no tsx overhead), Node starts in <200ms. The workstation's
+ * async git data load still needs ~1-2s. 2500ms gives comfortable headroom
+ * without introducing visible dead air in GIF recordings.
  */
-const POST_LAUNCH_SETTLE_MS = 5000
+const POST_LAUNCH_SETTLE_MS = 2500
 
 /**
  * Boot-recording timings (`recordFromBoot` GIFs only). Most demo GIFs
@@ -83,23 +83,21 @@ const POST_LAUNCH_SETTLE_MS = 5000
  * then fills in with real data on camera.
  *
  * The timing here is sensitive and was tuned empirically against
- * `demo-boot-workstation` (warm tsx cache):
- *   - < ~1700ms: tsx hasn't mounted coco yet, so Show reveals the raw
- *     `tsx …/index.ts ui …` launch line on the shell — ugly absolute
- *     paths, looks broken.
- *   - ~2000ms:   alt-screen mounted, but coco still shows its `<detached>`
+ * `demo-boot-workstation` (with dist/ build — no tsx overhead):
+ *   - < ~500ms:  Node hasn't mounted coco yet, so Show reveals the raw
+ *     shell line — looks broken.
+ *   - ~700ms:    alt-screen mounted, but coco still shows its `<detached>`
  *     branch placeholder while it resolves HEAD — usable, but off-message.
- *   - ~2200ms:   the sweet spot — sidebar + header resolved (`⎇ main ·
+ *   - ~900ms:    the sweet spot — sidebar + header resolved (`⎇ main ·
  *     loading commits`), only the commit graph still spinning. The clean
  *     "coming to life" frame we want.
- *   - > ~2600ms: data has already loaded; frame-0 is the finished UI and
+ *   - > ~1400ms: data has already loaded; frame-0 is the finished UI and
  *     the boot reveal is lost (degrades to a normal demo GIF).
- * If a regenerated boot GIF opens on the shell command line, the local
- * tsx cold-start is slower than when this was tuned — nudge BOOT_HIDDEN_MS
- * up (toward 2500) until frame-0 is coco's loading screen again.
+ * If a regenerated boot GIF opens on the shell command line, nudge
+ * BOOT_HIDDEN_MS up until frame-0 is coco's loading screen again.
  */
-const BOOT_HIDDEN_MS = 2200
-const BOOT_VISIBLE_SETTLE_MS = 2800
+const BOOT_HIDDEN_MS = 900
+const BOOT_VISIBLE_SETTLE_MS = 1800
 
 /**
  * The launch-to-capture settle lines, which differ by recipe mode:

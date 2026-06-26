@@ -1303,10 +1303,8 @@ export const RECIPES: ScreenshotRecipe[] = [
       COCO_SERVICE_MODEL: 'gpt-4o-mini',
     },
     actions: [
-      // Without --conventional, no commitlint check fires. The model
-      // naturally produces conventional-style messages. Just wait for
-      // the AI response to stream in.
-      { kind: 'sleep', ms: 6000 },
+      // dist/ build: near-instant startup. LLM call ~2-4s.
+      { kind: 'sleep', ms: 5000 },
     ],
   },
   {
@@ -1328,7 +1326,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     emitGif: true,
     dimensions: { cols: 100, rows: 30 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
     ],
   },
   {
@@ -1443,7 +1441,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     dimensions: { cols: 150, rows: 38 },
     actions: [
       // Wait out the cold-cache "loading context" beat before the gz chord.
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       // Jump to the Stashes view — an aligned table (ref · age · branch ·
       // files · message) with the inspector previewing contents.
       { kind: 'type', text: 'gz' },
@@ -1470,7 +1468,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     emitGif: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       // Branches view, then cursor onto a worktree-held branch (row 1 —
       // main is pinned at row 0) and press Enter to attempt the checkout.
       { kind: 'type', text: 'gb' },
@@ -1556,7 +1554,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     ghMock: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gp' },
       { kind: 'sleep', ms: 2000 },
     ],
@@ -1570,7 +1568,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     ghMock: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gP' },
       { kind: 'sleep', ms: 2000 },
     ],
@@ -1584,7 +1582,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     ghMock: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gi' },
       { kind: 'sleep', ms: 2000 },
     ],
@@ -1601,7 +1599,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     glabMock: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gP' },
       { kind: 'sleep', ms: 2000 },
     ],
@@ -1615,7 +1613,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     glabMock: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gi' },
       { kind: 'sleep', ms: 2000 },
     ],
@@ -1629,7 +1627,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     glabMock: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gp' },
       { kind: 'sleep', ms: 2000 },
     ],
@@ -1651,7 +1649,7 @@ export const RECIPES: ScreenshotRecipe[] = [
       // flag only exposes history/status/diff), so settle, then open it on
       // camera and browse. The GIF reads as "open coco ui -> g P -> merge
       // requests -> browse them".
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gP' },
       { kind: 'sleep', ms: 1800 },
       { kind: 'type', text: 'j' },
@@ -1672,7 +1670,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     emitGif: true,
     dimensions: { cols: 80, rows: 24 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'key', key: 'Tab' },     // main → inspector
       { kind: 'sleep', ms: 1500 },
       { kind: 'key', key: 'Tab' },     // inspector → sidebar
@@ -1693,7 +1691,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     emitGif: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gx' },    // conflicts view
       { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'u' },     // keep theirs (incoming) on the cursored file
@@ -1712,7 +1710,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     emitGif: true,
     dimensions: { cols: 150, rows: 38 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gB' },    // bisect view
       { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'b' },     // mark the current candidate bad
@@ -1775,7 +1773,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     emitGif: true,
     dimensions: { cols: 150, rows: 40 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gp' }, // current branch's PR: body + checks + reviews
       { kind: 'sleep', ms: 2800 },
       // Cross to the triage list to show the breadth.
@@ -1798,7 +1796,7 @@ export const RECIPES: ScreenshotRecipe[] = [
     emitGif: true,
     dimensions: { cols: 150, rows: 40 },
     actions: [
-      { kind: 'sleep', ms: 4000 },
+      { kind: 'sleep', ms: 2000 },
       { kind: 'type', text: 'gB' }, // bisect view
       { kind: 'sleep', ms: 2200 },
       { kind: 'type', text: 'b' }, // current candidate is bad
@@ -1886,9 +1884,9 @@ export const RECIPES: ScreenshotRecipe[] = [
       COCO_SERVICE_MODEL: 'gpt-4o-mini',
     },
     actions: [
-      // Using dist/ build, startup is near-instant. LLM response from
-      // gpt-4o-mini typically takes 2-4s. Give 7s total for comfortable margin.
-      { kind: 'sleep', ms: 7000 },
+      // With dist/ build, startup is near-instant (~200ms). LLM response
+      // from gpt-4o-mini typically takes 2-4s. 5s total keeps the GIF tight.
+      { kind: 'sleep', ms: 5000 },
     ],
   },
   {
