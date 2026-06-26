@@ -204,6 +204,22 @@ function buildEnvExports(): string[] {
   return lines
 }
 
+/**
+ * Build exports for per-recipe env overrides. These take precedence over
+ * forwarded host env (emitted after `buildEnvExports`) so a recipe can
+ * pin a specific provider/model for deterministic capture.
+ */
+function buildRecipeEnvExports(env: Record<string, string> | undefined): string[] {
+  if (!env) return []
+  const lines: string[] = []
+  for (const [key, value] of Object.entries(env)) {
+    lines.push(`Type "export ${key}=${value}"`)
+    lines.push(`Enter`)
+    lines.push(`Sleep 100ms`)
+  }
+  return lines
+}
+
 // Minimum length for a forwarded value to be treated as a secret worth
 // masking. Guards against blanking out short, non-sensitive settings
 // (e.g. an `OLLAMA_HOST` of `localhost`) or empty strings — and against
@@ -316,6 +332,9 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // the VHS shell so AI-powered commands (commit, changelog, review)
     // can make real LLM calls for demo GIFs.
     ...buildEnvExports(),
+    // Per-recipe env overrides (e.g. pin a fast model for commit demos).
+    // Emitted after forwarded env so recipe-level settings win.
+    ...buildRecipeEnvExports(recipe.env),
     // NO_COLOR is set per-recipe via theme=monochrome; otherwise we
     // let coco's own theme machinery paint.
     recipe.theme === 'monochrome' ? `Type "export NO_COLOR=1"` : null,

@@ -23,6 +23,8 @@ coco commit          # AI writes the message from your staged changes
 
 That's the core. Everything else — changelogs, code review, PRs, and the `coco ui` workstation — is the same engine pointed at more of your git workflow.
 
+![coco ui workstation booting up — loading commits into a full three-pane Git TUI](https://coco.griffen.codes/screenshots/demo-boot-workstation.gif)
+
 **✨ Key Features:**
 
 - 🤖 **AI-Powered Commit Messages** - Generate contextual commits from your staged changes

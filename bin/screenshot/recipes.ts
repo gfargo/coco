@@ -98,6 +98,13 @@ export type ScreenshotRecipe = {
    * instead of shelling out to the real GitLab CLI. Pair with `gitlabRemote`.
    */
   glabMock?: boolean
+  /**
+   * Per-recipe environment variable overrides. Exported into the VHS shell
+   * alongside the forwarded host env. Useful for pinning a fast model
+   * (`COCO_SERVICE_MODEL`) on AI-powered demo GIFs so capture time is
+   * predictable and the generated output arrives quickly on camera.
+   */
+  env?: Record<string, string>
 }
 
 /**
@@ -1280,6 +1287,10 @@ export const RECIPES: ScreenshotRecipe[] = [
     command: 'commit --dry-run --conventional',
     emitGif: true,
     dimensions: { cols: 100, rows: 28 },
+    env: {
+      COCO_SERVICE_PROVIDER: 'openai',
+      COCO_SERVICE_MODEL: 'gpt-4o-mini',
+    },
     actions: [
       // The scenario has no commitlint config, so coco asks how to proceed —
       // accept the default ("continue without validation") and let the model
