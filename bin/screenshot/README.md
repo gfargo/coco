@@ -238,7 +238,6 @@ Every capture runs through an automatic optimization chain:
 | PNG optimization | `pngquant` | `.png` | `.png` (overwritten) | 50-70% smaller |
 | PNG → WebP | `cwebp` | `.png` | `.webp` alongside | 25-35% vs optimized PNG |
 | GIF optimization | `gifsicle` | `.gif` | `.gif` (overwritten) | 20-30× smaller (frame collapse) |
-| GIF → WebP | `gif2webp` | `.gif` | `.webp` alongside | 50-70% vs optimized GIF |
 
 All steps are best-effort — missing tools are skipped with a hint, never a hard failure. Install them for full optimization:
 
@@ -246,7 +245,7 @@ All steps are best-effort — missing tools are skipped with a hint, never a har
 brew install pngquant webp gifsicle
 ```
 
-The `.webp` variants are produced alongside (not replacing) the originals. The `.www/` Next.js site can use `<Image>` with WebP for optimal loading while GitHub README embeds continue to reference the PNG/GIF originals.
+The `.webp` variants are produced for still PNGs only (not GIFs — gifsicle-optimized GIFs already beat animated WebP on terminal content). The `.www/` Next.js site auto-serves WebP for stills via its built-in image optimizer.
 
 ### Syncing assets to `.www/`
 

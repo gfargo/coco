@@ -280,27 +280,6 @@ function convertPngToWebp(pngPath: string): void {
 }
 
 /**
- * Convert an animated GIF to animated WebP. Animated WebP is typically
- * 50-70% smaller than optimized GIF. The .webp file is written alongside
- * the original (same path, .webp extension).
- *
- * Best-effort: if `gif2webp` isn't on PATH we skip silently.
- */
-function convertGifToWebp(gifPath: string): void {
-  const probe = spawnSync('gif2webp', ['-version'], { stdio: 'pipe' })
-  if (probe.status !== 0) return
-  const webpPath = gifPath.replace(/\.gif$/, '.webp')
-  const result = spawnSync('gif2webp', [
-    '-q', '85', '-m', '4', '-mixed', gifPath, '-o', webpPath,
-  ], { stdio: 'pipe' })
-  if (result.status !== 0) return
-  const gifSize = statSync(gifPath).size
-  const webpSize = statSync(webpPath).size
-  const kb = (n: number) => (n / 1024).toFixed(0)
-  console.log(`  · webp: ${kb(gifSize)} KB → ${kb(webpSize)} KB (${Math.round((1 - webpSize / gifSize) * 100)}% smaller)`)
-}
-
-/**
  * Spin up the named scenario into a temp git repo and return the path
  * + a cleanup callback. Returns a temp dir with no scenario applied
  * when `scenarioName` is `null` (for recipes that don't need git
@@ -476,7 +455,6 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean;
     convertPngToWebp(pngPath)
     if (gifPath && existsSync(gifPath)) {
       optimizeGif(gifPath, options.gifLossy)
-      convertGifToWebp(gifPath)
       console.log(`  ✓ ${gifPath}`)
     }
   } finally {

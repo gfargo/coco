@@ -265,13 +265,15 @@ function main() {
       synced++
 
       // Also copy the .webp variant if it exists (produced by the
-      // optimization pipeline). The .webp sits next to the original
-      // in .screenshots/ with the same base name but .webp extension.
-      const webpSrc = src.replace(/\.(png|gif)$/, '.webp')
-      if (existsSync(webpSrc)) {
-        const webpDest = join(WWW_PUBLIC, target.replace(/\.(png|gif)$/, '.webp'))
-        cpSync(webpSrc, webpDest)
-        synced++
+      // optimization pipeline for PNGs). GIFs stay as-is since gifsicle
+      // optimization already beats animated WebP on terminal content.
+      if (!target.endsWith('.gif')) {
+        const webpSrc = src.replace(/\.png$/, '.webp')
+        if (existsSync(webpSrc)) {
+          const webpDest = join(WWW_PUBLIC, target.replace(/\.png$/, '.webp'))
+          cpSync(webpSrc, webpDest)
+          synced++
+        }
       }
     }
   }
