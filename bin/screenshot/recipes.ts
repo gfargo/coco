@@ -1886,9 +1886,9 @@ export const RECIPES: ScreenshotRecipe[] = [
       COCO_SERVICE_MODEL: 'gpt-4o-mini',
     },
     actions: [
-      // tsx cold-start ~3s + LLM response ~3s. Give enough time for the
-      // full output to land on screen before the GIF ends.
-      { kind: 'sleep', ms: 10000 },
+      // Using dist/ build, startup is near-instant. LLM response from
+      // gpt-4o-mini typically takes 2-4s. Give 7s total for comfortable margin.
+      { kind: 'sleep', ms: 7000 },
     ],
   },
   {

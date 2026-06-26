@@ -78,7 +78,10 @@ if (!process.env.GH_TOKEN && !process.env.GITHUB_TOKEN) {
 }
 
 const SCREENSHOTS_DIR = join(REPO_ROOT, '.screenshots')
-const COCO_CLI = join(REPO_ROOT, 'node_modules', '.bin', 'tsx') + ' ' + join(REPO_ROOT, 'src', 'index.ts')
+// Use the built dist/ output instead of tsx for near-instant startup.
+// tsx cold-starts at 2-3s inside VHS; the compiled JS starts in <200ms.
+// Run `npm run build` before `npm run screenshot` if dist/ is stale.
+const COCO_CLI = 'node ' + join(REPO_ROOT, 'dist', 'index.js')
 const NODE_BIN_DIR = dirname(process.execPath)
 
 /**
