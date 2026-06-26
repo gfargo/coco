@@ -222,6 +222,85 @@ function optimizeGif(gifPath: string, lossy: number): void {
 }
 
 /**
+ * Optimize a PNG with pngquant — lossy palette quantization that's
+ * visually lossless on terminal screenshots (flat color blocks, sharp
+ * text edges). Typically shrinks PNGs by 50-70%.
+ *
+ * Best-effort: if `pngquant` isn't on PATH we skip silently.
+ */
+function optimizePng(pngPath: string): void {
+  const probe = spawnSync('pngquant', ['--version'], { stdio: 'pipe' })
+  if (probe.status !== 0) {
+    console.log('  · pngquant not found — PNG left unoptimized (brew install pngquant)')
+    return
+  }
+  const before = existsSync(pngPath) ? statSync(pngPath).size : 0
+  // --quality 85-100: keep quality high (terminal text is crisp)
+  // --speed 1: slowest/best compression
+  // --force --ext .png: overwrite in place (pngquant normally writes -fs8.png)
+  const result = spawnSync('pngquant', [
+    '--quality=85-100', '--speed=1', '--force', '--ext', '.png', pngPath,
+  ], { stdio: 'pipe' })
+  if (result.status !== 0) {
+    // pngquant exits 99 if quality constraint can't be met — that's fine,
+    // it means the PNG is already near-optimal.
+    if (result.status !== 99) {
+      console.log('  · pngquant optimization failed — PNG left as-is')
+    }
+    return
+  }
+  const after = statSync(pngPath).size
+  const kb = (n: number) => (n / 1024).toFixed(0)
+  console.log(`  · pngquant: ${kb(before)} KB → ${kb(after)} KB (${Math.round((1 - after / before) * 100)}% smaller)`)
+}
+
+/**
+ * Convert a PNG to WebP for the marketing site. WebP is typically
+ * 25-35% smaller than optimized PNG at equivalent quality. The .webp
+ * file is written alongside the original (same path, .webp extension).
+ *
+ * Best-effort: if `cwebp` isn't on PATH we skip silently.
+ */
+function convertPngToWebp(pngPath: string): void {
+  const probe = spawnSync('cwebp', ['-version'], { stdio: 'pipe' })
+  if (probe.status !== 0) {
+    // Don't warn on every file — just skip quietly. The README documents
+    // the optional dependency.
+    return
+  }
+  const webpPath = pngPath.replace(/\.png$/, '.webp')
+  const result = spawnSync('cwebp', [
+    '-q', '90', '-m', '6', pngPath, '-o', webpPath,
+  ], { stdio: 'pipe' })
+  if (result.status !== 0) return
+  const pngSize = statSync(pngPath).size
+  const webpSize = statSync(webpPath).size
+  const kb = (n: number) => (n / 1024).toFixed(0)
+  console.log(`  · webp: ${kb(pngSize)} KB → ${kb(webpSize)} KB (${Math.round((1 - webpSize / pngSize) * 100)}% smaller)`)
+}
+
+/**
+ * Convert an animated GIF to animated WebP. Animated WebP is typically
+ * 50-70% smaller than optimized GIF. The .webp file is written alongside
+ * the original (same path, .webp extension).
+ *
+ * Best-effort: if `gif2webp` isn't on PATH we skip silently.
+ */
+function convertGifToWebp(gifPath: string): void {
+  const probe = spawnSync('gif2webp', ['-version'], { stdio: 'pipe' })
+  if (probe.status !== 0) return
+  const webpPath = gifPath.replace(/\.gif$/, '.webp')
+  const result = spawnSync('gif2webp', [
+    '-q', '85', '-m', '4', '-mixed', gifPath, '-o', webpPath,
+  ], { stdio: 'pipe' })
+  if (result.status !== 0) return
+  const gifSize = statSync(gifPath).size
+  const webpSize = statSync(webpPath).size
+  const kb = (n: number) => (n / 1024).toFixed(0)
+  console.log(`  · webp: ${kb(gifSize)} KB → ${kb(webpSize)} KB (${Math.round((1 - webpSize / gifSize) * 100)}% smaller)`)
+}
+
+/**
  * Spin up the named scenario into a temp git repo and return the path
  * + a cleanup callback. Returns a temp dir with no scenario applied
  * when `scenarioName` is `null` (for recipes that don't need git
@@ -393,8 +472,11 @@ async function runRecipe(recipe: ScreenshotRecipe, options: { keepTape: boolean;
     }
 
     console.log(`  ✓ ${pngPath}`)
+    optimizePng(pngPath)
+    convertPngToWebp(pngPath)
     if (gifPath && existsSync(gifPath)) {
       optimizeGif(gifPath, options.gifLossy)
+      convertGifToWebp(gifPath)
       console.log(`  ✓ ${gifPath}`)
     }
   } finally {

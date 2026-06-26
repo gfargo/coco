@@ -5,7 +5,9 @@ High-fidelity PNG / GIF captures of the coco TUI for documentation, marketing, a
 ## Quick start
 
 ```bash
-brew install vhs                          # one-time setup
+brew install vhs                          # one-time setup (required)
+brew install pngquant                     # PNG optimization (optional, recommended)
+brew install webp                         # WebP conversion (optional, provides cwebp + gif2webp)
 npm run build                             # ensure dist/ is current
 npm run screenshot                        # capture every recipe
 npm run screenshot -- --list              # list available recipes
@@ -226,6 +228,25 @@ Keys already in your shell environment take precedence over `.env` values.
 The `.www/` Next.js site previously used hand-drawn artistic terminal mockups. Replace those with real captures from this pipeline. The PNGs are pixel-accurate, work in light + dark themes (different recipes), and update with the workstation rather than drifting out of sync.
 
 For animated demos (e.g. workflow walk-throughs), set `emitGif: true` on the recipe — VHS produces both the still PNG and a GIF in one pass. The driver then optimizes every GIF losslessly so synced assets stay web-ready (typically 20–30× smaller, zero quality loss); see [Authoring motion (GIF) demos](#authoring-motion-gif-demos) for that and the recipe-design rules that keep demos small and on-point.
+
+### Image optimization pipeline
+
+Every capture runs through an automatic optimization chain:
+
+| Step | Tool | Input | Output | Typical savings |
+|------|------|-------|--------|-----------------|
+| PNG optimization | `pngquant` | `.png` | `.png` (overwritten) | 50-70% smaller |
+| PNG → WebP | `cwebp` | `.png` | `.webp` alongside | 25-35% vs optimized PNG |
+| GIF optimization | `gifsicle` | `.gif` | `.gif` (overwritten) | 20-30× smaller (frame collapse) |
+| GIF → WebP | `gif2webp` | `.gif` | `.webp` alongside | 50-70% vs optimized GIF |
+
+All steps are best-effort — missing tools are skipped with a hint, never a hard failure. Install them for full optimization:
+
+```bash
+brew install pngquant webp gifsicle
+```
+
+The `.webp` variants are produced alongside (not replacing) the originals. The `.www/` Next.js site can use `<Image>` with WebP for optimal loading while GitHub README embeds continue to reference the PNG/GIF originals.
 
 ### Syncing assets to `.www/`
 
