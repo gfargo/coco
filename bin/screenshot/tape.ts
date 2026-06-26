@@ -339,39 +339,41 @@ export function buildTape(recipe: ScreenshotRecipe, options: TapeOptions): strin
     // let coco's own theme machinery paint.
     recipe.theme === 'monochrome' ? `Type "export NO_COLOR=1"` : null,
     recipe.theme === 'monochrome' ? `Enter` : null,
-    // Alias the raw tsx path so the visible command line shows `coco`
-    // instead of the full /path/to/node_modules/.bin/tsx .../src/index.ts.
-    `Type "alias coco='${quoteTapeString(options.cocoCommand)}'"`,
-    `Enter`,
-    `Sleep 100ms`,
-    // Clear AFTER all setup (env, alias) so the terminal is pristine
-    // when Show reveals it — no leftover export/alias lines visible.
-    `Type "clear"`,
-    `Enter`,
-    `Sleep 200ms`,
     // For GIF recipes with visibleCommand: Show the terminal, start GIF
-    // recording, type the pretty command visibly, then run the real command
-    // hidden. The viewer sees "$ coco commit" typed naturally followed by
-    // the output appearing — a polished demo without ugly paths or flags.
+    // recording, type the pretty command visibly. The alias wraps the real
+    // command (with hidden --repo/--dry-run flags) so the viewer watches
+    // `coco commit` execute live — spinner, output, everything streams in
+    // naturally. No hide/show dance.
     ...(recipe.emitGif && recipe.visibleCommand ? [
+      // Build a bash function that wraps the real command behind the pretty
+      // visible one. E.g. typing `coco commit` actually runs
+      // `coco commit --dry-run --repo /tmp/...`
+      `Type "function coco() { ${quoteTapeString(options.cocoCommand)} ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}; }"`,
+      `Enter`,
+      `Sleep 100ms`,
+      `Type "clear"`,
+      `Enter`,
+      `Sleep 200ms`,
       `Show`,
       `Sleep 500ms`,
       `Output "${options.outputGif}"`,
       `Set TypingSpeed 80ms`,
       `Type "${quoteTapeString(recipe.visibleCommand)}"`,
-      `Sleep 400ms`,
-      `Hide`,
-      // Erase the cosmetic command, type the real one, execute it.
-      `Set TypingSpeed 0ms`,
-      // Ctrl+U clears the current line in bash.
-      `Ctrl+U`,
-      `Type "coco ${quoteTapeString(recipe.command)} --repo ${quoteTapeString(options.cwd)}"`,
+      `Sleep 300ms`,
       `Enter`,
-      // Wait for coco to finish producing output, then reveal.
-      `Sleep ${POST_LAUNCH_SETTLE_MS}ms`,
-      `Show`,
+      `Set TypingSpeed 0ms`,
       ``,
     ] : [
+      // Alias the raw tsx path so the visible command line shows `coco`
+      // instead of the full /path/to/node_modules/.bin/tsx .../src/index.ts.
+      `Type "alias coco='${quoteTapeString(options.cocoCommand)}'"`,
+      `Enter`,
+      `Sleep 100ms`,
+      // Clear AFTER all setup (env, alias) so the terminal is pristine
+      // when Show reveals it — no leftover export/alias lines visible.
+      `Type "clear"`,
+      `Enter`,
+      `Sleep 200ms`,
       // For GIF recipes: keep hidden through boot so the recording
       // starts with the fully-loaded UI, not the typing/loading phase.
       // For screenshot-only recipes: Show before the command.
