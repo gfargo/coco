@@ -6,6 +6,7 @@ import {
   type IssueListOverview,
 } from '../../git/issuesListData'
 import { getGitLabIssueList } from '../../git/gitlabListData'
+import { getBitbucketIssueList } from '../../git/bitbucketListData'
 import type { CachedIssueList } from '../../git/githubListCache'
 import {
   createGitHubListHandler,
@@ -32,7 +33,11 @@ export const handler = createGitHubListHandler<
     limit: argv.limit,
   }),
   fetch: (git, filter, provider) =>
-    provider === 'gitlab' ? getGitLabIssueList(git, filter) : getIssueList(git, filter),
+    provider === 'gitlab'
+      ? getGitLabIssueList(git, filter)
+      : provider === 'bitbucket'
+        ? getBitbucketIssueList(git, filter)
+        : getIssueList(git, filter),
   extractItems: (overview) => overview.issues,
   toCachePayload: (items) => ({ kind: 'issues', items }),
   formatList: formatIssueList,

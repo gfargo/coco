@@ -6,6 +6,7 @@ import {
   type PullRequestListOverview,
 } from '../../git/pullRequestListData'
 import { getMergeRequestList } from '../../git/gitlabListData'
+import { getBitbucketPullRequestList } from '../../git/bitbucketListData'
 import type { CachedPullRequestList } from '../../git/githubListCache'
 import {
   createGitHubListHandler,
@@ -36,7 +37,11 @@ export const handler = createGitHubListHandler<
     limit: argv.limit,
   }),
   fetch: (git, filter, provider) =>
-    provider === 'gitlab' ? getMergeRequestList(git, filter) : getPullRequestList(git, filter),
+    provider === 'gitlab'
+      ? getMergeRequestList(git, filter)
+      : provider === 'bitbucket'
+        ? getBitbucketPullRequestList(git, filter)
+        : getPullRequestList(git, filter),
   extractItems: (overview) => overview.pullRequests,
   toCachePayload: (items) => ({ kind: 'prs', items }),
   formatList: formatPullRequestList,
