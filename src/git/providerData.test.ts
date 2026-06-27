@@ -69,13 +69,24 @@ describe('log provider data', () => {
   })
 
   it('falls back for unsupported hosts', () => {
-    expect(getProviderRepository('origin', 'git@bitbucket.org:gfargo/coco.git')).toEqual({
+    expect(getProviderRepository('origin', 'git@codeberg.org:gfargo/coco.git')).toEqual({
       provider: 'unsupported',
+      remote: 'origin',
+      host: 'codeberg.org',
+      owner: 'gfargo',
+      name: 'coco',
+      message: 'Unsupported remote host "codeberg.org" for origin.',
+    })
+  })
+
+  it('detects Bitbucket remotes', () => {
+    expect(getProviderRepository('origin', 'git@bitbucket.org:gfargo/coco.git')).toEqual({
+      provider: 'bitbucket',
       remote: 'origin',
       host: 'bitbucket.org',
       owner: 'gfargo',
       name: 'coco',
-      message: 'Unsupported remote host "bitbucket.org" for origin.',
+      webUrl: 'https://bitbucket.org/gfargo/coco',
     })
   })
 

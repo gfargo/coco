@@ -86,7 +86,8 @@ describe('getBitbucketPullRequestDetail (1238)', () => {
       throw new Error('network error')
     })
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('network error')
+    if (result.ok) return
+    expect(result.message).toContain('pull request #1')
   })
 })
 
