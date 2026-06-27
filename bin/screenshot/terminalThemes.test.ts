@@ -145,9 +145,9 @@ describe('buildTape launch-settle modes', () => {
 
     expect(output).toBeGreaterThan(launch)
     expect(between).toContain('Show')
-    // Hidden pre-roll skips the tsx cold-start (~2.2s), never the 5s settle.
-    expect(between).toContain('Sleep 2200ms')
-    expect(between).not.toContain('Sleep 5000ms')
+    // Hidden pre-roll skips the boot, never the full settle.
+    expect(between).toContain('Sleep 900ms')
+    expect(between).not.toContain('Sleep 2500ms')
   })
 
   it('normal GIFs hide the whole boot and record on the settled UI', () => {
@@ -159,7 +159,7 @@ describe('buildTape launch-settle modes', () => {
     const between = lines.slice(launch + 1, output)
 
     expect(output).toBeGreaterThan(launch)
-    expect(between).toContain('Sleep 5000ms')
+    expect(between).toContain('Sleep 2500ms')
     expect(between).toContain('Show')
   })
 
