@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "Lint on save",
+  "description": "When a TypeScript source file under src/ or bin/ is saved, run ESLint on it and fix any new errors the edit introduced, so lint failures are caught at edit time instead of in CI.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "bin/**/*.ts"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "The file that was just saved may have introduced lint issues. Run `npm run lint` scoped to the edited path (or `npx eslint <file>`). If there are errors, fix them in place following the existing code style, then re-run to confirm clean. Report only if something needed fixing; stay silent if it was already clean."
+  }
+}

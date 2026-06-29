@@ -54,17 +54,17 @@ coverage/
 
 /src/lib/buildInfo.ts
 
-.kiro
+# .kiro/ (steering, specs, hooks) and AGENTS.md are intentionally tracked —
+# they document the project for AI-assisted development and are referenced publicly.
 .claude
 CLAUDE.md
 GEMINI.md
-AGENTS.md
 
 package-lock.json
 commitlint.config.js
 
-# Internal specs, audits, and design docs
-specs/
+# Internal specs, audits, and design docs (root-level only — .kiro/specs/ is tracked)
+/specs/
 
 # Diff-condensing benchmark output (#845). Per-run files are local
 # noise; the committed baseline lives at .bench/baseline.json so PR
