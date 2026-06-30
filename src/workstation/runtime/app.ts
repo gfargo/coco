@@ -751,6 +751,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     mountedRef,
     refreshContext,
     refreshWorktreeContext,
+    refreshHistoryRows,
   })
 
   // Per-repo sidebar tab persistence (#21). Resolve the repo root, look

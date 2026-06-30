@@ -6,9 +6,12 @@
  * metadata + working-tree root and re-triggers a context reload when
  * something changes outside the TUI (editor save, external git commands,
  * a branch switch in another terminal). On a `'full'` change it calls
- * `refreshContext({ silent: true })`; on a worktree-only change it calls
- * `refreshWorktreeContext({ silent: true })`. Both refreshers are the
- * frame-tagged `useCallback`s from `app.ts`, passed in unchanged.
+ * `refreshContext({ silent: true })` **and** `refreshHistoryRows()` so
+ * the commit graph stays in sync with the repository after graph-mutating
+ * operations (git reset, rebase, cherry-pick, merge, etc.); on a
+ * worktree-only change it calls `refreshWorktreeContext({ silent: true })`.
+ * Both refreshers are the frame-tagged `useCallback`s from `app.ts`,
+ * passed in unchanged.
  *
  * The effect is reproduced **verbatim** — the async `revparse` bootstrap,
  * the `cancelled` guard, the 750ms debounce, the `mountedRef` mount check
@@ -16,8 +19,8 @@
  * cleanup that flips `cancelled` and calls `watcher?.close()` all carry
  * over byte-for-byte. A leaked watcher is a real regression, so the
  * teardown return is preserved exactly. The dependency array
- * `[git, refreshContext, refreshWorktreeContext]` is unchanged. This is a
- * behavior-preserving move, not a rewrite.
+ * `[git, refreshContext, refreshWorktreeContext, refreshHistoryRows]` is
+ * unchanged except for the addition of `refreshHistoryRows`.
  *
  * `React` is injected (per the runtime's `getLogInkRuntimeContext(React)`
  * convention) because the workstation never statically imports React.
@@ -25,7 +28,7 @@
 
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
-import type { LogInkRefreshWatcher } from '../../chrome/refreshWatcher'
+import type { LogInkRefreshKind, LogInkRefreshWatcher } from '../../chrome/refreshWatcher'
 import { createRefreshWatcher } from '../../chrome/refreshWatcher'
 
 export type UseRefreshWatcherDeps = {
@@ -40,19 +43,63 @@ export type UseRefreshWatcherDeps = {
    * `app.ts`.
    */
   refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<unknown>
+  /**
+   * Re-fetches the commit-graph rows (`state.rows`) from `app.ts`.
+   * Called alongside `refreshContext` on every `'full'` watcher event so
+   * that graph-mutating operations performed outside the TUI (git reset,
+   * rebase, cherry-pick, merge, pull --rebase, commit --amend) are
+   * reflected in the history view without a restart.
+   *
+   * Mirrors the manual `r` handler in `useInputHandler.ts` which already
+   * calls both `refreshContext()` and `refreshHistoryRows()`.
+   */
+  refreshHistoryRows: () => Promise<unknown>
+}
+
+/**
+ * Decide what to refresh based on the watcher kind. Extracted as a pure
+ * function so it can be tested without driving `fs.watch` or the full
+ * React hook machinery.
+ *
+ * - `'full'`     → call `refreshContext({ silent: true })` **and**
+ *                  `refreshHistoryRows()`. Used for HEAD/ref changes
+ *                  (branch switch, git reset, rebase, merge, etc.).
+ * - `'worktree'` → call only `refreshWorktreeContext({ silent: true })`.
+ *                  Used for index/working-tree changes (git add, save,
+ *                  etc.). Cheaper — no graph re-fetch.
+ */
+export function applyRefreshKind(
+  kind: LogInkRefreshKind,
+  actions: {
+    refreshContext: (options?: { silent?: boolean }) => Promise<unknown>
+    refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<unknown>
+    refreshHistoryRows: () => Promise<unknown>
+  },
+): void {
+  if (kind === 'full') {
+    void actions.refreshContext({ silent: true })
+    void actions.refreshHistoryRows()
+  } else {
+    void actions.refreshWorktreeContext({ silent: true })
+  }
 }
 
 /**
  * Issues the live-refresh watcher effect, in its original `app.ts`
  * position. Reproduced verbatim — same async bootstrap, same `cancelled`
  * guard, same 750ms debounce, same `mountedRef` check, same best-effort
- * `try/catch`, same `watcher?.close()` teardown, same dependency array.
+ * `try/catch`, same `watcher?.close()` teardown.
+ *
+ * The dependency array gains `refreshHistoryRows` (a stable `useCallback`
+ * from `app.ts`) alongside the existing `refreshContext` and
+ * `refreshWorktreeContext`. The watcher re-subscribes when any dep
+ * changes, which is the same behaviour the existing deps already had.
  */
 export function useRefreshWatcher(
   React: typeof ReactTypes,
   deps: UseRefreshWatcherDeps,
 ): void {
-  const { git, mountedRef, refreshContext, refreshWorktreeContext } = deps
+  const { git, mountedRef, refreshContext, refreshWorktreeContext, refreshHistoryRows } = deps
 
   // Live refresh: watch .git metadata + the working tree root and reload
   // context when something changes outside the TUI (editor save, external
@@ -86,11 +133,11 @@ export function useRefreshWatcher(
             if (!mountedRef.current) {
               return
             }
-            if (kind === 'full') {
-              void refreshContext({ silent: true })
-            } else {
-              void refreshWorktreeContext({ silent: true })
-            }
+            applyRefreshKind(kind, {
+              refreshContext,
+              refreshWorktreeContext,
+              refreshHistoryRows,
+            })
           },
         })
       } catch {
@@ -103,5 +150,5 @@ export function useRefreshWatcher(
       cancelled = true
       watcher?.close()
     }
-  }, [git, refreshContext, refreshWorktreeContext])
+  }, [git, refreshContext, refreshWorktreeContext, refreshHistoryRows])
 }
