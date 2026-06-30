@@ -201,30 +201,32 @@ For a global chord (e.g. a new `g <letter>` view selector), the chord goes in `i
 
 ## Calling existing CLI commands from a workstation flow
 
-When a workstation flow needs the full behavior of a `coco <command>` (commit message generation, changelog body for PR creation, etc.), invoke the command's `handler` directly with a synthetic `argv` rather than spawning a subprocess. The pattern lives in `src/git/commitWorkflowActions.ts` and `src/git/aiActions.ts`:
+When a workstation flow needs the full behavior of a `coco <command>` (commit message generation, changelog body for PR creation, etc.), invoke the command's **core generation function** directly with a synthetic `argv` rather than spawning a subprocess. The pattern lives in `src/git/commitWorkflowActions.ts` and `src/git/aiActions.ts`:
 
 ```ts
 // Synthetic argv shape: mode 'stdout', interactive false, silent logger
 const argv = createChangelogArgv({ branch: 'main' })
 
-// Capture stdout via process.stdout.write override
-const captured = await captureStdout(() => changelogHandler(argv, new Logger({ silent: true })))
+// Call the pure core function — returns { text, structured } with no I/O
+const { text } = await generateChangelogResult(argv, new Logger({ silent: true }))
 
 // Parse / return a typed *WorkflowResult shape
-return { ok: true, message: firstLine(captured), text: captured }
+return { ok: true, message: firstLine(text), text }
 ```
+
+**Important:** Do not use `captureStdout(() => handler(...))` in TUI flows. That approach monkey-patches the global `process.stdout.write` for the duration of the LLM call (potentially 5–15s), which intercepts Ink's live render frames and corrupts the TUI display. Always call the pure core function that returns a value directly instead. (See coco#1327 for the details of what goes wrong.)
 
 Worked examples:
 
 - `runCommitDraftWorkflow` → drives `coco commit` AI-draft generation from the compose surface's `I` keystroke (`src/git/commitWorkflowActions.ts`)
 - `runCommitWorkflow({ action: 'commit' | 'split-plan' | 'split-apply' })` → drives `coco commit` and its `--split` modes (`src/git/commitWorkflowActions.ts`)
-- `runChangelogTextWorkflow({ branch | sinceLastTag | tag | range })` → drives `coco changelog` and returns raw stdout (`src/git/aiActions.ts`)
-- `runPullRequestBodyWorkflow({ baseBranch })` → uses `coco changelog --branch <base>` to seed a PR title + body (`src/git/aiActions.ts`)
+- `runChangelogTextWorkflow({ branch | sinceLastTag | tag | range })` → drives `coco changelog` via `generateChangelogResult` and returns raw text (`src/git/aiActions.ts`)
+- `runPullRequestBodyWorkflow({ baseBranch })` → uses `generateChangelogResult` to seed a PR title + body (`src/git/aiActions.ts`)
 
-The recipe scales — any CLI command with a `handler(argv, logger)` signature can be wrapped this way. Two rules:
+The recipe scales — any CLI command that has extracted a pure core function (returning a value, no I/O) can be called this way. Two rules:
 
-1. **Pass `mode: 'stdout'` and `interactive: false` in the synthetic argv** so the handler emits structured output instead of opening an Inquirer prompt.
-2. **Use the raw-capture variant** (not the chrome-stripping one) if your UI surface wants blank lines / section structure preserved. `runChangelogAction` strips blank lines via `compactOutputLines`; `runChangelogTextWorkflow` keeps them.
+1. **Pass `mode: 'stdout'` and `interactive: false` in the synthetic argv** so the core logic produces structured output instead of opening an Inquirer prompt.
+2. **Use the raw text variant** (not the chrome-stripping one) if your UI surface wants blank lines / section structure preserved. `runChangelogAction` strips blank lines via `compactOutputLines`; `runChangelogTextWorkflow` keeps them.
 
 ## Testing changes
 
