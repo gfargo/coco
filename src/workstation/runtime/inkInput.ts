@@ -2303,7 +2303,7 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveDetailFile', delta: -1, fileCount: context.detailFileCount })]
     }
 
-    if (state.activeView === 'status' && context.worktreeFileCount) {
+    if (state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
       // Already on the group header — ↑ is a no-op (use ←/→ to switch
       // groups). Mirrors the sidebar's "header is the top of the
       // hierarchy" behavior.
@@ -2467,7 +2467,7 @@ export function getLogInkInputEvents(
       return [action({ type: 'moveDetailFile', delta: 1, fileCount: context.detailFileCount })]
     }
 
-    if (state.activeView === 'status' && context.worktreeFileCount) {
+    if (state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
       // Header focused → ↓ re-enters the group at the cursored file
       // (which is already the group's first file by construction).
       // Just clear the flag.

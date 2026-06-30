@@ -2732,6 +2732,33 @@ describe('log Ink input interactions', () => {
         { type: 'action', action: { type: 'setFocus', value: 'commits' } },
       ])
     })
+
+    // OSS-245 / coco #1328 — arrow keys on the status view must respect
+    // which panel is focused: sidebar focus → move within the sidebar
+    // entity list; center pane focus → move the worktree file list.
+    it('↑/↓ on the status view with sidebar branches focused moves the branch cursor, not the file list', () => {
+      // selectedBranchIndex > 0 to avoid the "promote to header" edge case
+      // (at index 0, ↑ sets sidebarHeaderFocused instead of moving).
+      const state = { ...sidebarBranchesState(), activeView: 'status' as const, selectedBranchIndex: 2 }
+      const down = getLogInkInputEvents(state, '', { downArrow: true }, { branchCount: 5, worktreeFileCount: 4 })
+      expect(down).toEqual([{ type: 'action', action: { type: 'moveBranch', delta: 1, count: 5 } }])
+
+      const up = getLogInkInputEvents(state, '', { upArrow: true }, { branchCount: 5, worktreeFileCount: 4 })
+      expect(up).toEqual([{ type: 'action', action: { type: 'moveBranch', delta: -1, count: 5 } }])
+    })
+
+    it('↑/↓ on the status view with the center pane focused still moves the worktree file list', () => {
+      const state = {
+        ...createLogInkState(rows),
+        activeView: 'status' as const,
+        focus: 'commits' as const,
+      }
+      const down = getLogInkInputEvents(state, '', { downArrow: true }, { worktreeFileCount: 4 })
+      expect(down).toEqual([{ type: 'action', action: { type: 'moveWorktreeFile', delta: 1, fileCount: 4 } }])
+
+      const up = getLogInkInputEvents(state, '', { upArrow: true }, { worktreeFileCount: 4 })
+      expect(up).toEqual([{ type: 'action', action: { type: 'moveWorktreeFile', delta: -1, fileCount: 4 } }])
+    })
   })
 
   // Issue #777 — wire revert / reset / interactive-rebase to history
