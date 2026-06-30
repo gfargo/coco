@@ -64,7 +64,24 @@ async function processInWaves<T, R>(
   return results
 }
 
-export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
+/**
+ * Core changelog generation logic — produces the changelog text and
+ * optional structured response without performing any I/O (no stdout
+ * writes, no banner, no handleResult).
+ *
+ * Extracted so that non-CLI callers (e.g. the TUI workstation) can call
+ * this directly and get the result back as a value, instead of having to
+ * monkey-patch process.stdout.write to capture the output (which collides
+ * with the live Ink renderer and corrupts the TUI display).
+ *
+ * Throws CommandExitError when there are no commits (same behaviour as
+ * the interactive handler — callers should catch and treat as an empty
+ * result).
+ */
+export async function generateChangelogResult(
+  argv: ChangelogArgv,
+  logger: Parameters<CommandHandler<ChangelogArgv>>[1]
+): Promise<{ text: string; structured: ChangelogResponse | undefined }> {
   const git = applyRepoFlag(argv)
   const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
   const key = getApiKeyForModel(config)
@@ -93,14 +110,6 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const tokenizer = await getTokenCounter(
     provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
   )
-
-  const INTERACTIVE = argv.json ? false : isInteractive(config)
-
-  if (INTERACTIVE) {
-    if (!config.hideCocoBanner) {
-      logger.log(LOGO)
-    }
-  }
 
   let structured: ChangelogResponse | undefined
 
@@ -243,7 +252,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       ...config,
       prompt: config.prompt || (CHANGELOG_PROMPT.template as string),
       logger,
-      interactive: INTERACTIVE,
+      interactive: argv.json ? false : isInteractive(config),
       review: {
         enableFullRetry: false,
       },
@@ -331,6 +340,27 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
       commandExit(0)
     },
   })
+
+  return { text: changelogMsg, structured }
+}
+
+/**
+ * CLI entrypoint — thin I/O wrapper around generateChangelogResult.
+ * Handles the banner, --json output, interactive/stdout mode, and
+ * telemetry summary. All heavy lifting (git, LLM, prompt) is in the
+ * core function above.
+ */
+export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
+  const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
+  const INTERACTIVE = argv.json ? false : isInteractive(config)
+
+  if (INTERACTIVE) {
+    if (!config.hideCocoBanner) {
+      logger.log(LOGO)
+    }
+  }
+
+  const { text: changelogMsg, structured } = await generateChangelogResult(argv, logger)
 
   if (argv.json) {
     emitJson(structured ?? null)

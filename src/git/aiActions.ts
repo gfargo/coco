@@ -1,5 +1,5 @@
 import { Arguments } from 'yargs'
-import { handler as changelogHandler } from '../commands/changelog/handler'
+import { generateChangelogResult } from '../commands/changelog/handler'
 import { ChangelogOptions } from '../commands/changelog/config'
 import { runCommitWorkflow } from './commitWorkflowActions'
 import { HistoryCommitRef } from './historyActions'
@@ -98,27 +98,6 @@ function compactOutputLines(output: string): string[] {
     .filter(Boolean)
 }
 
-async function captureStdout(action: () => Promise<void>): Promise<string> {
-  const originalWrite = process.stdout.write.bind(process.stdout)
-  let output = ''
-
-  process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
-    output += typeof chunk === 'string' ? chunk : chunk.toString()
-
-    const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === 'function')
-    callback?.()
-
-    return true
-  }) as typeof process.stdout.write
-
-  try {
-    await action()
-    return output
-  } finally {
-    process.stdout.write = originalWrite
-  }
-}
-
 function formatCapturedAiOutput(output: string): Pick<LogAiActionResult, 'message' | 'details' | 'editable'> {
   const lines = compactOutputLines(output)
   const telemetry = lines.filter((line) => line.includes('[llm:summary]'))
@@ -134,11 +113,8 @@ function formatCapturedAiOutput(output: string): Pick<LogAiActionResult, 'messag
 
 async function runChangelogAction(argv: ChangelogWorkflowArgv): Promise<LogAiActionResult> {
   try {
-    const output = await captureStdout(() => changelogHandler(argv, new Logger({
-      verbose: true,
-      silent: false,
-    })))
-    const formatted = formatCapturedAiOutput(output)
+    const { text } = await generateChangelogResult(argv, new Logger({ silent: true }))
+    const formatted = formatCapturedAiOutput(text)
 
     return {
       ok: true,
@@ -241,12 +217,10 @@ export async function runPullRequestBodyWorkflow(
   const baseBranch = input.baseBranch || 'main'
   const argv = createChangelogArgv({ branch: baseBranch })
 
-  let raw = ''
+  let text = ''
   try {
-    raw = await captureStdout(() => changelogHandler(argv, new Logger({
-      verbose: true,
-      silent: false,
-    })))
+    const result = await generateChangelogResult(argv, new Logger({ silent: true }))
+    text = result.text.trim()
   } catch (error) {
     return {
       ok: false,
@@ -254,7 +228,6 @@ export async function runPullRequestBodyWorkflow(
     }
   }
 
-  const text = raw.trim()
   if (!text) {
     return {
       ok: false,
@@ -310,17 +283,14 @@ export async function runChangelogTextWorkflow(
 ): Promise<{ ok: boolean; message: string; text?: string }> {
   const argv = createChangelogArgv(input)
 
-  let raw = ''
+  let text = ''
   try {
-    raw = await captureStdout(() => changelogHandler(argv, new Logger({
-      verbose: true,
-      silent: false,
-    })))
+    const result = await generateChangelogResult(argv, new Logger({ silent: true }))
+    text = result.text.trim()
   } catch (error) {
     return { ok: false, message: (error as Error).message }
   }
 
-  const text = raw.trim()
   if (!text) {
     return {
       ok: false,
