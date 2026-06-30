@@ -1,6 +1,6 @@
 {
   "name": "git-coco",
-  "version": "0.73.0",
+  "version": "0.74.0",
   "description": "git-coco — AI git commits, changelogs, code review, and PR/MR creation, plus a terminal workstation. Works on GitHub, GitHub Enterprise, and GitLab; supports OpenAI, Anthropic, Gemini, Mistral, Azure, Bedrock, and local Ollama.",
   "keywords": [
     "git",
