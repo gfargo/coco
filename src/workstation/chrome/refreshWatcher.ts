@@ -114,9 +114,17 @@ export type LogInkRefreshWatcher = {
  * The watch surface is deliberately narrow:
  *
  * - `.git/index` (worktree refresh) — fires on `git add` / `rm` / `commit`
- * - `.git/HEAD` (full refresh)      — fires on branch switches
+ * - `.git/HEAD` (full refresh)      — fires on branch switches and detached
+ *   HEAD operations
  * - `.git/refs/heads` recursively (full refresh) — fires on commits to a
  *   branch tip, branch creation/deletion
+ * - `.git/logs/HEAD` (full refresh) — fires on every HEAD movement: git
+ *   reset, rebase, cherry-pick, merge, pull --rebase, commit --amend. This
+ *   is the primary signal for graph-mutating operations on an attached
+ *   branch where `.git/HEAD` itself (the symbolic ref) does not change.
+ *   Best-effort: silently skipped when `core.logAllRefUpdates=false` or the
+ *   file does not yet exist (fresh repo). The refs/heads + HEAD watches
+ *   still cover those cases.
  * - repo root non-recursively (worktree refresh) — picks up top-level
  *   create/delete/rename. Subdirectory unstaged edits do NOT trigger an
  *   auto-refresh; the user can press `r` for those, which keeps watch
@@ -151,6 +159,7 @@ export function createRefreshWatcher(
   safeWatch(path.join(options.gitDir, 'index'), 'worktree')
   safeWatch(path.join(options.gitDir, 'HEAD'), 'full')
   safeWatch(path.join(options.gitDir, 'refs', 'heads'), 'full', { recursive: true })
+  safeWatch(path.join(options.gitDir, 'logs', 'HEAD'), 'full')
   safeWatch(options.repoRoot, 'worktree')
 
   return {
