@@ -1,4 +1,4 @@
-import { handler as changelogHandler } from '../commands/changelog/handler'
+import { generateChangelogResult } from '../commands/changelog/handler'
 import { runCommitWorkflow } from './commitWorkflowActions'
 import {
   aiActionTestInternals,
@@ -9,14 +9,14 @@ import {
 } from './aiActions'
 
 jest.mock('../commands/changelog/handler', () => ({
-  handler: jest.fn(),
+  generateChangelogResult: jest.fn(),
 }))
 
 jest.mock('./commitWorkflowActions', () => ({
   runCommitWorkflow: jest.fn(),
 }))
 
-const mockedChangelogHandler = changelogHandler as jest.MockedFunction<typeof changelogHandler>
+const mockedGenerateChangelogResult = generateChangelogResult as jest.MockedFunction<typeof generateChangelogResult>
 const mockedRunCommitWorkflow = runCommitWorkflow as jest.MockedFunction<typeof runCommitWorkflow>
 
 describe('log AI actions', () => {
@@ -27,7 +27,7 @@ describe('log AI actions', () => {
   }
 
   beforeEach(() => {
-    mockedChangelogHandler.mockReset()
+    mockedGenerateChangelogResult.mockReset()
     mockedRunCommitWorkflow.mockReset()
   })
 
@@ -44,8 +44,9 @@ describe('log AI actions', () => {
   })
 
   it('routes selected commit summaries through bounded changelog ranges', async () => {
-    mockedChangelogHandler.mockImplementation(async () => {
-      process.stdout.write('AI commit summary\n\n- Changed the log UI.\n')
+    mockedGenerateChangelogResult.mockResolvedValue({
+      text: 'AI commit summary\n\n- Changed the log UI.',
+      structured: undefined,
     })
 
     await expect(runLogAiAction('summarize-commit', {
@@ -56,7 +57,7 @@ describe('log AI actions', () => {
       details: [],
       editable: 'AI commit summary\n- Changed the log UI.',
     })
-    expect(mockedChangelogHandler).toHaveBeenCalledWith(
+    expect(mockedGenerateChangelogResult).toHaveBeenCalledWith(
       expect.objectContaining({
         _: ['changelog'],
         interactive: false,
@@ -68,8 +69,9 @@ describe('log AI actions', () => {
   })
 
   it('routes selected range summaries through changelog ranges', async () => {
-    mockedChangelogHandler.mockImplementation(async () => {
-      process.stdout.write('Range summary\n')
+    mockedGenerateChangelogResult.mockResolvedValue({
+      text: 'Range summary\n',
+      structured: undefined,
     })
 
     await expect(runLogAiAction('summarize-range', {
@@ -83,7 +85,7 @@ describe('log AI actions', () => {
       ok: true,
       message: 'Range summary',
     })
-    expect(mockedChangelogHandler).toHaveBeenCalledWith(
+    expect(mockedGenerateChangelogResult).toHaveBeenCalledWith(
       expect.objectContaining({
         range: '1111111:abcdef1234567890',
       }),
@@ -98,12 +100,13 @@ describe('log AI actions', () => {
       ok: false,
       message: 'Select a compare base before summarizing a range.',
     })
-    expect(mockedChangelogHandler).not.toHaveBeenCalled()
+    expect(mockedGenerateChangelogResult).not.toHaveBeenCalled()
   })
 
   it('routes release notes through changelog tag summaries', async () => {
-    mockedChangelogHandler.mockImplementation(async () => {
-      process.stdout.write('Release notes\n')
+    mockedGenerateChangelogResult.mockResolvedValue({
+      text: 'Release notes\n',
+      structured: undefined,
     })
 
     await expect(runLogAiAction('release-notes', {
@@ -112,7 +115,7 @@ describe('log AI actions', () => {
       ok: true,
       message: 'Release notes',
     })
-    expect(mockedChangelogHandler).toHaveBeenCalledWith(
+    expect(mockedGenerateChangelogResult).toHaveBeenCalledWith(
       expect.objectContaining({
         tag: '0.33.0',
         author: true,
@@ -126,7 +129,7 @@ describe('log AI actions', () => {
       ok: false,
       message: 'Select a tag before generating release notes.',
     })
-    expect(mockedChangelogHandler).not.toHaveBeenCalled()
+    expect(mockedGenerateChangelogResult).not.toHaveBeenCalled()
   })
 
   it('routes risk review through existing commit split analysis', async () => {
@@ -159,14 +162,15 @@ describe('log AI actions', () => {
 
   describe('runPullRequestBodyWorkflow', () => {
     it('runs the changelog against the base branch and splits title from body', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        process.stdout.write([
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: [
           'feat: workstation refactor',
           '',
           '- promote git data layer to src/git/',
           '- promote workstation chrome to src/workstation/',
           '- split inkRuntime into per-surface modules',
-        ].join('\n'))
+        ].join('\n'),
+        structured: undefined,
       })
 
       await expect(runPullRequestBodyWorkflow({ baseBranch: 'main' })).resolves.toEqual({
@@ -188,26 +192,28 @@ describe('log AI actions', () => {
         ].join('\n'),
       })
 
-      // The handler was called with the base branch on the argv. Other
+      // The core was called with the base branch on the argv. Other
       // changelog options stay at their defaults from createChangelogArgv.
-      const argv = mockedChangelogHandler.mock.calls[0][0]
+      const argv = mockedGenerateChangelogResult.mock.calls[0][0]
       expect(argv).toMatchObject({ branch: 'main', mode: 'stdout' })
     })
 
     it('defaults the base branch to "main" when none is supplied', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        process.stdout.write('feat: x\n\nBody.')
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: 'feat: x\n\nBody.',
+        structured: undefined,
       })
 
       await runPullRequestBodyWorkflow()
 
-      const argv = mockedChangelogHandler.mock.calls[0][0]
+      const argv = mockedGenerateChangelogResult.mock.calls[0][0]
       expect(argv.branch).toBe('main')
     })
 
     it('falls back to a single-line title when the changelog has no body', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        process.stdout.write('feat: tiny one-liner')
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: 'feat: tiny one-liner',
+        structured: undefined,
       })
 
       const result = await runPullRequestBodyWorkflow({ baseBranch: 'develop' })
@@ -218,9 +224,7 @@ describe('log AI actions', () => {
     })
 
     it('propagates changelog failures without producing a title/body pair', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        throw new Error('no commits in range')
-      })
+      mockedGenerateChangelogResult.mockRejectedValue(new Error('no commits in range'))
 
       const result = await runPullRequestBodyWorkflow({ baseBranch: 'main' })
 
@@ -232,27 +236,40 @@ describe('log AI actions', () => {
       expect(result.title).toBeUndefined()
       expect(result.body).toBeUndefined()
     })
+
+    it('does not monkey-patch process.stdout.write during generation', async () => {
+      const originalWrite = process.stdout.write
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: 'feat: no stdout pollution\n\nBody.',
+        structured: undefined,
+      })
+
+      await runPullRequestBodyWorkflow({ baseBranch: 'main' })
+
+      // The global stdout write function must be the same reference
+      // after the call — no patching should have occurred.
+      expect(process.stdout.write).toBe(originalWrite)
+    })
   })
 
   describe('runChangelogTextWorkflow', () => {
     it('returns the raw changelog output with blank lines + section structure intact', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        process.stdout.write([
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: [
           'feat: workstation v0.49.0',
           '',
           '## Highlights',
           '',
           '- create-pr now seeds the body from coco changelog',
           '- new `L` keystroke generates a changelog for the current branch',
-        ].join('\n'))
+        ].join('\n'),
+        structured: undefined,
       })
 
       const result = await runChangelogTextWorkflow({ branch: 'main' })
 
       expect(result.ok).toBe(true)
-      // The text field preserves blank lines unlike runChangelogAction
-      // (which strips them via compactOutputLines). That's the whole
-      // point of this helper — UI surfaces want the full prose.
+      // The text field preserves blank lines — UI surfaces want the full prose.
       expect(result.text).toBe([
         'feat: workstation v0.49.0',
         '',
@@ -263,13 +280,14 @@ describe('log AI actions', () => {
       ].join('\n'))
       expect(result.message).toBe('feat: workstation v0.49.0')
 
-      const argv = mockedChangelogHandler.mock.calls[0][0]
+      const argv = mockedGenerateChangelogResult.mock.calls[0][0]
       expect(argv).toMatchObject({ branch: 'main', mode: 'stdout' })
     })
 
     it('skips leading blank lines when computing the first-line message', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        process.stdout.write('\n\nfeat: x\n')
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: '\n\nfeat: x\n',
+        structured: undefined,
       })
 
       const result = await runChangelogTextWorkflow({ sinceLastTag: true })
@@ -279,9 +297,9 @@ describe('log AI actions', () => {
     })
 
     it('surfaces an empty-output result when the changelog produces nothing', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        // Common case: branch has no commits ahead of base.
-        process.stdout.write('   \n\n  ')
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: '   \n\n  ',
+        structured: undefined,
       })
 
       const result = await runChangelogTextWorkflow({ branch: 'main' })
@@ -292,9 +310,7 @@ describe('log AI actions', () => {
     })
 
     it('propagates changelog handler errors', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        throw new Error('LLM provider not configured')
-      })
+      mockedGenerateChangelogResult.mockRejectedValue(new Error('LLM provider not configured'))
 
       const result = await runChangelogTextWorkflow({ branch: 'main' })
 
@@ -304,8 +320,9 @@ describe('log AI actions', () => {
     })
 
     it('accepts the full set of changelog argv shapes (sinceLastTag, tag, range)', async () => {
-      mockedChangelogHandler.mockImplementation(async () => {
-        process.stdout.write('feat: changelog')
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: 'feat: changelog',
+        structured: undefined,
       })
 
       await runChangelogTextWorkflow({ sinceLastTag: true })
@@ -315,10 +332,22 @@ describe('log AI actions', () => {
       // Each invocation forwards the input through createChangelogArgv,
       // leaving the rest of the argv at its defaults (mode: 'stdout',
       // interactive: false, etc.).
-      const calls = mockedChangelogHandler.mock.calls
+      const calls = mockedGenerateChangelogResult.mock.calls
       expect(calls[0][0]).toMatchObject({ sinceLastTag: true, mode: 'stdout' })
       expect(calls[1][0]).toMatchObject({ tag: 'v1.0.0', mode: 'stdout' })
       expect(calls[2][0]).toMatchObject({ range: 'abc..def', mode: 'stdout' })
+    })
+
+    it('does not monkey-patch process.stdout.write during generation', async () => {
+      const originalWrite = process.stdout.write
+      mockedGenerateChangelogResult.mockResolvedValue({
+        text: 'feat: no stdout pollution',
+        structured: undefined,
+      })
+
+      await runChangelogTextWorkflow({ branch: 'main' })
+
+      expect(process.stdout.write).toBe(originalWrite)
     })
   })
 })
