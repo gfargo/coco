@@ -93,7 +93,7 @@ describe('force-delete-branch confirmation panel', () => {
 
   it('explains the unmerged reason instead of the generic destructive warning', () => {
     const state = { ...createLogInkState([]), pendingConfirmationId: 'force-delete-branch' }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
     expect(text).toContain('Force-delete branch')
     expect(text).toContain('fully merged')
     expect(text).toContain('git branch -D')
@@ -102,8 +102,40 @@ describe('force-delete-branch confirmation panel', () => {
 
   it('keeps the generic warning for an ordinary destructive confirm', () => {
     const state = { ...createLogInkState([]), pendingConfirmationId: 'delete-branch' }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 60, theme, false))
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 60, theme, false))
     expect(text).toContain('Destructive Git action requires confirmation')
+  })
+})
+
+describe('confirmation target naming', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  // Regression: destructive fallback keys (D / T / X / W) reach the
+  // confirm from views where the target list isn't on screen, and the
+  // panel showed only generic copy — the user confirmed blind.
+  it('names the branch a delete-branch confirm will act on', () => {
+    const state = { ...createLogInkState([]), pendingConfirmationId: 'delete-branch' }
+    const context = {
+      branches: {
+        localBranches: [
+          { shortName: 'main', current: true, ahead: 0, behind: 0 },
+          { shortName: 'feature/login', current: false, ahead: 0, behind: 0 },
+        ],
+      },
+    } as never
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, context, 80, theme, false))
+    // Cursor at index 0 — the sorted list pins the current branch first.
+    expect(text).toContain('branch: main')
+  })
+
+  it('names the cursored commit for cherry-pick confirms', () => {
+    const rows = [{
+      type: 'commit' as const, graph: '*', shortHash: 'abc1234', hash: 'abc1234'.padEnd(12, '0'),
+      parents: [], date: '2026-05-01', author: 'Coco', refs: [], message: 'fix: the thing',
+    }]
+    const state = { ...createLogInkState(rows), pendingConfirmationId: 'cherry-pick-commit' }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
+    expect(text).toContain('commit abc1234: fix: the thing')
   })
 })
 
@@ -116,7 +148,7 @@ describe('rebase-onto-branch confirmation panel (#0.71)', () => {
       pendingConfirmationId: 'rebase-onto-branch',
       pendingConfirmationPayload: "Rebase feature onto main? This rewrites feature's history.",
     }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
     expect(text).toContain('Rebase current onto selected ref')
     expect(text).toContain("Rebase feature onto main? This rewrites feature's history.")
     expect(text).not.toContain('Destructive Git action requires confirmation')
@@ -124,7 +156,7 @@ describe('rebase-onto-branch confirmation panel (#0.71)', () => {
 
   it('falls back to a static warning when the payload is absent', () => {
     const state = { ...createLogInkState([]), pendingConfirmationId: 'rebase-onto-branch' }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
     expect(text).toContain('Rebase rewrites the current branch')
   })
 })
@@ -138,7 +170,7 @@ describe('checkout-created-branch confirmation panel (#1326)', () => {
       pendingConfirmationId: 'checkout-created-branch',
       pendingConfirmationPayload: 'feature/foo',
     }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
     expect(text).toContain('Check out created branch')
     expect(text).toContain("feature/foo")
     expect(text).toContain('switch to it now')
@@ -147,7 +179,7 @@ describe('checkout-created-branch confirmation panel (#1326)', () => {
 
   it('falls back to a generic message when the payload is absent', () => {
     const state = { ...createLogInkState([]), pendingConfirmationId: 'checkout-created-branch' }
-    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
     expect(text).toContain('Branch created')
     expect(text).toContain('switch to it now')
     expect(text).not.toContain('Destructive Git action requires confirmation')

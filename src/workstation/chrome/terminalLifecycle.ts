@@ -114,10 +114,28 @@ export function installTerminalLifecycle(
     options.onResume?.()
   }
 
+  // External termination (`kill <pid>`, terminal manager closing the
+  // pane, session logout raising SIGHUP): installing a handler replaces
+  // Node's default hard-exit, so we get to leave the alt screen and
+  // re-show the cursor before going down. Without these, the user's
+  // shell came back inside a stale alt buffer with an invisible cursor.
+  // Exit codes follow the 128+signum convention so callers still see a
+  // signal death.
+  const onSigterm = (): void => {
+    restoreTerminal()
+    process.exit(143)
+  }
+  const onSighup = (): void => {
+    restoreTerminal()
+    process.exit(129)
+  }
+
   process.on('uncaughtException', onUncaughtException)
   process.on('unhandledRejection', onUnhandledRejection)
   process.on('SIGTSTP', onSigtstp)
   process.on('SIGCONT', onSigcont)
+  process.on('SIGTERM', onSigterm)
+  process.on('SIGHUP', onSighup)
 
   return {
     dispose: (): void => {
@@ -125,6 +143,8 @@ export function installTerminalLifecycle(
       process.off('unhandledRejection', onUnhandledRejection)
       process.off('SIGTSTP', onSigtstp)
       process.off('SIGCONT', onSigcont)
+      process.off('SIGTERM', onSigterm)
+      process.off('SIGHUP', onSighup)
     },
   }
 }

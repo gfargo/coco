@@ -1951,6 +1951,16 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // Any other key while the chord is armed CANCELS it (which-key
+  // semantics: an unknown continuation dismisses the chord without
+  // acting). Unmatched keys used to fall through returning [] with the
+  // prefix still armed, so an Esc "cancel" was a no-op and a `c`
+  // pressed minutes later silently fired `gc`. `g` falls through to
+  // the bare-`g` handler below, which resolves `gg` (jump to top).
+  if (state.pendingKey === 'g' && inputValue !== 'g') {
+    return [action({ type: 'setPendingKey', value: undefined })]
+  }
+
   // #784 — bisect view action keys. Scoped to `state.activeView ===
   // 'bisect' && state.focus === 'commits'` so the single-letter keys
   // stay free everywhere else. `g` and `b` collide with the global
@@ -3268,14 +3278,14 @@ export function getLogInkInputEvents(
   // diffed), and the stash diff (the file the cursor sits in inside
   // the patch). The runtime suspends Ink, spawns the editor sync, then
   // re-renders.
-  if (inputValue === 'o' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
+  if (inputValue === 'o' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath && !state.statusGroupHeaderFocused) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
   }
   // `i` opens the "add to .gitignore" picker for the cursored worktree
   // file. The runtime resolves the path + opens the picker (the bare
   // event carries no path — same selection-resolution pattern as the
   // revert / stage events).
-  if (inputValue === 'i' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
+  if (inputValue === 'i' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath && !state.statusGroupHeaderFocused) {
     return [{ type: 'openGitignorePicker' }]
   }
   // `b` opens the on-demand blame drill-down for the cursored worktree
@@ -3287,7 +3297,8 @@ export function getLogInkInputEvents(
     inputValue === 'b' &&
     state.activeView === 'status' &&
     context.worktreeFileCount &&
-    context.worktreeSelectedPath
+    context.worktreeSelectedPath &&
+    !state.statusGroupHeaderFocused
   ) {
     return [action({ type: 'navigateOpenBlameForPath', path: context.worktreeSelectedPath })]
   }
@@ -3307,7 +3318,8 @@ export function getLogInkInputEvents(
     inputValue === 'L' &&
     state.activeView === 'status' &&
     context.worktreeFileCount &&
-    context.worktreeSelectedPath
+    context.worktreeSelectedPath &&
+    !state.statusGroupHeaderFocused
   ) {
     return [action({ type: 'navigateOpenFileHistoryForPath', path: context.worktreeSelectedPath })]
   }
@@ -3674,7 +3686,15 @@ export function getLogInkInputEvents(
     })]
   }
 
-  if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {
+  // Gated off while the GROUP HEADER row is highlighted: the file cursor
+  // still points at the group's first file, so Space used to stage (and
+  // `z` below offered to revert) a file the visible cursor wasn't on.
+  if (
+    inputValue === ' ' &&
+    state.activeView === 'status' &&
+    context.worktreeFileCount &&
+    !state.statusGroupHeaderFocused
+  ) {
     return [{ type: 'toggleSelectedFileStage' }]
   }
 
@@ -3712,7 +3732,12 @@ export function getLogInkInputEvents(
     return [{ type: 'toggleSelectedFileStage' }]
   }
 
-  if (inputValue === 'z' && state.activeView === 'status' && context.worktreeFileCount) {
+  if (
+    inputValue === 'z' &&
+    state.activeView === 'status' &&
+    context.worktreeFileCount &&
+    !state.statusGroupHeaderFocused
+  ) {
     return [action({ type: 'setPendingMutationConfirmation', value: 'revert-file' })]
   }
 

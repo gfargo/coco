@@ -1386,6 +1386,23 @@ function withClearedFilter(state: LogInkState, enabled: boolean): LogInkState {
   return { ...withFilter(state, ''), filterMode: false }
 }
 
+/**
+ * Abandon an in-flight bisect start-wizard pick when the user laterally
+ * navigates away from the pick surface. The wizard flag used to survive
+ * every view switch: the explanatory status line auto-dismissed, and
+ * minutes later Enter on a history commit silently advanced the hidden
+ * wizard instead of opening the commit's diff. The wizard's own flow —
+ * `s` on bisect dispatches `setBisectPickMode` THEN `pushView('history')`
+ * in one batch — stays intact because history/bisect destinations are
+ * exempt (history is where picking happens; bisect is its home view).
+ */
+function withAbandonedBisectPick(state: LogInkState, destination: LogInkView): LogInkState {
+  if (!state.bisectPickMode || destination === 'history' || destination === 'bisect') {
+    return state
+  }
+  return { ...state, bisectPickMode: undefined, bisectPickPendingBad: undefined }
+}
+
 function withFilter(
   state: LogInkState,
   filter: string,
@@ -1428,17 +1445,26 @@ function withFilter(
 
 function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
   // Wholesale row replacement after a server-side re-fetch (#776).
-  // Resets the cursor to the top because the new commit set may not
-  // share any hashes with the old one (e.g. switching from `--all` to
-  // `-- some/path` typically dumps the previous selection).
   const commits = getCommitRows(rows)
   const filteredCommits = filterCommits(commits, state.filter)
+  // Preserve the cursor by HASH when the previously selected commit is
+  // still in the new set — most replaceRows are refreshes after a
+  // mutation (cherry-pick, fetch, every bisect good/bad mark), where
+  // snapping to the top on each one lost the user's place. When the
+  // commit set genuinely changed (e.g. switching from `--all` to
+  // `-- some/path`), the hash won't be found and the cursor resets to
+  // the top exactly as before.
+  const previousSelected = getSelectedInkCommit(state)
+  const preservedIndex = previousSelected
+    ? filteredCommits.findIndex((commit) =>
+      hashesMatchAny(commit.hash || commit.shortHash, [previousSelected.hash, previousSelected.shortHash]))
+    : -1
   return {
     ...state,
     rows,
     commits,
     filteredCommits,
-    selectedIndex: 0,
+    selectedIndex: preservedIndex >= 0 ? preservedIndex : 0,
     selectedFileIndex: 0,
     pendingCommitFocused: false,
     pendingKey: undefined,
@@ -2161,11 +2187,17 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       // destructive actions). Drill-ins (Enter → diff/blame/…) dispatch
       // their own navigate* actions, not this one, so the filter that
       // the drilled-into view depends on survives there.
-      return withClearedFilter(withPushedView(state, action.value), state.activeView !== action.value)
+      return withAbandonedBisectPick(
+        withClearedFilter(withPushedView(state, action.value), state.activeView !== action.value),
+        action.value,
+      )
     case 'popView':
       return withPoppedView(state)
     case 'replaceView':
-      return withClearedFilter(withReplacedView(state, action.value), state.activeView !== action.value)
+      return withAbandonedBisectPick(
+        withClearedFilter(withReplacedView(state, action.value), state.activeView !== action.value),
+        action.value,
+      )
     case 'pushRepoFrame':
       return withPushedRepoFrame(state, {
         label: action.label,

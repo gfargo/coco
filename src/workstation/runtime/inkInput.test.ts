@@ -2230,13 +2230,36 @@ describe('log Ink input interactions', () => {
     expect(state.fullGraph).toBe(true)
     expect(state.pendingKey).toBe('g')
 
-    // \\ flips from default (full) to compact.
+    // An unmatched continuation CANCELS the chord without acting
+    // (which-key semantics) — it used to leak through and toggle the
+    // graph while leaving the prefix armed.
+    state = applyInput(state, '\\')
+    expect(state.fullGraph).toBe(true)
+    expect(state.pendingKey).toBeUndefined()
+
+    // With the chord cleared, \\ flips from default (full) to compact.
     state = applyInput(state, '\\')
     expect(state.fullGraph).toBe(false)
 
     // Pressing it again flips back to full.
     state = applyInput(state, '\\')
     expect(state.fullGraph).toBe(true)
+  })
+
+  it('Esc cancels a pending g chord instead of leaving it armed', () => {
+    let state = createLogInkState(rows)
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
+
+    state = applyInput(state, '', { escape: true })
+    expect(state.pendingKey).toBeUndefined()
+
+    // The next `c` is plain cherry-pick (confirm), NOT the `gc` chord.
+    const events = getLogInkInputEvents(state, 'c')
+    const types = events
+      .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+      .map((event) => event.action.type)
+    expect(types).not.toContain('pushView')
   })
 
   describe('command palette', () => {
@@ -3860,6 +3883,31 @@ describe('log Ink input interactions', () => {
       expect(events).toEqual([
         { type: 'action', action: { type: 'setStatusGroupHeaderFocused', value: false } },
       ])
+    })
+
+    // Regression: with the header row highlighted, Space still staged —
+    // and z offered to revert — the group's FIRST file, which the visible
+    // cursor wasn't on (o/i/b/L targeted it too).
+    it('Space / z / o / b / L are inert while the group header is focused', () => {
+      const headerState = statusState({ selectedWorktreeFileIndex: 0, statusGroupHeaderFocused: true })
+      const ctx = {
+        worktreeFileCount: 6,
+        statusGroups: groups,
+        worktreeSelectedPath: 'src/first-file.ts',
+      }
+      for (const key of [' ', 'z', 'o', 'b', 'L']) {
+        const events = getLogInkInputEvents(headerState, key, {}, ctx)
+        expect(events).not.toContainEqual({ type: 'toggleSelectedFileStage' })
+        expect(events).not.toContainEqual(
+          expect.objectContaining({ type: 'openFileInEditor' })
+        )
+        const actionTypes = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action.type)
+        expect(actionTypes).not.toContain('setPendingMutationConfirmation')
+        expect(actionTypes).not.toContain('navigateOpenBlameForPath')
+        expect(actionTypes).not.toContain('navigateOpenFileHistoryForPath')
+      }
     })
 
     it('Enter on staged-group header fires unstage-all-staged', () => {

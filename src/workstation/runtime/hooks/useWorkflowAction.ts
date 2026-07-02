@@ -143,7 +143,7 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
  * Returns `undefined` for non-delete workflows (and when nothing is
  * selected), which the runner treats as "no pending marker".
  */
-function resolvePendingItemAction(
+export function resolvePendingItemAction(
   id: string,
   state: LogInkState,
   context: LogInkContext

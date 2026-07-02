@@ -206,18 +206,47 @@ describe('buildSplitDiffRows', () => {
     })
   })
 
-  it('treats a "\\ No newline at end of file" marker as a context-aligned row', () => {
+  // Regression: the marker used to be treated as a CONTEXT line — it
+  // force-flushed the pair block (the -x/+y change rendered as two
+  // unpaired rows), was given line numbers it doesn't have, and advanced
+  // both cursors so every number below drifted by one.
+  it('skips the "\\ No newline at end of file" marker without breaking pairing or numbering', () => {
     const rows = buildSplitDiffRows([
       '@@ -1,1 +1,1 @@',
       '-x',
+      '\\ No newline at end of file',
       '+y',
       '\\ No newline at end of file',
     ])
 
-    expect(rows).toHaveLength(3)
-    expect(rows[2].left.kind).toBe('context')
-    expect(rows[2].right.kind).toBe('context')
-    expect(rows[2].left.text).toBe('\\ No newline at end of file')
+    // Header + ONE paired change row; markers render nothing.
+    expect(rows).toHaveLength(2)
+    expect(rows[1]).toMatchObject({
+      left: { text: 'x', kind: 'remove', lineNumber: 1 },
+      right: { text: 'y', kind: 'add', lineNumber: 1 },
+    })
+  })
+
+  it('classifies deleted `-- ` content lines as removals, not headers', () => {
+    // A deletion of a SQL/Lua comment reads `--- select 1` on the wire —
+    // it used to match the `--- ` file-header check inside the hunk,
+    // rendering as an accent header and drifting old-side numbering.
+    const rows = buildSplitDiffRows([
+      '@@ -10,3 +10,2 @@',
+      ' context',
+      '--- drop this comment',
+      ' more context',
+    ])
+
+    expect(rows).toHaveLength(4)
+    expect(rows[2]).toMatchObject({
+      left: { text: '-- drop this comment', kind: 'remove', lineNumber: 11 },
+    })
+    // Old-side numbering continues correctly after the removal.
+    expect(rows[3]).toMatchObject({
+      left: { text: 'more context', kind: 'context', lineNumber: 12 },
+      right: { text: 'more context', kind: 'context', lineNumber: 11 },
+    })
   })
 
   // Regression for #1114: when the split renderer windows the diff to a

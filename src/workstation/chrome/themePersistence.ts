@@ -40,14 +40,22 @@ export function saveThemePreset(preset: LogInkThemePreset): boolean {
   const file = getXdgConfigPath()
   try {
     let config: Record<string, unknown> = {}
-    try {
-      const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'))
-      if (isRecord(parsed)) {
-        config = parsed
+    if (fs.existsSync(file)) {
+      // The file exists: it must parse as an object before we merge into
+      // it. Treating a malformed file (hand-edit with a trailing comma,
+      // truncated write) as "start fresh" silently ERASED every other
+      // setting the user had — abort instead; the theme still applies
+      // for the session.
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+      } catch {
+        return false
       }
-    } catch {
-      // No existing file (or unreadable/malformed) — start fresh.
-      config = {}
+      if (!isRecord(parsed)) {
+        return false
+      }
+      config = parsed
     }
 
     const logTui = isRecord(config.logTui) ? config.logTui : {}
@@ -55,7 +63,10 @@ export function saveThemePreset(preset: LogInkThemePreset): boolean {
     config.logTui = { ...logTui, theme: { ...theme, preset } }
 
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`)
+    // tmp+rename so a crash mid-write can't leave a truncated config.
+    const tmp = `${file}.${process.pid}.tmp`
+    fs.writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`)
+    fs.renameSync(tmp, file)
     return true
   } catch {
     return false

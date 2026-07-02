@@ -111,6 +111,13 @@ export function wrapCells(value: string, width: number): string[] {
         chunk += character
         chunkWidth += charW
       }
+      if (chunk === '') {
+        // A single character wider than the whole budget (wide char,
+        // width 1). Emit it anyway — an empty chunk never shrinks
+        // `remaining`, which used to spin this loop forever and hang
+        // the TUI.
+        chunk = Array.from(remaining)[0]
+      }
       lines.push(chunk)
       remaining = remaining.slice(chunk.length)
     }

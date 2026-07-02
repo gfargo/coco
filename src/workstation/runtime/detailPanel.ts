@@ -193,7 +193,7 @@ export function renderDetailPanel(
   }
 
   if (state.pendingConfirmationId || state.pendingMutationConfirmation) {
-    return renderConfirmationPanel(h, components, state, width, theme, focused)
+    return renderConfirmationPanel(h, components, state, surface.context, width, theme, focused)
   }
 
   // which-key style overlay — shows the available chord continuations

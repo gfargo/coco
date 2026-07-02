@@ -1,6 +1,19 @@
 import { formatCompactRelativeDate, COMPACT_RELATIVE_DATE_MAX_WIDTH } from './dateFormat'
 
 describe('formatCompactRelativeDate', () => {
+  // Regression: days 360-364 floor to 12 "months" but 0 "years"; the
+  // old `months < 12` gate fell through to the year branch and rendered
+  // a nonsense `0y`.
+  it('renders 12mo (not 0y) for commits aged 360-364 days', () => {
+    const NOW = new Date('2026-05-14T12:00:00Z')
+    expect(formatCompactRelativeDate('2025-05-19', NOW)).toBe('12mo')
+  })
+
+  it('rolls to 1y at 365 days', () => {
+    const NOW = new Date('2026-05-14T12:00:00Z')
+    expect(formatCompactRelativeDate('2025-05-14', NOW)).toBe('1y')
+  })
+
   const NOW = new Date(Date.UTC(2026, 4, 14)) // 2026-05-14
 
   it('returns today for the same UTC day', () => {
