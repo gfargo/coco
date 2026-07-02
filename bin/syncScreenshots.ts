@@ -36,7 +36,13 @@ const THEME_HISTORY_RECIPES = getLogInkThemePresets()
  * be synced to .www even if it exists in the recipe catalog.
  */
 const SITE_RECIPES = [
-  // Hero GIFs
+  // Hero GIFs — homepage carousel (all 130×32 consistent dimensions)
+  'hero-commit',
+  'hero-split',
+  'hero-ui',
+  'hero-changelog',
+  'hero-workspace',
+  // Legacy hero GIFs
   'demo-boot-workstation',
   'demo-commit-flow',
   'readme-commit',
@@ -113,6 +119,12 @@ const SITE_RECIPES = [
  * for semantic clarity on the site.
  */
 const FILENAME_MAP: Record<string, string[]> = {
+  // Hero GIF carousel — homepage (consistent 130×32 captures)
+  'hero-commit': ['hero-commit.gif'],
+  'hero-split': ['hero-split.gif'],
+  'hero-ui': ['hero-ui.gif'],
+  'hero-changelog': ['hero-changelog.gif'],
+  'hero-workspace': ['hero-workspace.gif'],
   'ui-history-rich-graph': ['hero-history-graph.png', 'view-history.png'],
   'ui-status-dirty-worktree': ['feature-status.png', 'view-status.png'],
   'ui-diff-feature-branch': ['view-diff.png'],

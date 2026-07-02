@@ -14,20 +14,21 @@ import { FileChange } from '../../lib/types'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import { Logger } from '../../lib/utils/logger'
 import { TokenCounter } from '../../lib/utils/tokenizer'
+import { confirmPrompt } from '../../lib/ui/inquirerPrompts'
 import { CommitOptions } from './config'
 import {
-  DEFAULT_MAX_PLAN_ATTEMPTS,
-  generateValidatedCommitSplitPlan,
+    DEFAULT_MAX_PLAN_ATTEMPTS,
+    generateValidatedCommitSplitPlan,
 } from './splitPlanGenerator'
 import {
-  CommitSplitGroup,
-  CommitSplitPlan,
-  CommitSplitPlanSchema,
+    CommitSplitGroup,
+    CommitSplitPlan,
+    CommitSplitPlanSchema,
 } from './splitPlanTypes'
 import {
-  formatPlanValidationIssuesError,
-  getPlanValidationIssues,
-  hasPlanValidationIssues,
+    formatPlanValidationIssuesError,
+    getPlanValidationIssues,
+    hasPlanValidationIssues,
 } from './splitPlanValidation'
 
 export { CommitSplitPlanSchema }
@@ -703,6 +704,20 @@ export async function handleCommitSplit({
 
   const { plan, context, fallback } = result
 
+  // --plan: print the plan and exit (opt-out from the default apply prompt).
+  if (argv.plan) {
+    if (fallback) {
+      return [
+        `Note: showing the single-commit fallback plan (${fallback.reason}).`,
+        'Re-run with a stronger model or use --strict-split to surface the planner error.',
+        '',
+        formatCommitSplitPlan(plan),
+      ].join('\n')
+    }
+    return formatCommitSplitPlan(plan)
+  }
+
+  // --apply: skip the confirmation prompt and apply directly.
   if (argv.apply) {
     const applied = await applyCommitSplitPlan({
       plan,
@@ -722,14 +737,39 @@ export async function handleCommitSplit({
     return applied.message
   }
 
+  // Default: show the plan, then prompt the user to apply.
   if (fallback) {
-    return [
-      `Note: showing the single-commit fallback plan (${fallback.reason}).`,
-      'Re-run with a stronger model or use --strict-split to surface the planner error.',
-      '',
-      formatCommitSplitPlan(plan),
-    ].join('\n')
+    logger.log(
+      `Note: showing the single-commit fallback plan (${fallback.reason}).\n` +
+      'Re-run with a stronger model or use --strict-split to surface the planner error.\n'
+    )
+  }
+  logger.log(formatCommitSplitPlan(plan))
+  logger.log('') // blank line before the prompt
+
+  const shouldApply = await confirmPrompt({
+    message: `Apply these ${plan.groups.filter((g) => !g.unclaimed).length} commits?`,
+    default: true,
+  })
+
+  if (!shouldApply) {
+    return 'Plan saved — re-run with --apply to commit later, or --plan to print again.'
   }
 
-  return formatCommitSplitPlan(plan)
+  const applied = await applyCommitSplitPlan({
+    plan,
+    changes: context.changes,
+    hunkInventory: context.hunkInventory,
+    git,
+    logger,
+    noVerify: argv.noVerify || config.noVerify || false,
+    fallback,
+  })
+  if (applied.fallback) {
+    return [
+      `Note: applied the single-commit fallback (${applied.fallback.reason}).`,
+      applied.message,
+    ].join('\n')
+  }
+  return applied.message
 }

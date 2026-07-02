@@ -1912,6 +1912,130 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 1800 },
     ],
   },
+
+  // ─────────────────────────────────────────────────────────────────
+  // HERO GIF SET — homepage hero carousel, all at 130×32 (≈16:9)
+  // ─────────────────────────────────────────────────────────────────
+  // These are short, punchy demos sized consistently for the homepage
+  // hero GIF showcase. Each one is ~5-10s and demonstrates a single
+  // coco capability. Run: npm run screenshot:sync hero-commit hero-split
+  // hero-ui hero-changelog hero-workspace
+  {
+    name: 'hero-commit',
+    description: 'Hero: coco commit — type command, AI drafts a commit message, done',
+    scenario: 'partial-stage',
+    command: 'commit --dry-run',
+    emitGif: true,
+    dimensions: { cols: 130, rows: 32 },
+    visibleCommand: 'coco commit',
+    env: {
+      COCO_SERVICE_PROVIDER: 'openai',
+      COCO_SERVICE_MODEL: 'gpt-4o-mini',
+    },
+    actions: [
+      // Wait for the LLM to return (fast model, ~2-4s).
+      { kind: 'sleep', ms: 5000 },
+    ],
+  },
+  {
+    name: 'hero-split',
+    description: 'Hero: coco commit --split — large staging area decomposed then applied',
+    scenario: 'dirty-many-files',
+    command: 'commit --split --conventional',
+    emitGif: true,
+    dimensions: { cols: 130, rows: 32 },
+    visibleCommand: 'coco commit --split',
+    env: {
+      COCO_SERVICE_PROVIDER: 'openai',
+      COCO_SERVICE_MODEL: 'gpt-4o-mini',
+    },
+    actions: [
+      // Let the LLM finish planning + show the apply prompt.
+      { kind: 'sleep', ms: 10000 },
+    ],
+  },
+  {
+    name: 'hero-ui',
+    description: 'Hero: coco ui — boot into history, browse commits, open diff, chord-switch views',
+    scenario: 'rich-history-graph',
+    command: 'ui --view history',
+    emitGif: true,
+    dimensions: { cols: 130, rows: 32 },
+    actions: [
+      // Let the workstation paint.
+      { kind: 'sleep', ms: 1200 },
+      // Browse history.
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 350 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 350 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 600 },
+      // Open a commit's diff.
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 1400 },
+      // Scroll the diff.
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 250 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 250 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 600 },
+      // Chord-switch to status.
+      { kind: 'type', text: 'gs' },
+      { kind: 'sleep', ms: 1200 },
+      // Chord-switch to branches.
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 1200 },
+      // Back to history to close the loop.
+      { kind: 'type', text: 'gh' },
+      { kind: 'sleep', ms: 800 },
+    ],
+  },
+  {
+    name: 'hero-changelog',
+    description: 'Hero: coco changelog — generate release notes from branch diff',
+    scenario: 'feature-pr-ready',
+    command: 'changelog --branch main',
+    emitGif: true,
+    dimensions: { cols: 130, rows: 32 },
+    visibleCommand: 'coco changelog',
+    env: {
+      COCO_SERVICE_PROVIDER: 'openai',
+      COCO_SERVICE_MODEL: 'gpt-4o-mini',
+    },
+    actions: [
+      // LLM generates changelog from commits.
+      { kind: 'sleep', ms: 6000 },
+    ],
+  },
+  {
+    name: 'hero-workspace',
+    description: 'Hero: coco workspace — multi-repo browser, pick a repo, drop into its TUI',
+    scenario: '_workspace',
+    command: 'workspace --root . --maxDepth 1',
+    emitGif: true,
+    dimensions: { cols: 130, rows: 32 },
+    actions: [
+      // Let the workspace list paint.
+      { kind: 'sleep', ms: 1800 },
+      // Browse repos.
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 500 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 700 },
+      // Enter the selected repo — drops into its TUI.
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 2800 },
+      // Quick browse inside — end here, don't quit (avoids tail frame).
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 400 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 400 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 1500 },
+    ],
+  },
 ]
 
 export function findRecipe(name: string): ScreenshotRecipe | undefined {
