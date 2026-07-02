@@ -1,5 +1,6 @@
 import {
   checkoutBranch,
+  checkoutBranchByName,
   createBranch,
   deleteBranch,
   isBranchCheckedOutElsewhereError,
@@ -116,6 +117,35 @@ describe('log branch actions', () => {
     expect(git.raw).toHaveBeenNthCalledWith(3, ['branch', '-d', 'feature/test'])
     expect(git.raw).toHaveBeenNthCalledWith(4, ['fetch', '--all', '--prune'])
     expect(git.raw).toHaveBeenNthCalledWith(5, ['pull', '--ff-only'])
+  })
+
+  describe('checkoutBranchByName (#1326)', () => {
+    it('runs git switch <name> for a valid branch name', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await checkoutBranchByName(git as never, 'feature/foo')
+      expect(result).toEqual({ ok: true, message: 'Checked out feature/foo' })
+      expect(git.raw).toHaveBeenCalledWith(['switch', 'feature/foo'])
+    })
+
+    it('trims whitespace before switching', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      await checkoutBranchByName(git as never, '  feature/bar  ')
+      expect(git.raw).toHaveBeenCalledWith(['switch', 'feature/bar'])
+    })
+
+    it('returns an error without calling git when name is empty', async () => {
+      const git = { raw: jest.fn() }
+      const result = await checkoutBranchByName(git as never, '   ')
+      expect(result).toEqual({ ok: false, message: 'Branch name required' })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+
+    it('returns an error without calling git when name is an empty string', async () => {
+      const git = { raw: jest.fn() }
+      const result = await checkoutBranchByName(git as never, '')
+      expect(result).toEqual({ ok: false, message: 'Branch name required' })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
   })
 
   describe('deleteBranch force', () => {

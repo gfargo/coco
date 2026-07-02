@@ -60,6 +60,7 @@ import {
 } from '../inkViewModel'
 import {
   checkoutBranch,
+  checkoutBranchByName,
   createBranch,
   deleteBranch,
   isBranchCheckedOutElsewhereError,
@@ -701,6 +702,15 @@ export function useWorkflowAction(
         if (!entry) return { ok: false, message: 'No reflog entry selected' }
         return checkoutReflogEntry(git, entry)
       },
+      // Follow-up checkout after a successful create-branch-here (#1326).
+      // Reached only via the in-runner setPendingConfirmation dispatch
+      // (create-branch-here → y-confirm → here); the branch name rides in
+      // `payload`. Using `git switch <name>` rather than checkoutBranch so
+      // we don't need a full BranchRef — the branch was just created so we
+      // know it's a plain local name.
+      'checkout-created-branch': async () => {
+        return checkoutBranchByName(git, payload ?? '')
+      },
       // #0.71 — submodule maintenance. Resolve the target from the
       // filtered list so the cursor index lines up with what's on screen
       // (a filtered-out submodule can never be the action target). The
@@ -1305,11 +1315,22 @@ export function useWorkflowAction(
     if (id === 'delete-branch' && !result?.ok && isBranchNotFullyMergedError(result?.message)) {
       dispatch({ type: 'setPendingConfirmation', value: 'force-delete-branch' })
     }
-    // A branch checked out in a worktree can't be deleted — and unlike
-    // the unmerged case, `git branch -D` won't force it either, so we
-    // don't offer a confirmation. Replace git's raw rejection with a
-    // clear "free up the worktree first" message that names where the
-    // branch is still in use.
+    // After a successful create-branch-here, offer to switch onto the
+    // newly created branch. The branch name travels in `payload` (the
+    // same value passed to createBranchFromCommit). This matches the
+    // desired behavior for #1326: `git branch <name> <sha>` stays put,
+    // so the user gets a Y/n confirm to switch.
+    if (id === 'create-branch-here' && result?.ok) {
+      const branchName = payload?.trim()
+      if (branchName) {
+        dispatch({
+          type: 'setPendingConfirmation',
+          value: 'checkout-created-branch',
+          payload: branchName,
+        })
+      }
+    }
+    // A branch checked out in a worktree can't be deleted
     if (
       (id === 'delete-branch' || id === 'force-delete-branch') &&
       !result?.ok &&
@@ -1401,6 +1422,10 @@ export function useWorkflowAction(
       'bisect-bad',
       'bisect-skip',
       'bisect-reset',
+      // Checking out the newly-created branch from create-branch-here
+      // changes HEAD — refresh the graph so the current-branch marker
+      // and history view reflect the switch (#1326).
+      'checkout-created-branch',
     ])
     if (result?.ok && historyMutatingIds.has(id)) {
       await refreshHistoryRows()
@@ -1415,7 +1440,7 @@ export function useWorkflowAction(
     // (resolvePendingItemAction → action 'checkout'), so a silent
     // stale-while-revalidate swap keeps the list readable and just
     // repaints the current-branch marker once the new context lands.
-    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout') && result?.ok) {
+    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch') && result?.ok) {
       dispatch({ type: 'resetBranchSelection' })
       await refreshContext({ silent: true })
     } else {

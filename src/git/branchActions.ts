@@ -101,6 +101,17 @@ export function createBranch(
   )
 }
 
+/**
+ * Switch to an existing local branch by name. Used as the follow-up action
+ * after `create-branch-here` (which creates the branch without switching) when
+ * the user confirms the checkout prompt.
+ */
+export function checkoutBranchByName(git: SimpleGit, name: string): Promise<BranchActionResult> {
+  const trimmed = name.trim()
+  if (!trimmed) return Promise.resolve({ ok: false, message: 'Branch name required' })
+  return runAction(() => git.raw(['switch', trimmed]), `Checked out ${trimmed}`)
+}
+
 export function renameBranch(
   git: SimpleGit,
   oldName: string,

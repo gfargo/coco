@@ -558,6 +558,20 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // Follow-up action after a successful create-branch-here (#1326).
+      // Reached only via the in-runner setPendingConfirmation dispatch
+      // (not a direct hotkey); empty `key` keeps it out of the palette
+      // to prevent accidental direct invocation without a branch-name
+      // payload. requiresConfirmation: false because this IS the
+      // confirmation target — the y-confirm overlay is the gate.
+      id: 'checkout-created-branch',
+      key: '',
+      label: 'Check out created branch',
+      description: 'Switch to the branch you just created.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // Per-view-only: scoped to the history view in inkInput via the
       // `gT` chord (bare `T` is taken by delete-tag on the tags view).
       // Same prompt-as-confirmation pattern as create-branch-here.

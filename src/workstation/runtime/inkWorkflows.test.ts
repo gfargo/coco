@@ -160,6 +160,22 @@ describe('log Ink workflows', () => {
     })
   })
 
+  it('registers checkout-created-branch as keyless, non-confirming follow-up action (#1326)', () => {
+    // Reached only via the in-runner setPendingConfirmation dispatch
+    // (create-branch-here → y-confirm → here). Must be keyless so it
+    // cannot be triggered directly by a keystroke, and must NOT itself
+    // require a second confirmation — it IS the confirmation target.
+    const action = getLogInkWorkflowActionById('checkout-created-branch')
+    expect(action).toMatchObject({
+      key: '',
+      kind: 'normal',
+      requiresConfirmation: false,
+    })
+    expect(action?.label).toContain('created branch')
+    // Keyless → never matches a raw keystroke.
+    expect(getLogInkWorkflowActionByKey('')).toBeUndefined()
+  })
+
   it('registers hunk-apply workflows as palette-only and non-destructive (#782)', () => {
     const worktree = getLogInkWorkflowActionById('apply-hunk-worktree')
     const index = getLogInkWorkflowActionById('apply-hunk-index')
