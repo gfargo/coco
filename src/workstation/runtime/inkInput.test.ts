@@ -2976,6 +2976,65 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('checkout-created-branch confirmation overlay (#1326)', () => {
+    // After create-branch or create-branch-here succeeds, the runtime
+    // dispatches setPendingConfirmation('checkout-created-branch', branchName).
+    // The input layer must:
+    //   y → runWorkflowAction('checkout-created-branch', payload) + clear confirm
+    //   n / Esc → clear confirm + status hint
+    //   anything else → swallow (no-op)
+
+    it('y confirms checkout and forwards the branch name as payload', () => {
+      const state: ReturnType<typeof createLogInkState> = {
+        ...createLogInkState(rows),
+        pendingConfirmationId: 'checkout-created-branch',
+        pendingConfirmationPayload: 'feature/foo',
+      }
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'checkout-created-branch',
+        payload: 'feature/foo',
+      })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: undefined },
+      })
+    })
+
+    it('n cancels checkout and shows the cancelled status hint', () => {
+      const state: ReturnType<typeof createLogInkState> = {
+        ...createLogInkState(rows),
+        pendingConfirmationId: 'checkout-created-branch',
+        pendingConfirmationPayload: 'feature/foo',
+      }
+      const events = getLogInkInputEvents(state, 'n')
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: undefined },
+      })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setStatus', value: 'workflow action cancelled' },
+      })
+      expect(events.find((e) => e.type === 'runWorkflowAction')).toBeUndefined()
+    })
+
+    it('Esc cancels checkout', () => {
+      const state: ReturnType<typeof createLogInkState> = {
+        ...createLogInkState(rows),
+        pendingConfirmationId: 'checkout-created-branch',
+        pendingConfirmationPayload: 'feature/bar',
+      }
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: undefined },
+      })
+      expect(events.find((e) => e.type === 'runWorkflowAction')).toBeUndefined()
+    })
+  })
+
   describe('d toggles diff view mode (#785)', () => {
     it('emits toggleDiffViewMode + a status hint when pressed in the diff view', () => {
       const state = { ...createLogInkState(rows), activeView: 'diff' as const }

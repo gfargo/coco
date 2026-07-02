@@ -95,10 +95,25 @@ export function createBranch(
   branchName: string,
   startPoint: string
 ): Promise<BranchActionResult> {
+  // Use `git branch` (not `git switch -c`) so the new branch is created
+  // without switching onto it. The workstation then prompts the user with
+  // a Y/n overlay asking whether to check it out, matching the
+  // create-branch-here behavior (#1326).
   return runAction(
-    () => git.raw(['switch', '-c', branchName, startPoint]),
+    () => git.raw(['branch', branchName, startPoint]),
     `Created branch ${branchName} from ${startPoint}`
   )
+}
+
+/**
+ * Switch to an existing local branch by name. Used as the follow-up action
+ * after `create-branch-here` (which creates the branch without switching) when
+ * the user confirms the checkout prompt.
+ */
+export function checkoutBranchByName(git: SimpleGit, name: string): Promise<BranchActionResult> {
+  const trimmed = name.trim()
+  if (!trimmed) return Promise.resolve({ ok: false, message: 'Branch name required' })
+  return runAction(() => git.raw(['switch', trimmed]), `Checked out ${trimmed}`)
 }
 
 export function renameBranch(

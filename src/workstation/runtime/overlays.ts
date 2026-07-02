@@ -120,6 +120,14 @@ export function renderConfirmationPanel(
     : state.pendingConfirmationId === 'rebase-onto-branch'
     ? state.pendingConfirmationPayload
       || 'Rebase rewrites the current branch\'s history. This cannot be undone by Coco.'
+    // Post-create-branch / create-branch-here checkout prompt (#1326):
+    // the payload IS the branch name — render it so the user sees what
+    // they're about to switch to. Fall back to a generic line if the
+    // payload is somehow absent.
+    : state.pendingConfirmationId === 'checkout-created-branch'
+    ? state.pendingConfirmationPayload
+      ? `Branch '${state.pendingConfirmationPayload}' created — switch to it now?`
+      : 'Branch created — switch to it now?'
     : action?.kind === 'ai'
     ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`
     : 'Destructive Git action requires confirmation.'

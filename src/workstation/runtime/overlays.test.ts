@@ -129,6 +129,31 @@ describe('rebase-onto-branch confirmation panel (#0.71)', () => {
   })
 })
 
+describe('checkout-created-branch confirmation panel (#1326)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  it('renders the branch name from payload and the switch-now prompt', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'checkout-created-branch',
+      pendingConfirmationPayload: 'feature/foo',
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    expect(text).toContain('Check out created branch')
+    expect(text).toContain("feature/foo")
+    expect(text).toContain('switch to it now')
+    expect(text).not.toContain('Destructive Git action requires confirmation')
+  })
+
+  it('falls back to a generic message when the payload is absent', () => {
+    const state = { ...createLogInkState([]), pendingConfirmationId: 'checkout-created-branch' }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, 80, theme, false))
+    expect(text).toContain('Branch created')
+    expect(text).toContain('switch to it now')
+    expect(text).not.toContain('Destructive Git action requires confirmation')
+  })
+})
+
 describe('split-plan overlay — unclaimed group (#1180)', () => {
   const components: LogInkComponents = { Box, Text }
 
