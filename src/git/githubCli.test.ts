@@ -109,6 +109,23 @@ describe('githubCli', () => {
     it('falls back to a generic message for empty input', () => {
       expect(compactGhError('   ')).toEqual({ message: 'GitHub CLI command failed.', details: [] })
     })
+
+    // Regression: execFile's message leads with the entire echoed command
+    // line — with a generated PR body inlined in argv, the status line
+    // showed "Command failed: gh pr create --title=… --body=<pages>"
+    // instead of gh's actual complaint.
+    it('drops the echoed command line and leads with the real reason', () => {
+      const message = [
+        'Command failed: gh pr create --base=main --head=feat/x --title=T --body=huge',
+        'a pull request for branch "feat/x" into branch "main" already exists:',
+        'https://github.com/gfargo/coco/pull/9',
+      ].join('\n')
+      const result = compactGhError(message)
+      expect(result.message).toBe(
+        'a pull request for branch "feat/x" into branch "main" already exists:'
+      )
+      expect(result.details).toEqual(['https://github.com/gfargo/coco/pull/9'])
+    })
   })
 
   describe('resolveGhActionError', () => {
@@ -128,6 +145,16 @@ describe('githubCli', () => {
       )
       expect(result.message).toBe('Pull request already exists')
       expect(result.details).toEqual(['try a different head'])
+    })
+
+    it('prefers the attached stderr (where gh explains itself) over the echoed command', async () => {
+      const runner = jest.fn().mockResolvedValue('Logged in to github.com')
+      const error = Object.assign(
+        new Error('Command failed: gh pr create --base=main --title=T --body=huge'),
+        { stderr: 'GraphQL: was submitted too quickly (createPullRequest)\n' }
+      )
+      const result = await resolveGhActionError(error, runner)
+      expect(result.message).toBe('GraphQL: was submitted too quickly (createPullRequest)')
     })
   })
 })

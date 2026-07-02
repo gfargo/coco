@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { GhRunner, defaultGhRunner } from './pullRequestData'
 import { resolveGhActionError } from './githubCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
@@ -42,14 +45,17 @@ async function runGhAction(
   }
 }
 
-export function buildCreatePullRequestArgs(input: CreatePullRequestInput): string[] {
+export function buildCreatePullRequestArgs(
+  input: CreatePullRequestInput,
+  bodyFile?: string,
+): string[] {
   const args = [
     'pr',
     'create',
     `--base=${input.base}`,
     `--head=${input.head}`,
     `--title=${input.title}`,
-    `--body=${input.body}`,
+    bodyFile ? `--body-file=${bodyFile}` : `--body=${input.body}`,
   ]
 
   if (input.draft) {
@@ -59,21 +65,32 @@ export function buildCreatePullRequestArgs(input: CreatePullRequestInput): strin
   return args
 }
 
-export function createPullRequest(
+export async function createPullRequest(
   input: CreatePullRequestInput,
   runner: GhRunner = defaultGhRunner
 ): Promise<PullRequestActionResult> {
   const bad = rejectFlagLike(input.head, 'Branch name') || rejectFlagLike(input.base, 'Branch name')
-  if (bad) return Promise.resolve({ ok: false, message: bad })
-  return runGhAction(runner, buildCreatePullRequestArgs(input), (output) => {
-    const url = parseCreatedPullRequestUrl(output)
+  if (bad) return { ok: false, message: bad }
+  // The body travels via a temp file, not argv: generated bodies run to
+  // multi-KB markdown, and inlining them in `--body=` both flirts with
+  // arg-length limits and echoes the whole body back through error
+  // messages when gh fails.
+  const bodyDir = mkdtempSync(join(tmpdir(), 'coco-pr-'))
+  const bodyFile = join(bodyDir, 'body.md')
+  try {
+    writeFileSync(bodyFile, input.body, 'utf8')
+    return await runGhAction(runner, buildCreatePullRequestArgs(input, bodyFile), (output) => {
+      const url = parseCreatedPullRequestUrl(output)
 
-    return {
-      ok: true,
-      message: url ? `Created pull request: ${url}` : 'Created pull request',
-      url,
-    }
-  })
+      return {
+        ok: true,
+        message: url ? `Created pull request: ${url}` : 'Created pull request',
+        url,
+      }
+    })
+  } finally {
+    rmSync(bodyDir, { recursive: true, force: true })
+  }
 }
 
 export function openPullRequest(url: string, runner: GhRunner = defaultGhRunner): Promise<PullRequestActionResult> {

@@ -99,6 +99,25 @@ export type UseHistoryPaginationStateDeps = {
 }
 
 /**
+ * Whether a freshly-loaded window of rows leaves more history to page in:
+ * interactive log mode without an explicit `--limit`, and the window
+ * filled the default page. Shared by the mount-time seed below and the
+ * boot loader's post-fetch correction — `coco ui` mounts with the cached
+ * rows (or none at all on a cold cache) and fetches the real window
+ * async, so a seed computed from the mount rows alone would permanently
+ * disable pagination on first run.
+ */
+export function computeHasMoreCommits(
+  logArgv: LogArgv | undefined,
+  rows: GitLogRow[],
+): boolean {
+  return (
+    Boolean(logArgv?.interactive && !logArgv.limit) &&
+    getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
+  )
+}
+
+/**
  * Issues the `hasMoreCommits` / `loadingMoreCommits` `useState` pair, in its
  * original `app.ts` position. `hasMoreCommits` keeps its verbatim lazy seed —
  * true only in interactive log mode without an explicit `--limit` when the
@@ -118,10 +137,7 @@ export function useHistoryPaginationState(
   setLoadingMoreCommits: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
 } {
   const { logArgv, rows } = deps
-  const [hasMoreCommits, setHasMoreCommits] = React.useState(() => (
-    Boolean(logArgv?.interactive && !logArgv.limit) &&
-    getCommitRows(rows).length >= LOG_INTERACTIVE_DEFAULT_LIMIT
-  ))
+  const [hasMoreCommits, setHasMoreCommits] = React.useState(() => computeHasMoreCommits(logArgv, rows))
   const [loadingMoreCommits, setLoadingMoreCommits] = React.useState(false)
   return {
     hasMoreCommits,

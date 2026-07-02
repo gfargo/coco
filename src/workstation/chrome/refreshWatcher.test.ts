@@ -1,4 +1,7 @@
-import { LogInkRefreshKind, createRefreshDebouncer } from './refreshWatcher'
+import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { LogInkRefreshKind, createRefreshDebouncer, createRefreshWatcher } from './refreshWatcher'
 
 /**
  * Synchronous fake scheduler so we can run debounce timing without
@@ -129,5 +132,48 @@ describe('createRefreshDebouncer', () => {
 
     fake.flush(500)
     expect(settles).toEqual([])
+  })
+})
+
+/**
+ * Integration coverage for the lock-file-rename survival: git updates
+ * `.git/index` and `.git/HEAD` by writing `<file>.lock` and renaming over
+ * the target, which orphans an inode-following `fs.watch` after the FIRST
+ * replacement — the TUI silently stopped auto-refreshing after one
+ * external `git add`. The watcher now watches the parent directory and
+ * filters by filename, which survives any number of renames.
+ */
+describe('createRefreshWatcher rename survival', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 150))
+
+  it('keeps firing for repeated lock+rename replacements of .git/index', async () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), 'coco-watch-'))
+    const gitDir = join(repoRoot, '.git')
+    mkdirSync(gitDir)
+    writeFileSync(join(gitDir, 'index'), 'v0')
+
+    const kinds: LogInkRefreshKind[] = []
+    const watcher = createRefreshWatcher({
+      repoRoot,
+      gitDir,
+      debounceMs: 20,
+      onChange: (kind) => kinds.push(kind),
+    })
+
+    try {
+      // Two full lock+rename cycles, letting each debounce window settle.
+      for (const version of ['v1', 'v2']) {
+        writeFileSync(join(gitDir, 'index.lock'), version)
+        renameSync(join(gitDir, 'index.lock'), join(gitDir, 'index'))
+        await settle()
+      }
+    } finally {
+      watcher.close()
+      rmSync(repoRoot, { recursive: true, force: true })
+    }
+
+    // One settle per replacement — the second rename is the regression.
+    expect(kinds.length).toBeGreaterThanOrEqual(2)
+    expect(kinds).toContain('worktree')
   })
 })

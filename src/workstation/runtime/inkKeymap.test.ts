@@ -513,6 +513,37 @@ describe('log Ink keymap', () => {
       expect(result).toHaveLength(0)
     })
 
+    // Regression: the scattered-letter fallback used to run across every
+    // searchable field — long descriptions matched almost any short
+    // query ("changel" pulled in yank, submodules, stash, and "Request
+    // changes"), burying the real hit in noise. Scattered-letter matches
+    // are label-only now; exact/prefix/substring still search all fields.
+    it('does not scatter-match query letters across command descriptions', () => {
+      const commands = getLogInkPaletteCommands()
+      const results = filterLogInkPaletteCommands(commands, 'changel', [])
+
+      expect(results.length).toBeGreaterThan(0)
+      for (const command of results) {
+        const label = command.label.toLowerCase()
+        const haystacks = [command.label, command.description, command.keys, command.id]
+          .map((field) => field.toLowerCase())
+        const substringHit = haystacks.some((field) => field.includes('changel'))
+        // Anything surviving without a real substring hit must at least
+        // scatter-match within its LABEL, not its description.
+        if (!substringHit) {
+          let cursor = 0
+          const scatterInLabel = [...'changel'].every((ch) => {
+            const at = label.indexOf(ch, cursor)
+            if (at < 0) return false
+            cursor = at + 1
+            return true
+          })
+          expect(scatterInLabel).toBe(true)
+        }
+      }
+      expect(results.map((command) => command.id)).not.toContain('yank')
+    })
+
     it('ignores recent ordering when a filter is set (relevance wins)', () => {
       const commands = getLogInkPaletteCommands()
       const result = filterLogInkPaletteCommands(commands, 'compose', ['navigateStash'])
@@ -584,8 +615,10 @@ describe('log Ink keymap', () => {
         showHelp: false,
       })
       expect(hints.contextual).toContain('s stage')
-      expect(hints.contextual).toContain('u theirs')
-      expect(hints.contextual).toContain('U ours')
+      // Intent-based labels: rebase swaps git's ours/theirs sides, so
+      // the hints name what the user keeps, not the git flag.
+      expect(hints.contextual).toContain('u incoming')
+      expect(hints.contextual).toContain('U yours')
       expect(hints.contextual).toContain('o edit')
       expect(hints.contextual).toContain('C continue*')
       expect(hints.contextual).toContain('enter diff')

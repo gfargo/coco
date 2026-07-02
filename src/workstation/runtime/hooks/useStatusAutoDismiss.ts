@@ -34,6 +34,10 @@ export const STATUS_AUTO_DISMISS_MS = 4000
 export type UseStatusAutoDismissDeps = {
   /** The live `state.statusMessage`. No message → nothing to dismiss. */
   statusMessage: string | undefined
+  /** `state.statusKind` — errors never auto-dismiss (the user must read them). */
+  statusKind: 'info' | 'error' | 'success' | 'warning' | undefined
+  /** `state.statusLoading` — in-flight progress lines hold until they settle. */
+  statusLoading: boolean | undefined
   /** `state.inputPrompt` — an open input prompt holds the status line. */
   inputPrompt: unknown
   /** `state.pendingConfirmationId` — a y/n confirmation is open. */
@@ -61,6 +65,8 @@ export type UseStatusAutoDismissDeps = {
  */
 export function shouldAutoDismissStatus(deps: {
   statusMessage: string | undefined
+  statusKind: 'info' | 'error' | 'success' | 'warning' | undefined
+  statusLoading: boolean | undefined
   inputPrompt: unknown
   pendingConfirmationId: unknown
   pendingChoice: unknown
@@ -68,6 +74,12 @@ export function shouldAutoDismissStatus(deps: {
   showCommandPalette: unknown
 }): boolean {
   if (!deps.statusMessage) return false
+  // Errors carry information the user has to act on (failure reasons,
+  // diagnostic paths) — they clear on the next action, not on a timer.
+  // Loading lines ("generating PR body… Esc to skip") are live progress
+  // for an in-flight call; wiping them mid-call removes both the
+  // feedback and the advertised cancel affordance.
+  if (deps.statusKind === 'error' || deps.statusLoading) return false
   if (
     deps.inputPrompt ||
     deps.pendingConfirmationId ||
@@ -94,6 +106,8 @@ export function useStatusAutoDismiss(
 ): void {
   const {
     statusMessage,
+    statusKind,
+    statusLoading,
     inputPrompt,
     pendingConfirmationId,
     pendingChoice,
@@ -104,6 +118,7 @@ export function useStatusAutoDismiss(
   } = deps
   React.useEffect(() => {
     if (!statusMessage) return
+    if (statusKind === 'error' || statusLoading) return
     if (inputPrompt || pendingConfirmationId || pendingChoice || pendingMutationConfirmation || showCommandPalette) {
       return
     }
@@ -125,5 +140,7 @@ export function useStatusAutoDismiss(
     pendingMutationConfirmation,
     showCommandPalette,
     statusMessage,
+    statusKind,
+    statusLoading,
   ])
 }

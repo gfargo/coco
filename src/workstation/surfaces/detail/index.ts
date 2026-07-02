@@ -58,6 +58,7 @@ import type { LogInkState } from '../../../workstation/runtime/inkViewModel'
 import { getSelectedInkCommit } from '../../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../../git/providerData'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
+import { sortBranches, sortTags } from '../../chrome/sorting'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import {
   buildCommitUrl,
@@ -676,7 +677,11 @@ export function renderBranchPreviewPanel(
       [{ text: formatLogInkLoading({ resource: 'branches' }), emphasis: 'dim' }],
       width, theme, focused)
   }
-  const all = context.branches?.localBranches || []
+  // Sort-then-filter, matching the branches surface and the workflow
+  // runner — the shared cursor indexes the SORTED list, so filtering the
+  // raw ref order here made the preview describe a different branch than
+  // the highlighted row.
+  const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
   const visible = state.filter
     ? all.filter((branch) =>
       matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter))
@@ -703,7 +708,8 @@ export function renderTagPreviewPanel(
       [{ text: formatLogInkLoading({ resource: 'tags' }), emphasis: 'dim' }],
       width, theme, focused)
   }
-  const all = context.tags?.tags || []
+  // Sort-then-filter — same contract as the branch preview above.
+  const all = sortTags(context.tags?.tags || [], state.tagSort)
   const visible = state.filter
     ? all.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
     : all

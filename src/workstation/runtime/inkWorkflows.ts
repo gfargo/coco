@@ -599,14 +599,15 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     },
     {
       // #0.67 — reflog "time machine". Scoped to the reflog view in
-      // inkInput (key `c`). Checking out a reflog entry detaches HEAD at
-      // that commit so the user can inspect or recover from it — it's
-      // reversible (no refs move) so it skips the y-confirm path.
+      // inkInput (key `c`), which dispatches by id — the empty `key`
+      // keeps this palette-discoverable without letting the end-of-
+      // dispatch key fallback fire it from views that don't bind `c`
+      // (branches, tags, stash, …), which would silently detach HEAD.
       // Reset-to-entry and branch-from-entry reuse the existing
       // `reset-to-commit` / `create-branch-here` workflows (a reflog
       // entry is just a commit by hash); only checkout is reflog-specific.
       id: 'checkout-reflog-entry',
-      key: 'c',
+      key: '',
       label: 'Checkout reflog entry',
       description: 'Check out the commit at the cursored reflog entry (detaches HEAD).',
       kind: 'normal',
@@ -749,10 +750,16 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // Label honesty: despite the historical id, this action does NOT
+      // read the selected commit — its confirm handler dispatches
+      // `runAiCommitDraft`, which drafts a commit message from the
+      // currently STAGED changes and lands it in the compose surface.
+      // The id is load-bearing (confirm special-case in inkInput,
+      // palette recents) so only the copy is corrected.
       id: 'ai-commit-summary',
       key: 'I',
-      label: 'AI commit summary',
-      description: 'Summarize the selected commit with token/cost awareness.',
+      label: 'AI commit draft',
+      description: 'Draft a commit message from the staged changes (opens compose), with token/cost awareness.',
       kind: 'ai',
       requiresConfirmation: true,
       estimatedTokens: 800,

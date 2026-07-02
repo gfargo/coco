@@ -3,7 +3,7 @@ import {
   getCommitRows,
 } from '../../../commands/log/data'
 import type { LogArgv } from '../../../commands/log/config'
-import { useHistoryPaginationState } from './useLoadMoreHistory'
+import { computeHasMoreCommits, useHistoryPaginationState } from './useLoadMoreHistory'
 
 /**
  * Tests for the `useHistoryPaginationState` seed (app.ts decomposition item 3
@@ -86,5 +86,24 @@ describe('useHistoryPaginationState seed', () => {
       rows: [],
     })
     expect(hasMoreCommits).toBe(false)
+  })
+})
+
+describe('computeHasMoreCommits (boot-loader correction)', () => {
+  // Regression: `coco ui` mounts with cached rows (or none on a cold
+  // cache) and fetches the real window async. The mount-time seed alone
+  // evaluated false and nothing corrected it, so pagination stayed dead
+  // for the whole session. The boot loader now recomputes from the
+  // fetched window with this helper.
+  it('reports more history when the fetched window fills the default page', () => {
+    rowsOfLength(LOG_INTERACTIVE_DEFAULT_LIMIT)
+    expect(computeHasMoreCommits(argv({ interactive: true }), [])).toBe(true)
+  })
+
+  it('reports no more history for a short window or an explicit --limit', () => {
+    rowsOfLength(LOG_INTERACTIVE_DEFAULT_LIMIT - 1)
+    expect(computeHasMoreCommits(argv({ interactive: true }), [])).toBe(false)
+    expect(computeHasMoreCommits(argv({ interactive: true, limit: 10 }), [])).toBe(false)
+    expect(computeHasMoreCommits(undefined, [])).toBe(false)
   })
 })

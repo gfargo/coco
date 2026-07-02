@@ -1335,7 +1335,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.activeView === 'conflicts') {
     return {
-      contextual: ['↑/↓ files', 'enter diff', 's stage', 'u theirs', 'U ours', 'o edit', 'C continue*', 'esc back'],
+      contextual: ['↑/↓ files', 'enter diff', 's stage', 'u incoming', 'U yours', 'o edit', 'C continue*', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1640,28 +1640,32 @@ function scorePaletteCommand(command: LogInkPaletteCommand, term: string): numbe
       best = best === undefined ? fieldScore : Math.max(best, fieldScore)
       continue
     }
-
-    let searchIndex = 0
-    let distance = 0
-    let matched = true
-
-    for (const character of normalized) {
-      const nextIndex = value.indexOf(character, searchIndex)
-      if (nextIndex < 0) {
-        matched = false
-        break
-      }
-      distance += nextIndex - searchIndex
-      searchIndex = nextIndex + 1
-    }
-
-    if (matched) {
-      const fieldScore = 300 - Math.min(distance, 200)
-      best = best === undefined ? fieldScore : Math.max(best, fieldScore)
-    }
   }
 
-  return best
+  if (best !== undefined) {
+    return best
+  }
+
+  // Loose character-subsequence fallback, LABEL ONLY. Running it across
+  // every searchable field (descriptions especially) made short queries
+  // match most of the registry — "changel" pulled in yank, submodules,
+  // and "Request changes" because their long descriptions happened to
+  // contain those seven letters in order somewhere. The label is short
+  // enough that a scattered-letter match still reads as intentional.
+  const label = command.label.toLowerCase()
+  let searchIndex = 0
+  let distance = 0
+
+  for (const character of normalized) {
+    const nextIndex = label.indexOf(character, searchIndex)
+    if (nextIndex < 0) {
+      return undefined
+    }
+    distance += nextIndex - searchIndex
+    searchIndex = nextIndex + 1
+  }
+
+  return 300 - Math.min(distance, 200)
 }
 
 /**

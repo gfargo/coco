@@ -233,7 +233,10 @@ export function useCommitComposeActions(
     if (editorOk) {
       try {
         const content = readFileSync(file, 'utf8')
-        dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: content } })
+        // `source: 'user'` — the editor content is the user's own typing,
+        // so it applies directly instead of staging behind the AI-draft
+        // accept prompt.
+        dispatch({ type: 'commitCompose', action: { type: 'setDraft', value: content, source: 'user' } })
         dispatch({ type: 'setStatus', value: 'Commit draft updated from editor.', kind: 'success' })
       } catch (error) {
         dispatch({

@@ -653,6 +653,43 @@ describe('log Ink view model', () => {
       expect(state.viewStack).toEqual(['history', 'diff'])
     })
 
+    // Regression: the shared `state.filter` used to survive lateral view
+    // switches, silently pre-narrowing the destination's list — and since
+    // workflows resolve their targets from the FILTERED lists by index,
+    // silently re-aiming destructive actions (drop-stash, delete-branch).
+    it('clears the shared filter on a lateral pushView/replaceView jump', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setFilter', value: 'fix' })
+      expect(state.filter).toBe('fix')
+
+      state = applyLogInkAction(state, { type: 'pushView', value: 'stash' })
+      expect(state.filter).toBe('')
+      expect(state.filterMode).toBe(false)
+
+      state = applyLogInkAction(state, { type: 'setFilter', value: 'wip' })
+      state = applyLogInkAction(state, { type: 'replaceView', value: 'branches' })
+      expect(state.filter).toBe('')
+    })
+
+    it('keeps the filter on drill-in navigate actions (diff depends on it)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setFilter', value: 'fix' })
+      const filtered = state.filteredCommits.length
+      expect(filtered).toBeGreaterThan(0)
+
+      // Enter on a history commit dispatches navigateOpenDiffForCommit,
+      // not pushView — the diff's subject commit is resolved through
+      // `filteredCommits[selectedIndex]`, so the filter must survive.
+      state = applyLogInkAction(state, {
+        type: 'navigateOpenDiffForCommit',
+        sha: state.filteredCommits[0].hash,
+        commitIndex: 0,
+      })
+      expect(state.activeView).toBe('diff')
+      expect(state.filter).toBe('fix')
+      expect(state.filteredCommits).toHaveLength(filtered)
+    })
+
     it('pops the top of the stack', () => {
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
@@ -1721,6 +1758,10 @@ describe('log Ink view model', () => {
       // since `nudgeParentState` doesn't touch those fields.
       expect(ret).toEqual({
         activeView: 'branches',
+        viewStack: before.viewStack,
+        diffSource: undefined,
+        stashDiffRef: undefined,
+        compareHead: undefined,
         selectedIndex: before.selectedIndex,
         selectedFileIndex: 0,
         selectedSubmoduleIndex: 0,
@@ -1768,6 +1809,36 @@ describe('log Ink view model', () => {
       expect(popped.branchSort).toBe(parentBranchSort)
       // Submodule's state is gone; only the root frame remains.
       expect(popped.repoStack).toHaveLength(1)
+    })
+
+    // Regression: popping a frame entered FROM a commit diff used to
+    // restore `viewStack: ['diff']` (one element — Esc and `<` both dead)
+    // with `diffSource` cleared by navigation inside the submodule, so
+    // the diff rendered source-less and picked up staging key handling.
+    it('popRepoFrame restores the full parent view stack and diff identity', () => {
+      let parent = createLogInkState(rows, { repoLabel: 'coco' })
+      parent = applyLogInkAction(parent, {
+        type: 'navigateOpenDiffForCommit',
+        sha: parent.filteredCommits[0].hash,
+        commitIndex: 0,
+      })
+      expect(parent.viewStack).toEqual(['history', 'diff'])
+      expect(parent.diffSource).toBe('commit')
+
+      let inside = applyLogInkAction(parent, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+      })
+      // Navigate around inside the submodule — this clears the shared
+      // diffSource on the live state, which is exactly why pop must
+      // restore it from the captured parentReturn.
+      inside = applyLogInkAction(inside, { type: 'pushView', value: 'branches' })
+      expect(inside.diffSource).toBeUndefined()
+
+      const popped = applyLogInkAction(inside, { type: 'popRepoFrame' })
+      expect(popped.activeView).toBe('diff')
+      expect(popped.viewStack).toEqual(['history', 'diff'])
+      expect(popped.diffSource).toBe('commit')
     })
 
     it('pushRepoFrame records the optional entryRange', () => {

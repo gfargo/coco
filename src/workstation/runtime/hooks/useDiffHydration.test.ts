@@ -51,21 +51,34 @@ const file = (path: string): WorktreeFile =>
   ({ path } as unknown as WorktreeFile)
 
 describe('shouldLoadWorktreeDiff', () => {
-  it('loads (true) when the diff view is active and a file is cursored', () => {
-    expect(shouldLoadWorktreeDiff('diff', file('src/app.ts'))).toBe(true)
+  it('loads (true) on the staging diff with a cursored file', () => {
+    expect(shouldLoadWorktreeDiff('diff', 'worktree', file('src/app.ts'))).toBe(true)
+    // The `g d` chord pushes the diff view without a source tag —
+    // undefined still means the staging diff.
+    expect(shouldLoadWorktreeDiff('diff', undefined, file('src/app.ts'))).toBe(true)
+  })
+
+  // Regression: with a dirty worktree, hydrating worktree hunks under a
+  // commit/stash/compare diff let Space/z stage or discard hunks of a
+  // file the user was not looking at (and j/k scrolled the invisible
+  // worktree offset instead of the visible diff).
+  it('skips (false) on commit / stash / compare diffs', () => {
+    expect(shouldLoadWorktreeDiff('diff', 'commit', file('src/app.ts'))).toBe(false)
+    expect(shouldLoadWorktreeDiff('diff', 'stash', file('src/app.ts'))).toBe(false)
+    expect(shouldLoadWorktreeDiff('diff', 'compare', file('src/app.ts'))).toBe(false)
   })
 
   it('skips (false) when no worktree file is cursored', () => {
-    expect(shouldLoadWorktreeDiff('diff', undefined)).toBe(false)
+    expect(shouldLoadWorktreeDiff('diff', 'worktree', undefined)).toBe(false)
   })
 
   it('skips (false) when the active view is not the diff view', () => {
-    expect(shouldLoadWorktreeDiff('history', file('src/app.ts'))).toBe(false)
-    expect(shouldLoadWorktreeDiff('status', file('src/app.ts'))).toBe(false)
+    expect(shouldLoadWorktreeDiff('history', 'worktree', file('src/app.ts'))).toBe(false)
+    expect(shouldLoadWorktreeDiff('status', undefined, file('src/app.ts'))).toBe(false)
   })
 
   it('skips (false) when neither condition holds', () => {
-    expect(shouldLoadWorktreeDiff('history', undefined)).toBe(false)
+    expect(shouldLoadWorktreeDiff('history', undefined, undefined)).toBe(false)
   })
 })
 

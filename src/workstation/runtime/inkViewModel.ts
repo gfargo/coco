@@ -159,6 +159,24 @@ export type LogInkRepoFrameEntryRange = {
 
 export type LogInkRepoFrameReturn = {
   activeView: LogInkView
+  /**
+   * The parent's full view stack at push time. Restoring only
+   * `[activeView]` stranded the user when the drill-in happened from a
+   * pushed view (commit diff): they popped back onto a one-element
+   * 'diff' stack where Esc and `<` were both dead. Optional for
+   * back-compat with states captured before the field landed — pop
+   * falls back to `[activeView]`.
+   */
+  viewStack?: LogInkView[]
+  /**
+   * Diff identity at push time. `withPushedView` inside the submodule
+   * clears these on the shared state, so without an explicit capture a
+   * pop back onto a commit diff rendered source-less (wrong key
+   * handling, staging semantics on a read-only diff).
+   */
+  diffSource?: LogInkDiffSource
+  stashDiffRef?: string
+  compareHead?: LogInkCompareRef
   selectedIndex: number
   selectedFileIndex: number
   selectedSubmoduleIndex: number
@@ -1241,6 +1259,10 @@ function withPushedRepoFrame(
     entryRange: payload.entryRange,
     parentReturn: {
       activeView: state.activeView,
+      viewStack: [...state.viewStack],
+      diffSource: state.diffSource,
+      stashDiffRef: state.stashDiffRef,
+      compareHead: state.compareHead,
       selectedIndex: state.selectedIndex,
       selectedFileIndex: state.selectedFileIndex,
       selectedSubmoduleIndex: state.selectedSubmoduleIndex,
@@ -1295,7 +1317,13 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     ...state,
     repoStack,
     activeView: ret.activeView,
-    viewStack: [ret.activeView],
+    // Restore the parent's full stack (fallback for pre-field captures)
+    // plus the diff identity — a pop back onto a commit diff must land
+    // on a diff that knows its source and can still walk back out.
+    viewStack: ret.viewStack?.length ? [...ret.viewStack] : [ret.activeView],
+    diffSource: ret.diffSource,
+    stashDiffRef: ret.stashDiffRef,
+    compareHead: ret.compareHead,
     selectedIndex: ret.selectedIndex,
     selectedFileIndex: ret.selectedFileIndex,
     selectedSubmoduleIndex: ret.selectedSubmoduleIndex,
@@ -1339,6 +1367,23 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     peekReturnFocus: undefined,
     pendingKey: undefined,
   }
+}
+
+/**
+ * Drop the shared filter as part of a LATERAL view switch (g-chord /
+ * palette jump). `state.filter` drives every promoted list — leaving it
+ * armed meant a filter typed on history silently pre-narrowed the stash /
+ * branch / triage lists the user jumped to, and since workflows resolve
+ * their targets from the filtered lists by index, silently re-aimed
+ * destructive actions. Applied AFTER the view-switch helper so the
+ * cleared filter can't disturb the switch's own bookkeeping; a no-op when
+ * no filter is set or the switch stayed on the same view (`enabled`).
+ */
+function withClearedFilter(state: LogInkState, enabled: boolean): LogInkState {
+  if (!enabled || (!state.filter && !state.filterMode)) {
+    return state
+  }
+  return { ...withFilter(state, ''), filterMode: false }
 }
 
 function withFilter(
@@ -2109,11 +2154,18 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     case 'setActiveView':
       return withReplacedView(state, action.value)
     case 'pushView':
-      return withPushedView(state, action.value)
+      // Lateral navigation (g-chords / palette "jump to …") lands on a
+      // fresh view — clear the shared filter so it can't silently
+      // pre-narrow the destination's list (and, since every workflow
+      // resolves its target from the FILTERED list, silently re-aim
+      // destructive actions). Drill-ins (Enter → diff/blame/…) dispatch
+      // their own navigate* actions, not this one, so the filter that
+      // the drilled-into view depends on survives there.
+      return withClearedFilter(withPushedView(state, action.value), state.activeView !== action.value)
     case 'popView':
       return withPoppedView(state)
     case 'replaceView':
-      return withReplacedView(state, action.value)
+      return withClearedFilter(withReplacedView(state, action.value), state.activeView !== action.value)
     case 'pushRepoFrame':
       return withPushedRepoFrame(state, {
         label: action.label,

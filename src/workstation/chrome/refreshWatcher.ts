@@ -156,10 +156,37 @@ export function createRefreshWatcher(
     }
   }
 
-  safeWatch(path.join(options.gitDir, 'index'), 'worktree')
-  safeWatch(path.join(options.gitDir, 'HEAD'), 'full')
+  // Watch a single FILE by watching its parent directory and filtering
+  // by name. `fs.watch` on the file itself follows the inode — and git
+  // updates `index` / `HEAD` / `logs/HEAD` via write-lock-file-then-
+  // rename, so a direct file watch fires for the first replacement and
+  // then sits on the orphaned old inode forever (the TUI silently
+  // stopped auto-refreshing after the first external `git add`). The
+  // directory watch survives any number of renames. A null filename
+  // (platforms that can't report one) triggers conservatively.
+  const safeWatchFileViaParent = (
+    pathname: string,
+    kind: LogInkRefreshKind
+  ): void => {
+    const dir = path.dirname(pathname)
+    const name = path.basename(pathname)
+    try {
+      const watcher = fs.watch(dir, (eventType, filename) => {
+        if (filename === null || filename === name) {
+          debouncer.trigger(kind)
+        }
+      })
+      watcher.on('error', () => {})
+      watchers.push(watcher)
+    } catch {
+      // Parent may not exist (e.g. `.git/logs` in a fresh repo). Skip.
+    }
+  }
+
+  safeWatchFileViaParent(path.join(options.gitDir, 'index'), 'worktree')
+  safeWatchFileViaParent(path.join(options.gitDir, 'HEAD'), 'full')
   safeWatch(path.join(options.gitDir, 'refs', 'heads'), 'full', { recursive: true })
-  safeWatch(path.join(options.gitDir, 'logs', 'HEAD'), 'full')
+  safeWatchFileViaParent(path.join(options.gitDir, 'logs', 'HEAD'), 'full')
   safeWatch(options.repoRoot, 'worktree')
 
   return {
