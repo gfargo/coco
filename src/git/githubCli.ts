@@ -237,6 +237,12 @@ export function compactGhError(message: string): GhActionError {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
+    // execFile prefixes its message with the entire echoed command line
+    // ("Command failed: gh pr create --title=... --body=<pages of text>").
+    // That line names no failure reason — and with a generated PR body in
+    // the argv it dwarfs the status line — so drop it and lead with gh's
+    // actual stderr complaint.
+    .filter((line) => !line.startsWith('Command failed:'))
 
   return {
     message: lines[0] || 'GitHub CLI command failed.',
@@ -256,7 +262,15 @@ export async function resolveGhActionError(
   error: unknown,
   runner: GhRunner
 ): Promise<GhActionError> {
-  const raw = (error as Error)?.message || 'GitHub CLI command failed.'
+  // Promisified execFile attaches the process stderr to the error —
+  // that's where gh explains itself ("a pull request for branch X
+  // already exists", auth guidance, …). Prefer it over `message`,
+  // which leads with the echoed command line.
+  const stderr = (error as { stderr?: unknown })?.stderr
+  const raw =
+    (typeof stderr === 'string' && stderr.trim() ? stderr : undefined) ||
+    (error as Error)?.message ||
+    'GitHub CLI command failed.'
 
   try {
     const status = await getGhStatus(runner)

@@ -2001,6 +2001,116 @@ describe('log Ink input interactions', () => {
     expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'createManualCommit' }])
   })
 
+  describe('worktree-diff keys are inert on commit/stash/compare diffs (dirty-worktree hijack)', () => {
+    // Regression: with a dirty worktree the hydrated worktree hunk/diff
+    // data used to win the dispatch on ANY diff view — Space silently
+    // staged (and z offered to discard) a hunk of the status-cursored
+    // file while the user was reading a read-only commit diff, and j/k
+    // scrolled the invisible worktree offset so the visible diff looked
+    // frozen.
+    const dirtyWorktreeContext = {
+      worktreeHunkOffsets: [0, 12],
+      worktreeDiffLineCount: 40,
+      worktreeFileCount: 2,
+    }
+
+    function diffState(source: 'commit' | 'worktree' | undefined): LogInkState {
+      const base = createLogInkState(rows, { activeView: 'diff' })
+      return { ...base, diffSource: source } as LogInkState
+    }
+
+    it('Space stages the cursored hunk only on the staging diff', () => {
+      expect(
+        getLogInkInputEvents(diffState('worktree'), ' ', {}, dirtyWorktreeContext)
+      ).toEqual([{ type: 'toggleSelectedHunkStage' }])
+      // `g d` pushes the diff view without a source tag — still staging.
+      expect(
+        getLogInkInputEvents(diffState(undefined), ' ', {}, dirtyWorktreeContext)
+      ).toEqual([{ type: 'toggleSelectedHunkStage' }])
+
+      const onCommitDiff = getLogInkInputEvents(diffState('commit'), ' ', {}, dirtyWorktreeContext)
+      expect(onCommitDiff).not.toContainEqual({ type: 'toggleSelectedHunkStage' })
+      expect(onCommitDiff).not.toContainEqual({ type: 'toggleSelectedFileStage' })
+    })
+
+    it('z opens the revert-hunk confirmation only on the staging diff', () => {
+      const staging = applyInput(diffState('worktree'), 'z', {}, dirtyWorktreeContext)
+      expect(staging.pendingMutationConfirmation).toBe('revert-hunk')
+
+      const commit = applyInput(diffState('commit'), 'z', {}, dirtyWorktreeContext)
+      expect(commit.pendingMutationConfirmation).toBeUndefined()
+    })
+
+    it('j/k on a commit diff scroll the visible preview, not the hidden worktree diff', () => {
+      const events = getLogInkInputEvents(diffState('commit'), 'j', {}, {
+        ...dirtyWorktreeContext,
+        previewLineCount: 80,
+      })
+      const actions = events
+        .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+        .map((event) => event.action.type)
+      expect(actions).toContain('pageDetailPreview')
+      expect(actions).not.toContain('pageWorktreeDiff')
+    })
+  })
+
+  describe('pendingAiDraft accept keys vs inline editing', () => {
+    function composeWithPendingDraft(): ReturnType<typeof createLogInkState> {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: typed by hand' },
+      })
+      // Non-empty summary routes the draft into pendingAiDraft.
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setDraft', value: 'feat: AI draft\n\nAI body' },
+      })
+      expect(state.commitCompose.pendingAiDraft).toBeDefined()
+      return state
+    }
+
+    it('R accepts the pending draft when not editing', () => {
+      const state = composeWithPendingDraft()
+      expect(getLogInkInputEvents(state, 'R')).toEqual([
+        {
+          type: 'action',
+          action: { type: 'commitCompose', action: { type: 'acceptPendingAiDraft' } },
+        },
+      ])
+    })
+
+    // Regression: the accept branch used to run before the editing
+    // intercept, so typing a capital R (or pressing Enter to advance
+    // fields) mid-edit silently replaced the user's summary+body with
+    // the AI draft — the exact loss pendingAiDraft exists to prevent.
+    it('R while editing appends to the buffer instead of accepting the draft', () => {
+      let state = composeWithPendingDraft()
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+
+      state = applyInput(state, 'R')
+      expect(state.commitCompose.pendingAiDraft).toBeDefined()
+      expect(state.commitCompose.summary).toBe('feat: typed by handR')
+    })
+
+    it('Enter while editing advances the field instead of accepting the draft', () => {
+      let state = composeWithPendingDraft()
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+
+      state = applyInput(state, '', { return: true })
+      expect(state.commitCompose.pendingAiDraft).toBeDefined()
+      expect(state.commitCompose.field).toBe('body')
+      expect(state.commitCompose.summary).toBe('feat: typed by hand')
+    })
+  })
+
   it('E from compose opens the draft in the external editor', () => {
     // Capital `E` (companion to lowercase `e` which activates inline
     // editing). The runtime callback handles the temp-file write + spawn

@@ -18,6 +18,14 @@
 import type * as ReactTypes from 'react'
 import type { LogInkContext } from '../types'
 import { matchesPromotedFilter } from '../promotedFilter'
+import {
+  DEFAULT_BRANCH_SORT_MODE,
+  DEFAULT_TAG_SORT_MODE,
+  sortBranches,
+  sortTags,
+  type BranchSortMode,
+  type TagSortMode,
+} from '../../chrome/sorting'
 
 // Element types are derived from `LogInkContext` via indexed access so
 // they track the real overview shapes (BranchRef, GitTagRef, StashEntry,
@@ -34,6 +42,14 @@ type RemoteListItem = NonNullable<LogInkContext['remotes']>['entries'][number]
 type IssueListItemType = NonNullable<NonNullable<LogInkContext['issueList']>['issues']>[number]
 type PullRequestListItemType =
   NonNullable<NonNullable<LogInkContext['pullRequestList']>['pullRequests']>[number]
+
+export type FilteredListSorts = {
+  /** `state.branchSort` — branches are sorted BEFORE filtering so the
+   * cursor index means the same row everywhere. */
+  branchSort?: BranchSortMode
+  /** `state.tagSort` — same contract as `branchSort`. */
+  tagSort?: TagSortMode
+}
 
 export type FilteredLists = {
   filteredBranchList: BranchListItem[]
@@ -57,16 +73,25 @@ export type FilteredLists = {
 export function buildFilteredLists(
   context: LogInkContext,
   filter: string | undefined,
+  sorts: FilteredListSorts = {},
 ): FilteredLists {
+  // Branches and tags are SORTED before filtering, with the same
+  // comparators the surfaces render with (current-branch-first +
+  // sort mode). Every consumer of these lists indexes them with the
+  // shared cursor (`selectedBranchIndex` / `selectedTagIndex`), so
+  // serving the raw for-each-ref order here meant the input-context
+  // snapshot, compare-mark, the rebase-onto prompt, and the preview
+  // panes all resolved a DIFFERENT row than the one highlighted on
+  // screen (the workflow runner sorted correctly — the two disagreed).
   const filteredBranchList = (() => {
-    const all = context.branches?.localBranches || []
+    const all = sortBranches(context.branches?.localBranches || [], sorts.branchSort ?? DEFAULT_BRANCH_SORT_MODE)
     if (!filter) return all
     return all.filter((branch) =>
       matchesPromotedFilter([branch.shortName, branch.upstream || ''], filter)
     )
   })()
   const filteredTagList = (() => {
-    const all = context.tags?.tags || []
+    const all = sortTags(context.tags?.tags || [], sorts.tagSort ?? DEFAULT_TAG_SORT_MODE)
     if (!filter) return all
     return all.filter((tag) =>
       matchesPromotedFilter([tag.name, tag.subject], filter)
@@ -175,14 +200,15 @@ export function useFilteredLists(
   React: typeof ReactTypes,
   context: LogInkContext,
   filter: string | undefined,
+  sorts: FilteredListSorts = {},
 ): FilteredLists {
   const filteredBranchList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredBranchList,
-    [context.branches?.localBranches, filter]
+    () => buildFilteredLists(context, filter, sorts).filteredBranchList,
+    [context.branches?.localBranches, filter, sorts.branchSort]
   )
   const filteredTagList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredTagList,
-    [context.tags?.tags, filter]
+    () => buildFilteredLists(context, filter, sorts).filteredTagList,
+    [context.tags?.tags, filter, sorts.tagSort]
   )
   const filteredStashList = React.useMemo(
     () => buildFilteredLists(context, filter).filteredStashList,

@@ -95,20 +95,26 @@ async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
 }
 
 /**
- * Pure guard shared (identically) by the worktree-hunks and
- * worktree-file-diff loaders: hydrate the worktree diff data only when the
- * diff view is active *and* a worktree file is cursored. Returns `false`
- * when either is missing (the effects reset their state and bail), `true`
- * when both hold (the fetch should run).
- *
- * The effects keep their guard inline and byte-for-byte; this helper
- * documents and tests the decision rather than replacing it.
+ * Pure guard shared by the worktree-hunks and worktree-file-diff loaders:
+ * hydrate the worktree diff data only when the diff view is active *as the
+ * staging diff* and a worktree file is cursored. `diffSource` matters:
+ * commit / stash / compare diffs must not hydrate worktree hunks — with a
+ * dirty worktree that data used to capture Space/z/j/k on a read-only
+ * commit diff and stage or discard hunks of an invisible file. The
+ * `g d` chord pushes the diff view without tagging a source, so
+ * `undefined` also counts as the staging diff (mirrors
+ * `isWorktreeDiffTarget` in the input resolver).
  */
 export function shouldLoadWorktreeDiff(
   activeView: LogInkView,
+  diffSource: LogInkDiffSource | undefined,
   selectedWorktreeFile: WorktreeFile | undefined,
 ): boolean {
-  return activeView === 'diff' && Boolean(selectedWorktreeFile)
+  return (
+    activeView === 'diff' &&
+    (diffSource === 'worktree' || diffSource === undefined) &&
+    Boolean(selectedWorktreeFile)
+  )
 }
 
 /**
@@ -311,6 +317,8 @@ export type UseWorktreeHunksHydrationDeps = {
   git: SimpleGit
   /** `state.activeView` — only `'diff'` triggers a load. */
   activeView: LogInkView
+  /** `state.diffSource` — only the staging diff ('worktree'/undefined) loads. */
+  diffSource: LogInkDiffSource | undefined
   /** The cursored worktree file (from `useStatusSurfaceData`). */
   selectedWorktreeFile: WorktreeFile | undefined
   /** Writer for the parsed worktree hunks. */
@@ -332,6 +340,7 @@ export function useWorktreeHunksHydration(
   const {
     git,
     activeView,
+    diffSource,
     selectedWorktreeFile,
     setWorktreeHunks,
     setWorktreeHunksLoading,
@@ -341,7 +350,7 @@ export function useWorktreeHunksHydration(
     let active = true
 
     async function loadWorktreeHunks(): Promise<void> {
-      if (activeView !== 'diff' || !selectedWorktreeFile) {
+      if (!shouldLoadWorktreeDiff(activeView, diffSource, selectedWorktreeFile)) {
         setWorktreeHunks(undefined)
         setWorktreeHunksLoading(false)
         return
@@ -367,6 +376,7 @@ export function useWorktreeHunksHydration(
     selectedWorktreeFile?.path,
     selectedWorktreeFile?.worktreeStatus,
     activeView,
+    diffSource,
   ])
 }
 
@@ -403,6 +413,8 @@ export type UseWorktreeDiffHydrationDeps = {
   git: SimpleGit
   /** `state.activeView` — only `'diff'` triggers a load. */
   activeView: LogInkView
+  /** `state.diffSource` — only the staging diff ('worktree'/undefined) loads. */
+  diffSource: LogInkDiffSource | undefined
   /** The cursored worktree file (from `useStatusSurfaceData`). */
   selectedWorktreeFile: WorktreeFile | undefined
   /** Writer for the loaded worktree file diff. */
@@ -424,6 +436,7 @@ export function useWorktreeDiffHydration(
   const {
     git,
     activeView,
+    diffSource,
     selectedWorktreeFile,
     setWorktreeDiff,
     setWorktreeDiffLoading,
@@ -433,7 +446,7 @@ export function useWorktreeDiffHydration(
     let active = true
 
     async function loadWorktreeDiff(): Promise<void> {
-      if (activeView !== 'diff' || !selectedWorktreeFile) {
+      if (!shouldLoadWorktreeDiff(activeView, diffSource, selectedWorktreeFile)) {
         setWorktreeDiff(undefined)
         setWorktreeDiffLoading(false)
         return
@@ -459,6 +472,7 @@ export function useWorktreeDiffHydration(
     selectedWorktreeFile?.path,
     selectedWorktreeFile?.worktreeStatus,
     activeView,
+    diffSource,
   ])
 }
 

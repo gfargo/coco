@@ -53,7 +53,7 @@ export type CommitComposeAction =
   | { type: 'toggleField' }
   | { type: 'setEditing'; value: boolean }
   | { type: 'setLoading'; value: boolean }
-  | { type: 'setDraft'; value: string }
+  | { type: 'setDraft'; value: string; source?: 'ai' | 'user' }
   | { type: 'setResult'; message?: string; details?: string[] }
   | { type: 'setStreamingPreview'; value: string | undefined }
   | { type: 'setPendingAiDraft'; value: string }
@@ -148,7 +148,13 @@ export function applyCommitComposeAction(
       // a confirmation message; the user accepts with `R` (replace)
       // or dismisses with Esc. Empty fields = safe to replace as
       // before, since there's nothing to lose.
-      if (state.summary.trim() || state.body.trim()) {
+      //
+      // The guard protects typing from the *AI* only. A user-sourced
+      // draft (the `$EDITOR` round-trip) IS the user's typing — staging
+      // it behind the accept prompt meant `E` never applied edits to a
+      // non-empty draft and Esc silently discarded the whole editor
+      // session.
+      if (action.source !== 'user' && (state.summary.trim() || state.body.trim())) {
         return {
           ...state,
           loading: false,

@@ -451,6 +451,21 @@ function isReflogActionTarget(state: LogInkState): boolean {
 }
 
 /**
+ * The staging (worktree) diff is the active surface. Enter paths that set
+ * an explicit source tag it 'worktree'; the `g d` chord pushes the diff
+ * view without one, so `undefined` also means worktree. Commit / stash /
+ * compare diffs must never match: with a dirty worktree their hydrated
+ * worktree hunk/diff data would otherwise capture Space / z / j / k /
+ * `[` `]` and stage, discard, or scroll a file the user isn't looking at.
+ */
+function isWorktreeDiffTarget(state: LogInkState): boolean {
+  return (
+    state.activeView === 'diff' &&
+    (state.diffSource === 'worktree' || state.diffSource === undefined)
+  )
+}
+
+/**
  * Explicit allowlists for the two "global-except-one-view" key bindings, per
  * KEYMAP.md's recommendation (§ "Prefer allowlists over negation guards"). These
  * used to be negation guards (`activeView !== 'conflicts'` / `!== compose/status/
@@ -1159,7 +1174,16 @@ export function getLogInkInputEvents(
   // surfaces the prompt). A user who chord-navigated away while the
   // draft was pending should see the original `R` / Esc semantics of
   // wherever they are now.
-  if (state.activeView === 'compose' && state.commitCompose.pendingAiDraft) {
+  // Gated on `!editing` as well: while the user is actively typing,
+  // `R` is just a letter and Enter advances the field — letting the
+  // pending-draft accept intercept them here would replace the very
+  // typing the pendingAiDraft staging exists to protect. The prompt
+  // stays visible; the user answers it after leaving edit mode.
+  if (
+    state.activeView === 'compose' &&
+    state.commitCompose.pendingAiDraft &&
+    !state.commitCompose.editing
+  ) {
     // `R` or `Enter` accept the swap (the AI draft becomes the new
     // content); `Enter` is the natural "yes, use it" confirmation.
     if ((inputValue === 'R' && !key.ctrl && !key.meta) || key.return) {
@@ -2148,7 +2172,7 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === '[') {
-    if (state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+    if (isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
       return [action({
         type: 'jumpWorktreeHunk',
         delta: -1,
@@ -2180,7 +2204,7 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === ']') {
-    if (state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+    if (isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
       return [action({
         type: 'jumpWorktreeHunk',
         delta: 1,
@@ -2334,7 +2358,7 @@ export function getLogInkInputEvents(
     // commit / stash diffs (#1185). `[`/`]` jump between hunks (the
     // staging unit), and the current hunk is derived from the scroll
     // position, so line-scrolling still walks the staging target.
-    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+    if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
         delta: -1,
@@ -2483,7 +2507,7 @@ export function getLogInkInputEvents(
 
     // Worktree (staging) diff: ↓ scrolls lines (see the ↑ handler) —
     // `[`/`]` jump hunks (#1185).
-    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+    if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
         delta: 1,
@@ -2568,7 +2592,7 @@ export function getLogInkInputEvents(
   }
 
   if (key.pageUp) {
-    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+    if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
         delta: -8,
@@ -2597,7 +2621,7 @@ export function getLogInkInputEvents(
   }
 
   if (key.pageDown) {
-    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+    if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
         delta: 8,
@@ -3298,7 +3322,7 @@ export function getLogInkInputEvents(
   if (inputValue === 'L' && state.activeView === 'blame' && state.blamePath) {
     return [action({ type: 'navigateOpenFileHistoryForPath', path: state.blamePath })]
   }
-  if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'worktree' && context.worktreeSelectedPath) {
+  if (inputValue === 'o' && isWorktreeDiffTarget(state) && context.worktreeSelectedPath) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
   }
   if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffSelectedPath) {
@@ -3668,7 +3692,7 @@ export function getLogInkInputEvents(
     })]
   }
 
-  if (inputValue === ' ' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+  if (inputValue === ' ' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
     return [{ type: 'toggleSelectedHunkStage' }]
   }
 
@@ -3676,8 +3700,7 @@ export function getLogInkInputEvents(
   // the whole file, since there's nothing to partial-stage.
   if (
     inputValue === ' ' &&
-    state.activeView === 'diff' &&
-    state.diffSource === 'worktree' &&
+    isWorktreeDiffTarget(state) &&
     !context.worktreeHunkOffsets?.length
   ) {
     return [{ type: 'toggleSelectedFileStage' }]
@@ -3685,7 +3708,7 @@ export function getLogInkInputEvents(
 
   // `a` stages/unstages the WHOLE current file from the staging diff —
   // an escape hatch out of hunk-by-hunk back to all-or-nothing.
-  if (inputValue === 'a' && state.activeView === 'diff' && state.diffSource === 'worktree') {
+  if (inputValue === 'a' && isWorktreeDiffTarget(state)) {
     return [{ type: 'toggleSelectedFileStage' }]
   }
 
@@ -3693,7 +3716,7 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingMutationConfirmation', value: 'revert-file' })]
   }
 
-  if (inputValue === 'z' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+  if (inputValue === 'z' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
     return [action({ type: 'setPendingMutationConfirmation', value: 'revert-hunk' })]
   }
 

@@ -92,7 +92,7 @@ import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dr
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../../git/worktreeActions'
 import { rebaseOnto } from '../../../git/rebaseActions'
-import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../../git/operationActions'
+import { abortOperation, continueOperation, resolveConflictKeepCurrentBranch, resolveConflictKeepIncoming, stageConflictResolved } from '../../../git/operationActions'
 import { getForgeActions } from '../../../git/forgeActions'
 import { clearGitHubListCache } from '../../../git/githubListCache'
 import { isPullRequestMergeStrategy } from '../../../git/pullRequestActions'
@@ -251,24 +251,17 @@ export function useWorkflowAction(
   React: typeof ReactTypes,
   deps: UseWorkflowActionDeps,
 ): UseWorkflowActionResult {
-  const {
-    git,
-    context,
-    state,
-    dispatch,
-    refreshContext,
-    refreshHistoryRows,
-    refreshWorktreeContext,
-    setContext,
-    setContextStatus,
-    forge,
-    forgeProvider,
-    filteredRemoteList,
-    filteredReflogList,
-    filteredSubmoduleList,
-    filteredIssueList,
-    filteredPullRequestTriageList,
-  } = deps
+  // Render-fresh snapshot of every input. The callback below is memoized
+  // once and reads all render-scoped values through this ref at CALL time,
+  // so a keystroke can never execute against the state of an earlier
+  // render. (The previous design closed over `state`/the filtered lists
+  // and enumerated their fields in the dep array; the array undercounted —
+  // it omitted `selectedIndex`, `selectedReflogIndex`, the triage indices
+  // and `activeView` — so cursor movement didn't regenerate the callback
+  // and cherry-pick / revert / reset / reflog-checkout / triage merge
+  // targeted the previously-cursored item.)
+  const depsRef = React.useRef(deps)
+  depsRef.current = deps
 
   // Last dropped stash {hash, message}, captured before `drop-stash` runs
   // so `undo-drop-stash` can re-store it. The dropped commit survives in
@@ -277,19 +270,34 @@ export function useWorkflowAction(
   // flows) — declared inside the hook at its original relative slot.
   const lastDroppedStashRef = React.useRef<{ hash: string; message: string } | null>(null)
 
-  // `worktreeDirty` is a pure derivation of the (already-threaded) whole
-  // `context.worktree`. In `app.ts` it was declared AFTER `runWorkflowAction`
-  // — fine there because the callback only reads it inside an async handler
-  // closure that runs long after render — but threading it into this hook
-  // would require a value declared below the hook call. Deriving it here
-  // (identical expression) keeps the callback body's `if (worktreeDirty)`
-  // byte-identical without reordering `app.ts`.
-  const worktreeDirty = Boolean(
-    context.worktree &&
-    (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
-  )
-
   const runWorkflowAction = React.useCallback(async (id: string, payload?: string) => {
+    // Resolve the live snapshot first — every name below shadows what the
+    // old closure captured, keeping the ~1,200-line body byte-identical.
+    const {
+      git,
+      context,
+      state,
+      dispatch,
+      refreshContext,
+      refreshHistoryRows,
+      refreshWorktreeContext,
+      setContext,
+      setContextStatus,
+      forge,
+      forgeProvider,
+      filteredRemoteList,
+      filteredReflogList,
+      filteredSubmoduleList,
+      filteredIssueList,
+      filteredPullRequestTriageList,
+    } = depsRef.current
+
+    // `worktreeDirty` is a pure derivation of the (already-threaded) whole
+    // `context.worktree` — derived from the same live snapshot.
+    const worktreeDirty = Boolean(
+      context.worktree &&
+      (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
+    )
     // Hunk-apply payload format: `<target>\n<patchText>` — the input
     // handler synthesizes both pieces (target from the keystroke,
     // patch text from extractDiffHunk against the live diff lines)
@@ -877,15 +885,19 @@ export function useWorkflowAction(
         }
         return abortOperation(git, operation)
       },
+      // Intent-based: `U` promises "keep your branch's version" and `u`
+      // "keep the incoming changes". The resolvers pick --ours/--theirs
+      // per operation type because rebase swaps git's sides (HEAD is the
+      // upstream during a rebase replay).
       'resolve-conflict-ours': async () => {
         const path = payload?.trim()
         if (!path) return { ok: false, message: 'No conflict file selected' }
-        return resolveConflictOurs(git, path)
+        return resolveConflictKeepCurrentBranch(git, context.operation?.operation ?? 'none', path)
       },
       'resolve-conflict-theirs': async () => {
         const path = payload?.trim()
         if (!path) return { ok: false, message: 'No conflict file selected' }
-        return resolveConflictTheirs(git, path)
+        return resolveConflictKeepIncoming(git, context.operation?.operation ?? 'none', path)
       },
       'resolve-conflict-stage': async () => {
         const path = payload?.trim()
@@ -1489,12 +1501,12 @@ export function useWorkflowAction(
         dispatch({ type: 'setPendingItemAction', value: undefined })
       }
     }
-  }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
-    state.branchSort, state.filter, state.selectedBranchIndex,
-    state.selectedStashIndex, state.selectedSubmoduleIndex, state.selectedRemoteIndex,
-    state.selectedTagIndex,
-    state.selectedWorktreeListIndex, state.stashDiffRef,
-    state.statusFilterMask, state.tagSort, state.worktreeCheckoutConflict])
+    // Identity-stable by design: the body reads exclusively through
+    // `depsRef` / `lastDroppedStashRef`, so there is nothing render-scoped
+    // to invalidate on. (Do NOT re-add state fields here — the enumerated
+    // array drifted out of sync with the body once already and shipped
+    // wrong-target destructive actions.)
+  }, [])
 
   return {
     runWorkflowAction,

@@ -119,9 +119,12 @@ the which-key overlay lists them live when you press `g`.
 | `g x` | Conflicts |
 | `g r` | Reflog |
 | `g B` | Bisect |
+| `g n` | Remotes |
 | `g M` | Submodules |
-| `g T` | Changelog |
+| `g T` | **Create tag** at the cursored commit (history view; name prompt) — *not* changelog; the changelog opens with `L` from history/branches |
 | `g H` | Apply cursored hunk to index (`git apply --cached`) |
+| `g C` | Theme picker (overlay) |
+| `g k` / `g K` | Open the project / global coco config in `$EDITOR` |
 | `g ?` | **Which-key strip** (overlay, not nav) — surfaces the *single-key* actions available in the current view (the deliberate overloads below), sourced live from `LOG_INK_KEY_BINDINGS`. `?` from the strip expands to the full help; `Esc` closes. The per-view counterpart to this very `g`-chord menu. |
 
 ---
@@ -143,7 +146,7 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `Z` | Reset branch tip here (mode prompt) |
 | `i` | Interactive rebase from the commit's parent |
 | `B` | Create branch here |
-| `s` | Sort / skip |
+| `L` | Open the changelog view |
 | `r` | Refresh |
 
 ### Status (staging)
@@ -158,6 +161,8 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `i` | Open the `.gitignore` picker |
 | `o` | Open the file in `$EDITOR` |
 | `1`/`2`/`3` | Toggle staged / unstaged / untracked visibility |
+| `b` | Blame the cursored file |
+| `L` | File history for the cursored file |
 | `e` / `c` | Compose: inline edit / commit |
 
 ### Diff — worktree (staging diff)
@@ -166,7 +171,7 @@ The hunk is the unit of action here.
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` | Walk hunks (single-hunk files fall back to line-scroll) |
+| `↑`/`↓` (`j`/`k`) | Line-scroll the diff (the current hunk follows the scroll position) |
 | `[` / `]` | Previous / next hunk |
 | `Space` | Stage / unstage the selected hunk (whole file if untracked) |
 | `a` | Stage / unstage the whole file |
@@ -223,6 +228,8 @@ The hunk is the unit of action here.
 | `D` | Delete (confirm) |
 | `u` | Set upstream (prompt) |
 | `F` / `U` / `P` | Fetch / pull / push the branch |
+| `r` | Rebase the current branch onto the cursored branch (confirm) |
+| `s` | Cycle the branch sort mode |
 | `m` | Mark / unmark compare base |
 
 ### Tags
@@ -258,7 +265,7 @@ variants.
 |-----|--------|
 | `Enter` | Open the conflicted file's diff |
 | `s` | Stage (mark resolved) |
-| `u` / `U` | Keep theirs / keep ours |
+| `u` / `U` | Keep incoming changes / keep your branch's version (mapped to git's `--theirs`/`--ours` per operation — a rebase swaps git's sides, the keys don't) |
 | `o` | Open in `$EDITOR` |
 | `C` | Continue the in-progress operation (only when no conflicts remain) |
 

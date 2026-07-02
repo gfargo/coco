@@ -12,6 +12,8 @@ import { shouldAutoDismissStatus } from './useStatusAutoDismiss'
 
 const noModals = {
   statusMessage: 'Pulled current branch' as string | undefined,
+  statusKind: undefined as 'info' | 'error' | 'success' | 'warning' | undefined,
+  statusLoading: undefined as boolean | undefined,
   inputPrompt: undefined as unknown,
   pendingConfirmationId: undefined as unknown,
   pendingChoice: undefined as unknown,
@@ -54,5 +56,23 @@ describe('shouldAutoDismissStatus', () => {
 
   it('does not dismiss while the command palette is open', () => {
     expect(shouldAutoDismissStatus({ ...noModals, showCommandPalette: true })).toBe(false)
+  })
+
+  // Regression: the 4s timer used to clear these too — error messages
+  // (with failure reasons / diagnostic log paths) vanished before they
+  // could be read, and in-flight progress lines like "generating PR
+  // body… Esc to skip" lost both the feedback and the cancel hint
+  // mid-call.
+  it('never dismisses error statuses', () => {
+    expect(shouldAutoDismissStatus({ ...noModals, statusKind: 'error' })).toBe(false)
+  })
+
+  it('never dismisses while the status is an in-flight loading line', () => {
+    expect(shouldAutoDismissStatus({ ...noModals, statusLoading: true })).toBe(false)
+  })
+
+  it('still dismisses success and warning statuses', () => {
+    expect(shouldAutoDismissStatus({ ...noModals, statusKind: 'success' })).toBe(true)
+    expect(shouldAutoDismissStatus({ ...noModals, statusKind: 'warning' })).toBe(true)
   })
 })

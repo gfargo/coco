@@ -62,6 +62,7 @@ import {LogInkContextKey, createLogInkContextStatus, updateLogInkContextStatus} 
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
 import {PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex} from '../chrome/selectionRectify'
+import {sortBranches, sortTags} from '../chrome/sorting'
 import {LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout} from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
 import {LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getThemePickerSelection} from '../../workstation/runtime/inkViewModel'
@@ -209,7 +210,7 @@ import {useSpinnerFrame} from './hooks/useSpinnerFrame'
 import {useStatusSurfaceData} from './hooks/buildStatusSurfaceData'
 import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
-import {useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
+import {computeHasMoreCommits, useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
 import {useOnboarding} from './hooks/useOnboarding'
 import {useRepoStackRuntimes} from './hooks/useRepoStackRuntimes'
 import {useResumeTick} from './hooks/useResumeTick'
@@ -266,7 +267,9 @@ function computePromotedSelectionsSnapshot(
   context: LogInkContext,
   nextFilter: string
 ): PromotedSelectionsSnapshot {
-  const allBranches = context.branches?.localBranches || []
+  // Sorted with the surfaces' comparators — the cursor indexes the
+  // SORTED lists, so rectifying in raw ref order preserved the wrong row.
+  const allBranches = sortBranches(context.branches?.localBranches || [], state.branchSort)
   const filteredBranches = nextFilter
     ? allBranches.filter((branch) =>
       matchesPromotedFilter([branch.shortName, branch.upstream || ''], nextFilter))
@@ -281,7 +284,7 @@ function computePromotedSelectionsSnapshot(
     previousBranchKey
   )
 
-  const allTags = context.tags?.tags || []
+  const allTags = sortTags(context.tags?.tags || [], state.tagSort)
   const filteredTags = nextFilter
     ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], nextFilter))
     : allTags
@@ -575,7 +578,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     filteredRemoteList,
     filteredIssueList,
     filteredPullRequestTriageList,
-  } = useFilteredLists(React, context, state.filter)
+  } = useFilteredLists(React, context, state.filter, {
+    branchSort: state.branchSort,
+    tagSort: state.tagSort,
+  })
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
@@ -594,6 +600,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       .then((nextRows) => {
         if (cancelled || !mountedRef.current) return
         dispatch({ type: 'replaceRows', rows: nextRows })
+        // Correct the pagination seed: on a cold cache the component
+        // mounted with zero rows, so the lazy `hasMoreCommits` seed
+        // evaluated false and load-more would stay disabled forever.
+        // The fetched window is the real first page — recompute.
+        setHasMoreCommits(computeHasMoreCommits(logArgv, nextRows))
       })
       .catch((error: unknown) => {
         if (cancelled || !mountedRef.current) return
@@ -621,6 +632,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // status line as live feedback for the open task.
   useStatusAutoDismiss(React, {
     statusMessage: state.statusMessage,
+    statusKind: state.statusKind,
+    statusLoading: state.statusLoading,
     inputPrompt: state.inputPrompt,
     pendingConfirmationId: state.pendingConfirmationId,
     pendingChoice: state.pendingChoice,
@@ -871,6 +884,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   useWorktreeHunksHydration(React, {
     git,
     activeView: state.activeView,
+    diffSource: state.diffSource,
     selectedWorktreeFile,
     setWorktreeHunks,
     setWorktreeHunksLoading,
@@ -1100,6 +1114,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   useWorktreeDiffHydration(React, {
     git,
     activeView: state.activeView,
+    diffSource: state.diffSource,
     selectedWorktreeFile,
     setWorktreeDiff,
     setWorktreeDiffLoading,
