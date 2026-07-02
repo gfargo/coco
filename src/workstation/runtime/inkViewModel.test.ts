@@ -653,6 +653,54 @@ describe('log Ink view model', () => {
       expect(state.viewStack).toEqual(['history', 'diff'])
     })
 
+    // Regression: replaceRows unconditionally reset selectedIndex to 0.
+    // Every history-mutating workflow (cherry-pick, fetch, each bisect
+    // good/bad mark) refreshes through replaceRows, so the cursor
+    // snapped to the top on every operation.
+    it('replaceRows preserves the cursor by hash when the commit survives the refresh', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'move', delta: 2 })
+      const selectedHash = state.filteredCommits[state.selectedIndex].hash
+
+      // Same rows, fresh array identities — a refresh with no changes.
+      state = applyLogInkAction(state, {
+        type: 'replaceRows',
+        rows: rows.map((row) => ({ ...row })),
+      })
+      expect(state.filteredCommits[state.selectedIndex].hash).toBe(selectedHash)
+    })
+
+    it('replaceRows still resets to the top when the commit set changed', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'move', delta: 2 })
+
+      state = applyLogInkAction(state, {
+        type: 'replaceRows',
+        rows: [{
+          type: 'commit', graph: '*', shortHash: 'zzz9999', hash: 'zzz9999'.padEnd(12, '9'),
+          parents: [], date: '2026-05-01', author: 'Coco Test', refs: [], message: 'entirely new set',
+        }],
+      })
+      expect(state.selectedIndex).toBe(0)
+    })
+
+    // Regression: the bisect start-wizard pick flag survived every view
+    // switch — its status hint auto-dismissed, and minutes later Enter on
+    // a history commit silently advanced the hidden wizard instead of
+    // opening the commit's diff.
+    it('abandons a bisect pick when laterally navigating off the pick surface', () => {
+      let state = createLogInkState(rows)
+      // The wizard's own entry batch: arm the pick, then land on history.
+      state = applyLogInkAction(state, { type: 'setBisectPickMode', mode: 'bad' })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'history' })
+      expect(state.bisectPickMode).toBe('bad')
+
+      // Wandering off to branches abandons the pick.
+      state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+      expect(state.bisectPickMode).toBeUndefined()
+      expect(state.bisectPickPendingBad).toBeUndefined()
+    })
+
     // Regression: the shared `state.filter` used to survive lateral view
     // switches, silently pre-narrowing the destination's list — and since
     // workflows resolve their targets from the FILTERED lists by index,

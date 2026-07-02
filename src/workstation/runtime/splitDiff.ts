@@ -68,12 +68,17 @@ export function formatSplitDiffCell(
   side: SplitDiffRow['left'] | SplitDiffRow['right'],
   columnWidth: number
 ): string {
+  // Pad by CELL width, not code units — `.padEnd` counts UTF-16 units,
+  // so CJK/emoji content (half the cells of its string length) got ~2x
+  // the padding, overflowed the fixed-width column, wrapped, and
+  // desynchronized the left/right rows below it.
+  const padCells = (text: string): string =>
+    text + ' '.repeat(Math.max(0, columnWidth - cellWidth(text)))
   if (side.kind === 'empty') {
-    const placeholder = ' · '
-    return placeholder.padEnd(columnWidth)
+    return padCells(' · ')
   }
   if (side.kind === 'header') {
-    return truncateCells(side.text, columnWidth).padEnd(columnWidth)
+    return padCells(truncateCells(side.text, columnWidth))
   }
   const lineNo = side.lineNumber !== undefined ? String(side.lineNumber).padStart(4) : '    '
   // Strip the trailing newline that some diffs include. Keeps column
@@ -82,7 +87,7 @@ export function formatSplitDiffCell(
   // 4 digits + 1 space gutter = 5 chars; reserve that off the column
   // before truncating the text.
   const textRoom = Math.max(1, columnWidth - 5)
-  return `${lineNo} ${truncateCells(text, textRoom)}`.padEnd(columnWidth)
+  return padCells(`${lineNo} ${truncateCells(text, textRoom)}`)
 }
 
 /**

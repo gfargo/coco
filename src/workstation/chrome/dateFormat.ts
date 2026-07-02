@@ -43,8 +43,10 @@ export function formatCompactRelativeDate(iso: string | undefined, now: Date): s
   const weeks = Math.floor(days / 7)
   if (weeks < 9) return `${weeks}w`
 
+  // Gate on days, not the rounded month count: days 360-364 floor to
+  // 12 "months" but 0 years, which used to render as a nonsense `0y`.
   const months = Math.floor(days / 30)
-  if (months < 12) return `${months}mo`
+  if (days < 365) return `${months}mo`
 
   const years = Math.floor(days / 365)
   return `${years}y`

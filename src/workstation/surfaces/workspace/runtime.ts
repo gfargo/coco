@@ -616,12 +616,22 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   }, [])
 
   const refresh = React.useCallback(async () => {
+    // Capture the cursored repo BEFORE the overview lands: the default
+    // sort is recency, so a refresh routinely reorders the list, and
+    // `replace-overview` only clamps the numeric index — the cursor
+    // stayed on the same ROW NUMBER but a different repo, and Enter
+    // drilled into the wrong one. Every other list-mutating flow
+    // (add / clone / resume) already anchors by path.
+    const focusedPath = selectFocusedRepo(stateRef.current)?.path
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, props.knownRepos)
       if (unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
+      if (focusedPath) {
+        dispatch({ type: 'anchor-cursor-by-path', path: focusedPath })
+      }
       dispatch({ type: 'set-status', status: `Refreshed ${overview.repos.length} repos.` })
       dispatch({
         type: 'set-pull-request-fetching',
@@ -882,6 +892,17 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       `key raw="${JSON.stringify(rawInput)}" code=${charCode} flags=${flags} focus=${state.focus} showOnboarding=${state.showOnboarding} showHelp=${state.showHelp}`
     )
 
+    // Ctrl+C quits from ANYWHERE — checked before the modal focus
+    // branches below, which used to `return` first and leave Ctrl+C
+    // inert inside the filter / add-repo / clone prompts (and made a
+    // hung `git clone` unabortable from the UI, since the clone branch
+    // swallows every key while in flight).
+    if (key.ctrl && (rawInput === 'c' || rawInput === '')) {
+      exitRefHolder.current.current = { kind: 'quit' }
+      exitFnRef.current()
+      return
+    }
+
     // First-run onboarding is non-modal — any keypress dismisses it
     // and persists the marker. The keypress still flows through to
     // the normal handler below so the user's first action isn't
@@ -1001,16 +1022,6 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           setCloneCompletion(completePath(next))
         }
       }
-      return
-    }
-
-    // Ctrl+C → quit, since we disabled Ink's built-in ctrl+c exit.
-    // Handled here (rather than in the pure resolver) because the
-    // resolver doesn't have a notion of "raw key with ctrl flag" for
-    // the quit shortcut — it just sees  with ctrl=true.
-    if (key.ctrl && (rawInput === 'c' || rawInput === '')) {
-      exitRefHolder.current.current = { kind: 'quit' }
-      exitFnRef.current()
       return
     }
 

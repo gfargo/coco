@@ -45,15 +45,25 @@ const DIFF_GIT_PREFIX = 'diff --git '
 
 /**
  * Find the index of the `@@` hunk header at or before `cursorOffset`.
- * Returns -1 when the cursor sits before the first hunk in the patch
- * (i.e. on a `diff --git` / `---` / `+++` header line) — caller treats
- * that as "no hunk at cursor" and surfaces a status message.
+ * Returns -1 when the cursor sits before the first hunk of ITS OWN
+ * file — i.e. on a `diff --git` / `---` / `+++` header line. The walk
+ * stops at a `diff --git` boundary: in a multi-file patch, running
+ * past it used to resolve the PREVIOUS file's last hunk while the
+ * caller labeled the patch with the cursored file's path, producing a
+ * mismatched patch (`git apply` failure at best, the wrong hunk
+ * applied to the wrong file at worst).
  */
 function findHunkHeaderAtOrBefore(lines: string[], cursorOffset: number): number {
   const start = Math.min(cursorOffset, lines.length - 1)
   for (let i = start; i >= 0; i -= 1) {
     if (lines[i]?.startsWith(HUNK_HEADER_PREFIX)) {
       return i
+    }
+    if (lines[i]?.startsWith(DIFF_GIT_PREFIX)) {
+      // Reached a file boundary (possibly the cursored line itself)
+      // without meeting a hunk header — the cursor sits in a file
+      // preamble, and any `@@` above belongs to a different file.
+      return -1
     }
   }
   return -1
