@@ -546,10 +546,10 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       // palette path can't synthesize a branch name and surfaces a
       // hint instead.
       //
-      // Distinct from `create-branch` (palette / `+` on branches view),
-      // which uses `git switch -c` and switches onto the new branch.
-      // This workflow uses `git branch <name> <sha>` and stays put —
-      // GitKraken's "create branch here" semantic.
+      // Both `create-branch` (palette / `+` on branches view) and this
+      // workflow now use `git branch <name>` without switching, then
+      // dispatch a y/n checkout prompt (#1326). GitKraken's
+      // "create branch here" semantic.
       id: 'create-branch-here',
       key: '',
       label: 'Create branch from commit',
@@ -558,11 +558,12 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
-      // Follow-up action after a successful create-branch-here (#1326).
-      // Reached only via the in-runner setPendingConfirmation dispatch
-      // (not a direct hotkey); empty `key` keeps it out of the palette
-      // to prevent accidental direct invocation without a branch-name
-      // payload. requiresConfirmation: false because this IS the
+      // Follow-up action after a successful create-branch or
+      // create-branch-here (#1326). Reached only via the in-runner
+      // setPendingConfirmation dispatch (not a direct hotkey); empty
+      // `key` keeps it out of the palette to prevent accidental direct
+      // invocation without a branch-name payload.
+      // requiresConfirmation: false because this IS the
       // confirmation target — the y-confirm overlay is the gate.
       id: 'checkout-created-branch',
       key: '',

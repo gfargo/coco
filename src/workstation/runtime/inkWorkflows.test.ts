@@ -162,9 +162,9 @@ describe('log Ink workflows', () => {
 
   it('registers checkout-created-branch as keyless, non-confirming follow-up action (#1326)', () => {
     // Reached only via the in-runner setPendingConfirmation dispatch
-    // (create-branch-here → y-confirm → here). Must be keyless so it
-    // cannot be triggered directly by a keystroke, and must NOT itself
-    // require a second confirmation — it IS the confirmation target.
+    // (create-branch or create-branch-here → y-confirm → here). Must be
+    // keyless so it cannot be triggered directly by a keystroke, and must
+    // NOT itself require a second confirmation — it IS the confirmation target.
     const action = getLogInkWorkflowActionById('checkout-created-branch')
     expect(action).toMatchObject({
       key: '',

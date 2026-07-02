@@ -1330,6 +1330,20 @@ export function useWorkflowAction(
         })
       }
     }
+    // After a successful create-branch (Branches surface `+`), offer to
+    // switch onto the newly created branch. createBranch now uses
+    // `git branch` (no auto-checkout) so the prompt matches the
+    // create-branch-here behavior (#1326).
+    if (id === 'create-branch' && result?.ok) {
+      const branchName = payload?.trim()
+      if (branchName) {
+        dispatch({
+          type: 'setPendingConfirmation',
+          value: 'checkout-created-branch',
+          payload: branchName,
+        })
+      }
+    }
     // A branch checked out in a worktree can't be deleted
     if (
       (id === 'delete-branch' || id === 'force-delete-branch') &&

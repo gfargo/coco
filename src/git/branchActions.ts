@@ -95,8 +95,12 @@ export function createBranch(
   branchName: string,
   startPoint: string
 ): Promise<BranchActionResult> {
+  // Use `git branch` (not `git switch -c`) so the new branch is created
+  // without switching onto it. The workstation then prompts the user with
+  // a Y/n overlay asking whether to check it out, matching the
+  // create-branch-here behavior (#1326).
   return runAction(
-    () => git.raw(['switch', '-c', branchName, startPoint]),
+    () => git.raw(['branch', branchName, startPoint]),
     `Created branch ${branchName} from ${startPoint}`
   )
 }

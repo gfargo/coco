@@ -112,11 +112,29 @@ describe('log branch actions', () => {
     await fetchRemotes(git as never)
     await pullCurrentBranch(git as never)
 
-    expect(git.raw).toHaveBeenNthCalledWith(1, ['switch', '-c', 'feature/new', 'abc1234'])
+    // createBranch now uses `git branch` (no auto-checkout) so the
+    // workstation can prompt before switching (#1326).
+    expect(git.raw).toHaveBeenNthCalledWith(1, ['branch', 'feature/new', 'abc1234'])
     expect(git.raw).toHaveBeenNthCalledWith(2, ['branch', '-m', 'feature/old', 'feature/new'])
     expect(git.raw).toHaveBeenNthCalledWith(3, ['branch', '-d', 'feature/test'])
     expect(git.raw).toHaveBeenNthCalledWith(4, ['fetch', '--all', '--prune'])
     expect(git.raw).toHaveBeenNthCalledWith(5, ['pull', '--ff-only'])
+  })
+
+  describe('createBranch (#1326)', () => {
+    it('creates a branch without switching (git branch, not git switch -c)', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await createBranch(git as never, 'feature/bar', 'main')
+      expect(result).toEqual({ ok: true, message: 'Created branch feature/bar from main' })
+      expect(git.raw).toHaveBeenCalledWith(['branch', 'feature/bar', 'main'])
+    })
+
+    it('returns ok:false when git throws', async () => {
+      const git = { raw: jest.fn().mockRejectedValue(new Error('already exists')) }
+      const result = await createBranch(git as never, 'feature/bar', 'main')
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('already exists')
+    })
   })
 
   describe('checkoutBranchByName (#1326)', () => {
