@@ -129,6 +129,8 @@ export type UseInputHandlerDeps = {
   toggleSelectedHunkStage: () => Promise<void>
   revertSelectedFile: () => Promise<void>
   revertSelectedHunk: () => Promise<void>
+  stageSelectedLines: () => Promise<void>
+  revertSelectedLines: () => Promise<void>
 
   /** Commit compose callbacks (`useCommitComposeActions`). */
   createCommitFromCompose: () => Promise<void>
@@ -225,6 +227,8 @@ export function useInputHandler(
     toggleSelectedHunkStage,
     revertSelectedFile,
     revertSelectedHunk,
+    stageSelectedLines,
+    revertSelectedLines,
     createCommitFromCompose,
     openComposeInEditor,
     runAiCommitDraft,
@@ -488,6 +492,10 @@ export function useInputHandler(
         void revertSelectedFile()
       } else if (event.type === 'revertSelectedHunk') {
         void revertSelectedHunk()
+      } else if (event.type === 'stageSelectedLines') {
+        void stageSelectedLines()
+      } else if (event.type === 'revertSelectedLines') {
+        void revertSelectedLines()
       } else if (event.type === 'createManualCommit') {
         void createCommitFromCompose()
       } else if (event.type === 'runAiCommitDraft') {

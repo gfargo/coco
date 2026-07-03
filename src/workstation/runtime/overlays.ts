@@ -145,6 +145,8 @@ export function renderConfirmationPanel(
   const action = getLogInkWorkflowActionById(state.pendingConfirmationId)
   const mutationLabel = state.pendingMutationConfirmation === 'revert-hunk'
     ? 'Revert selected hunk'
+    : state.pendingMutationConfirmation === 'discard-lines'
+      ? 'Discard the selected lines'
     : state.pendingMutationConfirmation === 'revert-file'
       ? 'Revert selected file'
       : state.pendingMutationConfirmation === 'discard-draft'

@@ -2054,6 +2054,55 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('line-level staging keys (#1358)', () => {
+    const dirtyDiffContext = {
+      worktreeHunkOffsets: [4],
+      worktreeDiffLineCount: 12,
+    }
+
+    function worktreeDiffState(overrides: Partial<LogInkState> = {}): LogInkState {
+      const base = createLogInkState(rows, { activeView: 'diff' })
+      return { ...base, diffSource: 'worktree' as const, worktreeDiffOffset: 6, ...overrides } as LogInkState
+    }
+
+    it('v anchors a selection at the current line; v again clears it', () => {
+      let state = applyInput(worktreeDiffState(), 'v', {}, dirtyDiffContext)
+      expect(state.diffLineSelectAnchor).toBe(6)
+
+      state = applyInput(state, 'v', {}, dirtyDiffContext)
+      expect(state.diffLineSelectAnchor).toBeUndefined()
+    })
+
+    it('Esc clears the selection without popping the view', () => {
+      let state = applyInput(worktreeDiffState(), 'v', {}, dirtyDiffContext)
+      state = applyInput(state, '', { escape: true }, dirtyDiffContext)
+      expect(state.diffLineSelectAnchor).toBeUndefined()
+      expect(state.activeView).toBe('diff')
+    })
+
+    it('Space with a selection stages the selected lines, not the hunk', () => {
+      const state = worktreeDiffState({ diffLineSelectAnchor: 5 })
+      const events = getLogInkInputEvents(state, ' ', {}, dirtyDiffContext)
+      expect(events).toEqual([{ type: 'stageSelectedLines' }])
+    })
+
+    it('z with a selection asks to discard the selected lines', () => {
+      let state = worktreeDiffState({ diffLineSelectAnchor: 5 })
+      state = applyInput(state, 'z', {}, dirtyDiffContext)
+      expect(state.pendingMutationConfirmation).toBe('discard-lines')
+
+      const events = getLogInkInputEvents(state, 'y', {}, dirtyDiffContext)
+      expect(events).toContainEqual({ type: 'revertSelectedLines' })
+    })
+
+    it('without a selection Space/z keep the whole-hunk semantics', () => {
+      expect(getLogInkInputEvents(worktreeDiffState(), ' ', {}, dirtyDiffContext))
+        .toEqual([{ type: 'toggleSelectedHunkStage' }])
+      const state = applyInput(worktreeDiffState(), 'z', {}, dirtyDiffContext)
+      expect(state.pendingMutationConfirmation).toBe('revert-hunk')
+    })
+  })
+
   describe('rebase plan surface keys (#1359)', () => {
     function rebaseState() {
       let state = createLogInkState(rows)

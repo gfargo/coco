@@ -132,6 +132,103 @@ export async function getWorktreeHunks(
   }
 }
 
+export type HunkLineRange = {
+  /** Inclusive indices into `hunk.hunk.lines` (the hunk BODY, no @@ row). */
+  start: number
+  end: number
+}
+
+/**
+ * Line-level staging core (#1358): synthesize a sub-hunk containing only
+ * the selected +/- lines, with the unselected changes neutralized per
+ * direction — the classic `git add -p` edit math:
+ *
+ *   STAGE (forward apply to the index — the index holds OLD content):
+ *     unselected `-` → context (the old text stays in the index)
+ *     unselected `+` → omitted (not being added yet)
+ *   DISCARD (reverse apply to the worktree — the file holds NEW content):
+ *     unselected `+` → context (the line stays in the file)
+ *     unselected `-` → omitted (already absent; stays deleted)
+ *
+ * Line counts are recounted from the synthesized body. Returns undefined
+ * when the selection contains no changed lines at all.
+ */
+export function sliceHunkLines(
+  hunk: WorktreeHunk,
+  range: HunkLineRange,
+  mode: 'stage' | 'discard'
+): WorktreeHunk | undefined {
+  const src = hunk.hunk
+  const lines: string[] = []
+  let selectedChanges = 0
+
+  src.lines.forEach((line, index) => {
+    const selected = index >= range.start && index <= range.end
+    const marker = line[0]
+    if (marker === '-') {
+      if (selected) {
+        selectedChanges += 1
+        lines.push(line)
+      } else if (mode === 'stage') {
+        lines.push(` ${line.slice(1)}`)
+      }
+      return
+    }
+    if (marker === '+') {
+      if (selected) {
+        selectedChanges += 1
+        lines.push(line)
+      } else if (mode === 'discard') {
+        lines.push(` ${line.slice(1)}`)
+      }
+      return
+    }
+    // Context rows and `\ No newline` markers pass through.
+    lines.push(line)
+  })
+
+  if (selectedChanges === 0) {
+    return undefined
+  }
+
+  const oldLines = lines.filter((line) => line[0] === ' ' || line[0] === '-').length
+  const newLines = lines.filter((line) => line[0] === ' ' || line[0] === '+').length
+  const sliced = { ...src, lines, oldLines, newLines }
+  return { ...hunk, hunk: sliced, header: hunkHeader(sliced), preview: hunkPreview(sliced) }
+}
+
+/** Stage only the selected lines of an UNSTAGED hunk into the index. */
+export async function stageHunkLines(
+  git: SimpleGit,
+  hunk: WorktreeHunk,
+  range: HunkLineRange
+): Promise<void> {
+  if (hunk.state !== 'unstaged') {
+    throw new Error('Only unstaged hunks support line staging.')
+  }
+  const sliced = sliceHunkLines(hunk, range, 'stage')
+  if (!sliced) {
+    throw new Error('The selection contains no changed lines.')
+  }
+  await applyPatchToIndex(git, patchForHunk(sliced))
+}
+
+/** Discard only the selected lines of an UNSTAGED hunk from the worktree. */
+export async function revertHunkLines(
+  git: SimpleGit,
+  hunk: WorktreeHunk,
+  range: HunkLineRange
+): Promise<void> {
+  if (hunk.state !== 'unstaged') {
+    throw new Error('Only unstaged hunks support line discard.')
+  }
+  const sliced = sliceHunkLines(hunk, range, 'discard')
+  if (!sliced) {
+    throw new Error('The selection contains no changed lines.')
+  }
+  await applyPatch(git, patchForHunk(sliced), ['apply', '--reverse', '-'])
+}
+
 export async function stageHunk(git: SimpleGit, hunk: WorktreeHunk): Promise<void> {
   if (hunk.state !== 'unstaged') {
     throw new Error('Only unstaged hunks can be staged.')

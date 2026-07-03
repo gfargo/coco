@@ -58,7 +58,9 @@ import { revertFile, stageFile, unstageFile } from '../../../git/statusActions'
 import {
   WorktreeHunkOverview,
   revertHunk,
+  revertHunkLines,
   stageHunk,
+  stageHunkLines,
   unstageHunk,
 } from '../../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../../git/worktreeDiffData'
@@ -76,6 +78,8 @@ export type UseWorktreeStageActionsDeps = {
   worktreeHunks: WorktreeHunkOverview | undefined
   /** `state.worktreeDiffOffset` — the diff viewport scroll offset. */
   worktreeDiffOffset: number
+  /** `state.diffLineSelectAnchor` — the visual line-select anchor (#1358). */
+  diffLineSelectAnchor: number | undefined
   /** Re-fetch the worktree context after a stage/revert mutation. */
   refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<unknown>
   /** Clears the cached worktree file diff so it re-hydrates. */
@@ -93,6 +97,8 @@ export type UseWorktreeStageActionsResult = {
   toggleSelectedHunkStage: () => Promise<void>
   revertSelectedFile: () => Promise<void>
   revertSelectedHunk: () => Promise<void>
+  stageSelectedLines: () => Promise<void>
+  revertSelectedLines: () => Promise<void>
 }
 
 export function useWorktreeStageActions(
@@ -106,6 +112,7 @@ export function useWorktreeStageActions(
     worktreeDiff,
     worktreeHunks,
     worktreeDiffOffset,
+    diffLineSelectAnchor,
     refreshWorktreeContext,
     setWorktreeDiff,
     setWorktreeHunks,
@@ -206,10 +213,90 @@ export function useWorktreeStageActions(
     }
   }, [dispatch, git, refreshWorktreeContext, worktreeDiffOffset, worktreeDiff, worktreeHunks])
 
+  /**
+   * Resolve the active line selection into (hunk, body-line range). The
+   * "cursor" on the staging diff is the viewport top, so the selection
+   * is [min(anchor, offset), max(anchor, offset)] in absolute diff-line
+   * space, clamped to the body of the hunk containing its start. Only
+   * unstaged hunks participate — the same restriction the whole-hunk
+   * Space stage applies implicitly by acting on the visible unstaged
+   * diff.
+   */
+  const resolveLineSelection = React.useCallback(() => {
+    if (diffLineSelectAnchor === undefined) return undefined
+    const offsets = worktreeDiff?.hunkOffsets ?? []
+    if (offsets.length === 0) return undefined
+    const a = Math.min(diffLineSelectAnchor, worktreeDiffOffset)
+    const b = Math.max(diffLineSelectAnchor, worktreeDiffOffset)
+    const hunkIndex = hunkIndexAtOffset(a, offsets)
+    const hunk = worktreeHunks?.hunks[hunkIndex]
+    if (!hunk) return undefined
+    const bodyStartAbs = offsets[hunkIndex] + 1
+    const bodyEndAbs = bodyStartAbs + hunk.hunk.lines.length - 1
+    const start = Math.max(a, bodyStartAbs) - bodyStartAbs
+    const end = Math.min(b, bodyEndAbs) - bodyStartAbs
+    if (end < start) return undefined
+    return { hunk, range: { start, end }, lineCount: end - start + 1 }
+  }, [diffLineSelectAnchor, worktreeDiffOffset, worktreeDiff, worktreeHunks])
+
+  const stageSelectedLines = React.useCallback(async () => {
+    const selection = resolveLineSelection()
+    if (!selection) {
+      dispatch({ type: 'setStatus', value: 'Selection has no hunk lines', kind: 'warning' })
+      return
+    }
+    try {
+      await stageHunkLines(git, selection.hunk, selection.range)
+      dispatch({ type: 'setDiffLineSelectAnchor', value: undefined })
+      dispatch({
+        type: 'setStatus',
+        value: `Staged ${selection.lineCount} selected line${selection.lineCount === 1 ? '' : 's'} in ${selection.hunk.filePath}`,
+        kind: 'success',
+      })
+      await refreshWorktreeContext({ silent: true })
+      setWorktreeDiff(undefined)
+      setWorktreeHunks(undefined)
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: (error as Error).message || 'failed to stage selected lines',
+        kind: 'error',
+      })
+    }
+  }, [dispatch, git, refreshWorktreeContext, resolveLineSelection, setWorktreeDiff, setWorktreeHunks])
+
+  const revertSelectedLines = React.useCallback(async () => {
+    const selection = resolveLineSelection()
+    if (!selection) {
+      dispatch({ type: 'setStatus', value: 'Selection has no hunk lines', kind: 'warning' })
+      return
+    }
+    try {
+      await revertHunkLines(git, selection.hunk, selection.range)
+      dispatch({ type: 'setDiffLineSelectAnchor', value: undefined })
+      dispatch({
+        type: 'setStatus',
+        value: `Discarded ${selection.lineCount} selected line${selection.lineCount === 1 ? '' : 's'} in ${selection.hunk.filePath}`,
+        kind: 'success',
+      })
+      await refreshWorktreeContext()
+      setWorktreeDiff(undefined)
+      setWorktreeHunks(undefined)
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: (error as Error).message || 'failed to discard selected lines',
+        kind: 'error',
+      })
+    }
+  }, [dispatch, git, refreshWorktreeContext, resolveLineSelection, setWorktreeDiff, setWorktreeHunks])
+
   return {
     toggleSelectedFileStage,
     toggleSelectedHunkStage,
     revertSelectedFile,
     revertSelectedHunk,
+    stageSelectedLines,
+    revertSelectedLines,
   }
 }

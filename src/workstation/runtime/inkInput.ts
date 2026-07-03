@@ -52,6 +52,8 @@ export type LogInkInputEvent =
   | { type: 'toggleSelectedHunkStage' }
   | { type: 'revertSelectedFile' }
   | { type: 'revertSelectedHunk' }
+  | { type: 'stageSelectedLines' }
+  | { type: 'revertSelectedLines' }
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
   | { type: 'cancelAiCommitDraft' }
@@ -1384,6 +1386,8 @@ export function getLogInkInputEvents(
       return [
         state.pendingMutationConfirmation === 'revert-hunk'
           ? { type: 'revertSelectedHunk' }
+          : state.pendingMutationConfirmation === 'discard-lines'
+          ? { type: 'revertSelectedLines' }
           : { type: 'revertSelectedFile' },
         action({ type: 'setPendingMutationConfirmation', value: undefined }),
       ]
@@ -1681,6 +1685,12 @@ export function getLogInkInputEvents(
   // ordering Esc would pop history back to bisect but the wizard
   // mode would stick around, and the next Enter on history would
   // still try to capture a sha.
+  // Line-select on the staging diff: Esc drops the selection without
+  // popping the view — the user is mid-staging, not leaving.
+  if (key.escape && state.diffLineSelectAnchor !== undefined && state.activeView === 'diff') {
+    return [action({ type: 'setDiffLineSelectAnchor', value: undefined })]
+  }
+
   if (key.escape && state.bisectPickMode) {
     const events: LogInkInputEvent[] = [
       action({ type: 'clearBisectPickMode' }),
@@ -3784,6 +3794,34 @@ export function getLogInkInputEvents(
       kind: 'stage-pathspec',
       label: 'Stage pathspec (e.g. `.`, `src/`, `*.ts`, or a space-separated list)',
     })]
+  }
+
+  // ── Line-level staging (#1358) ──────────────────────────────────────
+  // `v` anchors a visual selection at the current scroll line; j/k then
+  // extend it (the "cursor" on the staging diff IS the viewport top,
+  // same as the current-hunk derivation). While a selection is active,
+  // Space stages exactly those lines and `z` offers to discard them;
+  // `v`/Esc clears. The whole-hunk semantics below are untouched when no
+  // selection is active.
+  if (inputValue === 'v' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
+    return [action({
+      type: 'setDiffLineSelectAnchor',
+      value: state.diffLineSelectAnchor === undefined ? state.worktreeDiffOffset : undefined,
+    })]
+  }
+  if (
+    inputValue === ' ' &&
+    isWorktreeDiffTarget(state) &&
+    state.diffLineSelectAnchor !== undefined
+  ) {
+    return [{ type: 'stageSelectedLines' }]
+  }
+  if (
+    inputValue === 'z' &&
+    isWorktreeDiffTarget(state) &&
+    state.diffLineSelectAnchor !== undefined
+  ) {
+    return [action({ type: 'setPendingMutationConfirmation', value: 'discard-lines' })]
   }
 
   if (inputValue === ' ' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
