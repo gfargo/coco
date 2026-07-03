@@ -214,7 +214,8 @@ The hunk is the unit of action here.
 |-----|--------|
 | `e` | Inline edit the message |
 | `E` | Edit in `$EDITOR` |
-| `c` | Commit |
+| `c` | Commit — with an **empty draft** it drops you into edit mode on the summary instead of erroring (#1362) |
+| `Ctrl+D` | Commit straight from inline edit mode (the multiline-prompt submit convention) — full flow: `gs → A → c → <type> → Ctrl+D` |
 | `a` | **Amend** staged changes into HEAD (confirm; rewrites the head commit — reword lives in the `:` palette) |
 | `I` | AI-draft the message |
 | `S` | Start the commit-split flow |

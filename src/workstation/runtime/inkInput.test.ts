@@ -1988,8 +1988,14 @@ describe('log Ink input interactions', () => {
     expect(state.commitCompose.editing).toBe(true)
   })
 
-  it('routes c from diff to compose then commits', () => {
-    const state = createLogInkState(rows, { activeView: 'diff' })
+  it('routes c from diff to compose then commits (drafted summary)', () => {
+    // #1362 — the direct commit path now requires a drafted summary;
+    // an empty draft drops into edit mode instead (covered below).
+    let state = createLogInkState(rows, { activeView: 'diff' })
+    state = applyLogInkAction(state, {
+      type: 'commitCompose',
+      action: { type: 'append', value: 'feat: drafted' },
+    })
 
     expect(getLogInkInputEvents(state, 'c', {}, { worktreeFileCount: 1 })).toEqual([
       { type: 'action', action: { type: 'pushView', value: 'compose' } },
@@ -2009,9 +2015,13 @@ describe('log Ink input interactions', () => {
     ])
   })
 
-  it('c from compose commits without re-pushing the view', () => {
+  it('c from compose commits without re-pushing the view (drafted summary)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+    state = applyLogInkAction(state, {
+      type: 'commitCompose',
+      action: { type: 'append', value: 'feat: drafted' },
+    })
 
     expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'createManualCommit' }])
   })
@@ -2655,6 +2665,60 @@ describe('log Ink input interactions', () => {
 
       const events = getLogInkInputEvents(state, '', { escape: true })
       expect(events).not.toContainEqual({ type: 'cancelChangelog' })
+    })
+  })
+
+  describe('stage-and-commit grammar (#1362)', () => {
+    it('c with an empty draft lands in compose edit mode on the summary — no error', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      const events = getLogInkInputEvents(state, 'c', {}, { worktreeFileCount: 1 })
+      expect(events).not.toContainEqual({ type: 'createManualCommit' })
+
+      const after = applyInput(state, 'c', {}, { worktreeFileCount: 1 })
+      expect(after.activeView).toBe('compose')
+      expect(after.commitCompose.editing).toBe(true)
+      expect(after.commitCompose.field).toBe('summary')
+    })
+
+    it('c with a drafted summary commits as before', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: thing' },
+      })
+      const events = getLogInkInputEvents(state, 'c')
+      expect(events).toContainEqual({ type: 'createManualCommit' })
+    })
+
+    it('Ctrl+D commits straight from inline edit mode', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+      'fix: x'.split('').forEach((c) => { state = applyInput(state, c) })
+      expect(state.commitCompose.summary).toBe('fix: x')
+
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).toContainEqual({ type: 'createManualCommit' })
+      const after = applyInput(state, 'd', { ctrl: true })
+      expect(after.commitCompose.editing).toBe(false)
+    })
+
+    it('Ctrl+D with an empty summary warns and stays in edit mode', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).not.toContainEqual({ type: 'createManualCommit' })
+      const after = applyInput(state, 'd', { ctrl: true })
+      expect(after.commitCompose.editing).toBe(true)
     })
   })
 

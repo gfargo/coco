@@ -778,12 +778,7 @@ export function getLogInkPaletteExecuteEvents(
         action({ type: 'commitCompose', action: { type: 'setEditing', value: true } }),
       ]
     case 'commit':
-      return [
-        ...(state.activeView !== 'compose'
-          ? [action({ type: 'pushView', value: 'compose' })]
-          : []),
-        { type: 'createManualCommit' },
-      ]
+      return commitOrComposeEvents(state)
     case 'help':
       return [action({ type: 'toggleHelp' })]
     case 'commandPalette':
@@ -858,6 +853,33 @@ export function getLogInkPaletteExecuteEvents(
     default:
       return []
   }
+}
+
+/**
+ * The stage-and-commit grammar (#1362). `c` with a drafted summary
+ * commits; `c` with an EMPTY draft lands in the compose view already
+ * in edit mode with the summary field focused — instead of the old
+ * "Commit summary is required." error that forced `e` → type → esc →
+ * `c` (seven keys plus a failed attempt vs lazygit's three). Paired
+ * with Ctrl+D-commits-from-editing below, the flow is
+ * `gs → A → c → <type> → Ctrl+D`.
+ */
+function commitOrComposeEvents(state: LogInkState): LogInkInputEvent[] {
+  const events: LogInkInputEvent[] = state.activeView !== 'compose'
+    ? [action({ type: 'pushView', value: 'compose' })]
+    : []
+  if (!state.commitCompose.summary.trim()) {
+    return [
+      ...events,
+      action({ type: 'commitCompose', action: { type: 'setField', value: 'summary' } }),
+      action({ type: 'commitCompose', action: { type: 'setEditing', value: true } }),
+      action({
+        type: 'setStatus',
+        value: 'Type the commit summary — Ctrl+D commits, esc exits editing.',
+      }),
+    ]
+  }
+  return [...events, { type: 'createManualCommit' }]
 }
 
 /**
@@ -1318,6 +1340,25 @@ export function getLogInkInputEvents(
   if (state.commitCompose.editing) {
     if (key.escape) {
       return [action({ type: 'commitCompose', action: { type: 'setEditing', value: false } })]
+    }
+
+    // #1362 — Ctrl+D commits straight from inline editing (the app's
+    // multiline-prompt submit convention): type the message, one
+    // chord, done — no mode exit, no second `c`. An empty summary
+    // keeps the user editing with a hint instead of bouncing them
+    // through the git layer's error.
+    if (key.ctrl && inputValue === 'd') {
+      if (!state.commitCompose.summary.trim()) {
+        return [action({
+          type: 'setStatus',
+          value: 'Commit summary is required — type it first.',
+          kind: 'warning',
+        })]
+      }
+      return [
+        action({ type: 'commitCompose', action: { type: 'setEditing', value: false } }),
+        { type: 'createManualCommit' },
+      ]
     }
 
     if (key.tab) {
@@ -4006,12 +4047,7 @@ export function getLogInkInputEvents(
     inputValue === 'c' &&
     (state.activeView === 'status' || state.activeView === 'diff' || state.activeView === 'compose')
   ) {
-    const events: LogInkInputEvent[] = []
-    if (state.activeView !== 'compose') {
-      events.push(action({ type: 'pushView', value: 'compose' }))
-    }
-    events.push({ type: 'createManualCommit' })
-    return events
+    return commitOrComposeEvents(state)
   }
 
   // Context-sensitive per-branch variants of F / U / P. When the

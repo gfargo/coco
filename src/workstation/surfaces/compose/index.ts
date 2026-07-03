@@ -120,7 +120,7 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
   // The cancel hint also covers the streaming preview window — same
   // keystroke (Esc) aborts whether or not the preview is visible.
   const stateLine = compose.editing
-    ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
+    ? 'Editing — Ctrl+D commits · Enter switches summary↔body · Esc exits edit mode.'
     : compose.loading
       ? 'Generating AI draft — press Esc to cancel.'
       : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
