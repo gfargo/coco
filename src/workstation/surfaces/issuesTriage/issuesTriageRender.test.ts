@@ -13,6 +13,7 @@ import {
 import type { IssueListItem, IssueListOverview } from '../../../git/issuesListData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { __test as gitlabInternals } from '../../../git/gitlabListData'
+import { cellWidth } from '../../chrome/text'
 import { renderIssuesTriageSurface } from './index'
 
 type StubProps = Record<string, unknown>
@@ -24,6 +25,15 @@ const Box = ((props: StubProps) =>
 ) as unknown as React.ComponentType<StubProps>
 
 const components: LogInkComponents = { Box, Text }
+
+/** Flatten an element (sub)tree into its concatenated visible text. */
+function treeText(node: unknown): string {
+  if (node == null || node === false) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(treeText).join('')
+  const el = node as { props?: { children?: unknown } }
+  return el.props ? treeText(el.props.children) : ''
+}
 
 function makeState(overrides: Partial<LogInkState> = {}): LogInkState {
   return { ...createLogInkState([]), ...overrides }
@@ -43,7 +53,7 @@ function makeIssue(overrides: Partial<IssueListItem> = {}): IssueListItem {
 
 function render(
   state: LogInkState,
-  options: { issueList?: IssueListOverview; loading?: boolean } = {}
+  options: { issueList?: IssueListOverview; loading?: boolean; width?: number } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = options.issueList ? { issueList: options.issueList } : {}
@@ -57,7 +67,7 @@ function render(
     context,
     contextStatus,
     bodyRows: 30,
-    width: 120,
+    width: options.width ?? 120,
     theme,
   })
 }
@@ -116,6 +126,37 @@ describe('renderIssuesTriageSurface', () => {
       },
     })
     expect(tree).toBeDefined()
+  })
+
+  it('keeps rows within the panel width when labels are long (#1339)', () => {
+    const width = 80
+    const tree = render(makeState(), {
+      width,
+      issueList: {
+        available: true,
+        authenticated: true,
+        issues: [
+          makeIssue({
+            number: 1234,
+            title: 'A fairly long issue title that already competes for row space',
+            author: 'somebody-with-a-name',
+            comments: 12,
+            labels: ['bug', 'help wanted', 'good first issue', 'documentation', 'needs-triage'],
+          }),
+        ],
+      },
+    })
+    const children = (tree.props as { children: unknown[] }).children
+    const rows = children
+      .flat()
+      .map(treeText)
+      .filter((line) => line.includes('#1234'))
+    expect(rows).toHaveLength(1)
+    // Border (2) + paddingX (2) leave width - 4 cells for row content.
+    expect(cellWidth(rows[0])).toBeLessThanOrEqual(width - 4)
+    // Labels are budgeted in, not dropped: at least the opening bracket
+    // plus some label text must survive the truncation.
+    expect(rows[0]).toContain(' [bug')
   })
 
   it('structural snapshot — empty list', () => {

@@ -16,6 +16,7 @@
 
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { clampListWindowStart } from '../../chrome/layout'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import type { SurfaceRenderContext } from '../../runtime/types'
@@ -70,7 +71,7 @@ export function renderConflictsSurface(ctx: SurfaceRenderContext): ReactTypes.Re
 
   const selected = Math.max(0, Math.min(state.selectedConflictFileIndex, Math.max(0, conflictedFiles.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const startIndex = clampListWindowStart(selected, conflictedFiles.length, listRows)
   const visible = conflictedFiles.slice(startIndex, startIndex + listRows)
   const remaining = conflictedFiles.length
   const headerRight = loading

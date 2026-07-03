@@ -82,6 +82,47 @@ describe('renderComposeSurface', () => {
     expect(tree).toBeDefined()
   })
 
+  describe('body overflow scrolling (#1345)', () => {
+    // bodyRows: 30 → bodyRowsAvailable = 20; one row goes to the
+    // overflow marker, so 19 body lines stay visible of the 30 below.
+    const longBody = Array.from({ length: 30 }, (_, i) =>
+      `L${String(i + 1).padStart(2, '0')}`).join('\n')
+
+    function treeText(node: unknown): string {
+      if (node == null || node === false) return ''
+      if (typeof node === 'string' || typeof node === 'number') return String(node)
+      if (Array.isArray(node)) return node.map(treeText).join('\n')
+      const el = node as { props?: { children?: unknown } }
+      return el.props ? treeText(el.props.children) : ''
+    }
+
+    it('pins the window to the tail while editing the body', () => {
+      const base = createLogInkState([])
+      const state = makeState({
+        activeView: 'compose',
+        commitCompose: { ...base.commitCompose, body: longBody, editing: true, field: 'body' },
+      })
+      const text = treeText(render(state, { worktree: makeWorktree([]) }))
+      // The insertion point (last line) is visible; the head is elided
+      // behind an explicit marker.
+      expect(text).toContain('L30')
+      expect(text).not.toContain('L01')
+      expect(text).toContain('↑ 11 earlier lines')
+    })
+
+    it('keeps the head slice with a more-lines marker when not editing', () => {
+      const base = createLogInkState([])
+      const state = makeState({
+        activeView: 'compose',
+        commitCompose: { ...base.commitCompose, body: longBody, editing: false, field: 'body' },
+      })
+      const text = treeText(render(state, { worktree: makeWorktree([]) }))
+      expect(text).toContain('L01')
+      expect(text).not.toContain('L30')
+      expect(text).toContain('↓ 11 more lines')
+    })
+  })
+
   it('structural snapshot — empty', () => {
     expect(render(makeState(), { worktree: makeWorktree([]) })).toMatchSnapshot()
   })

@@ -80,8 +80,16 @@ async function processInWaves<T, R>(
  */
 export async function generateChangelogResult(
   argv: ChangelogArgv,
-  logger: Parameters<CommandHandler<ChangelogArgv>>[1]
+  logger: Parameters<CommandHandler<ChangelogArgv>>[1],
+  // Optional user-cancellation signal (#1338). Threaded into the
+  // changelog `executeChain` call so the workstation's Esc-cancel can
+  // tear down the in-flight LLM request; aborts surface as
+  // `LangChainCancelledError`.
+  options: { signal?: AbortSignal } = {}
 ): Promise<{ text: string; structured: ChangelogResponse | undefined }> {
+  // Captured up front: the `agent` callback below has its own `options`
+  // parameter (the review-loop options), which would shadow this one.
+  const cancelSignal = options.signal
   const git = applyRepoFlag(argv)
   const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
   const key = getApiKeyForModel(config)
@@ -309,6 +317,7 @@ export async function generateChangelogResult(
         parser,
         logger,
         tokenizer,
+        signal: cancelSignal,
         metadata: {
           task: argv.withDiff ? 'changelog-with-diff' : argv.onlyDiff ? 'changelog-only-diff' : 'changelog',
           command: 'changelog',

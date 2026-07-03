@@ -10,6 +10,7 @@
 
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { clampListWindowStart } from '../../chrome/layout'
 import { formatLogInkLoading, formatLogInkReflogEmpty } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import { splitReflogSubject } from '../../../git/reflogData'
@@ -34,7 +35,7 @@ export function renderReflogSurface(ctx: SurfaceRenderContext): ReactTypes.React
     : allEntries
   const selected = Math.max(0, Math.min(state.selectedReflogIndex, Math.max(0, entries.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const startIndex = clampListWindowStart(selected, entries.length, listRows)
   const visible = entries.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading

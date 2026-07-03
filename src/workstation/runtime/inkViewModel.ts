@@ -197,6 +197,34 @@ export type LogInkRepoFrameReturn = {
   userSidebarTab: LogInkSidebarTab
   branchSort: BranchSortMode
   tagSort: TagSortMode
+  /**
+   * Remaining per-repo state captured at push time (#1343). Each of
+   * these is only meaningful against the repo that produced it: a
+   * compare base marked in the parent must not become the diff base
+   * inside a submodule, a blame / file-history path from the parent
+   * must not hydrate against the submodule's git, the branch-keyed
+   * changelog cache would serve the parent's changelog for a same-named
+   * submodule branch, and the per-list cursors would land on arbitrary
+   * rows. Push clears them on the live state; pop restores the
+   * parent's. All optional for back-compat with states captured before
+   * the fields landed.
+   */
+  compareBase?: LogInkCompareRef
+  blamePath?: string
+  fileHistoryPath?: string
+  changelogCache?: { [branch: string]: ChangelogCacheEntry }
+  selectedWorktreeFileIndex?: number
+  selectedBranchIndex?: number
+  selectedTagIndex?: number
+  selectedStashIndex?: number
+  selectedWorktreeListIndex?: number
+  selectedConflictFileIndex?: number
+  selectedReflogIndex?: number
+  selectedRemoteIndex?: number
+  selectedBlameIndex?: number
+  selectedFileHistoryIndex?: number
+  selectedIssueIndex?: number
+  selectedPullRequestTriageIndex?: number
 }
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
@@ -299,6 +327,18 @@ export type LogInkState = {
   rows: GitLogRow[]
   commits: GitLogCommitRow[]
   filteredCommits: GitLogCommitRow[]
+  /**
+   * How many commits of the MAIN `git log` ordering have been fetched
+   * (#1337). This — not `commits.length` — is the `skip` offset for the
+   * next load-more page: anchored context loads (`loadCommitContext`)
+   * merge rows that are NOT a prefix of the main ordering, so counting
+   * every loaded commit overshoots the offset and silently skips the
+   * commits ranked in the gap. Counted pre-dedup (skip is a position in
+   * git's output, not in our merged list). Reset by `replaceRows`,
+   * advanced by `appendRows` only when the append is a main-ordering
+   * page.
+   */
+  mainHistoryCommitCount: number
   selectedIndex: number
   selectedFileIndex: number
   selectedWorktreeFileIndex: number
@@ -928,7 +968,17 @@ export type LogInkInputPromptState = {
 }
 
 export type LogInkAction =
-  | { type: 'appendRows'; rows: GitLogRow[] }
+  | {
+    type: 'appendRows'
+    rows: GitLogRow[]
+    /**
+     * Commit count of this append as fetched from the MAIN `git log`
+     * ordering (pre-dedup), when the append is a load-more page.
+     * Omitted for anchored context loads, which must not advance the
+     * pagination offset (#1337).
+     */
+    mainOrderingCount?: number
+  }
   | { type: 'replaceRows'; rows: GitLogRow[] }
   | { type: 'appendFilter'; value: string; promotedSelections?: PromotedSelectionsSnapshot }
   | { type: 'backspaceFilter'; promotedSelections?: PromotedSelectionsSnapshot }
@@ -1238,8 +1288,11 @@ function withPoppedView(state: LogInkState): LogInkState {
     viewStack,
     // Restore the user's last explicit tab choice so popping out of
     // compose / status (which auto-switch the sidebar to Branches)
-    // returns the user to whatever they actually had open before.
-    sidebarTab: state.userSidebarTab,
+    // returns the user to whatever they actually had open before —
+    // UNLESS we're popping INTO status/compose, where the same
+    // auto-switch rule applies as on push (#1348): the Status tab next
+    // to the status surface just duplicates the center pane.
+    sidebarTab: next === 'status' || next === 'compose' ? 'branches' : state.userSidebarTab,
     worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
     diffSource: next === 'diff' ? state.diffSource : undefined,
     stashDiffRef: next === 'diff' ? state.stashDiffRef : undefined,
@@ -1300,6 +1353,22 @@ function withPushedRepoFrame(
       userSidebarTab: state.userSidebarTab,
       branchSort: state.branchSort,
       tagSort: state.tagSort,
+      compareBase: state.compareBase,
+      blamePath: state.blamePath,
+      fileHistoryPath: state.fileHistoryPath,
+      changelogCache: state.changelogCache,
+      selectedWorktreeFileIndex: state.selectedWorktreeFileIndex,
+      selectedBranchIndex: state.selectedBranchIndex,
+      selectedTagIndex: state.selectedTagIndex,
+      selectedStashIndex: state.selectedStashIndex,
+      selectedWorktreeListIndex: state.selectedWorktreeListIndex,
+      selectedConflictFileIndex: state.selectedConflictFileIndex,
+      selectedReflogIndex: state.selectedReflogIndex,
+      selectedRemoteIndex: state.selectedRemoteIndex,
+      selectedBlameIndex: state.selectedBlameIndex,
+      selectedFileHistoryIndex: state.selectedFileHistoryIndex,
+      selectedIssueIndex: state.selectedIssueIndex,
+      selectedPullRequestTriageIndex: state.selectedPullRequestTriageIndex,
     },
   }
   return {
@@ -1317,6 +1386,27 @@ function withPushedRepoFrame(
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
     pendingMutationConfirmation: undefined,
+    // #1343 — none of these survive the repo boundary. The compare
+    // base, blame / file-history paths, and the branch-keyed changelog
+    // cache all reference the PARENT repo's objects; the per-list
+    // cursors would be arbitrary positions in the submodule's lists.
+    // All captured in parentReturn above and restored on pop.
+    compareBase: undefined,
+    blamePath: undefined,
+    fileHistoryPath: undefined,
+    changelogCache: {},
+    selectedWorktreeFileIndex: 0,
+    selectedBranchIndex: 0,
+    selectedTagIndex: 0,
+    selectedStashIndex: 0,
+    selectedWorktreeListIndex: 0,
+    selectedConflictFileIndex: 0,
+    selectedReflogIndex: 0,
+    selectedRemoteIndex: 0,
+    selectedBlameIndex: 0,
+    selectedFileHistoryIndex: 0,
+    selectedIssueIndex: 0,
+    selectedPullRequestTriageIndex: 0,
   }
 }
 
@@ -1368,6 +1458,26 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     userSidebarTab: ret.userSidebarTab,
     branchSort: ret.branchSort,
     tagSort: ret.tagSort,
+    // #1343 — restore the parent's per-repo state captured at push
+    // time. The `??` fallbacks cover frames captured before these
+    // fields landed: paths/base fall back to cleared (safe — they'd
+    // otherwise reference the WRONG repo), cursors to the top.
+    compareBase: ret.compareBase,
+    blamePath: ret.blamePath,
+    fileHistoryPath: ret.fileHistoryPath,
+    changelogCache: ret.changelogCache ?? {},
+    selectedWorktreeFileIndex: ret.selectedWorktreeFileIndex ?? 0,
+    selectedBranchIndex: ret.selectedBranchIndex ?? 0,
+    selectedTagIndex: ret.selectedTagIndex ?? 0,
+    selectedStashIndex: ret.selectedStashIndex ?? 0,
+    selectedWorktreeListIndex: ret.selectedWorktreeListIndex ?? 0,
+    selectedConflictFileIndex: ret.selectedConflictFileIndex ?? 0,
+    selectedReflogIndex: ret.selectedReflogIndex ?? 0,
+    selectedRemoteIndex: ret.selectedRemoteIndex ?? 0,
+    selectedBlameIndex: ret.selectedBlameIndex ?? 0,
+    selectedFileHistoryIndex: ret.selectedFileHistoryIndex ?? 0,
+    selectedIssueIndex: ret.selectedIssueIndex ?? 0,
+    selectedPullRequestTriageIndex: ret.selectedPullRequestTriageIndex ?? 0,
     pendingKey: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
@@ -1506,6 +1616,9 @@ function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
     rows,
     commits,
     filteredCommits,
+    // A wholesale replacement IS the main ordering's fresh window, so
+    // the pagination offset resets to its commit count (#1337).
+    mainHistoryCommitCount: commits.length,
     selectedIndex: preservedIndex >= 0 ? preservedIndex : 0,
     selectedFileIndex: 0,
     pendingCommitFocused: false,
@@ -1518,7 +1631,11 @@ function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
   }
 }
 
-function appendRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
+function appendRows(
+  state: LogInkState,
+  rows: GitLogRow[],
+  mainOrderingCount?: number
+): LogInkState {
   const selected = getSelectedInkCommit(state)
 
   // Dedup the merged row list by commit hash so the graph renderer —
@@ -1574,6 +1691,11 @@ function appendRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
     rows: nextRows,
     commits,
     filteredCommits,
+    // Only main-ordering pages advance the pagination offset (#1337);
+    // anchored context loads pass no count. Advanced by the FETCHED
+    // count, not the post-dedup delta — `skip` addresses positions in
+    // git's own output ordering.
+    mainHistoryCommitCount: state.mainHistoryCommitCount + (mainOrderingCount ?? 0),
     selectedIndex: selectedIndex >= 0
       ? selectedIndex
       : clampIndex(state.selectedIndex, filteredCommits.length),
@@ -1636,6 +1758,7 @@ export function createLogInkState(
     rows,
     commits,
     filteredCommits: commits,
+    mainHistoryCommitCount: commits.length,
     selectedIndex: 0,
     selectedFileIndex: 0,
     selectedWorktreeFileIndex: 0,
@@ -1749,7 +1872,7 @@ export function getLogInkRepoStackLabels(state: LogInkState): string[] {
 export function applyLogInkAction(state: LogInkState, action: LogInkAction): LogInkState {
   switch (action.type) {
     case 'appendRows':
-      return appendRows(state, action.rows)
+      return appendRows(state, action.rows, action.mainOrderingCount)
     case 'replaceRows':
       return replaceRows(state, action.rows)
     case 'appendFilter':
@@ -2490,12 +2613,25 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingConfirmationPayload: action.value ? action.payload : undefined,
         workflowActionId: action.value ? undefined : state.workflowActionId,
         pendingMutationConfirmation: action.value ? undefined : state.pendingMutationConfirmation,
+        // Only one modal prompt may own the keyboard (#1342): raising a
+        // confirmation dismisses any open choice prompt so a `y` meant
+        // for the confirm can't be matched against choice option keys.
+        pendingChoice: action.value ? undefined : state.pendingChoice,
         pendingKey: undefined,
       }
     case 'setWorktreeCheckoutConflict':
       return { ...state, worktreeCheckoutConflict: action.value, pendingKey: undefined }
     case 'setPendingChoice':
-      return { ...state, pendingChoice: action.value, pendingKey: undefined }
+      // Mirror of setPendingConfirmation (#1342): a new choice prompt
+      // displaces any pending confirmation so the two can never be
+      // active (and answer-shadowing) simultaneously.
+      return {
+        ...state,
+        pendingChoice: action.value,
+        pendingConfirmationId: action.value ? undefined : state.pendingConfirmationId,
+        pendingConfirmationPayload: action.value ? undefined : state.pendingConfirmationPayload,
+        pendingKey: undefined,
+      }
     case 'setPendingMutationConfirmation':
       return {
         ...state,

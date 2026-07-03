@@ -9,6 +9,7 @@
 
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { clampListWindowStart } from '../../chrome/layout'
 import { formatCompactRelativeDate } from '../../chrome/dateFormat'
 import { getRenderNow } from '../../chrome/snapshotMode'
 import { inlineSpinnerGlyph } from '../../chrome/spinner'
@@ -48,7 +49,7 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
   // One extra row reserved (vs the other surfaces' `- 4`) for the column
   // header row below.
   const listRows = Math.max(4, bodyRows - 5)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const startIndex = clampListWindowStart(selected, stashes.length, listRows)
   const visible = stashes.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading

@@ -8,6 +8,7 @@
 
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { clampListWindowStart } from '../../chrome/layout'
 import {
   formatLogInkLoading,
   formatLogInkRemotesEmpty,
@@ -34,7 +35,7 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
     : all
   const selected = Math.max(0, Math.min(state.selectedRemoteIndex, Math.max(0, filtered.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const startIndex = clampListWindowStart(selected, filtered.length, listRows)
   const visible = filtered.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading

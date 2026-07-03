@@ -684,9 +684,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       })
       if (mountedRef.current && fresh) {
         dispatch({ type: 'replaceRows', rows: fresh })
+        // Re-arm pagination from the fresh window (#1337): the refresh
+        // truncates the loaded rows back to one page, so a user who had
+        // paged to the end (`hasMoreCommits === false`) must be able to
+        // page back down — otherwise deep history vanishes for the
+        // session after any history-mutating workflow.
+        setHasMoreCommits(computeHasMoreCommits(logArgv, fresh))
       }
     } catch { /* ignore — stale rows beat blank rows */ }
-  }, [dispatch, git, logArgv, state.historyFetchArgs])
+  }, [dispatch, git, logArgv, setHasMoreCommits, state.historyFetchArgs])
 
   const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
     // Loud refresh (manual `r`): flip everything to 'loading' so the user
@@ -1262,6 +1268,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     regenerateChangelog,
     yankChangelog,
     openChangelogInEditor,
+    cancelChangelog,
   } = useChangelogActions(React, {
     dispatch,
     context,
@@ -1584,6 +1591,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     startCreatePullRequest,
     cancelPullRequestBodyDraft,
     startChangelogView,
+    cancelChangelog,
     startRebasePlan,
     regenerateChangelog,
     yankChangelog,

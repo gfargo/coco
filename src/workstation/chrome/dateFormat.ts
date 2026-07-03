@@ -7,9 +7,9 @@
  * variant: the date column is fixed-width and competes with the
  * commit message for cells, so a 2-3 character form is the budget.
  *
- * Inputs match what `git log --date=short` produces:
- * `YYYY-MM-DD`. Caller passes `now` so tests can pin the reference
- * instant.
+ * Inputs are `YYYY-MM-DD` in the VIEWER's local zone
+ * (`--date=format-local:%Y-%m-%d` in commands/log/data.ts). Caller
+ * passes `now` so tests can pin the reference instant.
  *
  * Outputs (rounded toward the nearest unit, no `ago` suffix):
  *   - `today` for same UTC day
@@ -19,8 +19,10 @@
  *   - `2y`+ for older
  *   - `''` for malformed inputs (caller renders nothing)
  *
- * Day comparison is in UTC so a commit dated "yesterday" never reads
- * "today" depending on the operator's timezone.
+ * Day comparison uses the viewer's LOCAL day on both sides (#1336):
+ * the commit day is already viewer-local, so truncating `now` to the
+ * viewer's local day keeps "today" meaning the user's own today.
+ * (`Date.UTC` below is just a timezone-free day-arithmetic device.)
  */
 export function formatCompactRelativeDate(iso: string | undefined, now: Date): string {
   if (!iso) return ''
@@ -32,10 +34,11 @@ export function formatCompactRelativeDate(iso: string | undefined, now: Date): s
   const day = Number.parseInt(match[3], 10)
   if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return ''
 
-  const commitUtc = Date.UTC(year, month - 1, day)
-  const nowUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const commitDay = Date.UTC(year, month - 1, day)
+  // Viewer-LOCAL day components — see the header note (#1336).
+  const nowDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
   const oneDay = 24 * 60 * 60 * 1000
-  const days = Math.floor((nowUtc - commitUtc) / oneDay)
+  const days = Math.floor((nowDay - commitDay) / oneDay)
 
   if (days <= 0) return 'today'
   if (days < 14) return `${days}d`

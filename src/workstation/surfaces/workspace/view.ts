@@ -455,9 +455,11 @@ function renderListBody(
   const focused = state.focus !== 'sidebar'
 
   // Reserve: 1 row each for panel title, column header, top chevron,
-  // bottom chevron, plus 2 for the border. Floor at 1 so we always
-  // render at least one row of content.
-  const reservedChrome = 5
+  // bottom chevron, plus 2 for the border — 6 rows total (#1347: at 5,
+  // the inner content overflowed the fixed-height Box by one row and
+  // Ink clipped the bottom chevron / last repo row). Floor at 1 so we
+  // always render at least one row of content.
+  const reservedChrome = 6
   const listRows = Math.max(1, height - reservedChrome)
   const windowed = buildWorkspaceListWindow(state, {
     width,
