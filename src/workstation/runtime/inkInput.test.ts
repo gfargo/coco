@@ -2953,6 +2953,22 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    it('sidebar-focused y targets the sidebar entity, not the history commit (#1388)', () => {
+      // From the default history view, Tab to the sidebar on the
+      // branches tab: y must emit the ref-style yank (no short flag,
+      // matching the entity arm) — the history arm used to win, and
+      // the resolver copied the commit hash while the cursor sat on a
+      // branch row.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setFocus', value: 'sidebar' })
+      state = applyLogInkAction(state, { type: 'setSidebarTab', value: 'branches' })
+      expect(state.activeView).toBe('history')
+
+      expect(getLogInkInputEvents(state, 'y', {}, { branchCount: 2 })).toEqual([
+        { type: 'yankFromActiveView' },
+      ])
+    })
+
     it('does not emit a short flag for views where it is meaningless', () => {
       // Branches/tags/stash/status only have one identifier per row — short
       // is reserved for hash-bearing views (history + commit-diff).

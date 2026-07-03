@@ -3861,9 +3861,11 @@ export function getLogInkInputEvents(
   // lists; the dispatcher only decides whether the keystroke applies.
   if (inputValue === 'y' || inputValue === 'Y') {
     const short = inputValue === 'Y'
-    if (state.activeView === 'history' && state.filteredCommits.length > 0) {
-      return [{ type: 'yankFromActiveView', short }]
-    }
+    // Entity arms run BEFORE the history fallback (#1388): from the
+    // workstation's default history view with the sidebar focused,
+    // the history branch used to always win, so `y` on a cursored
+    // sidebar branch copied the history commit instead. The resolver
+    // mirrors this precedence (sidebar entity wins over activeView).
     if (isBranchActionTarget(state) && context.branchCount) {
       return [{ type: 'yankFromActiveView' }]
     }
@@ -3872,6 +3874,9 @@ export function getLogInkInputEvents(
     }
     if (isStashActionTarget(state) && context.stashCount && context.stashSelectedRef) {
       return [{ type: 'yankFromActiveView' }]
+    }
+    if (state.activeView === 'history' && state.filteredCommits.length > 0) {
+      return [{ type: 'yankFromActiveView', short }]
     }
     if (state.activeView === 'status' && context.worktreeSelectedPath) {
       return [{ type: 'yankFromActiveView' }]
