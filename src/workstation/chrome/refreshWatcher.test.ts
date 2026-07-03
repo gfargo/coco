@@ -178,11 +178,20 @@ describe('createRefreshWatcher rename survival', () => {
       renameSync(join(gitDir, 'index.lock'), join(gitDir, 'index'))
       await waitFor(() => kinds.length >= 1)
 
-      // The second replacement is the regression: an inode-following
-      // fs.watch is orphaned by the first rename and never fires again.
-      writeFileSync(join(gitDir, 'index.lock'), 'v2')
-      renameSync(join(gitDir, 'index.lock'), join(gitDir, 'index'))
-      await waitFor(() => kinds.length >= 2)
+      // Post-first-rename replacements are the regression: an inode-
+      // following fs.watch is orphaned by the first rename and never
+      // fires again. macOS under coverage load can DROP an individual
+      // replacement's events outright (observed in CI even with the
+      // settle-wait), so issue up to five replacements, each with its
+      // own settle window — the invariant is "the watcher keeps firing
+      // after renames", which any one of them proves. A genuinely
+      // orphaned watcher fires for none of them and the count
+      // assertion below still fails.
+      for (let attempt = 2; attempt <= 6 && kinds.length < 2; attempt += 1) {
+        writeFileSync(join(gitDir, 'index.lock'), `v${attempt}`)
+        renameSync(join(gitDir, 'index.lock'), join(gitDir, 'index'))
+        await waitFor(() => kinds.length >= 2, 2000)
+      }
     } finally {
       watcher.close()
       rmSync(repoRoot, { recursive: true, force: true })
