@@ -1536,6 +1536,62 @@ describe('log Ink input interactions', () => {
     )).toBeDefined()
   })
 
+  describe('view-local jump keys on blame / file-history / changelog (#1387)', () => {
+    it('G and gg move the blame cursor, not the hidden history cursor', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'blame' })
+
+      const bottom = getLogInkInputEvents(state, 'G', {}, { blameLineCount: 120 })
+      expect(bottom.find((event) =>
+        event.type === 'action' && event.action.type === 'moveBlame' && event.action.delta === 120
+      )).toBeDefined()
+      expect(bottom.find((event) =>
+        event.type === 'action' && event.action.type === 'moveToBottom'
+      )).toBeUndefined()
+
+      const armed = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      const top = getLogInkInputEvents(armed, 'g', {}, { blameLineCount: 120 })
+      expect(top.find((event) =>
+        event.type === 'action' && event.action.type === 'moveBlame' && event.action.delta === -120
+      )).toBeDefined()
+      expect(top.find((event) =>
+        event.type === 'action' && event.action.type === 'moveToTop'
+      )).toBeUndefined()
+    })
+
+    it('PageDown moves the file-history cursor, not the history list', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'file-history' })
+
+      const events = getLogInkInputEvents(state, '', { pageDown: true }, { fileHistoryCommitCount: 40 })
+      expect(events.find((event) =>
+        event.type === 'action' && event.action.type === 'moveFileHistory' && event.action.delta === 10
+      )).toBeDefined()
+      expect(events.find((event) =>
+        event.type === 'action' && event.action.type === 'page'
+      )).toBeUndefined()
+    })
+
+    it('swallows the jump keys while the view is still loading (no count)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'blame' })
+
+      expect(getLogInkInputEvents(state, 'G', {}, {})).toEqual([])
+      expect(getLogInkInputEvents(state, '', { pageUp: true }, {})).toEqual([])
+    })
+
+    it('G scrolls the ready changelog to the end instead of moving history', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'changelog' })
+
+      const events = getLogInkInputEvents(state, 'G', {}, { changelogLineCount: 80 })
+      expect(events.find((event) =>
+        event.type === 'action' && event.action.type === 'pageChangelog' && event.action.delta === 80
+      )).toBeDefined()
+      expect(getLogInkInputEvents(state, 'G', {}, {})).toEqual([])
+    })
+  })
+
   it('does not hijack g/b/s/x outside the bisect view (#784)', () => {
     // Defensive check: pressing `g` on the history view must still set
     // pendingKey for the chord prefix, not fire bisect-good.

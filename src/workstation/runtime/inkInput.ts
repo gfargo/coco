@@ -2231,6 +2231,39 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
+      // View-local top jumps (#1387): blame / file-history / changelog
+      // advertise gg in the footer, but the generic moveToTop below
+      // only touches the HISTORY cursor — the visible list stayed put
+      // while the hidden selection silently relocated.
+      if (state.activeView === 'blame') {
+        return context.blameLineCount
+          ? [
+            action({ type: 'moveBlame', delta: -context.blameLineCount, count: context.blameLineCount }),
+            action({ type: 'setStatus', value: 'jumped to first line' }),
+          ]
+          : []
+      }
+      if (state.activeView === 'file-history') {
+        return context.fileHistoryCommitCount
+          ? [
+            action({
+              type: 'moveFileHistory',
+              delta: -context.fileHistoryCommitCount,
+              count: context.fileHistoryCommitCount,
+            }),
+            action({ type: 'setStatus', value: 'jumped to first commit' }),
+          ]
+          : []
+      }
+      if (state.activeView === 'changelog') {
+        return context.changelogLineCount
+          ? [action({
+            type: 'pageChangelog',
+            delta: -context.changelogLineCount,
+            lineCount: context.changelogLineCount,
+          })]
+          : []
+      }
       return [
         action({ type: 'moveToTop' }),
         action({ type: 'setStatus', value: 'jumped to first commit' }),
@@ -2327,6 +2360,36 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === 'G') {
+    // View-local bottom jumps (#1387) — see the gg mirror above.
+    if (state.activeView === 'blame') {
+      return context.blameLineCount
+        ? [
+          action({ type: 'moveBlame', delta: context.blameLineCount, count: context.blameLineCount }),
+          action({ type: 'setStatus', value: 'jumped to last line' }),
+        ]
+        : []
+    }
+    if (state.activeView === 'file-history') {
+      return context.fileHistoryCommitCount
+        ? [
+          action({
+            type: 'moveFileHistory',
+            delta: context.fileHistoryCommitCount,
+            count: context.fileHistoryCommitCount,
+          }),
+          action({ type: 'setStatus', value: 'jumped to last commit' }),
+        ]
+        : []
+    }
+    if (state.activeView === 'changelog') {
+      return context.changelogLineCount
+        ? [action({
+          type: 'pageChangelog',
+          delta: context.changelogLineCount,
+          lineCount: context.changelogLineCount,
+        })]
+        : []
+    }
     return [
       action({ type: 'moveToBottom' }),
       action({ type: 'setStatus', value: 'jumped to last commit' }),
@@ -2876,6 +2939,19 @@ export function getLogInkInputEvents(
       })]
     }
 
+    // View-local paging (#1387) — the generic `page` fallback below
+    // moves the HIDDEN history cursor beneath these surfaces.
+    if (state.activeView === 'blame') {
+      return context.blameLineCount
+        ? [action({ type: 'moveBlame', delta: -10, count: context.blameLineCount })]
+        : []
+    }
+    if (state.activeView === 'file-history') {
+      return context.fileHistoryCommitCount
+        ? [action({ type: 'moveFileHistory', delta: -10, count: context.fileHistoryCommitCount })]
+        : []
+    }
+
     return [action({ type: 'page', delta: -10 })]
   }
 
@@ -2903,6 +2979,18 @@ export function getLogInkInputEvents(
         delta: 8,
         previewLineCount: context.previewLineCount,
       })]
+    }
+
+    // View-local paging (#1387) — mirror of the pageUp branch above.
+    if (state.activeView === 'blame') {
+      return context.blameLineCount
+        ? [action({ type: 'moveBlame', delta: 10, count: context.blameLineCount })]
+        : []
+    }
+    if (state.activeView === 'file-history') {
+      return context.fileHistoryCommitCount
+        ? [action({ type: 'moveFileHistory', delta: 10, count: context.fileHistoryCommitCount })]
+        : []
     }
 
     return [action({ type: 'page', delta: 10 })]
