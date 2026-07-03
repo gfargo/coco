@@ -87,6 +87,8 @@ import {
   resetToCommit,
   revertCommit,
   startInteractiveRebase,
+  createFixupCommit,
+  autosquashRebase,
 } from '../../../git/historyActions'
 import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStash, popStash, renameStash, restoreStash, stashBranch } from '../../../git/stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
@@ -269,6 +271,12 @@ export function useWorkflowAction(
   // exclusively by `runWorkflowAction` (the `drop-stash` / `undo-drop-stash`
   // flows) — declared inside the hook at its original relative slot.
   const lastDroppedStashRef = React.useRef<{ hash: string; message: string } | null>(null)
+
+  // Last fixup target {hash, shortHash, message}, captured when
+  // `fixup-into-commit` succeeds so the follow-up `autosquash-rebase`
+  // (offered via choice prompt, which carries no payload) knows which
+  // commit's parent to rebase from.
+  const lastFixupTargetRef = React.useRef<{ hash: string; shortHash: string; message: string } | null>(null)
 
   const runWorkflowAction = React.useCallback(async (id: string, payload?: string) => {
     // Resolve the live snapshot first — every name below shadows what the
@@ -635,6 +643,35 @@ export function useWorkflowAction(
           shortHash: commit.shortHash,
           message: commit.message,
         })
+      },
+      'fixup-into-commit': async () => {
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        if ((context.worktree?.stagedCount ?? 0) === 0) {
+          return { ok: false, message: 'Nothing staged to fix up — stage changes first (gs, then space/A).' }
+        }
+        const target = { hash: commit.hash, shortHash: commit.shortHash, message: commit.message }
+        const result = await createFixupCommit(git, target)
+        if (result.ok) {
+          lastFixupTargetRef.current = target
+        }
+        return result
+      },
+      'autosquash-rebase': async () => {
+        // Prefer the recorded fixup target (the choice prompt carries no
+        // payload); fall back to the cursored commit for the palette path.
+        const recorded = lastFixupTargetRef.current
+        const commit = recorded ?? (() => {
+          const selected = getSelectedInkCommit(state)
+          return selected
+            ? { hash: selected.hash, shortHash: selected.shortHash, message: selected.message }
+            : undefined
+        })()
+        const result = await autosquashRebase(git, commit ?? undefined)
+        if (result.ok) {
+          lastFixupTargetRef.current = null
+        }
+        return result
       },
       'revert-commit': async () => {
         const commit = getSelectedInkCommit(state)
@@ -1342,6 +1379,23 @@ export function useWorkflowAction(
     // Rather than dead-end on that, capture the conflict and raise a
     // multi-option prompt: switch into that worktree, remove it and
     // check out here, or remove it and delete the branch (#1175, #1181).
+    // #1357 — after a successful fixup, offer to fold it in right away.
+    // Declining leaves the fixup! commit for a later autosquash (hinted
+    // in the success message).
+    if (id === 'fixup-into-commit' && result?.ok && lastFixupTargetRef.current) {
+      const target = lastFixupTargetRef.current
+      dispatch({
+        type: 'setPendingChoice',
+        value: {
+          id: 'fixup-autosquash-offer',
+          title: `Squash fixups into ${target.shortHash} now?`,
+          warning: 'Runs git rebase --autosquash (rewrites history). Esc keeps the fixup commit for later.',
+          options: [
+            { key: 's', label: 'Squash now (rebase --autosquash)', workflowId: 'autosquash-rebase', destructive: true },
+          ],
+        },
+      })
+    }
     if (id === 'checkout-branch' && !result?.ok && isBranchCheckedOutElsewhereError(result?.message)) {
       const worktreePath = parseCheckedOutWorktreePath(result?.message)
       const branchName = pendingItemAction?.id
@@ -1382,6 +1436,8 @@ export function useWorkflowAction(
     // metadata-only mutations (delete-tag, set-upstream, etc.).
     const historyMutatingIds = new Set([
       'checkout-branch',
+      'fixup-into-commit',
+      'autosquash-rebase',
       // Resolving a checkout conflict changes HEAD (checkout) and/or the
       // ref set (branch delete), so the graph needs a refresh.
       'conflict-remove-worktree-checkout',

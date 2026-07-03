@@ -2929,6 +2929,19 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    it('f on the history view sets pending confirmation for fixup-into-commit (#1357)', () => {
+      const events = getLogInkInputEvents(createLogInkState(rows), 'f')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'fixup-into-commit' } },
+      ])
+    })
+
+    it('f stays inert on the history view when no commits are loaded', () => {
+      const state = createLogInkState([])
+      const events = getLogInkInputEvents(state, 'f')
+      expect(events).toEqual([])
+    })
+
     it('R / Z / i are scoped to the history view — branches view sees them differently', () => {
       // Branches view has its own R (rename-branch). Z and i are unbound
       // there — they fall through silently.
@@ -3935,10 +3948,10 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 3 }),
         '',
         { upArrow: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'moveInspectorAction', delta: -1, actionCount: 8 } },
+        { type: 'action', action: { type: 'moveInspectorAction', delta: -1, actionCount: 9 } },
       ])
     })
 
@@ -3947,10 +3960,10 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 0 }),
         '',
         { downArrow: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'moveInspectorAction', delta: 1, actionCount: 8 } },
+        { type: 'action', action: { type: 'moveInspectorAction', delta: 1, actionCount: 9 } },
       ])
     })
 
@@ -3959,7 +3972,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorTab: 'inspector', inspectorActionIndex: 0 }),
         '',
         { upArrow: true },
-        { inspectorActionCount: 8, detailFileCount: 5 },
+        { inspectorActionCount: 9, detailFileCount: 5 },
       )
       expect(events).toEqual([
         { type: 'action', action: { type: 'moveDetailFile', delta: -1, fileCount: 5 } },
@@ -3971,7 +3984,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 0 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       const firstCommit = rows.find((r) => r.type === 'commit')
       const sha = firstCommit && firstCommit.type === 'commit' ? firstCommit.hash : ''
@@ -3985,7 +3998,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 1 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
         { type: 'action', action: { type: 'setPendingConfirmation', value: 'cherry-pick-commit' } },
@@ -3997,7 +4010,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 2 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
         { type: 'action', action: { type: 'setPendingConfirmation', value: 'revert-commit' } },
@@ -4009,7 +4022,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 3 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
         {
@@ -4023,32 +4036,44 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('Enter on yank (index 5) fires yankFromActiveView', () => {
+    it('Enter on fixup (index 5) sets pending confirmation for fixup-into-commit', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorActionIndex: 5 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
-      expect(events).toEqual([{ type: 'yankFromActiveView' }])
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'fixup-into-commit' } },
+      ])
     })
 
-    it('Enter on yank short (index 6) fires yankFromActiveView with short=true', () => {
+    it('Enter on yank (index 6) fires yankFromActiveView', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorActionIndex: 6 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
-      expect(events).toEqual([{ type: 'yankFromActiveView', short: true }])
+      expect(events).toEqual([{ type: 'yankFromActiveView' }])
     })
 
-    it('Enter on open in browser (index 7) fires open-pr workflow', () => {
+    it('Enter on yank short (index 7) fires yankFromActiveView with short=true', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorActionIndex: 7 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
+      )
+      expect(events).toEqual([{ type: 'yankFromActiveView', short: true }])
+    })
+
+    it('Enter on open in browser (index 8) fires open-pr workflow', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 8 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([{ type: 'runWorkflowAction', id: 'open-pr' }])
     })
@@ -4058,7 +4083,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorTab: 'inspector' }),
         '',
         { return: true },
-        { inspectorActionCount: 8, detailFileCount: 3 },
+        { inspectorActionCount: 9, detailFileCount: 3 },
       )
       // Diff-for-file path, not an action invoke.
       const types = events.map((e) =>
@@ -4072,7 +4097,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 1, selectedIndex: 99 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
         { type: 'action', action: { type: 'setStatus', value: 'No commit selected', kind: 'warning' } },

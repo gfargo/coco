@@ -17,6 +17,8 @@ import {
   rewordHeadCommit,
   resetToCommit,
   revertCommit,
+  autosquashRebase,
+  createFixupCommit,
   startInteractiveRebase,
 } from './historyActions'
 
@@ -228,6 +230,44 @@ describe('log history actions', () => {
 
     expect(git.raw).toHaveBeenNthCalledWith(1, ['reset', '--mixed', commit.hash])
     expect(git.raw).toHaveBeenNthCalledWith(2, ['rebase', '-i', `${commit.hash}^`])
+  })
+
+  it('creates a fixup commit targeting the cursored commit', async () => {
+    const git = {
+      revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+
+    await expect(createFixupCommit(git as never, commit)).resolves.toEqual({
+      ok: true,
+      message: 'Created fixup for abcdef1 — will squash on the next autosquash rebase',
+    })
+    expect(git.raw).toHaveBeenCalledWith(['commit', '--fixup', commit.hash])
+  })
+
+  it('autosquashes with the sequence editor disabled and recovery guidance', async () => {
+    const git = {
+      revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+
+    await expect(autosquashRebase(git as never, commit)).resolves.toEqual({
+      ok: true,
+      message: 'Autosquashed fixups into abcdef1',
+      details: ['Recovery: `git reflog` holds the pre-rebase HEAD if you need it back.'],
+    })
+    // -c keeps the editor override scoped to this invocation — mutating
+    // the shared instance env would break the user-facing `i` rebase.
+    expect(git.raw).toHaveBeenCalledWith(
+      ['-c', 'sequence.editor=true', 'rebase', '-i', '--autosquash', `${commit.hash}^`]
+    )
+  })
+
+  it('fixup and autosquash refuse a missing target', async () => {
+    const git = { revparse: jest.fn(), raw: jest.fn() }
+    await expect(createFixupCommit(git as never, undefined)).resolves.toMatchObject({ ok: false })
+    await expect(autosquashRebase(git as never, undefined)).resolves.toMatchObject({ ok: false })
+    expect(git.raw).not.toHaveBeenCalled()
   })
 
   it('blocks destructive history edits while another git operation is in progress', async () => {

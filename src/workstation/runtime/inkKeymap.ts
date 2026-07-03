@@ -75,6 +75,7 @@ export type LogInkCommandId =
   | 'viewRevert'
   | 'viewReset'
   | 'viewInteractiveRebase'
+  | 'viewFixup'
   | 'viewRebaseOnto'
   | 'viewCreateBranchHere'
   | 'viewCreateTagHere'
@@ -551,6 +552,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['Z'],
     label: 'reset to commit',
     description: 'Move the branch tip to the cursored commit (prompts for soft/mixed/hard).',
+    contexts: ['history'],
+  },
+  {
+    id: 'viewFixup',
+    keys: ['f'],
+    label: 'fixup into commit',
+    description: 'Commit the staged changes as a fixup! of the cursored commit; offers an immediate autosquash.',
     contexts: ['history'],
   },
   {
@@ -1437,7 +1445,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     // Grouped into compact `c/R/Z/i mutate` and `B/gT new` chips so
     // the footer stays scannable; full descriptions live in `?` help
     // and the palette.
-    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'B/gT new', 'm compare', 'y/Y yank', '/ search'],
+    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'y/Y yank', '/ search'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
