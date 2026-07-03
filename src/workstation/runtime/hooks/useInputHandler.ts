@@ -147,6 +147,13 @@ export type UseInputHandlerDeps = {
   /** Changelog callbacks (`useChangelogActions`). */
   startChangelogView: (options?: { force?: boolean }) => Promise<void>
   cancelChangelog: () => void
+
+  /** AI conflict-resolution callbacks (`useConflictResolutionActions`). */
+  startConflictResolution: () => Promise<void>
+  cancelConflictResolution: () => void
+  acceptConflictProposal: () => Promise<void>
+  acceptAllConflictProposals: () => Promise<void>
+  editConflictProposal: () => Promise<void>
   startRebasePlan: () => Promise<void>
   regenerateChangelog: () => void
   yankChangelog: () => void
@@ -238,6 +245,11 @@ export function useInputHandler(
     cancelPullRequestBodyDraft,
     startChangelogView,
     cancelChangelog,
+    startConflictResolution,
+    cancelConflictResolution,
+    acceptConflictProposal,
+    acceptAllConflictProposals,
+    editConflictProposal,
     startRebasePlan,
     regenerateChangelog,
     yankChangelog,
@@ -512,6 +524,16 @@ export function useInputHandler(
         void startChangelogView()
       } else if (event.type === 'cancelChangelog') {
         cancelChangelog()
+      } else if (event.type === 'runAiConflictResolution') {
+        void startConflictResolution()
+      } else if (event.type === 'cancelConflictResolution') {
+        cancelConflictResolution()
+      } else if (event.type === 'acceptConflictProposal') {
+        void acceptConflictProposal()
+      } else if (event.type === 'acceptAllConflictProposals') {
+        void acceptAllConflictProposals()
+      } else if (event.type === 'editConflictProposal') {
+        void editConflictProposal()
       } else if (event.type === 'startRebasePlan') {
         void startRebasePlan()
       } else if (event.type === 'regenerateChangelog') {

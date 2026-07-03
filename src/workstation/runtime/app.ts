@@ -198,6 +198,7 @@ import type { LogArgv } from '../../commands/log/config'
 import {matchesPromotedFilter} from '../runtime/promotedFilter'
 import {useFilteredLists} from './hooks/buildFilteredLists'
 import {useRebasePlanActions} from './hooks/useRebasePlanActions'
+import {useConflictResolutionActions} from './hooks/useConflictResolutionActions'
 import {useBisectCandidateHydration, useBisectCandidateState} from './hooks/useBisectCandidateHydration'
 import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
@@ -1535,6 +1536,24 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // render-fresh ref, so instantiation order is identity-safe.
   const { startRebasePlan } = useRebasePlanActions(React, { git, state, dispatch })
 
+  // #1369 — AI conflict resolution (`M` on the conflicts view). Same
+  // render-fresh-ref pattern; owns the per-invocation AbortController.
+  const {
+    startConflictResolution,
+    cancelConflictResolution,
+    acceptConflictProposal,
+    acceptAllConflictProposals,
+    editConflictProposal,
+  } = useConflictResolutionActions(React, {
+    git,
+    state,
+    context,
+    dispatch,
+    mountedRef,
+    refreshContext,
+    resumeRef,
+  })
+
   // Lifted verbatim into `useInputHandler` (0.72 app.ts decomposition, the
   // final big cluster). The single `useInput(…)` keyboard handler — the
   // component's largest reader — moves wholesale: it derives the per-keystroke
@@ -1592,6 +1611,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     cancelPullRequestBodyDraft,
     startChangelogView,
     cancelChangelog,
+    startConflictResolution,
+    cancelConflictResolution,
+    acceptConflictProposal,
+    acceptAllConflictProposals,
+    editConflictProposal,
     startRebasePlan,
     regenerateChangelog,
     yankChangelog,

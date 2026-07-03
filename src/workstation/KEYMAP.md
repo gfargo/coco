@@ -269,7 +269,19 @@ variants.
 | `s` | Stage (mark resolved) |
 | `u` / `U` | Keep incoming changes / keep your branch's version (mapped to git's `--theirs`/`--ours` per operation — a rebase swaps git's sides, the keys don't) |
 | `o` | Open in `$EDITOR` |
+| `M` | **AI conflict resolution** (y-confirm; token estimate shown): proposes a resolution per conflict region of the selected file — never auto-applied |
 | `C` | Continue the in-progress operation (only when no conflicts remain) |
+
+While AI proposals are open (after `M`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Walk the proposal regions |
+| `y` | Accept the cursored proposal (writes that region only; accepting the last region auto-stages the file) |
+| `e` | Edit the proposal in `$EDITOR`, then apply the edited text |
+| `n` | Reject the cursored proposal |
+| `Y` | Accept every pending proposal |
+| `Esc` | Dismiss the session (file untouched) — while generating, cancels the LLM call |
 
 ### Pull request / PR triage
 

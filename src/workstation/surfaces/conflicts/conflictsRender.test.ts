@@ -90,6 +90,82 @@ describe('renderConflictsSurface', () => {
     )
   })
 
+  describe('AI proposal panel (#1369)', () => {
+    function treeText(node: unknown): string {
+      if (node == null || node === false) return ''
+      if (typeof node === 'string' || typeof node === 'number') return String(node)
+      if (Array.isArray(node)) return node.map(treeText).join('\n')
+      const el = node as { props?: { children?: unknown } }
+      return el.props ? treeText(el.props.children) : ''
+    }
+
+    const mergeOp = makeOperation({
+      operation: 'merge',
+      conflictedFiles: [{ path: 'src/app.ts', indexStatus: 'U', worktreeStatus: 'U' }],
+      aiConflictHelpAvailable: true,
+    })
+
+    it('renders the loading state with the cancel hint', () => {
+      const state = makeState({
+        activeView: 'conflicts',
+        conflictResolution: { path: 'src/app.ts', status: 'loading', proposals: [], selectedIndex: 0 },
+      })
+      const text = treeText(render(state, { operation: mergeOp }))
+      expect(text).toContain('Generating conflict resolutions for src/app.ts')
+      expect(text).toContain('esc cancels')
+    })
+
+    it('renders the cursored proposal with ours/proposed/theirs blocks and hints', () => {
+      const state = makeState({
+        activeView: 'conflicts',
+        conflictResolution: {
+          path: 'src/app.ts',
+          status: 'ready',
+          selectedIndex: 0,
+          proposals: [{
+            regionIndex: 0,
+            resolution: 'const merged = true',
+            rationale: 'Combines both changes.',
+            status: 'pending',
+            region: {
+              index: 0,
+              startLine: 4,
+              endLine: 9,
+              oursLabel: 'HEAD',
+              theirsLabel: 'feature/x',
+              ours: ['const merged = false'],
+              theirs: ['const merged = 1'],
+            },
+          }],
+        },
+      })
+      const text = treeText(render(state, { operation: mergeOp }))
+      expect(text).toContain('AI proposals — region 1 (lines 4-9)')
+      expect(text).toContain('Combines both changes.')
+      expect(text).toContain('ours (HEAD)')
+      expect(text).toContain('const merged = false')
+      expect(text).toContain('proposed')
+      expect(text).toContain('const merged = true')
+      expect(text).toContain('theirs (feature/x)')
+      expect(text).toContain('y accept · e edit in $EDITOR · n reject · Y accept all')
+    })
+
+    it('renders the error state with the dismiss hint', () => {
+      const state = makeState({
+        activeView: 'conflicts',
+        conflictResolution: {
+          path: 'src/app.ts',
+          status: 'error',
+          error: 'rate limited',
+          proposals: [],
+          selectedIndex: 0,
+        },
+      })
+      const text = treeText(render(state, { operation: mergeOp }))
+      expect(text).toContain('AI resolution failed: rate limited')
+    })
+  })
+
   it('structural snapshot — no operation', () => {
     expect(render(makeState(), { operation: makeOperation() })).toMatchSnapshot()
   })
