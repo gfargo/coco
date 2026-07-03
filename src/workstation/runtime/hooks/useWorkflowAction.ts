@@ -65,6 +65,7 @@ import {
   deleteBranch,
   isBranchCheckedOutElsewhereError,
   isBranchNotFullyMergedError,
+  isDirtyWorktreeCheckoutError,
   parseCheckedOutWorktreePath,
   fetchBranch,
   fetchRemotes,
@@ -103,7 +104,7 @@ import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dr
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../../git/worktreeActions'
 import { rebaseOnto } from '../../../git/rebaseActions'
-import { abortOperation, continueOperation, resolveConflictKeepCurrentBranch, resolveConflictKeepIncoming, stageConflictResolved } from '../../../git/operationActions'
+import { abortOperation, continueOperation, isOperationConflictError, resolveConflictKeepCurrentBranch, resolveConflictKeepIncoming, stageConflictResolved } from '../../../git/operationActions'
 import { getForgeActions } from '../../../git/forgeActions'
 import { clearGitHubListCache } from '../../../git/githubListCache'
 import { isPullRequestMergeStrategy } from '../../../git/pullRequestActions'
@@ -159,6 +160,33 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
  * Returns `undefined` for non-delete workflows (and when nothing is
  * selected), which the runner treats as "no pending marker".
  */
+/**
+ * Workflow ids whose SUCCESS rewrote local history — the moments where
+ * advertising the reflog time machine actually matters (#1355). The
+ * shared result dispatch appends `gr reflog to recover` for these.
+ * Deliberately excludes ref-only moves (checkout, fetch/pull/push) and
+ * additive commits: recovery hints on operations nobody regrets are
+ * noise.
+ */
+const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
+  'reset-hard-to-commit',
+  'reset-soft-to-commit',
+  'reset-mixed-to-commit',
+  'cherry-pick-commit',
+  'revert-commit',
+  'fixup-into-commit',
+  'autosquash-rebase',
+  'interactive-rebase-to-commit',
+  'execute-rebase-plan',
+  'rebase-onto-branch',
+  'amend-head',
+  'reword-head',
+])
+
+export function isHistoryRewriteWorkflow(id: string): boolean {
+  return HISTORY_REWRITE_WORKFLOW_IDS.has(id)
+}
+
 export function resolvePendingItemAction(
   id: string,
   state: LogInkState,
@@ -881,6 +909,26 @@ export function useWorkflowAction(
       'checkout-created-branch': async () => {
         return checkoutBranchByName(git, payload ?? '')
       },
+      // Recovery follow-up for a dirty-worktree checkout refusal (#1360).
+      // Reached only via the dirty-checkout-recovery choice prompt below;
+      // the target branch name rides in `payload`. Stashes EVERYTHING
+      // (createStash passes `-u`, so untracked files ride along — they
+      // can block a switch too) and retries the switch by name. The
+      // stash is deliberately NOT auto-popped after the switch — the
+      // success message points at the stash surface (gz) so the user
+      // decides when (and on which branch) to bring the changes back.
+      'stash-and-checkout-branch': async () => {
+        const name = payload?.trim()
+        if (!name) return { ok: false, message: 'Branch name required' }
+        const stashed = await createStash(git, `WIP before switching to ${name}`)
+        if (!stashed.ok) {
+          return { ok: false, message: `Stash failed — staying put: ${stashed.message}` }
+        }
+        const checkout = await checkoutBranchByName(git, name)
+        return checkout.ok
+          ? { ok: true, message: `Stashed changes and switched to ${name} — the stash is waiting on the stash surface (gz)` }
+          : { ok: false, message: `Stashed changes, but the switch still failed: ${checkout.message}` }
+      },
       // #0.71 — submodule maintenance. Resolve the target from the
       // filtered list so the cursor index lines up with what's on screen
       // (a filtered-out submodule can never be the action target). The
@@ -1524,9 +1572,14 @@ export function useWorkflowAction(
     // Handlers that return no result (pure-navigation ones) keep the
     // neutral info treatment. Recovery escalations below may follow up
     // with their own prompt/warning on top of the error status.
+    // Momentum hint (#1355): after a history rewrite lands, advertise
+    // the reflog time machine AT the moment it matters — recovery
+    // exists but was never surfaced when the user might want it.
+    const historyRewriteHint =
+      result?.ok && isHistoryRewriteWorkflow(id) ? ' · gr reflog to recover' : ''
     dispatch({
       type: 'setStatus',
-      value: result?.message || 'Workflow action complete',
+      value: `${result?.message || 'Workflow action complete'}${historyRewriteHint}`,
       kind: result ? (result.ok ? 'success' : 'error') : undefined,
     })
     // A safe `delete-branch` (`git branch -d`) refuses branches that
@@ -1675,6 +1728,69 @@ export function useWorkflowAction(
         })
       }
     }
+    // #1360 — `git switch` on a dirty tree dead-ends with git's raw
+    // "would be overwritten" refusal. Offer stash & switch instead:
+    // `s` stashes everything (untracked included) and retries the
+    // checkout; Esc keeps the changes (and the current branch) in
+    // place. The cursor hasn't moved (the checkout failed), so the
+    // branch name captured for the row spinner is the retry target.
+    if (
+      id === 'checkout-branch' &&
+      !result?.ok &&
+      isDirtyWorktreeCheckoutError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+    ) {
+      const branchName = pendingItemAction?.id
+      if (branchName) {
+        dispatch({
+          type: 'setPendingChoice',
+          value: {
+            id: 'dirty-checkout-recovery',
+            title: `Uncommitted changes block switching to '${branchName}'`,
+            warning: 'Stash & switch stashes everything (including untracked files), then retries the checkout. The stash stays put for you to pop later.',
+            options: [
+              { key: 's', label: 'Stash changes & switch', workflowId: 'stash-and-checkout-branch', payload: branchName },
+            ],
+          },
+        })
+      }
+    }
+    // #1360 — a cherry-pick / revert / rebase / pull that stopped on
+    // CONFLICTS used to dump git's stderr on the status line and leave
+    // the user to find `gx` on their own. Detect the conflict outcome
+    // and offer the two moves that matter at that moment: open the
+    // conflicts view, or abort the operation to unwind. Esc dismisses
+    // the prompt but keeps the raw error status visible underneath
+    // (`keepStatusOnDismiss`) — the repo really is mid-operation.
+    const conflictRecoveryTitles: Record<string, string> = {
+      'cherry-pick-commit': 'Cherry-pick stopped on conflicts',
+      'revert-commit': 'Revert stopped on conflicts',
+      'rebase-onto-branch': 'Rebase stopped on conflicts',
+      'interactive-rebase': 'Rebase stopped on conflicts',
+      'execute-rebase-plan': 'Rebase stopped on conflicts',
+      'pull-current-branch': 'Pull stopped on conflicts',
+      'pull-selected-branch': 'Pull stopped on conflicts',
+      'pull-rebase-current': 'Pull stopped on conflicts',
+      'pull-merge-current': 'Pull stopped on conflicts',
+    }
+    if (
+      conflictRecoveryTitles[id] &&
+      !result?.ok &&
+      isOperationConflictError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+    ) {
+      dispatch({
+        type: 'setPendingChoice',
+        value: {
+          id: 'operation-conflict-recovery',
+          title: conflictRecoveryTitles[id],
+          warning: 'The repository is mid-operation. Resolve the conflicts and continue, or abort to unwind.',
+          keepStatusOnDismiss: true,
+          options: [
+            { key: 'x', label: 'Open conflicts view', intent: 'open-conflicts' },
+            { key: 'a', label: 'Abort the operation', workflowId: 'abort-operation', destructive: true },
+          ],
+        },
+      })
+    }
     // Refresh history rows AS WELL when the workflow could have
     // changed the commits the user sees (#945 follow-up). The
     // workflow IDs below all either create/rewrite local commits or
@@ -1733,6 +1849,9 @@ export function useWorkflowAction(
       // it — refresh so the PR's commits and the current-branch marker
       // appear (#1363).
       'triage-pr-checkout',
+      // Stash & switch (#1360) changes HEAD the same way a plain
+      // checkout does.
+      'stash-and-checkout-branch',
     ])
     if (result?.ok && historyMutatingIds.has(id)) {
       await refreshHistoryRows()
@@ -1747,7 +1866,7 @@ export function useWorkflowAction(
     // (resolvePendingItemAction → action 'checkout'), so a silent
     // stale-while-revalidate swap keeps the list readable and just
     // repaints the current-branch marker once the new context lands.
-    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch' || id === 'triage-pr-checkout') && result?.ok) {
+    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch' || id === 'triage-pr-checkout' || id === 'stash-and-checkout-branch') && result?.ok) {
       dispatch({ type: 'resetBranchSelection' })
       await refreshContext({ silent: true })
     } else {
@@ -1784,6 +1903,11 @@ export function useWorkflowAction(
     // Stage-all / stage-pathspec change staged/unstaged counts — refresh
     // the worktree so the status list + compose summary reflect it.
     if (result?.ok && (id === 'stage-all' || id === 'stage-pathspec')) {
+      await refreshWorktreeContext()
+    }
+    // Stash & switch (#1360) empties the worktree into a stash — refresh
+    // so the staged/unstaged/untracked counts drop to zero immediately.
+    if (result?.ok && id === 'stash-and-checkout-branch') {
       await refreshWorktreeContext()
     }
     if (result?.ok && id === 'drop-stash') {

@@ -75,6 +75,58 @@ describe('buildHeaderChips', () => {
     expect(chips.find((c) => c.id === 'bisecting')).toBeUndefined()
   })
 
+  describe('in-progress operation chip (#1360)', () => {
+    it('renders a warning chip for each merge-machinery operation', () => {
+      const cases = [
+        ['merge', '⚠ MERGING'],
+        ['rebase', '⚠ REBASING'],
+        ['cherry-pick', '⚠ CHERRY-PICKING'],
+        ['revert', '⚠ REVERTING'],
+      ] as const
+      for (const [operation, label] of cases) {
+        const chips = buildHeaderChips(makeInput({ operation }))
+        const chip = chips.find((c) => c.id === 'operation')!
+        expect(chip).toBeDefined()
+        expect(chip.label).toBe(label)
+        expect(chip.color).toBe('yellow') // theme.colors.warning
+        expect(chip.bold).toBe(true)
+      }
+    })
+
+    it('appends the conflict count with singular/plural copy', () => {
+      const three = buildHeaderChips(makeInput({ operation: 'rebase', operationConflicts: 3 }))
+      expect(three.find((c) => c.id === 'operation')!.label).toBe('⚠ REBASING (3 conflicts)')
+      const one = buildHeaderChips(makeInput({ operation: 'merge', operationConflicts: 1 }))
+      expect(one.find((c) => c.id === 'operation')!.label).toBe('⚠ MERGING (1 conflict)')
+      // Zero conflicts (all resolved, operation not yet continued) drops
+      // the parenthetical rather than rendering "(0 conflicts)".
+      const zero = buildHeaderChips(makeInput({ operation: 'cherry-pick', operationConflicts: 0 }))
+      expect(zero.find((c) => c.id === 'operation')!.label).toBe('⚠ CHERRY-PICKING')
+    })
+
+    it('omits the chip when no operation is in progress (undefined or none)', () => {
+      expect(
+        buildHeaderChips(makeInput()).find((c) => c.id === 'operation')
+      ).toBeUndefined()
+      expect(
+        buildHeaderChips(makeInput({ operation: 'none' })).find((c) => c.id === 'operation')
+      ).toBeUndefined()
+    })
+
+    it('sits in the state cluster — after dirty, before bisecting', () => {
+      const chips = buildHeaderChips(makeInput({ operation: 'rebase', bisecting: true }))
+      const ids = chips.map((c) => c.id)
+      expect(ids.indexOf('operation')).toBe(ids.indexOf('dirty') + 1)
+      expect(ids.indexOf('bisecting')).toBe(ids.indexOf('operation') + 1)
+    })
+
+    it('falls back to the ASCII glyph per theme.ascii', () => {
+      const theme = createLogInkTheme({ noColor: false, ascii: true })
+      const chips = buildHeaderChips(makeInput({ theme, operation: 'rebase', operationConflicts: 2 }))
+      expect(chips.find((c) => c.id === 'operation')!.label).toBe('! REBASING (2 conflicts)')
+    })
+  })
+
   it('omits the PR chip entirely when no pull request is loaded', () => {
     const chips = buildHeaderChips(makeInput({ pullRequest: undefined }))
     expect(chips.find((c) => c.id === 'pr')).toBeUndefined()

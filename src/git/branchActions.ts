@@ -178,6 +178,21 @@ export function isBranchCheckedOutElsewhereError(message: string | undefined): b
 }
 
 /**
+ * True when a checkout / switch was refused because uncommitted local
+ * changes (tracked or untracked) would be overwritten. Matches git's
+ * wording across versions and both entry commands: "Your local changes
+ * to the following files would be overwritten by checkout" / "The
+ * following untracked working tree files would be overwritten by
+ * checkout" (and the `git switch` phrasing). Deliberately narrower than
+ * a generic dirty-tree check — the merge-flavored "overwritten by
+ * merge" rejection routes through the pull recovery flows instead
+ * (#1360).
+ */
+export function isDirtyWorktreeCheckoutError(message: string | undefined): boolean {
+  return /would be overwritten by (checkout|switch)/i.test(message || '')
+}
+
+/**
  * Pull the worktree path out of git's "checked out at '<path>'" /
  * "used by worktree at '<path>'" rejection so the UI can name where the
  * branch is still in use. Returns undefined when the message doesn't

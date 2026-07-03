@@ -92,6 +92,12 @@ export function createLogInkHeader(
     const branch = context.branches?.currentBranch || context.provider?.currentBranch || '<detached>'
     const dirty = Boolean(context.branches?.dirty)
     const bisecting = Boolean(context.bisect?.active)
+    // In-progress merge-machinery operation (#1360) — 'none' collapses
+    // to undefined so the chip builder's omit-when-absent rule applies.
+    const operation = context.operation?.operation && context.operation.operation !== 'none'
+      ? context.operation.operation
+      : undefined
+    const operationConflicts = context.operation?.conflictedFiles?.length ?? 0
     const repo = context.provider?.repository.owner && context.provider.repository.name
       ? `${context.provider.repository.owner}/${context.provider.repository.name}`
       : 'local repository'
@@ -122,6 +128,8 @@ export function createLogInkHeader(
       branch,
       dirty,
       bisecting,
+      operation,
+      operationConflicts,
       pullRequest: prInfo ? {
         number: prInfo.number,
         state: prInfo.state,
