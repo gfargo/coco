@@ -47,8 +47,12 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
     : allStashes
   const selected = Math.max(0, Math.min(state.selectedStashIndex, Math.max(0, stashes.length - 1)))
   // One extra row reserved (vs the other surfaces' `- 4`) for the column
-  // header row below.
-  const listRows = Math.max(4, bodyRows - 5)
+  // header row below. Conditional rows are counted too (#1392): the
+  // filter affordance while filtering, and one more for the second
+  // scroll indicator once the list overflows the window (the base
+  // spare absorbed only one of the two).
+  const baseRows = Math.max(4, bodyRows - 5 - (state.filterMode ? 1 : 0))
+  const listRows = stashes.length > baseRows ? Math.max(4, baseRows - 1) : baseRows
   const startIndex = clampListWindowStart(selected, stashes.length, listRows)
   const visible = stashes.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
