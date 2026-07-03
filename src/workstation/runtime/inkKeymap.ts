@@ -1142,8 +1142,12 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
   }
 
   if (options.showHelp) {
+    // Every key here is live inside the help handler — the old set
+    // advertised `tab focus` and `/ search` while the handler
+    // swallowed both ("a footer that lies about a key is a bug",
+    // #1355). `/` is now true: it opens the overlay's type-to-filter.
     return {
-      contextual: ['? close', 'tab focus', '/ search'],
+      contextual: ['? close', '/ filter', 'j/k scroll'],
       global: ['q quit'],
     }
   }
@@ -1516,16 +1520,18 @@ export function getLogInkHelpSections(
     !GLOBAL_BINDING_IDS.includes(binding.id) && bindingMatchesViewContext(binding, options)
   )
 
+  // "This view" leads (#1355): users press `?` to answer "what can I
+  // do HERE" — the global set is reference material, not the answer.
   return [
-    {
-      title: 'Global',
-      bindings: globals,
-      subgroups: buildSubgroups(globals, true),
-    },
     {
       title: `This view (${options.activeView})`,
       bindings: viewBindings,
       subgroups: buildSubgroups(viewBindings, false),
+    },
+    {
+      title: 'Global',
+      bindings: globals,
+      subgroups: buildSubgroups(globals, true),
     },
   ]
 }

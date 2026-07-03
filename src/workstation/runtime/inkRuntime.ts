@@ -36,10 +36,12 @@ type LogInkStreams = {
 type LogInkOptions = {
   appLabel?: string
   /**
-   * P4.3 — opt-in idle tip rotation. Forwarded from `logTui.idleTips` in the
-   * user's config. The runtime starts a tip cycle when `state.statusMessage`
-   * is empty for >10s; the tip lives in the footer's status slot until the
-   * next user action sets a real message.
+   * Idle tip rotation, ON by default (#1355 — it was opt-in, so the
+   * audience who needed it never saw it). Forwarded from
+   * `logTui.idleTips` in the user's config; set `false` to opt out.
+   * The runtime starts a tip cycle when `state.statusMessage` is empty
+   * for >10s; the tip lives in the footer's status slot until the next
+   * user action sets a real message.
    */
   idleTips?: boolean
   /**
@@ -121,7 +123,10 @@ export async function startInkInteractiveLog(
   const app = React.createElement(LogInkApp, {
     appLabel: options.appLabel || 'coco log',
     git,
-    idleTipsEnabled: Boolean(options.idleTips),
+    // Default-ON (#1355): the tip rotation is activity-suppressed with
+    // a grace period, and the audience who needs it never finds an
+    // opt-in. `logTui.idleTips: false` remains the opt-out.
+    idleTipsEnabled: options.idleTips !== false,
     // Resolve undefined → true so the default flips on automatically.
     // An explicit `false` from config opts out.
     dateBucketingEnabled: options.dateBucketing !== false,

@@ -103,3 +103,11 @@ export function formatSplitApplySuccess(
   }
   return `${navCue}${tail}`
 }
+
+/**
+ * Momentum suffix for a successful manual commit (#1355). The moment a
+ * commit lands is exactly when "push it" and "see it in history" are
+ * the next moves — an unadorned "Created abc123" reads as a dead end.
+ * Concatenated onto the success message, not a standalone sentence.
+ */
+export const COMMIT_MOMENTUM_HINT = ' — P push · gh history'

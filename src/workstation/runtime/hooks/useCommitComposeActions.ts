@@ -48,6 +48,7 @@ import { tmpdir } from 'node:os'
 import * as nodePath from 'node:path'
 import type { LogInkAction } from '../inkViewModel'
 import type { LogInkContext } from '../types'
+import { COMMIT_MOMENTUM_HINT } from '../../chrome/postApplyHints'
 import type { CommitComposeState } from '../../../commands/log/commitCompose'
 import { createManualCommit, formatCommitComposeMessage } from '../../../commands/log/commitCompose'
 import type { WorktreeOverview } from '../../../git/statusData'
@@ -114,7 +115,14 @@ export function useCommitComposeActions(
       type: 'commitCompose',
       action: { type: 'setResult', message: result.message, details: result.details },
     })
-    dispatch({ type: 'setStatus', value: result.message })
+    // Momentum hint (#1355): a landed commit's natural next moves are
+    // push and history — say so at the moment it matters. Outcome-
+    // colored per the #1349 convention.
+    dispatch({
+      type: 'setStatus',
+      value: result.ok ? `${result.message}${COMMIT_MOMENTUM_HINT}` : result.message,
+      kind: result.ok ? 'success' : 'error',
+    })
 
     if (result.ok) {
       dispatch({ type: 'commitCompose', action: { type: 'reset' } })

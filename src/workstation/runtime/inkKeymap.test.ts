@@ -301,7 +301,9 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: true,
     })).toEqual({
-      contextual: ['? close', 'tab focus', '/ search'],
+      // Honest help footer (#1355): every advertised key is live in
+      // the help handler; / opens the overlay's type-to-filter.
+      contextual: ['? close', '/ filter', 'j/k scroll'],
       global: ['q quit'],
     })
 
@@ -316,22 +318,23 @@ describe('log Ink keymap', () => {
     })
   })
 
-  it('groups help into Global and the active view', () => {
+  it('groups help into the active view (leading, #1355) and Global', () => {
     const sections = getLogInkHelpSections({ activeView: 'history', focus: 'commits' })
 
+    // "This view" leads: ? answers "what can I do HERE" first.
     expect(sections.map((section) => section.title)).toEqual([
-      'Global',
       'This view (history)',
+      'Global',
     ])
 
-    const globals = sections[0].bindings.map((binding) => binding.id)
+    const globals = sections[1].bindings.map((binding) => binding.id)
     expect(globals).toContain('help')
     expect(globals).toContain('commandPalette')
     expect(globals).toContain('quit')
     expect(globals).toContain('focusNext')
     expect(globals).not.toContain('moveUp')
 
-    const viewBindings = sections[1].bindings.map((binding) => binding.id)
+    const viewBindings = sections[0].bindings.map((binding) => binding.id)
     expect(viewBindings).toContain('moveUp')
     expect(viewBindings).toContain('search')
     expect(viewBindings).toContain('toggleGraph')
@@ -341,10 +344,10 @@ describe('log Ink keymap', () => {
 
   it('renders the help label with the active view', () => {
     const status = getLogInkHelpSections({ activeView: 'status', focus: 'commits' })
-    expect(status[1].title).toBe('This view (status)')
+    expect(status[0].title).toBe('This view (status)')
 
     const diff = getLogInkHelpSections({ activeView: 'diff', focus: 'detail' })
-    expect(diff[1].title).toBe('This view (diff)')
+    expect(diff[0].title).toBe('This view (diff)')
   })
 
   it('still derives bindings from the shared keymap', () => {
@@ -447,17 +450,17 @@ describe('log Ink keymap', () => {
 
   it('exposes the gc compose chord as a global navigation binding', () => {
     const sections = getLogInkHelpSections({ activeView: 'history', focus: 'commits' })
-    const globalIds = sections[0].bindings.map((binding) => binding.id)
+    const globalIds = sections[1].bindings.map((binding) => binding.id)
 
     expect(globalIds).toContain('navigateCompose')
 
-    const composeBinding = sections[0].bindings.find((binding) => binding.id === 'navigateCompose')
+    const composeBinding = sections[1].bindings.find((binding) => binding.id === 'navigateCompose')
     expect(composeBinding?.keys).toEqual(['gc'])
   })
 
   it('exposes the gb/gt/gz chords as global navigation bindings', () => {
     const sections = getLogInkHelpSections({ activeView: 'history', focus: 'commits' })
-    const globals = sections[0].bindings
+    const globals = sections[1].bindings
 
     const branches = globals.find((binding) => binding.id === 'navigateBranches')
     const tags = globals.find((binding) => binding.id === 'navigateTags')
