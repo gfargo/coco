@@ -174,3 +174,55 @@ describe('inline pending spinner in the sidebar', () => {
     expect(flattenText(tree)).toContain(SPIN)
   })
 })
+
+describe('inline pending spinner on the PR triage list (#1363)', () => {
+  const { renderPullRequestTriageSurface } =
+    // Imported lazily to keep the top-of-file import block focused on
+    // the original four surfaces.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('../surfaces/pullRequestTriage') as typeof import('../surfaces/pullRequestTriage')
+
+  const triageContext = {
+    ...context,
+    pullRequestList: {
+      available: true,
+      authenticated: true,
+      repository: { owner: 'gfargo', name: 'coco' },
+      pullRequests: [
+        {
+          number: 41, title: 'feat: one', url: 'https://x/41', state: 'OPEN', isDraft: false,
+          headRefName: 'feat/one', baseRefName: 'main', createdAt: '', updatedAt: '',
+        },
+        {
+          number: 42, title: 'feat: two', url: 'https://x/42', state: 'OPEN', isDraft: false,
+          headRefName: 'feat/two', baseRefName: 'main', createdAt: '', updatedAt: '',
+        },
+      ],
+    },
+  } as unknown as LogInkContext
+
+  function renderTriage(pending?: LogInkPendingItemAction): string {
+    const base = createLogInkState([])
+    const ctx: SurfaceRenderContext = {
+      h: createElement,
+      components,
+      state: { ...base, activeView: 'pull-request-triage', focus: 'commits', pendingItemAction: pending },
+      context: triageContext,
+      contextStatus: createLogInkContextStatus('ready'),
+      bodyRows: 30,
+      width: 90,
+      theme,
+    }
+    return flattenText(renderPullRequestTriageSurface(ctx, 0))
+  }
+
+  it('swaps the cursor glyph for the spinner on the PR being checked out', () => {
+    const text = renderTriage({ kind: 'pull-request', id: '42', action: 'checkout' })
+    expect(text).toMatch(new RegExp(`${SPIN}\\s+#42`))
+    expect(text).not.toMatch(new RegExp(`${SPIN}\\s+#41`))
+  })
+
+  it('renders no spinner when nothing is pending', () => {
+    expect(renderTriage()).not.toContain(SPIN)
+  })
+})

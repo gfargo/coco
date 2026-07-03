@@ -7,6 +7,7 @@ import type {
   PullRequestListOverview,
 } from './pullRequestListData'
 import type { PullRequestDetailResult } from './pullRequestDetailData'
+import type { PullRequestDiffResult } from './pullRequestDiffData'
 import type { IssueDetailResult } from './issueDetailData'
 import type {
   CreatePullRequestInput,
@@ -20,11 +21,13 @@ import { getPullRequestList } from './pullRequestListData'
 import { getIssueList } from './issuesListData'
 import { getPullRequestDetail } from './pullRequestDetailData'
 import { getIssueDetail } from './issueDetailData'
+import { getPullRequestDiff } from './pullRequestDiffData'
 import {
   addPullRequestAssignee,
   addPullRequestLabel,
   approvePullRequest,
   approvePullRequestByNumber,
+  checkoutPullRequestByNumber,
   closePullRequest,
   closePullRequestByNumber,
   commentPullRequest,
@@ -52,11 +55,13 @@ import {
   addMergeRequestLabel,
   approveMergeRequest,
   approveMergeRequestByNumber,
+  checkoutMergeRequestByNumber,
   closeMergeRequest,
   closeMergeRequestByNumber,
   commentMergeRequest,
   commentMergeRequestByNumber,
   createMergeRequest,
+  getMergeRequestDiff,
   mergeMergeRequest,
   mergeMergeRequestByNumber,
   openMergeRequest,
@@ -114,6 +119,12 @@ export type ForgeActions = {
   // Detail (number only; GitLab binds the project path internally)
   getPullRequestDetail: (n: number) => Promise<PullRequestDetailResult>
   getIssueDetail: (n: number) => Promise<IssueDetailResult>
+  /**
+   * Unified patch for a PR / MR by number (#1363). Backs the triage
+   * Enter → diff drill-in. Bitbucket has no CLI patch fetch, so its
+   * facade returns a graceful `{ ok: false }` explaining the gap.
+   */
+  getPullRequestDiffByNumber: (n: number) => Promise<PullRequestDiffResult>
   // Pull-request / merge-request mutations by number (triage)
   commentPullRequestByNumber: (n: number, body: string) => Promise<PullRequestActionResult>
   addPullRequestLabel: (n: number, label: string) => Promise<PullRequestActionResult>
@@ -122,6 +133,12 @@ export type ForgeActions = {
   closePullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
   approvePullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
   requestChangesPullRequestByNumber: (n: number, body: string) => Promise<PullRequestActionResult>
+  /**
+   * `gh pr checkout <n>` / `glab mr checkout <n>` (#1363) — fetch the
+   * PR's head branch and switch onto it. Bitbucket has no CLI
+   * counterpart, so its facade returns a graceful `{ ok: false }`.
+   */
+  checkoutPullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
   // Current-branch PR / MR mutations
   mergePullRequest: (strategy: PullRequestMergeStrategy) => Promise<PullRequestActionResult>
   closePullRequest: () => Promise<PullRequestActionResult>
@@ -143,6 +160,7 @@ const githubActions: ForgeActions = {
   getIssueList: (git, filter) => getIssueList(git, filter),
   getPullRequestDetail: (n) => getPullRequestDetail(n),
   getIssueDetail: (n) => getIssueDetail(n),
+  getPullRequestDiffByNumber: (n) => getPullRequestDiff(n),
   commentPullRequestByNumber,
   addPullRequestLabel,
   addPullRequestAssignee,
@@ -150,6 +168,7 @@ const githubActions: ForgeActions = {
   closePullRequestByNumber,
   approvePullRequestByNumber,
   requestChangesPullRequestByNumber,
+  checkoutPullRequestByNumber,
   mergePullRequest,
   closePullRequest,
   approvePullRequest,
@@ -180,6 +199,7 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
       path ? getMergeRequestDetail(path, n) : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
     getIssueDetail: (n) =>
       path ? getGitLabIssueDetail(path, n) : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
+    getPullRequestDiffByNumber: (n) => getMergeRequestDiff(n, defaultGlabRunner, host),
     commentPullRequestByNumber: (n, body) => commentMergeRequestByNumber(n, body, defaultGlabRunner, host),
     addPullRequestLabel: (n, label) => addMergeRequestLabel(n, label, defaultGlabRunner, host),
     addPullRequestAssignee: (n, assignee) => addMergeRequestAssignee(n, assignee, defaultGlabRunner, host),
@@ -187,6 +207,7 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
     closePullRequestByNumber: (n) => closeMergeRequestByNumber(n, defaultGlabRunner, host),
     approvePullRequestByNumber: (n) => approveMergeRequestByNumber(n, defaultGlabRunner, host),
     requestChangesPullRequestByNumber: (n, body) => requestChangesMergeRequestByNumber(n, body, defaultGlabRunner, host),
+    checkoutPullRequestByNumber: (n) => checkoutMergeRequestByNumber(n, defaultGlabRunner, host),
     mergePullRequest: (strategy) => mergeMergeRequest(strategy, defaultGlabRunner, host),
     closePullRequest: () => closeMergeRequest(defaultGlabRunner, host),
     approvePullRequest: () => approveMergeRequest(defaultGlabRunner, host),
@@ -222,6 +243,11 @@ function bitbucketActions(
       path
         ? getBitbucketIssueDetail(path, n)
         : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
+    // Bitbucket has no CLI patch fetch / checkout — surface the gap as a
+    // graceful failure so the diff surface / status line explain it
+    // instead of dead-ending (#1363).
+    getPullRequestDiffByNumber: () =>
+      Promise.resolve({ ok: false, message: 'Pull request diffs are not supported for Bitbucket yet.' }),
     commentPullRequestByNumber: (n, body) => commentBitbucketPullRequestByNumber(path ?? '', n, body),
     addPullRequestLabel: () => addBitbucketPullRequestLabel(),
     addPullRequestAssignee: (n, assignee) => addBitbucketPullRequestReviewer(path ?? '', n, assignee),
@@ -229,6 +255,8 @@ function bitbucketActions(
     closePullRequestByNumber: (n) => closeBitbucketPullRequestByNumber(path ?? '', n),
     approvePullRequestByNumber: (n) => approveBitbucketPullRequestByNumber(path ?? '', n),
     requestChangesPullRequestByNumber: (n, body) => requestChangesBitbucketPullRequestByNumber(path ?? '', n, body),
+    checkoutPullRequestByNumber: () =>
+      Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket yet.' }),
     mergePullRequest: (strategy) => mergeBitbucketPullRequest(path, currentBranch, strategy),
     closePullRequest: () => closeBitbucketPullRequest(path, currentBranch),
     approvePullRequest: () => approveBitbucketPullRequest(path, currentBranch),

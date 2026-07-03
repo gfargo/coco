@@ -219,7 +219,12 @@ export function useDetailHydration(
   ])
 
   React.useEffect(() => {
-    if (state.activeView !== 'pull-request-triage') return
+    // #1363 — the PR-sourced diff keeps the triage preview panel on the
+    // right, so detail hydration stays live there too: a user who
+    // Enter-drills before the 250ms debounce fires still gets checks /
+    // reviewers next to the patch.
+    const onPrDiff = state.activeView === 'diff' && state.diffSource === 'pr'
+    if (state.activeView !== 'pull-request-triage' && !onPrDiff) return
     const cursored = filteredPullRequestTriageList[
       Math.min(
         state.selectedPullRequestTriageIndex,
@@ -253,6 +258,9 @@ export function useDetailHydration(
   }, [
     runtimes.length,
     state.activeView,
+    // #1363 — the guard reads the diff source (PR-sourced diff keeps
+    // hydrating); refire if it changes under a stable activeView.
+    state.diffSource,
     state.selectedPullRequestTriageIndex,
     filteredPullRequestTriageList,
     context.pullRequestDetailByNumber,

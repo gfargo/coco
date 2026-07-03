@@ -71,7 +71,6 @@ function zeroExtraComponent(
       submodules: define(renderSubmodulesSurface, 'SubmodulesSurface'),
       remotes: define(renderRemotesSurface, 'RemotesSurface'),
       'pull-request': define(renderPullRequestSurface, 'PullRequestSurface'),
-      'pull-request-triage': define(renderPullRequestTriageSurface, 'PullRequestTriageSurface'),
       issues: define(renderIssuesTriageSurface, 'IssuesTriageSurface'),
       conflicts: define(renderConflictsSurface, 'ConflictsSurface'),
       changelog: define(renderChangelogSurface, 'ChangelogSurface'),
@@ -113,6 +112,9 @@ function spinnerSurfaceComponent(
       tags: make(renderTagsSurface, 'TagsSurface'),
       stash: make(renderStashSurface, 'StashSurface'),
       worktrees: make(renderWorktreesSurface, 'WorktreesSurface'),
+      // #1363 — the triage list needs the spinner frame for the inline
+      // pending-row spinner while `gh pr checkout <n>` runs.
+      'pull-request-triage': make(renderPullRequestTriageSurface, 'PullRequestTriageSurface'),
     }
   }
   return cachedSpinnerComponents[view]
@@ -223,6 +225,9 @@ export type MainPanelExtras = {
   stashDiffLoading: boolean
   compareDiffLines: string[] | undefined
   compareDiffLoading: boolean
+  prDiffLines: string[] | undefined
+  prDiffLoading: boolean
+  prDiffError: string | undefined
   bisectCandidateDetail: GitCommitDetail | undefined
   bisectCandidateLoading: boolean
   /** Cached blame for `state.blamePath` (#0.71). Undefined on a cache miss. */
@@ -260,6 +265,9 @@ export function renderMainPanel(
     stashDiffLoading,
     compareDiffLines,
     compareDiffLoading,
+    prDiffLines,
+    prDiffLoading,
+    prDiffError,
     bisectCandidateDetail,
     bisectCandidateLoading,
     blame,
@@ -309,6 +317,9 @@ export function renderMainPanel(
       stashDiffLoading,
       compareDiffLines,
       compareDiffLoading,
+      prDiffLines,
+      prDiffLoading,
+      prDiffError,
       syntaxSpans,
     }
     return h(diffSurfaceComponent(React), { diff: diffData })
@@ -372,7 +383,7 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'pull-request-triage') {
-    return h(zeroExtraComponent(React, 'pull-request-triage')!)
+    return h(spinnerSurfaceComponent(React, 'pull-request-triage')!, { spinnerFrame })
   }
 
   if (state.activeView === 'issues') {

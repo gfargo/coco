@@ -71,7 +71,6 @@ const ZERO_EXTRA_VIEWS: Array<[view: string, displayName: string]> = [
   ['submodules', 'SubmodulesSurface'],
   ['remotes', 'RemotesSurface'],
   ['pull-request', 'PullRequestSurface'],
-  ['pull-request-triage', 'PullRequestTriageSurface'],
   ['issues', 'IssuesTriageSurface'],
   ['conflicts', 'ConflictsSurface'],
   ['changelog', 'ChangelogSurface'],
@@ -107,6 +106,9 @@ describe('renderMainPanel — single-extra surface wiring', () => {
     ['tags', 'TagsSurface'],
     ['stash', 'StashSurface'],
     ['worktrees', 'WorktreesSurface'],
+    // #1363 — the triage list moved to the spinner group for the
+    // checkout row spinner.
+    ['pull-request-triage', 'PullRequestTriageSurface'],
   ])('mounts the %s view as %s and threads the spinner frame', (view, displayName) => {
     const React = makeReact()
     const el = renderMainPanel(React, makeSurface(view), makeExtras()) as unknown as CapturedElement

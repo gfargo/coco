@@ -323,3 +323,25 @@ export function requestChangesPullRequestByNumber(
     })
   )
 }
+
+/**
+ * `gh pr checkout <n>` — fetch the PR's head branch and switch the
+ * worktree onto it (#1363). The one triage verb that mutates LOCAL
+ * state rather than forge state: no y-confirm (a checkout is cheap to
+ * undo and gh refuses rather than clobbering a dirty worktree), but
+ * the workstation runs it as a workflow so it gets the row spinner +
+ * post-op context refresh like `checkout-branch`.
+ */
+export function checkoutPullRequestByNumber(
+  pullRequestNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  return runGhAction(
+    runner,
+    ['pr', 'checkout', String(pullRequestNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Checked out pull request #${pullRequestNumber}`,
+    })
+  )
+}

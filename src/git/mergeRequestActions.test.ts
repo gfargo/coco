@@ -1,5 +1,8 @@
 import {
   addMergeRequestAssignee,
+  buildMergeRequestDiffArgs,
+  checkoutMergeRequestByNumber,
+  getMergeRequestDiff,
   addMergeRequestLabel,
   approveMergeRequest,
   approveMergeRequestByNumber,
@@ -127,5 +130,43 @@ describe('MR mutating action arg contracts (#0.70)', () => {
     expect((await addMergeRequestAssignee(5, 'bob,carol', runner)).ok).toBe(false)
     expect((await createMergeRequest({ base: 'main', head: '--foo', title: 'T', body: 'B' }, runner)).ok).toBe(false)
     expect(calls).toEqual([])
+  })
+})
+
+describe('MR checkout + diff (#1363)', () => {
+  it('checkoutMergeRequestByNumber runs glab mr checkout <n>', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await checkoutMergeRequestByNumber(41, runner)
+    expect(calls[0]).toEqual(['mr', 'checkout', '41'])
+    expect(result.ok).toBe(true)
+    expect(result.message).toBe('Checked out merge request !41')
+  })
+
+  it('builds the glab mr diff argv with flag=value color suppression', () => {
+    expect(buildMergeRequestDiffArgs(7)).toEqual(['mr', 'diff', '7', '--color=never'])
+  })
+
+  it('getMergeRequestDiff parses the patch into lines', async () => {
+    const patch = 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n'
+    const runner = jest.fn().mockResolvedValue(patch)
+    const result = await getMergeRequestDiff(7, runner)
+    expect(runner).toHaveBeenCalledWith(['mr', 'diff', '7', '--color=never'])
+    expect(result).toEqual({
+      ok: true,
+      lines: ['diff --git a/x b/x', '--- a/x', '+++ b/x', '@@ -1 +1 @@', '-a', '+b'],
+    })
+  })
+
+  it('getMergeRequestDiff surfaces glab failures as { ok: false }', async () => {
+    // Unlike gh's resolver, the glab error path reads `error.message`.
+    const failure = new Error('404 Not Found')
+    // Diff call rejects; the error resolver's auth probe succeeds so
+    // the original stderr surfaces.
+    const runner = jest.fn().mockRejectedValueOnce(failure).mockResolvedValue('ok')
+    const result = await getMergeRequestDiff(7, runner)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.message).toContain('404 Not Found')
+    }
   })
 })

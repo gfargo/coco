@@ -2592,3 +2592,65 @@ describe('worktree hunk navigation — viewport-derived current hunk (#1179)', (
     expect(hunkIndexAtOffset(state.worktreeDiffOffset, offsets)).toBe(2)
   })
 })
+
+describe('PR-triage diff drill-in (#1363)', () => {
+  it('navigateOpenDiffForPullRequest pushes the diff view tagged diffSource=pr', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'pull-request-triage' })
+    state = applyLogInkAction(state, {
+      type: 'navigateOpenDiffForPullRequest',
+      number: 962,
+      pullRequestIndex: 3,
+    })
+    expect(state.activeView).toBe('diff')
+    expect(state.viewStack).toEqual(['history', 'pull-request-triage', 'diff'])
+    expect(state.diffSource).toBe('pr')
+    expect(state.prDiffNumber).toBe(962)
+    expect(state.selectedPullRequestTriageIndex).toBe(3)
+  })
+
+  it('resets the scroll offsets and line-select anchor so the patch opens at the top', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pageDetailPreview', delta: 5, previewLineCount: 100 })
+    expect(state.diffPreviewOffset).toBeGreaterThan(0)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'pull-request-triage' })
+    state = applyLogInkAction(state, { type: 'navigateOpenDiffForPullRequest', number: 7 })
+    expect(state.diffPreviewOffset).toBe(0)
+    expect(state.worktreeDiffOffset).toBe(0)
+    expect(state.diffLineSelectAnchor).toBeUndefined()
+  })
+
+  it('popping the diff view clears diffSource and prDiffNumber (mirrors stashDiffRef)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'pull-request-triage' })
+    state = applyLogInkAction(state, { type: 'navigateOpenDiffForPullRequest', number: 962 })
+    state = applyLogInkAction(state, { type: 'popView' })
+    expect(state.activeView).toBe('pull-request-triage')
+    expect(state.diffSource).toBeUndefined()
+    expect(state.prDiffNumber).toBeUndefined()
+  })
+
+  it('pushing a non-diff view over the PR diff clears the PR diff identity', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'pull-request-triage' })
+    state = applyLogInkAction(state, { type: 'navigateOpenDiffForPullRequest', number: 962 })
+    state = applyLogInkAction(state, { type: 'pushView', value: 'history' })
+    expect(state.prDiffNumber).toBeUndefined()
+    expect(state.diffSource).toBeUndefined()
+  })
+
+  it('repo-frame push/pop round-trips the PR diff identity (#931 capture discipline)', () => {
+    let state = createLogInkState(rows, { repoLabel: 'coco' })
+    state = applyLogInkAction(state, { type: 'pushView', value: 'pull-request-triage' })
+    state = applyLogInkAction(state, { type: 'navigateOpenDiffForPullRequest', number: 962 })
+    state = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
+    // The child frame opens on its own history view; any view push
+    // inside it clears the carried diff identity (same shared-state
+    // semantics as stashDiffRef — see LogInkRepoFrameReturn's doc).
+    expect(state.activeView).toBe('history')
+    state = applyLogInkAction(state, { type: 'popRepoFrame' })
+    expect(state.activeView).toBe('diff')
+    expect(state.diffSource).toBe('pr')
+    expect(state.prDiffNumber).toBe(962)
+  })
+})

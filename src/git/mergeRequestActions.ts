@@ -1,6 +1,7 @@
 import { defaultGlabRunner, resolveGlabActionError, type GlabRunner } from './glabCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { PullRequestActionResult } from './pullRequestActions'
+import { parsePullRequestDiffLines, type PullRequestDiffResult } from './pullRequestDiffData'
 
 /**
  * GitLab merge-request create/open, the glab counterparts to the gh
@@ -309,4 +310,49 @@ export function requestChangesMergeRequest(
     ok: true,
     message: output.trim() || 'Requested changes',
   }), hostname)
+}
+
+/**
+ * `glab mr checkout <n>` — the GitLab counterpart of
+ * `checkoutPullRequestByNumber` (#1363). Fetches the MR's source
+ * branch and switches the worktree onto it.
+ */
+export function checkoutMergeRequestByNumber(
+  mergeRequestNumber: number,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestActionResult> {
+  return runGlabAction(runner, ['mr', 'checkout', String(mergeRequestNumber)], (output) => ({
+    ok: true,
+    message: output.trim() || `Checked out merge request !${mergeRequestNumber}`,
+  }), hostname)
+}
+
+/**
+ * `glab mr diff <n>` argv (#1363). `--color=never` keeps the patch free
+ * of ANSI escapes regardless of glab's TTY detection — the workstation
+ * applies its own +/- theming per line.
+ */
+export function buildMergeRequestDiffArgs(mergeRequestNumber: number): string[] {
+  return ['mr', 'diff', String(mergeRequestNumber), '--color=never']
+}
+
+/**
+ * Unified-patch fetch for a merge request by number — the GitLab
+ * counterpart of `getPullRequestDiff` (#1363). Returns the shared
+ * `PullRequestDiffResult` so the workstation's PR-diff hydration
+ * treats both forges uniformly.
+ */
+export async function getMergeRequestDiff(
+  mergeRequestNumber: number,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestDiffResult> {
+  try {
+    const output = await runner(buildMergeRequestDiffArgs(mergeRequestNumber))
+    return { ok: true, lines: parsePullRequestDiffLines(output) }
+  } catch (error) {
+    const { message } = await resolveGlabActionError(error, runner, hostname)
+    return { ok: false, message }
+  }
 }

@@ -583,6 +583,21 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #1363 — review-locally in one key. Scoped to the triage view in
+      // inkInput (key `C` there; the view opted out of the global
+      // create-PR allowlist so the key is free). Non-destructive: gh
+      // refuses rather than clobbering a dirty worktree, and switching
+      // back is one checkout — so no y-confirm, mirroring
+      // `checkout-branch`. Empty key keeps it palette-discoverable
+      // without registering a global hotkey.
+      id: 'triage-pr-checkout',
+      key: '',
+      label: 'Check out pull request',
+      description: 'gh pr checkout <n> — fetch the cursored pull request\'s branch and switch onto it.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // Per-view-only: scoped to the history view in inkInput so `R`
       // doesn't fire elsewhere (it's also `R` for rename in branches
       // and delete-remote-tag in tags). Empty key keeps it

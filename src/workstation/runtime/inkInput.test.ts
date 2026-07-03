@@ -5342,6 +5342,107 @@ describe('triage-view per-row actions (#882 phase 4)', () => {
       const result = applyInput(state, 'c')
       expect(result.inputPrompt?.kind).toBe('pr-comment')
     })
+
+    // #1363 — Enter on a triage row opens the PR diff.
+    it('Enter opens the PR diff for the cursored row', () => {
+      const state = applyInput(baseState(), '', { return: true }, {
+        pullRequestTriageCount: 2,
+        pullRequestTriageSelectedNumber: 962,
+      })
+      expect(state.activeView).toBe('diff')
+      expect(state.diffSource).toBe('pr')
+      expect(state.prDiffNumber).toBe(962)
+      expect(state.statusMessage).toBe('viewing diff for #962')
+    })
+
+    it('Enter stays inert while the triage list is loading / empty (zero count)', () => {
+      const events = getLogInkInputEvents(baseState(), '', { return: true }, {
+        pullRequestTriageCount: 0,
+      })
+      expect(events.find((event) =>
+        event.type === 'action' && event.action.type === 'navigateOpenDiffForPullRequest'
+      )).toBeUndefined()
+      // And without a resolved number (defensive — count>0 implies one).
+      const noNumber = getLogInkInputEvents(baseState(), '', { return: true }, {
+        pullRequestTriageCount: 2,
+      })
+      expect(noNumber.find((event) =>
+        event.type === 'action' && event.action.type === 'navigateOpenDiffForPullRequest'
+      )).toBeUndefined()
+    })
+
+    // #1363 — C on a triage row checks the PR out locally instead of
+    // opening the create-PR flow (the view opted out of CREATE_PR_VIEWS).
+    it('C dispatches the triage-pr-checkout workflow for the cursored row', () => {
+      const events = getLogInkInputEvents(baseState(), 'C', {}, {
+        pullRequestTriageCount: 2,
+        pullRequestTriageSelectedNumber: 962,
+      })
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'triage-pr-checkout' }])
+    })
+
+    it('C never fires create-PR from the triage view, even with an empty list', () => {
+      // With rows in scope C means checkout; with none it must be inert
+      // rather than falling through to the create-PR workflow.
+      for (const context of [
+        { pullRequestTriageCount: 2, pullRequestTriageSelectedNumber: 962 },
+        {},
+      ]) {
+        const events = getLogInkInputEvents(baseState(), 'C', {}, context)
+        expect(events).not.toContainEqual({ type: 'startCreatePullRequest' })
+        expect(events).not.toContainEqual({ type: 'runWorkflowAction', id: 'create-pr' })
+      }
+    })
+  })
+})
+
+describe('PR diff view keys (#1363)', () => {
+  const prDiffState = (): LogInkState => {
+    let state = applyLogInkAction(createLogInkState(rows), {
+      type: 'pushView',
+      value: 'pull-request-triage',
+    })
+    state = applyLogInkAction(state, { type: 'navigateOpenDiffForPullRequest', number: 962 })
+    return state
+  }
+
+  it('j/k line-scroll the PR patch via previewLineCount', () => {
+    let state = prDiffState()
+    state = applyInput(state, 'j', {}, { previewLineCount: 40 })
+    expect(state.diffPreviewOffset).toBe(1)
+    state = applyInput(state, 'k', {}, { previewLineCount: 40 })
+    expect(state.diffPreviewOffset).toBe(0)
+  })
+
+  it('[ and ] jump between files via prDiffFileOffsets', () => {
+    let state = prDiffState()
+    const offsets = [0, 12, 30]
+    state = applyInput(state, ']', {}, { prDiffFileOffsets: offsets })
+    expect(state.diffPreviewOffset).toBe(12)
+    state = applyInput(state, ']', {}, { prDiffFileOffsets: offsets })
+    expect(state.diffPreviewOffset).toBe(30)
+    state = applyInput(state, '[', {}, { prDiffFileOffsets: offsets })
+    expect(state.diffPreviewOffset).toBe(12)
+  })
+
+  it('C checks out the viewed PR, carrying the number as the payload', () => {
+    const events = getLogInkInputEvents(prDiffState(), 'C', {}, {})
+    expect(events).toEqual([
+      { type: 'runWorkflowAction', id: 'triage-pr-checkout', payload: '962' },
+    ])
+  })
+
+  it('stash-only verbs stay dead on the PR diff (no cherry-pick / editor target)', () => {
+    // `c` on a stash diff cherry-picks the cursored file; on a PR diff
+    // the file may not exist locally, so the key must not resolve a
+    // target even when file offsets are present.
+    const events = getLogInkInputEvents(prDiffState(), 'c', {}, {
+      prDiffFileOffsets: [0, 10],
+    })
+    expect(events.find((event) =>
+      event.type === 'action' && event.action.type === 'setPendingConfirmation'
+    )).toBeUndefined()
+    expect(events).not.toContainEqual(expect.objectContaining({ type: 'openFileInEditor' }))
   })
 })
 
@@ -5815,9 +5916,12 @@ const ALL_VIEWS: LogInkView[] = [
 ]
 
 describe('global key allowlists (negation-guard conversion)', () => {
-  it('C creates a PR in every view except conflicts', () => {
+  it('C creates a PR in every view except conflicts and the PR triage list', () => {
+    // conflicts → C marks the conflict resolved; pull-request-triage →
+    // C checks the cursored PR out locally (#1363).
+    const excluded: LogInkView[] = ['conflicts', 'pull-request-triage']
     for (const view of ALL_VIEWS) {
-      expect(isCreatePrView(view)).toBe(view !== 'conflicts')
+      expect(isCreatePrView(view)).toBe(!excluded.includes(view))
     }
   })
 

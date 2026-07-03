@@ -735,3 +735,32 @@ describe('log Ink keymap', () => {
     })
   })
 })
+
+describe('PR triage review flow hints (#1363)', () => {
+  it('surfaces the enter-diff + C-checkout pair on the triage list footer', () => {
+    const hints = getLogInkFooterHints({
+      activeView: 'pull-request-triage',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    })
+    expect(hints.contextual).toContain('enter diff')
+    expect(hints.contextual).toContain('C checkout')
+  })
+
+  it('gives the PR-sourced diff its own read-only hint set (file jump + checkout, no mutate verbs)', () => {
+    const hints = getLogInkFooterHints({
+      activeView: 'diff',
+      diffSource: 'pr',
+      filterMode: false,
+      focus: 'commits',
+      showHelp: false,
+    })
+    expect(hints.contextual).toEqual(['j/k lines', '[/] file', 'C checkout', 'd split', 'esc back'])
+    // The stash/commit-diff mutate verbs must not leak in — the PR's
+    // files aren't in the local worktree.
+    expect(hints.contextual).not.toContain('c cherry-pick')
+    expect(hints.contextual).not.toContain('H apply hunk')
+    expect(hints.contextual).not.toContain('o edit')
+  })
+})

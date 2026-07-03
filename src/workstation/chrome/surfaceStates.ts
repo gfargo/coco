@@ -210,3 +210,28 @@ export function formatLogInkForgeNoRemote({
 }: LogInkForgeUnavailableArgs): string {
   return `${resource} require a ${forge} remote (origin or fallback). None detected for this repo.`
 }
+
+export type LogInkPullRequestDiffErrorArgs = {
+  /** Failure message from the forge CLI patch fetch. */
+  message: string
+}
+
+/**
+ * Error copy for the PR diff drill-in (#1363). The fetch failures here
+ * are actionable (auth expired, PR branch deleted, unsupported forge)
+ * so the surface leads with the CLI's message instead of a generic
+ * "no diff" hint that would read as an empty pull request.
+ */
+export function formatLogInkPullRequestDiffError({
+  message,
+}: LogInkPullRequestDiffErrorArgs): string {
+  return `Could not load the diff: ${message} Press esc to go back, r to refresh.`
+}
+
+/**
+ * Empty copy for the PR diff drill-in (#1363): the fetch succeeded but
+ * the patch is empty (e.g. an empty commit or a fully-reverted PR).
+ */
+export function formatLogInkPullRequestDiffEmpty(): string {
+  return 'No diff to display for this pull request.'
+}

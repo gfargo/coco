@@ -37,7 +37,7 @@ export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discar
  * async action runs against them. Each maps to a surface + a stable
  * per-row id used by `pendingItemAction`.
  */
-export type LogInkListItemKind = 'branch' | 'tag' | 'stash' | 'worktree'
+export type LogInkListItemKind = 'branch' | 'tag' | 'stash' | 'worktree' | 'pull-request'
 
 /**
  * Which async action is in flight on the pending row. The inline
@@ -197,6 +197,7 @@ export type LogInkRepoFrameReturn = {
    */
   diffSource?: LogInkDiffSource
   stashDiffRef?: string
+  prDiffNumber?: number
   compareHead?: LogInkCompareRef
   selectedIndex: number
   selectedFileIndex: number
@@ -254,7 +255,7 @@ export type LogInkRepoFrameReturn = {
  * input handlers off this field so a dirty worktree can't bleed staging
  * UI into a commit-diff view.
  */
-export type LogInkDiffSource = 'commit' | 'worktree' | 'stash' | 'compare'
+export type LogInkDiffSource = 'commit' | 'worktree' | 'stash' | 'compare' | 'pr'
 
 /**
  * A ref in the compare-two-refs flow (#779). `kind` is captured from
@@ -686,6 +687,13 @@ export type LogInkState = {
    */
   stashDiffRef?: string
   /**
+   * Pull-request number currently being inspected in the diff view
+   * (#1363 — triage Enter → PR diff). Set by
+   * `navigateOpenDiffForPullRequest`; cleared when the diff view is
+   * popped or replaced, mirroring `stashDiffRef`.
+   */
+  prDiffNumber?: number
+  /**
    * Compare-two-refs flow (#779). `compareBase` is set by `m` on a
    * branch / tag / history row; while it's defined, the footer shows
    * a "compare base: <label>" hint and `Enter` on a second ref opens
@@ -1095,6 +1103,7 @@ export type LogInkAction =
   | { type: 'navigateOpenFileHistoryForPath'; path: string }
   | { type: 'moveFileHistory'; delta: number; count: number }
   | { type: 'navigateOpenDiffForStash'; ref: string; stashIndex?: number }
+  | { type: 'navigateOpenDiffForPullRequest'; number: number; pullRequestIndex?: number }
   | { type: 'navigateOpenDiffForCompare'; base: LogInkCompareRef; head: LogInkCompareRef }
   | { type: 'setCompareBase'; value: LogInkCompareRef }
   | { type: 'clearCompareBase' }
@@ -1338,6 +1347,7 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     diffLineSelectAnchor: value === 'diff' ? state.diffLineSelectAnchor : undefined,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
+    prDiffNumber: value === 'diff' ? state.prDiffNumber : undefined,
     compareHead: value === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: value === 'status' ? state.statusGroupHeaderFocused : false,
@@ -1376,6 +1386,7 @@ function withPoppedView(state: LogInkState): LogInkState {
     worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
     diffSource: next === 'diff' ? state.diffSource : undefined,
     stashDiffRef: next === 'diff' ? state.stashDiffRef : undefined,
+    prDiffNumber: next === 'diff' ? state.prDiffNumber : undefined,
     compareBase: wasOnDiff ? undefined : state.compareBase,
     compareHead: next === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: next === 'history' ? state.pendingCommitFocused : false,
@@ -1424,6 +1435,7 @@ function withPushedRepoFrame(
       viewStack: [...state.viewStack],
       diffSource: state.diffSource,
       stashDiffRef: state.stashDiffRef,
+      prDiffNumber: state.prDiffNumber,
       compareHead: state.compareHead,
       selectedIndex: state.selectedIndex,
       selectedFileIndex: state.selectedFileIndex,
@@ -1522,6 +1534,7 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     viewStack: ret.viewStack?.length ? [...ret.viewStack] : [ret.activeView],
     diffSource: ret.diffSource,
     stashDiffRef: ret.stashDiffRef,
+    prDiffNumber: ret.prDiffNumber,
     compareHead: ret.compareHead,
     selectedIndex: ret.selectedIndex,
     selectedFileIndex: ret.selectedFileIndex,
@@ -1579,6 +1592,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     diffLineSelectAnchor: value === 'diff' ? state.diffLineSelectAnchor : undefined,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
+    prDiffNumber: value === 'diff' ? state.prDiffNumber : undefined,
     compareHead: value === 'diff' ? state.compareHead : undefined,
     pendingCommitFocused: value === 'history' ? state.pendingCommitFocused : false,
     statusGroupHeaderFocused: value === 'status' ? state.statusGroupHeaderFocused : false,
@@ -2581,6 +2595,23 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // diff had, landing the user mid-patch.
         diffPreviewOffset: 0,
         worktreeDiffOffset: 0,
+      }
+    }
+    case 'navigateOpenDiffForPullRequest': {
+      const next = withPushedView(state, 'diff')
+      return {
+        ...next,
+        diffSource: 'pr',
+        prDiffNumber: action.number,
+        selectedPullRequestTriageIndex: Math.max(
+          0,
+          action.pullRequestIndex ?? state.selectedPullRequestTriageIndex
+        ),
+        // Reset the diff scroll offset so the PR patch always opens at
+        // the top — same reasoning as the stash branch above.
+        diffPreviewOffset: 0,
+        worktreeDiffOffset: 0,
+        diffLineSelectAnchor: undefined,
       }
     }
     case 'navigateOpenDiffForCompare': {
