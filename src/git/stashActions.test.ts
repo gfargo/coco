@@ -61,8 +61,14 @@ describe('log stash actions', () => {
     // --staged is index-only: no -u, no --keep-index.
     expect(git.raw).toHaveBeenLastCalledWith(['stash', 'push', '--staged', '-m', 'idx'])
 
-    await createStash(git as never, '', { pathspec: 'src/a.ts  src/b.ts' })
+    await createStash(git as never, '', { paths: ['src/a.ts', 'src/b.ts'] })
     expect(git.raw).toHaveBeenLastCalledWith(['stash', 'push', '-u', '--', 'src/a.ts', 'src/b.ts'])
+
+    // A single path containing spaces stays ONE pathspec (#1397) —
+    // whitespace tokenization used to split it, and a fragment could
+    // match a real directory and stash far more than asked.
+    await createStash(git as never, '', { paths: ['my file.ts'] })
+    expect(git.raw).toHaveBeenLastCalledWith(['stash', 'push', '-u', '--', 'my file.ts'])
   })
 
   it('applies with --index to restore the staged split', async () => {

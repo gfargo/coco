@@ -24,8 +24,15 @@ export type CreateStashOptions = {
   keepIndex?: boolean
   /** `--staged`: stash only the staged (index) changes. */
   stagedOnly?: boolean
-  /** `-- <paths>`: stash only the matching paths (partial stash). */
-  pathspec?: string
+  /**
+   * `-- <paths>`: stash only the matching pathspecs (partial stash).
+   * Explicit list — NOT a whitespace-tokenized string (#1397): a
+   * single path containing a space (`my file.ts`) must reach git as
+   * one pathspec, or a fragment can match a real directory and stash
+   * far more than asked. Callers that accept typed input own the
+   * tokenization decision at their boundary.
+   */
+  paths?: string[]
 }
 
 export function createStash(
@@ -48,13 +55,13 @@ export function createStash(
 
   if (trimmedMessage) args.push('-m', trimmedMessage)
 
-  const paths = options.pathspec?.trim()
-  if (paths) args.push('--', ...paths.split(/\s+/))
+  const paths = (options.paths ?? []).map((path) => path.trim()).filter(Boolean)
+  if (paths.length > 0) args.push('--', ...paths)
 
   const what = options.stagedOnly
     ? 'staged changes'
-    : paths
-      ? `“${paths}”`
+    : paths.length > 0
+      ? `“${paths.join(' ')}”`
       : options.keepIndex
         ? 'changes (index kept)'
         : ''
