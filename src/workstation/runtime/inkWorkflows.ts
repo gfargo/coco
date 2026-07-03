@@ -149,6 +149,33 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #1357 — fixup workflow. Scoped to the history view in inkInput
+      // (key `f` there; empty key keeps it palette-discoverable without
+      // becoming a global binding). Creates an ordinary commit from the
+      // staged changes marked `fixup!` for the cursored commit; the
+      // y-confirm names the target. The follow-up autosquash below is
+      // offered via a choice prompt after this succeeds.
+      id: 'fixup-into-commit',
+      key: '',
+      label: 'Fixup into commit',
+      description: 'Commit the staged changes as a fixup! of the cursored commit (squashed on the next autosquash rebase).',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      // Runs `rebase -i --autosquash` from the fixup target's parent with
+      // the sequence editor disabled — folds pending fixup! commits into
+      // their targets without opening an editor. History rewrite, so it
+      // rides the y-confirm path; conflicts route to the gx conflicts
+      // view like any other rebase.
+      id: 'autosquash-rebase',
+      key: '',
+      label: 'Autosquash fixups',
+      description: 'Run git rebase --autosquash to fold fixup! commits into their targets (rewrites history).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       // Per-view-only: scoped to the commit-diff explore in inkInput.
       // Routed through the y-confirm path because `git checkout <sha> --
       // <path>` overwrites the worktree file unconditionally and we

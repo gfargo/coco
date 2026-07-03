@@ -145,6 +145,7 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `R` | Revert the commit |
 | `Z` | Reset branch tip here (mode prompt) |
 | `i` | Interactive rebase from the commit's parent |
+| `f` | Fixup: commit staged changes as `fixup!` of the cursored commit (confirm; offers immediate autosquash) |
 | `B` | Create branch here |
 | `L` | Open the changelog view |
 | `r` | Refresh |
@@ -330,7 +331,7 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `D` | worktrees → remove worktree + branch · branches → delete branch |
 | `x` / `X` | PR → close · issues → close / reopen · stashes → drop (`X`) |
 | `L` | history/branches → generate changelog · PR-triage/issues → add label |
-| `f` | PR-triage → cycle PR filter · issues → cycle issue filter |
+| `f` | history → fixup staged into cursored commit · PR-triage → cycle PR filter · issues → cycle issue filter |
 | `o` | status/diff/conflicts → open file in `$EDITOR` (consistent — different file resolution only) |
 | `[` / `]` | worktree diff → hunk · commit diff → hunk · stash diff → **file** · sidebar/inspector focus → cycle tab |
 

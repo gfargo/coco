@@ -365,6 +365,10 @@ export function getInspectorActionExecuteEvents(
       return requireCommit(() => [
         action({ type: 'setPendingConfirmation', value: 'interactive-rebase' }),
       ])
+    case 'f':
+      return requireCommit(() => [
+        action({ type: 'setPendingConfirmation', value: 'fixup-into-commit' }),
+      ])
     case 'y':
       return requireCommit(() => [{ type: 'yankFromActiveView' }])
     case 'Y':
@@ -3515,6 +3519,21 @@ export function getLogInkInputEvents(
     !state.pendingCommitFocused
   ) {
     return [action({ type: 'setPendingConfirmation', value: 'interactive-rebase' })]
+  }
+
+  // `f` creates a fixup! commit from the STAGED changes targeting the
+  // cursored commit (#1357). y-confirm names the target; after a
+  // successful fixup the runtime raises a choice prompt offering to run
+  // the autosquash rebase immediately. `f` is free on history (the
+  // triage views' filter-cycle `f` is scoped to those views).
+  if (
+    inputValue === 'f' &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    return [action({ type: 'setPendingConfirmation', value: 'fixup-into-commit' })]
   }
 
   // `B` opens a create-branch prompt rooted at the cursored commit

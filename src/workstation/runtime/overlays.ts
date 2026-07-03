@@ -102,6 +102,8 @@ const COMMIT_TARGET_CONFIRMATION_IDS = new Set([
   'revert-commit',
   'interactive-rebase',
   'reset-to-commit',
+  'fixup-into-commit',
+  'autosquash-rebase',
 ])
 
 /**
