@@ -340,6 +340,72 @@ describe('renderFooter', () => {
     })
   })
 
+  // #1354 — the hint band must FIT the terminal. Pre-fix the footer
+  // received no width at all: at the documented default 120 columns the
+  // contextual + global clusters exceeded the row, both Text spans
+  // wrapped, and the wrapped fragments pushed the height-2 box's status
+  // row (errors, spinners, cancel hints) off-screen entirely.
+  describe('hint band width fitting (#1354)', () => {
+    const renderAt = (state: LogInkState, columns: number) =>
+      asNode(
+        renderFooter(
+          createElement,
+          { Box, Text },
+          state,
+          baseContext,
+          createLogInkTheme({ noColor: false }),
+          undefined,
+          0,
+          false,
+          columns
+        )
+      )
+    const rowText = (tree: Node): { ctx: string; glob: string } => {
+      const row1 = childAt(tree, 0)
+      return {
+        ctx: String(childAt(row1, 0).props.children),
+        glob: String(childAt(row1, 1).props.children),
+      }
+    }
+    // The width-heaviest hint states from the audit captures.
+    const cases: Array<Partial<LogInkState>> = [
+      {}, // history
+      { activeView: 'status' },
+      { activeView: 'compose' },
+      { activeView: 'diff', diffSource: 'worktree' },
+      { activeView: 'diff', diffSource: 'commit' },
+      { activeView: 'branches' },
+      { focus: 'sidebar', sidebarTab: 'branches' },
+    ]
+
+    it.each([[120], [80]])('row 1 fits at %d columns for every heavy view', (columns) => {
+      for (const overrides of cases) {
+        const { ctx, glob } = rowText(renderAt(makeState(overrides), columns))
+        // paddingX (2) + minimum space-between gap (>=1). Hint glyphs
+        // are single-width so length is a faithful column proxy.
+        expect(ctx.length + glob.length + 2 + 1).toBeLessThanOrEqual(columns)
+      }
+    })
+
+    it('drops the contextual tail, keeping the leading essentials', () => {
+      // Worktree diff carries the longest hint list; at 80 columns the
+      // exotic tail must go while the leading movement hint survives.
+      const { ctx } = rowText(
+        renderAt(makeState({ activeView: 'diff', diffSource: 'worktree' }), 80)
+      )
+      expect(ctx).toContain('j/k lines')
+      expect(ctx).not.toContain('esc back')
+    })
+
+    it('keeps the recovery globals intact at the default width', () => {
+      const { glob } = rowText(
+        renderAt(makeState({ activeView: 'diff', diffSource: 'worktree' }), 120)
+      )
+      expect(glob).toContain('? help')
+      expect(glob).toContain('q quit')
+    })
+  })
+
   // Snapshot covers the no-status default — the layout most users see
   // most of the time — to catch incidental structural drift.
   it('structural snapshot — default no-status footer', () => {

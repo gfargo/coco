@@ -1309,18 +1309,33 @@ describe('log Ink input interactions', () => {
     }
   })
 
-  it('lower-case g on the bisect view marks good (no chord trigger) (#784)', () => {
+  it('y on the bisect view marks good (#1352 — g is the chord prefix again)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 'y', {}, {})
+    expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
+  })
+
+  it('g on the bisect view arms the chord so gh/gs navigation works mid-bisect (#1352)', () => {
+    // The old bare-`g` mark-good binding shadowed the chord prefix: a
+    // user reflexively typing `gh` to navigate away silently ran
+    // `git bisect good`. `g` must arm the chord, and the continuation
+    // must navigate — never mutate bisect state.
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
 
     const events = getLogInkInputEvents(state, 'g', {}, {})
-
-    expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
-    // pendingKey must NOT be set — bisect's g consumed the keystroke.
+    expect(events).not.toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
     const pendingChange = events.find((event) =>
       event.type === 'action' && event.action.type === 'setPendingKey'
     )
-    expect(pendingChange).toBeUndefined()
+    expect(pendingChange).toBeDefined()
+
+    state = applyInput(state, 'g', {}, {})
+    expect(state.pendingKey).toBe('g')
+    const after = applyInput(state, 'h', {}, {})
+    expect(after.activeView).toBe('history')
   })
 
   it('b on the bisect view marks bad (does not require g chord) (#784)', () => {
@@ -2643,6 +2658,51 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('amend / reword wiring (#1350)', () => {
+    it('a on compose raises the amend-head confirmation', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      const after = applyInput(state, 'a')
+      expect(after.pendingConfirmationId).toBe('amend-head')
+    })
+
+    it('a while inline-editing types a letter instead of amending', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+      const after = applyInput(state, 'a')
+      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.commitCompose.summary).toBe('a')
+    })
+
+    it('a stays stage-file on the status view (overload preserved)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      const after = applyInput(state, 'a')
+      expect(after.pendingConfirmationId).toBeUndefined()
+    })
+
+    it('the reword-head prompt submits its text as the workflow payload', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'openInputPrompt',
+        kind: 'reword-head',
+        label: 'Reword HEAD',
+        initial: 'old subject',
+      })
+      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: '!' })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'reword-head',
+        payload: 'old subject!',
+      })
+    })
+  })
+
   describe('AI conflict-resolution review keys (#1369)', () => {
     const region = (index: number) => ({
       index,
@@ -2827,8 +2887,9 @@ describe('log Ink input interactions', () => {
       expect(
         getLogInkInputEvents(state, 'Y', {}, { bisectCompletionSha: 'abc12345' })
       ).toEqual([{ type: 'yankFromActiveView', short: true }])
-      // No terminator → falls through.
-      expect(getLogInkInputEvents(state, 'y', {}, {})).toEqual([])
+      // No terminator → `y` is the mark-good key mid-bisect (#1352).
+      expect(getLogInkInputEvents(state, 'y', {}, {}))
+        .toEqual([{ type: 'runWorkflowAction', id: 'bisect-good' }])
     })
 
     it('emits yankFromActiveView from diff view across worktree/stash/commit sources', () => {
@@ -3123,16 +3184,15 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('Z on the history view opens the reset-mode prompt', () => {
+    it('Z on the history view opens the 1-key reset-mode choice (#1351)', () => {
       const events = getLogInkInputEvents(createLogInkState(rows), 'Z')
       expect(events).toEqual([
         {
           type: 'action',
-          action: {
-            type: 'openInputPrompt',
-            kind: 'reset-mode',
-            label: 'Reset mode (soft / mixed / hard)',
-          },
+          action: expect.objectContaining({
+            type: 'setPendingChoice',
+            value: expect.objectContaining({ id: 'reset-mode-choice' }),
+          }),
         },
       ])
     })
@@ -3169,47 +3229,31 @@ describe('log Ink input interactions', () => {
       })
     })
 
-    it('reset-mode prompt submission forwards the mode to reset-to-commit', () => {
-      let state = createLogInkState(rows)
-      state = applyInput(state, 'Z')
-      expect(state.inputPrompt?.kind).toBe('reset-mode')
-
-      // Simulate typing "soft" then Enter.
-      state = applyInput(state, 's')
-      state = applyInput(state, 'o')
-      state = applyInput(state, 'f')
-      state = applyInput(state, 't')
-      const events = getLogInkInputEvents(state, '', { return: true })
-      expect(events).toContainEqual({
-        type: 'runWorkflowAction',
-        id: 'reset-to-commit',
-        payload: 'soft',
-      })
+    it('the reset choice keys run reset-to-commit with the mode payload (#1351)', () => {
+      // One keystroke per mode — no typed word, no typo scold.
+      for (const [choiceKey, mode] of [['s', 'soft'], ['m', 'mixed'], ['h', 'hard']] as const) {
+        let state = createLogInkState(rows)
+        state = applyInput(state, 'Z')
+        expect(state.pendingChoice?.id).toBe('reset-mode-choice')
+        const events = getLogInkInputEvents(state, choiceKey)
+        expect(events).toContainEqual({
+          type: 'runWorkflowAction',
+          id: 'reset-to-commit',
+          payload: mode,
+        })
+        // The prompt closes with the pick.
+        const after = applyInput(state, choiceKey)
+        expect(after.pendingChoice).toBeUndefined()
+      }
     })
 
-    it('reset-mode prompt rejects unknown modes with a status message', () => {
+    it('an unbound key leaves the reset choice open; esc cancels it', () => {
       let state = createLogInkState(rows)
       state = applyInput(state, 'Z')
-      'extreme'.split('').forEach((c) => { state = applyInput(state, c) })
-      const events = getLogInkInputEvents(state, '', { return: true })
-      // Status message + no workflow run.
-      expect(events.find((e) => e.type === 'runWorkflowAction')).toBeUndefined()
-      expect(events).toContainEqual({
-        type: 'action',
-        action: { type: 'setStatus', value: 'Unknown reset mode: extreme. Use soft, mixed, or hard.', kind: 'warning' },
-      })
-    })
-
-    it('reset-mode prompt accepts mixed and hard modes case-insensitively', () => {
-      let state = createLogInkState(rows)
-      state = applyInput(state, 'Z')
-      'HARD'.split('').forEach((c) => { state = applyInput(state, c) })
-      const events = getLogInkInputEvents(state, '', { return: true })
-      expect(events).toContainEqual({
-        type: 'runWorkflowAction',
-        id: 'reset-to-commit',
-        payload: 'hard',
-      })
+      state = applyInput(state, 'x')
+      expect(state.pendingChoice?.id).toBe('reset-mode-choice')
+      state = applyInput(state, '', { escape: true })
+      expect(state.pendingChoice).toBeUndefined()
     })
 
     it('R / Z / i no-op when the history list is empty', () => {
@@ -3892,7 +3936,7 @@ describe('log Ink input interactions', () => {
 
 
 
-    it('keeps single-line prompts (create-branch, reset-mode, etc.) untouched', () => {
+    it('keeps single-line prompts (create-branch, rename-branch, etc.) untouched', () => {
       // Sanity check: opening a non-multiline prompt and pressing
       // Enter still submits as before — the new dispatch path is
       // strictly opt-in.
@@ -4307,7 +4351,7 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('Enter on reset (index 3) opens the reset-mode prompt', () => {
+    it('Enter on reset (index 3) opens the 1-key reset-mode choice (#1351)', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorActionIndex: 3 }),
         '',
@@ -4317,11 +4361,10 @@ describe('log Ink input interactions', () => {
       expect(events).toEqual([
         {
           type: 'action',
-          action: {
-            type: 'openInputPrompt',
-            kind: 'reset-mode',
-            label: 'Reset mode (soft / mixed / hard)',
-          },
+          action: expect.objectContaining({
+            type: 'setPendingChoice',
+            value: expect.objectContaining({ id: 'reset-mode-choice' }),
+          }),
         },
       ])
     })
@@ -5109,31 +5152,22 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
       expect(state.pendingConfirmationId).toBe('triage-pr-approve')
     })
 
-    it('m opens the merge-strategy prompt', () => {
+    it('m opens the 1-key merge-strategy choice (#1351)', () => {
       const state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
-      expect(state.inputPrompt?.kind).toBe('triage-pr-merge-strategy')
-      expect(state.pendingConfirmationId).toBeUndefined()
-    })
-
-    it('submitting the merge-strategy prompt validates the strategy + routes through y-confirm', () => {
-      let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
-      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'squash' })
-      state = applyInput(state, '', { return: true })
-      expect(state.pendingConfirmationId).toBe('triage-pr-merge')
-      expect(state.pendingConfirmationPayload).toBe('squash')
+      expect(state.pendingChoice?.id).toBe('pr-merge-strategy-choice')
       expect(state.inputPrompt).toBeUndefined()
     })
 
-    it('rejects unknown merge strategies with a status message', () => {
-      let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
-      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'fastforward' })
-      const events = getLogInkInputEvents(state, '', { return: true })
-      const status = events.find(
-        (e): e is Extract<typeof e, { type: 'action' }> =>
-          e.type === 'action' && (e.action as { type: string }).type === 'setStatus'
-      )
-      expect(status).toBeDefined()
-      expect(JSON.stringify(status)).toContain('Unknown merge strategy')
+    it('the strategy keys run triage-pr-merge with the strategy payload (#1351)', () => {
+      for (const [choiceKey, strategy] of [['m', 'merge'], ['s', 'squash'], ['r', 'rebase']] as const) {
+        const state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
+        const events = getLogInkInputEvents(state, choiceKey)
+        expect(events).toContainEqual({
+          type: 'runWorkflowAction',
+          id: 'triage-pr-merge',
+          payload: strategy,
+        })
+      }
     })
 
     it('R opens the request-changes multi-line prompt', () => {
@@ -5150,17 +5184,10 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
       expect(state.pendingConfirmationPayload).toBe('please address X')
     })
 
-    it('confirming triage-pr-merge forwards the strategy payload to the workflow', () => {
+    it('picking a strategy closes the choice prompt', () => {
       let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
-      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'rebase' })
-      state = applyInput(state, '', { return: true })
-      const events = getLogInkInputEvents(state, 'y')
-      const workflow = events.find((e) => e.type === 'runWorkflowAction')
-      expect(workflow).toEqual({
-        type: 'runWorkflowAction',
-        id: 'triage-pr-merge',
-        payload: 'rebase',
-      })
+      state = applyInput(state, 'r')
+      expect(state.pendingChoice).toBeUndefined()
     })
 
     it('does NOT collide with the single-PR action panel keys', () => {

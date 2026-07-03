@@ -1786,7 +1786,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     h(Box, { flexDirection: 'column', height: layout.rows },
     h(LogInkHeader, { contextStatus, appLabel }),
     h(Box, { flexDirection: 'row', height: layout.bodyRows }, ...bodyPanels),
-    renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame, layout.singlePane)
+    renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame, layout.singlePane, layout.columns)
     )
   )
 }
