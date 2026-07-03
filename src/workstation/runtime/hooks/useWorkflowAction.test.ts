@@ -1,6 +1,7 @@
 import type ReactTypes from 'react'
 import { createLogInkState } from '../inkViewModel'
 import { checkoutReflogEntry } from '../../../git/reflogActions'
+import { pullCurrentBranch, pushBranch } from '../../../git/branchActions'
 import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowAction'
 
 /**
@@ -16,6 +17,15 @@ import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowActi
 jest.mock('../../../git/reflogActions', () => ({
   checkoutReflogEntry: jest.fn().mockResolvedValue({ ok: true, message: 'checked out' }),
 }))
+
+jest.mock('../../../git/branchActions', () => {
+  const actual = jest.requireActual('../../../git/branchActions')
+  return {
+    ...actual,
+    pushBranch: jest.fn(),
+    pullCurrentBranch: jest.fn(),
+  }
+})
 
 const checkoutReflogEntryMock = checkoutReflogEntry as jest.MockedFunction<
   typeof checkoutReflogEntry
@@ -106,5 +116,92 @@ describe('runWorkflowAction reads the live render snapshot, not the mount-time c
     await first.runWorkflowAction('checkout-reflog-entry')
     expect(checkoutReflogEntryMock).toHaveBeenCalledTimes(1)
     expect(checkoutReflogEntryMock).toHaveBeenCalledWith(expect.anything(), entries[1])
+  })
+})
+
+const pushBranchMock = pushBranch as jest.MockedFunction<typeof pushBranch>
+const pullCurrentBranchMock = pullCurrentBranch as jest.MockedFunction<typeof pullCurrentBranch>
+
+const localBranch = {
+  type: 'local',
+  name: 'refs/heads/main',
+  shortName: 'main',
+  hash: 'abc',
+  current: true,
+  upstream: 'origin/main',
+  remote: 'origin',
+  date: '2026-05-01',
+  subject: 'feat',
+  ahead: 1,
+  behind: 1,
+} as never
+
+describe('push/pull failure recovery (#1356)', () => {
+  it('offers a with-lease force confirm when a push is rejected non-fast-forward', async () => {
+    pushBranchMock.mockResolvedValue({
+      ok: false,
+      message: "error: failed to push some refs to 'origin'",
+      details: ['! [rejected] main -> main (non-fast-forward)'],
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [localBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('push-selected-branch')
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'setPendingConfirmation',
+      value: 'force-push-selected-branch',
+    })
+  })
+
+  it('offers the rebase/merge choice when a current-branch pull diverges', async () => {
+    pullCurrentBranchMock.mockResolvedValue({
+      ok: false,
+      message: 'fatal: Not possible to fast-forward, aborting.',
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('pull-current-branch')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'diverged-pull-recovery',
+        options: [
+          expect.objectContaining({ key: 'r', workflowId: 'pull-rebase-current' }),
+          expect.objectContaining({ key: 'm', workflowId: 'pull-merge-current' }),
+        ],
+      }),
+    }))
+  })
+
+  it('does NOT offer the pull choice for a non-current fetch-refspec rejection', async () => {
+    pushBranchMock.mockReset()
+    pullCurrentBranchMock.mockReset()
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [localBranch], currentBranch: 'other' } } as never,
+    }))
+    // pull-selected-branch on a NON-current branch goes through the
+    // fetch refspec path (real implementation), which we let fail via
+    // the unmocked fetch — instead simulate by checking the predicate
+    // boundary: a rejection message without the ff-only phrasing must
+    // not raise the choice. Use the mocked pullCurrentBranch for the
+    // current-branch delegation with a refspec-style message.
+    pullCurrentBranchMock.mockResolvedValue({
+      ok: false,
+      message: '! [rejected] main -> main (non-fast-forward)',
+    })
+    await runWorkflowAction('pull-current-branch')
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingChoice' }))
   })
 })

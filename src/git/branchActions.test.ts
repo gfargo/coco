@@ -14,6 +14,12 @@ import {
   pushCurrentBranch,
   renameBranch,
   setUpstream,
+  forcePushBranch,
+  forcePushCurrentBranch,
+  isDivergedPullError,
+  isNonFastForwardPushError,
+  pullCurrentBranchMerge,
+  pullCurrentBranchRebase,
 } from './branchActions'
 import { BranchRef } from './branchData'
 
@@ -144,6 +150,66 @@ describe('log branch actions', () => {
       const result = await deleteBranch(git as never, localBranch())
       expect(result.ok).toBe(false)
       expect(isBranchNotFullyMergedError(result.message)).toBe(true)
+    })
+  })
+
+  describe('force-push with lease (#1356)', () => {
+    it('force-pushes the current branch with lease', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      await expect(forcePushCurrentBranch(git as never)).resolves.toEqual({
+        ok: true,
+        message: 'Force-pushed current branch (with lease)',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['push', '--force-with-lease'])
+    })
+
+    it('force-pushes the cursored branch to its remote', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const branch = localBranch({ upstream: 'origin/feature/test', remote: 'origin' })
+      await expect(forcePushBranch(git as never, branch)).resolves.toEqual({
+        ok: true,
+        message: 'Force-pushed feature/test to origin/feature/test (with lease)',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['push', '--force-with-lease', 'origin', 'feature/test'])
+    })
+
+    it('refuses remote branches and upstream-less branches without calling git', async () => {
+      const git = { raw: jest.fn() }
+      await expect(forcePushBranch(git as never, remoteBranch())).resolves.toMatchObject({ ok: false })
+      await expect(forcePushBranch(git as never, localBranch())).resolves.toMatchObject({ ok: false })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('diverged pull recovery (#1356)', () => {
+    it('pulls with rebase / merge', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      await pullCurrentBranchRebase(git as never)
+      expect(git.raw).toHaveBeenCalledWith(['pull', '--rebase'])
+      await pullCurrentBranchMerge(git as never)
+      expect(git.raw).toHaveBeenCalledWith(['pull', '--no-rebase'])
+    })
+  })
+
+  describe('isNonFastForwardPushError', () => {
+    it('matches the rejection phrasings across git versions', () => {
+      expect(isNonFastForwardPushError('! [rejected] main -> main (non-fast-forward)')).toBe(true)
+      expect(isNonFastForwardPushError('hint: Updates were rejected... (e.g., git pull ...) fetch first')).toBe(true)
+      expect(isNonFastForwardPushError('! [rejected] main -> main (stale info)')).toBe(true)
+      expect(isNonFastForwardPushError("error: failed to push some refs to 'origin'")).toBe(true)
+      expect(isNonFastForwardPushError('Everything up-to-date')).toBe(false)
+      expect(isNonFastForwardPushError(undefined)).toBe(false)
+    })
+  })
+
+  describe('isDivergedPullError', () => {
+    it('matches the ff-only refusal but NOT the fetch-refspec rejection', () => {
+      expect(isDivergedPullError('fatal: Not possible to fast-forward, aborting.')).toBe(true)
+      expect(isDivergedPullError('hint: You have divergent branches...have diverged')).toBe(true)
+      // Non-current-branch pulls fail via fetch refspec — the rebase/merge
+      // choice doesn't apply there, so the predicate must not match.
+      expect(isDivergedPullError('! [rejected] main -> main (non-fast-forward)')).toBe(false)
+      expect(isDivergedPullError(undefined)).toBe(false)
     })
   })
 

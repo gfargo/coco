@@ -149,6 +149,46 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #1356 — force-push recovery. Never bound to a key: raised as a
+      // y-confirm escalation when an ordinary push is rejected
+      // non-fast-forward (post-amend/rebase), and palette-reachable.
+      // --force-with-lease refuses to clobber remote commits that
+      // arrived since the last fetch.
+      id: 'force-push-current-branch',
+      key: '',
+      label: 'Force-push current branch (with lease)',
+      description: 'git push --force-with-lease — overwrite the remote branch after a history rewrite.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'force-push-selected-branch',
+      key: '',
+      label: 'Force-push selected branch (with lease)',
+      description: 'git push --force-with-lease for the cursored branch after a history rewrite.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // Divergence recovery pair — offered via choice prompt when
+      // `pull --ff-only` refuses because local and remote diverged.
+      // Consent comes from the explicit choice, so no second y-confirm.
+      id: 'pull-rebase-current',
+      key: '',
+      label: 'Pull with rebase',
+      description: 'git pull --rebase — replay local commits on top of the diverged remote.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'pull-merge-current',
+      key: '',
+      label: 'Pull with merge',
+      description: 'git pull --no-rebase — merge the diverged remote into the local branch.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // #1357 — fixup workflow. Scoped to the history view in inkInput
       // (key `f` there; empty key keeps it palette-discoverable without
       // becoming a global binding). Creates an ordinary commit from the
