@@ -2054,6 +2054,55 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('rebase plan surface keys (#1359)', () => {
+    function rebaseState() {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'openRebasePlan',
+        rows: [
+          { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', subject: 'feat: one', author: 'Coco', date: '2026-05-01', action: 'pick' as const },
+          { sha: 'b'.repeat(40), shortSha: 'bbbbbbb', subject: 'fix: two', author: 'Coco', date: '2026-05-02', action: 'pick' as const },
+        ],
+      })
+      return state
+    }
+
+    it('s retags the cursored row to squash (not branch/tag sort)', () => {
+      const state = applyInput(rebaseState(), 's')
+      expect(state.rebasePlan?.rows[0].action).toBe('squash')
+    })
+
+    it('J reorders the cursored row downward', () => {
+      const state = applyInput(rebaseState(), 'J')
+      expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(['bbbbbbb', 'aaaaaaa'])
+    })
+
+    it('r opens the reword prompt seeded with the subject; submit stages the reword', () => {
+      let state = applyInput(rebaseState(), 'r')
+      expect(state.inputPrompt).toMatchObject({ kind: 'rebase-reword', value: 'feat: one' })
+
+      // Append and submit — Enter routes through the prompt handler.
+      state = applyInput(state, '!', {})
+      state = applyInput(state, '', { return: true })
+      expect(state.inputPrompt).toBeUndefined()
+      expect(state.rebasePlan?.rows[0]).toMatchObject({ action: 'reword', newMessage: 'feat: one!' })
+    })
+
+    it('Enter asks for confirmation of execute-rebase-plan', () => {
+      const events = getLogInkInputEvents(rebaseState(), '', { return: true })
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'execute-rebase-plan' } },
+      ])
+    })
+
+    it('j/k move the plan cursor', () => {
+      let state = applyInput(rebaseState(), 'j')
+      expect(state.rebasePlan?.selectedIndex).toBe(1)
+      state = applyInput(state, 'k')
+      expect(state.rebasePlan?.selectedIndex).toBe(0)
+    })
+  })
+
   describe('pendingAiDraft accept keys vs inline editing', () => {
     function composeWithPendingDraft(): ReturnType<typeof createLogInkState> {
       let state = createLogInkState(rows)
@@ -2920,13 +2969,12 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('i on the history view sets pending confirmation for interactive-rebase', () => {
+    it('i on the history view opens the in-TUI rebase plan (#1359)', () => {
       // Lowercase `i` keeps the existing global `I` ai-commit-summary
       // workflow reachable on the history view; matches `git rebase -i`.
+      // The $EDITOR variant stays palette-reachable as interactive-rebase.
       const events = getLogInkInputEvents(createLogInkState(rows), 'i')
-      expect(events).toEqual([
-        { type: 'action', action: { type: 'setPendingConfirmation', value: 'interactive-rebase' } },
-      ])
+      expect(events).toEqual([{ type: 'startRebasePlan' }])
     })
 
     it('f on the history view sets pending confirmation for fixup-into-commit (#1357)', () => {

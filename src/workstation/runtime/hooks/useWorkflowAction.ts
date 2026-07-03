@@ -114,6 +114,7 @@ import {
 import { applyStatusFilterMask } from '../../../git/statusData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../../git/bisectActions'
 import { checkoutReflogEntry } from '../../../git/reflogActions'
+import { executeRebasePlan } from '../../../git/rebasePlanActions'
 import { initSubmodule, syncSubmodule, updateSubmodule } from '../../../git/submoduleActions'
 import { addRemote, pruneRemote, removeRemote, setRemoteUrl } from '../../../git/remoteActions'
 import { matchesPromotedFilter } from '../promotedFilter'
@@ -665,6 +666,19 @@ export function useWorkflowAction(
         const result = await createFixupCommit(git, target)
         if (result.ok) {
           lastFixupTargetRef.current = target
+        }
+        return result
+      },
+      'execute-rebase-plan': async () => {
+        const plan = state.rebasePlan
+        if (!plan || plan.rows.length === 0) {
+          return { ok: false, message: 'No rebase plan open — press i on a history commit first.' }
+        }
+        const result = await executeRebasePlan(git, plan.rows)
+        if (result.ok) {
+          // The plan is consumed; land back on the rewritten history.
+          dispatch({ type: 'clearRebasePlan' })
+          dispatch({ type: 'navigateHome' })
         }
         return result
       },
@@ -1535,6 +1549,7 @@ export function useWorkflowAction(
       'checkout-branch',
       'fixup-into-commit',
       'autosquash-rebase',
+      'execute-rebase-plan',
       'force-push-current-branch',
       'force-push-selected-branch',
       'pull-rebase-current',

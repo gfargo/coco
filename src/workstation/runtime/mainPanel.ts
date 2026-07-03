@@ -31,6 +31,7 @@ import { renderIssuesTriageSurface } from '../surfaces/issuesTriage'
 import { renderPullRequestSurface } from '../surfaces/pullRequest'
 import { renderPullRequestTriageSurface } from '../surfaces/pullRequestTriage'
 import { renderReflogSurface } from '../surfaces/reflog'
+import { renderRebaseSurface } from '../surfaces/rebase'
 import { renderRemotesSurface } from '../surfaces/remotes'
 import { renderStashSurface } from '../surfaces/stash'
 import { renderStatusSurface } from '../surfaces/status'
@@ -66,6 +67,7 @@ function zeroExtraComponent(
     cachedZeroExtraComponents = {
       status: define(renderStatusSurface, 'StatusSurface'),
       reflog: define(renderReflogSurface, 'ReflogSurface'),
+      rebase: define(renderRebaseSurface, 'RebaseSurface'),
       submodules: define(renderSubmodulesSurface, 'SubmodulesSurface'),
       remotes: define(renderRemotesSurface, 'RemotesSurface'),
       'pull-request': define(renderPullRequestSurface, 'PullRequestSurface'),
@@ -322,6 +324,10 @@ export function renderMainPanel(
 
   if (state.activeView === 'tags') {
     return h(spinnerSurfaceComponent(React, 'tags')!, { spinnerFrame })
+  }
+
+  if (state.activeView === 'rebase') {
+    return h(zeroExtraComponent(React, 'rebase')!)
   }
 
   if (state.activeView === 'reflog') {

@@ -684,6 +684,59 @@ describe('log Ink view model', () => {
       expect(state.selectedIndex).toBe(0)
     })
 
+    describe('rebase plan (#1359)', () => {
+      const planRows = [
+        { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', subject: 'feat: one', author: 'Coco', date: '2026-05-01', action: 'pick' as const },
+        { sha: 'b'.repeat(40), shortSha: 'bbbbbbb', subject: 'fix: two', author: 'Coco', date: '2026-05-02', action: 'pick' as const },
+        { sha: 'c'.repeat(40), shortSha: 'ccccccc', subject: 'wip', author: 'Coco', date: '2026-05-03', action: 'pick' as const },
+      ]
+      const openPlan = () => applyLogInkAction(createLogInkState(rows), { type: 'openRebasePlan', rows: planRows })
+
+      it('openRebasePlan pushes the rebase view with the cursor at the top', () => {
+        const state = openPlan()
+        expect(state.activeView).toBe('rebase')
+        expect(state.rebasePlan?.rows).toHaveLength(3)
+        expect(state.rebasePlan?.selectedIndex).toBe(0)
+      })
+
+      it('retags, rewords, and reorders the cursored row with clamping', () => {
+        let state = openPlan()
+        state = applyLogInkAction(state, { type: 'moveRebaseCursor', delta: 5 })
+        expect(state.rebasePlan?.selectedIndex).toBe(2)
+
+        state = applyLogInkAction(state, { type: 'setRebaseAction', action: 'fixup' })
+        expect(state.rebasePlan?.rows[2].action).toBe('fixup')
+
+        state = applyLogInkAction(state, { type: 'setRebaseRewordMessage', message: 'chore: reworded' })
+        expect(state.rebasePlan?.rows[2]).toMatchObject({ action: 'reword', newMessage: 'chore: reworded' })
+
+        // Retagging away from reword drops the stale message.
+        state = applyLogInkAction(state, { type: 'setRebaseAction', action: 'pick' })
+        expect(state.rebasePlan?.rows[2].newMessage).toBeUndefined()
+
+        state = applyLogInkAction(state, { type: 'moveRebaseRow', delta: -1 })
+        expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(['aaaaaaa', 'ccccccc', 'bbbbbbb'])
+        expect(state.rebasePlan?.selectedIndex).toBe(1)
+
+        // Reorder off either edge is a no-op.
+        state = applyLogInkAction(state, { type: 'moveRebaseCursor', delta: -5 })
+        const before = state.rebasePlan?.rows.map((r) => r.shortSha)
+        state = applyLogInkAction(state, { type: 'moveRebaseRow', delta: -1 })
+        expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(before)
+      })
+
+      it('clears the plan on lateral navigation and on popView — a stale plan must never execute', () => {
+        let state = openPlan()
+        state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+        expect(state.rebasePlan).toBeUndefined()
+
+        state = openPlan()
+        state = applyLogInkAction(state, { type: 'popView' })
+        expect(state.activeView).toBe('history')
+        expect(state.rebasePlan).toBeUndefined()
+      })
+    })
+
     // Regression: the bisect start-wizard pick flag survived every view
     // switch — its status hint auto-dismissed, and minutes later Enter on
     // a history commit silently advanced the hidden wizard instead of
