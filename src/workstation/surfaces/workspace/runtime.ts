@@ -39,6 +39,7 @@ import type {
 } from 'ink'
 
 import {
+  canonicalize,
   getWorkspaceOverview,
   type WorkspaceOverview,
   type WorkspaceRepoSummary,
@@ -560,13 +561,22 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   const cloningRef = React.useRef(cloning)
   cloningRef.current = cloning
 
+  // Session-current known-repo pins for discovery. Seeded from the
+  // mount-time merge (CLI/config pins + persisted store) and updated by
+  // add / remove / clone. Every discovery call reads THIS list — the
+  // frozen `props.knownRepos` snapshot still contains a just-removed
+  // path, so merging it back in resurrected the entry on the very next
+  // refresh (and, once resurrected, `d` refused to remove it again
+  // because the store no longer listed it).
+  const knownReposRef = React.useRef<ReadonlyArray<string>>(props.knownRepos)
+
   // Background discovery + PR-count refresh on mount.
   React.useEffect(() => {
     let cancelled = false
     dispatch({ type: 'set-loading', loading: true })
     void (async () => {
       try {
-        const overview = await props.loadOverview(props.roots, props.knownRepos)
+        const overview = await props.loadOverview(props.roots, knownReposRef.current)
         if (cancelled || unmountedRef.current) return
         writeCachedWorkspace(props.roots, overview)
         dispatch({ type: 'replace-overview', overview })
@@ -627,7 +637,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     const focusedPath = selectFocusedRepo(stateRef.current)?.path
     dispatch({ type: 'set-loading', loading: true })
     try {
-      const overview = await props.loadOverview(props.roots, props.knownRepos)
+      const overview = await props.loadOverview(props.roots, knownReposRef.current)
       if (unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
@@ -735,14 +745,17 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       return
     }
     const updated = removeKnownRepo(target)
+    // Drop the path from the session pins too — the persisted store no
+    // longer has it, but a CLI/config pin (or the mount snapshot) would
+    // resurrect it on the next discovery pass.
+    knownReposRef.current = knownReposRef.current.filter((entry) => entry !== target)
     dispatch({ type: 'replace-known-repos', paths: updated })
     dispatch({ type: 'cancel-delete' })
     dispatch({ type: 'set-status', status: `Removed ${target}.` })
     // Refresh discovery so the deleted entry drops out of the list.
     dispatch({ type: 'set-loading', loading: true })
     try {
-      const merged = mergeKnownRepos(props.knownRepos, updated)
-      const overview = await props.loadOverview(props.roots, merged)
+      const overview = await props.loadOverview(props.roots, knownReposRef.current)
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
     } catch (err) {
@@ -761,16 +774,23 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   }, [dispatch])
 
   const commitAddRepo = React.useCallback(async () => {
-    const candidate = expandHomePrefix(addRepoDraft.trim().replace(/\/+$/, ''))
-    if (!candidate) {
+    const expanded = expandHomePrefix(addRepoDraft.trim().replace(/\/+$/, ''))
+    if (!expanded) {
       dispatch({ type: 'set-status', status: 'Enter a path.' })
       return
     }
+    // Store the realpath: discovery canonicalizes every repo it emits,
+    // so a symlinked component (e.g. /tmp → /private/tmp) would make
+    // the overview row's path never match the stored pin — `d` then
+    // claims the repo wasn't added via `a`, and the post-add cursor
+    // anchor misses.
+    const candidate = canonicalize(expanded)
     if (!isGitWorkingTree(candidate)) {
       dispatch({ type: 'set-status', status: `${candidate} is not a git repo.` })
       return
     }
     const updated = appendKnownRepo(candidate)
+    knownReposRef.current = mergeKnownRepos(knownReposRef.current, updated)
     dispatch({ type: 'replace-known-repos', paths: updated })
     dispatch({ type: 'set-focus', focus: 'list' })
     dispatch({ type: 'set-status', status: `Added ${candidate}.` })
@@ -778,8 +798,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     // cursor anchors onto it.
     dispatch({ type: 'set-loading', loading: true })
     try {
-      const merged = mergeKnownRepos(props.knownRepos, readKnownRepos())
-      const overview = await props.loadOverview(props.roots, merged)
+      const overview = await props.loadOverview(props.roots, knownReposRef.current)
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       dispatch({ type: 'anchor-cursor-by-path', path: candidate })
@@ -827,17 +846,20 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-status', status: result.message })
       return
     }
-    const updated = appendKnownRepo(target)
+    // Canonicalize after the clone lands (the directory must exist for
+    // realpath) so the stored pin matches discovery's canonical paths.
+    const repoPath = canonicalize(target)
+    const updated = appendKnownRepo(repoPath)
+    knownReposRef.current = mergeKnownRepos(knownReposRef.current, updated)
     dispatch({ type: 'replace-known-repos', paths: updated })
     dispatch({ type: 'set-focus', focus: 'list' })
     dispatch({ type: 'set-status', status: result.message })
     dispatch({ type: 'set-loading', loading: true })
     try {
-      const merged = mergeKnownRepos(props.knownRepos, readKnownRepos())
-      const overview = await props.loadOverview(props.roots, merged)
+      const overview = await props.loadOverview(props.roots, knownReposRef.current)
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
-      dispatch({ type: 'anchor-cursor-by-path', path: target })
+      dispatch({ type: 'anchor-cursor-by-path', path: repoPath })
     } catch (err) {
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
