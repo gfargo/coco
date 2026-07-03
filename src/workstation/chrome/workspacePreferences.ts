@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto'
 
+import { canonicalize } from '../../git/workspaceData'
 import {
   WORKSPACE_SORT_MODES,
   type WorkspaceSortMode,
@@ -56,7 +57,15 @@ const store = createJsonStore<WorkspacePreferences>({
 })
 
 export function workspacePreferencesKey(roots: ReadonlyArray<string>): string {
-  const normalized = [...roots].map((entry) => entry.trim()).filter(Boolean).sort()
+  // Canonicalize before hashing (mirrors `workspaceCacheKey`): two
+  // spellings of one directory must share preferences, and two
+  // different directories launched with the same relative `--root`
+  // must NOT cross-pollinate sort/tab/filter.
+  const normalized = [...roots]
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => canonicalize(entry))
+    .sort()
   return crypto.createHash('sha1').update(normalized.join('\n')).digest('hex').slice(0, 16) // DevSkim: ignore DS126858
 }
 

@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto'
 
-import { WorkspaceOverview } from '../../git/workspaceData'
+import { canonicalize, WorkspaceOverview } from '../../git/workspaceData'
 
 import { createJsonStore } from './jsonStore'
 
@@ -22,7 +22,17 @@ import { createJsonStore } from './jsonStore'
 const CACHE_SCHEMA_VERSION = 1
 
 export function workspaceCacheKey(roots: ReadonlyArray<string>): string {
-  const normalized = [...roots].map((entry) => entry.trim()).filter(Boolean).sort()
+  // Canonicalize before hashing: roots arrive as typed (`--root ./code`,
+  // `~/code`, config strings). Hashing the raw spelling split one
+  // directory's cache across spellings AND collided different
+  // directories launched with the same relative `--root` — boot then
+  // painted the OTHER workspace's cached repo list until discovery
+  // corrected it.
+  const normalized = [...roots]
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => canonicalize(entry))
+    .sort()
   // sha1 here is a non-security cache-key derivation. DevSkim DS126858
   // does not apply.
   return crypto.createHash('sha1').update(normalized.join('\n')).digest('hex').slice(0, 16) // DevSkim: ignore DS126858
