@@ -666,6 +666,111 @@ describe('log Ink view model', () => {
     expect(state.pendingMutationConfirmation).toBeUndefined()
   })
 
+  describe('AI conflict-resolution session (#1369)', () => {
+    const region = (index: number) => ({
+      index,
+      startLine: index * 10 + 1,
+      endLine: index * 10 + 5,
+      oursLabel: 'HEAD',
+      theirsLabel: 'feature/x',
+      ours: [`ours ${index}`],
+      theirs: [`theirs ${index}`],
+    })
+    const proposal = (index: number) => ({
+      regionIndex: index,
+      resolution: `resolved ${index}`,
+      rationale: 'combines both',
+      region: region(index),
+    })
+
+    function readyState() {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+      state = applyLogInkAction(state, { type: 'setConflictResolutionLoading', path: 'src/app.ts' })
+      expect(state.conflictResolution?.status).toBe('loading')
+      state = applyLogInkAction(state, {
+        type: 'setConflictResolutionReady',
+        path: 'src/app.ts',
+        proposals: [proposal(0), proposal(1), proposal(2)],
+      })
+      return state
+    }
+
+    it('lands proposals as pending with the cursor on the first', () => {
+      const state = readyState()
+      expect(state.conflictResolution).toMatchObject({
+        path: 'src/app.ts',
+        status: 'ready',
+        selectedIndex: 0,
+      })
+      expect(state.conflictResolution?.proposals.map((p) => p.status))
+        .toEqual(['pending', 'pending', 'pending'])
+    })
+
+    it('marking a proposal advances the cursor to the next pending one', () => {
+      let state = readyState()
+      state = applyLogInkAction(state, {
+        type: 'setConflictProposalStatus',
+        regionIndex: 0,
+        status: 'accepted',
+      })
+      expect(state.conflictResolution?.proposals[0].status).toBe('accepted')
+      expect(state.conflictResolution?.selectedIndex).toBe(1)
+
+      // Rejecting the middle one skips to the last pending.
+      state = applyLogInkAction(state, {
+        type: 'setConflictProposalStatus',
+        regionIndex: 1,
+        status: 'rejected',
+      })
+      expect(state.conflictResolution?.selectedIndex).toBe(2)
+    })
+
+    it('an edit-accept records the replacement resolution text', () => {
+      let state = readyState()
+      state = applyLogInkAction(state, {
+        type: 'setConflictProposalStatus',
+        regionIndex: 1,
+        status: 'accepted',
+        resolution: 'hand-edited text',
+      })
+      expect(state.conflictResolution?.proposals[1]).toMatchObject({
+        status: 'accepted',
+        resolution: 'hand-edited text',
+      })
+    })
+
+    it('clamps proposal cursor movement', () => {
+      let state = readyState()
+      state = applyLogInkAction(state, { type: 'moveConflictProposal', delta: 5 })
+      expect(state.conflictResolution?.selectedIndex).toBe(2)
+      state = applyLogInkAction(state, { type: 'moveConflictProposal', delta: -9 })
+      expect(state.conflictResolution?.selectedIndex).toBe(0)
+    })
+
+    it('drops the session on navigation away from the conflicts view', () => {
+      let state = readyState()
+      state = applyLogInkAction(state, { type: 'pushView', value: 'history' })
+      expect(state.conflictResolution).toBeUndefined()
+
+      state = readyState()
+      state = applyLogInkAction(state, { type: 'popView' })
+      expect(state.conflictResolution).toBeUndefined()
+    })
+
+    it('records the error state for the surface to render', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setConflictResolutionError',
+        path: 'src/app.ts',
+        error: 'rate limited',
+      })
+      expect(state.conflictResolution).toMatchObject({ status: 'error', error: 'rate limited' })
+      state = applyLogInkAction(state, { type: 'clearConflictResolution' })
+      expect(state.conflictResolution).toBeUndefined()
+    })
+  })
+
   it('choice and confirmation prompts displace each other (#1342)', () => {
     const choice = {
       id: 'diverged-pull-recovery',

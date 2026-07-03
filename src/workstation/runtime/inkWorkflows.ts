@@ -825,10 +825,16 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       estimatedTokens: 800,
     },
     {
+      // #1369 — upgraded from the explain-only stub: proposes a
+      // resolution per conflict region of the cursored file; each
+      // proposal lands behind explicit y/e/n on the conflicts surface
+      // and is never auto-applied. The id is load-bearing (confirm
+      // special-case in inkInput, palette recents) so it keeps its
+      // historical name.
       id: 'ai-conflict-help',
       key: 'M',
-      label: 'AI conflict help',
-      description: 'Explain conflicted files and suggest resolution steps.',
+      label: 'AI conflict resolution',
+      description: 'Propose per-region resolutions for the selected conflicted file (y/e/n per region).',
       kind: 'ai',
       requiresConfirmation: true,
       estimatedTokens: 1200,

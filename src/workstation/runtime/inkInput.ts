@@ -61,6 +61,11 @@ export type LogInkInputEvent =
   | { type: 'cancelPullRequestBodyDraft' }
   | { type: 'startChangelogView' }
   | { type: 'cancelChangelog' }
+  | { type: 'runAiConflictResolution' }
+  | { type: 'cancelConflictResolution' }
+  | { type: 'acceptConflictProposal' }
+  | { type: 'acceptAllConflictProposals' }
+  | { type: 'editConflictProposal' }
   | { type: 'startRebasePlan' }
   | { type: 'regenerateChangelog' }
   | { type: 'yankChangelog' }
@@ -1196,6 +1201,16 @@ export function getLogInkInputEvents(
         ]
       }
 
+      // AI conflict resolution (#1369): `M` → confirm → the runtime
+      // hook extracts regions, runs the LLM, and lands per-region
+      // proposals on the conflicts surface.
+      if (workflowAction?.id === 'ai-conflict-help') {
+        return [
+          { type: 'runAiConflictResolution' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+
       // Destructive + provider workflow actions (delete-branch, delete-tag,
       // drop-stash, remove-worktree, abort-operation, create-pr, …) defer
       // to the runtime — it has the live context needed to identify the
@@ -1271,6 +1286,12 @@ export function getLogInkInputEvents(
   // cancelled path transitions the view out of loading.
   if (state.changelogView.status === 'loading' && key.escape) {
     return [{ type: 'cancelChangelog' }]
+  }
+
+  // Cancel in-flight AI conflict resolution (#1369). Same invariant:
+  // Esc cancels any in-flight AI call from any view.
+  if (state.conflictResolution?.status === 'loading' && key.escape) {
+    return [{ type: 'cancelConflictResolution' }]
   }
 
   // Pending AI draft confirmation (audit finding #7). When the AI
@@ -1719,6 +1740,52 @@ export function getLogInkInputEvents(
   // popping the view — the user is mid-staging, not leaving.
   if (key.escape && state.diffLineSelectAnchor !== undefined && state.activeView === 'diff') {
     return [action({ type: 'setDiffLineSelectAnchor', value: undefined })]
+  }
+
+  // AI conflict-resolution session (#1369). While proposals are open
+  // on the conflicts view they own the review keys: j/k walk regions,
+  // y/e/n act on the cursored one, Y accepts everything pending, Esc
+  // dismisses. The file is untouched until an explicit accept. Sits
+  // ABOVE the global Esc-pop and single-letter fallbacks (`n` = move,
+  // `y` = yank) so the review keys can't leak into navigation.
+  if (state.activeView === 'conflicts' && state.conflictResolution) {
+    const session = state.conflictResolution
+    if (session.status === 'ready' && session.proposals.length > 0) {
+      if (key.downArrow || inputValue === 'j') {
+        return [action({ type: 'moveConflictProposal', delta: 1 })]
+      }
+      if (key.upArrow || inputValue === 'k') {
+        return [action({ type: 'moveConflictProposal', delta: -1 })]
+      }
+      if (inputValue === 'y' && !key.ctrl && !key.meta) {
+        return [{ type: 'acceptConflictProposal' }]
+      }
+      if (inputValue === 'Y' && !key.ctrl && !key.meta) {
+        return [{ type: 'acceptAllConflictProposals' }]
+      }
+      if (inputValue === 'e' && !key.ctrl && !key.meta) {
+        return [{ type: 'editConflictProposal' }]
+      }
+      if (inputValue === 'n' && !key.ctrl && !key.meta) {
+        const proposal = session.proposals[session.selectedIndex]
+        return proposal && proposal.status === 'pending'
+          ? [action({
+            type: 'setConflictProposalStatus',
+            regionIndex: proposal.regionIndex,
+            status: 'rejected',
+          })]
+          : []
+      }
+      if (key.escape) {
+        return [
+          action({ type: 'clearConflictResolution' }),
+          action({ type: 'setStatus', value: 'Proposals dismissed — file untouched.' }),
+        ]
+      }
+    }
+    if (session.status === 'error' && key.escape) {
+      return [action({ type: 'clearConflictResolution' })]
+    }
   }
 
   if (key.escape && state.bisectPickMode) {

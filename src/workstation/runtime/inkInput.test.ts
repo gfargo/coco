@@ -2643,6 +2643,79 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('AI conflict-resolution review keys (#1369)', () => {
+    const region = (index: number) => ({
+      index,
+      startLine: 1,
+      endLine: 5,
+      oursLabel: 'HEAD',
+      theirsLabel: 'feature/x',
+      ours: [`ours ${index}`],
+      theirs: [`theirs ${index}`],
+    })
+
+    function sessionState() {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+      state = applyLogInkAction(state, {
+        type: 'setConflictResolutionReady',
+        path: 'src/app.ts',
+        proposals: [
+          { regionIndex: 0, resolution: 'resolved 0', rationale: 'r', region: region(0) },
+          { regionIndex: 1, resolution: 'resolved 1', rationale: 'r', region: region(1) },
+        ],
+      })
+      return state
+    }
+
+    it('y/e/Y route to the runtime accept/edit handlers', () => {
+      expect(getLogInkInputEvents(sessionState(), 'y')).toEqual([{ type: 'acceptConflictProposal' }])
+      expect(getLogInkInputEvents(sessionState(), 'e')).toEqual([{ type: 'editConflictProposal' }])
+      expect(getLogInkInputEvents(sessionState(), 'Y')).toEqual([{ type: 'acceptAllConflictProposals' }])
+    })
+
+    it('n rejects the cursored proposal in the reducer', () => {
+      const after = applyInput(sessionState(), 'n')
+      expect(after.conflictResolution?.proposals[0].status).toBe('rejected')
+      expect(after.conflictResolution?.selectedIndex).toBe(1)
+    })
+
+    it('j/k walk the proposals instead of the file list', () => {
+      const state = sessionState()
+      const after = applyInput(state, 'j')
+      expect(after.conflictResolution?.selectedIndex).toBe(1)
+      expect(after.selectedConflictFileIndex).toBe(state.selectedConflictFileIndex)
+    })
+
+    it('Esc dismisses the session without touching the file', () => {
+      const after = applyInput(sessionState(), '', { escape: true })
+      expect(after.conflictResolution).toBeUndefined()
+      // Still on the conflicts view — Esc consumed by the dismissal.
+      expect(after.activeView).toBe('conflicts')
+    })
+
+    it('Esc cancels an in-flight generation from any view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setConflictResolutionLoading', path: 'src/app.ts' })
+      expect(state.activeView).toBe('history')
+      expect(getLogInkInputEvents(state, '', { escape: true }))
+        .toEqual([{ type: 'cancelConflictResolution' }])
+    })
+
+    it('confirming the M workflow fires the resolution runtime event', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setPendingConfirmation',
+        value: 'ai-conflict-help',
+      })
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events).toContainEqual({ type: 'runAiConflictResolution' })
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: 'runWorkflowAction', id: 'ai-conflict-help' })
+      )
+    })
+  })
+
   describe('s cycles sort modes (P4.2)', () => {
     it('cycles branch sort when active view is branches', () => {
       let state = createLogInkState(rows)

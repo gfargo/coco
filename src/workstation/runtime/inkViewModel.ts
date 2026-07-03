@@ -1,6 +1,7 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../commands/log/data'
 import { hashesMatchAny } from '../../git/hashes'
 import type { RebasePlanRow, RebaseTodoAction } from '../../git/rebasePlanActions'
+import type { ConflictRegion } from '../../git/conflictRegionActions'
 import { getLogInkThemePresets, type LogInkThemePreset } from '../chrome/theme'
 import {
     CommitComposeAction,
@@ -813,10 +814,39 @@ export type LogInkState = {
    * never execute against a moved HEAD.
    */
   rebasePlan?: LogInkRebasePlan
+  /**
+   * AI conflict resolution session (#1369): per-region proposals for
+   * ONE conflicted file, held between generation and the explicit
+   * per-region accept/edit/reject. Cleared on navigation away from the
+   * conflicts view (a stale proposal must never write into a file that
+   * moved underneath it) and when the file is fully resolved.
+   */
+  conflictResolution?: LogInkConflictResolutionState
 }
 
 export type LogInkRebasePlan = {
   rows: RebasePlanRow[]
+  selectedIndex: number
+}
+
+export type LogInkConflictProposal = {
+  regionIndex: number
+  resolution: string
+  rationale: string
+  status: 'pending' | 'accepted' | 'rejected'
+  /**
+   * Region snapshot at generation time — the display source for the
+   * ours/theirs blocks AND the content-matched identity the apply path
+   * uses (line numbers shift as earlier regions are accepted).
+   */
+  region: ConflictRegion
+}
+
+export type LogInkConflictResolutionState = {
+  path: string
+  status: 'loading' | 'ready' | 'error'
+  error?: string
+  proposals: LogInkConflictProposal[]
   selectedIndex: number
 }
 
@@ -1115,6 +1145,22 @@ export type LogInkAction =
   | { type: 'setRebaseRewordMessage'; message: string }
   | { type: 'clearRebasePlan' }
   | { type: 'setDiffLineSelectAnchor'; value?: number }
+  | { type: 'setConflictResolutionLoading'; path: string }
+  | {
+    type: 'setConflictResolutionReady'
+    path: string
+    proposals: Array<Omit<LogInkConflictProposal, 'status'>>
+  }
+  | { type: 'setConflictResolutionError'; path: string; error: string }
+  | { type: 'moveConflictProposal'; delta: number }
+  | {
+    type: 'setConflictProposalStatus'
+    regionIndex: number
+    status: 'accepted' | 'rejected'
+    /** Replacement text when an $EDITOR edit changed the proposal before accept. */
+    resolution?: string
+  }
+  | { type: 'clearConflictResolution' }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -1553,6 +1599,20 @@ function withAbandonedRebasePlan(state: LogInkState, destination: LogInkView): L
     return state
   }
   return { ...state, rebasePlan: undefined }
+}
+
+/**
+ * Drop an open conflict-resolution session when navigation leaves the
+ * conflicts view (#1369) — a stale proposal must never write into a
+ * file that changed while the user wandered elsewhere. (Accepts are
+ * content-matched as a second line of defense, but the session UI
+ * itself should not linger.)
+ */
+function withAbandonedConflictResolution(state: LogInkState, destination: LogInkView): LogInkState {
+  if (!state.conflictResolution || destination === 'conflicts') {
+    return state
+  }
+  return { ...state, conflictResolution: undefined }
 }
 
 function withFilter(
@@ -2352,23 +2412,32 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       // destructive actions). Drill-ins (Enter → diff/blame/…) dispatch
       // their own navigate* actions, not this one, so the filter that
       // the drilled-into view depends on survives there.
-      return withAbandonedRebasePlan(
-        withAbandonedBisectPick(
-          withClearedFilter(withPushedView(state, action.value), state.activeView !== action.value),
+      return withAbandonedConflictResolution(
+        withAbandonedRebasePlan(
+          withAbandonedBisectPick(
+            withClearedFilter(withPushedView(state, action.value), state.activeView !== action.value),
+            action.value,
+          ),
           action.value,
         ),
         action.value,
       )
     case 'popView': {
       const popped = withPoppedView(state)
-      return state.activeView === 'rebase' && popped.activeView !== 'rebase'
+      const withoutPlan = state.activeView === 'rebase' && popped.activeView !== 'rebase'
         ? { ...popped, rebasePlan: undefined }
         : popped
+      return state.activeView === 'conflicts' && withoutPlan.activeView !== 'conflicts'
+        ? { ...withoutPlan, conflictResolution: undefined }
+        : withoutPlan
     }
     case 'replaceView':
-      return withAbandonedRebasePlan(
-        withAbandonedBisectPick(
-          withClearedFilter(withReplacedView(state, action.value), state.activeView !== action.value),
+      return withAbandonedConflictResolution(
+        withAbandonedRebasePlan(
+          withAbandonedBisectPick(
+            withClearedFilter(withReplacedView(state, action.value), state.activeView !== action.value),
+            action.value,
+          ),
           action.value,
         ),
         action.value,
@@ -3073,6 +3142,82 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return { ...state, diffLineSelectAnchor: action.value, pendingKey: undefined }
     case 'clearRebasePlan':
       return { ...state, rebasePlan: undefined, pendingKey: undefined }
+    case 'setConflictResolutionLoading':
+      return {
+        ...state,
+        conflictResolution: { path: action.path, status: 'loading', proposals: [], selectedIndex: 0 },
+        pendingKey: undefined,
+      }
+    case 'setConflictResolutionReady':
+      return {
+        ...state,
+        conflictResolution: {
+          path: action.path,
+          status: 'ready',
+          proposals: action.proposals.map((proposal) => ({ ...proposal, status: 'pending' as const })),
+          selectedIndex: 0,
+        },
+        pendingKey: undefined,
+      }
+    case 'setConflictResolutionError':
+      return {
+        ...state,
+        conflictResolution: {
+          path: action.path,
+          status: 'error',
+          error: action.error,
+          proposals: [],
+          selectedIndex: 0,
+        },
+        pendingKey: undefined,
+      }
+    case 'moveConflictProposal': {
+      const session = state.conflictResolution
+      if (!session || session.proposals.length === 0) {
+        return { ...state, pendingKey: undefined }
+      }
+      return {
+        ...state,
+        conflictResolution: {
+          ...session,
+          selectedIndex: clampIndex(session.selectedIndex + action.delta, session.proposals.length),
+        },
+        pendingKey: undefined,
+      }
+    }
+    case 'setConflictProposalStatus': {
+      const session = state.conflictResolution
+      if (!session) {
+        return { ...state, pendingKey: undefined }
+      }
+      const proposals = session.proposals.map((proposal) =>
+        proposal.regionIndex === action.regionIndex
+          ? {
+            ...proposal,
+            status: action.status,
+            resolution: action.resolution ?? proposal.resolution,
+          }
+          : proposal
+      )
+      // Advance the cursor to the next still-pending proposal so the
+      // y/y/y flow walks the file without manual j presses.
+      const nextPending = proposals.findIndex(
+        (proposal, index) => index > session.selectedIndex && proposal.status === 'pending'
+      )
+      const anyPending = proposals.findIndex((proposal) => proposal.status === 'pending')
+      const selectedIndex = nextPending !== -1
+        ? nextPending
+        : anyPending !== -1
+          ? anyPending
+          : session.selectedIndex
+      return {
+        ...state,
+        conflictResolution: { ...session, proposals, selectedIndex },
+        pendingKey: undefined,
+      }
+    }
+    case 'clearConflictResolution':
+      return { ...state, conflictResolution: undefined, pendingKey: undefined }
     case 'setBisectPickMode':
       return {
         ...state,
