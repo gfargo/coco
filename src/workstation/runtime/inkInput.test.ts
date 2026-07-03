@@ -1313,8 +1313,27 @@ describe('log Ink input interactions', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
 
-    const events = getLogInkInputEvents(state, 'y', {}, {})
+    const events = getLogInkInputEvents(state, 'y', {}, { bisectActive: true })
     expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
+  })
+
+  it('y/b/x on the empty bisect view (no active session) do not fire raw git bisect', () => {
+    // Like `s`/`R`, the mark/reset keys are meaningless before a
+    // session exists — they used to surface a raw `git bisect` error
+    // ("You need to start by \"git bisect start\"") on the status line.
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    expect(getLogInkInputEvents(state, 'y', {}, { bisectActive: false }))
+      .not.toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
+    expect(getLogInkInputEvents(state, 'b', {}, { bisectActive: false }))
+      .not.toContainEqual({ type: 'runWorkflowAction', id: 'bisect-bad' })
+    const resetEvents = getLogInkInputEvents(state, 'x', {}, { bisectActive: false })
+    expect(resetEvents.find((event) =>
+      event.type === 'action' &&
+      event.action.type === 'setPendingConfirmation' &&
+      event.action.value === 'bisect-reset'
+    )).toBeUndefined()
   })
 
   it('g on the bisect view arms the chord so gh/gs navigation works mid-bisect (#1352)', () => {
@@ -1342,7 +1361,7 @@ describe('log Ink input interactions', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
 
-    const events = getLogInkInputEvents(state, 'b', {}, {})
+    const events = getLogInkInputEvents(state, 'b', {}, { bisectActive: true })
 
     expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-bad' })
   })
@@ -1455,7 +1474,7 @@ describe('log Ink input interactions', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
 
-    const events = getLogInkInputEvents(state, 'x', {}, {})
+    const events = getLogInkInputEvents(state, 'x', {}, { bisectActive: true })
 
     const confirm = events.find((event) =>
       event.type === 'action' && event.action.type === 'setPendingConfirmation'
@@ -1464,6 +1483,57 @@ describe('log Ink input interactions', () => {
     if (confirm && confirm.type === 'action' && confirm.action.type === 'setPendingConfirmation') {
       expect(confirm.action.value).toBe('bisect-reset')
     }
+  })
+
+  it('1/2/3 with the sidebar focused jump tabs instead of toggling the status mask', () => {
+    // The sidebar footer advertises "1-5 jump"; the status-view mask
+    // intercept used to eat 1/2/3 (toggling center-pane state
+    // invisibly) while the sidebar stayed put.
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+    state = applyLogInkAction(state, { type: 'setFocus', value: 'sidebar' })
+
+    const events = getLogInkInputEvents(state, '2', {}, {})
+    expect(events.find((event) =>
+      event.type === 'action' && event.action.type === 'toggleStatusFilterMask'
+    )).toBeUndefined()
+    expect(events.find((event) =>
+      event.type === 'action' && event.action.type === 'setSidebarTab'
+    )).toBeDefined()
+
+    // Commits focus keeps the mask toggle.
+    state = applyLogInkAction(state, { type: 'setFocus', value: 'commits' })
+    const maskEvents = getLogInkInputEvents(state, '2', {}, {})
+    expect(maskEvents.find((event) =>
+      event.type === 'action' && event.action.type === 'toggleStatusFilterMask'
+    )).toBeDefined()
+  })
+
+  it('C respects the CREATE_PR_VIEWS allowlist on non-opted-in views', () => {
+    // rebase / blame / file-history deliberately did not opt into the
+    // bare-C create-PR binding; the registry fall-through at the end
+    // of the dispatcher used to fire the workflow anyway.
+    for (const view of ['blame', 'file-history'] as const) {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: view })
+      const events = getLogInkInputEvents(state, 'C', {}, {})
+      expect(events).not.toContainEqual({ type: 'runWorkflowAction', id: 'create-pr' })
+      expect(events).not.toContainEqual({ type: 'startCreatePullRequest' })
+    }
+  })
+
+  it('arrow keys scroll the ready changelog view like j/k', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'changelog' })
+
+    const down = getLogInkInputEvents(state, '', { downArrow: true }, { changelogLineCount: 40 })
+    expect(down.find((event) =>
+      event.type === 'action' && event.action.type === 'pageChangelog' && event.action.delta === 1
+    )).toBeDefined()
+    const up = getLogInkInputEvents(state, '', { upArrow: true }, { changelogLineCount: 40 })
+    expect(up.find((event) =>
+      event.type === 'action' && event.action.type === 'pageChangelog' && event.action.delta === -1
+    )).toBeDefined()
   })
 
   it('does not hijack g/b/s/x outside the bisect view (#784)', () => {
@@ -2952,7 +3022,7 @@ describe('log Ink input interactions', () => {
         getLogInkInputEvents(state, 'Y', {}, { bisectCompletionSha: 'abc12345' })
       ).toEqual([{ type: 'yankFromActiveView', short: true }])
       // No terminator → `y` is the mark-good key mid-bisect (#1352).
-      expect(getLogInkInputEvents(state, 'y', {}, {}))
+      expect(getLogInkInputEvents(state, 'y', {}, { bisectActive: true }))
         .toEqual([{ type: 'runWorkflowAction', id: 'bisect-good' }])
     })
 

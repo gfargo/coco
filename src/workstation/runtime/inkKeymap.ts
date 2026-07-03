@@ -689,6 +689,10 @@ export type GetLogInkFooterHintsOptions = {
    *  back to the generic "enter open" hint instead of showing per-item
    *  ops the user cannot reach. */
   sidebarItemCount?: number
+  /** True while a bisect session is in progress. The bisect view's
+   *  mark/skip/run/reset keys are gated on an active session, so the
+   *  footer must not advertise them from the empty-state view. */
+  bisectActive?: boolean
   /**
    * Current diff view rendering mode (#785). When set on the diff view
    * the footer surfaces `d split` / `d unified` so users see what `d`
@@ -1420,7 +1424,12 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.activeView === 'bisect') {
     return {
-      contextual: ['y good', 'b bad', 's skip', 'R run', 'x reset', 'esc back'],
+      // No session yet → the only live keys are the start wizard and
+      // back-out; the mark/skip/run/reset set is gated on an active
+      // session in the input layer.
+      contextual: options.bisectActive
+        ? ['y good', 'b bad', 's skip', 'R run', 'x reset', 'esc back']
+        : ['s start', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
