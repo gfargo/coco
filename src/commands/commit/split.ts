@@ -262,6 +262,74 @@ function assertNoUnstagedOverlap(
   }
 }
 
+/**
+ * Apply-time drift check (#1396). The plan and its validation ran
+ * against the snapshot taken at generation time, but `git add <file>`
+ * stages whatever is on disk NOW — the workstation holds the plan
+ * between preview and `y`-to-apply, and edits made in that window
+ * (editor autosave, formatter, another session) would be committed
+ * under the reviewed message with no guard firing (the snapshot's
+ * `unstaged` list predates them).
+ *
+ * Scope mirrors `assertNoUnstagedOverlap`: only FILE-mode claims are
+ * checked. Hunk-mode groups re-apply the recorded patches to the
+ * index (`applyPatchToIndex`), so disk state doesn't feed them.
+ *
+ * Reads per-file index/working-tree codes from `status().files` — the
+ * convenience arrays (`modified` etc.) conflate the two columns, and a
+ * cleanly staged file would false-positive as a worktree edit.
+ */
+async function assertNoStagedDriftSincePlan(
+  plan: CommitSplitPlan,
+  hunkInventory: HunkInventory,
+  git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>
+): Promise<void> {
+  const hunkFiles = new Set(
+    plan.groups.flatMap((group) =>
+      getGroupHunks(group)
+        .map((hunkId) => hunkInventory.byId.get(hunkId)?.filePath)
+        .filter((file): file is string => Boolean(file))
+    )
+  )
+  const fileModeFiles = plan.groups
+    .filter((group) => !group.unclaimed)
+    .flatMap((group) => getGroupFiles(group))
+    .filter((file) => !hunkFiles.has(file))
+  if (fileModeFiles.length === 0) {
+    return
+  }
+
+  const fresh = await git.status()
+  const freshStaged = new Set<string>([
+    ...fresh.staged,
+    ...fresh.created,
+    ...fresh.renamed.map((entry) =>
+      typeof entry === 'string' ? entry : entry.to
+    ),
+  ])
+  const worktreeEdited = new Set(
+    (fresh.files || [])
+      .filter((file) => {
+        const wd = file.working_dir
+        return wd && wd !== ' ' && wd !== '?'
+      })
+      .map((file) => file.path)
+  )
+
+  const unstagedSincePlan = fileModeFiles.filter((file) => !freshStaged.has(file))
+  if (unstagedSincePlan.length > 0) {
+    throw new Error(
+      `Staged changes drifted since the plan was generated — no longer staged: ${unstagedSincePlan.join(', ')}. Regenerate the plan (r) and re-apply.`
+    )
+  }
+  const editedSincePlan = fileModeFiles.filter((file) => worktreeEdited.has(file))
+  if (editedSincePlan.length > 0) {
+    throw new Error(
+      `Files changed on disk since the plan was generated: ${editedSincePlan.join(', ')}. Applying would commit the drifted content under the reviewed message — regenerate the plan (r) and re-apply.`
+    )
+  }
+}
+
 function buildPatchForHunks(hunks: StagedHunk[]): string {
   const byFile = new Map<string, StagedHunk[]>()
 
@@ -358,6 +426,7 @@ export async function applyCommitSplitPlan({
 }): Promise<CommitSplitApplyResult> {
   validatePlanForStagedFiles(plan, changes.staged, hunkInventory)
   assertNoUnstagedOverlap(plan, changes, hunkInventory)
+  await assertNoStagedDriftSincePlan(plan, hunkInventory, git)
 
   // Defensive: drop any group with empty files[] AND empty hunks[].
   // `dropEmptyGroups` runs in the generator's rescue chain but we
