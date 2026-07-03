@@ -212,6 +212,7 @@ import {useSpinnerFrame} from './hooks/useSpinnerFrame'
 import {useStatusSurfaceData} from './hooks/buildStatusSurfaceData'
 import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
+import {isStaleFrameResolve} from './loadMoreResolver'
 import {computeHasMoreCommits, useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
 import {useOnboarding} from './hooks/useOnboarding'
 import {useRepoStackRuntimes} from './hooks/useRepoStackRuntimes'
@@ -488,6 +489,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const loadingMoreCommitsRef = React.useRef(false)
   const loadMoreRequestRef = React.useRef(0)
   const mountedRef = React.useRef(true)
+  // #1384 — render-fresh mirror of the repo-frame depth
+  // (`state.repoStack.length - 1`). The history ROW loaders capture it
+  // at dispatch and re-read it at resolve to drop completions that
+  // straddle a repo-frame push / pop — rows live in the single reducer
+  // state and are swapped in place per frame, so unlike the #994
+  // context loaders there is no per-frame slot to route a late write
+  // to; dropping is the only safe completion. A ref (not a closure
+  // capture) so the STABLE loader callbacks always see the live depth.
+  const repoFrameDepthRef = React.useRef(state.repoStack.length - 1)
+  repoFrameDepthRef.current = state.repoStack.length - 1
 
   // P4.3 — idle tip rotation. Extracted into `useIdleTip` (0.72 app.ts
   // decomposition). The hook issues the `useState` tick counter then the
@@ -597,10 +608,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // dispatching after the user `q` quits before rows arrive.
   React.useEffect(() => {
     if (!loadRows) return
+    // #1384 — the boot fetch runs against the ROOT frame's git; if the
+    // user drills into a submodule before a slow boot load resolves,
+    // the late `replaceRows` would swap root-repo commits into the
+    // child frame. Same frame-tag-and-drop as `refreshHistoryRows`.
+    const issuedAtDepth = repoFrameDepthRef.current
     let cancelled = false
     void loadRows()
       .then((nextRows) => {
-        if (cancelled || !mountedRef.current) return
+        if (cancelled || isStaleFrameResolve({
+          mounted: mountedRef.current,
+          issuedAtDepth,
+          currentDepth: repoFrameDepthRef.current,
+        })) return
         dispatch({ type: 'replaceRows', rows: nextRows })
         // Correct the pagination seed: on a cold cache the component
         // mounted with zero rows, so the lazy `hasMoreCommits` seed
@@ -667,6 +687,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
    */
   const refreshHistoryRows = React.useCallback(async () => {
     try {
+      // #1384 — capture the repo-frame depth BEFORE the awaits (the
+      // same discipline as refreshContext's #994 tag below). The
+      // resolve drops when the frame stack changed mid-flight: this
+      // callback's `git` belongs to the frame it was created for, so
+      // a late `replaceRows` would swap that repo's commits into
+      // whichever frame is active now.
+      const issuedAtDepth = repoFrameDepthRef.current
       const fetchArgs = state.historyFetchArgs
       const mergedArgv: LogArgv = {
         ...logArgv,
@@ -683,7 +710,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
         extraRefs: stashHashes,
       })
-      if (mountedRef.current && fresh) {
+      const staleFrame = isStaleFrameResolve({
+        mounted: mountedRef.current,
+        issuedAtDepth,
+        currentDepth: repoFrameDepthRef.current,
+      })
+      if (!staleFrame && fresh) {
         dispatch({ type: 'replaceRows', rows: fresh })
         // Re-arm pagination from the fresh window (#1337): the refresh
         // truncates the loaded rows back to one page, so a user who had
@@ -1005,8 +1037,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // in `useEffect`.
   React.useEffect(() => {
     if (state.activeView !== 'issues') return
-    setContext((current) => (current.issueList ? { ...current, issueList: undefined } : current))
-    setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'idle'))
+    // #1384 — frame-tag the clear (via the render-fresh depth ref, so
+    // the deliberately-narrow dep array below stays untouched): the
+    // preset belongs to the frame whose view is showing, so the write
+    // must land there, not on whichever frame is active if a push /
+    // pop lands in the same commit window.
+    const issuedAtDepth = repoFrameDepthRef.current
+    setContext(
+      (current) => (current.issueList ? { ...current, issueList: undefined } : current),
+      issuedAtDepth,
+    )
+    setContextStatus(
+      (current) => updateLogInkContextStatus(current, 'issueList', 'idle'),
+      issuedAtDepth,
+    )
     // We deliberately depend ONLY on the preset — not on
     // activeView — so re-entering the view doesn't re-fire and
     // discard the just-loaded data. The activeView guard above
@@ -1055,10 +1099,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   React.useEffect(() => {
     if (state.activeView !== 'pull-request-triage') return
-    setContext((current) =>
-      current.pullRequestList ? { ...current, pullRequestList: undefined } : current
+    // #1384 — frame-tagged like the issue preset-clear above.
+    const issuedAtDepth = repoFrameDepthRef.current
+    setContext(
+      (current) =>
+        current.pullRequestList ? { ...current, pullRequestList: undefined } : current,
+      issuedAtDepth,
     )
-    setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'))
+    setContextStatus(
+      (current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'),
+      issuedAtDepth,
+    )
   }, [state.selectedPullRequestFilter])
 
   // Per-item inspector hydration (#882) + on-demand blame hydration
@@ -1341,6 +1392,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     refreshContext,
     refreshHistoryRows,
     refreshWorktreeContext,
+    runtimes,
     setContext,
     setContextStatus,
     forge,
