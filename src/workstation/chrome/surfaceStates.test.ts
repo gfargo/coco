@@ -4,6 +4,8 @@ import {
   formatLogInkComposeEmpty,
   formatLogInkHistoryEmpty,
   formatLogInkLoading,
+  formatLogInkPullRequestDiffEmpty,
+  formatLogInkPullRequestDiffError,
   formatLogInkStashEmpty,
   formatLogInkStatusEmpty,
   formatLogInkTagsEmpty,
@@ -123,5 +125,18 @@ describe('log Ink surface states', () => {
       expect(message).toContain('gs') // status view
       expect(message).toContain('gc') // round-trip back to compose
     })
+  })
+})
+
+describe('PR diff loading / error states (#1363)', () => {
+  it('leads the error state with the CLI message and points at recovery keys', () => {
+    const text = formatLogInkPullRequestDiffError({ message: 'gh: Not Found (HTTP 404)' })
+    expect(text).toContain('gh: Not Found (HTTP 404)')
+    expect(text).toContain('esc')
+    expect(text).toContain('r to refresh')
+  })
+
+  it('distinguishes an empty patch from a failed fetch', () => {
+    expect(formatLogInkPullRequestDiffEmpty()).toBe('No diff to display for this pull request.')
   })
 })

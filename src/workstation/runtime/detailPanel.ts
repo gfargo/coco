@@ -229,6 +229,14 @@ export function renderDetailPanel(
     if (state.diffSource === 'commit') {
       return h(commitDiffDetailComponent(React), { detail, loading })
     }
+    // PR-sourced diff (#1363): keep the triage preview pane alongside
+    // the patch — the cursored triage row is the PR being viewed
+    // (`navigateOpenDiffForPullRequest` syncs the index), so the panel
+    // shows the PR's metadata / checks instead of a stale commit
+    // inspector.
+    if (state.diffSource === 'pr') {
+      return h(coreDetailComponent(React, 'prPreview')!)
+    }
     return h(coreDetailComponent(React, 'commit')!)
   }
 

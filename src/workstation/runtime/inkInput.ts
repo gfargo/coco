@@ -165,6 +165,11 @@ export type LogInkInputContext = {
   pullRequestTriageCount?: number
   /** URL of the cursored PR in the triage list view (#882 phase 3). */
   pullRequestTriageSelectedUrl?: string
+  /**
+   * Number of the cursored PR in the triage list view (#1363). Drives
+   * the Enter → PR diff drill-in and the `C` checkout workflow.
+   */
+  pullRequestTriageSelectedNumber?: number
   worktreeListCount?: number
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
@@ -179,6 +184,13 @@ export type LogInkInputContext = {
    * patch. Used by `c` (cherry-pick) to know which path to materialize.
    */
   stashDiffSelectedPath?: string
+  /**
+   * Per-file `diff --git` line offsets inside the active PR diff
+   * (#1363). Used by `]` / `[` to jump to next / previous file within
+   * the PR patch — a distinct field from `stashDiffFileOffsets` so the
+   * stash-only verbs never acquire a PR-diff target.
+   */
+  prDiffFileOffsets?: number[]
   /**
    * Path of the cursored file in the worktree (status / worktree diff
    * views). Used by `o` (open in $EDITOR).
@@ -483,10 +495,13 @@ function isWorktreeDiffTarget(state: LogInkState): boolean {
  * views are absent so the lists can't silently drift.
  */
 // Bare `C` creates a pull request everywhere EXCEPT the conflicts view, where
-// `C` means "mark conflict resolved".
+// `C` means "mark conflict resolved", and the PR-triage view, where `C`
+// means `gh pr checkout <n>` for the cursored row (#1363) — on a list of
+// existing PRs, "get this PR's branch locally" is the far likelier intent
+// than opening a brand-new PR.
 const CREATE_PR_VIEWS: readonly LogInkView[] = [
   'history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash',
-  'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'reflog',
+  'worktrees', 'pull-request', 'issues', 'reflog',
   'bisect', 'changelog', 'submodules', 'remotes',
 ]
 // Bare `S` creates a stash everywhere EXCEPT the commit triad
@@ -2484,6 +2499,13 @@ export function getLogInkInputEvents(
         hunkOffsets: context.stashDiffFileOffsets,
       })]
     }
+    if (state.activeView === 'diff' && state.diffSource === 'pr' && context.prDiffFileOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: -1,
+        hunkOffsets: context.prDiffFileOffsets,
+      })]
+    }
     if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
       return [action({
         type: 'jumpCommitDiffHunk',
@@ -2514,6 +2536,13 @@ export function getLogInkInputEvents(
         type: 'jumpCommitDiffHunk',
         delta: 1,
         hunkOffsets: context.stashDiffFileOffsets,
+      })]
+    }
+    if (state.activeView === 'diff' && state.diffSource === 'pr' && context.prDiffFileOffsets?.length) {
+      return [action({
+        type: 'jumpCommitDiffHunk',
+        delta: 1,
+        hunkOffsets: context.prDiffFileOffsets,
       })]
     }
     if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
@@ -3530,6 +3559,29 @@ export function getLogInkInputEvents(
   // issue handlers above; distinct view id so the keys don't
   // collide with the single-PR action panel (`pull-request`).
   if (state.activeView === 'pull-request-triage' && state.focus === 'commits') {
+    // #1363 — Enter opens the PR diff (`gh pr diff <n>` hydrated by the
+    // runtime once the view lands). Both guards matter: a zero count
+    // (list still loading / empty / fully filtered out) or a missing
+    // number mean there is no row to drill into, so Enter stays inert
+    // instead of pushing a source-less diff view.
+    if (key.return && context.pullRequestTriageCount && context.pullRequestTriageSelectedNumber) {
+      return [
+        action({
+          type: 'navigateOpenDiffForPullRequest',
+          number: context.pullRequestTriageSelectedNumber,
+          pullRequestIndex: state.selectedPullRequestTriageIndex,
+        }),
+        action({ type: 'setStatus', value: `viewing diff for #${context.pullRequestTriageSelectedNumber}` }),
+      ]
+    }
+    // #1363 — `C` checks the cursored PR out locally (`gh pr checkout
+    // <n>`), the "review this properly" one-key. The triage view opted
+    // OUT of the global create-PR `C` allowlist (see CREATE_PR_VIEWS)
+    // so this binding owns the key here; create-PR stays reachable from
+    // every other opted-in view.
+    if (inputValue === 'C' && context.pullRequestTriageCount && context.pullRequestTriageSelectedNumber) {
+      return [{ type: 'runWorkflowAction', id: 'triage-pr-checkout' }]
+    }
     if (inputValue === 'O' && context.pullRequestTriageSelectedUrl) {
       return [{ type: 'runWorkflowAction', id: 'triage-pr-open' }]
     }
@@ -3714,6 +3766,15 @@ export function getLogInkInputEvents(
       value: 'Finish or cancel the commit draft before creating a PR.',
       kind: 'warning',
     })]
+  }
+  // #1363 — `C` on the PR diff checks the viewed PR out locally, the
+  // natural "read the patch → review it properly" follow-up. Must sit
+  // before the create-PR fallthrough below ('diff' is an opted-in
+  // create-PR view; only the PR-sourced diff repurposes the key). The
+  // PR number travels as the payload so the runner targets the viewed
+  // PR even if the triage list refetched underneath the diff.
+  if (inputValue === 'C' && state.activeView === 'diff' && state.diffSource === 'pr' && state.prDiffNumber) {
+    return [{ type: 'runWorkflowAction', id: 'triage-pr-checkout', payload: String(state.prDiffNumber) }]
   }
   if (inputValue === 'C' && isCreatePrView(state.activeView)) {
     return [{ type: 'startCreatePullRequest' }]

@@ -1,5 +1,5 @@
 /**
- * Diff surface — the unified or side-by-side diff view. Four sources
+ * Diff surface — the unified or side-by-side diff view. Five sources
  * route through here, disambiguated by `state.diffSource`:
  *
  *   - `'stash'`    → render the patch text from a `git stash show -p`,
@@ -12,6 +12,11 @@
  *                    flow.
  *   - `'commit'`   → file preview hunks for a commit (history → Enter
  *                    on a commit). Read-only commit-diff exploration.
+ *   - `'pr'`       → `gh pr diff <n>` patch from the PR-triage drill-in
+ *                    (#1363). Read-only like compare, but keeps the
+ *                    stash diff's per-file `]` / `[` cursor — a PR
+ *                    patch is multi-file and "which file am I in" is
+ *                    the core review question.
  *   - default      → worktree-file diff for the active status entry,
  *                    with hunk navigation + per-hunk staging / revert.
  *
@@ -24,6 +29,11 @@
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatStashHeaderIdentity } from '../../chrome/stashHeader'
+import {
+  formatLogInkLoading,
+  formatLogInkPullRequestDiffEmpty,
+  formatLogInkPullRequestDiffError,
+} from '../../chrome/surfaceStates'
 import { cellWidth, truncateCells, truncatePathCells } from '../../chrome/text'
 import type {
   GitCommitDetail,
@@ -74,6 +84,9 @@ export type DiffSurfaceData = {
   stashDiffLoading: boolean
   compareDiffLines: string[] | undefined
   compareDiffLoading: boolean
+  prDiffLines: string[] | undefined
+  prDiffLoading: boolean
+  prDiffError: string | undefined
   syntaxSpans?: Map<string, SyntaxSpan[]>
 }
 
@@ -95,6 +108,9 @@ export function renderDiffSurface(
     stashDiffLoading,
     compareDiffLines,
     compareDiffLoading,
+    prDiffLines,
+    prDiffLoading,
+    prDiffError,
     syntaxSpans,
   } = diff
   const { Box, Text } = components
@@ -229,6 +245,111 @@ export function renderDiffSurface(
       dimColor: index > 0,
     }, truncateCells(line, width - 4))),
     ...stashBodyNodes)
+  }
+
+  // PR-triage drill-in branch (#1363). Mirrors the stash diff above —
+  // same per-file `diff --git` segmentation so `]` / `[` jump between
+  // files and the active file's header carries the selection bar — but
+  // read-only: the patch's files live on the PR's head branch, not
+  // necessarily in the local worktree, so cherry-pick / open-in-editor
+  // have no sensible target here (checkout the PR with `C` instead).
+  if (state.diffSource === 'pr') {
+    const lines = prDiffLines || []
+    const splitActive = isSplitDiffViable(state, width)
+    const splitRequestedButTooNarrow = state.diffViewMode === 'split' && !splitActive
+    const visibleLines = lines.slice(
+      state.diffPreviewOffset,
+      state.diffPreviewOffset + visibleRows
+    )
+    const prFiles = parseStashDiffFiles(lines)
+    const fileCount = prFiles.length
+    const currentFile = findStashFileForOffset(prFiles, state.diffPreviewOffset)
+    const currentFileIndex = currentFile
+      ? Math.max(0, prFiles.findIndex((file) => file.startLine === currentFile.startLine))
+      : -1
+    // Panel subtitle: the triage row the user drilled in from. The
+    // number is authoritative (`state.prDiffNumber`); the title is a
+    // best-effort lookup against the triage list so a refetch that
+    // dropped the PR still renders a usable `#<n>` header.
+    const prItem = context.pullRequestList?.pullRequests?.find(
+      (pr) => pr.number === state.prDiffNumber
+    )
+    const prLabel = `#${state.prDiffNumber ?? '?'}${prItem ? ` ${prItem.title}` : ''}`
+    const baseHeaderLines: string[] = prDiffLoading
+      ? [formatLogInkLoading({ resource: `diff for #${state.prDiffNumber ?? '?'}` })]
+      : prDiffError
+        ? [formatLogInkPullRequestDiffError({ message: prDiffError })]
+        : lines.length
+          ? [
+            fileCount > 0 && currentFile
+              ? `File ${currentFileIndex + 1}/${fileCount}: ${currentFile.path}`
+              : 'No files in this diff.',
+            `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
+            '',
+          ]
+          : [formatLogInkPullRequestDiffEmpty()]
+    const headerLines = splitRequestedButTooNarrow
+      ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
+      : baseHeaderLines
+
+    // File header anchor map — see the stash branch above: O(1) restyle
+    // of each `diff --git` row, with the file containing the scroll
+    // offset marked active on the selection bar.
+    const prFileByStartLine = new Map(prFiles.map((file) => [file.startLine, file]))
+    const activeStartLine = currentFile?.startLine
+    const prBodyNodes: ReactTypes.ReactNode[] = prDiffLoading || prDiffError || !lines.length
+      ? []
+      : splitActive
+        ? renderSplitDiffBody(
+          h, components, lines, state.diffPreviewOffset, visibleRows, width, theme,
+          'pr-diff-split', syntaxSpans
+        )
+        : visibleLines.map((line, index) => {
+          const absoluteIndex = state.diffPreviewOffset + index
+          const headerFile = prFileByStartLine.get(absoluteIndex)
+          if (headerFile) {
+            const isActive = absoluteIndex === activeStartLine
+            const arrow = theme.ascii ? '> ' : '▾ '
+            const activeHeader = isActive && focused && !theme.noColor
+            return h(Text, {
+              key: `pr-diff-line-${absoluteIndex}`,
+              bold: true,
+              color: activeHeader
+                ? theme.colors.selectionForeground
+                : (theme.noColor ? undefined : theme.colors.accent),
+              backgroundColor: activeHeader ? theme.colors.selection : undefined,
+            }, (() => {
+              const pathBudget = (width - 4) - cellWidth(arrow)
+              return pathBudget >= 8
+                ? `${arrow}${truncatePathCells(headerFile.path, pathBudget)}`
+                : truncateCells(`${arrow}${headerFile.path}`, width - 4)
+            })())
+          }
+          return renderDiffLine(
+            h, Text, line, theme, syntaxSpans, width - 4,
+            `pr-diff-line-${absoluteIndex}`
+          )
+        })
+
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      flexShrink: 0,
+      paddingX: 1,
+      width,
+    },
+    h(Box, { justifyContent: 'space-between' },
+      h(Text, { bold: true }, panelTitle(splitActive ? 'PR diff (split)' : 'PR diff', focused)),
+      // Cell-budgeted like the stash subtitle (#1390) so a long PR
+      // title can't wrap the space-between header row.
+      h(Text, { dimColor: true }, truncateCells(prLabel, Math.max(10, width - 4 - 20)))
+    ),
+    ...headerLines.map((line, index) => h(Text, {
+      key: `pr-diff-header-${index}`,
+      dimColor: index > 0,
+    }, truncateCells(line, width - 4))),
+    ...prBodyNodes)
   }
 
   // Compare-two-refs branch (#779). Mirrors the stash diff above but

@@ -144,3 +144,110 @@ describe('worktree diff — hunk staging rail (#1184, #1185)', () => {
     }
   })
 })
+
+describe('PR diff surface (#1363)', () => {
+  const prPatch = [
+    'diff --git a/src/a.ts b/src/a.ts',
+    '--- a/src/a.ts',
+    '+++ b/src/a.ts',
+    '@@ -1 +1 @@',
+    '-old',
+    '+new',
+    'diff --git a/src/b.ts b/src/b.ts',
+    '--- a/src/b.ts',
+    '+++ b/src/b.ts',
+    '@@ -2 +2 @@',
+    '-two',
+    '+three',
+  ]
+
+  function buildPr(overrides: {
+    lines?: string[]
+    loading?: boolean
+    error?: string
+    offset?: number
+  } = {}): unknown {
+    const base = createLogInkState([])
+    const ctx = {
+      h: createElement,
+      components,
+      state: {
+        ...base,
+        activeView: 'diff',
+        diffSource: 'pr',
+        prDiffNumber: 962,
+        focus: 'commits',
+        diffPreviewOffset: overrides.offset ?? 0,
+      },
+      context: {
+        pullRequestList: {
+          available: true,
+          authenticated: true,
+          pullRequests: [
+            { number: 962, title: 'feat: triage detail' },
+          ],
+        },
+      } as unknown as LogInkContext,
+      contextStatus: createLogInkContextStatus('ready'),
+      bodyRows: 30,
+      width: 100,
+      theme,
+    } as unknown as SurfaceRenderContext
+
+    const diff = {
+      worktreeDiff: undefined,
+      worktreeDiffLoading: false,
+      worktreeHunks: undefined,
+      worktreeHunksLoading: false,
+      filePreview: undefined,
+      filePreviewLoading: false,
+      commitDiffHunkOffsets: undefined,
+      selectedDetailFile: undefined,
+      stashDiffLines: undefined,
+      stashDiffLoading: false,
+      compareDiffLines: undefined,
+      compareDiffLoading: false,
+      prDiffLines: overrides.lines,
+      prDiffLoading: overrides.loading ?? false,
+      prDiffError: overrides.error,
+      syntaxSpans: undefined,
+    } as unknown as DiffSurfaceData
+
+    return renderDiffSurface(ctx, diff)
+  }
+
+  it('renders the PR title bar with the number + triage-list title', () => {
+    const text = flattenText(buildPr({ lines: prPatch }))
+    expect(text).toContain('PR diff')
+    expect(text).toContain('#962 feat: triage detail')
+  })
+
+  it('shows the surface-states loading line while the patch fetch runs', () => {
+    const text = flattenText(buildPr({ loading: true }))
+    expect(text).toContain('· Loading diff for #962…')
+  })
+
+  it('surfaces a fetch failure with recovery hints instead of a bare empty state', () => {
+    const text = flattenText(buildPr({ error: 'gh auth token expired.', lines: [] }))
+    expect(text).toContain('Could not load the diff: gh auth token expired.')
+    expect(text).toContain('Press esc to go back')
+  })
+
+  it('renders the empty-patch hint for a diff-less PR', () => {
+    const text = flattenText(buildPr({ lines: [] }))
+    expect(text).toContain('No diff to display for this pull request.')
+  })
+
+  it('segments the patch per file and tracks the file containing the scroll offset', () => {
+    // Offset 0 sits inside the first file.
+    expect(flattenText(buildPr({ lines: prPatch }))).toContain('File 1/2: src/a.ts')
+    // Offset 7 sits inside the second file (its header is line 6).
+    expect(flattenText(buildPr({ lines: prPatch, offset: 7 }))).toContain('File 2/2: src/b.ts')
+  })
+
+  it('replaces diff --git headers with compact ▾ path markers', () => {
+    const text = flattenText(buildPr({ lines: prPatch }))
+    expect(text).toContain('▾ src/a.ts')
+    expect(text).not.toContain('diff --git a/src/a.ts')
+  })
+})

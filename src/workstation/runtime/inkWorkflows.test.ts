@@ -208,3 +208,20 @@ describe('log Ink workflows', () => {
     expect(text).toContain('Operation data loading')
   })
 })
+
+describe('triage PR checkout workflow (#1363)', () => {
+  it('registers triage-pr-checkout as keyless (view-scoped C dispatches by id) and confirmation-free', () => {
+    // Non-destructive: gh refuses on a dirty worktree rather than
+    // clobbering it, and switching back is one checkout — same
+    // consent model as checkout-branch.
+    expect(getLogInkWorkflowActionById('triage-pr-checkout')).toMatchObject({
+      key: '',
+      kind: 'normal',
+      requiresConfirmation: false,
+    })
+  })
+
+  it('never resolves triage-pr-checkout from a raw C keystroke (create-pr owns the registry key)', () => {
+    expect(getLogInkWorkflowActionByKey('C')?.id).toBe('create-pr')
+  })
+})

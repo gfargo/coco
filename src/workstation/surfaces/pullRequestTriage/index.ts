@@ -13,6 +13,7 @@
 import type * as ReactTypes from 'react'
 import type { PullRequestListItem } from '../../../git/pullRequestListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { inlineSpinnerGlyph } from '../../chrome/spinner'
 import { clampListWindowStart } from '../../chrome/layout'
 import { forgeNouns } from '../../chrome/forgeNouns'
 import {
@@ -25,6 +26,7 @@ import { cellWidth, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import { PULL_REQUEST_FILTER_LABELS } from '../../../git/triageFilterPresets'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
+import { isPendingItemAction } from '../../runtime/inkViewModel'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 
@@ -104,7 +106,10 @@ function matchesPullRequestFilter(pr: PullRequestListItem, filter: string): bool
   )
 }
 
-export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): ReactTypes.ReactElement {
+export function renderPullRequestTriageSurface(
+  ctx: SurfaceRenderContext,
+  spinnerFrame: number = 0
+): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
   const { Box, Text } = components
   const focused = state.focus === 'commits'
@@ -197,7 +202,11 @@ export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): React
       bodyLines = windowed.map((pr, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
-        const cursor = isSelected ? '>' : ' '
+        // #1363 — while `gh pr checkout <n>` runs against this row, the
+        // cursor glyph swaps for the shared inline spinner (same idiom
+        // as the branches surface's delete/checkout rows).
+        const busy = isPendingItemAction(state.pendingItemAction, 'pull-request', String(pr.number))
+        const cursor = busy ? inlineSpinnerGlyph(spinnerFrame, theme.ascii) : isSelected ? '>' : ' '
         const numStr = `#${pr.number}`.padEnd(numberColWidth)
         const stateLabel = pr.isDraft ? 'draft' : pr.state.toLowerCase()
         const stateStr = stateLabel.padEnd(6)

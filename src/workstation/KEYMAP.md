@@ -208,6 +208,17 @@ The hunk is the unit of action here.
 | `j`/`k` | Line-scroll |
 | `d` | Toggle unified / split |
 
+### Diff — pull request (triage `Enter`, read-only)
+
+| Key | Action |
+|-----|--------|
+| `j`/`k` | Line-scroll the patch |
+| `[` / `]` | Previous / next **file** (PR patches index by file, like stash diffs) |
+| `C` | Check the viewed PR's branch out locally (`gh pr checkout <n>`) |
+| `d` | Toggle unified / split |
+
+No cherry-pick / hunk-apply / `$EDITOR` here — the patch's files live on the PR's head branch, not necessarily in the local worktree. `C` is the "act on it" verb.
+
 ### Compose (commit message)
 
 | Key | Action |
@@ -289,6 +300,8 @@ While AI proposals are open (after `M`):
 
 | Key | Action |
 |-----|--------|
+| `Enter` | Open the PR's diff (triage; `gh pr diff <n>`, cached per number) |
+| `C` | Check the PR's branch out locally (triage; `gh pr checkout <n>`) — the global create-PR `C` is repurposed on this view |
 | `m` | Merge (1-key strategy choice: `m` merge · `s` squash · `r` rebase) |
 | `a` | Approve (confirm) |
 | `R` | Request changes (review prompt) |
@@ -347,7 +360,7 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | Key | Meanings by context |
 |-----|---------------------|
 | `c` | history → cherry-pick commit · commit/stash diff → cherry-pick/restore file · status/diff/compose → commit · PR/PR-triage → comment · issues → comment |
-| `C` | conflicts → continue operation · compose → *blocked* (guard against fat-finger PR-create) · elsewhere → create PR |
+| `C` | conflicts → continue operation · PR triage / PR diff → **checkout PR** (#1363) · compose → *blocked* (guard against fat-finger PR-create) · elsewhere → create PR |
 | `R` | history → revert · branches → rename · tags → delete-remote · PR/PR-triage → request changes · bisect → run command |
 | `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve · compose → **amend HEAD** (confirm; #1350) |
 | `m` | branches/tags/history (compare flow) → mark compare base · PR/PR-triage → merge |
@@ -360,7 +373,7 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `f` | history → fixup staged into cursored commit · PR-triage → cycle PR filter · issues → cycle issue filter |
 | `o` | status/diff/conflicts → open file in `$EDITOR` (consistent — different file resolution only) |
 | `y` | bisect → mark good · conflicts (AI proposals open) → accept proposal · elsewhere → yank (`g` stays the chord prefix everywhere — bisect used to shadow it and `gh` silently marked the candidate good) |
-| `[` / `]` | worktree diff → hunk · commit diff → hunk · stash diff → **file** · sidebar/inspector focus → cycle tab |
+| `[` / `]` | worktree diff → hunk · commit diff → hunk · stash/PR diff → **file** · sidebar/inspector focus → cycle tab |
 
 The three highest-risk overloads, because they're guard-heavy or
 context-subtle, are `c`, `C`, and `[`/`]`. Touch their handlers carefully.

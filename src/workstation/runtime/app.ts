@@ -71,7 +71,7 @@ import {getGitOperationOverview} from '../../git/operationData'
 import {getProviderOverview} from '../../git/providerData'
 import {getForgeActions, getForgePullRequestOverview} from '../../git/forgeActions'
 import {issueFilterForPreset, pullRequestFilterForPreset} from '../../git/triageFilterPresets'
-import {getStashCommitHashes, getStashOverview} from '../../git/stashData'
+import {getStashCommitHashes, getStashOverview, parseStashDiffFiles} from '../../git/stashData'
 import {getWorktreeOverview} from '../../git/statusData'
 import {getBisectStatus} from '../../git/bisectData'
 import {getReflogOverview} from '../../git/reflogData'
@@ -205,6 +205,7 @@ import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitD
 import {useContextHydration} from './hooks/useContextHydration'
 import {useBlameLoadingState, useDetailHydration, useFileHistoryLoadingState} from './hooks/useDetailHydration'
 import {useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState} from './hooks/useDiffHydration'
+import {usePullRequestDiffHydration, usePullRequestDiffState} from './hooks/usePullRequestDiffHydration'
 import {useDiffSyntaxHighlight, useDiffSyntaxState} from './hooks/useDiffSyntaxHighlight'
 import {useIdleTip} from './hooks/useIdleTip'
 import {useRefreshWatcher} from './hooks/useRefreshWatcher'
@@ -475,6 +476,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // #779 — compare-two-refs diff state. Loaded lazily when the diff
   // view becomes active with `diffSource === 'compare'`.
   const {compareDiffLines, setCompareDiffLines, compareDiffLoading, setCompareDiffLoading} = useCompareDiffState(React)
+  // #1363 — PR-triage diff state (Enter on a triage row). Loaded lazily
+  // when the diff view becomes active with `diffSource === 'pr'`; the
+  // loader hook below serves repeat opens from a bounded per-number
+  // cache invalidated when the triage list refetches.
+  const {
+    prDiffLines, setPrDiffLines,
+    prDiffLoading, setPrDiffLoading,
+    prDiffError, setPrDiffError,
+  } = usePullRequestDiffState(React)
   // Load-more pagination state, owned by `useHistoryPaginationState` (app.ts
   // decomposition item 3 / #1237). The `useState` pair stays in this exact
   // slot; the setters are shared (the loader `useLoadMoreHistory` below plus
@@ -568,6 +578,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     state.statusFilterMask,
     state.selectedWorktreeFileIndex,
     stashDiffLines,
+  )
+
+  // #1363 — per-file segmentation of the active PR patch (same
+  // `diff --git` walk as `stashDiffParsedFiles`), memoized so the `[`/`]`
+  // file-jump offsets in the input handler don't re-parse per keystroke.
+  const prDiffParsedFiles = React.useMemo(
+    () => (prDiffLines ? parseStashDiffFiles(prDiffLines) : []),
+    [prDiffLines],
   )
 
   // Filtered promoted-view lists (#808). These were recomputed inline
@@ -1033,6 +1051,23 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     }),
     [forgeProvider, forgePath, forgeGitlabHost, forgeCurrentBranch]
   )
+
+  // #1363 — load the PR patch (via the forge facade) once the diff view
+  // becomes active with diffSource='pr'. Same lazy-loader shape as the
+  // stash hydration above, plus a bounded per-number cache keyed on the
+  // triage list's identity (a refetch invalidates every cached patch)
+  // and a surfaced error message (a failed `gh pr diff` is actionable,
+  // unlike a missing stash diff).
+  usePullRequestDiffHydration(React, {
+    getPullRequestDiffByNumber: forge.getPullRequestDiffByNumber,
+    activeView: state.activeView,
+    diffSource: state.diffSource,
+    prDiffNumber: state.prDiffNumber,
+    pullRequestList: context.pullRequestList,
+    setPrDiffLines,
+    setPrDiffLoading,
+    setPrDiffError,
+  })
 
   React.useEffect(() => {
     if (state.activeView !== 'issues') return
@@ -1640,6 +1675,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     selectedWorktreeFile,
     stashDiffParsedFiles,
     stashDiffLines,
+    prDiffLines,
+    prDiffParsedFiles,
     filePreview,
     commitDiffHunkOffsets,
     detail,
@@ -1786,6 +1823,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashDiffLoading,
       compareDiffLines,
       compareDiffLoading,
+      prDiffLines,
+      prDiffLoading,
+      prDiffError,
       bisectCandidateDetail,
       bisectCandidateLoading,
       blame: state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined,

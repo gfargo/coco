@@ -212,6 +212,31 @@ export function resolvePendingItemAction(
       : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
     return wt ? { kind: 'worktree', id: wt.path, action: 'delete' } : undefined
   }
+  // #1363 — `gh pr checkout <n>` gets the same inline row spinner as a
+  // branch checkout. Resolution mirrors `buildFilteredLists`'s triage
+  // filter fields so the spinner lands on exactly the row the handler
+  // will act on.
+  if (id === 'triage-pr-checkout') {
+    const all = context.pullRequestList?.pullRequests || []
+    const visible = filter
+      ? all.filter((pr) =>
+          matchesPromotedFilter(
+            [
+              `#${pr.number}`,
+              pr.title,
+              pr.author || '',
+              pr.headRefName,
+              pr.baseRefName,
+              ...(pr.labels || []),
+              ...(pr.assignees || []),
+            ],
+            filter
+          )
+        )
+      : all
+    const pr = visible[Math.min(state.selectedPullRequestTriageIndex, Math.max(0, visible.length - 1))]
+    return pr ? { kind: 'pull-request', id: String(pr.number), action: 'checkout' } : undefined
+  }
   return undefined
 }
 
@@ -1408,6 +1433,27 @@ export function useWorkflowAction(
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
+      // #1363 — `gh pr checkout <n>` for the cursored triage row. The
+      // only triage verb that mutates LOCAL state (HEAD moves), so it
+      // skips the list-cache invalidation (the PR itself is untouched)
+      // and instead rides the checkout follow-ups below: history
+      // refresh + cursor snap + silent context refresh, exactly like
+      // `checkout-branch`.
+      'triage-pr-checkout': async () => {
+        // The PR-diff `C` path carries the viewed PR's number as the
+        // payload (the triage cursor could drift if the list refetched
+        // under the open diff); the triage-list `C` path omits it and
+        // targets the cursored row.
+        const payloadNumber = Number(payload)
+        if (payload && Number.isInteger(payloadNumber) && payloadNumber > 0) {
+          return forge.checkoutPullRequestByNumber(payloadNumber)
+        }
+        const pr = filteredPullRequestTriageList[
+          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
+        ]
+        if (!pr) return { ok: false, message: 'No pull request under cursor' }
+        return forge.checkoutPullRequestByNumber(pr.number)
+      },
       // Status surface group-level batch ops (#791 follow-up). The
       // input handler dispatches these when the user presses Enter on a
       // group header. We re-derive the file list from the live
@@ -1683,6 +1729,10 @@ export function useWorkflowAction(
       // changes HEAD — refresh the graph so the current-branch marker
       // and history view reflect the switch (#1326).
       'checkout-created-branch',
+      // `gh pr checkout <n>` fetches the PR branch and moves HEAD onto
+      // it — refresh so the PR's commits and the current-branch marker
+      // appear (#1363).
+      'triage-pr-checkout',
     ])
     if (result?.ok && historyMutatingIds.has(id)) {
       await refreshHistoryRows()
@@ -1697,7 +1747,7 @@ export function useWorkflowAction(
     // (resolvePendingItemAction → action 'checkout'), so a silent
     // stale-while-revalidate swap keeps the list readable and just
     // repaints the current-branch marker once the new context lands.
-    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch') && result?.ok) {
+    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch' || id === 'triage-pr-checkout') && result?.ok) {
       dispatch({ type: 'resetBranchSelection' })
       await refreshContext({ silent: true })
     } else {

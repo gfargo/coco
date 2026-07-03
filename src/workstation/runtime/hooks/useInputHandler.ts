@@ -96,6 +96,10 @@ export type UseInputHandlerDeps = {
 
   /** Active stash patch lines (drives the stash-diff preview path). */
   stashDiffLines: string[] | undefined
+  /** Active PR patch lines (#1363 — drives the PR-diff preview path). */
+  prDiffLines: string[] | undefined
+  /** Per-file segmentation of the PR patch (#1363 — `[`/`]` file jump). */
+  prDiffParsedFiles: StatusSurfaceData['stashDiffParsedFiles']
   /** Active commit-file diff preview (drives the commit-diff preview path). */
   filePreview: GitCommitFilePreview | undefined
   /** `@@`-header offsets within the commit-diff preview (hunk navigation). */
@@ -219,6 +223,8 @@ export function useInputHandler(
     selectedWorktreeFile,
     stashDiffParsedFiles,
     stashDiffLines,
+    prDiffLines,
+    prDiffParsedFiles,
     filePreview,
     commitDiffHunkOffsets,
     detail,
@@ -311,17 +317,22 @@ export function useInputHandler(
       Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
     ]?.url
     const pullRequestTriageVisibleCount = filteredPullRequestTriageList.length
-    const pullRequestTriageSelectedUrl = filteredPullRequestTriageList[
+    const pullRequestTriageSelected = filteredPullRequestTriageList[
       Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-    ]?.url
+    ]
+    const pullRequestTriageSelectedUrl = pullRequestTriageSelected?.url
+    const pullRequestTriageSelectedNumber = pullRequestTriageSelected?.number
     const worktreeVisibleCount = filteredWorktreeList.length
 
-    // When the diff view is showing a stash patch, swap the previewLineCount
-    // to the stash diff length so the existing pageDetailPreview path
-    // (j/k, PgUp/PgDn) scrolls through it without a parallel pipeline.
+    // When the diff view is showing a stash or PR patch, swap the
+    // previewLineCount to that patch's length so the existing
+    // pageDetailPreview path (j/k, PgUp/PgDn) scrolls through it
+    // without a parallel pipeline.
     const diffPreviewLineCount = state.diffSource === 'stash'
       ? stashDiffLines?.length
-      : filePreview?.hunks.length
+      : state.diffSource === 'pr'
+        ? prDiffLines?.length
+        : filePreview?.hunks.length
 
     // Per-file segmentation for stash diffs reads the LogInkApp-scoped
     // memo so navigation keys + the input-context derivation share a
@@ -332,6 +343,13 @@ export function useInputHandler(
     const stashDiffSelectedPath = state.diffSource === 'stash'
       ? findStashFileForOffset(stashDiffFiles, state.diffPreviewOffset)?.path
       : undefined
+    // #1363 — same segmentation for the PR patch, feeding the `[`/`]`
+    // per-file jump on the PR diff. Distinct field (not overloading the
+    // stash one) so the stash-only verbs (`c` cherry-pick, `o` open)
+    // can't acquire a PR-diff target by accident.
+    const prDiffFileOffsets = state.diffSource === 'pr'
+      ? prDiffParsedFiles.map((file) => file.startLine)
+      : []
 
     getLogInkInputEvents(state, inputValue, key, {
       // Narrow terminals show one pane at a time (#1135) — gates the `v`
@@ -389,9 +407,11 @@ export function useInputHandler(
       issueSelectedUrl,
       pullRequestTriageCount: pullRequestTriageVisibleCount,
       pullRequestTriageSelectedUrl,
+      pullRequestTriageSelectedNumber,
       stashSelectedRef,
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,
+      prDiffFileOffsets: prDiffFileOffsets.length ? prDiffFileOffsets : undefined,
       worktreeListCount: worktreeVisibleCount,
       worktreeSelectedPath: visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path,
       statusGroups: visibleWorktreeGroups.map((group) => ({

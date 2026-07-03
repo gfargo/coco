@@ -664,7 +664,7 @@ export type GetLogInkFooterHintsOptions = {
   activeView?: LogInkView
   /** Used to differentiate the diff-view hints between commit / worktree
    *  / stash sources without reaching into runtime state. */
-  diffSource?: 'commit' | 'worktree' | 'stash' | 'compare'
+  diffSource?: 'commit' | 'worktree' | 'stash' | 'compare' | 'pr'
   filterMode: boolean
   focus: LogInkFocus
   showHelp: boolean
@@ -1282,6 +1282,17 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
         global: NORMAL_GLOBAL_HINTS,
       }
     }
+    if (options.diffSource === 'pr') {
+      // PR-triage drill-in (#1363): read-only like compare (the files
+      // live on the PR's head branch, so no cherry-pick / hunk apply /
+      // open-in-editor), but with the stash diff's per-file `[/]` jump.
+      // `C` checks the PR's branch out locally — the "review this
+      // properly" follow-up to reading the patch.
+      return {
+        contextual: ['j/k lines', '[/] file', 'C checkout', splitToggleHint, 'esc back'],
+        global: NORMAL_GLOBAL_HINTS,
+      }
+    }
     // Worktree (staging) diff. Consistent with the commit/stash diffs
     // (#1185): j/k scroll lines, [/] jump between hunks. space stages /
     // unstages the hunk under the viewport, a stages the whole file, z
@@ -1384,9 +1395,10 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
   if (options.activeView === 'pull-request-triage') {
     return {
       // #882 phase 4-6 — full PR action panel scoped to the triage
-      // list + filter cycling. AI summarize (`I`) deferred to a
-      // follow-up.
-      contextual: ['↑/↓ PRs', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'esc back'],
+      // list + filter cycling; #1363 adds the review pair (enter →
+      // read the diff, C → check the branch out locally). AI
+      // summarize (`I`) deferred to a follow-up.
+      contextual: ['↑/↓ PRs', 'enter diff', 'C checkout', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
