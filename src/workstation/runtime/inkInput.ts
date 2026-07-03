@@ -1173,6 +1173,16 @@ export function getLogInkInputEvents(
           action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
         ]
       }
+      // `open-conflicts` routes straight to the conflicts view (#1360)
+      // — pure navigation, same reasoning as `switch-worktree` above.
+      // The sticky error status underneath stays put so the user still
+      // sees what stopped the operation once they land on the view.
+      if (option.intent === 'open-conflicts') {
+        return [
+          action({ type: 'pushView', value: 'conflicts' }),
+          action({ type: 'setPendingChoice', value: undefined }),
+        ]
+      }
       if (option.workflowId) {
         // The workflow runner owns the live context + clears any
         // conflict state once it resolves. Options may carry a payload
@@ -1190,7 +1200,12 @@ export function getLogInkInputEvents(
         ...(state.worktreeCheckoutConflict
           ? [action({ type: 'setWorktreeCheckoutConflict', value: undefined })]
           : []),
-        action({ type: 'setStatus', value: 'cancelled' }),
+        // Recovery prompts raised on top of a sticky error status keep
+        // that status visible after dismissal (#1360) — declining the
+        // recovery doesn't make git's error less true.
+        ...(state.pendingChoice.keepStatusOnDismiss
+          ? []
+          : [action({ type: 'setStatus', value: 'cancelled' })]),
       ]
     }
     return []
