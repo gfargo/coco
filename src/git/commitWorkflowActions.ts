@@ -10,6 +10,7 @@ import {
   applyCommitSplitPlan,
   prepareCommitSplitPlan,
 } from '../commands/commit/split'
+import { LangChainCancelledError } from '../lib/langchain/errors'
 import { LLMModel } from '../lib/langchain/types'
 import {
   getApiKeyForModel,
@@ -287,7 +288,17 @@ export type CommitSplitPlanResult =
        */
       fallback?: import('../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
     }
-  | { ok: false; message: string; details?: string[] }
+  | {
+      ok: false
+      message: string
+      details?: string[]
+      /**
+       * True when the failure is a user abort (Esc during generation),
+       * not an error — callers should stay quiet instead of surfacing
+       * an error status.
+       */
+      cancelled?: boolean
+    }
 
 /**
  * Run plan generation in isolation — no formatting, no apply, no
@@ -298,7 +309,7 @@ export type CommitSplitPlanResult =
  * split matches what the user previewed.
  */
 export async function runCommitSplitPlanWorkflow(
-  input: { git?: SimpleGit } = {}
+  input: { git?: SimpleGit; signal?: AbortSignal } = {}
 ): Promise<CommitSplitPlanResult> {
   const git = input.git || getRepo()
   const argv = createCommitWorkflowArgv('split-plan')
@@ -341,6 +352,7 @@ export async function runCommitSplitPlanWorkflow(
       llm,
       planLlm,
       planService: splitService,
+      signal: input.signal,
     })
 
     if ('empty' in result) {
@@ -357,6 +369,11 @@ export async function runCommitSplitPlanWorkflow(
       fallback: result.fallback,
     }
   } catch (error) {
+    // User abort (Esc during generation) is intent, not failure — let
+    // the caller drop the result silently instead of painting an error.
+    if (error instanceof LangChainCancelledError) {
+      return { ok: false, cancelled: true, message: 'Split plan cancelled.' }
+    }
     if (isCommandExitError(error)) {
       const lines = compactOutputLines(error.message)
       return {

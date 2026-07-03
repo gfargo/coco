@@ -30,12 +30,18 @@ function defaultShouldRetry(error: Error): boolean {
   if (error.name.includes('Validation') || error.name.includes('Configuration')) {
     return false
   }
-  
+
   // Don't retry authentication errors
   if (error.name.includes('Authentication')) {
     return false
   }
-  
+
+  // Never retry a user cancellation (LangChainCancelledError et al) —
+  // the abort was intent, and a retry would re-issue the aborted call.
+  if (error.name.includes('Cancelled')) {
+    return false
+  }
+
   // Retry execution errors and timeouts
   return true
 }

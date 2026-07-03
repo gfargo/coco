@@ -49,10 +49,23 @@ describe('retry utilities', () => {
     it('should respect shouldRetry predicate', async () => {
       const operation = jest.fn().mockRejectedValue(new Error('ValidationError'))
       const shouldRetry = jest.fn().mockReturnValue(false)
-      
+
       await expect(withRetry(operation, { shouldRetry })).rejects.toThrow('ValidationError')
       expect(operation).toHaveBeenCalledTimes(1)
       expect(shouldRetry).toHaveBeenCalledWith(expect.any(Error))
+    })
+
+    it('never retries a user cancellation by default', async () => {
+      // A cancelled LLM call (LangChainCancelledError) is intent, not a
+      // transient failure — the default predicate must not re-issue it.
+      const cancelled = new Error('user cancelled')
+      cancelled.name = 'LangChainCancelledError'
+      const operation = jest.fn().mockRejectedValue(cancelled)
+
+      await expect(withRetry(operation, { maxAttempts: 3, backoffMs: 1 })).rejects.toThrow(
+        'user cancelled'
+      )
+      expect(operation).toHaveBeenCalledTimes(1)
     })
   })
 

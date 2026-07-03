@@ -1490,11 +1490,11 @@ export function getLogInkInputEvents(
     const lineCount = context.splitPlanLineCount || 0
 
     if (key.escape) {
-      // Esc during loading is a soft cancel — we can't actually abort
-      // the in-flight LLM call (runs in a sibling promise), but we
-      // close the overlay and the runtime ignores the resolved plan
-      // when it eventually lands (it checks `state.splitPlan?.status`
-      // before dispatching setSplitPlanReady).
+      // Esc closes the overlay AND aborts an in-flight generation —
+      // `cancelCommitSplit` fires the plan AbortController (#1338
+      // pattern), and the start path drops a superseded/aborted
+      // result instead of dispatching setSplitPlanReady over the
+      // user's next activity.
       return [{ type: 'cancelCommitSplit' }]
     }
 

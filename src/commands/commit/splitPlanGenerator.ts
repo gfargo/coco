@@ -44,6 +44,12 @@ export interface GenerateSplitPlanArgs {
    * degraded plan.
    */
   strict?: boolean
+  /**
+   * Optional user-cancellation signal — forwarded into each plan
+   * attempt's LLM call so Esc in the workstation actually tears the
+   * request down (surfaces as `LangChainCancelledError`).
+   */
+  signal?: AbortSignal
 }
 
 /**
@@ -93,6 +99,7 @@ export async function generateValidatedCommitSplitPlan({
   metadata = {},
   maxAttempts = DEFAULT_MAX_PLAN_ATTEMPTS,
   strict = false,
+  signal,
 }: GenerateSplitPlanArgs): Promise<GenerateSplitPlanResult> {
   let lastIssues: PlanValidationIssues | null = null
   let attempt = 0
@@ -115,6 +122,7 @@ export async function generateValidatedCommitSplitPlan({
       {
         logger,
         tokenizer,
+        signal,
         metadata: {
           task: 'commit-split-plan',
           ...metadata,
