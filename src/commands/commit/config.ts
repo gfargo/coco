@@ -117,17 +117,17 @@ export const options = {
     alias: 'n',
   },
   split: {
-    description: 'Group staged changes into multiple related commit proposals',
+    description: 'Group staged changes into multiple commits — shows the plan and prompts to apply',
     type: 'boolean',
     default: false,
   },
   plan: {
-    description: 'Only print a commit split plan without changing git state',
+    description: 'Print the split plan without prompting to apply (plan-only mode)',
     type: 'boolean',
     default: false,
   },
   apply: {
-    description: 'Apply a generated file-level or hunk-level commit split plan and create commits',
+    description: 'Apply a split plan immediately without confirmation',
     type: 'boolean',
     default: false,
   },
