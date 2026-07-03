@@ -92,7 +92,12 @@ export function renderPullRequestSurface(ctx: SurfaceRenderContext): ReactTypes.
   const checkBudget = Math.max(3, Math.min(checkRows.length, Math.floor(bodyRows / 2)))
   const visibleChecks = checkRows.slice(0, checkBudget)
   const truncatedChecks = checkRows.length - visibleChecks.length
-  const bodyPreviewBudget = Math.max(2, bodyRows - 8 - visibleChecks.length)
+  // Count the surface's REAL fixed chrome (#1394): border (2) + header
+  // + title + state + blank + Checks label + checks summary + possible
+  // checks-trunc line + blank + Reviews label + reviews summary +
+  // blank + Description label + possible body-trunc line = 15. The old
+  // reserve of 8 let a long PR body overflow the panel by ~5 rows.
+  const bodyPreviewBudget = Math.max(2, bodyRows - 15 - visibleChecks.length)
   const bodyLines = (pr.body || '').split(/\r?\n/).filter((line) => line.trim().length > 0)
   const visibleBodyLines = bodyLines.slice(0, bodyPreviewBudget)
   const truncatedBodyLines = bodyLines.length - visibleBodyLines.length
