@@ -18,7 +18,7 @@
  * unstaged — the same order `getWorktreeHunks` builds).
  */
 import type * as ReactTypes from 'react'
-import { truncateCells } from '../chrome/text'
+import { expandTabs, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import type { WorktreeHunk } from '../../git/statusHunks'
 import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
@@ -85,7 +85,7 @@ export function renderWorktreeDiffBody(
         h(Text, { color: accent }, bar),
         h(Text, { color: badgeColor, bold: isSelected }, badge),
         h(Text, { bold: isSelected, color: isSelected ? accent : (theme.noColor ? undefined : theme.colors.muted) },
-          truncateCells(line, codeWidth))
+          truncateCells(expandTabs(line), codeWidth))
       )
     }
 
@@ -94,7 +94,7 @@ export function renderWorktreeDiffBody(
     // focus); the selected hunk and unstaged hunks keep full diff +
     // syntax coloring via renderDiffLine so the focus stays vivid.
     const content = isStaged && !isSelected && hunkIndex >= 0
-      ? h(Text, { key: `${key}-c`, dimColor: true }, truncateCells(line, codeWidth))
+      ? h(Text, { key: `${key}-c`, dimColor: true }, truncateCells(expandTabs(line), codeWidth))
       : renderDiffLine(h, Text, line, theme, syntaxSpans, codeWidth, `${key}-c`)
 
     return h(Box, { key, flexDirection: 'row' },

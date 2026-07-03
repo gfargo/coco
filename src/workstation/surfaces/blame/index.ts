@@ -18,7 +18,7 @@
 
 import type * as ReactTypes from 'react'
 import { formatLogInkBlameEmpty, formatLogInkLoading } from '../../chrome/surfaceStates'
-import { cellWidth, truncateCells } from '../../chrome/text'
+import { expandTabs, cellWidth, truncateCells } from '../../chrome/text'
 import type { BlameResult } from '../../../git/blameData'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -99,7 +99,9 @@ export function renderBlameSurface(
         // dimmed span so the source content reads at full contrast.
         const gutter = `${cursor} ${line.shortHash} ${author} ${lineNo} `
         const contentWidth = Math.max(8, width - 4 - cellWidth(gutter))
-        const content = truncateCells(line.content, contentWidth)
+        // Tabs expand before truncation (#1393) — Go/Makefile blame
+        // rows overran the panel while "measuring" as fitting.
+        const content = truncateCells(expandTabs(line.content), contentWidth)
         return h(Text, {
           key: `blame-${index}`,
           bold: isSelected,
