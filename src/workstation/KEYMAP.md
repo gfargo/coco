@@ -174,9 +174,10 @@ The hunk is the unit of action here.
 |-----|--------|
 | `↑`/`↓` (`j`/`k`) | Line-scroll the diff (the current hunk follows the scroll position) |
 | `[` / `]` | Previous / next hunk |
-| `Space` | Stage / unstage the selected hunk (whole file if untracked) |
+| `v` | Visual line-select (anchor at the current line; j/k extends; `v`/Esc clears) |
+| `Space` | Stage / unstage the selected hunk — or **only the selected lines** while a `v` selection is active |
 | `a` | Stage / unstage the whole file |
-| `z` | Discard the hunk (confirm) |
+| `z` | Discard the hunk — or only the selected lines while a `v` selection is active (confirm) |
 | `o` | Open the file in `$EDITOR` |
 
 ### Diff — commit (read-only exploration)

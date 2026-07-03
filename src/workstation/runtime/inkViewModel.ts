@@ -29,7 +29,7 @@ export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
 export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame' | 'file-history' | 'rebase'
-export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
+export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-lines' | 'discard-draft'
 
 /**
  * Kinds of list item that can carry an inline pending-spinner while an
@@ -405,6 +405,13 @@ export type LogInkState = {
   commitCompose: CommitComposeState
   diffPreviewOffset: number
   worktreeDiffOffset: number
+  /**
+   * Visual line-select anchor on the staging diff (#1358). Set by `v`;
+   * the selection is [min(anchor, worktreeDiffOffset), max(...)]. Undefined
+   * when no selection is active. Cleared whenever the diff offset resets
+   * (view switches, file changes) so a stale range can't be staged.
+   */
+  diffLineSelectAnchor?: number
   filter: string
   filterMode: boolean
   fullGraph: boolean
@@ -1057,6 +1064,7 @@ export type LogInkAction =
   | { type: 'moveRebaseRow'; delta: number }
   | { type: 'setRebaseRewordMessage'; message: string }
   | { type: 'clearRebasePlan' }
+  | { type: 'setDiffLineSelectAnchor'; value?: number }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -1197,6 +1205,7 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     // persistence and pop-view restores the previous tab.
     sidebarTab: value === 'compose' || value === 'status' ? 'branches' : state.sidebarTab,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
+    diffLineSelectAnchor: value === 'diff' ? state.diffLineSelectAnchor : undefined,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     compareHead: value === 'diff' ? state.compareHead : undefined,
@@ -1377,6 +1386,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     activeView: value,
     viewStack,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
+    diffLineSelectAnchor: value === 'diff' ? state.diffLineSelectAnchor : undefined,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     compareHead: value === 'diff' ? state.compareHead : undefined,
@@ -2297,6 +2307,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...next,
         selectedWorktreeFileIndex: Math.max(0, action.fileIndex),
         worktreeDiffOffset: 0,
+        diffLineSelectAnchor: undefined,
         diffSource: 'worktree',
       }
     }
@@ -2922,6 +2933,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       ))
       return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
     }
+    case 'setDiffLineSelectAnchor':
+      return { ...state, diffLineSelectAnchor: action.value, pendingKey: undefined }
     case 'clearRebasePlan':
       return { ...state, rebasePlan: undefined, pendingKey: undefined }
     case 'setBisectPickMode':

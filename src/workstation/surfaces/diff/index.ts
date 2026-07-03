@@ -430,6 +430,12 @@ export function renderDiffSurface(
       hunks: worktreeHunks?.hunks || [],
       selectedIndex: currentHunkIndex,
       keyPrefix: 'diff-surface-line',
+      lineSelect: state.diffLineSelectAnchor !== undefined
+        ? {
+          start: Math.min(state.diffLineSelectAnchor, state.worktreeDiffOffset),
+          end: Math.max(state.diffLineSelectAnchor, state.worktreeDiffOffset),
+        }
+        : undefined,
     })
     : []))
 }

@@ -36,6 +36,12 @@ export type WorktreeDiffBodyParams = {
   hunks: WorktreeHunk[]
   selectedIndex: number
   keyPrefix: string
+  /**
+   * Absolute line range of the active visual selection (#1358), when the
+   * user is line-staging. Selected rows get a solid accent bar so what
+   * `space` will stage is unambiguous.
+   */
+  lineSelect?: { start: number; end: number }
 }
 
 /** The hunk index owning `absLine`, or -1 for pre-hunk header/label rows. */
@@ -54,7 +60,7 @@ export function renderWorktreeDiffBody(
   params: WorktreeDiffBodyParams
 ): ReactTypes.ReactElement[] {
   const { Box, Text } = components
-  const { lines, offset, visibleRows, width, theme, syntaxSpans, hunkOffsets, hunks, selectedIndex, keyPrefix } = params
+  const { lines, offset, visibleRows, width, theme, syntaxSpans, hunkOffsets, hunks, selectedIndex, keyPrefix, lineSelect } = params
   const headerSet = new Set(hunkOffsets)
   const accent = theme.noColor ? undefined : theme.colors.accent
   const added = theme.noColor ? undefined : theme.colors.gitAdded
@@ -68,7 +74,8 @@ export function renderWorktreeDiffBody(
     const hunk = hunkIndex >= 0 ? hunks[hunkIndex] : undefined
     const isSelected = hunkIndex >= 0 && hunkIndex === selectedIndex
     const isStaged = hunk?.state === 'staged'
-    const bar = isSelected ? '▎' : ' '
+    const isLineSelected = lineSelect !== undefined && abs >= lineSelect.start && abs <= lineSelect.end
+    const bar = isLineSelected ? '▌' : isSelected ? '▎' : ' '
 
     // `@@` header row — badge + (dim) hunk position, emphasized when selected.
     if (headerSet.has(abs)) {

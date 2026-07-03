@@ -1278,7 +1278,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     // unstages the hunk under the viewport, a stages the whole file, z
     // discards the current hunk.
     return {
-      contextual: ['j/k lines', '[/] hunk', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
+      contextual: ['j/k lines', '[/] hunk', 'v select', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
