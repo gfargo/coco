@@ -1,6 +1,11 @@
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { isAbsolute, join } from 'path'
 import { SimpleGit } from 'simple-git'
+import {
+  CONFLICT_OURS_MARKER,
+  CONFLICT_SEPARATOR_MARKER,
+  CONFLICT_THEIRS_MARKER,
+} from './conflictRegionActions'
 
 export type GitOperationType = 'none' | 'merge' | 'rebase' | 'cherry-pick' | 'revert'
 
@@ -97,10 +102,12 @@ export function parseConflictMarkers(path: string, content: string): ConflictMar
       line: index + 1,
       marker: line.trim(),
     }))
+    // Exact markers only (#1395) — prefix matching also listed content
+    // lines like setext underlines (`========`) as conflict markers.
     .filter((entry) => (
-      entry.marker.startsWith('<<<<<<<') ||
-      entry.marker.startsWith('=======') ||
-      entry.marker.startsWith('>>>>>>>')
+      CONFLICT_OURS_MARKER.test(entry.marker) ||
+      CONFLICT_SEPARATOR_MARKER.test(entry.marker) ||
+      CONFLICT_THEIRS_MARKER.test(entry.marker)
     ))
 }
 

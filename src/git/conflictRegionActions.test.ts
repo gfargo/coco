@@ -73,6 +73,39 @@ describe('parseConflictRegions', () => {
   it('returns no regions for a clean file', () => {
     expect(parseConflictRegions('a\nb\nc\n').regions).toHaveLength(0)
   })
+
+  it('does not treat content lines starting with marker characters as markers (#1395)', () => {
+    // A setext underline (8+ '=') and a divider comment inside "ours"
+    // used to flip the parser into theirs early — the real separator
+    // then landed inside theirs, and accept-ours/theirs (and the AI
+    // resolver) operated on wrong side contents.
+    const { regions } = parseConflictRegions([
+      '<<<<<<< HEAD',
+      'Title',
+      '========',
+      '//======= divider comment',
+      'ours tail',
+      '=======',
+      'theirs line',
+      '>>>>>>> feature/x',
+      '',
+    ].join('\n'))
+    expect(regions).toHaveLength(1)
+    expect(regions[0].ours).toEqual(['Title', '========', '//======= divider comment', 'ours tail'])
+    expect(regions[0].theirs).toEqual(['theirs line'])
+  })
+
+  it('does not open a region on 8+ angle brackets, and tolerates CRLF markers', () => {
+    const clean = parseConflictRegions('<<<<<<<< not a marker\nplain\n')
+    expect(clean.regions).toHaveLength(0)
+
+    const crlf = parseConflictRegions(
+      '<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> other\r\n'
+    )
+    expect(crlf.regions).toHaveLength(1)
+    expect(crlf.regions[0].oursLabel).toBe('HEAD')
+    expect(crlf.regions[0].theirsLabel).toBe('other')
+  })
 })
 
 describe('apply/read against a real worktree file', () => {
