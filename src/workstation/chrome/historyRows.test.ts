@@ -1,9 +1,9 @@
 import { GitLogRow } from '../../commands/log/data'
 import {
-  commitGlyphFor,
-  formatInkHistoryGraphRow,
-  formatInkRefLabels,
-  getVisibleLogInkHistory,
+    commitGlyphFor,
+    formatInkHistoryGraphRow,
+    formatInkRefLabels,
+    getVisibleLogInkHistory,
 } from './historyRows'
 import { applyLogInkAction, createLogInkState } from '../../workstation/runtime/inkViewModel'
 
@@ -419,7 +419,10 @@ describe('Ink history rows', () => {
   // visible label and the eye gets temporal orientation without per-
   // row repetition. Triggered by passing `dateBucketingNow`.
   describe('dateBucketingNow', () => {
-    const NOW = new Date(Date.UTC(2026, 4, 14)) // 2026-05-14
+    // Local-component constructor (not Date.UTC): bucketing compares the
+    // VIEWER's local day (#1336), so a UTC-instant `now` would make
+    // these assertions timezone-sensitive on contributor machines.
+    const NOW = new Date(2026, 4, 14) // 2026-05-14 local
 
     const fixtureRows: GitLogRow[] = [
       {

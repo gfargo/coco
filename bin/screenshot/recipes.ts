@@ -1950,8 +1950,13 @@ export const RECIPES: ScreenshotRecipe[] = [
       COCO_SERVICE_MODEL: 'gpt-4o-mini',
     },
     actions: [
-      // Let the LLM finish planning + show the apply prompt.
-      { kind: 'sleep', ms: 10000 },
+      // LLM plans the split groups (~4-8s), then the plan displays and
+      // the apply prompt appears. Wait for the full flow to render.
+      { kind: 'sleep', ms: 14000 },
+      // Confirm the apply prompt (Y is default, just press Enter).
+      { kind: 'key', key: 'Enter' },
+      // Let the commits land and the success message render.
+      { kind: 'sleep', ms: 4000 },
     ],
   },
   {
