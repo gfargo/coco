@@ -18,6 +18,13 @@ export class PreCommitHookError extends Error {
  * Detects whether a GitError was caused by a pre-commit hook that modified files.
  * These hooks (e.g. black, prettier) reformat files and exit non-zero on the first run,
  * but the commit can succeed once the modified files are re-staged.
+ *
+ * Deliberately NARROW: it must match only the "hook reformatted files"
+ * signature, not any failing hook. The pre-commit framework prints
+ * `- hook id: <name>` for EVERY failing hook — plain lint failures
+ * included — and matching on that used to auto-stage-and-retry a
+ * commit whose hook genuinely rejected it, silently sweeping the whole
+ * worktree into the commit (see the retry in `createCommit`).
  */
 export function isPreCommitHookModifiedFilesError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
@@ -26,8 +33,21 @@ export function isPreCommitHookModifiedFilesError(error: unknown): boolean {
   // git itself outputs "modified files exist in working tree" in some hook setups
   return (
     msg.includes('files were modified by this hook') ||
-    msg.includes('modified by this hook') ||
-    msg.includes('hook id:')
+    msg.includes('modified by this hook')
+  )
+}
+
+/**
+ * Non-hook commit failures that must not be reported as "blocked by
+ * hook": git exits non-zero for these with hooks entirely out of the
+ * picture, and wrapping them in PreCommitHookError pointed users at
+ * their hook config for a problem that has nothing to do with it.
+ */
+function isKnownNonHookCommitFailure(message: string): boolean {
+  return (
+    message.includes('nothing to commit') ||
+    message.includes('no changes added to commit') ||
+    message.includes('nothing added to commit')
   )
 }
 
@@ -71,14 +91,32 @@ export async function createCommit(
         await onHookModifiedFiles()
       }
 
-      // Stage all hook-modified files and retry the commit once
-      await git.add('.')
+      // Re-stage ONLY the files that were already in the index — the
+      // hook reformatted those in the worktree, so `add` picks up the
+      // new content. `git add .` here used to sweep the ENTIRE
+      // worktree (deliberately-unstaged edits, untracked scratch
+      // files, and — in the split flow, where everything else sits
+      // unstaged after the up-front reset — every other group's
+      // changes) into this one commit.
+      const staged = (await git.raw(['diff', '--cached', '--name-only', '-z']))
+        .split('\0')
+        .filter(Boolean)
+      if (staged.length > 0) {
+        await git.raw(['add', '--', ...staged])
+      }
       return await git.commit(message, flags)
     }
 
-    // Wrap any other GitError so callers can present it cleanly rather than
-    // showing a raw Node.js stack trace originating from simple-git internals.
     if (error instanceof GitError) {
+      // Known non-hook failures pass through untouched: "nothing to
+      // commit" reported as "Commit blocked by hook: …" sent users
+      // debugging hooks that never ran.
+      if (isKnownNonHookCommitFailure(error.message)) {
+        throw error
+      }
+      // Wrap remaining GitErrors so callers can present them cleanly
+      // rather than showing a raw Node.js stack trace originating
+      // from simple-git internals.
       throw new PreCommitHookError(error.message)
     }
 

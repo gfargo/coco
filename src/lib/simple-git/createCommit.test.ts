@@ -9,10 +9,12 @@ const mockCommitResult: CommitResult = {
   summary: { changes: 1, deletions: 0, insertions: 1 },
 }
 
-function makeGit(commitImpl: jest.Mock, addImpl?: jest.Mock): SimpleGit {
+function makeGit(commitImpl: jest.Mock, rawImpl?: jest.Mock): SimpleGit {
   return {
     commit: commitImpl,
-    add: addImpl ?? jest.fn().mockResolvedValue(undefined),
+    // `raw` serves both the staged-file listing (diff --cached) and the
+    // scoped re-add in the hook-retry path.
+    raw: rawImpl ?? jest.fn().mockResolvedValue(''),
   } as unknown as SimpleGit
 }
 
@@ -27,9 +29,13 @@ describe('isPreCommitHookModifiedFilesError', () => {
     expect(isPreCommitHookModifiedFilesError(err)).toBe(true)
   })
 
-  it('returns true when message contains "hook id:"', () => {
-    const err = new Error('- hook id: trailing-whitespace\n- exit code: 1')
-    expect(isPreCommitHookModifiedFilesError(err)).toBe(true)
+  it('returns false for a failing hook that did NOT modify files', () => {
+    // The pre-commit framework prints "- hook id:" for EVERY failing
+    // hook — plain lint failures included. Matching on it used to
+    // auto-stage the entire worktree and retry a commit the hook had
+    // genuinely rejected.
+    const err = new Error('- hook id: flake8\n- exit code: 1\n\nsrc/app.py:3:1: F401 unused import')
+    expect(isPreCommitHookModifiedFilesError(err)).toBe(false)
   })
 
   it('returns false for unrelated git errors', () => {
@@ -85,10 +91,10 @@ describe('createCommit', () => {
   })
 
   it('re-throws non-GitError errors', async () => {
-    const err = new Error('nothing to commit')
+    const err = new Error('spawn git ENOENT')
     const commitMock = jest.fn().mockRejectedValue(err)
     const git = makeGit(commitMock)
-    await expect(createCommit('test commit', git)).rejects.toThrow('nothing to commit')
+    await expect(createCommit('test commit', git)).rejects.toThrow('spawn git ENOENT')
   })
 
   it('wraps GitError as PreCommitHookError', async () => {
@@ -96,6 +102,22 @@ describe('createCommit', () => {
     const commitMock = jest.fn().mockRejectedValue(gitErr)
     const git = makeGit(commitMock)
     await expect(createCommit('test commit', git)).rejects.toBeInstanceOf(PreCommitHookError)
+  })
+
+  it('does not blame hooks for "nothing to commit"', async () => {
+    // Empty-index commits exit non-zero with hooks entirely out of the
+    // picture — wrapping them used to report "Commit blocked by hook:
+    // nothing to commit", pointing users at hook config that never ran.
+    const gitErr = new GitError(undefined, 'nothing to commit, working tree clean')
+    const commitMock = jest.fn().mockRejectedValue(gitErr)
+    const git = makeGit(commitMock)
+    try {
+      await createCommit('test commit', git)
+      fail('expected to throw')
+    } catch (err) {
+      expect(err).not.toBeInstanceOf(PreCommitHookError)
+      expect((err as Error).message).toContain('nothing to commit')
+    }
   })
 
   it('preserves hook output in PreCommitHookError', async () => {
@@ -140,29 +162,50 @@ describe('createCommit', () => {
       'black...Failed\n- hook id: black\n- files were modified by this hook'
     )
 
-    it('stages all files and retries the commit', async () => {
-      const addMock = jest.fn().mockResolvedValue(undefined)
+    it('re-stages only the already-staged files and retries the commit', async () => {
+      // The retry must be scoped to the index — `git add .` here used
+      // to sweep deliberately-unstaged edits and untracked files into
+      // the commit (catastrophic in the split flow, where every other
+      // group's changes sit unstaged).
+      const rawMock = jest.fn().mockImplementation((args: string[]) =>
+        Promise.resolve(args[0] === 'diff' ? 'src/a.ts\0src/b with space.ts\0' : '')
+      )
       const commitMock = jest
         .fn()
         .mockRejectedValueOnce(hookError)
         .mockResolvedValueOnce(mockCommitResult)
-      const git = makeGit(commitMock, addMock)
+      const git = makeGit(commitMock, rawMock)
 
       const result = await createCommit('test commit', git)
 
-      expect(addMock).toHaveBeenCalledWith('.')
+      expect(rawMock).toHaveBeenCalledWith(['diff', '--cached', '--name-only', '-z'])
+      expect(rawMock).toHaveBeenCalledWith(['add', '--', 'src/a.ts', 'src/b with space.ts'])
       expect(commitMock).toHaveBeenCalledTimes(2)
       expect(result).toEqual(mockCommitResult)
     })
 
-    it('calls onHookModifiedFiles callback before retry', async () => {
-      const onHookModifiedFiles = jest.fn()
-      const addMock = jest.fn().mockResolvedValue(undefined)
+    it('skips the re-add when the index is empty', async () => {
+      const rawMock = jest.fn().mockResolvedValue('')
       const commitMock = jest
         .fn()
         .mockRejectedValueOnce(hookError)
         .mockResolvedValueOnce(mockCommitResult)
-      const git = makeGit(commitMock, addMock)
+      const git = makeGit(commitMock, rawMock)
+
+      await createCommit('test commit', git)
+
+      expect(rawMock).toHaveBeenCalledTimes(1)
+      expect(rawMock).toHaveBeenCalledWith(['diff', '--cached', '--name-only', '-z'])
+    })
+
+    it('calls onHookModifiedFiles callback before retry', async () => {
+      const onHookModifiedFiles = jest.fn()
+      const rawMock = jest.fn().mockResolvedValue('')
+      const commitMock = jest
+        .fn()
+        .mockRejectedValueOnce(hookError)
+        .mockResolvedValueOnce(mockCommitResult)
+      const git = makeGit(commitMock, rawMock)
 
       await createCommit('test commit', git, onHookModifiedFiles)
 
@@ -170,35 +213,35 @@ describe('createCommit', () => {
     })
 
     it('works without an onHookModifiedFiles callback', async () => {
-      const addMock = jest.fn().mockResolvedValue(undefined)
+      const rawMock = jest.fn().mockResolvedValue('')
       const commitMock = jest
         .fn()
         .mockRejectedValueOnce(hookError)
         .mockResolvedValueOnce(mockCommitResult)
-      const git = makeGit(commitMock, addMock)
+      const git = makeGit(commitMock, rawMock)
 
       await expect(createCommit('test commit', git)).resolves.toEqual(mockCommitResult)
     })
 
     it('throws if the retry also fails', async () => {
       const retryError = new Error('commit failed after hook fix')
-      const addMock = jest.fn().mockResolvedValue(undefined)
+      const rawMock = jest.fn().mockResolvedValue('')
       const commitMock = jest
         .fn()
         .mockRejectedValueOnce(hookError)
         .mockRejectedValueOnce(retryError)
-      const git = makeGit(commitMock, addMock)
+      const git = makeGit(commitMock, rawMock)
 
       await expect(createCommit('test commit', git)).rejects.toThrow('commit failed after hook fix')
     })
 
     it('passes noVerify flag through to retry commit', async () => {
-      const addMock = jest.fn().mockResolvedValue(undefined)
+      const rawMock = jest.fn().mockResolvedValue('')
       const commitMock = jest
         .fn()
         .mockRejectedValueOnce(hookError)
         .mockResolvedValueOnce(mockCommitResult)
-      const git = makeGit(commitMock, addMock)
+      const git = makeGit(commitMock, rawMock)
 
       await createCommit('test commit', git, undefined, { noVerify: true })
 
