@@ -376,6 +376,20 @@ export async function checkoutOrDeleteFromRef(
   path: string,
   label: string
 ): Promise<BranchActionResult> {
+  // Verify the REF resolves before interpreting a cat-file failure as
+  // "path deleted at ref" (#1383). The two failures were conflated: a
+  // stale selector (e.g. `stash@{2}` held in workstation state after
+  // the stash list changed) fell through to the destructive branch and
+  // `git rm --force`d the user's file instead of surfacing the bad
+  // revision.
+  try {
+    await git.raw(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
+  } catch {
+    return {
+      ok: false,
+      message: `${label} no longer resolves — the ref may have changed. Refresh and retry.`,
+    }
+  }
   const exists = await pathExistsAtRef(git, ref, path)
   if (exists) {
     return runAction(
