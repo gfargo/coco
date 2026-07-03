@@ -531,6 +531,7 @@ export async function prepareCommitSplitPlan({
   llm,
   planLlm,
   planService,
+  signal,
 }: {
   argv: Arguments<CommitOptions>
   config: Config & CommitOptions
@@ -551,6 +552,13 @@ export async function prepareCommitSplitPlan({
   planLlm?: ReturnType<typeof getLlm>
   /** Service descriptor matching `planLlm` (for telemetry metadata). */
   planService?: LLMService
+  /**
+   * Optional user-cancellation signal — forwarded into the plan
+   * generation LLM calls (workstation Esc). The diff-summary pre-pass
+   * is not signal-aware yet; a cancel during it takes effect the
+   * moment the plan step starts (pre-aborted signal check).
+   */
+  signal?: AbortSignal
 }): Promise<
   | {
       plan: CommitSplitPlan
@@ -677,6 +685,7 @@ export async function prepareCommitSplitPlan({
     // the planner reverts to the pre-#1005 behaviour of throwing on
     // exhaustion instead of returning the single-group fallback.
     strict: Boolean(argv.strictSplit ?? config.strictSplit),
+    signal,
   })
 
   const groupCount = plan.groups.filter((g) => !g.unclaimed).length

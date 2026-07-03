@@ -1,6 +1,7 @@
 import { StringOutputParser } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { z } from 'zod'
+import { LangChainCancelledError } from '../errors'
 import { withRetry, type RetryOptions } from '../../utils/retry'
 import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
@@ -19,6 +20,13 @@ export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
   logger?: Logger
   tokenizer?: TokenCounter
   metadata?: Partial<LlmCallMetadata>
+  /**
+   * Optional user-cancellation signal (#1338 pattern). Forwarded into
+   * `executeChain` so the underlying HTTP request tears down when the
+   * signal fires. Aborts surface as `LangChainCancelledError`, are
+   * never retried, and skip the fallback parser.
+   */
+  signal?: AbortSignal
 }
 
 /**
@@ -45,6 +53,7 @@ export async function executeChainWithSchema<T>(
     logger,
     tokenizer,
     metadata,
+    signal,
     ...parserOptions
   } = options
   
@@ -61,19 +70,26 @@ export async function executeChainWithSchema<T>(
       parser,
       logger,
       tokenizer,
+      signal,
       metadata: {
         task: 'schema-chain',
         ...metadata,
         retryAttempt: attempt,
       },
     })
-    
+
     return result as T
   }
-  
+
   try {
     return await withRetry(operation, retryOptions)
   } catch (error) {
+    // A user abort is intent, not a parse failure — never degrade it
+    // into the fallback path (which would fire ANOTHER llm call on an
+    // already-cancelled interaction).
+    if (error instanceof LangChainCancelledError) {
+      throw error
+    }
     if (fallbackParser) {
       if (onFallback) {
         onFallback()
@@ -86,6 +102,7 @@ export async function executeChainWithSchema<T>(
         parser: new StringOutputParser(),
         logger,
         tokenizer,
+        signal,
         metadata: {
           task: 'schema-chain-fallback',
           ...metadata,

@@ -102,6 +102,14 @@ export function useCommitSplitActions(
     refreshWorktreeContext,
   } = deps
 
+  // AbortController for the in-flight plan generation (#1338 pattern —
+  // same shape as the changelog / commit-draft cancels). Esc used to be
+  // a "soft cancel": the overlay closed but the LLM call ran to
+  // completion and its unconditional `setSplitPlanReady` dispatch
+  // REOPENED the overlay tens of seconds later, stealing the keyboard
+  // from whatever the user had moved on to.
+  const planAbortRef = React.useRef<AbortController | null>(null)
+
   // `S` keystroke — start the `coco commit --split` flow (#907).
   // Pre-flight refuses cleanly when:
   //   - Nothing is staged (suggests `g s` to pick files)
@@ -132,7 +140,30 @@ export function useCommitSplitActions(
     dispatch({ type: 'startSplitPlanLoad' })
     dispatch({ type: 'setStatus', value: 'Generating split plan (this can take a minute)…', loading: true })
 
-    const result = await runCommitSplitPlanWorkflow({ git })
+    // Abort any predecessor (r re-roll while one is already running)
+    // and take ownership of the slot for this invocation.
+    planAbortRef.current?.abort()
+    const controller = new AbortController()
+    planAbortRef.current = controller
+
+    let result: Awaited<ReturnType<typeof runCommitSplitPlanWorkflow>>
+    try {
+      result = await runCommitSplitPlanWorkflow({ git, signal: controller.signal })
+    } finally {
+      if (planAbortRef.current === controller) {
+        planAbortRef.current = null
+      }
+    }
+
+    // Ownership check: if the user cancelled (Esc → abort) or a newer
+    // invocation superseded this one, drop the result on the floor —
+    // the cancel path already closed the overlay and set its status.
+    if (controller.signal.aborted) {
+      return
+    }
+    if (!result.ok && result.cancelled) {
+      return
+    }
 
     if (!result.ok) {
       dispatch({ type: 'setSplitPlanError', error: result.message })
@@ -359,9 +390,13 @@ export function useCommitSplitActions(
     })
   }, [dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext, stateSplitPlan])
 
-  // Esc inside the overlay — close without applying. Status line gets
-  // a confirmation so the user knows the operation was abandoned.
+  // Esc inside the overlay — close without applying, and tear down an
+  // in-flight generation (the abort propagates into the LLM HTTP
+  // request; the start path's ownership check drops the settled
+  // result). Status line gets a confirmation so the user knows the
+  // operation was abandoned.
   const cancelCommitSplit = React.useCallback(() => {
+    planAbortRef.current?.abort()
     dispatch({ type: 'clearSplitPlan' })
     dispatch({ type: 'setStatus', value: 'Split plan cancelled.' })
   }, [dispatch])
