@@ -50,6 +50,7 @@
 
 import type * as ReactTypes from 'react'
 import { pickSpinnerFrame } from '../chrome/spinner'
+import { cellWidth, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import { getLogInkFooterHints } from '../../workstation/runtime/inkKeymap'
 import type { LogInkState } from '../../workstation/runtime/inkViewModel'
@@ -63,7 +64,17 @@ export function renderFooter(
   theme: LogInkTheme,
   idleTip?: string,
   spinnerFrame: number = 0,
-  singlePane: boolean = false
+  singlePane: boolean = false,
+  /**
+   * Terminal column count (#1354). When provided, row 1 is FITTED to
+   * the width: contextual hints drop lowest-priority-first (each
+   * view's hint list leads with its essentials, so the tail is the
+   * exotic end) until both clusters fit on one line, and each cluster
+   * renders as a single truncated Text so the row can never wrap —
+   * wrapping pushed the height-2 box's status row (errors, spinners,
+   * cancel hints) off-screen entirely at the default 120 columns.
+   */
+  width?: number
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   // Sidebar item count drives the per-tab footer hints — when items are
@@ -179,8 +190,27 @@ export function renderFooter(
   const statusBold = isError || isWarning || isSuccess || isLoading || isInfo
   const statusDim = !statusBold
 
-  const hintsText = hints.contextual.join('   ')
-  const globalText = hints.global.join(' · ')
+  let hintsText = hints.contextual.join('   ')
+  let globalText = hints.global.join(' · ')
+  if (width !== undefined) {
+    // paddingX eats 2 cells; keep a minimum 2-cell space-between gap.
+    const budget = Math.max(20, width - 2)
+    const gap = 2
+    // Globals are the recovery cluster (? / : / q) — they keep their
+    // cells, clamped to the row as a last resort.
+    globalText = truncateCells(globalText, budget)
+    const contextual = [...hints.contextual]
+    while (
+      contextual.length > 0 &&
+      cellWidth(contextual.join('   ')) + gap + cellWidth(globalText) > budget
+    ) {
+      contextual.pop()
+    }
+    hintsText = truncateCells(
+      contextual.join('   '),
+      Math.max(0, budget - gap - cellWidth(globalText))
+    )
+  }
 
   return h(Box, { flexDirection: 'column', height: 2, paddingX: 1 },
     // Row 1: contextual ↔ global hints. justifyContent pushes them

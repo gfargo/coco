@@ -810,6 +810,29 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // #1350 — amend staged changes into HEAD. Destructive: rewrites
+      // the head commit (a pushed branch then needs force-with-lease,
+      // which the P-push escalation offers). Bound to `a` on the
+      // compose view (inkInput); palette everywhere via this entry.
+      id: 'amend-head',
+      key: '',
+      label: 'Amend HEAD with staged changes',
+      description: 'git commit --amend --no-edit — folds the staged changes into the head commit.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // #1350 — reword the HEAD commit message. Palette-only entry
+      // point; opens an input prompt seeded with the current subject,
+      // so the prompt itself is the confirmation step.
+      id: 'reword-head',
+      key: '',
+      label: 'Reword HEAD commit message',
+      description: 'git commit --amend -m <message> — prompt seeded with the current subject.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // Label honesty: despite the historical id, this action does NOT
       // read the selected commit — its confirm handler dispatches
       // `runAiCommitDraft`, which drafts a commit message from the

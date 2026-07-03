@@ -95,6 +95,8 @@ import {
   startInteractiveRebase,
   createFixupCommit,
   autosquashRebase,
+  amendHeadCommit,
+  rewordHeadCommit,
 } from '../../../git/historyActions'
 import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStash, popStash, renameStash, restoreStash, stashBranch } from '../../../git/stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
@@ -668,6 +670,43 @@ export function useWorkflowAction(
         }
         return result
       },
+      // #1350 — amend/reword were fully implemented (and tested) in
+      // historyActions but reachable from nowhere. Both are HEAD-only,
+      // so they resolve HEAD directly instead of the history cursor —
+      // the entry points are compose (`a`) and the palette.
+      'amend-head': async () => {
+        if ((context.worktree?.stagedCount ?? 0) === 0) {
+          return { ok: false, message: 'Nothing staged to amend — stage changes first (gs, then space/A).' }
+        }
+        const head = (await git.revparse(['HEAD'])).trim()
+        const result = await amendHeadCommit(git, head)
+        return result.ok
+          ? {
+            ...result,
+            // Momentum hint: an amend rewrites the head commit, so a
+            // previously-pushed branch now needs the with-lease force
+            // (the P-push escalation offers it automatically).
+            message: `${result.message} (${head.slice(0, 7)}) — P push may need force-with-lease`,
+          }
+          : result
+      },
+      'reword-head': async () => {
+        const head = (await git.revparse(['HEAD'])).trim()
+        if (payload?.trim()) {
+          return rewordHeadCommit(git, head, payload)
+        }
+        // No message yet (palette entry) — open the prompt seeded with
+        // the current subject; submission re-runs this workflow with
+        // the typed message as payload.
+        const subject = (await git.raw(['log', '-1', '--pretty=%s'])).trim()
+        dispatch({
+          type: 'openInputPrompt',
+          kind: 'reword-head',
+          label: `Reword HEAD (${head.slice(0, 7)}) — new commit message`,
+          initial: subject,
+        })
+        return { ok: true, message: 'Reword HEAD — edit the message, enter to apply, esc cancels.' }
+      },
       'execute-rebase-plan': async () => {
         const plan = state.rebasePlan
         if (!plan || plan.rows.length === 0) {
@@ -707,10 +746,10 @@ export function useWorkflowAction(
         })
       },
       'reset-to-commit': async () => {
-        // Mode arrives via the action's `payload` field — the input
-        // handler runs the reset-mode prompt (kind: 'reset-mode') and
-        // routes the typed value here. Default to `mixed` (git's own
-        // default) when the user submitted an empty value.
+        // Mode arrives via the action's `payload` field — the 1-key
+        // reset-mode choice (#1351) routes s/m/h here as
+        // soft/mixed/hard. Default to `mixed` (git's own default) when
+        // no payload arrives (palette path).
         const raw = payload?.trim().toLowerCase() || 'mixed'
         if (!isResetMode(raw)) {
           return { ok: false, message: `Unknown reset mode: ${raw}. Use soft, mixed, or hard.` }
@@ -1381,7 +1420,18 @@ export function useWorkflowAction(
     }
     try {
     const result = await handler()
-    dispatch({ type: 'setStatus', value: result?.message || 'Workflow action complete' })
+    // #1349 — color the shared result dispatch by OUTCOME. Before this,
+    // a failed cherry-pick and a successful push both rendered as the
+    // blue ℹ info style; the status system already distinguishes
+    // success (green ✓, auto-dismisses) from error (red ✗, sticky).
+    // Handlers that return no result (pure-navigation ones) keep the
+    // neutral info treatment. Recovery escalations below may follow up
+    // with their own prompt/warning on top of the error status.
+    dispatch({
+      type: 'setStatus',
+      value: result?.message || 'Workflow action complete',
+      kind: result ? (result.ok ? 'success' : 'error') : undefined,
+    })
     // A safe `delete-branch` (`git branch -d`) refuses branches that
     // aren't fully merged. Rather than dead-end on git's raw error, raise
     // a second y-confirm offering the force-delete (`git branch -D`). The
@@ -1510,6 +1560,9 @@ export function useWorkflowAction(
       'checkout-branch',
       'fixup-into-commit',
       'autosquash-rebase',
+      // Amend/reword rewrite the HEAD commit in place (#1350).
+      'amend-head',
+      'reword-head',
       'execute-rebase-plan',
       'force-push-current-branch',
       'force-push-selected-branch',

@@ -143,7 +143,7 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `\` | Toggle the graph column |
 | `c` | Cherry-pick the commit |
 | `R` | Revert the commit |
-| `Z` | Reset branch tip here (mode prompt) |
+| `Z` | Reset branch tip here (1-key mode choice: `s` soft · `m` mixed · `h` hard) |
 | `i` | Open the **rebase plan** surface for `<commit>^..HEAD` (in-TUI interactive rebase; the $EDITOR variant stays in the `:` palette) |
 | `f` | Fixup: commit staged changes as `fixup!` of the cursored commit (confirm; offers immediate autosquash) |
 | `B` | Create branch here |
@@ -215,6 +215,7 @@ The hunk is the unit of action here.
 | `e` | Inline edit the message |
 | `E` | Edit in `$EDITOR` |
 | `c` | Commit |
+| `a` | **Amend** staged changes into HEAD (confirm; rewrites the head commit — reword lives in the `:` palette) |
 | `I` | AI-draft the message |
 | `S` | Start the commit-split flow |
 | `A` | Stage everything |
@@ -287,7 +288,7 @@ While AI proposals are open (after `M`):
 
 | Key | Action |
 |-----|--------|
-| `m` | Merge (strategy prompt) |
+| `m` | Merge (1-key strategy choice: `m` merge · `s` squash · `r` rebase) |
 | `a` | Approve (confirm) |
 | `R` | Request changes (review prompt) |
 | `c` | Comment (prompt) |
@@ -310,7 +311,7 @@ While AI proposals are open (after `M`):
 
 | Key | Action |
 |-----|--------|
-| `g=` | Mark good |
+| `y` | Mark good (`g` stays the chord prefix, so `gh`/`gs` navigation works mid-bisect) |
 | `b` | Mark bad |
 | `s` | Skip / start wizard |
 | `x` | Reset bisect |
@@ -347,7 +348,7 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `c` | history → cherry-pick commit · commit/stash diff → cherry-pick/restore file · status/diff/compose → commit · PR/PR-triage → comment · issues → comment |
 | `C` | conflicts → continue operation · compose → *blocked* (guard against fat-finger PR-create) · elsewhere → create PR |
 | `R` | history → revert · branches → rename · tags → delete-remote · PR/PR-triage → request changes · bisect → run command |
-| `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve |
+| `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve · compose → **amend HEAD** (confirm; #1350) |
 | `m` | branches/tags/history (compare flow) → mark compare base · PR/PR-triage → merge |
 | `i` | status → open `.gitignore` picker · history → interactive rebase |
 | `S` | status/diff/compose → commit-split flow · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
@@ -357,6 +358,7 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `L` | history/branches → generate changelog · PR-triage/issues → add label |
 | `f` | history → fixup staged into cursored commit · PR-triage → cycle PR filter · issues → cycle issue filter |
 | `o` | status/diff/conflicts → open file in `$EDITOR` (consistent — different file resolution only) |
+| `y` | bisect → mark good · conflicts (AI proposals open) → accept proposal · elsewhere → yank (`g` stays the chord prefix everywhere — bisect used to shadow it and `gh` silently marked the candidate good) |
 | `[` / `]` | worktree diff → hunk · commit diff → hunk · stash diff → **file** · sidebar/inspector focus → cycle tab |
 
 The three highest-risk overloads, because they're guard-heavy or

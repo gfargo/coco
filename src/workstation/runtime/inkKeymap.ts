@@ -1285,7 +1285,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.activeView === 'compose') {
     return {
-      contextual: ['e edit', 'c commit', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
+      contextual: ['e edit', 'c commit', 'a amend', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1420,7 +1420,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.activeView === 'bisect') {
     return {
-      contextual: ['g good', 'b bad', 's skip', 'R run', 'x reset', 'esc back'],
+      contextual: ['y good', 'b bad', 's skip', 'R run', 'x reset', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

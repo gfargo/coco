@@ -205,3 +205,38 @@ describe('push/pull failure recovery (#1356)', () => {
     expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingChoice' }))
   })
 })
+
+describe('result status carries the outcome kind (#1349)', () => {
+  it('a failing handler dispatches statusKind error', async () => {
+    pullCurrentBranchMock.mockResolvedValue({
+      ok: false,
+      message: 'fatal: could not read from remote repository',
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('pull-current-branch')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'fatal: could not read from remote repository',
+      kind: 'error',
+    }))
+  })
+
+  it('a succeeding handler dispatches statusKind success', async () => {
+    pullCurrentBranchMock.mockResolvedValue({ ok: true, message: 'Pulled main from origin' })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('pull-current-branch')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Pulled main from origin',
+      kind: 'success',
+    }))
+  })
+})

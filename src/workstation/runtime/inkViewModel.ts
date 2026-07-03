@@ -71,6 +71,12 @@ export type LogInkChoiceOption = {
   label: string
   destructive?: boolean
   workflowId?: string
+  /**
+   * Optional payload forwarded to `runWorkflowAction(workflowId,
+   * payload)` (#1351) — lets one workflow id serve several options
+   * (reset soft/mixed/hard, merge strategy merge/squash/rebase).
+   */
+  payload?: string
   intent?: 'switch-worktree'
 }
 
@@ -946,8 +952,7 @@ export type LogInkInputPromptKind =
   | 'stash-branch'
   | 'gitignore-pattern'
   | 'stage-pathspec'
-  | 'reset-mode'
-  | 'pr-merge-strategy'
+  | 'reword-head'
   | 'pr-comment'
   | 'pr-request-changes'
   | 'create-pr'
@@ -971,12 +976,10 @@ export type LogInkInputPromptKind =
   | 'triage-pr-label'
   | 'triage-pr-assign'
   // #882 phase 5 — destructive PR mutations on the triage view.
-  // Each prompts for input then forwards through the y-confirm
-  // path. Same pattern as the single-PR `pr-merge-strategy` /
-  // `pr-request-changes` prompts, but routed to the by-number
-  // workflows so the cursored PR (not the current branch's) gets
-  // the action.
-  | 'triage-pr-merge-strategy'
+  // Prompts for the review body then forwards through the y-confirm
+  // path, routed to the by-number workflow so the cursored PR (not
+  // the current branch's) gets the action. (The merge-strategy
+  // prompts became 1-key choice prompts in #1351.)
   | 'triage-pr-request-changes'
 
 export type LogInkInputPromptState = {

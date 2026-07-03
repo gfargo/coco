@@ -364,11 +364,7 @@ export function getInspectorActionExecuteEvents(
       ])
     case 'Z':
       return requireCommit(() => [
-        action({
-          type: 'openInputPrompt',
-          kind: 'reset-mode',
-          label: 'Reset mode (soft / mixed / hard)',
-        }),
+        action({ type: 'setPendingChoice', value: RESET_MODE_CHOICE }),
       ])
     case 'i':
       return requireCommit(() => [{ type: 'startRebasePlan' }])
@@ -864,6 +860,35 @@ export function getLogInkPaletteExecuteEvents(
   }
 }
 
+/**
+ * 1-key choice prompts for the former typed-word prompts (#1351).
+ * `Z` used to demand the user TYPE soft/mixed/hard (with an error
+ * scold on typos); PR merges demanded the strategy word. The choice
+ * overlay already existed — these constants route each option key
+ * straight into the workflow with the mode/strategy as payload.
+ */
+const RESET_MODE_CHOICE = {
+  id: 'reset-mode-choice',
+  title: 'Reset branch tip to the cursored commit',
+  warning: 'hard discards ALL uncommitted working-tree changes.',
+  options: [
+    { key: 's', label: 'Soft — keep changes staged', workflowId: 'reset-to-commit', payload: 'soft' },
+    { key: 'm', label: 'Mixed — keep changes unstaged', workflowId: 'reset-to-commit', payload: 'mixed' },
+    { key: 'h', label: 'Hard — discard working-tree changes', workflowId: 'reset-to-commit', payload: 'hard', destructive: true },
+  ],
+}
+
+const mergeStrategyChoice = (workflowId: string) => ({
+  id: 'pr-merge-strategy-choice',
+  title: 'Merge pull request',
+  warning: 'Lands on the base branch immediately.',
+  options: [
+    { key: 'm', label: 'Merge commit', workflowId, payload: 'merge', destructive: true },
+    { key: 's', label: 'Squash and merge', workflowId, payload: 'squash', destructive: true },
+    { key: 'r', label: 'Rebase and merge', workflowId, payload: 'rebase', destructive: true },
+  ],
+})
+
 const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '1': 'status',
   '2': 'branches',
@@ -891,10 +916,8 @@ function hasUnsavedComposeDraft(state: LogInkState): boolean {
  * prompts and by Ctrl+D on multi-line prompts (#806). Most prompt
  * kinds dispatch a workflow whose id matches the kind
  * (`create-branch`, `rename-branch`, etc.). A few are exceptions:
- *   - `reset-mode` (#777) collects soft/mixed/hard and forwards the
- *     mode as the payload to `reset-to-commit`.
- *   - `pr-merge-strategy` (#783) validates the strategy and routes to
- *     `merge-pr` via the y-confirm path.
+ *   - the former typed-word prompts (reset mode, merge strategy) are
+ *     1-key choice prompts now (#1351) and never reach this function.
  *   - `pr-comment` dispatches `comment-pr` directly — the body itself
  *     is the affirmative action.
  *   - `pr-request-changes` routes to `request-changes-pr` via
@@ -939,31 +962,9 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       action({ type: 'closeInputPrompt' }),
     ]
   }
-  if (state.inputPrompt.kind === 'reset-mode') {
-    const mode = value.toLowerCase()
-    if (mode !== 'soft' && mode !== 'mixed' && mode !== 'hard') {
-      return [action({
-        type: 'setStatus',
-        value: `Unknown reset mode: ${value}. Use soft, mixed, or hard.`,
-        kind: 'warning',
-      })]
-    }
+  if (state.inputPrompt.kind === 'reword-head') {
     return [
-      { type: 'runWorkflowAction', id: 'reset-to-commit', payload: mode },
-      action({ type: 'closeInputPrompt' }),
-    ]
-  }
-  if (state.inputPrompt.kind === 'pr-merge-strategy') {
-    const strategy = value.toLowerCase()
-    if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
-      return [action({
-        type: 'setStatus',
-        value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
-        kind: 'warning',
-      })]
-    }
-    return [
-      action({ type: 'setPendingConfirmation', value: 'merge-pr', payload: strategy }),
+      { type: 'runWorkflowAction', id: 'reword-head', payload: value },
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -1017,20 +1018,6 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   // gets a final "are you sure?" before anything ships. The
   // collected value (strategy / body) rides along as the
   // confirmation payload.
-  if (state.inputPrompt.kind === 'triage-pr-merge-strategy') {
-    const strategy = value.toLowerCase()
-    if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
-      return [action({
-        type: 'setStatus',
-        value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
-        kind: 'warning',
-      })]
-    }
-    return [
-      action({ type: 'setPendingConfirmation', value: 'triage-pr-merge', payload: strategy }),
-      action({ type: 'closeInputPrompt' }),
-    ]
-  }
   if (state.inputPrompt.kind === 'triage-pr-request-changes') {
     return [
       action({ type: 'setPendingConfirmation', value: 'triage-pr-request-changes', payload: value }),
@@ -1166,9 +1153,10 @@ export function getLogInkInputEvents(
       }
       if (option.workflowId) {
         // The workflow runner owns the live context + clears any
-        // conflict state once it resolves.
+        // conflict state once it resolves. Options may carry a payload
+        // (#1351 — reset mode, merge strategy).
         return [
-          { type: 'runWorkflowAction', id: option.workflowId },
+          { type: 'runWorkflowAction', id: option.workflowId, payload: option.payload },
           action({ type: 'setPendingChoice', value: undefined }),
         ]
       }
@@ -2077,17 +2065,21 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingKey', value: undefined })]
   }
 
-  // #784 — bisect view action keys. Scoped to `state.activeView ===
-  // 'bisect' && state.focus === 'commits'` so the single-letter keys
-  // stay free everywhere else. `g` and `b` collide with the global
-  // chord prefix and the `gb` continuation respectively — placed
-  // BEFORE the bare-`g` chord trigger below so a `g` keystroke on
-  // the bisect view marks good rather than entering chord mode. The
-  // user's path back out of bisect is `<` / `esc`, never a chord;
-  // the in-bisect view itself can't navigate elsewhere via `g`-prefix
-  // chords until the user exits with `esc` first.
+  // #784 / #1352 — bisect view action keys. Scoped to `state.activeView
+  // === 'bisect' && state.focus === 'commits'` so the single-letter
+  // keys stay free everywhere else. Mark-good is `y` (yes/good), NOT
+  // bare `g`: the old `g` binding shadowed the global chord prefix, so
+  // a user reflexively typing `gh`/`gs` to navigate away silently ran
+  // `git bisect good` on the current candidate. `g` now arms the chord
+  // on bisect like everywhere else (`gh`/`gs`/`gx` work mid-bisect);
+  // `b` keeps the `pendingKey !== 'g'` guard so `gb` still reaches
+  // branches. The trade: `y` yank is unavailable on this one transient
+  // view (the candidate sha is visible in the panel).
   if (state.activeView === 'bisect' && state.focus === 'commits') {
-    if (inputValue === 'g' && state.pendingKey !== 'g') {
+    // Gated off once the bisect has terminated: the completion panel
+    // rebinds y/Y to yank the first-bad sha (#879 item 3), and there
+    // is no candidate left to mark.
+    if (inputValue === 'y' && !key.ctrl && !key.meta && !context.bisectCompletionSha) {
       return [{ type: 'runWorkflowAction', id: 'bisect-good' }]
     }
     if (inputValue === 'b' && state.pendingKey !== 'g') {
@@ -3287,11 +3279,9 @@ export function getLogInkInputEvents(
   // comment open prompts first, the rest route through the y-confirm
   // path because they're irreversible (or near-irreversible).
   if (inputValue === 'm' && state.activeView === 'pull-request') {
-    return [action({
-      type: 'openInputPrompt',
-      kind: 'pr-merge-strategy',
-      label: 'Merge strategy (merge / squash / rebase)',
-    })]
+    // 1-key strategy choice (#1351); each option routes straight into
+    // the merge workflow with the strategy as payload.
+    return [action({ type: 'setPendingChoice', value: mergeStrategyChoice('merge-pr') })]
   }
   if (inputValue === 'x' && state.activeView === 'pull-request') {
     return [action({ type: 'setPendingConfirmation', value: 'close-pr' })]
@@ -3407,11 +3397,7 @@ export function getLogInkInputEvents(
     // prompts first; submit lands the strategy / body as the
     // confirmation payload, which the runner picks up after y.
     if (inputValue === 'm' && context.pullRequestTriageCount) {
-      return [action({
-        type: 'openInputPrompt',
-        kind: 'triage-pr-merge-strategy',
-        label: 'Merge strategy (merge / squash / rebase)',
-      })]
+      return [action({ type: 'setPendingChoice', value: mergeStrategyChoice('triage-pr-merge') })]
     }
     if (inputValue === 'x' && context.pullRequestTriageCount) {
       return [action({ type: 'setPendingConfirmation', value: 'triage-pr-close' })]
@@ -3662,13 +3648,9 @@ export function getLogInkInputEvents(
   }
 
   // `Z` resets the current branch tip to the cursored commit. Opens a
-  // mode prompt (soft / mixed / hard) instead of jumping straight to
-  // confirmation because the choice changes the destructiveness
-  // dramatically — `--hard` discards working-tree changes. The prompt
-  // submission special-cases `kind === 'reset-mode'` to forward the
-  // mode through `reset-to-commit` (see prompt-submit handler above).
-  // No `initial` value: existing prompts append to initial rather than
-  // replacing it, which would surprise the user typing the mode.
+  // 1-key mode choice (#1351 — s soft / m mixed / h hard) instead of a
+  // typed-word prompt; hard carries the destructive styling because it
+  // discards working-tree changes.
   if (
     inputValue === 'Z' &&
     state.activeView === 'history' &&
@@ -3676,11 +3658,7 @@ export function getLogInkInputEvents(
     state.filteredCommits.length > 0 &&
     !state.pendingCommitFocused
   ) {
-    return [action({
-      type: 'openInputPrompt',
-      kind: 'reset-mode',
-      label: 'Reset mode (soft / mixed / hard)',
-    })]
+    return [action({ type: 'setPendingChoice', value: RESET_MODE_CHOICE })]
   }
 
   // `i` (lowercase) opens the in-TUI interactive rebase surface for
@@ -3737,11 +3715,7 @@ export function getLogInkInputEvents(
   // their target from the reflog cursor when the reflog view is active (see
   // runtime handlers); the prompts here are identical to the history path.
   if (inputValue === 'Z' && isReflogActionTarget(state) && context.reflogCount) {
-    return [action({
-      type: 'openInputPrompt',
-      kind: 'reset-mode',
-      label: 'Reset mode (soft / mixed / hard)',
-    })]
+    return [action({ type: 'setPendingChoice', value: RESET_MODE_CHOICE })]
   }
   if (inputValue === 'B' && isReflogActionTarget(state) && context.reflogCount) {
     return [action({
@@ -3898,6 +3872,13 @@ export function getLogInkInputEvents(
   // without leaving the message editor.
   if (inputValue === 'A' && (state.activeView === 'status' || state.activeView === 'compose')) {
     return [{ type: 'runWorkflowAction', id: 'stage-all' }]
+  }
+  // #1350 — `a` on compose amends the staged changes into HEAD instead
+  // of creating a new commit ("amend instead of commit"). y-confirmed:
+  // it rewrites the head commit. Compose only — `a` means stage-file on
+  // status/diff and apply on stashes (see the KEYMAP overload table).
+  if (inputValue === 'a' && state.activeView === 'compose' && !key.ctrl && !key.meta) {
+    return [action({ type: 'setPendingConfirmation', value: 'amend-head' })]
   }
   if (inputValue === '+' && (state.activeView === 'status' || state.activeView === 'compose')) {
     return [action({
