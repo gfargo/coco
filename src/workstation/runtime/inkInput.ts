@@ -1766,8 +1766,16 @@ export function getLogInkInputEvents(
   // mode would stick around, and the next Enter on history would
   // still try to capture a sha.
   // Line-select on the staging diff: Esc drops the selection without
-  // popping the view — the user is mid-staging, not leaving.
-  if (key.escape && state.diffLineSelectAnchor !== undefined && state.activeView === 'diff') {
+  // popping the view — the user is mid-staging, not leaving. Gated on
+  // the WORKTREE diff (#1389): the anchor is meaningless on
+  // commit/stash/compare diffs, and a stale one made the first Esc
+  // clear invisible state instead of popping.
+  if (
+    key.escape &&
+    state.diffLineSelectAnchor !== undefined &&
+    state.activeView === 'diff' &&
+    isWorktreeDiffTarget(state)
+  ) {
     return [action({ type: 'setDiffLineSelectAnchor', value: undefined })]
   }
 
@@ -2487,7 +2495,16 @@ export function getLogInkInputEvents(
   // narrow (single-pane) terminals: a momentary glance that snaps back
   // with `v` / Esc (handled above once peeking). No-op in the three-pane
   // layout (every pane is already on screen) and from the sidebar itself.
-  if (inputValue === 'v' && context.singlePane && state.focus !== 'sidebar') {
+  // NOT on the staging diff (#1389): `v` is line-select there, and the
+  // peek intercept made line-level staging unreachable on narrow
+  // terminals (the narrow footer even replaced the "v select" hint
+  // with "v peek", so the feature silently vanished with width).
+  if (
+    inputValue === 'v' &&
+    context.singlePane &&
+    state.focus !== 'sidebar' &&
+    !isWorktreeDiffTarget(state)
+  ) {
     return [action({ type: 'togglePeek' })]
   }
 

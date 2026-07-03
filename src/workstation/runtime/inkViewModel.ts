@@ -2493,6 +2493,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedIndex: clampIndex(selectedIndex, filteredCommits.length),
         selectedFileIndex: Math.max(0, action.fileIndex ?? 0),
         diffPreviewOffset: 0,
+        // The anchor is a worktree-diff concept (#1389) — a stale one
+        // carried in from the staging diff made the commit diff's
+        // first Esc clear invisible state instead of popping.
+        diffLineSelectAnchor: undefined,
         diffSource: 'commit',
       }
     }
