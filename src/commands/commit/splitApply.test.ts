@@ -46,13 +46,19 @@ function makeFakeGit(options: { stagedBeforeReset: string[] }) {
       ops.push(`stage ${(Array.isArray(files) ? files : [files]).join(',')}`)
       return ''
     }),
+    // The staged list must contain the PLANNED files: the apply-time
+    // drift check (#1396) verifies every file-mode claim is still
+    // staged before the up-front reset, and `files` feeds its per-file
+    // worktree-edit probe. A placeholder name here tripped the guard
+    // the moment #1381 and #1407 landed together.
     status: jest.fn(async () => ({
-      staged: ['whatever.ts'],
+      staged: options.stagedBeforeReset,
       created: [],
       renamed: [],
       modified: [],
       deleted: [],
       not_added: [],
+      files: [],
     })),
     revparse: jest.fn(async () => `head-${head}`),
     advanceHead: () => {
