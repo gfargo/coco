@@ -119,9 +119,12 @@ the which-key overlay lists them live when you press `g`.
 | `g x` | Conflicts |
 | `g r` | Reflog |
 | `g B` | Bisect |
+| `g n` | Remotes |
 | `g M` | Submodules |
-| `g T` | Changelog |
+| `g T` | **Create tag** at the cursored commit (history view; name prompt) — *not* changelog; the changelog opens with `L` from history/branches |
 | `g H` | Apply cursored hunk to index (`git apply --cached`) |
+| `g C` | Theme picker (overlay) |
+| `g k` / `g K` | Open the project / global coco config in `$EDITOR` |
 | `g ?` | **Which-key strip** (overlay, not nav) — surfaces the *single-key* actions available in the current view (the deliberate overloads below), sourced live from `LOG_INK_KEY_BINDINGS`. `?` from the strip expands to the full help; `Esc` closes. The per-view counterpart to this very `g`-chord menu. |
 
 ---
@@ -140,10 +143,11 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `\` | Toggle the graph column |
 | `c` | Cherry-pick the commit |
 | `R` | Revert the commit |
-| `Z` | Reset branch tip here (mode prompt) |
-| `i` | Interactive rebase from the commit's parent |
+| `Z` | Reset branch tip here (1-key mode choice: `s` soft · `m` mixed · `h` hard) |
+| `i` | Open the **rebase plan** surface for `<commit>^..HEAD` (in-TUI interactive rebase; the $EDITOR variant stays in the `:` palette) |
+| `f` | Fixup: commit staged changes as `fixup!` of the cursored commit (confirm; offers immediate autosquash) |
 | `B` | Create branch here |
-| `s` | Sort / skip |
+| `L` | Open the changelog view (`Esc` while it's generating cancels the LLM call) |
 | `r` | Refresh |
 
 ### Status (staging)
@@ -158,6 +162,8 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `i` | Open the `.gitignore` picker |
 | `o` | Open the file in `$EDITOR` |
 | `1`/`2`/`3` | Toggle staged / unstaged / untracked visibility |
+| `b` | Blame the cursored file |
+| `L` | File history for the cursored file |
 | `e` / `c` | Compose: inline edit / commit |
 
 ### Diff — worktree (staging diff)
@@ -166,11 +172,12 @@ The hunk is the unit of action here.
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` | Walk hunks (single-hunk files fall back to line-scroll) |
+| `↑`/`↓` (`j`/`k`) | Line-scroll the diff (the current hunk follows the scroll position) |
 | `[` / `]` | Previous / next hunk |
-| `Space` | Stage / unstage the selected hunk (whole file if untracked) |
+| `v` | Visual line-select (anchor at the current line; j/k extends; `v`/Esc clears) |
+| `Space` | Stage / unstage the selected hunk — or **only the selected lines** while a `v` selection is active |
 | `a` | Stage / unstage the whole file |
-| `z` | Discard the hunk (confirm) |
+| `z` | Discard the hunk — or only the selected lines while a `v` selection is active (confirm) |
 | `o` | Open the file in `$EDITOR` |
 
 ### Diff — commit (read-only exploration)
@@ -207,7 +214,9 @@ The hunk is the unit of action here.
 |-----|--------|
 | `e` | Inline edit the message |
 | `E` | Edit in `$EDITOR` |
-| `c` | Commit |
+| `c` | Commit — with an **empty draft** it drops you into edit mode on the summary instead of erroring (#1362) |
+| `Ctrl+D` | Commit straight from inline edit mode (the multiline-prompt submit convention) — full flow: `gs → A → c → <type> → Ctrl+D` |
+| `a` | **Amend** staged changes into HEAD (confirm; rewrites the head commit — reword lives in the `:` palette) |
 | `I` | AI-draft the message |
 | `S` | Start the commit-split flow |
 | `A` | Stage everything |
@@ -223,6 +232,8 @@ The hunk is the unit of action here.
 | `D` | Delete (confirm) |
 | `u` | Set upstream (prompt) |
 | `F` / `U` / `P` | Fetch / pull / push the branch |
+| `r` | Rebase the current branch onto the cursored branch (confirm) |
+| `s` | Cycle the branch sort mode |
 | `m` | Mark / unmark compare base |
 
 ### Tags
@@ -258,15 +269,27 @@ variants.
 |-----|--------|
 | `Enter` | Open the conflicted file's diff |
 | `s` | Stage (mark resolved) |
-| `u` / `U` | Keep theirs / keep ours |
+| `u` / `U` | Keep incoming changes / keep your branch's version (mapped to git's `--theirs`/`--ours` per operation — a rebase swaps git's sides, the keys don't) |
 | `o` | Open in `$EDITOR` |
+| `M` | **AI conflict resolution** (y-confirm; token estimate shown): proposes a resolution per conflict region of the selected file — never auto-applied |
 | `C` | Continue the in-progress operation (only when no conflicts remain) |
+
+While AI proposals are open (after `M`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Walk the proposal regions |
+| `y` | Accept the cursored proposal (writes that region only; accepting the last region auto-stages the file) |
+| `e` | Edit the proposal in `$EDITOR`, then apply the edited text |
+| `n` | Reject the cursored proposal |
+| `Y` | Accept every pending proposal |
+| `Esc` | Dismiss the session (file untouched) — while generating, cancels the LLM call |
 
 ### Pull request / PR triage
 
 | Key | Action |
 |-----|--------|
-| `m` | Merge (strategy prompt) |
+| `m` | Merge (1-key strategy choice: `m` merge · `s` squash · `r` rebase) |
 | `a` | Approve (confirm) |
 | `R` | Request changes (review prompt) |
 | `c` | Comment (prompt) |
@@ -289,11 +312,22 @@ variants.
 
 | Key | Action |
 |-----|--------|
-| `g=` | Mark good |
+| `y` | Mark good (`g` stays the chord prefix, so `gh`/`gs` navigation works mid-bisect) |
 | `b` | Mark bad |
 | `s` | Skip / start wizard |
 | `x` | Reset bisect |
 | `R` | Run custom command |
+
+### Rebase plan (entered with `i` from history)
+
+| Key | Action |
+|-----|--------|
+| `↑`/`↓` (`j`/`k`) | Move the cursor through the todo rows |
+| `J` / `K` | Reorder: move the cursored row down / up |
+| `p` / `s` / `f` / `d` / `e` | Retag the row: pick / squash / fixup / drop / edit |
+| `r` | Reword (prompt seeded with the current subject) |
+| `Enter` | Run the plan (y-confirm; rewrites history, conflicts route to `gx`) |
+| `Esc` | Back — discards the plan |
 
 ### Worktrees
 
@@ -315,7 +349,7 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `c` | history → cherry-pick commit · commit/stash diff → cherry-pick/restore file · status/diff/compose → commit · PR/PR-triage → comment · issues → comment |
 | `C` | conflicts → continue operation · compose → *blocked* (guard against fat-finger PR-create) · elsewhere → create PR |
 | `R` | history → revert · branches → rename · tags → delete-remote · PR/PR-triage → request changes · bisect → run command |
-| `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve |
+| `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve · compose → **amend HEAD** (confirm; #1350) |
 | `m` | branches/tags/history (compare flow) → mark compare base · PR/PR-triage → merge |
 | `i` | status → open `.gitignore` picker · history → interactive rebase |
 | `S` | status/diff/compose → commit-split flow · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
@@ -323,8 +357,9 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `D` | worktrees → remove worktree + branch · branches → delete branch |
 | `x` / `X` | PR → close · issues → close / reopen · stashes → drop (`X`) |
 | `L` | history/branches → generate changelog · PR-triage/issues → add label |
-| `f` | PR-triage → cycle PR filter · issues → cycle issue filter |
+| `f` | history → fixup staged into cursored commit · PR-triage → cycle PR filter · issues → cycle issue filter |
 | `o` | status/diff/conflicts → open file in `$EDITOR` (consistent — different file resolution only) |
+| `y` | bisect → mark good · conflicts (AI proposals open) → accept proposal · elsewhere → yank (`g` stays the chord prefix everywhere — bisect used to shadow it and `gh` silently marked the candidate good) |
 | `[` / `]` | worktree diff → hunk · commit diff → hunk · stash diff → **file** · sidebar/inspector focus → cycle tab |
 
 The three highest-risk overloads, because they're guard-heavy or

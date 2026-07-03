@@ -129,6 +129,8 @@ export type UseInputHandlerDeps = {
   toggleSelectedHunkStage: () => Promise<void>
   revertSelectedFile: () => Promise<void>
   revertSelectedHunk: () => Promise<void>
+  stageSelectedLines: () => Promise<void>
+  revertSelectedLines: () => Promise<void>
 
   /** Commit compose callbacks (`useCommitComposeActions`). */
   createCommitFromCompose: () => Promise<void>
@@ -144,6 +146,15 @@ export type UseInputHandlerDeps = {
 
   /** Changelog callbacks (`useChangelogActions`). */
   startChangelogView: (options?: { force?: boolean }) => Promise<void>
+  cancelChangelog: () => void
+
+  /** AI conflict-resolution callbacks (`useConflictResolutionActions`). */
+  startConflictResolution: () => Promise<void>
+  cancelConflictResolution: () => void
+  acceptConflictProposal: () => Promise<void>
+  acceptAllConflictProposals: () => Promise<void>
+  editConflictProposal: () => Promise<void>
+  startRebasePlan: () => Promise<void>
   regenerateChangelog: () => void
   yankChangelog: () => void
   openChangelogInEditor: () => void
@@ -224,6 +235,8 @@ export function useInputHandler(
     toggleSelectedHunkStage,
     revertSelectedFile,
     revertSelectedHunk,
+    stageSelectedLines,
+    revertSelectedLines,
     createCommitFromCompose,
     openComposeInEditor,
     runAiCommitDraft,
@@ -231,6 +244,13 @@ export function useInputHandler(
     startCreatePullRequest,
     cancelPullRequestBodyDraft,
     startChangelogView,
+    cancelChangelog,
+    startConflictResolution,
+    cancelConflictResolution,
+    acceptConflictProposal,
+    acceptAllConflictProposals,
+    editConflictProposal,
+    startRebasePlan,
     regenerateChangelog,
     yankChangelog,
     openChangelogInEditor,
@@ -486,6 +506,10 @@ export function useInputHandler(
         void revertSelectedFile()
       } else if (event.type === 'revertSelectedHunk') {
         void revertSelectedHunk()
+      } else if (event.type === 'stageSelectedLines') {
+        void stageSelectedLines()
+      } else if (event.type === 'revertSelectedLines') {
+        void revertSelectedLines()
       } else if (event.type === 'createManualCommit') {
         void createCommitFromCompose()
       } else if (event.type === 'runAiCommitDraft') {
@@ -498,6 +522,20 @@ export function useInputHandler(
         cancelPullRequestBodyDraft()
       } else if (event.type === 'startChangelogView') {
         void startChangelogView()
+      } else if (event.type === 'cancelChangelog') {
+        cancelChangelog()
+      } else if (event.type === 'runAiConflictResolution') {
+        void startConflictResolution()
+      } else if (event.type === 'cancelConflictResolution') {
+        cancelConflictResolution()
+      } else if (event.type === 'acceptConflictProposal') {
+        void acceptConflictProposal()
+      } else if (event.type === 'acceptAllConflictProposals') {
+        void acceptAllConflictProposals()
+      } else if (event.type === 'editConflictProposal') {
+        void editConflictProposal()
+      } else if (event.type === 'startRebasePlan') {
+        void startRebasePlan()
       } else if (event.type === 'regenerateChangelog') {
         regenerateChangelog()
       } else if (event.type === 'yankChangelog') {

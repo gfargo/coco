@@ -127,3 +127,39 @@ export function findGroupForIndex(
   }
   return undefined
 }
+
+/**
+ * Optimistic stage/unstage flip for one file (#1353). The status
+ * surface flips the toggled file's group in local context immediately
+ * so `space` repaints on the keystroke; the awaited worktree refresh
+ * that follows reconciles with git's truth (including when the git
+ * call fails). Porcelain codes are approximations — good enough for
+ * the one render frame they live for.
+ */
+export function optimisticToggleWorktreeOverview(
+  overview: WorktreeOverview,
+  path: string
+): WorktreeOverview {
+  const files = overview.files.map((file): WorktreeFile => {
+    if (file.path !== path) return file
+    if (file.state === 'staged') {
+      return { ...file, state: 'unstaged', indexStatus: ' ', worktreeStatus: 'M' }
+    }
+    if (file.state === 'untracked') {
+      return { ...file, state: 'staged', indexStatus: 'A', worktreeStatus: ' ' }
+    }
+    return {
+      ...file,
+      state: 'staged',
+      indexStatus: file.worktreeStatus.trim() || 'M',
+      worktreeStatus: ' ',
+    }
+  })
+  return {
+    ...overview,
+    files,
+    stagedCount: files.filter((file) => file.state === 'staged').length,
+    unstagedCount: files.filter((file) => file.state === 'unstaged').length,
+    untrackedCount: files.filter((file) => file.state === 'untracked').length,
+  }
+}

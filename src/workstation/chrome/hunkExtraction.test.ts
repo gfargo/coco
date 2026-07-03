@@ -73,6 +73,39 @@ describe('extractDiffHunk', () => {
     ).toBeNull()
   })
 
+  // Regression: in a multi-file patch, a cursor on file B's preamble
+  // (its `diff --git`/index/---/+++ lines) used to walk backwards PAST
+  // the file boundary into file A's last `@@`, pairing file A's hunk
+  // body with file B's path — a mismatched patch handed to `git apply`.
+  it('returns null when the cursor is on a later file preamble (never crosses diff --git)', () => {
+    const twoFilePatch = [
+      'diff --git a/src/aaa.ts b/src/aaa.ts',
+      '--- a/src/aaa.ts',
+      '+++ b/src/aaa.ts',
+      '@@ -1,2 +1,3 @@',
+      ' const a = 1',
+      '+const added = 2',
+      'diff --git a/src/bbb.ts b/src/bbb.ts',
+      '--- a/src/bbb.ts',
+      '+++ b/src/bbb.ts',
+      '@@ -5,2 +5,3 @@',
+      ' const z = 9',
+      '+const y = 8',
+    ]
+    // Cursor on file B's `diff --git` line and on its `+++` line: both
+    // sit before file B's first hunk, so there is no hunk "at" cursor.
+    for (const cursorOffset of [6, 8]) {
+      expect(
+        extractDiffHunk({ lines: twoFilePatch, cursorOffset, path: 'src/bbb.ts' })
+      ).toBeNull()
+    }
+    // Sanity: inside file B's hunk still extracts file B's hunk.
+    const inside = extractDiffHunk({ lines: twoFilePatch, cursorOffset: 10, path: 'src/bbb.ts' })
+    expect(inside?.patchText).toContain('b/src/bbb.ts')
+    expect(inside?.patchText).toContain('+const y = 8')
+    expect(inside?.patchText).not.toContain('aaa')
+  })
+
   it('returns null on an empty patch', () => {
     expect(
       extractDiffHunk({ lines: [], cursorOffset: 0, path: 'src/foo.ts' })

@@ -68,12 +68,20 @@ describe('log Ink workflows', () => {
     expect(getLogInkWorkflowActionByKey('')).toBeUndefined()
   })
 
-  it('registers the reflog checkout action (non-destructive, key c)', () => {
+  it('registers the reflog checkout action as palette-only (view-scoped dispatch is by id)', () => {
     expect(getLogInkWorkflowActionById('checkout-reflog-entry')).toMatchObject({
-      key: 'c',
+      key: '',
       kind: 'normal',
       requiresConfirmation: false,
     })
+  })
+
+  // Regression for the global `c` leak: with a live key on this entry,
+  // the end-of-dispatch fallback fired `git checkout <reflog hash>`
+  // (detached HEAD, no confirmation) from any view that doesn't bind
+  // `c` — branches, tags, stash, worktrees, remotes, bisect, blame.
+  it('never resolves checkout-reflog-entry from a raw keystroke', () => {
+    expect(getLogInkWorkflowActionByKey('c')).toBeUndefined()
   })
 
   it('declares every workflow action id at most once', () => {

@@ -254,6 +254,26 @@ describe('log commit compose state', () => {
       expect(state.message).toMatch(/Press Enter \(or R\) to replace/)
     })
 
+    it('applies user-sourced drafts ($EDITOR round-trip) directly, even over a non-empty draft', () => {
+      // Regression: the divert treated every setDraft as an AI draft, so
+      // `E` (edit in $EDITOR) never applied edits to a non-empty draft —
+      // the status said "updated from editor" while the panel demanded
+      // an AI-draft accept, and Esc discarded the whole editor session.
+      let state = applyCommitComposeAction(createCommitComposeState(), {
+        type: 'append',
+        value: 'feat: original summary',
+      })
+
+      state = applyCommitComposeAction(state, {
+        type: 'setDraft',
+        value: 'feat: edited in vim\n\nreworded body',
+        source: 'user',
+      })
+      expect(state.summary).toBe('feat: edited in vim')
+      expect(state.body).toBe('reworded body')
+      expect(state.pendingAiDraft).toBeUndefined()
+    })
+
     it('routes setDraft to summary/body directly when fields are empty (no clobber risk)', () => {
       // Common path: user fires `I` without typing first; AI draft
       // lands straight into the editable fields as before.

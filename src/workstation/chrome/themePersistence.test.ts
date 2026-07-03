@@ -106,13 +106,19 @@ describe('theme preset persistence', () => {
     expect(fs.existsSync(getXdgConfigPath())).toBe(false)
   })
 
-  it('ignores a malformed existing config rather than throwing', () => {
+  it('aborts (without throwing) on a malformed existing config instead of clobbering it', () => {
     const file = getXdgConfigPath()
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, '{ this is not json')
 
+    // Regression: the old behavior treated the unparseable file as
+    // "start fresh" and OVERWROTE it — one theme pick in the TUI erased
+    // every other setting after a hand-edit left a trailing comma. The
+    // save must fail softly and leave the user's file byte-identical.
     expect(() => saveThemePreset('dracula')).not.toThrow()
-    expect(getSavedThemePreset()).toBe('dracula')
+    expect(saveThemePreset('dracula')).toBe(false)
+    expect(fs.readFileSync(file, 'utf8')).toBe('{ this is not json')
+    expect(getSavedThemePreset()).toBeUndefined()
   })
 
   it('is best-effort: returns false (no throw) when the path cannot be written', () => {

@@ -536,6 +536,65 @@ export function createTagAtCommit(
   ))
 }
 
+/**
+ * `git commit --fixup=<sha>` from the currently staged changes. The
+ * caller pre-checks that something is staged (the runtime handler has
+ * the worktree counts); git's own "nothing added" error still surfaces
+ * as a fallback. Non-destructive — it's an ordinary commit whose
+ * message marks it for a later autosquash.
+ */
+export function createFixupCommit(
+  git: SimpleGit,
+  commit: HistoryCommitRef | undefined
+): Promise<BranchActionResult> {
+  if (!commit) {
+    return Promise.resolve({
+      ok: false,
+      message: 'No commit selected.',
+    })
+  }
+
+  return guardNoInProgressOperation(git).then((blocked) => (
+    blocked || runAction(
+      () => git.raw(['commit', '--fixup', commit.hash]),
+      `Created fixup for ${commit.shortHash} — will squash on the next autosquash rebase`
+    )
+  ))
+}
+
+/**
+ * `git rebase -i --autosquash <target>^` with the sequence editor
+ * disabled (`-c sequence.editor=true`), so git applies the generated
+ * todo — fixups folded into their targets — without ever opening an
+ * editor. `-c` keeps the override scoped to this one invocation instead
+ * of mutating the shared SimpleGit env (which would silently break the
+ * user-facing `i` interactive rebase). Fixup entries reuse the target's
+ * message, so $GIT_EDITOR is never opened either.
+ */
+export function autosquashRebase(
+  git: SimpleGit,
+  commit: HistoryCommitRef | undefined
+): Promise<BranchActionResult> {
+  if (!commit) {
+    return Promise.resolve({
+      ok: false,
+      message: 'No fixup target to squash into.',
+    })
+  }
+
+  return guardNoInProgressOperation(git).then((blocked) => (
+    blocked || runAction(
+      () => git.raw(['-c', 'sequence.editor=true', 'rebase', '-i', '--autosquash', `${commit.hash}^`]),
+      `Autosquashed fixups into ${commit.shortHash}`
+    )
+  )).then((result) => ({
+    ...result,
+    details: result.ok
+      ? ['Recovery: `git reflog` holds the pre-rebase HEAD if you need it back.']
+      : result.details,
+  }))
+}
+
 export function startInteractiveRebase(
   git: SimpleGit,
   commit: HistoryCommitRef | undefined

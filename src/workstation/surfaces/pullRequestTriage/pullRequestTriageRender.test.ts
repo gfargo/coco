@@ -16,6 +16,7 @@ import type {
 } from '../../../git/pullRequestListData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { __test as gitlabInternals } from '../../../git/gitlabListData'
+import { cellWidth } from '../../chrome/text'
 import { renderPullRequestTriageSurface } from './index'
 
 type StubProps = Record<string, unknown>
@@ -62,6 +63,7 @@ function render(
     pullRequestList?: PullRequestListOverview
     loading?: boolean
     provider?: LogInkContext['provider']
+    width?: number
   } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
@@ -79,7 +81,7 @@ function render(
     context,
     contextStatus,
     bodyRows: 30,
-    width: 120,
+    width: options.width ?? 120,
     theme,
   })
 }
@@ -178,6 +180,37 @@ describe('renderPullRequestTriageSurface', () => {
     const text = treeText(tree)
     expect(text).toContain('Pull requests')
     expect(text).not.toContain('Merge requests')
+  })
+
+  it('keeps rows within the panel width when labels are long (#1339)', () => {
+    const width = 100
+    const tree = render(makeState(), {
+      width,
+      pullRequestList: {
+        available: true,
+        authenticated: true,
+        pullRequests: [
+          makePr({
+            number: 5678,
+            title: 'A fairly long pull request title that already competes for row space',
+            author: 'somebody-with-a-name',
+            headRefName: 'feature/very-long-branch-name-here',
+            labels: ['enhancement', 'help wanted', 'breaking-change', 'needs-review'],
+          }),
+        ],
+      },
+    })
+    const children = (tree.props as { children: unknown[] }).children
+    const rows = children
+      .flat()
+      .map(treeText)
+      .filter((line) => line.includes('#5678'))
+    expect(rows).toHaveLength(1)
+    // Border (2) + paddingX (2) leave width - 4 cells for row content.
+    expect(cellWidth(rows[0])).toBeLessThanOrEqual(width - 4)
+    // Labels are budgeted in, not dropped: at least the opening bracket
+    // plus some label text must survive the truncation.
+    expect(rows[0]).toContain(' [enh')
   })
 
   it('structural snapshot — empty list', () => {

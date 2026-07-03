@@ -75,6 +75,7 @@ export type LogInkCommandId =
   | 'viewRevert'
   | 'viewReset'
   | 'viewInteractiveRebase'
+  | 'viewFixup'
   | 'viewRebaseOnto'
   | 'viewCreateBranchHere'
   | 'viewCreateTagHere'
@@ -551,6 +552,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['Z'],
     label: 'reset to commit',
     description: 'Move the branch tip to the cursored commit (prompts for soft/mixed/hard).',
+    contexts: ['history'],
+  },
+  {
+    id: 'viewFixup',
+    keys: ['f'],
+    label: 'fixup into commit',
+    description: 'Commit the staged changes as a fixup! of the cursored commit; offers an immediate autosquash.',
     contexts: ['history'],
   },
   {
@@ -1270,14 +1278,14 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     // unstages the hunk under the viewport, a stages the whole file, z
     // discards the current hunk.
     return {
-      contextual: ['j/k lines', '[/] hunk', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
+      contextual: ['j/k lines', '[/] hunk', 'v select', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.activeView === 'compose') {
     return {
-      contextual: ['e edit', 'c commit', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
+      contextual: ['e edit', 'c commit', 'a amend', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1333,9 +1341,16 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     }
   }
 
+  if (options.activeView === 'rebase') {
+    return {
+      contextual: ['↑/↓ move', 'J/K reorder', 'p/s/f/d/e retag', 'r reword', 'enter run', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
   if (options.activeView === 'conflicts') {
     return {
-      contextual: ['↑/↓ files', 'enter diff', 's stage', 'u theirs', 'U ours', 'o edit', 'C continue*', 'esc back'],
+      contextual: ['↑/↓ files', 'enter diff', 's stage', 'u incoming', 'U yours', 'o edit', 'C continue*', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1405,7 +1420,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.activeView === 'bisect') {
     return {
-      contextual: ['g good', 'b bad', 's skip', 'R run', 'x reset', 'esc back'],
+      contextual: ['y good', 'b bad', 's skip', 'R run', 'x reset', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1437,7 +1452,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     // Grouped into compact `c/R/Z/i mutate` and `B/gT new` chips so
     // the footer stays scannable; full descriptions live in `?` help
     // and the palette.
-    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'B/gT new', 'm compare', 'y/Y yank', '/ search'],
+    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'y/Y yank', '/ search'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1640,28 +1655,32 @@ function scorePaletteCommand(command: LogInkPaletteCommand, term: string): numbe
       best = best === undefined ? fieldScore : Math.max(best, fieldScore)
       continue
     }
-
-    let searchIndex = 0
-    let distance = 0
-    let matched = true
-
-    for (const character of normalized) {
-      const nextIndex = value.indexOf(character, searchIndex)
-      if (nextIndex < 0) {
-        matched = false
-        break
-      }
-      distance += nextIndex - searchIndex
-      searchIndex = nextIndex + 1
-    }
-
-    if (matched) {
-      const fieldScore = 300 - Math.min(distance, 200)
-      best = best === undefined ? fieldScore : Math.max(best, fieldScore)
-    }
   }
 
-  return best
+  if (best !== undefined) {
+    return best
+  }
+
+  // Loose character-subsequence fallback, LABEL ONLY. Running it across
+  // every searchable field (descriptions especially) made short queries
+  // match most of the registry — "changel" pulled in yank, submodules,
+  // and "Request changes" because their long descriptions happened to
+  // contain those seven letters in order somewhere. The label is short
+  // enough that a scattered-letter match still reads as intentional.
+  const label = command.label.toLowerCase()
+  let searchIndex = 0
+  let distance = 0
+
+  for (const character of normalized) {
+    const nextIndex = label.indexOf(character, searchIndex)
+    if (nextIndex < 0) {
+      return undefined
+    }
+    distance += nextIndex - searchIndex
+    searchIndex = nextIndex + 1
+  }
+
+  return 300 - Math.min(distance, 200)
 }
 
 /**

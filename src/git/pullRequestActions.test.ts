@@ -34,6 +34,22 @@ describe('log pull request actions', () => {
       '--body=Generated body',
     ])
 
+    // With a body file the body itself must stay out of argv — generated
+    // bodies run long and get echoed back through failure messages.
+    expect(buildCreatePullRequestArgs({
+      base: 'main',
+      head: 'feature/pr',
+      title: 'Add PR workflow',
+      body: 'Generated body',
+    }, '/tmp/coco-pr-x/body.md')).toEqual([
+      'pr',
+      'create',
+      '--base=main',
+      '--head=feature/pr',
+      '--title=Add PR workflow',
+      '--body-file=/tmp/coco-pr-x/body.md',
+    ])
+
     expect(buildCreatePullRequestArgs({
       base: 'main',
       head: 'feature/pr',
@@ -59,6 +75,11 @@ describe('log pull request actions', () => {
       message: 'Created pull request: https://github.com/gfargo/coco/pull/123',
       url: 'https://github.com/gfargo/coco/pull/123',
     })
+
+    // The create call passes the body via --body-file, never inline.
+    const createArgs = runner.mock.calls[0][0] as string[]
+    expect(createArgs.some((arg) => arg.startsWith('--body-file='))).toBe(true)
+    expect(createArgs.some((arg) => arg.startsWith('--body='))).toBe(false)
     await expect(openPullRequest('https://github.com/gfargo/coco/pull/123', runner)).resolves.toEqual({
       ok: true,
       message: 'Opened pull request: https://github.com/gfargo/coco/pull/123',

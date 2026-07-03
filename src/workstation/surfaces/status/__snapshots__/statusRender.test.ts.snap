@@ -114,7 +114,7 @@ exports[`renderStatusSurface structural snapshot — mixed staged + unstaged + u
   >
         
     <Text
-      color="red"
+      color="yellow"
     >
       ●
     </Text>

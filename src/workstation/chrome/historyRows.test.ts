@@ -451,6 +451,30 @@ describe('Ink history rows', () => {
       ])
     })
 
+    // Regression (verified by execution before the fix): headers consume
+    // rows AFTER the window start was computed headerless, so with the
+    // cursor at the end of the list every emitted header pushed the tail
+    // — including the SELECTED commit — off the render. Further j
+    // presses looked dead because the highlight was off-screen.
+    it('always renders the selected commit, even at end-of-list with headers eating the budget', () => {
+      const manyRows: GitLogRow[] = Array.from({ length: 20 }, (_, i) => ({
+        type: 'commit', graph: '* ', shortHash: `h${i}`, hash: `h${i}`.padEnd(40, '0'),
+        parents: [],
+        // Alternate dates so bucket transitions emit several headers.
+        date: i % 2 === 0 ? '2026-05-14' : '2026-04-30',
+        author: 'Coco', refs: [], message: `commit ${i}`,
+      }))
+      let state = createLogInkState(manyRows)
+      state = { ...state, selectedIndex: 19 }
+
+      const visible = getVisibleLogInkHistory(state, 10, { dateBucketingNow: NOW })
+      const selectedRendered = visible.items.some(
+        (item) => item.type === 'commit' && item.selected
+      )
+      expect(selectedRendered).toBe(true)
+      expect(visible.items.length).toBeLessThanOrEqual(10)
+    })
+
     it('reuses one header for consecutive commits in the same bucket', () => {
       const sameDayRows: GitLogRow[] = Array.from({ length: 3 }, (_, i) => ({
         type: 'commit', graph: '* ', shortHash: `h${i}`, hash: `h${i}`.padEnd(40, '0'),

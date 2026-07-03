@@ -32,8 +32,10 @@ import {
     getLogInkViewKeyBindings,
 } from '../../workstation/runtime/inkKeymap'
 import type { LogInkChoicePrompt, LogInkState } from '../../workstation/runtime/inkViewModel'
-import { filterThemePresets } from '../../workstation/runtime/inkViewModel'
+import { filterThemePresets, getSelectedInkCommit } from '../../workstation/runtime/inkViewModel'
 import { getLogInkWorkflowActionById } from '../../workstation/runtime/inkWorkflows'
+import { resolvePendingItemAction } from './hooks/useWorkflowAction'
+import type { LogInkContext } from './types'
 import type { LogInkComponents } from './types'
 import { focusBorderColor, panelTitle } from './utils'
 
@@ -88,10 +90,53 @@ export function renderInputPromptPanel(
   h(Text, { dimColor: true }, hint))
 }
 
+/**
+ * Confirmable workflow ids whose target is the cursored HISTORY commit.
+ * Everything list-shaped (branch/tag/stash/worktree deletes and
+ * checkouts) resolves through `resolvePendingItemAction` — the same
+ * sorted+filtered resolver the runner and row spinners use, so the name
+ * shown is exactly the item that will be acted on.
+ */
+const COMMIT_TARGET_CONFIRMATION_IDS = new Set([
+  'cherry-pick-commit',
+  'revert-commit',
+  'interactive-rebase',
+  'reset-to-commit',
+  'fixup-into-commit',
+  'autosquash-rebase',
+])
+
+/**
+ * Human line naming the item a pending confirmation will act on, or
+ * undefined when the workflow has no resolvable single target. Shown in
+ * the confirm overlay so the user never confirms blind — several
+ * destructive keys (D / T / X / W) reach the confirm from views where
+ * the target list isn't even on screen.
+ */
+export function describeConfirmationTarget(
+  state: LogInkState,
+  context: LogInkContext,
+): string | undefined {
+  const id = state.pendingConfirmationId
+  if (!id) return undefined
+  const item = resolvePendingItemAction(id, state, context)
+  if (item) {
+    return `${item.kind}: ${item.id}`
+  }
+  if (COMMIT_TARGET_CONFIRMATION_IDS.has(id)) {
+    const commit = getSelectedInkCommit(state)
+    if (commit) {
+      return `commit ${commit.shortHash}: ${commit.message}`
+    }
+  }
+  return undefined
+}
+
 export function renderConfirmationPanel(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
   state: LogInkState,
+  context: LogInkContext,
   width: number,
   theme: LogInkTheme,
   focused: boolean
@@ -100,6 +145,8 @@ export function renderConfirmationPanel(
   const action = getLogInkWorkflowActionById(state.pendingConfirmationId)
   const mutationLabel = state.pendingMutationConfirmation === 'revert-hunk'
     ? 'Revert selected hunk'
+    : state.pendingMutationConfirmation === 'discard-lines'
+      ? 'Discard the selected lines'
     : state.pendingMutationConfirmation === 'revert-file'
       ? 'Revert selected file'
       : state.pendingMutationConfirmation === 'discard-draft'
@@ -114,6 +161,11 @@ export function renderConfirmationPanel(
     // branch — name the reason so the force isn't a blind "y again".
     : state.pendingConfirmationId === 'force-delete-branch'
     ? 'Not fully merged. Force-delete (git branch -D) is irreversible.'
+    // Push was rejected non-fast-forward — name what the force actually
+    // does and its remaining safety net so the y isn't blind.
+    : state.pendingConfirmationId === 'force-push-current-branch' ||
+      state.pendingConfirmationId === 'force-push-selected-branch'
+    ? 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.'
     // Rebase-onto carries a per-invocation warning naming both branches
     // (built in inkInput from the cursored + current branch). Fall back
     // to a static line if the payload is somehow absent.
@@ -131,6 +183,7 @@ export function renderConfirmationPanel(
     : action?.kind === 'ai'
     ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`
     : 'Destructive Git action requires confirmation.'
+  const target = describeConfirmationTarget(state, context)
 
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
@@ -141,6 +194,7 @@ export function renderConfirmationPanel(
   },
   h(Text, { bold: true }, panelTitle('Confirm', focused)),
   h(Text, undefined, truncateCells(label, width - 4)),
+  ...(target ? [h(Text, { bold: true }, truncateCells(`\u2192 ${target}`, width - 4))] : []),
   h(Text, { dimColor: true }, truncateCells(warning, width - 4)),
   h(Text, undefined, ''),
   h(Text, undefined, 'Press y to confirm or n/Esc to cancel.'))

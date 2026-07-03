@@ -126,6 +126,15 @@ exports[`renderHistoryInspector structural snapshot — no detail 1`] = `
     <Text
       color="cyan"
     >
+      f    
+    </Text>
+      
+    Fixup staged into commit
+  </Text>
+  <Text>
+    <Text
+      color="cyan"
+    >
       y    
     </Text>
       

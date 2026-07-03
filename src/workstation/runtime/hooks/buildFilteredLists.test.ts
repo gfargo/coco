@@ -1,3 +1,9 @@
+import {
+  DEFAULT_BRANCH_SORT_MODE,
+  DEFAULT_TAG_SORT_MODE,
+  sortBranches,
+  sortTags,
+} from '../../chrome/sorting'
 import { buildFilteredLists } from './buildFilteredLists'
 import type { LogInkContext } from '../types'
 
@@ -104,11 +110,26 @@ describe('buildFilteredLists', () => {
       expect(result.filteredPullRequestTriageList).toHaveLength(2)
     })
 
-    it('returns the original array reference for an undefined filter', () => {
+    it('returns the original array reference for an undefined filter (unsorted lists)', () => {
       const result = buildFilteredLists(context, undefined)
       // No filter => the verbatim `return all` path, not a `.filter()` copy.
-      expect(result.filteredBranchList).toBe(context.branches?.localBranches)
+      // Branches/tags are exceptions: they pass through the sort (below).
       expect(result.filteredIssueList).toBe(context.issueList?.issues)
+      expect(result.filteredStashList).toBe(context.stashes?.stashes)
+    })
+
+    it('sorts branches/tags with the surfaces' + "'" + ' comparators before filtering', () => {
+      // Regression: these lists used to be served in raw for-each-ref
+      // order while the surfaces rendered them sorted (current branch
+      // pinned first) — the same selectedBranchIndex meant DIFFERENT
+      // rows in the renderer vs the input-context snapshot, so
+      // compare-mark and the rebase-onto prompt resolved a branch the
+      // user never highlighted.
+      const result = buildFilteredLists(context, undefined)
+      expect(result.filteredBranchList.map((b) => b.shortName))
+        .toEqual(sortBranches(context.branches?.localBranches || [], DEFAULT_BRANCH_SORT_MODE).map((b) => b.shortName))
+      expect(result.filteredTagList.map((t) => t.name))
+        .toEqual(sortTags(context.tags?.tags || [], DEFAULT_TAG_SORT_MODE).map((t) => t.name))
     })
   })
 

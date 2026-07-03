@@ -137,10 +137,10 @@ function toCompactItems(
   visibleCount: number,
   bucketingNow: Date | undefined
 ): LogInkHistoryItem[] {
-  const start = clampWindowStart(state.selectedIndex, state.filteredCommits.length, visibleCount)
-  const slice = state.filteredCommits.slice(start, start + visibleCount)
+  let start = clampWindowStart(state.selectedIndex, state.filteredCommits.length, visibleCount)
 
   if (!bucketingNow) {
+    const slice = state.filteredCommits.slice(start, start + visibleCount)
     return slice.map((commit, offset) =>
       makeCompactCommitItem(commit, start + offset === state.selectedIndex)
     )
@@ -151,19 +151,41 @@ function toCompactItems(
   // header occupies one row from the visibleCount budget every time
   // it fires, so the visible commit count drops slightly in exchange
   // for always-on temporal orientation.
-  const items: LogInkHistoryItem[] = []
-  let prevBucket: string | undefined = undefined
-  for (let offset = 0; offset < slice.length && items.length < visibleCount; offset += 1) {
-    const commit = slice[offset]
-    const bucket = getDateBucket(commit.date, bucketingNow)
-    if (bucket.key !== prevBucket) {
-      items.push(bucketHeaderItem(bucket.label))
-      prevBucket = bucket.key
-      if (items.length >= visibleCount) break
+  const build = (windowStart: number): LogInkHistoryItem[] => {
+    const slice = state.filteredCommits.slice(windowStart, windowStart + visibleCount)
+    const items: LogInkHistoryItem[] = []
+    let prevBucket: string | undefined = undefined
+    for (let offset = 0; offset < slice.length && items.length < visibleCount; offset += 1) {
+      const commit = slice[offset]
+      const bucket = getDateBucket(commit.date, bucketingNow)
+      if (bucket.key !== prevBucket) {
+        items.push(bucketHeaderItem(bucket.label))
+        prevBucket = bucket.key
+        if (items.length >= visibleCount) break
+      }
+      items.push(
+        makeCompactCommitItem(commit, windowStart + offset === state.selectedIndex)
+      )
     }
-    items.push(
-      makeCompactCommitItem(commit, start + offset === state.selectedIndex)
-    )
+    return items
+  }
+
+  // The headers were budgeted AFTER the window start was computed
+  // headerless, so with the cursor in the bottom half of the window
+  // (always the case at end-of-list) each emitted header used to push
+  // the tail — including the SELECTED commit — off the render. Slide
+  // the window forward until the selection is inside the emitted items;
+  // bounded by the header count (≤ one per bucket transition).
+  let items = build(start)
+  const selectionRendered = (rendered: LogInkHistoryItem[]): boolean =>
+    rendered.some((item) => item.type === 'commit' && item.selected)
+  while (
+    !selectionRendered(items) &&
+    start < state.selectedIndex &&
+    start < state.filteredCommits.length - 1
+  ) {
+    start += 1
+    items = build(start)
   }
   return items
 }

@@ -53,12 +53,22 @@ import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import { hunkIndexAtOffset } from '../inkViewModel'
 import type { LogInkAction } from '../inkViewModel'
-import type { WorktreeFile } from '../../../git/statusData'
+import {
+  applyStatusFilterMask,
+  flattenWorktreeGroups,
+  groupWorktreeFiles,
+  optimisticToggleWorktreeOverview,
+  type WorktreeFile,
+  type WorktreeFileVisibilityMask,
+  type WorktreeOverview,
+} from '../../../git/statusData'
 import { revertFile, stageFile, unstageFile } from '../../../git/statusActions'
 import {
   WorktreeHunkOverview,
   revertHunk,
+  revertHunkLines,
   stageHunk,
+  stageHunkLines,
   unstageHunk,
 } from '../../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../../git/worktreeDiffData'
@@ -76,8 +86,25 @@ export type UseWorktreeStageActionsDeps = {
   worktreeHunks: WorktreeHunkOverview | undefined
   /** `state.worktreeDiffOffset` — the diff viewport scroll offset. */
   worktreeDiffOffset: number
+  /** `state.diffLineSelectAnchor` — the visual line-select anchor (#1358). */
+  diffLineSelectAnchor: number | undefined
   /** Re-fetch the worktree context after a stage/revert mutation. */
   refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<unknown>
+  /**
+   * Apply an in-place update to the loaded worktree overview (#1353) —
+   * the optimistic stage/unstage flip so `space` repaints on the
+   * keystroke instead of after git + a full refresh. The refresh that
+   * follows reconciles with git's truth.
+   */
+  mutateWorktreeOverview: (
+    updater: (overview: WorktreeOverview | undefined) => WorktreeOverview | undefined
+  ) => void
+  /** The grouped/visible status list the cursor indexes into (#1353). */
+  visibleWorktreeFilesGrouped: WorktreeFile[]
+  /** `state.selectedWorktreeFileIndex` — cursor into the grouped list. */
+  selectedWorktreeFileIndex: number
+  /** `state.statusFilterMask` — the 1/2/3 visibility mask. */
+  statusFilterMask: WorktreeFileVisibilityMask
   /** Clears the cached worktree file diff so it re-hydrates. */
   setWorktreeDiff: ReactTypes.Dispatch<
     ReactTypes.SetStateAction<WorktreeFileDiff | undefined>
@@ -93,6 +120,8 @@ export type UseWorktreeStageActionsResult = {
   toggleSelectedHunkStage: () => Promise<void>
   revertSelectedFile: () => Promise<void>
   revertSelectedHunk: () => Promise<void>
+  stageSelectedLines: () => Promise<void>
+  revertSelectedLines: () => Promise<void>
 }
 
 export function useWorktreeStageActions(
@@ -106,7 +135,12 @@ export function useWorktreeStageActions(
     worktreeDiff,
     worktreeHunks,
     worktreeDiffOffset,
+    diffLineSelectAnchor,
     refreshWorktreeContext,
+    mutateWorktreeOverview,
+    visibleWorktreeFilesGrouped,
+    selectedWorktreeFileIndex,
+    statusFilterMask,
     setWorktreeDiff,
     setWorktreeHunks,
   } = deps
@@ -117,16 +151,63 @@ export function useWorktreeStageActions(
       return
     }
 
+    const wasStaged = selectedWorktreeFile.state === 'staged'
+    // #1353 part 2 — optimistic flip: move the file to its new group in
+    // local context on the keystroke, so `space` never feels dead on a
+    // big repo. The awaited refresh below reconciles with git's truth
+    // (including when the git call fails).
+    mutateWorktreeOverview((overview) =>
+      overview ? optimisticToggleWorktreeOverview(overview, selectedWorktreeFile.path) : overview
+    )
+    // #1353 part 1 — capture, from the PRE-toggle ordering, the
+    // actionable files that follow the cursor (wrapping) so a
+    // successful stage can advance onto the next one: staging N files
+    // becomes `space space space` instead of `space j space j`.
+    const followers = wasStaged
+      ? []
+      : [
+        ...visibleWorktreeFilesGrouped.slice(selectedWorktreeFileIndex + 1),
+        ...visibleWorktreeFilesGrouped.slice(0, selectedWorktreeFileIndex),
+      ]
+        .filter((file) => file.state !== 'staged' && file.path !== selectedWorktreeFile.path)
+        .map((file) => file.path)
+
     dispatch({ type: 'setStatus', value: 'updating file stage state' })
-    const result = selectedWorktreeFile.state === 'staged'
+    const result = wasStaged
       ? await unstageFile(git, selectedWorktreeFile)
       : await stageFile(git, selectedWorktreeFile)
 
-    dispatch({ type: 'setStatus', value: result.message })
-    await refreshWorktreeContext()
+    dispatch({ type: 'setStatus', value: result.message, kind: result.ok ? undefined : 'error' })
+    const fresh = (await refreshWorktreeContext()) as WorktreeOverview | undefined
     setWorktreeDiff(undefined)
     setWorktreeHunks(undefined)
-  }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile])
+
+    if (result.ok && !wasStaged && followers.length && fresh?.files) {
+      // Re-anchor by PATH against the fresh grouped ordering — staging
+      // reflows the groups, so the old index is meaningless.
+      const grouped = flattenWorktreeGroups(
+        groupWorktreeFiles(applyStatusFilterMask(fresh.files, statusFilterMask))
+      )
+      for (const path of followers) {
+        const index = grouped.findIndex(
+          (file) => file.path === path && file.state !== 'staged'
+        )
+        if (index >= 0) {
+          dispatch({ type: 'jumpToStatusGroup', targetIndex: index })
+          break
+        }
+      }
+    }
+  }, [
+    dispatch,
+    git,
+    mutateWorktreeOverview,
+    refreshWorktreeContext,
+    selectedWorktreeFile,
+    selectedWorktreeFileIndex,
+    statusFilterMask,
+    visibleWorktreeFilesGrouped,
+  ])
 
   const toggleSelectedHunkStage = React.useCallback(async () => {
     // The staging target is the hunk under the viewport (#1185) —
@@ -206,10 +287,90 @@ export function useWorktreeStageActions(
     }
   }, [dispatch, git, refreshWorktreeContext, worktreeDiffOffset, worktreeDiff, worktreeHunks])
 
+  /**
+   * Resolve the active line selection into (hunk, body-line range). The
+   * "cursor" on the staging diff is the viewport top, so the selection
+   * is [min(anchor, offset), max(anchor, offset)] in absolute diff-line
+   * space, clamped to the body of the hunk containing its start. Only
+   * unstaged hunks participate — the same restriction the whole-hunk
+   * Space stage applies implicitly by acting on the visible unstaged
+   * diff.
+   */
+  const resolveLineSelection = React.useCallback(() => {
+    if (diffLineSelectAnchor === undefined) return undefined
+    const offsets = worktreeDiff?.hunkOffsets ?? []
+    if (offsets.length === 0) return undefined
+    const a = Math.min(diffLineSelectAnchor, worktreeDiffOffset)
+    const b = Math.max(diffLineSelectAnchor, worktreeDiffOffset)
+    const hunkIndex = hunkIndexAtOffset(a, offsets)
+    const hunk = worktreeHunks?.hunks[hunkIndex]
+    if (!hunk) return undefined
+    const bodyStartAbs = offsets[hunkIndex] + 1
+    const bodyEndAbs = bodyStartAbs + hunk.hunk.lines.length - 1
+    const start = Math.max(a, bodyStartAbs) - bodyStartAbs
+    const end = Math.min(b, bodyEndAbs) - bodyStartAbs
+    if (end < start) return undefined
+    return { hunk, range: { start, end }, lineCount: end - start + 1 }
+  }, [diffLineSelectAnchor, worktreeDiffOffset, worktreeDiff, worktreeHunks])
+
+  const stageSelectedLines = React.useCallback(async () => {
+    const selection = resolveLineSelection()
+    if (!selection) {
+      dispatch({ type: 'setStatus', value: 'Selection has no hunk lines', kind: 'warning' })
+      return
+    }
+    try {
+      await stageHunkLines(git, selection.hunk, selection.range)
+      dispatch({ type: 'setDiffLineSelectAnchor', value: undefined })
+      dispatch({
+        type: 'setStatus',
+        value: `Staged ${selection.lineCount} selected line${selection.lineCount === 1 ? '' : 's'} in ${selection.hunk.filePath}`,
+        kind: 'success',
+      })
+      await refreshWorktreeContext({ silent: true })
+      setWorktreeDiff(undefined)
+      setWorktreeHunks(undefined)
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: (error as Error).message || 'failed to stage selected lines',
+        kind: 'error',
+      })
+    }
+  }, [dispatch, git, refreshWorktreeContext, resolveLineSelection, setWorktreeDiff, setWorktreeHunks])
+
+  const revertSelectedLines = React.useCallback(async () => {
+    const selection = resolveLineSelection()
+    if (!selection) {
+      dispatch({ type: 'setStatus', value: 'Selection has no hunk lines', kind: 'warning' })
+      return
+    }
+    try {
+      await revertHunkLines(git, selection.hunk, selection.range)
+      dispatch({ type: 'setDiffLineSelectAnchor', value: undefined })
+      dispatch({
+        type: 'setStatus',
+        value: `Discarded ${selection.lineCount} selected line${selection.lineCount === 1 ? '' : 's'} in ${selection.hunk.filePath}`,
+        kind: 'success',
+      })
+      await refreshWorktreeContext()
+      setWorktreeDiff(undefined)
+      setWorktreeHunks(undefined)
+    } catch (error) {
+      dispatch({
+        type: 'setStatus',
+        value: (error as Error).message || 'failed to discard selected lines',
+        kind: 'error',
+      })
+    }
+  }, [dispatch, git, refreshWorktreeContext, resolveLineSelection, setWorktreeDiff, setWorktreeHunks])
+
   return {
     toggleSelectedFileStage,
     toggleSelectedHunkStage,
     revertSelectedFile,
     revertSelectedHunk,
+    stageSelectedLines,
+    revertSelectedLines,
   }
 }

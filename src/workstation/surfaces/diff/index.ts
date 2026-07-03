@@ -31,6 +31,11 @@ import type {
 } from '../../../commands/log/data'
 import { hunkIndexAtOffset } from '../../../workstation/runtime/inkViewModel'
 import {
+  applyStatusFilterMask,
+  flattenWorktreeGroups,
+  groupWorktreeFiles,
+} from '../../../git/statusData'
+import {
   findStashFileForOffset,
   parseStashDiffFiles,
 } from '../../../git/stashData'
@@ -95,7 +100,16 @@ export function renderDiffSurface(
   const { Box, Text } = components
   const focused = state.focus === 'commits'
   const worktree = context.worktree
-  const worktreeFile = worktree?.files[state.selectedWorktreeFileIndex]
+  // Resolve the subject file through the SAME masked+grouped list the
+  // selection index refers to (#1345) — `selectedWorktreeFileIndex` is a
+  // cursor into the status surface's grouped/visible ordering, so
+  // indexing the raw `worktree.files` here named a different file in
+  // the "Loading diff for X…" line (and mis-gated the body) whenever
+  // grouping or the 1/2/3 visibility mask reordered the list. Mirrors
+  // `buildStatusSurfaceData` (`selectedWorktreeFile`).
+  const worktreeFile = flattenWorktreeGroups(
+    groupWorktreeFiles(applyStatusFilterMask(worktree?.files || [], state.statusFilterMask))
+  )[state.selectedWorktreeFileIndex]
   const visibleRows = Math.max(4, bodyRows - 4)
 
   // Stash diff branch: when the user opened the diff via Enter on a stash
@@ -430,6 +444,12 @@ export function renderDiffSurface(
       hunks: worktreeHunks?.hunks || [],
       selectedIndex: currentHunkIndex,
       keyPrefix: 'diff-surface-line',
+      lineSelect: state.diffLineSelectAnchor !== undefined
+        ? {
+          start: Math.min(state.diffLineSelectAnchor, state.worktreeDiffOffset),
+          end: Math.max(state.diffLineSelectAnchor, state.worktreeDiffOffset),
+        }
+        : undefined,
     })
     : []))
 }

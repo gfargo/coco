@@ -74,6 +74,12 @@ import {
   pushCurrentBranch,
   renameBranch,
   setUpstream,
+  forcePushBranch,
+  forcePushCurrentBranch,
+  isDivergedPullError,
+  isNonFastForwardPushError,
+  pullCurrentBranchMerge,
+  pullCurrentBranchRebase,
 } from '../../../git/branchActions'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
@@ -88,12 +94,16 @@ import {
   resetToCommit,
   revertCommit,
   startInteractiveRebase,
+  createFixupCommit,
+  autosquashRebase,
+  amendHeadCommit,
+  rewordHeadCommit,
 } from '../../../git/historyActions'
 import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStash, popStash, renameStash, restoreStash, stashBranch } from '../../../git/stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../../git/worktreeActions'
 import { rebaseOnto } from '../../../git/rebaseActions'
-import { abortOperation, continueOperation, resolveConflictOurs, resolveConflictTheirs, stageConflictResolved } from '../../../git/operationActions'
+import { abortOperation, continueOperation, resolveConflictKeepCurrentBranch, resolveConflictKeepIncoming, stageConflictResolved } from '../../../git/operationActions'
 import { getForgeActions } from '../../../git/forgeActions'
 import { clearGitHubListCache } from '../../../git/githubListCache'
 import { isPullRequestMergeStrategy } from '../../../git/pullRequestActions'
@@ -106,6 +116,7 @@ import {
 import { applyStatusFilterMask } from '../../../git/statusData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../../git/bisectActions'
 import { checkoutReflogEntry } from '../../../git/reflogActions'
+import { executeRebasePlan } from '../../../git/rebasePlanActions'
 import { initSubmodule, syncSubmodule, updateSubmodule } from '../../../git/submoduleActions'
 import { addRemote, pruneRemote, removeRemote, setRemoteUrl } from '../../../git/remoteActions'
 import { matchesPromotedFilter } from '../promotedFilter'
@@ -132,6 +143,10 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'fetch-selected-branch': { kind: 'fetch', label: 'Fetching branch from remote…' },
   'pull-selected-branch': { kind: 'pull', label: 'Pulling branch from remote…' },
   'push-selected-branch': { kind: 'push', label: 'Pushing branch to remote…' },
+  'force-push-current-branch': { kind: 'push', label: 'Force-pushing (with lease)…' },
+  'force-push-selected-branch': { kind: 'push', label: 'Force-pushing branch (with lease)…' },
+  'pull-rebase-current': { kind: 'pull', label: 'Pulling with rebase…' },
+  'pull-merge-current': { kind: 'pull', label: 'Pulling with merge…' },
 }
 
 /**
@@ -143,7 +158,7 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
  * Returns `undefined` for non-delete workflows (and when nothing is
  * selected), which the runner treats as "no pending marker".
  */
-function resolvePendingItemAction(
+export function resolvePendingItemAction(
   id: string,
   state: LogInkState,
   context: LogInkContext
@@ -252,24 +267,17 @@ export function useWorkflowAction(
   React: typeof ReactTypes,
   deps: UseWorkflowActionDeps,
 ): UseWorkflowActionResult {
-  const {
-    git,
-    context,
-    state,
-    dispatch,
-    refreshContext,
-    refreshHistoryRows,
-    refreshWorktreeContext,
-    setContext,
-    setContextStatus,
-    forge,
-    forgeProvider,
-    filteredRemoteList,
-    filteredReflogList,
-    filteredSubmoduleList,
-    filteredIssueList,
-    filteredPullRequestTriageList,
-  } = deps
+  // Render-fresh snapshot of every input. The callback below is memoized
+  // once and reads all render-scoped values through this ref at CALL time,
+  // so a keystroke can never execute against the state of an earlier
+  // render. (The previous design closed over `state`/the filtered lists
+  // and enumerated their fields in the dep array; the array undercounted —
+  // it omitted `selectedIndex`, `selectedReflogIndex`, the triage indices
+  // and `activeView` — so cursor movement didn't regenerate the callback
+  // and cherry-pick / revert / reset / reflog-checkout / triage merge
+  // targeted the previously-cursored item.)
+  const depsRef = React.useRef(deps)
+  depsRef.current = deps
 
   // Last dropped stash {hash, message}, captured before `drop-stash` runs
   // so `undo-drop-stash` can re-store it. The dropped commit survives in
@@ -278,19 +286,40 @@ export function useWorkflowAction(
   // flows) — declared inside the hook at its original relative slot.
   const lastDroppedStashRef = React.useRef<{ hash: string; message: string } | null>(null)
 
-  // `worktreeDirty` is a pure derivation of the (already-threaded) whole
-  // `context.worktree`. In `app.ts` it was declared AFTER `runWorkflowAction`
-  // — fine there because the callback only reads it inside an async handler
-  // closure that runs long after render — but threading it into this hook
-  // would require a value declared below the hook call. Deriving it here
-  // (identical expression) keeps the callback body's `if (worktreeDirty)`
-  // byte-identical without reordering `app.ts`.
-  const worktreeDirty = Boolean(
-    context.worktree &&
-    (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
-  )
+  // Last fixup target {hash, shortHash, message}, captured when
+  // `fixup-into-commit` succeeds so the follow-up `autosquash-rebase`
+  // (offered via choice prompt, which carries no payload) knows which
+  // commit's parent to rebase from.
+  const lastFixupTargetRef = React.useRef<{ hash: string; shortHash: string; message: string } | null>(null)
 
   const runWorkflowAction = React.useCallback(async (id: string, payload?: string) => {
+    // Resolve the live snapshot first — every name below shadows what the
+    // old closure captured, keeping the ~1,200-line body byte-identical.
+    const {
+      git,
+      context,
+      state,
+      dispatch,
+      refreshContext,
+      refreshHistoryRows,
+      refreshWorktreeContext,
+      setContext,
+      setContextStatus,
+      forge,
+      forgeProvider,
+      filteredRemoteList,
+      filteredReflogList,
+      filteredSubmoduleList,
+      filteredIssueList,
+      filteredPullRequestTriageList,
+    } = depsRef.current
+
+    // `worktreeDirty` is a pure derivation of the (already-threaded) whole
+    // `context.worktree` — derived from the same live snapshot.
+    const worktreeDirty = Boolean(
+      context.worktree &&
+      (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
+    )
     // Hunk-apply payload format: `<target>\n<patchText>` — the input
     // handler synthesizes both pieces (target from the keystroke,
     // patch text from extractDiffHunk against the live diff lines)
@@ -629,6 +658,85 @@ export function useWorkflowAction(
           message: commit.message,
         })
       },
+      'fixup-into-commit': async () => {
+        const commit = getSelectedInkCommit(state)
+        if (!commit) return { ok: false, message: 'No commit selected' }
+        if ((context.worktree?.stagedCount ?? 0) === 0) {
+          return { ok: false, message: 'Nothing staged to fix up — stage changes first (gs, then space/A).' }
+        }
+        const target = { hash: commit.hash, shortHash: commit.shortHash, message: commit.message }
+        const result = await createFixupCommit(git, target)
+        if (result.ok) {
+          lastFixupTargetRef.current = target
+        }
+        return result
+      },
+      // #1350 — amend/reword were fully implemented (and tested) in
+      // historyActions but reachable from nowhere. Both are HEAD-only,
+      // so they resolve HEAD directly instead of the history cursor —
+      // the entry points are compose (`a`) and the palette.
+      'amend-head': async () => {
+        if ((context.worktree?.stagedCount ?? 0) === 0) {
+          return { ok: false, message: 'Nothing staged to amend — stage changes first (gs, then space/A).' }
+        }
+        const head = (await git.revparse(['HEAD'])).trim()
+        const result = await amendHeadCommit(git, head)
+        return result.ok
+          ? {
+            ...result,
+            // Momentum hint: an amend rewrites the head commit, so a
+            // previously-pushed branch now needs the with-lease force
+            // (the P-push escalation offers it automatically).
+            message: `${result.message} (${head.slice(0, 7)}) — P push may need force-with-lease`,
+          }
+          : result
+      },
+      'reword-head': async () => {
+        const head = (await git.revparse(['HEAD'])).trim()
+        if (payload?.trim()) {
+          return rewordHeadCommit(git, head, payload)
+        }
+        // No message yet (palette entry) — open the prompt seeded with
+        // the current subject; submission re-runs this workflow with
+        // the typed message as payload.
+        const subject = (await git.raw(['log', '-1', '--pretty=%s'])).trim()
+        dispatch({
+          type: 'openInputPrompt',
+          kind: 'reword-head',
+          label: `Reword HEAD (${head.slice(0, 7)}) — new commit message`,
+          initial: subject,
+        })
+        return { ok: true, message: 'Reword HEAD — edit the message, enter to apply, esc cancels.' }
+      },
+      'execute-rebase-plan': async () => {
+        const plan = state.rebasePlan
+        if (!plan || plan.rows.length === 0) {
+          return { ok: false, message: 'No rebase plan open — press i on a history commit first.' }
+        }
+        const result = await executeRebasePlan(git, plan.rows)
+        if (result.ok) {
+          // The plan is consumed; land back on the rewritten history.
+          dispatch({ type: 'clearRebasePlan' })
+          dispatch({ type: 'navigateHome' })
+        }
+        return result
+      },
+      'autosquash-rebase': async () => {
+        // Prefer the recorded fixup target (the choice prompt carries no
+        // payload); fall back to the cursored commit for the palette path.
+        const recorded = lastFixupTargetRef.current
+        const commit = recorded ?? (() => {
+          const selected = getSelectedInkCommit(state)
+          return selected
+            ? { hash: selected.hash, shortHash: selected.shortHash, message: selected.message }
+            : undefined
+        })()
+        const result = await autosquashRebase(git, commit ?? undefined)
+        if (result.ok) {
+          lastFixupTargetRef.current = null
+        }
+        return result
+      },
       'revert-commit': async () => {
         const commit = getSelectedInkCommit(state)
         if (!commit) return { ok: false, message: 'No commit selected' }
@@ -639,10 +747,10 @@ export function useWorkflowAction(
         })
       },
       'reset-to-commit': async () => {
-        // Mode arrives via the action's `payload` field — the input
-        // handler runs the reset-mode prompt (kind: 'reset-mode') and
-        // routes the typed value here. Default to `mixed` (git's own
-        // default) when the user submitted an empty value.
+        // Mode arrives via the action's `payload` field — the 1-key
+        // reset-mode choice (#1351) routes s/m/h here as
+        // soft/mixed/hard. Default to `mixed` (git's own default) when
+        // no payload arrives (palette path).
         const raw = payload?.trim().toLowerCase() || 'mixed'
         if (!isResetMode(raw)) {
           return { ok: false, message: `Unknown reset mode: ${raw}. Use soft, mixed, or hard.` }
@@ -887,15 +995,19 @@ export function useWorkflowAction(
         }
         return abortOperation(git, operation)
       },
+      // Intent-based: `U` promises "keep your branch's version" and `u`
+      // "keep the incoming changes". The resolvers pick --ours/--theirs
+      // per operation type because rebase swaps git's sides (HEAD is the
+      // upstream during a rebase replay).
       'resolve-conflict-ours': async () => {
         const path = payload?.trim()
         if (!path) return { ok: false, message: 'No conflict file selected' }
-        return resolveConflictOurs(git, path)
+        return resolveConflictKeepCurrentBranch(git, context.operation?.operation ?? 'none', path)
       },
       'resolve-conflict-theirs': async () => {
         const path = payload?.trim()
         if (!path) return { ok: false, message: 'No conflict file selected' }
-        return resolveConflictTheirs(git, path)
+        return resolveConflictKeepIncoming(git, context.operation?.operation ?? 'none', path)
       },
       'resolve-conflict-stage': async () => {
         const path = payload?.trim()
@@ -989,6 +1101,18 @@ export function useWorkflowAction(
         if (!branch) return { ok: false, message: 'No branch selected' }
         return pushBranch(git, branch)
       },
+      'force-push-current-branch': async () => forcePushCurrentBranch(git),
+      'force-push-selected-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return forcePushBranch(git, branch)
+      },
+      'pull-rebase-current': async () => pullCurrentBranchRebase(git),
+      'pull-merge-current': async () => pullCurrentBranchMerge(git),
       'add-to-gitignore': async () => addToGitignore(git, payload || ''),
       'rename-branch': async () => {
         const newName = payload?.trim()
@@ -1306,7 +1430,18 @@ export function useWorkflowAction(
     }
     try {
     const result = await handler()
-    dispatch({ type: 'setStatus', value: result?.message || 'Workflow action complete' })
+    // #1349 — color the shared result dispatch by OUTCOME. Before this,
+    // a failed cherry-pick and a successful push both rendered as the
+    // blue ℹ info style; the status system already distinguishes
+    // success (green ✓, auto-dismisses) from error (red ✗, sticky).
+    // Handlers that return no result (pure-navigation ones) keep the
+    // neutral info treatment. Recovery escalations below may follow up
+    // with their own prompt/warning on top of the error status.
+    dispatch({
+      type: 'setStatus',
+      value: result?.message || 'Workflow action complete',
+      kind: result ? (result.ok ? 'success' : 'error') : undefined,
+    })
     // A safe `delete-branch` (`git branch -d`) refuses branches that
     // aren't fully merged. Rather than dead-end on git's raw error, raise
     // a second y-confirm offering the force-delete (`git branch -D`). The
@@ -1344,7 +1479,47 @@ export function useWorkflowAction(
         })
       }
     }
-    // A branch checked out in a worktree can't be deleted
+    // #1356 — a push rejected non-fast-forward (post-amend/rebase) gets
+    // a with-lease force offer instead of a dead-end. The y-confirm
+    // carries its own warning copy; --force-with-lease still refuses if
+    // the remote moved since the last fetch.
+    if (
+      (id === 'push-current-branch' || id === 'push-selected-branch') &&
+      !result?.ok &&
+      isNonFastForwardPushError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+    ) {
+      dispatch({
+        type: 'setPendingConfirmation',
+        value: id === 'push-current-branch' ? 'force-push-current-branch' : 'force-push-selected-branch',
+      })
+    }
+    // #1356 — a diverged `pull --ff-only` offers the rebase/merge
+    // recovery choice instead of git's raw refusal. Only fires for the
+    // CURRENT branch (the predicate excludes the fetch-refspec rejection
+    // non-current pulls produce — rebase/merge don't apply there).
+    if (
+      (id === 'pull-current-branch' || id === 'pull-selected-branch') &&
+      !result?.ok &&
+      isDivergedPullError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+    ) {
+      dispatch({
+        type: 'setPendingChoice',
+        value: {
+          id: 'diverged-pull-recovery',
+          title: 'Local and remote have diverged',
+          warning: 'A fast-forward pull is not possible. Choose how to reconcile.',
+          options: [
+            { key: 'r', label: 'Pull with rebase (replay local commits on top)', workflowId: 'pull-rebase-current' },
+            { key: 'm', label: 'Pull with merge (create a merge commit)', workflowId: 'pull-merge-current' },
+          ],
+        },
+      })
+    }
+    // A branch checked out in a worktree can't be deleted — and unlike
+    // the unmerged case, `git branch -D` won't force it either, so we
+    // don't offer a confirmation. Replace git's raw rejection with a
+    // clear "free up the worktree first" message that names where the
+    // branch is still in use.
     if (
       (id === 'delete-branch' || id === 'force-delete-branch') &&
       !result?.ok &&
@@ -1365,6 +1540,23 @@ export function useWorkflowAction(
     // Rather than dead-end on that, capture the conflict and raise a
     // multi-option prompt: switch into that worktree, remove it and
     // check out here, or remove it and delete the branch (#1175, #1181).
+    // #1357 — after a successful fixup, offer to fold it in right away.
+    // Declining leaves the fixup! commit for a later autosquash (hinted
+    // in the success message).
+    if (id === 'fixup-into-commit' && result?.ok && lastFixupTargetRef.current) {
+      const target = lastFixupTargetRef.current
+      dispatch({
+        type: 'setPendingChoice',
+        value: {
+          id: 'fixup-autosquash-offer',
+          title: `Squash fixups into ${target.shortHash} now?`,
+          warning: 'Runs git rebase --autosquash (rewrites history). Esc keeps the fixup commit for later.',
+          options: [
+            { key: 's', label: 'Squash now (rebase --autosquash)', workflowId: 'autosquash-rebase', destructive: true },
+          ],
+        },
+      })
+    }
     if (id === 'checkout-branch' && !result?.ok && isBranchCheckedOutElsewhereError(result?.message)) {
       const worktreePath = parseCheckedOutWorktreePath(result?.message)
       const branchName = pendingItemAction?.id
@@ -1405,6 +1597,16 @@ export function useWorkflowAction(
     // metadata-only mutations (delete-tag, set-upstream, etc.).
     const historyMutatingIds = new Set([
       'checkout-branch',
+      'fixup-into-commit',
+      'autosquash-rebase',
+      // Amend/reword rewrite the HEAD commit in place (#1350).
+      'amend-head',
+      'reword-head',
+      'execute-rebase-plan',
+      'force-push-current-branch',
+      'force-push-selected-branch',
+      'pull-rebase-current',
+      'pull-merge-current',
       // Resolving a checkout conflict changes HEAD (checkout) and/or the
       // ref set (branch delete), so the graph needs a refresh.
       'conflict-remove-worktree-checkout',
@@ -1528,12 +1730,12 @@ export function useWorkflowAction(
         dispatch({ type: 'setPendingItemAction', value: undefined })
       }
     }
-  }, [context, dispatch, git, refreshContext, refreshHistoryRows, refreshWorktreeContext,
-    state.branchSort, state.filter, state.selectedBranchIndex,
-    state.selectedStashIndex, state.selectedSubmoduleIndex, state.selectedRemoteIndex,
-    state.selectedTagIndex,
-    state.selectedWorktreeListIndex, state.stashDiffRef,
-    state.statusFilterMask, state.tagSort, state.worktreeCheckoutConflict])
+    // Identity-stable by design: the body reads exclusively through
+    // `depsRef` / `lastDroppedStashRef`, so there is nothing render-scoped
+    // to invalidate on. (Do NOT re-add state fields here — the enumerated
+    // array drifted out of sync with the body once already and shipped
+    // wrong-target destructive actions.)
+  }, [])
 
   return {
     runWorkflowAction,

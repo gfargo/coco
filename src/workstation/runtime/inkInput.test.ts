@@ -1309,18 +1309,33 @@ describe('log Ink input interactions', () => {
     }
   })
 
-  it('lower-case g on the bisect view marks good (no chord trigger) (#784)', () => {
+  it('y on the bisect view marks good (#1352 — g is the chord prefix again)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
+
+    const events = getLogInkInputEvents(state, 'y', {}, {})
+    expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
+  })
+
+  it('g on the bisect view arms the chord so gh/gs navigation works mid-bisect (#1352)', () => {
+    // The old bare-`g` mark-good binding shadowed the chord prefix: a
+    // user reflexively typing `gh` to navigate away silently ran
+    // `git bisect good`. `g` must arm the chord, and the continuation
+    // must navigate — never mutate bisect state.
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'bisect' })
 
     const events = getLogInkInputEvents(state, 'g', {}, {})
-
-    expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
-    // pendingKey must NOT be set — bisect's g consumed the keystroke.
+    expect(events).not.toContainEqual({ type: 'runWorkflowAction', id: 'bisect-good' })
     const pendingChange = events.find((event) =>
       event.type === 'action' && event.action.type === 'setPendingKey'
     )
-    expect(pendingChange).toBeUndefined()
+    expect(pendingChange).toBeDefined()
+
+    state = applyInput(state, 'g', {}, {})
+    expect(state.pendingKey).toBe('g')
+    const after = applyInput(state, 'h', {}, {})
+    expect(after.activeView).toBe('history')
   })
 
   it('b on the bisect view marks bad (does not require g chord) (#784)', () => {
@@ -1973,8 +1988,14 @@ describe('log Ink input interactions', () => {
     expect(state.commitCompose.editing).toBe(true)
   })
 
-  it('routes c from diff to compose then commits', () => {
-    const state = createLogInkState(rows, { activeView: 'diff' })
+  it('routes c from diff to compose then commits (drafted summary)', () => {
+    // #1362 — the direct commit path now requires a drafted summary;
+    // an empty draft drops into edit mode instead (covered below).
+    let state = createLogInkState(rows, { activeView: 'diff' })
+    state = applyLogInkAction(state, {
+      type: 'commitCompose',
+      action: { type: 'append', value: 'feat: drafted' },
+    })
 
     expect(getLogInkInputEvents(state, 'c', {}, { worktreeFileCount: 1 })).toEqual([
       { type: 'action', action: { type: 'pushView', value: 'compose' } },
@@ -1994,11 +2015,223 @@ describe('log Ink input interactions', () => {
     ])
   })
 
-  it('c from compose commits without re-pushing the view', () => {
+  it('c from compose commits without re-pushing the view (drafted summary)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+    state = applyLogInkAction(state, {
+      type: 'commitCompose',
+      action: { type: 'append', value: 'feat: drafted' },
+    })
 
     expect(getLogInkInputEvents(state, 'c')).toEqual([{ type: 'createManualCommit' }])
+  })
+
+  describe('worktree-diff keys are inert on commit/stash/compare diffs (dirty-worktree hijack)', () => {
+    // Regression: with a dirty worktree the hydrated worktree hunk/diff
+    // data used to win the dispatch on ANY diff view — Space silently
+    // staged (and z offered to discard) a hunk of the status-cursored
+    // file while the user was reading a read-only commit diff, and j/k
+    // scrolled the invisible worktree offset so the visible diff looked
+    // frozen.
+    const dirtyWorktreeContext = {
+      worktreeHunkOffsets: [0, 12],
+      worktreeDiffLineCount: 40,
+      worktreeFileCount: 2,
+    }
+
+    function diffState(source: 'commit' | 'worktree' | undefined): LogInkState {
+      const base = createLogInkState(rows, { activeView: 'diff' })
+      return { ...base, diffSource: source } as LogInkState
+    }
+
+    it('Space stages the cursored hunk only on the staging diff', () => {
+      expect(
+        getLogInkInputEvents(diffState('worktree'), ' ', {}, dirtyWorktreeContext)
+      ).toEqual([{ type: 'toggleSelectedHunkStage' }])
+      // `g d` pushes the diff view without a source tag — still staging.
+      expect(
+        getLogInkInputEvents(diffState(undefined), ' ', {}, dirtyWorktreeContext)
+      ).toEqual([{ type: 'toggleSelectedHunkStage' }])
+
+      const onCommitDiff = getLogInkInputEvents(diffState('commit'), ' ', {}, dirtyWorktreeContext)
+      expect(onCommitDiff).not.toContainEqual({ type: 'toggleSelectedHunkStage' })
+      expect(onCommitDiff).not.toContainEqual({ type: 'toggleSelectedFileStage' })
+    })
+
+    it('z opens the revert-hunk confirmation only on the staging diff', () => {
+      const staging = applyInput(diffState('worktree'), 'z', {}, dirtyWorktreeContext)
+      expect(staging.pendingMutationConfirmation).toBe('revert-hunk')
+
+      const commit = applyInput(diffState('commit'), 'z', {}, dirtyWorktreeContext)
+      expect(commit.pendingMutationConfirmation).toBeUndefined()
+    })
+
+    it('j/k on a commit diff scroll the visible preview, not the hidden worktree diff', () => {
+      const events = getLogInkInputEvents(diffState('commit'), 'j', {}, {
+        ...dirtyWorktreeContext,
+        previewLineCount: 80,
+      })
+      const actions = events
+        .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+        .map((event) => event.action.type)
+      expect(actions).toContain('pageDetailPreview')
+      expect(actions).not.toContain('pageWorktreeDiff')
+    })
+  })
+
+  describe('line-level staging keys (#1358)', () => {
+    const dirtyDiffContext = {
+      worktreeHunkOffsets: [4],
+      worktreeDiffLineCount: 12,
+    }
+
+    function worktreeDiffState(overrides: Partial<LogInkState> = {}): LogInkState {
+      const base = createLogInkState(rows, { activeView: 'diff' })
+      return { ...base, diffSource: 'worktree' as const, worktreeDiffOffset: 6, ...overrides } as LogInkState
+    }
+
+    it('v anchors a selection at the current line; v again clears it', () => {
+      let state = applyInput(worktreeDiffState(), 'v', {}, dirtyDiffContext)
+      expect(state.diffLineSelectAnchor).toBe(6)
+
+      state = applyInput(state, 'v', {}, dirtyDiffContext)
+      expect(state.diffLineSelectAnchor).toBeUndefined()
+    })
+
+    it('Esc clears the selection without popping the view', () => {
+      let state = applyInput(worktreeDiffState(), 'v', {}, dirtyDiffContext)
+      state = applyInput(state, '', { escape: true }, dirtyDiffContext)
+      expect(state.diffLineSelectAnchor).toBeUndefined()
+      expect(state.activeView).toBe('diff')
+    })
+
+    it('Space with a selection stages the selected lines, not the hunk', () => {
+      const state = worktreeDiffState({ diffLineSelectAnchor: 5 })
+      const events = getLogInkInputEvents(state, ' ', {}, dirtyDiffContext)
+      expect(events).toEqual([{ type: 'stageSelectedLines' }])
+    })
+
+    it('z with a selection asks to discard the selected lines', () => {
+      let state = worktreeDiffState({ diffLineSelectAnchor: 5 })
+      state = applyInput(state, 'z', {}, dirtyDiffContext)
+      expect(state.pendingMutationConfirmation).toBe('discard-lines')
+
+      const events = getLogInkInputEvents(state, 'y', {}, dirtyDiffContext)
+      expect(events).toContainEqual({ type: 'revertSelectedLines' })
+    })
+
+    it('without a selection Space/z keep the whole-hunk semantics', () => {
+      expect(getLogInkInputEvents(worktreeDiffState(), ' ', {}, dirtyDiffContext))
+        .toEqual([{ type: 'toggleSelectedHunkStage' }])
+      const state = applyInput(worktreeDiffState(), 'z', {}, dirtyDiffContext)
+      expect(state.pendingMutationConfirmation).toBe('revert-hunk')
+    })
+  })
+
+  describe('rebase plan surface keys (#1359)', () => {
+    function rebaseState() {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'openRebasePlan',
+        rows: [
+          { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', subject: 'feat: one', author: 'Coco', date: '2026-05-01', action: 'pick' as const },
+          { sha: 'b'.repeat(40), shortSha: 'bbbbbbb', subject: 'fix: two', author: 'Coco', date: '2026-05-02', action: 'pick' as const },
+        ],
+      })
+      return state
+    }
+
+    it('s retags the cursored row to squash (not branch/tag sort)', () => {
+      const state = applyInput(rebaseState(), 's')
+      expect(state.rebasePlan?.rows[0].action).toBe('squash')
+    })
+
+    it('J reorders the cursored row downward', () => {
+      const state = applyInput(rebaseState(), 'J')
+      expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(['bbbbbbb', 'aaaaaaa'])
+    })
+
+    it('r opens the reword prompt seeded with the subject; submit stages the reword', () => {
+      let state = applyInput(rebaseState(), 'r')
+      expect(state.inputPrompt).toMatchObject({ kind: 'rebase-reword', value: 'feat: one' })
+
+      // Append and submit — Enter routes through the prompt handler.
+      state = applyInput(state, '!', {})
+      state = applyInput(state, '', { return: true })
+      expect(state.inputPrompt).toBeUndefined()
+      expect(state.rebasePlan?.rows[0]).toMatchObject({ action: 'reword', newMessage: 'feat: one!' })
+    })
+
+    it('Enter asks for confirmation of execute-rebase-plan', () => {
+      const events = getLogInkInputEvents(rebaseState(), '', { return: true })
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'execute-rebase-plan' } },
+      ])
+    })
+
+    it('j/k move the plan cursor', () => {
+      let state = applyInput(rebaseState(), 'j')
+      expect(state.rebasePlan?.selectedIndex).toBe(1)
+      state = applyInput(state, 'k')
+      expect(state.rebasePlan?.selectedIndex).toBe(0)
+    })
+  })
+
+  describe('pendingAiDraft accept keys vs inline editing', () => {
+    function composeWithPendingDraft(): ReturnType<typeof createLogInkState> {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: typed by hand' },
+      })
+      // Non-empty summary routes the draft into pendingAiDraft.
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setDraft', value: 'feat: AI draft\n\nAI body' },
+      })
+      expect(state.commitCompose.pendingAiDraft).toBeDefined()
+      return state
+    }
+
+    it('R accepts the pending draft when not editing', () => {
+      const state = composeWithPendingDraft()
+      expect(getLogInkInputEvents(state, 'R')).toEqual([
+        {
+          type: 'action',
+          action: { type: 'commitCompose', action: { type: 'acceptPendingAiDraft' } },
+        },
+      ])
+    })
+
+    // Regression: the accept branch used to run before the editing
+    // intercept, so typing a capital R (or pressing Enter to advance
+    // fields) mid-edit silently replaced the user's summary+body with
+    // the AI draft — the exact loss pendingAiDraft exists to prevent.
+    it('R while editing appends to the buffer instead of accepting the draft', () => {
+      let state = composeWithPendingDraft()
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+
+      state = applyInput(state, 'R')
+      expect(state.commitCompose.pendingAiDraft).toBeDefined()
+      expect(state.commitCompose.summary).toBe('feat: typed by handR')
+    })
+
+    it('Enter while editing advances the field instead of accepting the draft', () => {
+      let state = composeWithPendingDraft()
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+
+      state = applyInput(state, '', { return: true })
+      expect(state.commitCompose.pendingAiDraft).toBeDefined()
+      expect(state.commitCompose.field).toBe('body')
+      expect(state.commitCompose.summary).toBe('feat: typed by hand')
+    })
   })
 
   it('E from compose opens the draft in the external editor', () => {
@@ -2120,13 +2353,36 @@ describe('log Ink input interactions', () => {
     expect(state.fullGraph).toBe(true)
     expect(state.pendingKey).toBe('g')
 
-    // \\ flips from default (full) to compact.
+    // An unmatched continuation CANCELS the chord without acting
+    // (which-key semantics) — it used to leak through and toggle the
+    // graph while leaving the prefix armed.
+    state = applyInput(state, '\\')
+    expect(state.fullGraph).toBe(true)
+    expect(state.pendingKey).toBeUndefined()
+
+    // With the chord cleared, \\ flips from default (full) to compact.
     state = applyInput(state, '\\')
     expect(state.fullGraph).toBe(false)
 
     // Pressing it again flips back to full.
     state = applyInput(state, '\\')
     expect(state.fullGraph).toBe(true)
+  })
+
+  it('Esc cancels a pending g chord instead of leaving it armed', () => {
+    let state = createLogInkState(rows)
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
+
+    state = applyInput(state, '', { escape: true })
+    expect(state.pendingKey).toBeUndefined()
+
+    // The next `c` is plain cherry-pick (confirm), NOT the `gc` chord.
+    const events = getLogInkInputEvents(state, 'c')
+    const types = events
+      .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+      .map((event) => event.action.type)
+    expect(types).not.toContain('pushView')
   })
 
   describe('command palette', () => {
@@ -2366,6 +2622,224 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('Esc cancels in-flight changelog generation (#1338)', () => {
+    it('dispatches cancelChangelog when Esc is pressed while the changelog is loading', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'changelog' })
+      state = applyLogInkAction(state, {
+        type: 'setChangelogLoading',
+        branch: 'feat/x',
+        baseLabel: 'vs main',
+      })
+      expect(state.changelogView.status).toBe('loading')
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toEqual([{ type: 'cancelChangelog' }])
+    })
+
+    it('fires from any view while the generation is in flight (invariant #5)', () => {
+      // The user pressed L, chord-navigated away while waiting, and
+      // wants out — Esc must still cancel even off the changelog view.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setChangelogLoading',
+        branch: 'feat/x',
+        baseLabel: 'vs main',
+      })
+      expect(state.activeView).toBe('history')
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toEqual([{ type: 'cancelChangelog' }])
+    })
+
+    it('does not steal Esc once the changelog is ready (normal Esc preserved)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'changelog' })
+      state = applyLogInkAction(state, {
+        type: 'setChangelogReady',
+        branch: 'feat/x',
+        baseLabel: 'vs main',
+        text: '## changelog',
+        generatedAt: 1750000000000,
+      })
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).not.toContainEqual({ type: 'cancelChangelog' })
+    })
+  })
+
+  describe('stage-and-commit grammar (#1362)', () => {
+    it('c with an empty draft lands in compose edit mode on the summary — no error', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      const events = getLogInkInputEvents(state, 'c', {}, { worktreeFileCount: 1 })
+      expect(events).not.toContainEqual({ type: 'createManualCommit' })
+
+      const after = applyInput(state, 'c', {}, { worktreeFileCount: 1 })
+      expect(after.activeView).toBe('compose')
+      expect(after.commitCompose.editing).toBe(true)
+      expect(after.commitCompose.field).toBe('summary')
+    })
+
+    it('c with a drafted summary commits as before', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: thing' },
+      })
+      const events = getLogInkInputEvents(state, 'c')
+      expect(events).toContainEqual({ type: 'createManualCommit' })
+    })
+
+    it('Ctrl+D commits straight from inline edit mode', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+      'fix: x'.split('').forEach((c) => { state = applyInput(state, c) })
+      expect(state.commitCompose.summary).toBe('fix: x')
+
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).toContainEqual({ type: 'createManualCommit' })
+      const after = applyInput(state, 'd', { ctrl: true })
+      expect(after.commitCompose.editing).toBe(false)
+    })
+
+    it('Ctrl+D with an empty summary warns and stays in edit mode', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+      const events = getLogInkInputEvents(state, 'd', { ctrl: true })
+      expect(events).not.toContainEqual({ type: 'createManualCommit' })
+      const after = applyInput(state, 'd', { ctrl: true })
+      expect(after.commitCompose.editing).toBe(true)
+    })
+  })
+
+  describe('amend / reword wiring (#1350)', () => {
+    it('a on compose raises the amend-head confirmation', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      const after = applyInput(state, 'a')
+      expect(after.pendingConfirmationId).toBe('amend-head')
+    })
+
+    it('a while inline-editing types a letter instead of amending', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'compose' })
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+      const after = applyInput(state, 'a')
+      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.commitCompose.summary).toBe('a')
+    })
+
+    it('a stays stage-file on the status view (overload preserved)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'status' })
+      const after = applyInput(state, 'a')
+      expect(after.pendingConfirmationId).toBeUndefined()
+    })
+
+    it('the reword-head prompt submits its text as the workflow payload', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'openInputPrompt',
+        kind: 'reword-head',
+        label: 'Reword HEAD',
+        initial: 'old subject',
+      })
+      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: '!' })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'reword-head',
+        payload: 'old subject!',
+      })
+    })
+  })
+
+  describe('AI conflict-resolution review keys (#1369)', () => {
+    const region = (index: number) => ({
+      index,
+      startLine: 1,
+      endLine: 5,
+      oursLabel: 'HEAD',
+      theirsLabel: 'feature/x',
+      ours: [`ours ${index}`],
+      theirs: [`theirs ${index}`],
+    })
+
+    function sessionState() {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+      state = applyLogInkAction(state, {
+        type: 'setConflictResolutionReady',
+        path: 'src/app.ts',
+        proposals: [
+          { regionIndex: 0, resolution: 'resolved 0', rationale: 'r', region: region(0) },
+          { regionIndex: 1, resolution: 'resolved 1', rationale: 'r', region: region(1) },
+        ],
+      })
+      return state
+    }
+
+    it('y/e/Y route to the runtime accept/edit handlers', () => {
+      expect(getLogInkInputEvents(sessionState(), 'y')).toEqual([{ type: 'acceptConflictProposal' }])
+      expect(getLogInkInputEvents(sessionState(), 'e')).toEqual([{ type: 'editConflictProposal' }])
+      expect(getLogInkInputEvents(sessionState(), 'Y')).toEqual([{ type: 'acceptAllConflictProposals' }])
+    })
+
+    it('n rejects the cursored proposal in the reducer', () => {
+      const after = applyInput(sessionState(), 'n')
+      expect(after.conflictResolution?.proposals[0].status).toBe('rejected')
+      expect(after.conflictResolution?.selectedIndex).toBe(1)
+    })
+
+    it('j/k walk the proposals instead of the file list', () => {
+      const state = sessionState()
+      const after = applyInput(state, 'j')
+      expect(after.conflictResolution?.selectedIndex).toBe(1)
+      expect(after.selectedConflictFileIndex).toBe(state.selectedConflictFileIndex)
+    })
+
+    it('Esc dismisses the session without touching the file', () => {
+      const after = applyInput(sessionState(), '', { escape: true })
+      expect(after.conflictResolution).toBeUndefined()
+      // Still on the conflicts view — Esc consumed by the dismissal.
+      expect(after.activeView).toBe('conflicts')
+    })
+
+    it('Esc cancels an in-flight generation from any view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setConflictResolutionLoading', path: 'src/app.ts' })
+      expect(state.activeView).toBe('history')
+      expect(getLogInkInputEvents(state, '', { escape: true }))
+        .toEqual([{ type: 'cancelConflictResolution' }])
+    })
+
+    it('confirming the M workflow fires the resolution runtime event', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setPendingConfirmation',
+        value: 'ai-conflict-help',
+      })
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events).toContainEqual({ type: 'runAiConflictResolution' })
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: 'runWorkflowAction', id: 'ai-conflict-help' })
+      )
+    })
+  })
+
   describe('s cycles sort modes (P4.2)', () => {
     it('cycles branch sort when active view is branches', () => {
       let state = createLogInkState(rows)
@@ -2477,8 +2951,9 @@ describe('log Ink input interactions', () => {
       expect(
         getLogInkInputEvents(state, 'Y', {}, { bisectCompletionSha: 'abc12345' })
       ).toEqual([{ type: 'yankFromActiveView', short: true }])
-      // No terminator → falls through.
-      expect(getLogInkInputEvents(state, 'y', {}, {})).toEqual([])
+      // No terminator → `y` is the mark-good key mid-bisect (#1352).
+      expect(getLogInkInputEvents(state, 'y', {}, {}))
+        .toEqual([{ type: 'runWorkflowAction', id: 'bisect-good' }])
     })
 
     it('emits yankFromActiveView from diff view across worktree/stash/commit sources', () => {
@@ -2773,27 +3248,38 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('Z on the history view opens the reset-mode prompt', () => {
+    it('Z on the history view opens the 1-key reset-mode choice (#1351)', () => {
       const events = getLogInkInputEvents(createLogInkState(rows), 'Z')
       expect(events).toEqual([
         {
           type: 'action',
-          action: {
-            type: 'openInputPrompt',
-            kind: 'reset-mode',
-            label: 'Reset mode (soft / mixed / hard)',
-          },
+          action: expect.objectContaining({
+            type: 'setPendingChoice',
+            value: expect.objectContaining({ id: 'reset-mode-choice' }),
+          }),
         },
       ])
     })
 
-    it('i on the history view sets pending confirmation for interactive-rebase', () => {
+    it('i on the history view opens the in-TUI rebase plan (#1359)', () => {
       // Lowercase `i` keeps the existing global `I` ai-commit-summary
       // workflow reachable on the history view; matches `git rebase -i`.
+      // The $EDITOR variant stays palette-reachable as interactive-rebase.
       const events = getLogInkInputEvents(createLogInkState(rows), 'i')
+      expect(events).toEqual([{ type: 'startRebasePlan' }])
+    })
+
+    it('f on the history view sets pending confirmation for fixup-into-commit (#1357)', () => {
+      const events = getLogInkInputEvents(createLogInkState(rows), 'f')
       expect(events).toEqual([
-        { type: 'action', action: { type: 'setPendingConfirmation', value: 'interactive-rebase' } },
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'fixup-into-commit' } },
       ])
+    })
+
+    it('f stays inert on the history view when no commits are loaded', () => {
+      const state = createLogInkState([])
+      const events = getLogInkInputEvents(state, 'f')
+      expect(events).toEqual([])
     })
 
     it('R / Z / i are scoped to the history view — branches view sees them differently', () => {
@@ -2807,47 +3293,31 @@ describe('log Ink input interactions', () => {
       })
     })
 
-    it('reset-mode prompt submission forwards the mode to reset-to-commit', () => {
-      let state = createLogInkState(rows)
-      state = applyInput(state, 'Z')
-      expect(state.inputPrompt?.kind).toBe('reset-mode')
-
-      // Simulate typing "soft" then Enter.
-      state = applyInput(state, 's')
-      state = applyInput(state, 'o')
-      state = applyInput(state, 'f')
-      state = applyInput(state, 't')
-      const events = getLogInkInputEvents(state, '', { return: true })
-      expect(events).toContainEqual({
-        type: 'runWorkflowAction',
-        id: 'reset-to-commit',
-        payload: 'soft',
-      })
+    it('the reset choice keys run reset-to-commit with the mode payload (#1351)', () => {
+      // One keystroke per mode — no typed word, no typo scold.
+      for (const [choiceKey, mode] of [['s', 'soft'], ['m', 'mixed'], ['h', 'hard']] as const) {
+        let state = createLogInkState(rows)
+        state = applyInput(state, 'Z')
+        expect(state.pendingChoice?.id).toBe('reset-mode-choice')
+        const events = getLogInkInputEvents(state, choiceKey)
+        expect(events).toContainEqual({
+          type: 'runWorkflowAction',
+          id: 'reset-to-commit',
+          payload: mode,
+        })
+        // The prompt closes with the pick.
+        const after = applyInput(state, choiceKey)
+        expect(after.pendingChoice).toBeUndefined()
+      }
     })
 
-    it('reset-mode prompt rejects unknown modes with a status message', () => {
+    it('an unbound key leaves the reset choice open; esc cancels it', () => {
       let state = createLogInkState(rows)
       state = applyInput(state, 'Z')
-      'extreme'.split('').forEach((c) => { state = applyInput(state, c) })
-      const events = getLogInkInputEvents(state, '', { return: true })
-      // Status message + no workflow run.
-      expect(events.find((e) => e.type === 'runWorkflowAction')).toBeUndefined()
-      expect(events).toContainEqual({
-        type: 'action',
-        action: { type: 'setStatus', value: 'Unknown reset mode: extreme. Use soft, mixed, or hard.', kind: 'warning' },
-      })
-    })
-
-    it('reset-mode prompt accepts mixed and hard modes case-insensitively', () => {
-      let state = createLogInkState(rows)
-      state = applyInput(state, 'Z')
-      'HARD'.split('').forEach((c) => { state = applyInput(state, c) })
-      const events = getLogInkInputEvents(state, '', { return: true })
-      expect(events).toContainEqual({
-        type: 'runWorkflowAction',
-        id: 'reset-to-commit',
-        payload: 'hard',
-      })
+      state = applyInput(state, 'x')
+      expect(state.pendingChoice?.id).toBe('reset-mode-choice')
+      state = applyInput(state, '', { escape: true })
+      expect(state.pendingChoice).toBeUndefined()
     })
 
     it('R / Z / i no-op when the history list is empty', () => {
@@ -3036,8 +3506,8 @@ describe('log Ink input interactions', () => {
   })
 
   describe('d toggles diff view mode (#785)', () => {
-    it('emits toggleDiffViewMode + a status hint when pressed in the diff view', () => {
-      const state = { ...createLogInkState(rows), activeView: 'diff' as const }
+    it('emits toggleDiffViewMode + a status hint when pressed on a commit diff', () => {
+      const state = { ...createLogInkState(rows), activeView: 'diff' as const, diffSource: 'commit' as const }
       const events = getLogInkInputEvents(state, 'd')
 
       expect(events).toEqual([
@@ -3053,6 +3523,7 @@ describe('log Ink input interactions', () => {
       const state = {
         ...createLogInkState(rows),
         activeView: 'diff' as const,
+        diffSource: 'commit' as const,
         diffViewMode: 'split' as const,
       }
       const events = getLogInkInputEvents(state, 'd')
@@ -3061,6 +3532,20 @@ describe('log Ink input interactions', () => {
         type: 'action',
         action: { type: 'setStatus', value: 'Switched to unified diff', kind: 'success' },
       })
+    })
+
+    // Regression (#1344): the staging (worktree) diff renders unified-
+    // only, so the toggle used to report "Switched to side-by-side"
+    // while nothing changed — and the flipped mode leaked into the next
+    // commit/stash diff. The handler now matches the footer (no d hint
+    // on the worktree diff).
+    it('is inert on the staging diff (worktree / untagged source)', () => {
+      const state = { ...createLogInkState(rows), activeView: 'diff' as const }
+      const events = getLogInkInputEvents(state, 'd')
+      const actionTypes = events
+        .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+        .map((event) => event.action.type)
+      expect(actionTypes).not.toContain('toggleDiffViewMode')
     })
 
     it('does not toggle the mode when pressed outside the diff view', () => {
@@ -3515,7 +4000,7 @@ describe('log Ink input interactions', () => {
 
 
 
-    it('keeps single-line prompts (create-branch, reset-mode, etc.) untouched', () => {
+    it('keeps single-line prompts (create-branch, rename-branch, etc.) untouched', () => {
       // Sanity check: opening a non-multiline prompt and pressing
       // Enter still submits as before — the new dispatch path is
       // strictly opt-in.
@@ -3752,6 +4237,31 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    // Regression: with the header row highlighted, Space still staged —
+    // and z offered to revert — the group's FIRST file, which the visible
+    // cursor wasn't on (o/i/b/L targeted it too).
+    it('Space / z / o / b / L are inert while the group header is focused', () => {
+      const headerState = statusState({ selectedWorktreeFileIndex: 0, statusGroupHeaderFocused: true })
+      const ctx = {
+        worktreeFileCount: 6,
+        statusGroups: groups,
+        worktreeSelectedPath: 'src/first-file.ts',
+      }
+      for (const key of [' ', 'z', 'o', 'b', 'L']) {
+        const events = getLogInkInputEvents(headerState, key, {}, ctx)
+        expect(events).not.toContainEqual({ type: 'toggleSelectedFileStage' })
+        expect(events).not.toContainEqual(
+          expect.objectContaining({ type: 'openFileInEditor' })
+        )
+        const actionTypes = events
+          .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+          .map((event) => event.action.type)
+        expect(actionTypes).not.toContain('setPendingMutationConfirmation')
+        expect(actionTypes).not.toContain('navigateOpenBlameForPath')
+        expect(actionTypes).not.toContain('navigateOpenFileHistoryForPath')
+      }
+    })
+
     it('Enter on staged-group header fires unstage-all-staged', () => {
       const events = getLogInkInputEvents(
         statusState({ selectedWorktreeFileIndex: 0, statusGroupHeaderFocused: true }),
@@ -3836,10 +4346,10 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 3 }),
         '',
         { upArrow: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'moveInspectorAction', delta: -1, actionCount: 8 } },
+        { type: 'action', action: { type: 'moveInspectorAction', delta: -1, actionCount: 9 } },
       ])
     })
 
@@ -3848,10 +4358,10 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 0 }),
         '',
         { downArrow: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'moveInspectorAction', delta: 1, actionCount: 8 } },
+        { type: 'action', action: { type: 'moveInspectorAction', delta: 1, actionCount: 9 } },
       ])
     })
 
@@ -3860,7 +4370,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorTab: 'inspector', inspectorActionIndex: 0 }),
         '',
         { upArrow: true },
-        { inspectorActionCount: 8, detailFileCount: 5 },
+        { inspectorActionCount: 9, detailFileCount: 5 },
       )
       expect(events).toEqual([
         { type: 'action', action: { type: 'moveDetailFile', delta: -1, fileCount: 5 } },
@@ -3872,7 +4382,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 0 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       const firstCommit = rows.find((r) => r.type === 'commit')
       const sha = firstCommit && firstCommit.type === 'commit' ? firstCommit.hash : ''
@@ -3886,7 +4396,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 1 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
         { type: 'action', action: { type: 'setPendingConfirmation', value: 'cherry-pick-commit' } },
@@ -3898,58 +4408,69 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 2 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
         { type: 'action', action: { type: 'setPendingConfirmation', value: 'revert-commit' } },
       ])
     })
 
-    it('Enter on reset (index 3) opens the reset-mode prompt', () => {
+    it('Enter on reset (index 3) opens the 1-key reset-mode choice (#1351)', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorActionIndex: 3 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
         {
           type: 'action',
-          action: {
-            type: 'openInputPrompt',
-            kind: 'reset-mode',
-            label: 'Reset mode (soft / mixed / hard)',
-          },
+          action: expect.objectContaining({
+            type: 'setPendingChoice',
+            value: expect.objectContaining({ id: 'reset-mode-choice' }),
+          }),
         },
       ])
     })
 
-    it('Enter on yank (index 5) fires yankFromActiveView', () => {
+    it('Enter on fixup (index 5) sets pending confirmation for fixup-into-commit', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorActionIndex: 5 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
-      expect(events).toEqual([{ type: 'yankFromActiveView' }])
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'fixup-into-commit' } },
+      ])
     })
 
-    it('Enter on yank short (index 6) fires yankFromActiveView with short=true', () => {
+    it('Enter on yank (index 6) fires yankFromActiveView', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorActionIndex: 6 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
-      expect(events).toEqual([{ type: 'yankFromActiveView', short: true }])
+      expect(events).toEqual([{ type: 'yankFromActiveView' }])
     })
 
-    it('Enter on open in browser (index 7) fires open-pr workflow', () => {
+    it('Enter on yank short (index 7) fires yankFromActiveView with short=true', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorActionIndex: 7 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
+      )
+      expect(events).toEqual([{ type: 'yankFromActiveView', short: true }])
+    })
+
+    it('Enter on open in browser (index 8) fires open-pr workflow', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorActionIndex: 8 }),
+        '',
+        { return: true },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([{ type: 'runWorkflowAction', id: 'open-pr' }])
     })
@@ -3959,7 +4480,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorTab: 'inspector' }),
         '',
         { return: true },
-        { inspectorActionCount: 8, detailFileCount: 3 },
+        { inspectorActionCount: 9, detailFileCount: 3 },
       )
       // Diff-for-file path, not an action invoke.
       const types = events.map((e) =>
@@ -3973,7 +4494,7 @@ describe('log Ink input interactions', () => {
         actionsFocusState({ inspectorActionIndex: 1, selectedIndex: 99 }),
         '',
         { return: true },
-        { inspectorActionCount: 8 },
+        { inspectorActionCount: 9 },
       )
       expect(events).toEqual([
         { type: 'action', action: { type: 'setStatus', value: 'No commit selected', kind: 'warning' } },
@@ -4695,31 +5216,22 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
       expect(state.pendingConfirmationId).toBe('triage-pr-approve')
     })
 
-    it('m opens the merge-strategy prompt', () => {
+    it('m opens the 1-key merge-strategy choice (#1351)', () => {
       const state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
-      expect(state.inputPrompt?.kind).toBe('triage-pr-merge-strategy')
-      expect(state.pendingConfirmationId).toBeUndefined()
-    })
-
-    it('submitting the merge-strategy prompt validates the strategy + routes through y-confirm', () => {
-      let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
-      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'squash' })
-      state = applyInput(state, '', { return: true })
-      expect(state.pendingConfirmationId).toBe('triage-pr-merge')
-      expect(state.pendingConfirmationPayload).toBe('squash')
+      expect(state.pendingChoice?.id).toBe('pr-merge-strategy-choice')
       expect(state.inputPrompt).toBeUndefined()
     })
 
-    it('rejects unknown merge strategies with a status message', () => {
-      let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
-      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'fastforward' })
-      const events = getLogInkInputEvents(state, '', { return: true })
-      const status = events.find(
-        (e): e is Extract<typeof e, { type: 'action' }> =>
-          e.type === 'action' && (e.action as { type: string }).type === 'setStatus'
-      )
-      expect(status).toBeDefined()
-      expect(JSON.stringify(status)).toContain('Unknown merge strategy')
+    it('the strategy keys run triage-pr-merge with the strategy payload (#1351)', () => {
+      for (const [choiceKey, strategy] of [['m', 'merge'], ['s', 'squash'], ['r', 'rebase']] as const) {
+        const state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
+        const events = getLogInkInputEvents(state, choiceKey)
+        expect(events).toContainEqual({
+          type: 'runWorkflowAction',
+          id: 'triage-pr-merge',
+          payload: strategy,
+        })
+      }
     })
 
     it('R opens the request-changes multi-line prompt', () => {
@@ -4736,17 +5248,10 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
       expect(state.pendingConfirmationPayload).toBe('please address X')
     })
 
-    it('confirming triage-pr-merge forwards the strategy payload to the workflow', () => {
+    it('picking a strategy closes the choice prompt', () => {
       let state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
-      state = applyLogInkAction(state, { type: 'appendInputPrompt', value: 'rebase' })
-      state = applyInput(state, '', { return: true })
-      const events = getLogInkInputEvents(state, 'y')
-      const workflow = events.find((e) => e.type === 'runWorkflowAction')
-      expect(workflow).toEqual({
-        type: 'runWorkflowAction',
-        id: 'triage-pr-merge',
-        payload: 'rebase',
-      })
+      state = applyInput(state, 'r')
+      expect(state.pendingChoice).toBeUndefined()
     })
 
     it('does NOT collide with the single-PR action panel keys', () => {
@@ -4937,6 +5442,73 @@ describe('triage filter cycling (#882 phase 6)', () => {
       // Still showing the prompt; nothing fired.
       expect(after.pendingChoice).toBeDefined()
       expect(after.repoStack.length).toBe(state.repoStack.length)
+    })
+  })
+
+  describe('modal prompt keyboard precedence (#1342)', () => {
+    const choice = {
+      id: 'diverged-pull-recovery',
+      title: 'Branches diverged',
+      options: [
+        { key: 'r', label: 'Pull with rebase', workflowId: 'pull-rebase-current' },
+        { key: 'm', label: 'Pull with merge', workflowId: 'pull-merge-current' },
+      ],
+    }
+
+    it('a choice prompt raised during filter typing owns the keyboard', () => {
+      // The prompt can be raised asynchronously while the user is
+      // mid-filter; its option keys must answer the prompt, not append
+      // to the filter text underneath the overlay.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleFilterMode' })
+      state = applyLogInkAction(state, { type: 'appendFilter', value: 'ab' })
+      state = applyLogInkAction(state, { type: 'setPendingChoice', value: choice })
+
+      const events = getLogInkInputEvents(state, 'r')
+      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'pull-rebase-current' })
+
+      const after = applyInput(state, 'r')
+      expect(after.pendingChoice).toBeUndefined()
+      expect(after.filter).toBe('ab')
+    })
+
+    it('a y/n confirmation raised during compose editing owns the keyboard', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+      state = applyLogInkAction(state, {
+        type: 'setPendingConfirmation',
+        value: 'delete-branch',
+        payload: 'feat/x',
+      })
+
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'delete-branch',
+        payload: 'feat/x',
+      })
+
+      const after = applyInput(state, 'y')
+      expect(after.pendingConfirmationId).toBeUndefined()
+      // The `y` never leaked into the compose field being edited.
+      expect(after.commitCompose.summary).toBe('')
+      expect(after.commitCompose.body).toBe('')
+    })
+
+    it('n declines the confirmation instead of appending to the filter', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleFilterMode' })
+      state = applyLogInkAction(state, {
+        type: 'setPendingConfirmation',
+        value: 'delete-branch',
+      })
+
+      const after = applyInput(state, 'n')
+      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.filter).toBe('')
     })
   })
 })

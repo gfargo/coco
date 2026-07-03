@@ -48,6 +48,7 @@ const HISTORY_COMMIT_ACTIONS: InspectorAction[] = [
   { key: 'R', label: 'Revert', destructive: true },
   { key: 'Z', label: 'Reset to commit', destructive: true },
   { key: 'i', label: 'Interactive rebase', destructive: true },
+  { key: 'f', label: 'Fixup staged into commit' },
   { key: 'y', label: 'Yank hash' },
   { key: 'Y', label: 'Yank short hash' },
   { key: 'O', label: 'Open in browser' },

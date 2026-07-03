@@ -73,9 +73,37 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
   // outer truncate(line, 140). The 2-space indent eats 2 cells; chrome
   // (border + paddingX) eats 4 — same budget as renderCommitPanel.
   const bodyTextWidth = Math.max(8, width - 6)
-  const bodyVisualLines = compose.body
-    ? compose.body.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth)).slice(0, bodyRowsAvailable)
+  const allBodyLines = compose.body
+    ? compose.body.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth))
     : ['<empty>']
+  // Long bodies scroll with the insertion point (#1345): editing always
+  // appends at the END of the body, so while the body field is being
+  // edited the window pins to the tail — otherwise newly typed text
+  // landed below the fold with no indication. Outside editing the head
+  // slice is kept (reading order), with an explicit overflow marker
+  // either way. One row of the budget is spent on the marker so the
+  // panel's height math is unchanged.
+  const bodyEditingActive = compose.editing && compose.field === 'body'
+  let bodyVisualLines = allBodyLines
+  let bodyOverflowMarker: { text: string; above: boolean } | undefined
+  if (allBodyLines.length > bodyRowsAvailable) {
+    const visibleCount = Math.max(1, bodyRowsAvailable - 1)
+    const hidden = allBodyLines.length - visibleCount
+    const plural = hidden === 1 ? '' : 's'
+    if (bodyEditingActive) {
+      bodyVisualLines = allBodyLines.slice(-visibleCount)
+      bodyOverflowMarker = {
+        text: `${theme.ascii ? '^' : '↑'} ${hidden} earlier line${plural}`,
+        above: true,
+      }
+    } else {
+      bodyVisualLines = allBodyLines.slice(0, visibleCount)
+      bodyOverflowMarker = {
+        text: `${theme.ascii ? 'v' : '↓'} ${hidden} more line${plural}`,
+        above: false,
+      }
+    }
+  }
   // Summary now renders on its own indented line under the label (like the
   // body), so it wraps at the full content width instead of the cramped
   // "Summary  " (9) + chrome budget it had when label and value shared a row.
@@ -92,7 +120,7 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
   // The cancel hint also covers the streaming preview window — same
   // keystroke (Esc) aborts whether or not the preview is visible.
   const stateLine = compose.editing
-    ? 'Editing — Enter switches summary↔body, Esc exits edit mode.'
+    ? 'Editing — Ctrl+D commits · Enter switches summary↔body · Esc exits edit mode.'
     : compose.loading
       ? 'Generating AI draft — press Esc to cancel.'
       : 'Press e to edit, c to commit, I for AI draft, esc to leave.'
@@ -180,7 +208,13 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
   ...renderSectionContent(summaryVisualLines, 'summary', summaryCursor),
   h(Text, undefined, ''),
   renderSectionHeader('Body', 'body'),
+  ...(bodyOverflowMarker?.above
+    ? [h(Text, { key: 'compose-body-overflow-above', dimColor: true }, `  ${bodyOverflowMarker.text}`)]
+    : []),
   ...renderSectionContent(bodyVisualLines, 'body', bodyCursor),
+  ...(bodyOverflowMarker && !bodyOverflowMarker.above
+    ? [h(Text, { key: 'compose-body-overflow-below', dimColor: true }, `  ${bodyOverflowMarker.text}`)]
+    : []),
   // Loading indicator + post-action message belong inline with the draft
   // (they describe what just happened to the fields above). The state-
   // line ("Editing — Enter switches summary↔body…" / "Press e to edit

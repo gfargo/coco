@@ -81,6 +81,8 @@ export type UseChangelogActionsResult = {
   regenerateChangelog: () => void
   yankChangelog: () => void
   openChangelogInEditor: () => void
+  /** Esc during a loading changelog — aborts the in-flight LLM call (#1338). */
+  cancelChangelog: () => void
 }
 
 export function useChangelogActions(
@@ -113,6 +115,13 @@ export function useChangelogActions(
   // history view while the LLM runs. On error, we keep the view pushed
   // and render the error there (with `r` to retry) instead of bailing
   // back to history with a status-line message that may scroll past.
+  // AbortController for the in-flight changelog generation (#1338).
+  // Same lifecycle as `aiDraftAbortRef` in useAiCommitDraftActions: a
+  // ref (not state) because cancel is a synchronous side-effect read by
+  // the input handler's Esc binding; installed per invocation, cleared
+  // in the finally block only when it still points at OUR controller.
+  const changelogAbortRef = React.useRef<AbortController | null>(null)
+
   const startChangelogView = React.useCallback(async (options: { force?: boolean } = {}) => {
     const head = context.branches?.currentBranch || context.provider?.currentBranch
     if (!head) {
@@ -163,33 +172,63 @@ export function useChangelogActions(
     dispatch({ type: 'setChangelogLoading', branch: head, baseLabel })
     dispatch({ type: 'setStatus', value: `generating changelog (${baseLabel})…`, loading: true })
 
-    const result = await runChangelogTextWorkflow(argv)
+    // Tear down any controller from a previous generation (defensive —
+    // a settled call clears it in the finally block below) and install
+    // a fresh one so Esc can abort THIS call (#1338).
+    changelogAbortRef.current?.abort()
+    const controller = new AbortController()
+    changelogAbortRef.current = controller
 
-    if (!result.ok || !result.text) {
+    try {
+      const result = await runChangelogTextWorkflow(argv, { signal: controller.signal })
+
+      // Cancel path (#1338): the user pressed Esc mid-generation. Move
+      // the view out of its loading state (r regenerates) and show a
+      // neutral — not error — status line.
+      if (result.cancelled) {
+        dispatch({
+          type: 'setChangelogError',
+          branch: head,
+          baseLabel,
+          error: 'Cancelled — press r to regenerate.',
+        })
+        dispatch({ type: 'setStatus', value: 'Changelog generation cancelled.', kind: 'info' })
+        return
+      }
+
+      if (!result.ok || !result.text) {
+        dispatch({
+          type: 'setChangelogError',
+          branch: head,
+          baseLabel,
+          error: result.message,
+        })
+        dispatch({ type: 'setStatus', value: `Changelog failed: ${result.message}`, kind: 'error' })
+        return
+      }
+
       dispatch({
-        type: 'setChangelogError',
+        type: 'setChangelogReady',
         branch: head,
         baseLabel,
-        error: result.message,
+        text: result.text,
+        // Audit finding #9: timestamp captured at dispatch time, not
+        // inside the reducer.
+        generatedAt: Date.now(),
       })
-      dispatch({ type: 'setStatus', value: `Changelog failed: ${result.message}`, kind: 'error' })
-      return
+      dispatch({
+        type: 'setStatus',
+        value: 'Changelog ready — y yank · E $EDITOR · c PR · r regen · < back.',
+        kind: 'success',
+      })
+    } finally {
+      // Clear the ref only if it still points at OUR controller — a
+      // rapid regenerate could have already replaced it, in which case
+      // the new controller owns cancel duty now.
+      if (changelogAbortRef.current === controller) {
+        changelogAbortRef.current = null
+      }
     }
-
-    dispatch({
-      type: 'setChangelogReady',
-      branch: head,
-      baseLabel,
-      text: result.text,
-      // Audit finding #9: timestamp captured at dispatch time, not
-      // inside the reducer.
-      generatedAt: Date.now(),
-    })
-    dispatch({
-      type: 'setStatus',
-      value: 'Changelog ready — y yank · E $EDITOR · c PR · r regen · < back.',
-      kind: 'success',
-    })
   }, [
     context.branches?.currentBranch,
     context.provider?.currentBranch,
@@ -301,10 +340,22 @@ export function useChangelogActions(
     try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
   }, [dispatch, resumeRef, changelogViewText])
 
+  /**
+   * Cancel an in-flight changelog generation (#1338). Called by the
+   * input handler when Esc fires while `changelogView.status ===
+   * 'loading'`. Idempotent — no active controller is a no-op. The
+   * cleanup dispatches (view transition + status) flow back through
+   * `startChangelogView`'s cancelled path, not here.
+   */
+  const cancelChangelog = React.useCallback(() => {
+    changelogAbortRef.current?.abort()
+  }, [])
+
   return {
     startChangelogView,
     regenerateChangelog,
     yankChangelog,
     openChangelogInEditor,
+    cancelChangelog,
   }
 }

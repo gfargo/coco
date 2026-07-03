@@ -156,6 +156,38 @@ export function resolveConflictTheirs(
   )
 }
 
+/**
+ * Intent-based conflict resolution. The workstation's `u`/`U` keys promise
+ * "keep the incoming changes" / "keep your branch's version" — but git's
+ * `--ours` / `--theirs` don't map to that constantly. During a merge,
+ * cherry-pick, or revert, HEAD is the user's branch, so `--ours` is the
+ * user's version. During a REBASE git replays the user's commits onto the
+ * upstream: HEAD (and therefore `--ours`) is the upstream side, and the
+ * user's own version is `--theirs`. Without this swap, "keep my version"
+ * on a rebase conflict silently wrote and staged the upstream's version —
+ * the opposite of the user's intent.
+ */
+export function resolveConflictKeepCurrentBranch(
+  git: SimpleGit,
+  operation: GitOperationType,
+  path: string
+): Promise<BranchActionResult> {
+  return operation === 'rebase'
+    ? resolveConflictTheirs(git, path)
+    : resolveConflictOurs(git, path)
+}
+
+/** See {@link resolveConflictKeepCurrentBranch} — the incoming/other side. */
+export function resolveConflictKeepIncoming(
+  git: SimpleGit,
+  operation: GitOperationType,
+  path: string
+): Promise<BranchActionResult> {
+  return operation === 'rebase'
+    ? resolveConflictOurs(git, path)
+    : resolveConflictTheirs(git, path)
+}
+
 export function stageConflictResolved(
   git: SimpleGit,
   path: string

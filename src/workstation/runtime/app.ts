@@ -62,6 +62,7 @@ import {LogInkContextKey, createLogInkContextStatus, updateLogInkContextStatus} 
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
 import {PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex} from '../chrome/selectionRectify'
+import {sortBranches, sortTags} from '../chrome/sorting'
 import {LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout} from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
 import {LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getThemePickerSelection} from '../../workstation/runtime/inkViewModel'
@@ -196,6 +197,8 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import {matchesPromotedFilter} from '../runtime/promotedFilter'
 import {useFilteredLists} from './hooks/buildFilteredLists'
+import {useRebasePlanActions} from './hooks/useRebasePlanActions'
+import {useConflictResolutionActions} from './hooks/useConflictResolutionActions'
 import {useBisectCandidateHydration, useBisectCandidateState} from './hooks/useBisectCandidateHydration'
 import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
@@ -209,7 +212,7 @@ import {useSpinnerFrame} from './hooks/useSpinnerFrame'
 import {useStatusSurfaceData} from './hooks/buildStatusSurfaceData'
 import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
-import {useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
+import {computeHasMoreCommits, useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
 import {useOnboarding} from './hooks/useOnboarding'
 import {useRepoStackRuntimes} from './hooks/useRepoStackRuntimes'
 import {useResumeTick} from './hooks/useResumeTick'
@@ -266,7 +269,9 @@ function computePromotedSelectionsSnapshot(
   context: LogInkContext,
   nextFilter: string
 ): PromotedSelectionsSnapshot {
-  const allBranches = context.branches?.localBranches || []
+  // Sorted with the surfaces' comparators — the cursor indexes the
+  // SORTED lists, so rectifying in raw ref order preserved the wrong row.
+  const allBranches = sortBranches(context.branches?.localBranches || [], state.branchSort)
   const filteredBranches = nextFilter
     ? allBranches.filter((branch) =>
       matchesPromotedFilter([branch.shortName, branch.upstream || ''], nextFilter))
@@ -281,7 +286,7 @@ function computePromotedSelectionsSnapshot(
     previousBranchKey
   )
 
-  const allTags = context.tags?.tags || []
+  const allTags = sortTags(context.tags?.tags || [], state.tagSort)
   const filteredTags = nextFilter
     ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], nextFilter))
     : allTags
@@ -575,7 +580,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     filteredRemoteList,
     filteredIssueList,
     filteredPullRequestTriageList,
-  } = useFilteredLists(React, context, state.filter)
+  } = useFilteredLists(React, context, state.filter, {
+    branchSort: state.branchSort,
+    tagSort: state.tagSort,
+  })
 
   const dispatch = React.useCallback((action: Parameters<typeof applyLogInkAction>[1]) => {
     setState((current) => applyLogInkAction(current, action))
@@ -594,6 +602,11 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       .then((nextRows) => {
         if (cancelled || !mountedRef.current) return
         dispatch({ type: 'replaceRows', rows: nextRows })
+        // Correct the pagination seed: on a cold cache the component
+        // mounted with zero rows, so the lazy `hasMoreCommits` seed
+        // evaluated false and load-more would stay disabled forever.
+        // The fetched window is the real first page — recompute.
+        setHasMoreCommits(computeHasMoreCommits(logArgv, nextRows))
       })
       .catch((error: unknown) => {
         if (cancelled || !mountedRef.current) return
@@ -621,6 +634,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // status line as live feedback for the open task.
   useStatusAutoDismiss(React, {
     statusMessage: state.statusMessage,
+    statusKind: state.statusKind,
+    statusLoading: state.statusLoading,
     inputPrompt: state.inputPrompt,
     pendingConfirmationId: state.pendingConfirmationId,
     pendingChoice: state.pendingChoice,
@@ -670,9 +685,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       })
       if (mountedRef.current && fresh) {
         dispatch({ type: 'replaceRows', rows: fresh })
+        // Re-arm pagination from the fresh window (#1337): the refresh
+        // truncates the loaded rows back to one page, so a user who had
+        // paged to the end (`hasMoreCommits === false`) must be able to
+        // page back down — otherwise deep history vanishes for the
+        // session after any history-mutating workflow.
+        setHasMoreCommits(computeHasMoreCommits(logArgv, fresh))
       }
     } catch { /* ignore — stale rows beat blank rows */ }
-  }, [dispatch, git, logArgv, state.historyFetchArgs])
+  }, [dispatch, git, logArgv, setHasMoreCommits, state.historyFetchArgs])
 
   const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
     // Loud refresh (manual `r`): flip everything to 'loading' so the user
@@ -871,6 +892,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   useWorktreeHunksHydration(React, {
     git,
     activeView: state.activeView,
+    diffSource: state.diffSource,
     selectedWorktreeFile,
     setWorktreeHunks,
     setWorktreeHunksLoading,
@@ -1100,6 +1122,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   useWorktreeDiffHydration(React, {
     git,
     activeView: state.activeView,
+    diffSource: state.diffSource,
     selectedWorktreeFile,
     setWorktreeDiff,
     setWorktreeDiffLoading,
@@ -1136,6 +1159,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     toggleSelectedHunkStage,
     revertSelectedFile,
     revertSelectedHunk,
+    stageSelectedLines,
+    revertSelectedLines,
   } = useWorktreeStageActions(React, {
     git,
     dispatch,
@@ -1143,7 +1168,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     worktreeDiff,
     worktreeHunks,
     worktreeDiffOffset: state.worktreeDiffOffset,
+    diffLineSelectAnchor: state.diffLineSelectAnchor,
     refreshWorktreeContext,
+    // #1353 — optimistic stage/unstage flip on the loaded overview,
+    // scoped to the active frame (same depth convention as
+    // refreshWorktreeContext).
+    mutateWorktreeOverview: (updater) =>
+      setContext((current) => ({ ...current, worktree: updater(current.worktree) }), runtimes.length - 1),
+    visibleWorktreeFilesGrouped,
+    selectedWorktreeFileIndex: state.selectedWorktreeFileIndex,
+    statusFilterMask: state.statusFilterMask,
     setWorktreeDiff,
     setWorktreeHunks,
   })
@@ -1243,6 +1277,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     regenerateChangelog,
     yankChangelog,
     openChangelogInEditor,
+    cancelChangelog,
   } = useChangelogActions(React, {
     dispatch,
     context,
@@ -1505,6 +1540,28 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
   )
 
+  // #1359 — in-TUI interactive rebase entry point. Reads through a
+  // render-fresh ref, so instantiation order is identity-safe.
+  const { startRebasePlan } = useRebasePlanActions(React, { git, state, dispatch })
+
+  // #1369 — AI conflict resolution (`M` on the conflicts view). Same
+  // render-fresh-ref pattern; owns the per-invocation AbortController.
+  const {
+    startConflictResolution,
+    cancelConflictResolution,
+    acceptConflictProposal,
+    acceptAllConflictProposals,
+    editConflictProposal,
+  } = useConflictResolutionActions(React, {
+    git,
+    state,
+    context,
+    dispatch,
+    mountedRef,
+    refreshContext,
+    resumeRef,
+  })
+
   // Lifted verbatim into `useInputHandler` (0.72 app.ts decomposition, the
   // final big cluster). The single `useInput(…)` keyboard handler — the
   // component's largest reader — moves wholesale: it derives the per-keystroke
@@ -1552,6 +1609,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     toggleSelectedHunkStage,
     revertSelectedFile,
     revertSelectedHunk,
+    stageSelectedLines,
+    revertSelectedLines,
     createCommitFromCompose,
     openComposeInEditor,
     runAiCommitDraft,
@@ -1559,6 +1618,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     startCreatePullRequest,
     cancelPullRequestBodyDraft,
     startChangelogView,
+    cancelChangelog,
+    startConflictResolution,
+    cancelConflictResolution,
+    acceptConflictProposal,
+    acceptAllConflictProposals,
+    editConflictProposal,
+    startRebasePlan,
     regenerateChangelog,
     yankChangelog,
     openChangelogInEditor,
@@ -1728,7 +1794,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     h(Box, { flexDirection: 'column', height: layout.rows },
     h(LogInkHeader, { contextStatus, appLabel }),
     h(Box, { flexDirection: 'row', height: layout.bodyRows }, ...bodyPanels),
-    renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame, layout.singlePane)
+    renderFooter(h, { Box, Text }, state, context, theme, idleTip, spinnerFrame, layout.singlePane, layout.columns)
     )
   )
 }

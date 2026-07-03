@@ -1,5 +1,7 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../commands/log/data'
 import { hashesMatchAny } from '../../git/hashes'
+import type { RebasePlanRow, RebaseTodoAction } from '../../git/rebasePlanActions'
+import type { ConflictRegion } from '../../git/conflictRegionActions'
 import { getLogInkThemePresets, type LogInkThemePreset } from '../chrome/theme'
 import {
     CommitComposeAction,
@@ -27,8 +29,8 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame' | 'file-history'
-export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame' | 'file-history' | 'rebase'
+export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-lines' | 'discard-draft'
 
 /**
  * Kinds of list item that can carry an inline pending-spinner while an
@@ -69,6 +71,12 @@ export type LogInkChoiceOption = {
   label: string
   destructive?: boolean
   workflowId?: string
+  /**
+   * Optional payload forwarded to `runWorkflowAction(workflowId,
+   * payload)` (#1351) — lets one workflow id serve several options
+   * (reset soft/mixed/hard, merge strategy merge/squash/rebase).
+   */
+  payload?: string
   intent?: 'switch-worktree'
 }
 
@@ -159,6 +167,24 @@ export type LogInkRepoFrameEntryRange = {
 
 export type LogInkRepoFrameReturn = {
   activeView: LogInkView
+  /**
+   * The parent's full view stack at push time. Restoring only
+   * `[activeView]` stranded the user when the drill-in happened from a
+   * pushed view (commit diff): they popped back onto a one-element
+   * 'diff' stack where Esc and `<` were both dead. Optional for
+   * back-compat with states captured before the field landed — pop
+   * falls back to `[activeView]`.
+   */
+  viewStack?: LogInkView[]
+  /**
+   * Diff identity at push time. `withPushedView` inside the submodule
+   * clears these on the shared state, so without an explicit capture a
+   * pop back onto a commit diff rendered source-less (wrong key
+   * handling, staging semantics on a read-only diff).
+   */
+  diffSource?: LogInkDiffSource
+  stashDiffRef?: string
+  compareHead?: LogInkCompareRef
   selectedIndex: number
   selectedFileIndex: number
   selectedSubmoduleIndex: number
@@ -178,6 +204,34 @@ export type LogInkRepoFrameReturn = {
   userSidebarTab: LogInkSidebarTab
   branchSort: BranchSortMode
   tagSort: TagSortMode
+  /**
+   * Remaining per-repo state captured at push time (#1343). Each of
+   * these is only meaningful against the repo that produced it: a
+   * compare base marked in the parent must not become the diff base
+   * inside a submodule, a blame / file-history path from the parent
+   * must not hydrate against the submodule's git, the branch-keyed
+   * changelog cache would serve the parent's changelog for a same-named
+   * submodule branch, and the per-list cursors would land on arbitrary
+   * rows. Push clears them on the live state; pop restores the
+   * parent's. All optional for back-compat with states captured before
+   * the fields landed.
+   */
+  compareBase?: LogInkCompareRef
+  blamePath?: string
+  fileHistoryPath?: string
+  changelogCache?: { [branch: string]: ChangelogCacheEntry }
+  selectedWorktreeFileIndex?: number
+  selectedBranchIndex?: number
+  selectedTagIndex?: number
+  selectedStashIndex?: number
+  selectedWorktreeListIndex?: number
+  selectedConflictFileIndex?: number
+  selectedReflogIndex?: number
+  selectedRemoteIndex?: number
+  selectedBlameIndex?: number
+  selectedFileHistoryIndex?: number
+  selectedIssueIndex?: number
+  selectedPullRequestTriageIndex?: number
 }
 /**
  * Tracks which kind of diff the user pushed into. `commit` means they
@@ -280,6 +334,18 @@ export type LogInkState = {
   rows: GitLogRow[]
   commits: GitLogCommitRow[]
   filteredCommits: GitLogCommitRow[]
+  /**
+   * How many commits of the MAIN `git log` ordering have been fetched
+   * (#1337). This — not `commits.length` — is the `skip` offset for the
+   * next load-more page: anchored context loads (`loadCommitContext`)
+   * merge rows that are NOT a prefix of the main ordering, so counting
+   * every loaded commit overshoots the offset and silently skips the
+   * commits ranked in the gap. Counted pre-dedup (skip is a position in
+   * git's output, not in our merged list). Reset by `replaceRows`,
+   * advanced by `appendRows` only when the append is a main-ordering
+   * page.
+   */
+  mainHistoryCommitCount: number
   selectedIndex: number
   selectedFileIndex: number
   selectedWorktreeFileIndex: number
@@ -386,6 +452,13 @@ export type LogInkState = {
   commitCompose: CommitComposeState
   diffPreviewOffset: number
   worktreeDiffOffset: number
+  /**
+   * Visual line-select anchor on the staging diff (#1358). Set by `v`;
+   * the selection is [min(anchor, worktreeDiffOffset), max(...)]. Undefined
+   * when no selection is active. Cleared whenever the diff offset resets
+   * (view switches, file changes) so a stale range can't be staged.
+   */
+  diffLineSelectAnchor?: number
   filter: string
   filterMode: boolean
   fullGraph: boolean
@@ -740,6 +813,47 @@ export type LogInkState = {
    */
   bisectPickMode?: 'bad' | 'good'
   bisectPickPendingBad?: string
+  /**
+   * The in-TUI interactive rebase plan (#1359): the todo rows for
+   * `<base>^..HEAD` plus the cursor. Present only while the rebase view
+   * is open; cleared on pop / lateral navigation so a stale plan can
+   * never execute against a moved HEAD.
+   */
+  rebasePlan?: LogInkRebasePlan
+  /**
+   * AI conflict resolution session (#1369): per-region proposals for
+   * ONE conflicted file, held between generation and the explicit
+   * per-region accept/edit/reject. Cleared on navigation away from the
+   * conflicts view (a stale proposal must never write into a file that
+   * moved underneath it) and when the file is fully resolved.
+   */
+  conflictResolution?: LogInkConflictResolutionState
+}
+
+export type LogInkRebasePlan = {
+  rows: RebasePlanRow[]
+  selectedIndex: number
+}
+
+export type LogInkConflictProposal = {
+  regionIndex: number
+  resolution: string
+  rationale: string
+  status: 'pending' | 'accepted' | 'rejected'
+  /**
+   * Region snapshot at generation time — the display source for the
+   * ours/theirs blocks AND the content-matched identity the apply path
+   * uses (line numbers shift as earlier regions are accepted).
+   */
+  region: ConflictRegion
+}
+
+export type LogInkConflictResolutionState = {
+  path: string
+  status: 'loading' | 'ready' | 'error'
+  error?: string
+  proposals: LogInkConflictProposal[]
+  selectedIndex: number
 }
 
 export type ChangelogViewStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -838,12 +952,12 @@ export type LogInkInputPromptKind =
   | 'stash-branch'
   | 'gitignore-pattern'
   | 'stage-pathspec'
-  | 'reset-mode'
-  | 'pr-merge-strategy'
+  | 'reword-head'
   | 'pr-comment'
   | 'pr-request-changes'
   | 'create-pr'
   | 'bisect-run-command'
+  | 'rebase-reword'
   // #0.71 — remotes view mutations. `add-remote` collects a single
   // `name url` line (space-separated, parsed in the submit handler);
   // `set-remote-url` collects just a URL applied to the cursored
@@ -862,12 +976,10 @@ export type LogInkInputPromptKind =
   | 'triage-pr-label'
   | 'triage-pr-assign'
   // #882 phase 5 — destructive PR mutations on the triage view.
-  // Each prompts for input then forwards through the y-confirm
-  // path. Same pattern as the single-PR `pr-merge-strategy` /
-  // `pr-request-changes` prompts, but routed to the by-number
-  // workflows so the cursored PR (not the current branch's) gets
-  // the action.
-  | 'triage-pr-merge-strategy'
+  // Prompts for the review body then forwards through the y-confirm
+  // path, routed to the by-number workflow so the cursored PR (not
+  // the current branch's) gets the action. (The merge-strategy
+  // prompts became 1-key choice prompts in #1351.)
   | 'triage-pr-request-changes'
 
 export type LogInkInputPromptState = {
@@ -889,7 +1001,17 @@ export type LogInkInputPromptState = {
 }
 
 export type LogInkAction =
-  | { type: 'appendRows'; rows: GitLogRow[] }
+  | {
+    type: 'appendRows'
+    rows: GitLogRow[]
+    /**
+     * Commit count of this append as fetched from the MAIN `git log`
+     * ordering (pre-dedup), when the append is a load-more page.
+     * Omitted for anchored context loads, which must not advance the
+     * pagination offset (#1337).
+     */
+    mainOrderingCount?: number
+  }
   | { type: 'replaceRows'; rows: GitLogRow[] }
   | { type: 'appendFilter'; value: string; promotedSelections?: PromotedSelectionsSnapshot }
   | { type: 'backspaceFilter'; promotedSelections?: PromotedSelectionsSnapshot }
@@ -1019,6 +1141,29 @@ export type LogInkAction =
   | { type: 'clearSplitPlan' }
   | { type: 'setBisectPickMode'; mode: 'bad' | 'good'; pendingBad?: string }
   | { type: 'clearBisectPickMode' }
+  | { type: 'openRebasePlan'; rows: RebasePlanRow[] }
+  | { type: 'moveRebaseCursor'; delta: number }
+  | { type: 'setRebaseAction'; action: RebaseTodoAction }
+  | { type: 'moveRebaseRow'; delta: number }
+  | { type: 'setRebaseRewordMessage'; message: string }
+  | { type: 'clearRebasePlan' }
+  | { type: 'setDiffLineSelectAnchor'; value?: number }
+  | { type: 'setConflictResolutionLoading'; path: string }
+  | {
+    type: 'setConflictResolutionReady'
+    path: string
+    proposals: Array<Omit<LogInkConflictProposal, 'status'>>
+  }
+  | { type: 'setConflictResolutionError'; path: string; error: string }
+  | { type: 'moveConflictProposal'; delta: number }
+  | {
+    type: 'setConflictProposalStatus'
+    regionIndex: number
+    status: 'accepted' | 'rejected'
+    /** Replacement text when an $EDITOR edit changed the proposal before accept. */
+    resolution?: string
+  }
+  | { type: 'clearConflictResolution' }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -1159,6 +1304,7 @@ function withPushedView(state: LogInkState, value: LogInkView): LogInkState {
     // persistence and pop-view restores the previous tab.
     sidebarTab: value === 'compose' || value === 'status' ? 'branches' : state.sidebarTab,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
+    diffLineSelectAnchor: value === 'diff' ? state.diffLineSelectAnchor : undefined,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     compareHead: value === 'diff' ? state.compareHead : undefined,
@@ -1191,8 +1337,11 @@ function withPoppedView(state: LogInkState): LogInkState {
     viewStack,
     // Restore the user's last explicit tab choice so popping out of
     // compose / status (which auto-switch the sidebar to Branches)
-    // returns the user to whatever they actually had open before.
-    sidebarTab: state.userSidebarTab,
+    // returns the user to whatever they actually had open before —
+    // UNLESS we're popping INTO status/compose, where the same
+    // auto-switch rule applies as on push (#1348): the Status tab next
+    // to the status surface just duplicates the center pane.
+    sidebarTab: next === 'status' || next === 'compose' ? 'branches' : state.userSidebarTab,
     worktreeDiffOffset: next === 'diff' ? state.worktreeDiffOffset : 0,
     diffSource: next === 'diff' ? state.diffSource : undefined,
     stashDiffRef: next === 'diff' ? state.stashDiffRef : undefined,
@@ -1241,6 +1390,10 @@ function withPushedRepoFrame(
     entryRange: payload.entryRange,
     parentReturn: {
       activeView: state.activeView,
+      viewStack: [...state.viewStack],
+      diffSource: state.diffSource,
+      stashDiffRef: state.stashDiffRef,
+      compareHead: state.compareHead,
       selectedIndex: state.selectedIndex,
       selectedFileIndex: state.selectedFileIndex,
       selectedSubmoduleIndex: state.selectedSubmoduleIndex,
@@ -1249,6 +1402,22 @@ function withPushedRepoFrame(
       userSidebarTab: state.userSidebarTab,
       branchSort: state.branchSort,
       tagSort: state.tagSort,
+      compareBase: state.compareBase,
+      blamePath: state.blamePath,
+      fileHistoryPath: state.fileHistoryPath,
+      changelogCache: state.changelogCache,
+      selectedWorktreeFileIndex: state.selectedWorktreeFileIndex,
+      selectedBranchIndex: state.selectedBranchIndex,
+      selectedTagIndex: state.selectedTagIndex,
+      selectedStashIndex: state.selectedStashIndex,
+      selectedWorktreeListIndex: state.selectedWorktreeListIndex,
+      selectedConflictFileIndex: state.selectedConflictFileIndex,
+      selectedReflogIndex: state.selectedReflogIndex,
+      selectedRemoteIndex: state.selectedRemoteIndex,
+      selectedBlameIndex: state.selectedBlameIndex,
+      selectedFileHistoryIndex: state.selectedFileHistoryIndex,
+      selectedIssueIndex: state.selectedIssueIndex,
+      selectedPullRequestTriageIndex: state.selectedPullRequestTriageIndex,
     },
   }
   return {
@@ -1266,6 +1435,27 @@ function withPushedRepoFrame(
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
     pendingMutationConfirmation: undefined,
+    // #1343 — none of these survive the repo boundary. The compare
+    // base, blame / file-history paths, and the branch-keyed changelog
+    // cache all reference the PARENT repo's objects; the per-list
+    // cursors would be arbitrary positions in the submodule's lists.
+    // All captured in parentReturn above and restored on pop.
+    compareBase: undefined,
+    blamePath: undefined,
+    fileHistoryPath: undefined,
+    changelogCache: {},
+    selectedWorktreeFileIndex: 0,
+    selectedBranchIndex: 0,
+    selectedTagIndex: 0,
+    selectedStashIndex: 0,
+    selectedWorktreeListIndex: 0,
+    selectedConflictFileIndex: 0,
+    selectedReflogIndex: 0,
+    selectedRemoteIndex: 0,
+    selectedBlameIndex: 0,
+    selectedFileHistoryIndex: 0,
+    selectedIssueIndex: 0,
+    selectedPullRequestTriageIndex: 0,
   }
 }
 
@@ -1295,7 +1485,13 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     ...state,
     repoStack,
     activeView: ret.activeView,
-    viewStack: [ret.activeView],
+    // Restore the parent's full stack (fallback for pre-field captures)
+    // plus the diff identity — a pop back onto a commit diff must land
+    // on a diff that knows its source and can still walk back out.
+    viewStack: ret.viewStack?.length ? [...ret.viewStack] : [ret.activeView],
+    diffSource: ret.diffSource,
+    stashDiffRef: ret.stashDiffRef,
+    compareHead: ret.compareHead,
     selectedIndex: ret.selectedIndex,
     selectedFileIndex: ret.selectedFileIndex,
     selectedSubmoduleIndex: ret.selectedSubmoduleIndex,
@@ -1311,6 +1507,26 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     userSidebarTab: ret.userSidebarTab,
     branchSort: ret.branchSort,
     tagSort: ret.tagSort,
+    // #1343 — restore the parent's per-repo state captured at push
+    // time. The `??` fallbacks cover frames captured before these
+    // fields landed: paths/base fall back to cleared (safe — they'd
+    // otherwise reference the WRONG repo), cursors to the top.
+    compareBase: ret.compareBase,
+    blamePath: ret.blamePath,
+    fileHistoryPath: ret.fileHistoryPath,
+    changelogCache: ret.changelogCache ?? {},
+    selectedWorktreeFileIndex: ret.selectedWorktreeFileIndex ?? 0,
+    selectedBranchIndex: ret.selectedBranchIndex ?? 0,
+    selectedTagIndex: ret.selectedTagIndex ?? 0,
+    selectedStashIndex: ret.selectedStashIndex ?? 0,
+    selectedWorktreeListIndex: ret.selectedWorktreeListIndex ?? 0,
+    selectedConflictFileIndex: ret.selectedConflictFileIndex ?? 0,
+    selectedReflogIndex: ret.selectedReflogIndex ?? 0,
+    selectedRemoteIndex: ret.selectedRemoteIndex ?? 0,
+    selectedBlameIndex: ret.selectedBlameIndex ?? 0,
+    selectedFileHistoryIndex: ret.selectedFileHistoryIndex ?? 0,
+    selectedIssueIndex: ret.selectedIssueIndex ?? 0,
+    selectedPullRequestTriageIndex: ret.selectedPullRequestTriageIndex ?? 0,
     pendingKey: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
@@ -1329,6 +1545,7 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     activeView: value,
     viewStack,
     worktreeDiffOffset: value === 'diff' ? state.worktreeDiffOffset : 0,
+    diffLineSelectAnchor: value === 'diff' ? state.diffLineSelectAnchor : undefined,
     diffSource: value === 'diff' ? state.diffSource : undefined,
     stashDiffRef: value === 'diff' ? state.stashDiffRef : undefined,
     compareHead: value === 'diff' ? state.compareHead : undefined,
@@ -1339,6 +1556,66 @@ function withReplacedView(state: LogInkState, value: LogInkView): LogInkState {
     peekReturnFocus: undefined,
     pendingKey: undefined,
   }
+}
+
+/**
+ * Drop the shared filter as part of a LATERAL view switch (g-chord /
+ * palette jump). `state.filter` drives every promoted list — leaving it
+ * armed meant a filter typed on history silently pre-narrowed the stash /
+ * branch / triage lists the user jumped to, and since workflows resolve
+ * their targets from the filtered lists by index, silently re-aimed
+ * destructive actions. Applied AFTER the view-switch helper so the
+ * cleared filter can't disturb the switch's own bookkeeping; a no-op when
+ * no filter is set or the switch stayed on the same view (`enabled`).
+ */
+function withClearedFilter(state: LogInkState, enabled: boolean): LogInkState {
+  if (!enabled || (!state.filter && !state.filterMode)) {
+    return state
+  }
+  return { ...withFilter(state, ''), filterMode: false }
+}
+
+/**
+ * Abandon an in-flight bisect start-wizard pick when the user laterally
+ * navigates away from the pick surface. The wizard flag used to survive
+ * every view switch: the explanatory status line auto-dismissed, and
+ * minutes later Enter on a history commit silently advanced the hidden
+ * wizard instead of opening the commit's diff. The wizard's own flow —
+ * `s` on bisect dispatches `setBisectPickMode` THEN `pushView('history')`
+ * in one batch — stays intact because history/bisect destinations are
+ * exempt (history is where picking happens; bisect is its home view).
+ */
+function withAbandonedBisectPick(state: LogInkState, destination: LogInkView): LogInkState {
+  if (!state.bisectPickMode || destination === 'history' || destination === 'bisect') {
+    return state
+  }
+  return { ...state, bisectPickMode: undefined, bisectPickPendingBad: undefined }
+}
+
+/**
+ * Drop an open rebase plan when navigation leaves the rebase view — a
+ * stale plan must never execute against a HEAD that moved while the
+ * user wandered elsewhere.
+ */
+function withAbandonedRebasePlan(state: LogInkState, destination: LogInkView): LogInkState {
+  if (!state.rebasePlan || destination === 'rebase') {
+    return state
+  }
+  return { ...state, rebasePlan: undefined }
+}
+
+/**
+ * Drop an open conflict-resolution session when navigation leaves the
+ * conflicts view (#1369) — a stale proposal must never write into a
+ * file that changed while the user wandered elsewhere. (Accepts are
+ * content-matched as a second line of defense, but the session UI
+ * itself should not linger.)
+ */
+function withAbandonedConflictResolution(state: LogInkState, destination: LogInkView): LogInkState {
+  if (!state.conflictResolution || destination === 'conflicts') {
+    return state
+  }
+  return { ...state, conflictResolution: undefined }
 }
 
 function withFilter(
@@ -1383,17 +1660,29 @@ function withFilter(
 
 function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
   // Wholesale row replacement after a server-side re-fetch (#776).
-  // Resets the cursor to the top because the new commit set may not
-  // share any hashes with the old one (e.g. switching from `--all` to
-  // `-- some/path` typically dumps the previous selection).
   const commits = getCommitRows(rows)
   const filteredCommits = filterCommits(commits, state.filter)
+  // Preserve the cursor by HASH when the previously selected commit is
+  // still in the new set — most replaceRows are refreshes after a
+  // mutation (cherry-pick, fetch, every bisect good/bad mark), where
+  // snapping to the top on each one lost the user's place. When the
+  // commit set genuinely changed (e.g. switching from `--all` to
+  // `-- some/path`), the hash won't be found and the cursor resets to
+  // the top exactly as before.
+  const previousSelected = getSelectedInkCommit(state)
+  const preservedIndex = previousSelected
+    ? filteredCommits.findIndex((commit) =>
+      hashesMatchAny(commit.hash || commit.shortHash, [previousSelected.hash, previousSelected.shortHash]))
+    : -1
   return {
     ...state,
     rows,
     commits,
     filteredCommits,
-    selectedIndex: 0,
+    // A wholesale replacement IS the main ordering's fresh window, so
+    // the pagination offset resets to its commit count (#1337).
+    mainHistoryCommitCount: commits.length,
+    selectedIndex: preservedIndex >= 0 ? preservedIndex : 0,
     selectedFileIndex: 0,
     pendingCommitFocused: false,
     pendingKey: undefined,
@@ -1405,7 +1694,11 @@ function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
   }
 }
 
-function appendRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
+function appendRows(
+  state: LogInkState,
+  rows: GitLogRow[],
+  mainOrderingCount?: number
+): LogInkState {
   const selected = getSelectedInkCommit(state)
 
   // Dedup the merged row list by commit hash so the graph renderer —
@@ -1461,6 +1754,11 @@ function appendRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
     rows: nextRows,
     commits,
     filteredCommits,
+    // Only main-ordering pages advance the pagination offset (#1337);
+    // anchored context loads pass no count. Advanced by the FETCHED
+    // count, not the post-dedup delta — `skip` addresses positions in
+    // git's own output ordering.
+    mainHistoryCommitCount: state.mainHistoryCommitCount + (mainOrderingCount ?? 0),
     selectedIndex: selectedIndex >= 0
       ? selectedIndex
       : clampIndex(state.selectedIndex, filteredCommits.length),
@@ -1523,6 +1821,7 @@ export function createLogInkState(
     rows,
     commits,
     filteredCommits: commits,
+    mainHistoryCommitCount: commits.length,
     selectedIndex: 0,
     selectedFileIndex: 0,
     selectedWorktreeFileIndex: 0,
@@ -1636,7 +1935,7 @@ export function getLogInkRepoStackLabels(state: LogInkState): string[] {
 export function applyLogInkAction(state: LogInkState, action: LogInkAction): LogInkState {
   switch (action.type) {
     case 'appendRows':
-      return appendRows(state, action.rows)
+      return appendRows(state, action.rows, action.mainOrderingCount)
     case 'replaceRows':
       return replaceRows(state, action.rows)
     case 'appendFilter':
@@ -2109,11 +2408,43 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     case 'setActiveView':
       return withReplacedView(state, action.value)
     case 'pushView':
-      return withPushedView(state, action.value)
-    case 'popView':
-      return withPoppedView(state)
+      // Lateral navigation (g-chords / palette "jump to …") lands on a
+      // fresh view — clear the shared filter so it can't silently
+      // pre-narrow the destination's list (and, since every workflow
+      // resolves its target from the FILTERED list, silently re-aim
+      // destructive actions). Drill-ins (Enter → diff/blame/…) dispatch
+      // their own navigate* actions, not this one, so the filter that
+      // the drilled-into view depends on survives there.
+      return withAbandonedConflictResolution(
+        withAbandonedRebasePlan(
+          withAbandonedBisectPick(
+            withClearedFilter(withPushedView(state, action.value), state.activeView !== action.value),
+            action.value,
+          ),
+          action.value,
+        ),
+        action.value,
+      )
+    case 'popView': {
+      const popped = withPoppedView(state)
+      const withoutPlan = state.activeView === 'rebase' && popped.activeView !== 'rebase'
+        ? { ...popped, rebasePlan: undefined }
+        : popped
+      return state.activeView === 'conflicts' && withoutPlan.activeView !== 'conflicts'
+        ? { ...withoutPlan, conflictResolution: undefined }
+        : withoutPlan
+    }
     case 'replaceView':
-      return withReplacedView(state, action.value)
+      return withAbandonedConflictResolution(
+        withAbandonedRebasePlan(
+          withAbandonedBisectPick(
+            withClearedFilter(withReplacedView(state, action.value), state.activeView !== action.value),
+            action.value,
+          ),
+          action.value,
+        ),
+        action.value,
+      )
     case 'pushRepoFrame':
       return withPushedRepoFrame(state, {
         label: action.label,
@@ -2171,6 +2502,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...next,
         selectedWorktreeFileIndex: Math.max(0, action.fileIndex),
         worktreeDiffOffset: 0,
+        diffLineSelectAnchor: undefined,
         diffSource: 'worktree',
       }
     }
@@ -2353,12 +2685,25 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingConfirmationPayload: action.value ? action.payload : undefined,
         workflowActionId: action.value ? undefined : state.workflowActionId,
         pendingMutationConfirmation: action.value ? undefined : state.pendingMutationConfirmation,
+        // Only one modal prompt may own the keyboard (#1342): raising a
+        // confirmation dismisses any open choice prompt so a `y` meant
+        // for the confirm can't be matched against choice option keys.
+        pendingChoice: action.value ? undefined : state.pendingChoice,
         pendingKey: undefined,
       }
     case 'setWorktreeCheckoutConflict':
       return { ...state, worktreeCheckoutConflict: action.value, pendingKey: undefined }
     case 'setPendingChoice':
-      return { ...state, pendingChoice: action.value, pendingKey: undefined }
+      // Mirror of setPendingConfirmation (#1342): a new choice prompt
+      // displaces any pending confirmation so the two can never be
+      // active (and answer-shadowing) simultaneously.
+      return {
+        ...state,
+        pendingChoice: action.value,
+        pendingConfirmationId: action.value ? undefined : state.pendingConfirmationId,
+        pendingConfirmationPayload: action.value ? undefined : state.pendingConfirmationPayload,
+        pendingKey: undefined,
+      }
     case 'setPendingMutationConfirmation':
       return {
         ...state,
@@ -2740,6 +3085,142 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       }
     case 'clearSplitPlan':
       return { ...state, splitPlan: undefined, pendingKey: undefined }
+    case 'openRebasePlan': {
+      const next = withPushedView(state, 'rebase')
+      return {
+        ...next,
+        rebasePlan: { rows: action.rows, selectedIndex: 0 },
+      }
+    }
+    case 'moveRebaseCursor': {
+      const plan = state.rebasePlan
+      if (!plan || plan.rows.length === 0) return state
+      return {
+        ...state,
+        rebasePlan: {
+          ...plan,
+          selectedIndex: clampIndex(plan.selectedIndex + action.delta, plan.rows.length),
+        },
+        pendingKey: undefined,
+      }
+    }
+    case 'setRebaseAction': {
+      const plan = state.rebasePlan
+      const row = plan?.rows[plan.selectedIndex]
+      if (!plan || !row) return state
+      // Retagging away from reword drops the stashed message so a later
+      // re-reword starts fresh instead of resurrecting stale text.
+      const rows = plan.rows.map((entry, index) => (
+        index === plan.selectedIndex
+          ? { ...entry, action: action.action, newMessage: action.action === 'reword' ? entry.newMessage : undefined }
+          : entry
+      ))
+      return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
+    }
+    case 'moveRebaseRow': {
+      const plan = state.rebasePlan
+      if (!plan) return state
+      const from = plan.selectedIndex
+      const to = from + action.delta
+      if (to < 0 || to >= plan.rows.length) return state
+      const rows = [...plan.rows]
+      const [moved] = rows.splice(from, 1)
+      rows.splice(to, 0, moved)
+      return { ...state, rebasePlan: { rows, selectedIndex: to }, pendingKey: undefined }
+    }
+    case 'setRebaseRewordMessage': {
+      const plan = state.rebasePlan
+      const row = plan?.rows[plan.selectedIndex]
+      if (!plan || !row) return state
+      const message = action.message.trim()
+      if (!message) return { ...state, pendingKey: undefined }
+      const rows = plan.rows.map((entry, index) => (
+        index === plan.selectedIndex
+          ? { ...entry, action: 'reword' as const, newMessage: message }
+          : entry
+      ))
+      return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
+    }
+    case 'setDiffLineSelectAnchor':
+      return { ...state, diffLineSelectAnchor: action.value, pendingKey: undefined }
+    case 'clearRebasePlan':
+      return { ...state, rebasePlan: undefined, pendingKey: undefined }
+    case 'setConflictResolutionLoading':
+      return {
+        ...state,
+        conflictResolution: { path: action.path, status: 'loading', proposals: [], selectedIndex: 0 },
+        pendingKey: undefined,
+      }
+    case 'setConflictResolutionReady':
+      return {
+        ...state,
+        conflictResolution: {
+          path: action.path,
+          status: 'ready',
+          proposals: action.proposals.map((proposal) => ({ ...proposal, status: 'pending' as const })),
+          selectedIndex: 0,
+        },
+        pendingKey: undefined,
+      }
+    case 'setConflictResolutionError':
+      return {
+        ...state,
+        conflictResolution: {
+          path: action.path,
+          status: 'error',
+          error: action.error,
+          proposals: [],
+          selectedIndex: 0,
+        },
+        pendingKey: undefined,
+      }
+    case 'moveConflictProposal': {
+      const session = state.conflictResolution
+      if (!session || session.proposals.length === 0) {
+        return { ...state, pendingKey: undefined }
+      }
+      return {
+        ...state,
+        conflictResolution: {
+          ...session,
+          selectedIndex: clampIndex(session.selectedIndex + action.delta, session.proposals.length),
+        },
+        pendingKey: undefined,
+      }
+    }
+    case 'setConflictProposalStatus': {
+      const session = state.conflictResolution
+      if (!session) {
+        return { ...state, pendingKey: undefined }
+      }
+      const proposals = session.proposals.map((proposal) =>
+        proposal.regionIndex === action.regionIndex
+          ? {
+            ...proposal,
+            status: action.status,
+            resolution: action.resolution ?? proposal.resolution,
+          }
+          : proposal
+      )
+      // Advance the cursor to the next still-pending proposal so the
+      // y/y/y flow walks the file without manual j presses.
+      const nextPending = proposals.findIndex(
+        (proposal, index) => index > session.selectedIndex && proposal.status === 'pending'
+      )
+      const anyPending = proposals.findIndex((proposal) => proposal.status === 'pending')
+      const selectedIndex = nextPending !== -1
+        ? nextPending
+        : anyPending !== -1
+          ? anyPending
+          : session.selectedIndex
+      return {
+        ...state,
+        conflictResolution: { ...session, proposals, selectedIndex },
+        pendingKey: undefined,
+      }
+    }
+    case 'clearConflictResolution':
+      return { ...state, conflictResolution: undefined, pendingKey: undefined }
     case 'setBisectPickMode':
       return {
         ...state,

@@ -149,6 +149,73 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #1356 — force-push recovery. Never bound to a key: raised as a
+      // y-confirm escalation when an ordinary push is rejected
+      // non-fast-forward (post-amend/rebase), and palette-reachable.
+      // --force-with-lease refuses to clobber remote commits that
+      // arrived since the last fetch.
+      id: 'force-push-current-branch',
+      key: '',
+      label: 'Force-push current branch (with lease)',
+      description: 'git push --force-with-lease — overwrite the remote branch after a history rewrite.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'force-push-selected-branch',
+      key: '',
+      label: 'Force-push selected branch (with lease)',
+      description: 'git push --force-with-lease for the cursored branch after a history rewrite.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // Divergence recovery pair — offered via choice prompt when
+      // `pull --ff-only` refuses because local and remote diverged.
+      // Consent comes from the explicit choice, so no second y-confirm.
+      id: 'pull-rebase-current',
+      key: '',
+      label: 'Pull with rebase',
+      description: 'git pull --rebase — replay local commits on top of the diverged remote.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'pull-merge-current',
+      key: '',
+      label: 'Pull with merge',
+      description: 'git pull --no-rebase — merge the diverged remote into the local branch.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      // #1357 — fixup workflow. Scoped to the history view in inkInput
+      // (key `f` there; empty key keeps it palette-discoverable without
+      // becoming a global binding). Creates an ordinary commit from the
+      // staged changes marked `fixup!` for the cursored commit; the
+      // y-confirm names the target. The follow-up autosquash below is
+      // offered via a choice prompt after this succeeds.
+      id: 'fixup-into-commit',
+      key: '',
+      label: 'Fixup into commit',
+      description: 'Commit the staged changes as a fixup! of the cursored commit (squashed on the next autosquash rebase).',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      // Runs `rebase -i --autosquash` from the fixup target's parent with
+      // the sequence editor disabled — folds pending fixup! commits into
+      // their targets without opening an editor. History rewrite, so it
+      // rides the y-confirm path; conflicts route to the gx conflicts
+      // view like any other rebase.
+      id: 'autosquash-rebase',
+      key: '',
+      label: 'Autosquash fixups',
+      description: 'Run git rebase --autosquash to fold fixup! commits into their targets (rewrites history).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       // Per-view-only: scoped to the commit-diff explore in inkInput.
       // Routed through the y-confirm path because `git checkout <sha> --
       // <path>` overwrites the worktree file unconditionally and we
@@ -590,23 +657,32 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       // (lowercase) is used instead of `I` so the existing `I`
       // ai-commit-summary workflow stays reachable on the history
       // view — `i` matches the `git rebase -i` flag mnemonic anyway.
+      id: 'execute-rebase-plan',
+      key: '',
+      label: 'Run rebase plan',
+      description: 'Execute the rebase plan built in the rebase view (rewrites history; conflicts route to the conflicts view).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'interactive-rebase',
       key: '',
-      label: 'Interactive rebase',
+      label: 'Interactive rebase (in $EDITOR)',
       description: 'Start an interactive rebase from the cursored commit (opens $GIT_EDITOR for the todo list).',
       kind: 'destructive',
       requiresConfirmation: true,
     },
     {
       // #0.67 — reflog "time machine". Scoped to the reflog view in
-      // inkInput (key `c`). Checking out a reflog entry detaches HEAD at
-      // that commit so the user can inspect or recover from it — it's
-      // reversible (no refs move) so it skips the y-confirm path.
+      // inkInput (key `c`), which dispatches by id — the empty `key`
+      // keeps this palette-discoverable without letting the end-of-
+      // dispatch key fallback fire it from views that don't bind `c`
+      // (branches, tags, stash, …), which would silently detach HEAD.
       // Reset-to-entry and branch-from-entry reuse the existing
       // `reset-to-commit` / `create-branch-here` workflows (a reflog
       // entry is just a commit by hash); only checkout is reflog-specific.
       id: 'checkout-reflog-entry',
-      key: 'c',
+      key: '',
       label: 'Checkout reflog entry',
       description: 'Check out the commit at the cursored reflog entry (detaches HEAD).',
       kind: 'normal',
@@ -749,19 +825,54 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // #1350 — amend staged changes into HEAD. Destructive: rewrites
+      // the head commit (a pushed branch then needs force-with-lease,
+      // which the P-push escalation offers). Bound to `a` on the
+      // compose view (inkInput); palette everywhere via this entry.
+      id: 'amend-head',
+      key: '',
+      label: 'Amend HEAD with staged changes',
+      description: 'git commit --amend --no-edit — folds the staged changes into the head commit.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // #1350 — reword the HEAD commit message. Palette-only entry
+      // point; opens an input prompt seeded with the current subject,
+      // so the prompt itself is the confirmation step.
+      id: 'reword-head',
+      key: '',
+      label: 'Reword HEAD commit message',
+      description: 'git commit --amend -m <message> — prompt seeded with the current subject.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      // Label honesty: despite the historical id, this action does NOT
+      // read the selected commit — its confirm handler dispatches
+      // `runAiCommitDraft`, which drafts a commit message from the
+      // currently STAGED changes and lands it in the compose surface.
+      // The id is load-bearing (confirm special-case in inkInput,
+      // palette recents) so only the copy is corrected.
       id: 'ai-commit-summary',
       key: 'I',
-      label: 'AI commit summary',
-      description: 'Summarize the selected commit with token/cost awareness.',
+      label: 'AI commit draft',
+      description: 'Draft a commit message from the staged changes (opens compose), with token/cost awareness.',
       kind: 'ai',
       requiresConfirmation: true,
       estimatedTokens: 800,
     },
     {
+      // #1369 — upgraded from the explain-only stub: proposes a
+      // resolution per conflict region of the cursored file; each
+      // proposal lands behind explicit y/e/n on the conflicts surface
+      // and is never auto-applied. The id is load-bearing (confirm
+      // special-case in inkInput, palette recents) so it keeps its
+      // historical name.
       id: 'ai-conflict-help',
       key: 'M',
-      label: 'AI conflict help',
-      description: 'Explain conflicted files and suggest resolution steps.',
+      label: 'AI conflict resolution',
+      description: 'Propose per-region resolutions for the selected conflicted file (y/e/n per region).',
       kind: 'ai',
       requiresConfirmation: true,
       estimatedTokens: 1200,

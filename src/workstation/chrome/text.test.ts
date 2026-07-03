@@ -13,6 +13,13 @@ describe('log Ink text helpers', () => {
   })
 
   describe('wrapCells', () => {
+    it('never hangs when the budget is narrower than one wide character', () => {
+      // Regression: an empty chunk never shrank `remaining`, spinning
+      // the hard-split loop forever. Width 1 vs width-2 CJK chars must
+      // still terminate, emitting one (overflowing) char per line.
+      expect(wrapCells('日本語', 1)).toEqual(['日', '本', '語'])
+    })
+
     it('returns the input unchanged when it already fits', () => {
       expect(wrapCells('short', 20)).toEqual(['short'])
       expect(wrapCells('', 20)).toEqual([''])

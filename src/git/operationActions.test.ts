@@ -2,6 +2,8 @@ import {
     abortOperation,
     continueOperation,
     operationActionTestInternals,
+    resolveConflictKeepCurrentBranch,
+    resolveConflictKeepIncoming,
     resolveConflictOurs,
     resolveConflictTheirs,
     skipOperation,
@@ -91,6 +93,36 @@ describe('log operation actions', () => {
       expect(result).toEqual({ ok: true, message: 'Resolved src/conflict.ts (kept theirs)' })
       expect(git.raw).toHaveBeenCalledWith(['checkout', '--theirs', '--', 'src/conflict.ts'])
       expect(git.raw).toHaveBeenCalledWith(['add', '--', 'src/conflict.ts'])
+    })
+
+    // Intent mapping: during merge/cherry-pick/revert HEAD is the user's
+    // branch (--ours == "yours"); during a rebase git replays the user's
+    // commits onto the upstream, so the sides swap. The keys promise
+    // intent ("keep yours" / "keep incoming"), so the resolvers must pick
+    // the flag per operation — the old direct wiring wrote and staged the
+    // upstream's version when the user asked for their own mid-rebase.
+    it('keep-current-branch uses --ours on merge/cherry-pick and --theirs on rebase', async () => {
+      const merge = { raw: jest.fn().mockResolvedValue('') }
+      await resolveConflictKeepCurrentBranch(merge as never, 'merge', 'src/conflict.ts')
+      expect(merge.raw).toHaveBeenCalledWith(['checkout', '--ours', '--', 'src/conflict.ts'])
+
+      const cherryPick = { raw: jest.fn().mockResolvedValue('') }
+      await resolveConflictKeepCurrentBranch(cherryPick as never, 'cherry-pick', 'src/conflict.ts')
+      expect(cherryPick.raw).toHaveBeenCalledWith(['checkout', '--ours', '--', 'src/conflict.ts'])
+
+      const rebase = { raw: jest.fn().mockResolvedValue('') }
+      await resolveConflictKeepCurrentBranch(rebase as never, 'rebase', 'src/conflict.ts')
+      expect(rebase.raw).toHaveBeenCalledWith(['checkout', '--theirs', '--', 'src/conflict.ts'])
+    })
+
+    it('keep-incoming uses --theirs on merge and --ours on rebase', async () => {
+      const merge = { raw: jest.fn().mockResolvedValue('') }
+      await resolveConflictKeepIncoming(merge as never, 'merge', 'src/conflict.ts')
+      expect(merge.raw).toHaveBeenCalledWith(['checkout', '--theirs', '--', 'src/conflict.ts'])
+
+      const rebase = { raw: jest.fn().mockResolvedValue('') }
+      await resolveConflictKeepIncoming(rebase as never, 'rebase', 'src/conflict.ts')
+      expect(rebase.raw).toHaveBeenCalledWith(['checkout', '--ours', '--', 'src/conflict.ts'])
     })
 
     it('stageConflictResolved stages the file to mark it resolved', async () => {

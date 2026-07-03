@@ -52,12 +52,21 @@ export type LogInkInputEvent =
   | { type: 'toggleSelectedHunkStage' }
   | { type: 'revertSelectedFile' }
   | { type: 'revertSelectedHunk' }
+  | { type: 'stageSelectedLines' }
+  | { type: 'revertSelectedLines' }
   | { type: 'createManualCommit' }
   | { type: 'runAiCommitDraft' }
   | { type: 'cancelAiCommitDraft' }
   | { type: 'startCreatePullRequest' }
   | { type: 'cancelPullRequestBodyDraft' }
   | { type: 'startChangelogView' }
+  | { type: 'cancelChangelog' }
+  | { type: 'runAiConflictResolution' }
+  | { type: 'cancelConflictResolution' }
+  | { type: 'acceptConflictProposal' }
+  | { type: 'acceptAllConflictProposals' }
+  | { type: 'editConflictProposal' }
+  | { type: 'startRebasePlan' }
   | { type: 'regenerateChangelog' }
   | { type: 'yankChangelog' }
   | { type: 'openChangelogInEditor' }
@@ -355,15 +364,13 @@ export function getInspectorActionExecuteEvents(
       ])
     case 'Z':
       return requireCommit(() => [
-        action({
-          type: 'openInputPrompt',
-          kind: 'reset-mode',
-          label: 'Reset mode (soft / mixed / hard)',
-        }),
+        action({ type: 'setPendingChoice', value: RESET_MODE_CHOICE }),
       ])
     case 'i':
+      return requireCommit(() => [{ type: 'startRebasePlan' }])
+    case 'f':
       return requireCommit(() => [
-        action({ type: 'setPendingConfirmation', value: 'interactive-rebase' }),
+        action({ type: 'setPendingConfirmation', value: 'fixup-into-commit' }),
       ])
     case 'y':
       return requireCommit(() => [{ type: 'yankFromActiveView' }])
@@ -448,6 +455,21 @@ function isStashActionTarget(state: LogInkState): boolean {
  */
 function isReflogActionTarget(state: LogInkState): boolean {
   return state.activeView === 'reflog' && state.focus === 'commits'
+}
+
+/**
+ * The staging (worktree) diff is the active surface. Enter paths that set
+ * an explicit source tag it 'worktree'; the `g d` chord pushes the diff
+ * view without one, so `undefined` also means worktree. Commit / stash /
+ * compare diffs must never match: with a dirty worktree their hydrated
+ * worktree hunk/diff data would otherwise capture Space / z / j / k /
+ * `[` `]` and stage, discard, or scroll a file the user isn't looking at.
+ */
+function isWorktreeDiffTarget(state: LogInkState): boolean {
+  return (
+    state.activeView === 'diff' &&
+    (state.diffSource === 'worktree' || state.diffSource === undefined)
+  )
 }
 
 /**
@@ -756,12 +778,7 @@ export function getLogInkPaletteExecuteEvents(
         action({ type: 'commitCompose', action: { type: 'setEditing', value: true } }),
       ]
     case 'commit':
-      return [
-        ...(state.activeView !== 'compose'
-          ? [action({ type: 'pushView', value: 'compose' })]
-          : []),
-        { type: 'createManualCommit' },
-      ]
+      return commitOrComposeEvents(state)
     case 'help':
       return [action({ type: 'toggleHelp' })]
     case 'commandPalette':
@@ -838,6 +855,62 @@ export function getLogInkPaletteExecuteEvents(
   }
 }
 
+/**
+ * The stage-and-commit grammar (#1362). `c` with a drafted summary
+ * commits; `c` with an EMPTY draft lands in the compose view already
+ * in edit mode with the summary field focused — instead of the old
+ * "Commit summary is required." error that forced `e` → type → esc →
+ * `c` (seven keys plus a failed attempt vs lazygit's three). Paired
+ * with Ctrl+D-commits-from-editing below, the flow is
+ * `gs → A → c → <type> → Ctrl+D`.
+ */
+function commitOrComposeEvents(state: LogInkState): LogInkInputEvent[] {
+  const events: LogInkInputEvent[] = state.activeView !== 'compose'
+    ? [action({ type: 'pushView', value: 'compose' })]
+    : []
+  if (!state.commitCompose.summary.trim()) {
+    return [
+      ...events,
+      action({ type: 'commitCompose', action: { type: 'setField', value: 'summary' } }),
+      action({ type: 'commitCompose', action: { type: 'setEditing', value: true } }),
+      action({
+        type: 'setStatus',
+        value: 'Type the commit summary — Ctrl+D commits, esc exits editing.',
+      }),
+    ]
+  }
+  return [...events, { type: 'createManualCommit' }]
+}
+
+/**
+ * 1-key choice prompts for the former typed-word prompts (#1351).
+ * `Z` used to demand the user TYPE soft/mixed/hard (with an error
+ * scold on typos); PR merges demanded the strategy word. The choice
+ * overlay already existed — these constants route each option key
+ * straight into the workflow with the mode/strategy as payload.
+ */
+const RESET_MODE_CHOICE = {
+  id: 'reset-mode-choice',
+  title: 'Reset branch tip to the cursored commit',
+  warning: 'hard discards ALL uncommitted working-tree changes.',
+  options: [
+    { key: 's', label: 'Soft — keep changes staged', workflowId: 'reset-to-commit', payload: 'soft' },
+    { key: 'm', label: 'Mixed — keep changes unstaged', workflowId: 'reset-to-commit', payload: 'mixed' },
+    { key: 'h', label: 'Hard — discard working-tree changes', workflowId: 'reset-to-commit', payload: 'hard', destructive: true },
+  ],
+}
+
+const mergeStrategyChoice = (workflowId: string) => ({
+  id: 'pr-merge-strategy-choice',
+  title: 'Merge pull request',
+  warning: 'Lands on the base branch immediately.',
+  options: [
+    { key: 'm', label: 'Merge commit', workflowId, payload: 'merge', destructive: true },
+    { key: 's', label: 'Squash and merge', workflowId, payload: 'squash', destructive: true },
+    { key: 'r', label: 'Rebase and merge', workflowId, payload: 'rebase', destructive: true },
+  ],
+})
+
 const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '1': 'status',
   '2': 'branches',
@@ -865,10 +938,8 @@ function hasUnsavedComposeDraft(state: LogInkState): boolean {
  * prompts and by Ctrl+D on multi-line prompts (#806). Most prompt
  * kinds dispatch a workflow whose id matches the kind
  * (`create-branch`, `rename-branch`, etc.). A few are exceptions:
- *   - `reset-mode` (#777) collects soft/mixed/hard and forwards the
- *     mode as the payload to `reset-to-commit`.
- *   - `pr-merge-strategy` (#783) validates the strategy and routes to
- *     `merge-pr` via the y-confirm path.
+ *   - the former typed-word prompts (reset mode, merge strategy) are
+ *     1-key choice prompts now (#1351) and never reach this function.
  *   - `pr-comment` dispatches `comment-pr` directly — the body itself
  *     is the affirmative action.
  *   - `pr-request-changes` routes to `request-changes-pr` via
@@ -907,31 +978,15 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       action({ type: 'closeInputPrompt' }),
     ]
   }
-  if (state.inputPrompt.kind === 'reset-mode') {
-    const mode = value.toLowerCase()
-    if (mode !== 'soft' && mode !== 'mixed' && mode !== 'hard') {
-      return [action({
-        type: 'setStatus',
-        value: `Unknown reset mode: ${value}. Use soft, mixed, or hard.`,
-        kind: 'warning',
-      })]
-    }
+  if (state.inputPrompt.kind === 'rebase-reword') {
     return [
-      { type: 'runWorkflowAction', id: 'reset-to-commit', payload: mode },
+      action({ type: 'setRebaseRewordMessage', message: value }),
       action({ type: 'closeInputPrompt' }),
     ]
   }
-  if (state.inputPrompt.kind === 'pr-merge-strategy') {
-    const strategy = value.toLowerCase()
-    if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
-      return [action({
-        type: 'setStatus',
-        value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
-        kind: 'warning',
-      })]
-    }
+  if (state.inputPrompt.kind === 'reword-head') {
     return [
-      action({ type: 'setPendingConfirmation', value: 'merge-pr', payload: strategy }),
+      { type: 'runWorkflowAction', id: 'reword-head', payload: value },
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -985,20 +1040,6 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   // gets a final "are you sure?" before anything ships. The
   // collected value (strategy / body) rides along as the
   // confirmation payload.
-  if (state.inputPrompt.kind === 'triage-pr-merge-strategy') {
-    const strategy = value.toLowerCase()
-    if (strategy !== 'merge' && strategy !== 'squash' && strategy !== 'rebase') {
-      return [action({
-        type: 'setStatus',
-        value: `Unknown merge strategy: ${value}. Use merge, squash, or rebase.`,
-        kind: 'warning',
-      })]
-    }
-    return [
-      action({ type: 'setPendingConfirmation', value: 'triage-pr-merge', payload: strategy }),
-      action({ type: 'closeInputPrompt' }),
-    ]
-  }
   if (state.inputPrompt.kind === 'triage-pr-request-changes') {
     return [
       action({ type: 'setPendingConfirmation', value: 'triage-pr-request-changes', payload: value }),
@@ -1106,6 +1147,107 @@ export function getLogInkInputEvents(
     return []
   }
 
+  // Multi-option prompt (#1181) — the n-way generalization of the y/n
+  // confirmation. Match the keypress against the prompt's options; each
+  // either runs a workflow or fires a built-in navigation intent.
+  //
+  // Sits directly under the input prompt and ABOVE the compose-editing
+  // and filter-mode intercepts (#1342): choice prompts are raised
+  // asynchronously (worktree-checkout conflict, diverged-pull recovery,
+  // …), so the user may be mid-typing when one appears. The overlay
+  // renders on top; the keyboard must belong to it, not to the text
+  // mode underneath.
+  if (state.pendingChoice) {
+    const option = state.pendingChoice.options.find((opt) => opt.key === inputValue)
+    if (option) {
+      // `switch-worktree` is pure navigation — open the worktree as a
+      // nested repo frame. Handled here rather than via the workflow
+      // runner, whose post-action context refresh would mis-target the
+      // frame we just pushed.
+      if (option.intent === 'switch-worktree' && state.worktreeCheckoutConflict) {
+        const conflict = state.worktreeCheckoutConflict
+        return [
+          action({ type: 'pushRepoFrame', label: conflict.branch, workdir: conflict.worktreePath }),
+          action({ type: 'setStatus', value: `Switched to worktree ${conflict.worktreePath} (${conflict.branch})` }),
+          action({ type: 'setPendingChoice', value: undefined }),
+          action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
+        ]
+      }
+      if (option.workflowId) {
+        // The workflow runner owns the live context + clears any
+        // conflict state once it resolves. Options may carry a payload
+        // (#1351 — reset mode, merge strategy).
+        return [
+          { type: 'runWorkflowAction', id: option.workflowId, payload: option.payload },
+          action({ type: 'setPendingChoice', value: undefined }),
+        ]
+      }
+      return [action({ type: 'setPendingChoice', value: undefined })]
+    }
+    if (inputValue === 'n' || key.escape) {
+      return [
+        action({ type: 'setPendingChoice', value: undefined }),
+        ...(state.worktreeCheckoutConflict
+          ? [action({ type: 'setWorktreeCheckoutConflict', value: undefined })]
+          : []),
+        action({ type: 'setStatus', value: 'cancelled' }),
+      ]
+    }
+    return []
+  }
+
+  // Workflow y/n confirmation. Same modality rule as pendingChoice
+  // above (#1342): confirmations can be raised asynchronously (e.g.
+  // the force-push escalation after a rejected push), so they must
+  // outrank editing / filter text modes for the keyboard.
+  if (state.pendingConfirmationId) {
+    if (inputValue === 'y') {
+      const workflowAction = getLogInkWorkflowActionById(state.pendingConfirmationId)
+
+      if (workflowAction?.id === 'ai-commit-summary') {
+        return [
+          { type: 'runAiCommitDraft' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+
+      // AI conflict resolution (#1369): `M` → confirm → the runtime
+      // hook extracts regions, runs the LLM, and lands per-region
+      // proposals on the conflicts surface.
+      if (workflowAction?.id === 'ai-conflict-help') {
+        return [
+          { type: 'runAiConflictResolution' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+
+      // Destructive + provider workflow actions (delete-branch, delete-tag,
+      // drop-stash, remove-worktree, abort-operation, create-pr, …) defer
+      // to the runtime — it has the live context needed to identify the
+      // selected item and run the right action function.
+      if (workflowAction) {
+        return [
+          { type: 'runWorkflowAction', id: workflowAction.id, payload: state.pendingConfirmationPayload },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+
+      return [
+        action({ type: 'setPendingConfirmation', value: undefined }),
+        action({ type: 'setStatus', value: 'workflow action queued' }),
+      ]
+    }
+
+    if (inputValue === 'n' || key.escape) {
+      return [
+        action({ type: 'setPendingConfirmation', value: undefined }),
+        action({ type: 'setStatus', value: 'workflow action cancelled' }),
+      ]
+    }
+
+    return []
+  }
+
   // Cancel in-flight AI commit draft (#881 phase 3). When the compose
   // state has a draft in flight (loading === true), Esc aborts the
   // LLM call and the runtime handler cleans up (clear loading, clear
@@ -1146,6 +1288,22 @@ export function getLogInkInputEvents(
     return [{ type: 'cancelPullRequestBodyDraft' }]
   }
 
+  // Cancel in-flight changelog generation (#1338). Same invariant as
+  // the two cancels above: Esc must cancel any in-flight AI call from
+  // ANY view — the changelog runs 5-15s after `L`, and without this
+  // Esc merely popped the view while the call ran to completion and
+  // billed tokens. The runtime aborts the controller; the workflow's
+  // cancelled path transitions the view out of loading.
+  if (state.changelogView.status === 'loading' && key.escape) {
+    return [{ type: 'cancelChangelog' }]
+  }
+
+  // Cancel in-flight AI conflict resolution (#1369). Same invariant:
+  // Esc cancels any in-flight AI call from any view.
+  if (state.conflictResolution?.status === 'loading' && key.escape) {
+    return [{ type: 'cancelConflictResolution' }]
+  }
+
   // Pending AI draft confirmation (audit finding #7). When the AI
   // draft completes against a non-empty compose surface, it lands in
   // `pendingAiDraft` instead of overwriting the user's typing. `R`
@@ -1159,7 +1317,16 @@ export function getLogInkInputEvents(
   // surfaces the prompt). A user who chord-navigated away while the
   // draft was pending should see the original `R` / Esc semantics of
   // wherever they are now.
-  if (state.activeView === 'compose' && state.commitCompose.pendingAiDraft) {
+  // Gated on `!editing` as well: while the user is actively typing,
+  // `R` is just a letter and Enter advances the field — letting the
+  // pending-draft accept intercept them here would replace the very
+  // typing the pendingAiDraft staging exists to protect. The prompt
+  // stays visible; the user answers it after leaving edit mode.
+  if (
+    state.activeView === 'compose' &&
+    state.commitCompose.pendingAiDraft &&
+    !state.commitCompose.editing
+  ) {
     // `R` or `Enter` accept the swap (the AI draft becomes the new
     // content); `Enter` is the natural "yes, use it" confirmation.
     if ((inputValue === 'R' && !key.ctrl && !key.meta) || key.return) {
@@ -1173,6 +1340,25 @@ export function getLogInkInputEvents(
   if (state.commitCompose.editing) {
     if (key.escape) {
       return [action({ type: 'commitCompose', action: { type: 'setEditing', value: false } })]
+    }
+
+    // #1362 — Ctrl+D commits straight from inline editing (the app's
+    // multiline-prompt submit convention): type the message, one
+    // chord, done — no mode exit, no second `c`. An empty summary
+    // keeps the user editing with a hint instead of bouncing them
+    // through the git layer's error.
+    if (key.ctrl && inputValue === 'd') {
+      if (!state.commitCompose.summary.trim()) {
+        return [action({
+          type: 'setStatus',
+          value: 'Commit summary is required — type it first.',
+          kind: 'warning',
+        })]
+      }
+      return [
+        action({ type: 'commitCompose', action: { type: 'setEditing', value: false } }),
+        { type: 'createManualCommit' },
+      ]
     }
 
     if (key.tab) {
@@ -1261,85 +1447,6 @@ export function getLogInkInputEvents(
     return []
   }
 
-  // Multi-option prompt (#1181) — the n-way generalization of the y/n
-  // confirmation. Match the keypress against the prompt's options; each
-  // either runs a workflow or fires a built-in navigation intent.
-  if (state.pendingChoice) {
-    const option = state.pendingChoice.options.find((opt) => opt.key === inputValue)
-    if (option) {
-      // `switch-worktree` is pure navigation — open the worktree as a
-      // nested repo frame. Handled here rather than via the workflow
-      // runner, whose post-action context refresh would mis-target the
-      // frame we just pushed.
-      if (option.intent === 'switch-worktree' && state.worktreeCheckoutConflict) {
-        const conflict = state.worktreeCheckoutConflict
-        return [
-          action({ type: 'pushRepoFrame', label: conflict.branch, workdir: conflict.worktreePath }),
-          action({ type: 'setStatus', value: `Switched to worktree ${conflict.worktreePath} (${conflict.branch})` }),
-          action({ type: 'setPendingChoice', value: undefined }),
-          action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
-        ]
-      }
-      if (option.workflowId) {
-        // The workflow runner owns the live context + clears any
-        // conflict state once it resolves.
-        return [
-          { type: 'runWorkflowAction', id: option.workflowId },
-          action({ type: 'setPendingChoice', value: undefined }),
-        ]
-      }
-      return [action({ type: 'setPendingChoice', value: undefined })]
-    }
-    if (inputValue === 'n' || key.escape) {
-      return [
-        action({ type: 'setPendingChoice', value: undefined }),
-        ...(state.worktreeCheckoutConflict
-          ? [action({ type: 'setWorktreeCheckoutConflict', value: undefined })]
-          : []),
-        action({ type: 'setStatus', value: 'cancelled' }),
-      ]
-    }
-    return []
-  }
-
-  if (state.pendingConfirmationId) {
-    if (inputValue === 'y') {
-      const workflowAction = getLogInkWorkflowActionById(state.pendingConfirmationId)
-
-      if (workflowAction?.id === 'ai-commit-summary') {
-        return [
-          { type: 'runAiCommitDraft' },
-          action({ type: 'setPendingConfirmation', value: undefined }),
-        ]
-      }
-
-      // Destructive + provider workflow actions (delete-branch, delete-tag,
-      // drop-stash, remove-worktree, abort-operation, create-pr, …) defer
-      // to the runtime — it has the live context needed to identify the
-      // selected item and run the right action function.
-      if (workflowAction) {
-        return [
-          { type: 'runWorkflowAction', id: workflowAction.id, payload: state.pendingConfirmationPayload },
-          action({ type: 'setPendingConfirmation', value: undefined }),
-        ]
-      }
-
-      return [
-        action({ type: 'setPendingConfirmation', value: undefined }),
-        action({ type: 'setStatus', value: 'workflow action queued' }),
-      ]
-    }
-
-    if (inputValue === 'n' || key.escape) {
-      return [
-        action({ type: 'setPendingConfirmation', value: undefined }),
-        action({ type: 'setStatus', value: 'workflow action cancelled' }),
-      ]
-    }
-
-    return []
-  }
-
   if (state.pendingMutationConfirmation) {
     if (inputValue === 'y') {
       if (state.pendingMutationConfirmation === 'discard-draft') {
@@ -1351,6 +1458,8 @@ export function getLogInkInputEvents(
       return [
         state.pendingMutationConfirmation === 'revert-hunk'
           ? { type: 'revertSelectedHunk' }
+          : state.pendingMutationConfirmation === 'discard-lines'
+          ? { type: 'revertSelectedLines' }
           : { type: 'revertSelectedFile' },
         action({ type: 'setPendingMutationConfirmation', value: undefined }),
       ]
@@ -1387,6 +1496,14 @@ export function getLogInkInputEvents(
       // when it eventually lands (it checks `state.splitPlan?.status`
       // before dispatching setSplitPlanReady).
       return [{ type: 'cancelCommitSplit' }]
+    }
+
+    // `q` quits from the overlay like it does from help / view-keys
+    // (#1348) — EXCEPT mid-apply, where quitting would abandon a
+    // half-applied split. Loading is safe to quit from (same soft-
+    // cancel semantics as Esc).
+    if (inputValue === 'q' && state.splitPlan.status !== 'applying') {
+      return [{ type: 'cancelCommitSplit' }, { type: 'exit' }]
     }
 
     // Apply only fires from the 'ready' state. While loading we have
@@ -1648,6 +1765,58 @@ export function getLogInkInputEvents(
   // ordering Esc would pop history back to bisect but the wizard
   // mode would stick around, and the next Enter on history would
   // still try to capture a sha.
+  // Line-select on the staging diff: Esc drops the selection without
+  // popping the view — the user is mid-staging, not leaving.
+  if (key.escape && state.diffLineSelectAnchor !== undefined && state.activeView === 'diff') {
+    return [action({ type: 'setDiffLineSelectAnchor', value: undefined })]
+  }
+
+  // AI conflict-resolution session (#1369). While proposals are open
+  // on the conflicts view they own the review keys: j/k walk regions,
+  // y/e/n act on the cursored one, Y accepts everything pending, Esc
+  // dismisses. The file is untouched until an explicit accept. Sits
+  // ABOVE the global Esc-pop and single-letter fallbacks (`n` = move,
+  // `y` = yank) so the review keys can't leak into navigation.
+  if (state.activeView === 'conflicts' && state.conflictResolution) {
+    const session = state.conflictResolution
+    if (session.status === 'ready' && session.proposals.length > 0) {
+      if (key.downArrow || inputValue === 'j') {
+        return [action({ type: 'moveConflictProposal', delta: 1 })]
+      }
+      if (key.upArrow || inputValue === 'k') {
+        return [action({ type: 'moveConflictProposal', delta: -1 })]
+      }
+      if (inputValue === 'y' && !key.ctrl && !key.meta) {
+        return [{ type: 'acceptConflictProposal' }]
+      }
+      if (inputValue === 'Y' && !key.ctrl && !key.meta) {
+        return [{ type: 'acceptAllConflictProposals' }]
+      }
+      if (inputValue === 'e' && !key.ctrl && !key.meta) {
+        return [{ type: 'editConflictProposal' }]
+      }
+      if (inputValue === 'n' && !key.ctrl && !key.meta) {
+        const proposal = session.proposals[session.selectedIndex]
+        return proposal && proposal.status === 'pending'
+          ? [action({
+            type: 'setConflictProposalStatus',
+            regionIndex: proposal.regionIndex,
+            status: 'rejected',
+          })]
+          : []
+      }
+      if (key.escape) {
+        return [
+          action({ type: 'clearConflictResolution' }),
+          action({ type: 'setStatus', value: 'Proposals dismissed — file untouched.' }),
+        ]
+      }
+    }
+    if (session.status === 'error' && key.escape) {
+      return [action({ type: 'clearConflictResolution' })]
+    }
+  }
+
   if (key.escape && state.bisectPickMode) {
     const events: LogInkInputEvent[] = [
       action({ type: 'clearBisectPickMode' }),
@@ -1927,17 +2096,31 @@ export function getLogInkInputEvents(
     ]
   }
 
-  // #784 — bisect view action keys. Scoped to `state.activeView ===
-  // 'bisect' && state.focus === 'commits'` so the single-letter keys
-  // stay free everywhere else. `g` and `b` collide with the global
-  // chord prefix and the `gb` continuation respectively — placed
-  // BEFORE the bare-`g` chord trigger below so a `g` keystroke on
-  // the bisect view marks good rather than entering chord mode. The
-  // user's path back out of bisect is `<` / `esc`, never a chord;
-  // the in-bisect view itself can't navigate elsewhere via `g`-prefix
-  // chords until the user exits with `esc` first.
+  // Any other key while the chord is armed CANCELS it (which-key
+  // semantics: an unknown continuation dismisses the chord without
+  // acting). Unmatched keys used to fall through returning [] with the
+  // prefix still armed, so an Esc "cancel" was a no-op and a `c`
+  // pressed minutes later silently fired `gc`. `g` falls through to
+  // the bare-`g` handler below, which resolves `gg` (jump to top).
+  if (state.pendingKey === 'g' && inputValue !== 'g') {
+    return [action({ type: 'setPendingKey', value: undefined })]
+  }
+
+  // #784 / #1352 — bisect view action keys. Scoped to `state.activeView
+  // === 'bisect' && state.focus === 'commits'` so the single-letter
+  // keys stay free everywhere else. Mark-good is `y` (yes/good), NOT
+  // bare `g`: the old `g` binding shadowed the global chord prefix, so
+  // a user reflexively typing `gh`/`gs` to navigate away silently ran
+  // `git bisect good` on the current candidate. `g` now arms the chord
+  // on bisect like everywhere else (`gh`/`gs`/`gx` work mid-bisect);
+  // `b` keeps the `pendingKey !== 'g'` guard so `gb` still reaches
+  // branches. The trade: `y` yank is unavailable on this one transient
+  // view (the candidate sha is visible in the panel).
   if (state.activeView === 'bisect' && state.focus === 'commits') {
-    if (inputValue === 'g' && state.pendingKey !== 'g') {
+    // Gated off once the bisect has terminated: the completion panel
+    // rebinds y/Y to yank the first-bad sha (#879 item 3), and there
+    // is no candidate left to mark.
+    if (inputValue === 'y' && !key.ctrl && !key.meta && !context.bisectCompletionSha) {
       return [{ type: 'runWorkflowAction', id: 'bisect-good' }]
     }
     if (inputValue === 'b' && state.pendingKey !== 'g') {
@@ -2017,6 +2200,13 @@ export function getLogInkInputEvents(
     if (inputValue === 'r') {
       return [{ type: 'regenerateChangelog' }]
     }
+    // While loading / errored there's no line count yet — swallow the
+    // scroll keys instead of letting them fall through to the global
+    // move handler, which used to scroll the HISTORY cursor invisibly
+    // beneath this surface (#1348).
+    if (inputValue === 'j' || inputValue === 'k' || key.upArrow || key.downArrow || key.pageUp || key.pageDown) {
+      return []
+    }
   }
 
   if (inputValue === 'g') {
@@ -2030,11 +2220,60 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingKey', value: 'g' })]
   }
 
+  // ── In-TUI interactive rebase surface (#1359) ───────────────────────
+  // The plan claims its keys while the view is active: j/k cursor, J/K
+  // reorder, p/s/f/d/e retag, r reword (prompt), Enter executes (behind
+  // a y-confirm), Esc pops (which clears the plan). Placed before every
+  // other single-letter handler so the rebase letters can't leak into
+  // sort/fixup/diff-toggle semantics.
+  if (state.activeView === 'rebase' && state.rebasePlan) {
+    if (inputValue === 'J') {
+      return [action({ type: 'moveRebaseRow', delta: 1 })]
+    }
+    if (inputValue === 'K') {
+      return [action({ type: 'moveRebaseRow', delta: -1 })]
+    }
+    if (inputValue === 'p') {
+      return [action({ type: 'setRebaseAction', action: 'pick' })]
+    }
+    if (inputValue === 's') {
+      return [action({ type: 'setRebaseAction', action: 'squash' })]
+    }
+    if (inputValue === 'f') {
+      return [action({ type: 'setRebaseAction', action: 'fixup' })]
+    }
+    if (inputValue === 'd') {
+      return [action({ type: 'setRebaseAction', action: 'drop' })]
+    }
+    if (inputValue === 'e') {
+      return [action({ type: 'setRebaseAction', action: 'edit' })]
+    }
+    if (inputValue === 'r') {
+      const row = state.rebasePlan.rows[state.rebasePlan.selectedIndex]
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'rebase-reword',
+        label: `New message for ${row?.shortSha ?? 'commit'}`,
+        initial: row?.newMessage ?? row?.subject ?? '',
+      })]
+    }
+    if (key.return) {
+      return [action({ type: 'setPendingConfirmation', value: 'execute-rebase-plan' })]
+    }
+  }
+
   // `d` on the diff view toggles between unified and side-by-side split
   // rendering (#785). Scoped to the diff view so the letter stays free
   // for other surfaces. The chord branch above already claimed `gd`,
   // so by the time we get here `pendingKey` is not `g`.
-  if (inputValue === 'd' && state.activeView === 'diff') {
+  //
+  // NOT on the staging (worktree) diff (#1344): that renderer is
+  // unified-only (staging is the primary action there), so the toggle
+  // used to report "Switched to side-by-side" while nothing changed —
+  // and the flipped mode then leaked into the next commit/stash diff.
+  // The footer already hides the `d` hint there; the handler now
+  // matches it.
+  if (inputValue === 'd' && state.activeView === 'diff' && !isWorktreeDiffTarget(state)) {
     const next = state.diffViewMode === 'unified' ? 'split' : 'unified'
     return [
       action({ type: 'toggleDiffViewMode' }),
@@ -2148,7 +2387,7 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === '[') {
-    if (state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+    if (isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
       return [action({
         type: 'jumpWorktreeHunk',
         delta: -1,
@@ -2180,7 +2419,7 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === ']') {
-    if (state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+    if (isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
       return [action({
         type: 'jumpWorktreeHunk',
         delta: 1,
@@ -2330,11 +2569,15 @@ export function getLogInkInputEvents(
       })]
     }
 
+    if (state.activeView === 'rebase' && state.rebasePlan) {
+      return [action({ type: 'moveRebaseCursor', delta: -1 })]
+    }
+
     // Worktree (staging) diff: ↑/↓ scroll lines — consistent with the
     // commit / stash diffs (#1185). `[`/`]` jump between hunks (the
     // staging unit), and the current hunk is derived from the scroll
     // position, so line-scrolling still walks the staging target.
-    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+    if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
         delta: -1,
@@ -2481,9 +2724,13 @@ export function getLogInkInputEvents(
       })]
     }
 
+    if (state.activeView === 'rebase' && state.rebasePlan) {
+      return [action({ type: 'moveRebaseCursor', delta: 1 })]
+    }
+
     // Worktree (staging) diff: ↓ scrolls lines (see the ↑ handler) —
     // `[`/`]` jump hunks (#1185).
-    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+    if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
         delta: 1,
@@ -2568,7 +2815,7 @@ export function getLogInkInputEvents(
   }
 
   if (key.pageUp) {
-    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+    if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
         delta: -8,
@@ -2597,7 +2844,7 @@ export function getLogInkInputEvents(
   }
 
   if (key.pageDown) {
-    if (state.activeView === 'diff' && context.worktreeDiffLineCount) {
+    if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
       return [action({
         type: 'pageWorktreeDiff',
         delta: 8,
@@ -3073,11 +3320,9 @@ export function getLogInkInputEvents(
   // comment open prompts first, the rest route through the y-confirm
   // path because they're irreversible (or near-irreversible).
   if (inputValue === 'm' && state.activeView === 'pull-request') {
-    return [action({
-      type: 'openInputPrompt',
-      kind: 'pr-merge-strategy',
-      label: 'Merge strategy (merge / squash / rebase)',
-    })]
+    // 1-key strategy choice (#1351); each option routes straight into
+    // the merge workflow with the strategy as payload.
+    return [action({ type: 'setPendingChoice', value: mergeStrategyChoice('merge-pr') })]
   }
   if (inputValue === 'x' && state.activeView === 'pull-request') {
     return [action({ type: 'setPendingConfirmation', value: 'close-pr' })]
@@ -3193,11 +3438,7 @@ export function getLogInkInputEvents(
     // prompts first; submit lands the strategy / body as the
     // confirmation payload, which the runner picks up after y.
     if (inputValue === 'm' && context.pullRequestTriageCount) {
-      return [action({
-        type: 'openInputPrompt',
-        kind: 'triage-pr-merge-strategy',
-        label: 'Merge strategy (merge / squash / rebase)',
-      })]
+      return [action({ type: 'setPendingChoice', value: mergeStrategyChoice('triage-pr-merge') })]
     }
     if (inputValue === 'x' && context.pullRequestTriageCount) {
       return [action({ type: 'setPendingConfirmation', value: 'triage-pr-close' })]
@@ -3244,14 +3485,14 @@ export function getLogInkInputEvents(
   // diffed), and the stash diff (the file the cursor sits in inside
   // the patch). The runtime suspends Ink, spawns the editor sync, then
   // re-renders.
-  if (inputValue === 'o' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
+  if (inputValue === 'o' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath && !state.statusGroupHeaderFocused) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
   }
   // `i` opens the "add to .gitignore" picker for the cursored worktree
   // file. The runtime resolves the path + opens the picker (the bare
   // event carries no path — same selection-resolution pattern as the
   // revert / stage events).
-  if (inputValue === 'i' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath) {
+  if (inputValue === 'i' && state.activeView === 'status' && context.worktreeFileCount && context.worktreeSelectedPath && !state.statusGroupHeaderFocused) {
     return [{ type: 'openGitignorePicker' }]
   }
   // `b` opens the on-demand blame drill-down for the cursored worktree
@@ -3263,7 +3504,8 @@ export function getLogInkInputEvents(
     inputValue === 'b' &&
     state.activeView === 'status' &&
     context.worktreeFileCount &&
-    context.worktreeSelectedPath
+    context.worktreeSelectedPath &&
+    !state.statusGroupHeaderFocused
   ) {
     return [action({ type: 'navigateOpenBlameForPath', path: context.worktreeSelectedPath })]
   }
@@ -3283,7 +3525,8 @@ export function getLogInkInputEvents(
     inputValue === 'L' &&
     state.activeView === 'status' &&
     context.worktreeFileCount &&
-    context.worktreeSelectedPath
+    context.worktreeSelectedPath &&
+    !state.statusGroupHeaderFocused
   ) {
     return [action({ type: 'navigateOpenFileHistoryForPath', path: context.worktreeSelectedPath })]
   }
@@ -3298,7 +3541,7 @@ export function getLogInkInputEvents(
   if (inputValue === 'L' && state.activeView === 'blame' && state.blamePath) {
     return [action({ type: 'navigateOpenFileHistoryForPath', path: state.blamePath })]
   }
-  if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'worktree' && context.worktreeSelectedPath) {
+  if (inputValue === 'o' && isWorktreeDiffTarget(state) && context.worktreeSelectedPath) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]
   }
   if (inputValue === 'o' && state.activeView === 'diff' && state.diffSource === 'stash' && context.stashDiffSelectedPath) {
@@ -3446,13 +3689,9 @@ export function getLogInkInputEvents(
   }
 
   // `Z` resets the current branch tip to the cursored commit. Opens a
-  // mode prompt (soft / mixed / hard) instead of jumping straight to
-  // confirmation because the choice changes the destructiveness
-  // dramatically — `--hard` discards working-tree changes. The prompt
-  // submission special-cases `kind === 'reset-mode'` to forward the
-  // mode through `reset-to-commit` (see prompt-submit handler above).
-  // No `initial` value: existing prompts append to initial rather than
-  // replacing it, which would surprise the user typing the mode.
+  // 1-key mode choice (#1351 — s soft / m mixed / h hard) instead of a
+  // typed-word prompt; hard carries the destructive styling because it
+  // discards working-tree changes.
   if (
     inputValue === 'Z' &&
     state.activeView === 'history' &&
@@ -3460,17 +3699,13 @@ export function getLogInkInputEvents(
     state.filteredCommits.length > 0 &&
     !state.pendingCommitFocused
   ) {
-    return [action({
-      type: 'openInputPrompt',
-      kind: 'reset-mode',
-      label: 'Reset mode (soft / mixed / hard)',
-    })]
+    return [action({ type: 'setPendingChoice', value: RESET_MODE_CHOICE })]
   }
 
-  // `i` (lowercase) starts an interactive rebase from the cursored
-  // commit's parent. Lowercase keeps the existing global `I`
-  // ai-commit-summary workflow reachable on the history view; `i`
-  // also matches the `git rebase -i` flag mnemonic.
+  // `i` (lowercase) opens the in-TUI interactive rebase surface for
+  // `<cursored>^..HEAD` (#1359) — reorder/squash/fixup/drop/reword as a
+  // first-person list instead of shelling the todo into $GIT_EDITOR.
+  // The editor variant stays palette-reachable as `interactive-rebase`.
   if (
     inputValue === 'i' &&
     state.activeView === 'history' &&
@@ -3478,7 +3713,22 @@ export function getLogInkInputEvents(
     state.filteredCommits.length > 0 &&
     !state.pendingCommitFocused
   ) {
-    return [action({ type: 'setPendingConfirmation', value: 'interactive-rebase' })]
+    return [{ type: 'startRebasePlan' }]
+  }
+
+  // `f` creates a fixup! commit from the STAGED changes targeting the
+  // cursored commit (#1357). y-confirm names the target; after a
+  // successful fixup the runtime raises a choice prompt offering to run
+  // the autosquash rebase immediately. `f` is free on history (the
+  // triage views' filter-cycle `f` is scoped to those views).
+  if (
+    inputValue === 'f' &&
+    state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+  ) {
+    return [action({ type: 'setPendingConfirmation', value: 'fixup-into-commit' })]
   }
 
   // `B` opens a create-branch prompt rooted at the cursored commit
@@ -3506,11 +3756,7 @@ export function getLogInkInputEvents(
   // their target from the reflog cursor when the reflog view is active (see
   // runtime handlers); the prompts here are identical to the history path.
   if (inputValue === 'Z' && isReflogActionTarget(state) && context.reflogCount) {
-    return [action({
-      type: 'openInputPrompt',
-      kind: 'reset-mode',
-      label: 'Reset mode (soft / mixed / hard)',
-    })]
+    return [action({ type: 'setPendingChoice', value: RESET_MODE_CHOICE })]
   }
   if (inputValue === 'B' && isReflogActionTarget(state) && context.reflogCount) {
     return [action({
@@ -3650,7 +3896,15 @@ export function getLogInkInputEvents(
     })]
   }
 
-  if (inputValue === ' ' && state.activeView === 'status' && context.worktreeFileCount) {
+  // Gated off while the GROUP HEADER row is highlighted: the file cursor
+  // still points at the group's first file, so Space used to stage (and
+  // `z` below offered to revert) a file the visible cursor wasn't on.
+  if (
+    inputValue === ' ' &&
+    state.activeView === 'status' &&
+    context.worktreeFileCount &&
+    !state.statusGroupHeaderFocused
+  ) {
     return [{ type: 'toggleSelectedFileStage' }]
   }
 
@@ -3660,6 +3914,13 @@ export function getLogInkInputEvents(
   if (inputValue === 'A' && (state.activeView === 'status' || state.activeView === 'compose')) {
     return [{ type: 'runWorkflowAction', id: 'stage-all' }]
   }
+  // #1350 — `a` on compose amends the staged changes into HEAD instead
+  // of creating a new commit ("amend instead of commit"). y-confirmed:
+  // it rewrites the head commit. Compose only — `a` means stage-file on
+  // status/diff and apply on stashes (see the KEYMAP overload table).
+  if (inputValue === 'a' && state.activeView === 'compose' && !key.ctrl && !key.meta) {
+    return [action({ type: 'setPendingConfirmation', value: 'amend-head' })]
+  }
   if (inputValue === '+' && (state.activeView === 'status' || state.activeView === 'compose')) {
     return [action({
       type: 'openInputPrompt',
@@ -3668,7 +3929,35 @@ export function getLogInkInputEvents(
     })]
   }
 
-  if (inputValue === ' ' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+  // ── Line-level staging (#1358) ──────────────────────────────────────
+  // `v` anchors a visual selection at the current scroll line; j/k then
+  // extend it (the "cursor" on the staging diff IS the viewport top,
+  // same as the current-hunk derivation). While a selection is active,
+  // Space stages exactly those lines and `z` offers to discard them;
+  // `v`/Esc clears. The whole-hunk semantics below are untouched when no
+  // selection is active.
+  if (inputValue === 'v' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
+    return [action({
+      type: 'setDiffLineSelectAnchor',
+      value: state.diffLineSelectAnchor === undefined ? state.worktreeDiffOffset : undefined,
+    })]
+  }
+  if (
+    inputValue === ' ' &&
+    isWorktreeDiffTarget(state) &&
+    state.diffLineSelectAnchor !== undefined
+  ) {
+    return [{ type: 'stageSelectedLines' }]
+  }
+  if (
+    inputValue === 'z' &&
+    isWorktreeDiffTarget(state) &&
+    state.diffLineSelectAnchor !== undefined
+  ) {
+    return [action({ type: 'setPendingMutationConfirmation', value: 'discard-lines' })]
+  }
+
+  if (inputValue === ' ' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
     return [{ type: 'toggleSelectedHunkStage' }]
   }
 
@@ -3676,8 +3965,7 @@ export function getLogInkInputEvents(
   // the whole file, since there's nothing to partial-stage.
   if (
     inputValue === ' ' &&
-    state.activeView === 'diff' &&
-    state.diffSource === 'worktree' &&
+    isWorktreeDiffTarget(state) &&
     !context.worktreeHunkOffsets?.length
   ) {
     return [{ type: 'toggleSelectedFileStage' }]
@@ -3685,15 +3973,20 @@ export function getLogInkInputEvents(
 
   // `a` stages/unstages the WHOLE current file from the staging diff —
   // an escape hatch out of hunk-by-hunk back to all-or-nothing.
-  if (inputValue === 'a' && state.activeView === 'diff' && state.diffSource === 'worktree') {
+  if (inputValue === 'a' && isWorktreeDiffTarget(state)) {
     return [{ type: 'toggleSelectedFileStage' }]
   }
 
-  if (inputValue === 'z' && state.activeView === 'status' && context.worktreeFileCount) {
+  if (
+    inputValue === 'z' &&
+    state.activeView === 'status' &&
+    context.worktreeFileCount &&
+    !state.statusGroupHeaderFocused
+  ) {
     return [action({ type: 'setPendingMutationConfirmation', value: 'revert-file' })]
   }
 
-  if (inputValue === 'z' && state.activeView === 'diff' && context.worktreeHunkOffsets?.length) {
+  if (inputValue === 'z' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
     return [action({ type: 'setPendingMutationConfirmation', value: 'revert-hunk' })]
   }
 
@@ -3754,12 +4047,7 @@ export function getLogInkInputEvents(
     inputValue === 'c' &&
     (state.activeView === 'status' || state.activeView === 'diff' || state.activeView === 'compose')
   ) {
-    const events: LogInkInputEvent[] = []
-    if (state.activeView !== 'compose') {
-      events.push(action({ type: 'pushView', value: 'compose' }))
-    }
-    events.push({ type: 'createManualCommit' })
-    return events
+    return commitOrComposeEvents(state)
   }
 
   // Context-sensitive per-branch variants of F / U / P. When the

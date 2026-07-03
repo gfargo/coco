@@ -126,6 +126,16 @@ type LayoutNode = {
   isRoot: boolean
   /** Lane ids opened by this commit's extra (merge) parents. */
   bornParents: Set<number>
+  /**
+   * Lane ids of ALREADY-OPEN lanes this merge's extra parents resolved
+   * to (#1335). Distinct from `bornParents`: a born lane's whole edge
+   * emanates from the dot (no vertical above), while a reused lane
+   * keeps its own vertical continuation and needs an ADDITIONAL
+   * connector edge from the merge dot — without it the merge glyph
+   * renders with only one descending line and the DAG edge to the
+   * second parent is invisible.
+   */
+  mergedLanes: Set<number>
   /** Lane snapshot entering this commit row. */
   before: (Lane | null)[]
   /** Lane snapshot leaving this commit row (entering the next). */
@@ -166,6 +176,7 @@ export function computeGraphLayout(commits: LayoutCommit[]): GraphLayout {
     const isRoot = commit.parents.length === 0
     const isMerge = commit.parents.length > 1
     const bornParents = new Set<number>()
+    const mergedLanes = new Set<number>()
 
     if (isRoot) {
       lanes[column] = null
@@ -175,20 +186,25 @@ export function computeGraphLayout(commits: LayoutCommit[]): GraphLayout {
         const parentHash = commit.parents[p]
         // Reuse a lane already waiting for this parent so two merges
         // that share a parent share its lane.
-        let target = lanes.findIndex((lane) => lane?.expecting === parentHash)
+        const target = lanes.findIndex((lane) => lane?.expecting === parentHash)
         if (target === -1) {
-          target = firstFreeColumn(lanes)
+          const born = firstFreeColumn(lanes)
           const newLaneId = nextLaneId
           nextLaneId += 1
-          lanes[target] = { laneId: newLaneId, expecting: parentHash }
+          lanes[born] = { laneId: newLaneId, expecting: parentHash }
           bornParents.add(newLaneId)
+        } else if (target !== column) {
+          // The parent's lane already exists (#1335) — record the
+          // connection so pass 2 emits a connector from the merge dot
+          // to that lane in addition to the lane's own vertical.
+          mergedLanes.add(lanes[target]!.laneId)
         }
       }
     }
 
     trimTrailingHoles(lanes)
     const after = lanes.map((lane) => (lane ? { ...lane } : null))
-    nodes.push({ hash: commit.hash, column, laneId, isMerge, isRoot, bornParents, before, after })
+    nodes.push({ hash: commit.hash, column, laneId, isMerge, isRoot, bornParents, mergedLanes, before, after })
   }
 
   // Pass 2 — derive pass-throughs and edge rows (one commit lookahead).
@@ -217,6 +233,14 @@ export function computeGraphLayout(commits: LayoutCommit[]): GraphLayout {
       const from = emanatesFromDot ? node.column : c
       const to = next && lane.expecting === next.hash ? next.column : c
       edges.push({ laneId: lane.laneId, from, to })
+      // A merge parent that resolved to this ALREADY-OPEN lane (#1335):
+      // the lane's own vertical (above) keeps its continuity, and this
+      // extra edge draws the connector from the merge dot into the
+      // lane. The renderer composes the two per-cell (├─┤ junctions),
+      // so the second-parent edge is no longer invisible.
+      if (node.mergedLanes.has(lane.laneId) && node.column !== to) {
+        edges.push({ laneId: lane.laneId, from: node.column, to })
+      }
     }
 
     const width =

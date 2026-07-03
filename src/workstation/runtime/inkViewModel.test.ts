@@ -344,6 +344,49 @@ describe('log Ink view model', () => {
     expect(commitHashes).toHaveLength(4)
   })
 
+  it('advances the main-ordering pagination offset only for load-more pages (#1337)', () => {
+    const olderCommit = (hash: string): (typeof rows)[number] => ({
+      type: 'commit',
+      graph: '*',
+      shortHash: hash.slice(0, 7),
+      hash,
+      parents: [],
+      date: '2026-04-25',
+      author: 'Coco Test',
+      refs: [],
+      message: `chore: ${hash.slice(0, 7)}`,
+    })
+
+    let state = createLogInkState(rows)
+    expect(state.mainHistoryCommitCount).toBe(3)
+
+    // Anchored context load: rows merged from getLogRowsAnchoredOn are
+    // NOT a prefix of the main ordering — the offset must not move,
+    // even though commits.length grows.
+    state = applyLogInkAction(state, {
+      type: 'appendRows',
+      rows: [olderCommit('aaaaaaa0000001')],
+    })
+    expect(state.commits).toHaveLength(4)
+    expect(state.mainHistoryCommitCount).toBe(3)
+
+    // Load-more page: advances by the FETCHED count (pre-dedup), not
+    // the post-dedup delta — one of the two rows below is the anchored
+    // commit already merged above, but git's skip offset still counts
+    // it.
+    state = applyLogInkAction(state, {
+      type: 'appendRows',
+      rows: [olderCommit('aaaaaaa0000001'), olderCommit('bbbbbbb0000002')],
+      mainOrderingCount: 2,
+    })
+    expect(state.commits).toHaveLength(5)
+    expect(state.mainHistoryCommitCount).toBe(5)
+
+    // A wholesale replacement resets the offset to the fresh window.
+    state = applyLogInkAction(state, { type: 'replaceRows', rows })
+    expect(state.mainHistoryCommitCount).toBe(3)
+  })
+
   it('tracks selected changed files and diff preview paging', () => {
     let state = createLogInkState(rows)
 
@@ -623,6 +666,142 @@ describe('log Ink view model', () => {
     expect(state.pendingMutationConfirmation).toBeUndefined()
   })
 
+  describe('AI conflict-resolution session (#1369)', () => {
+    const region = (index: number) => ({
+      index,
+      startLine: index * 10 + 1,
+      endLine: index * 10 + 5,
+      oursLabel: 'HEAD',
+      theirsLabel: 'feature/x',
+      ours: [`ours ${index}`],
+      theirs: [`theirs ${index}`],
+    })
+    const proposal = (index: number) => ({
+      regionIndex: index,
+      resolution: `resolved ${index}`,
+      rationale: 'combines both',
+      region: region(index),
+    })
+
+    function readyState() {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+      state = applyLogInkAction(state, { type: 'setConflictResolutionLoading', path: 'src/app.ts' })
+      expect(state.conflictResolution?.status).toBe('loading')
+      state = applyLogInkAction(state, {
+        type: 'setConflictResolutionReady',
+        path: 'src/app.ts',
+        proposals: [proposal(0), proposal(1), proposal(2)],
+      })
+      return state
+    }
+
+    it('lands proposals as pending with the cursor on the first', () => {
+      const state = readyState()
+      expect(state.conflictResolution).toMatchObject({
+        path: 'src/app.ts',
+        status: 'ready',
+        selectedIndex: 0,
+      })
+      expect(state.conflictResolution?.proposals.map((p) => p.status))
+        .toEqual(['pending', 'pending', 'pending'])
+    })
+
+    it('marking a proposal advances the cursor to the next pending one', () => {
+      let state = readyState()
+      state = applyLogInkAction(state, {
+        type: 'setConflictProposalStatus',
+        regionIndex: 0,
+        status: 'accepted',
+      })
+      expect(state.conflictResolution?.proposals[0].status).toBe('accepted')
+      expect(state.conflictResolution?.selectedIndex).toBe(1)
+
+      // Rejecting the middle one skips to the last pending.
+      state = applyLogInkAction(state, {
+        type: 'setConflictProposalStatus',
+        regionIndex: 1,
+        status: 'rejected',
+      })
+      expect(state.conflictResolution?.selectedIndex).toBe(2)
+    })
+
+    it('an edit-accept records the replacement resolution text', () => {
+      let state = readyState()
+      state = applyLogInkAction(state, {
+        type: 'setConflictProposalStatus',
+        regionIndex: 1,
+        status: 'accepted',
+        resolution: 'hand-edited text',
+      })
+      expect(state.conflictResolution?.proposals[1]).toMatchObject({
+        status: 'accepted',
+        resolution: 'hand-edited text',
+      })
+    })
+
+    it('clamps proposal cursor movement', () => {
+      let state = readyState()
+      state = applyLogInkAction(state, { type: 'moveConflictProposal', delta: 5 })
+      expect(state.conflictResolution?.selectedIndex).toBe(2)
+      state = applyLogInkAction(state, { type: 'moveConflictProposal', delta: -9 })
+      expect(state.conflictResolution?.selectedIndex).toBe(0)
+    })
+
+    it('drops the session on navigation away from the conflicts view', () => {
+      let state = readyState()
+      state = applyLogInkAction(state, { type: 'pushView', value: 'history' })
+      expect(state.conflictResolution).toBeUndefined()
+
+      state = readyState()
+      state = applyLogInkAction(state, { type: 'popView' })
+      expect(state.conflictResolution).toBeUndefined()
+    })
+
+    it('records the error state for the surface to render', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setConflictResolutionError',
+        path: 'src/app.ts',
+        error: 'rate limited',
+      })
+      expect(state.conflictResolution).toMatchObject({ status: 'error', error: 'rate limited' })
+      state = applyLogInkAction(state, { type: 'clearConflictResolution' })
+      expect(state.conflictResolution).toBeUndefined()
+    })
+  })
+
+  it('choice and confirmation prompts displace each other (#1342)', () => {
+    const choice = {
+      id: 'diverged-pull-recovery',
+      title: 'Branches diverged',
+      options: [{ key: 'r', label: 'Pull with rebase', workflowId: 'pull-rebase-current' }],
+    }
+
+    // Raising a confirmation while a choice prompt is open closes the
+    // choice — otherwise input precedence would shadow the confirm and
+    // its `y` would be matched against choice option keys.
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: choice })
+    state = applyLogInkAction(state, {
+      type: 'setPendingConfirmation',
+      value: 'delete-branch',
+      payload: 'feat/x',
+    })
+    expect(state.pendingChoice).toBeUndefined()
+    expect(state.pendingConfirmationId).toBe('delete-branch')
+
+    // …and the mirror direction.
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: choice })
+    expect(state.pendingConfirmationId).toBeUndefined()
+    expect(state.pendingConfirmationPayload).toBeUndefined()
+    expect(state.pendingChoice).toEqual(choice)
+
+    // Clearing one leaves the other untouched.
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: undefined })
+    expect(state.pendingChoice).toBeUndefined()
+  })
+
   describe('navigation primitives', () => {
     it('initializes the view stack with the root view', () => {
       const state = createLogInkState(rows)
@@ -651,6 +830,144 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, { type: 'pushView', value: 'diff' })
 
       expect(state.viewStack).toEqual(['history', 'diff'])
+    })
+
+    // Regression: replaceRows unconditionally reset selectedIndex to 0.
+    // Every history-mutating workflow (cherry-pick, fetch, each bisect
+    // good/bad mark) refreshes through replaceRows, so the cursor
+    // snapped to the top on every operation.
+    it('replaceRows preserves the cursor by hash when the commit survives the refresh', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'move', delta: 2 })
+      const selectedHash = state.filteredCommits[state.selectedIndex].hash
+
+      // Same rows, fresh array identities — a refresh with no changes.
+      state = applyLogInkAction(state, {
+        type: 'replaceRows',
+        rows: rows.map((row) => ({ ...row })),
+      })
+      expect(state.filteredCommits[state.selectedIndex].hash).toBe(selectedHash)
+    })
+
+    it('replaceRows still resets to the top when the commit set changed', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'move', delta: 2 })
+
+      state = applyLogInkAction(state, {
+        type: 'replaceRows',
+        rows: [{
+          type: 'commit', graph: '*', shortHash: 'zzz9999', hash: 'zzz9999'.padEnd(12, '9'),
+          parents: [], date: '2026-05-01', author: 'Coco Test', refs: [], message: 'entirely new set',
+        }],
+      })
+      expect(state.selectedIndex).toBe(0)
+    })
+
+    describe('rebase plan (#1359)', () => {
+      const planRows = [
+        { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', subject: 'feat: one', author: 'Coco', date: '2026-05-01', action: 'pick' as const },
+        { sha: 'b'.repeat(40), shortSha: 'bbbbbbb', subject: 'fix: two', author: 'Coco', date: '2026-05-02', action: 'pick' as const },
+        { sha: 'c'.repeat(40), shortSha: 'ccccccc', subject: 'wip', author: 'Coco', date: '2026-05-03', action: 'pick' as const },
+      ]
+      const openPlan = () => applyLogInkAction(createLogInkState(rows), { type: 'openRebasePlan', rows: planRows })
+
+      it('openRebasePlan pushes the rebase view with the cursor at the top', () => {
+        const state = openPlan()
+        expect(state.activeView).toBe('rebase')
+        expect(state.rebasePlan?.rows).toHaveLength(3)
+        expect(state.rebasePlan?.selectedIndex).toBe(0)
+      })
+
+      it('retags, rewords, and reorders the cursored row with clamping', () => {
+        let state = openPlan()
+        state = applyLogInkAction(state, { type: 'moveRebaseCursor', delta: 5 })
+        expect(state.rebasePlan?.selectedIndex).toBe(2)
+
+        state = applyLogInkAction(state, { type: 'setRebaseAction', action: 'fixup' })
+        expect(state.rebasePlan?.rows[2].action).toBe('fixup')
+
+        state = applyLogInkAction(state, { type: 'setRebaseRewordMessage', message: 'chore: reworded' })
+        expect(state.rebasePlan?.rows[2]).toMatchObject({ action: 'reword', newMessage: 'chore: reworded' })
+
+        // Retagging away from reword drops the stale message.
+        state = applyLogInkAction(state, { type: 'setRebaseAction', action: 'pick' })
+        expect(state.rebasePlan?.rows[2].newMessage).toBeUndefined()
+
+        state = applyLogInkAction(state, { type: 'moveRebaseRow', delta: -1 })
+        expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(['aaaaaaa', 'ccccccc', 'bbbbbbb'])
+        expect(state.rebasePlan?.selectedIndex).toBe(1)
+
+        // Reorder off either edge is a no-op.
+        state = applyLogInkAction(state, { type: 'moveRebaseCursor', delta: -5 })
+        const before = state.rebasePlan?.rows.map((r) => r.shortSha)
+        state = applyLogInkAction(state, { type: 'moveRebaseRow', delta: -1 })
+        expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(before)
+      })
+
+      it('clears the plan on lateral navigation and on popView — a stale plan must never execute', () => {
+        let state = openPlan()
+        state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+        expect(state.rebasePlan).toBeUndefined()
+
+        state = openPlan()
+        state = applyLogInkAction(state, { type: 'popView' })
+        expect(state.activeView).toBe('history')
+        expect(state.rebasePlan).toBeUndefined()
+      })
+    })
+
+    // Regression: the bisect start-wizard pick flag survived every view
+    // switch — its status hint auto-dismissed, and minutes later Enter on
+    // a history commit silently advanced the hidden wizard instead of
+    // opening the commit's diff.
+    it('abandons a bisect pick when laterally navigating off the pick surface', () => {
+      let state = createLogInkState(rows)
+      // The wizard's own entry batch: arm the pick, then land on history.
+      state = applyLogInkAction(state, { type: 'setBisectPickMode', mode: 'bad' })
+      state = applyLogInkAction(state, { type: 'pushView', value: 'history' })
+      expect(state.bisectPickMode).toBe('bad')
+
+      // Wandering off to branches abandons the pick.
+      state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+      expect(state.bisectPickMode).toBeUndefined()
+      expect(state.bisectPickPendingBad).toBeUndefined()
+    })
+
+    // Regression: the shared `state.filter` used to survive lateral view
+    // switches, silently pre-narrowing the destination's list — and since
+    // workflows resolve their targets from the FILTERED lists by index,
+    // silently re-aiming destructive actions (drop-stash, delete-branch).
+    it('clears the shared filter on a lateral pushView/replaceView jump', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setFilter', value: 'fix' })
+      expect(state.filter).toBe('fix')
+
+      state = applyLogInkAction(state, { type: 'pushView', value: 'stash' })
+      expect(state.filter).toBe('')
+      expect(state.filterMode).toBe(false)
+
+      state = applyLogInkAction(state, { type: 'setFilter', value: 'wip' })
+      state = applyLogInkAction(state, { type: 'replaceView', value: 'branches' })
+      expect(state.filter).toBe('')
+    })
+
+    it('keeps the filter on drill-in navigate actions (diff depends on it)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setFilter', value: 'fix' })
+      const filtered = state.filteredCommits.length
+      expect(filtered).toBeGreaterThan(0)
+
+      // Enter on a history commit dispatches navigateOpenDiffForCommit,
+      // not pushView — the diff's subject commit is resolved through
+      // `filteredCommits[selectedIndex]`, so the filter must survive.
+      state = applyLogInkAction(state, {
+        type: 'navigateOpenDiffForCommit',
+        sha: state.filteredCommits[0].hash,
+        commitIndex: 0,
+      })
+      expect(state.activeView).toBe('diff')
+      expect(state.filter).toBe('fix')
+      expect(state.filteredCommits).toHaveLength(filtered)
     })
 
     it('pops the top of the stack', () => {
@@ -1721,6 +2038,10 @@ describe('log Ink view model', () => {
       // since `nudgeParentState` doesn't touch those fields.
       expect(ret).toEqual({
         activeView: 'branches',
+        viewStack: before.viewStack,
+        diffSource: undefined,
+        stashDiffRef: undefined,
+        compareHead: undefined,
         selectedIndex: before.selectedIndex,
         selectedFileIndex: 0,
         selectedSubmoduleIndex: 0,
@@ -1729,6 +2050,23 @@ describe('log Ink view model', () => {
         userSidebarTab: before.userSidebarTab,
         branchSort: before.branchSort,
         tagSort: before.tagSort,
+        // Per-repo state captured for the pop restore (#1343).
+        compareBase: undefined,
+        blamePath: undefined,
+        fileHistoryPath: undefined,
+        changelogCache: {},
+        selectedWorktreeFileIndex: 0,
+        selectedBranchIndex: 0,
+        selectedTagIndex: 0,
+        selectedStashIndex: 0,
+        selectedWorktreeListIndex: 0,
+        selectedConflictFileIndex: 0,
+        selectedReflogIndex: 0,
+        selectedRemoteIndex: 0,
+        selectedBlameIndex: 0,
+        selectedFileHistoryIndex: 0,
+        selectedIssueIndex: 0,
+        selectedPullRequestTriageIndex: 0,
       })
       expect(before.selectedIndex).toBeGreaterThan(0)
     })
@@ -1768,6 +2106,36 @@ describe('log Ink view model', () => {
       expect(popped.branchSort).toBe(parentBranchSort)
       // Submodule's state is gone; only the root frame remains.
       expect(popped.repoStack).toHaveLength(1)
+    })
+
+    // Regression: popping a frame entered FROM a commit diff used to
+    // restore `viewStack: ['diff']` (one element — Esc and `<` both dead)
+    // with `diffSource` cleared by navigation inside the submodule, so
+    // the diff rendered source-less and picked up staging key handling.
+    it('popRepoFrame restores the full parent view stack and diff identity', () => {
+      let parent = createLogInkState(rows, { repoLabel: 'coco' })
+      parent = applyLogInkAction(parent, {
+        type: 'navigateOpenDiffForCommit',
+        sha: parent.filteredCommits[0].hash,
+        commitIndex: 0,
+      })
+      expect(parent.viewStack).toEqual(['history', 'diff'])
+      expect(parent.diffSource).toBe('commit')
+
+      let inside = applyLogInkAction(parent, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+      })
+      // Navigate around inside the submodule — this clears the shared
+      // diffSource on the live state, which is exactly why pop must
+      // restore it from the captured parentReturn.
+      inside = applyLogInkAction(inside, { type: 'pushView', value: 'branches' })
+      expect(inside.diffSource).toBeUndefined()
+
+      const popped = applyLogInkAction(inside, { type: 'popRepoFrame' })
+      expect(popped.activeView).toBe('diff')
+      expect(popped.viewStack).toEqual(['history', 'diff'])
+      expect(popped.diffSource).toBe('commit')
     })
 
     it('pushRepoFrame records the optional entryRange', () => {
@@ -1864,6 +2232,50 @@ describe('log Ink view model', () => {
       const after = applyLogInkAction(before, { type: 'pushRepoFrame', label: 'vendor/lib' })
       expect(after.pendingConfirmationId).toBeUndefined()
       expect(after.pendingConfirmationPayload).toBeUndefined()
+    })
+
+    // #1343 — compare base, blame / file-history paths, the branch-keyed
+    // changelog cache, and per-list cursors are all meaningful only
+    // against the repo that produced them. Push must clear them (a
+    // parent-repo path or ref must never hydrate against the
+    // submodule's git) and pop must restore the parent's.
+    it('pushRepoFrame clears per-repo state; popRepoFrame restores it (#1343)', () => {
+      let parent = createLogInkState(rows, { repoLabel: 'coco' })
+      parent = applyLogInkAction(parent, {
+        type: 'setCompareBase',
+        value: { kind: 'branch', ref: 'main', label: 'main' },
+      })
+      parent = applyLogInkAction(parent, { type: 'navigateOpenBlameForPath', path: 'src/app.ts' })
+      parent = applyLogInkAction(parent, {
+        type: 'navigateOpenFileHistoryForPath',
+        path: 'src/app.ts',
+      })
+      parent = applyLogInkAction(parent, {
+        type: 'setChangelogReady',
+        branch: 'main',
+        text: '## parent changelog',
+        baseLabel: 'origin/main',
+        generatedAt: 1750000000000,
+      })
+      parent = applyLogInkAction(parent, { type: 'moveBranch', delta: 3, count: 10 })
+
+      const inside = applyLogInkAction(parent, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+        workdir: '/abs/coco/vendor/lib',
+      })
+      expect(inside.compareBase).toBeUndefined()
+      expect(inside.blamePath).toBeUndefined()
+      expect(inside.fileHistoryPath).toBeUndefined()
+      expect(inside.changelogCache).toEqual({})
+      expect(inside.selectedBranchIndex).toBe(0)
+
+      const popped = applyLogInkAction(inside, { type: 'popRepoFrame' })
+      expect(popped.compareBase).toEqual({ kind: 'branch', ref: 'main', label: 'main' })
+      expect(popped.blamePath).toBe('src/app.ts')
+      expect(popped.fileHistoryPath).toBe('src/app.ts')
+      expect(popped.changelogCache.main).toBeDefined()
+      expect(popped.selectedBranchIndex).toBe(3)
     })
   })
 })

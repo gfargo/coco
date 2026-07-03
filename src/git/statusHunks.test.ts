@@ -3,7 +3,10 @@ import { spawn } from 'child_process'
 import {
   getWorktreeHunks,
   revertHunk,
+  revertHunkLines,
+  sliceHunkLines,
   stageHunk,
+  stageHunkLines,
   statusHunkTestInternals,
   unstageHunk,
 } from './statusHunks'
@@ -168,5 +171,100 @@ describe('log status hunks', () => {
       cwd: '/repo',
       stdio: ['pipe', 'ignore', 'pipe'],
     })
+  })
+})
+
+describe('line-level staging (#1358)', () => {
+  // A hunk with two separate changes so a selection can cover one and
+  // leave the other untouched.
+  const multiChangeDiff = [
+    'diff --git a/src/file.ts b/src/file.ts',
+    'index 1111111..2222222 100644',
+    '--- a/src/file.ts',
+    '+++ b/src/file.ts',
+    '@@ -1,4 +1,4 @@',
+    ' const keep = 1',
+    '-const first = old',
+    '+const first = new',
+    ' const middle = 2',
+    '-const second = old',
+    '+const second = new',
+    '',
+  ].join('\n')
+
+  const unstagedHunk = () =>
+    statusHunkTestInternals.parseHunks('src/file.ts', 'unstaged', multiChangeDiff)[0]
+
+  it('STAGE slice: unselected removals become context, unselected additions vanish', () => {
+    // Select only the FIRST change pair (body lines 1-2).
+    const sliced = sliceHunkLines(unstagedHunk(), { start: 1, end: 2 }, 'stage')
+    expect(sliced?.hunk.lines).toEqual([
+      ' const keep = 1',
+      '-const first = old',
+      '+const first = new',
+      ' const middle = 2',
+      ' const second = old', // unselected removal → context (index keeps it)
+      // unselected addition omitted — not being staged
+    ])
+    expect(sliced?.hunk.oldLines).toBe(4)
+    expect(sliced?.hunk.newLines).toBe(4)
+    expect(sliced?.header).toBe('@@ -1,4 +1,4 @@')
+  })
+
+  it('DISCARD slice: unselected additions become context, unselected removals vanish', () => {
+    const sliced = sliceHunkLines(unstagedHunk(), { start: 1, end: 2 }, 'discard')
+    expect(sliced?.hunk.lines).toEqual([
+      ' const keep = 1',
+      '-const first = old',
+      '+const first = new',
+      ' const middle = 2',
+      // unselected removal omitted — already absent from the worktree
+      ' const second = new', // unselected addition → context (stays in file)
+    ])
+    expect(sliced?.hunk.oldLines).toBe(4)
+    expect(sliced?.hunk.newLines).toBe(4)
+  })
+
+  it('returns undefined when the selection holds no changed lines', () => {
+    expect(sliceHunkLines(unstagedHunk(), { start: 0, end: 0 }, 'stage')).toBeUndefined()
+    expect(sliceHunkLines(unstagedHunk(), { start: 3, end: 3 }, 'discard')).toBeUndefined()
+  })
+
+  it('stageHunkLines applies the sliced patch to the index', async () => {
+    const git = createGit(multiChangeDiff)
+    const child = mockSpawnSuccess()
+    const promise = stageHunkLines(git as never, unstagedHunk(), { start: 1, end: 2 })
+    setImmediate(() => child.emit('close', 0))
+    await promise
+
+    expect(mockedSpawn).toHaveBeenCalledWith('git', expect.arrayContaining(['apply', '--cached']), expect.anything())
+    const patch = child.stdin.write.mock.calls[0][0] as string
+    expect(patch).toContain('+const first = new')
+    expect(patch).toContain(' const second = old')
+    expect(patch).not.toContain('+const second = new')
+  })
+
+  it('revertHunkLines reverse-applies the discard slice to the worktree', async () => {
+    const git = createGit(multiChangeDiff)
+    const child = mockSpawnSuccess()
+    const promise = revertHunkLines(git as never, unstagedHunk(), { start: 4, end: 5 })
+    setImmediate(() => child.emit('close', 0))
+    await promise
+
+    const [, args] = mockedSpawn.mock.calls[0]
+    expect(args).toEqual(expect.arrayContaining(['apply', '--reverse']))
+    expect(args).not.toEqual(expect.arrayContaining(['--cached']))
+    const patch = child.stdin.write.mock.calls[0][0] as string
+    // Selected second pair kept as changes; unselected first pair
+    // neutralized per discard rules.
+    expect(patch).toContain('-const second = old')
+    expect(patch).toContain(' const first = new')
+    expect(patch).not.toContain('-const first = old')
+  })
+
+  it('refuses staged hunks', async () => {
+    const staged = statusHunkTestInternals.parseHunks('src/file.ts', 'staged', multiChangeDiff)[0]
+    await expect(stageHunkLines({} as never, staged, { start: 1, end: 2 })).rejects.toThrow('unstaged')
+    await expect(revertHunkLines({} as never, staged, { start: 1, end: 2 })).rejects.toThrow('unstaged')
   })
 })

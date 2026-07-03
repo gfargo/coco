@@ -64,35 +64,6 @@ export type DiffHunkContext = {
 const EMPTY_LEFT: SplitDiffSide = { text: '', kind: 'empty' }
 const EMPTY_RIGHT: SplitDiffSide = { text: '', kind: 'empty' }
 
-/**
- * Parse the start line numbers out of an `@@ -A,B +C,D @@` header. Returns
- * `[oldStart, newStart]`; either falls back to 1 when the header is
- * malformed (which only happens with synthetic / hand-crafted patches).
- */
-function parseHunkHeader(line: string): [number, number] {
-  const match = /@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/.exec(line)
-  if (!match) {
-    return [1, 1]
-  }
-  return [Number(match[1]) || 1, Number(match[2]) || 1]
-}
-
-function isDiffHeader(line: string): boolean {
-  return (
-    line.startsWith('diff ') ||
-    line.startsWith('index ') ||
-    line.startsWith('--- ') ||
-    line.startsWith('+++ ') ||
-    line.startsWith('similarity ') ||
-    line.startsWith('rename ') ||
-    line.startsWith('copy ') ||
-    line.startsWith('new file ') ||
-    line.startsWith('deleted file ') ||
-    line.startsWith('old mode ') ||
-    line.startsWith('new mode ') ||
-    line.startsWith('Binary files ')
-  )
-}
 
 /**
  * Flush a pending change block (removals + additions accumulated from a
@@ -122,6 +93,14 @@ function flushChangeBlock(
  * starts partway through a hunk. Counting mirrors `buildSplitDiffRows`
  * exactly so the seeded line numbers stay continuous across the cut.
  */
+function parseHunkHeader(line: string): [number, number] {
+  const match = /@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/.exec(line)
+  if (!match) {
+    return [1, 1]
+  }
+  return [Number(match[1]) || 1, Number(match[2]) || 1]
+}
+
 export function computeDiffContext(unifiedLines: string[], upTo: number): DiffHunkContext {
   let oldLineNo = 0
   let newLineNo = 0
@@ -136,7 +115,17 @@ export function computeDiffContext(unifiedLines: string[], upTo: number): DiffHu
       inHunk = true
       continue
     }
-    if (!inHunk || isDiffHeader(raw)) {
+    if (raw.startsWith('diff --git ')) {
+      inHunk = false
+      continue
+    }
+    if (!inHunk) {
+      continue
+    }
+    // Mirrors buildSplitDiffRows: in-hunk prefixes are authoritative
+    // (deleted `-- ` content lines are removals, not headers), and the
+    // `\ No newline` marker is metadata that advances nothing.
+    if (raw.startsWith('\\')) {
       continue
     }
     if (raw.startsWith('-')) {
@@ -147,7 +136,7 @@ export function computeDiffContext(unifiedLines: string[], upTo: number): DiffHu
       newLineNo += 1
       continue
     }
-    // Context line (or `\ No newline` marker) advances both cursors.
+    // Context line advances both cursors.
     oldLineNo += 1
     newLineNo += 1
   }
@@ -187,8 +176,30 @@ export function buildSplitDiffRows(
       continue
     }
 
-    if (!inHunk || isDiffHeader(raw)) {
+    // A `diff --git` line unambiguously starts the NEXT file — leave
+    // hunk mode so its preamble (`index`, `---`, `+++`) classifies as
+    // headers below.
+    if (raw.startsWith('diff --git ')) {
+      inHunk = false
       flushHeader(raw)
+      continue
+    }
+
+    // INSIDE a hunk the -/+/space/backslash prefixes are authoritative.
+    // Running the header check here too meant a deleted line whose
+    // content starts with `-- ` (SQL/Lua comments — the diff line reads
+    // `--- foo`) rendered as an accent-colored header, broke the
+    // left/right pairing, and skipped the old-side line-number
+    // increment, drifting every number below it (same for added `++ `).
+    if (!inHunk) {
+      flushHeader(raw)
+      continue
+    }
+
+    // `\ No newline at end of file` — unified-diff metadata, not
+    // content: it has no line number, must not advance either cursor,
+    // and must not flush the removal/addition pairing it sits between.
+    if (raw.startsWith('\\')) {
       continue
     }
 

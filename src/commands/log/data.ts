@@ -288,7 +288,12 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
     'log',
     '--graph',
     '--decorate=short',
-    '--date=short',
+    // Viewer-local calendar day, not the committer's recorded offset
+    // (#1336): the TUI's Today/Yesterday buckets and the compact `Nd`
+    // column compare this against the VIEWER's day, so a committer-tz
+    // day (`--date=short`) put fresh commits under "Yesterday" whenever
+    // the two zones straddled midnight. Same `YYYY-MM-DD` shape.
+    '--date=format-local:%Y-%m-%d',
     '--color=never',
     `--max-count=${normalizeLimit(argv.limit, argv.interactive, options)}`,
     `--pretty=format:${LOG_FORMAT}`,
@@ -452,7 +457,9 @@ export async function getCommitDetail(git: SimpleGit, commit: string): Promise<G
     git.raw([
       'show',
       '--no-patch',
-      '--date=short',
+      // Same viewer-local day as buildLogArgs (#1336) so the inspector
+      // and the history rows never disagree about a commit's date.
+      '--date=format-local:%Y-%m-%d',
       '--color=never',
       `--pretty=format:${DETAIL_FORMAT}`,
       commit,
