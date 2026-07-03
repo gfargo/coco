@@ -42,6 +42,20 @@ export type ConflictRegion = {
   theirs: string[]
 }
 
+// Git's markers are EXACTLY seven marker characters: `<<<<<<< <label>`,
+// `||||||| <base-label>`, a bare `=======`, `>>>>>>> <label>`. Matching
+// by prefix (#1395) let ordinary content flip the parser — an RST/
+// markdown setext underline (`========`) or a `//======== divider`
+// comment inside the "ours" side started the theirs section early, and
+// the real separator then landed INSIDE theirs. The AI resolver and
+// accept-ours/theirs would operate on the wrong side contents. The
+// `(?:\s|$)` tail (rather than requiring a label) tolerates CRLF and
+// label-less markers; an 8th marker character fails the match.
+export const CONFLICT_OURS_MARKER = /^<{7}(?:\s|$)/
+export const CONFLICT_BASE_MARKER = /^\|{7}(?:\s|$)/
+export const CONFLICT_SEPARATOR_MARKER = /^={7}\s*$/
+export const CONFLICT_THEIRS_MARKER = /^>{7}(?:\s|$)/
+
 export function parseConflictRegions(content: string): {
   lines: string[]
   regions: ConflictRegion[]
@@ -51,7 +65,7 @@ export function parseConflictRegions(content: string): {
 
   let i = 0
   while (i < lines.length) {
-    if (!lines[i].startsWith('<<<<<<<')) {
+    if (!CONFLICT_OURS_MARKER.test(lines[i])) {
       i += 1
       continue
     }
@@ -66,16 +80,16 @@ export function parseConflictRegions(content: string): {
     let j = i + 1
     for (; j < lines.length; j += 1) {
       const line = lines[j]
-      if (section !== 'theirs' && line.startsWith('|||||||')) {
+      if (section !== 'theirs' && CONFLICT_BASE_MARKER.test(line)) {
         section = 'base'
         base = []
         continue
       }
-      if (section !== 'theirs' && line.startsWith('=======')) {
+      if (section !== 'theirs' && CONFLICT_SEPARATOR_MARKER.test(line)) {
         section = 'theirs'
         continue
       }
-      if (section === 'theirs' && line.startsWith('>>>>>>>')) {
+      if (section === 'theirs' && CONFLICT_THEIRS_MARKER.test(line)) {
         theirsLabel = line.slice(7).trim()
         endLine = j + 1
         break
