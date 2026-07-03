@@ -218,3 +218,34 @@ export function truncatePathCells(value: string, width: number): string {
   // elided, then ellipsis-truncates the filename.
   return truncateCells(`…/${filename}`, width)
 }
+
+/**
+ * Expand tab characters to spaces using fixed column stops (#1393).
+ *
+ * `cellWidth` counts control characters as 0 cells, but a terminal
+ * advances to the next tab stop per `\t` — so tab-indented content
+ * (Go, Makefiles) rendered rows that visually overran every truncation
+ * budget while "measuring" as fitting. Expanding at fixed stops from
+ * the string's own start is deliberately simpler than real terminal
+ * tab stops (which are column-relative to whatever gutters render
+ * before the content): the output is consistent and measurable, which
+ * is what the width math needs. `startColumn` lets segment-wise
+ * callers (syntax-highlighted diff spans) keep the column running
+ * across segments.
+ */
+export function expandTabs(value: string, tabWidth = 8, startColumn = 0): string {
+  if (!value.includes('\t')) return value
+  let out = ''
+  let column = startColumn
+  for (const character of value) {
+    if (character === '\t') {
+      const pad = tabWidth - (column % tabWidth)
+      out += ' '.repeat(pad)
+      column += pad
+      continue
+    }
+    out += character
+    column += characterWidth(character)
+  }
+  return out
+}

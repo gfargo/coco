@@ -1,6 +1,37 @@
-import { cellWidth, truncateCells, truncatePathCells, wrapCells } from './text'
+import { cellWidth, expandTabs, truncateCells, truncatePathCells, wrapCells } from './text'
 
 describe('log Ink text helpers', () => {
+  describe('expandTabs (#1393)', () => {
+    it('expands tabs to the next fixed 8-column stop', () => {
+      expect(expandTabs('\ta')).toBe('        a')
+      expect(expandTabs('ab\tc')).toBe('ab      c')
+      expect(expandTabs('12345678\tx')).toBe('12345678        x')
+    })
+
+    it('tracks columns across multiple tabs and wide characters', () => {
+      // Two-cell CJK char advances the column by 2 before the tab.
+      expect(expandTabs('変\tx')).toBe('変      x')
+      expect(expandTabs('\t\tx')).toBe('                x')
+    })
+
+    it('honours startColumn for segment-wise expansion', () => {
+      // Continuing at column 6 → next stop is 8 → 2 spaces.
+      expect(expandTabs('\tx', 8, 6)).toBe('  x')
+    })
+
+    it('returns tab-free strings unchanged', () => {
+      const plain = 'no tabs here'
+      expect(expandTabs(plain)).toBe(plain)
+    })
+
+    it('makes tab-indented content measurable by cellWidth', () => {
+      // The overflow class: cellWidth saw 0 for the tab while the
+      // terminal advanced 8 cells.
+      expect(cellWidth('\tfoo')).toBe(3)
+      expect(cellWidth(expandTabs('\tfoo'))).toBe(11)
+    })
+  })
+
   it('measures wide and emoji characters by terminal cell width', () => {
     expect(cellWidth('abc')).toBe(3)
     expect(cellWidth('変更')).toBe(4)
