@@ -58,6 +58,7 @@ export type LogInkInputEvent =
   | { type: 'startCreatePullRequest' }
   | { type: 'cancelPullRequestBodyDraft' }
   | { type: 'startChangelogView' }
+  | { type: 'startRebasePlan' }
   | { type: 'regenerateChangelog' }
   | { type: 'yankChangelog' }
   | { type: 'openChangelogInEditor' }
@@ -362,9 +363,7 @@ export function getInspectorActionExecuteEvents(
         }),
       ])
     case 'i':
-      return requireCommit(() => [
-        action({ type: 'setPendingConfirmation', value: 'interactive-rebase' }),
-      ])
+      return requireCommit(() => [{ type: 'startRebasePlan' }])
     case 'f':
       return requireCommit(() => [
         action({ type: 'setPendingConfirmation', value: 'fixup-into-commit' }),
@@ -923,6 +922,12 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   if (state.inputPrompt.kind === 'stage-pathspec') {
     return [
       { type: 'runWorkflowAction', id: 'stage-pathspec', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'rebase-reword') {
+    return [
+      action({ type: 'setRebaseRewordMessage', message: value }),
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -2068,6 +2073,48 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingKey', value: 'g' })]
   }
 
+  // ── In-TUI interactive rebase surface (#1359) ───────────────────────
+  // The plan claims its keys while the view is active: j/k cursor, J/K
+  // reorder, p/s/f/d/e retag, r reword (prompt), Enter executes (behind
+  // a y-confirm), Esc pops (which clears the plan). Placed before every
+  // other single-letter handler so the rebase letters can't leak into
+  // sort/fixup/diff-toggle semantics.
+  if (state.activeView === 'rebase' && state.rebasePlan) {
+    if (inputValue === 'J') {
+      return [action({ type: 'moveRebaseRow', delta: 1 })]
+    }
+    if (inputValue === 'K') {
+      return [action({ type: 'moveRebaseRow', delta: -1 })]
+    }
+    if (inputValue === 'p') {
+      return [action({ type: 'setRebaseAction', action: 'pick' })]
+    }
+    if (inputValue === 's') {
+      return [action({ type: 'setRebaseAction', action: 'squash' })]
+    }
+    if (inputValue === 'f') {
+      return [action({ type: 'setRebaseAction', action: 'fixup' })]
+    }
+    if (inputValue === 'd') {
+      return [action({ type: 'setRebaseAction', action: 'drop' })]
+    }
+    if (inputValue === 'e') {
+      return [action({ type: 'setRebaseAction', action: 'edit' })]
+    }
+    if (inputValue === 'r') {
+      const row = state.rebasePlan.rows[state.rebasePlan.selectedIndex]
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'rebase-reword',
+        label: `New message for ${row?.shortSha ?? 'commit'}`,
+        initial: row?.newMessage ?? row?.subject ?? '',
+      })]
+    }
+    if (key.return) {
+      return [action({ type: 'setPendingConfirmation', value: 'execute-rebase-plan' })]
+    }
+  }
+
   // `d` on the diff view toggles between unified and side-by-side split
   // rendering (#785). Scoped to the diff view so the letter stays free
   // for other surfaces. The chord branch above already claimed `gd`,
@@ -2368,6 +2415,10 @@ export function getLogInkInputEvents(
       })]
     }
 
+    if (state.activeView === 'rebase' && state.rebasePlan) {
+      return [action({ type: 'moveRebaseCursor', delta: -1 })]
+    }
+
     // Worktree (staging) diff: ↑/↓ scroll lines — consistent with the
     // commit / stash diffs (#1185). `[`/`]` jump between hunks (the
     // staging unit), and the current hunk is derived from the scroll
@@ -2517,6 +2568,10 @@ export function getLogInkInputEvents(
         delta: 1,
         fileCount: context.worktreeFileCount,
       })]
+    }
+
+    if (state.activeView === 'rebase' && state.rebasePlan) {
+      return [action({ type: 'moveRebaseCursor', delta: 1 })]
     }
 
     // Worktree (staging) diff: ↓ scrolls lines (see the ↑ handler) —
@@ -3507,10 +3562,10 @@ export function getLogInkInputEvents(
     })]
   }
 
-  // `i` (lowercase) starts an interactive rebase from the cursored
-  // commit's parent. Lowercase keeps the existing global `I`
-  // ai-commit-summary workflow reachable on the history view; `i`
-  // also matches the `git rebase -i` flag mnemonic.
+  // `i` (lowercase) opens the in-TUI interactive rebase surface for
+  // `<cursored>^..HEAD` (#1359) — reorder/squash/fixup/drop/reword as a
+  // first-person list instead of shelling the todo into $GIT_EDITOR.
+  // The editor variant stays palette-reachable as `interactive-rebase`.
   if (
     inputValue === 'i' &&
     state.activeView === 'history' &&
@@ -3518,7 +3573,7 @@ export function getLogInkInputEvents(
     state.filteredCommits.length > 0 &&
     !state.pendingCommitFocused
   ) {
-    return [action({ type: 'setPendingConfirmation', value: 'interactive-rebase' })]
+    return [{ type: 'startRebasePlan' }]
   }
 
   // `f` creates a fixup! commit from the STAGED changes targeting the

@@ -1341,6 +1341,13 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     }
   }
 
+  if (options.activeView === 'rebase') {
+    return {
+      contextual: ['↑/↓ move', 'J/K reorder', 'p/s/f/d/e retag', 'r reword', 'enter run', 'esc back'],
+      global: NORMAL_GLOBAL_HINTS,
+    }
+  }
+
   if (options.activeView === 'conflicts') {
     return {
       contextual: ['↑/↓ files', 'enter diff', 's stage', 'u incoming', 'U yours', 'o edit', 'C continue*', 'esc back'],

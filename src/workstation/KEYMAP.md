@@ -144,7 +144,7 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `c` | Cherry-pick the commit |
 | `R` | Revert the commit |
 | `Z` | Reset branch tip here (mode prompt) |
-| `i` | Interactive rebase from the commit's parent |
+| `i` | Open the **rebase plan** surface for `<commit>^..HEAD` (in-TUI interactive rebase; the $EDITOR variant stays in the `:` palette) |
 | `f` | Fixup: commit staged changes as `fixup!` of the cursored commit (confirm; offers immediate autosquash) |
 | `B` | Create branch here |
 | `L` | Open the changelog view |
@@ -302,6 +302,17 @@ variants.
 | `s` | Skip / start wizard |
 | `x` | Reset bisect |
 | `R` | Run custom command |
+
+### Rebase plan (entered with `i` from history)
+
+| Key | Action |
+|-----|--------|
+| `↑`/`↓` (`j`/`k`) | Move the cursor through the todo rows |
+| `J` / `K` | Reorder: move the cursored row down / up |
+| `p` / `s` / `f` / `d` / `e` | Retag the row: pick / squash / fixup / drop / edit |
+| `r` | Reword (prompt seeded with the current subject) |
+| `Enter` | Run the plan (y-confirm; rewrites history, conflicts route to `gx`) |
+| `Esc` | Back — discards the plan |
 
 ### Worktrees
 

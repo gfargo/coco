@@ -1,5 +1,6 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../commands/log/data'
 import { hashesMatchAny } from '../../git/hashes'
+import type { RebasePlanRow, RebaseTodoAction } from '../../git/rebasePlanActions'
 import { getLogInkThemePresets, type LogInkThemePreset } from '../chrome/theme'
 import {
     CommitComposeAction,
@@ -27,7 +28,7 @@ import {
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
-export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame' | 'file-history'
+export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame' | 'file-history' | 'rebase'
 export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-draft'
 
 /**
@@ -758,6 +759,18 @@ export type LogInkState = {
    */
   bisectPickMode?: 'bad' | 'good'
   bisectPickPendingBad?: string
+  /**
+   * The in-TUI interactive rebase plan (#1359): the todo rows for
+   * `<base>^..HEAD` plus the cursor. Present only while the rebase view
+   * is open; cleared on pop / lateral navigation so a stale plan can
+   * never execute against a moved HEAD.
+   */
+  rebasePlan?: LogInkRebasePlan
+}
+
+export type LogInkRebasePlan = {
+  rows: RebasePlanRow[]
+  selectedIndex: number
 }
 
 export type ChangelogViewStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -862,6 +875,7 @@ export type LogInkInputPromptKind =
   | 'pr-request-changes'
   | 'create-pr'
   | 'bisect-run-command'
+  | 'rebase-reword'
   // #0.71 — remotes view mutations. `add-remote` collects a single
   // `name url` line (space-separated, parsed in the submit handler);
   // `set-remote-url` collects just a URL applied to the cursored
@@ -1037,6 +1051,12 @@ export type LogInkAction =
   | { type: 'clearSplitPlan' }
   | { type: 'setBisectPickMode'; mode: 'bad' | 'good'; pendingBad?: string }
   | { type: 'clearBisectPickMode' }
+  | { type: 'openRebasePlan'; rows: RebasePlanRow[] }
+  | { type: 'moveRebaseCursor'; delta: number }
+  | { type: 'setRebaseAction'; action: RebaseTodoAction }
+  | { type: 'moveRebaseRow'; delta: number }
+  | { type: 'setRebaseRewordMessage'; message: string }
+  | { type: 'clearRebasePlan' }
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -1401,6 +1421,18 @@ function withAbandonedBisectPick(state: LogInkState, destination: LogInkView): L
     return state
   }
   return { ...state, bisectPickMode: undefined, bisectPickPendingBad: undefined }
+}
+
+/**
+ * Drop an open rebase plan when navigation leaves the rebase view — a
+ * stale plan must never execute against a HEAD that moved while the
+ * user wandered elsewhere.
+ */
+function withAbandonedRebasePlan(state: LogInkState, destination: LogInkView): LogInkState {
+  if (!state.rebasePlan || destination === 'rebase') {
+    return state
+  }
+  return { ...state, rebasePlan: undefined }
 }
 
 function withFilter(
@@ -2187,15 +2219,25 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       // destructive actions). Drill-ins (Enter → diff/blame/…) dispatch
       // their own navigate* actions, not this one, so the filter that
       // the drilled-into view depends on survives there.
-      return withAbandonedBisectPick(
-        withClearedFilter(withPushedView(state, action.value), state.activeView !== action.value),
+      return withAbandonedRebasePlan(
+        withAbandonedBisectPick(
+          withClearedFilter(withPushedView(state, action.value), state.activeView !== action.value),
+          action.value,
+        ),
         action.value,
       )
-    case 'popView':
-      return withPoppedView(state)
+    case 'popView': {
+      const popped = withPoppedView(state)
+      return state.activeView === 'rebase' && popped.activeView !== 'rebase'
+        ? { ...popped, rebasePlan: undefined }
+        : popped
+    }
     case 'replaceView':
-      return withAbandonedBisectPick(
-        withClearedFilter(withReplacedView(state, action.value), state.activeView !== action.value),
+      return withAbandonedRebasePlan(
+        withAbandonedBisectPick(
+          withClearedFilter(withReplacedView(state, action.value), state.activeView !== action.value),
+          action.value,
+        ),
         action.value,
       )
     case 'pushRepoFrame':
@@ -2824,6 +2866,64 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       }
     case 'clearSplitPlan':
       return { ...state, splitPlan: undefined, pendingKey: undefined }
+    case 'openRebasePlan': {
+      const next = withPushedView(state, 'rebase')
+      return {
+        ...next,
+        rebasePlan: { rows: action.rows, selectedIndex: 0 },
+      }
+    }
+    case 'moveRebaseCursor': {
+      const plan = state.rebasePlan
+      if (!plan || plan.rows.length === 0) return state
+      return {
+        ...state,
+        rebasePlan: {
+          ...plan,
+          selectedIndex: clampIndex(plan.selectedIndex + action.delta, plan.rows.length),
+        },
+        pendingKey: undefined,
+      }
+    }
+    case 'setRebaseAction': {
+      const plan = state.rebasePlan
+      const row = plan?.rows[plan.selectedIndex]
+      if (!plan || !row) return state
+      // Retagging away from reword drops the stashed message so a later
+      // re-reword starts fresh instead of resurrecting stale text.
+      const rows = plan.rows.map((entry, index) => (
+        index === plan.selectedIndex
+          ? { ...entry, action: action.action, newMessage: action.action === 'reword' ? entry.newMessage : undefined }
+          : entry
+      ))
+      return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
+    }
+    case 'moveRebaseRow': {
+      const plan = state.rebasePlan
+      if (!plan) return state
+      const from = plan.selectedIndex
+      const to = from + action.delta
+      if (to < 0 || to >= plan.rows.length) return state
+      const rows = [...plan.rows]
+      const [moved] = rows.splice(from, 1)
+      rows.splice(to, 0, moved)
+      return { ...state, rebasePlan: { rows, selectedIndex: to }, pendingKey: undefined }
+    }
+    case 'setRebaseRewordMessage': {
+      const plan = state.rebasePlan
+      const row = plan?.rows[plan.selectedIndex]
+      if (!plan || !row) return state
+      const message = action.message.trim()
+      if (!message) return { ...state, pendingKey: undefined }
+      const rows = plan.rows.map((entry, index) => (
+        index === plan.selectedIndex
+          ? { ...entry, action: 'reword' as const, newMessage: message }
+          : entry
+      ))
+      return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
+    }
+    case 'clearRebasePlan':
+      return { ...state, rebasePlan: undefined, pendingKey: undefined }
     case 'setBisectPickMode':
       return {
         ...state,

@@ -197,6 +197,7 @@ import type { LogArgv } from '../../commands/log/config'
 // LogInkState filter-mode shape.
 import {matchesPromotedFilter} from '../runtime/promotedFilter'
 import {useFilteredLists} from './hooks/buildFilteredLists'
+import {useRebasePlanActions} from './hooks/useRebasePlanActions'
 import {useBisectCandidateHydration, useBisectCandidateState} from './hooks/useBisectCandidateHydration'
 import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
 import {useContextHydration} from './hooks/useContextHydration'
@@ -1520,6 +1521,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     (context.worktree.stagedCount + context.worktree.unstagedCount + context.worktree.untrackedCount) > 0
   )
 
+  // #1359 — in-TUI interactive rebase entry point. Reads through a
+  // render-fresh ref, so instantiation order is identity-safe.
+  const { startRebasePlan } = useRebasePlanActions(React, { git, state, dispatch })
+
   // Lifted verbatim into `useInputHandler` (0.72 app.ts decomposition, the
   // final big cluster). The single `useInput(…)` keyboard handler — the
   // component's largest reader — moves wholesale: it derives the per-keystroke
@@ -1574,6 +1579,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     startCreatePullRequest,
     cancelPullRequestBodyDraft,
     startChangelogView,
+    startRebasePlan,
     regenerateChangelog,
     yankChangelog,
     openChangelogInEditor,

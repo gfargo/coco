@@ -144,6 +144,7 @@ export type UseInputHandlerDeps = {
 
   /** Changelog callbacks (`useChangelogActions`). */
   startChangelogView: (options?: { force?: boolean }) => Promise<void>
+  startRebasePlan: () => Promise<void>
   regenerateChangelog: () => void
   yankChangelog: () => void
   openChangelogInEditor: () => void
@@ -231,6 +232,7 @@ export function useInputHandler(
     startCreatePullRequest,
     cancelPullRequestBodyDraft,
     startChangelogView,
+    startRebasePlan,
     regenerateChangelog,
     yankChangelog,
     openChangelogInEditor,
@@ -498,6 +500,8 @@ export function useInputHandler(
         cancelPullRequestBodyDraft()
       } else if (event.type === 'startChangelogView') {
         void startChangelogView()
+      } else if (event.type === 'startRebasePlan') {
+        void startRebasePlan()
       } else if (event.type === 'regenerateChangelog') {
         regenerateChangelog()
       } else if (event.type === 'yankChangelog') {

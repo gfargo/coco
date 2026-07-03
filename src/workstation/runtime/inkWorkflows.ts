@@ -642,9 +642,17 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       // (lowercase) is used instead of `I` so the existing `I`
       // ai-commit-summary workflow stays reachable on the history
       // view — `i` matches the `git rebase -i` flag mnemonic anyway.
+      id: 'execute-rebase-plan',
+      key: '',
+      label: 'Run rebase plan',
+      description: 'Execute the rebase plan built in the rebase view (rewrites history; conflicts route to the conflicts view).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
       id: 'interactive-rebase',
       key: '',
-      label: 'Interactive rebase',
+      label: 'Interactive rebase (in $EDITOR)',
       description: 'Start an interactive rebase from the cursored commit (opens $GIT_EDITOR for the todo list).',
       kind: 'destructive',
       requiresConfirmation: true,
