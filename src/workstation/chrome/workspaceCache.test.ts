@@ -35,6 +35,22 @@ describe('workspaceCacheKey', () => {
   it('differs when the set of roots differs', () => {
     expect(workspaceCacheKey(['~/code'])).not.toBe(workspaceCacheKey(['~/code', '~/work']))
   })
+
+  it('is stable across spellings of the same directory', () => {
+    // `~/x` and its absolute expansion must share a key — hashing the
+    // raw string split one directory's cache across spellings.
+    expect(workspaceCacheKey(['~/code'])).toBe(workspaceCacheKey([`${os.homedir()}/code`]))
+  })
+
+  it('differs for the same relative root launched from different directories', () => {
+    // A relative `--root ./code` resolves against the process cwd —
+    // hashing the raw "./code" string collided every launch directory
+    // into one cache, so boot painted the OTHER workspace's repo list.
+    expect(workspaceCacheKey(['./code'])).toBe(
+      workspaceCacheKey([`${process.cwd()}/code`])
+    )
+    expect(workspaceCacheKey(['./code'])).not.toBe(workspaceCacheKey(['/somewhere-else/code']))
+  })
 })
 
 describe('workspace cache read/write', () => {
