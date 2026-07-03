@@ -66,7 +66,7 @@ import {
 } from '../../chrome/workspaceCache'
 import { installTerminalLifecycle } from '../../chrome/terminalLifecycle'
 
-import { renderWorkspaceApp } from './view'
+import { renderWorkspaceApp, workspaceHelpMaxOffset } from './view'
 import {
   applyWorkspaceAction,
   createWorkspaceState,
@@ -539,6 +539,8 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   // surface visibly judders. Same pattern coco ui uses.
   const stateRef = React.useRef(state)
   stateRef.current = state
+  const rowsRef = React.useRef(rows)
+  rowsRef.current = rows
   const filterDraftRef = React.useRef(filterDraft)
   filterDraftRef.current = filterDraft
   const addRepoDraftRef = React.useRef(addRepoDraft)
@@ -1040,6 +1042,12 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           setFilterDraft(state.filter ?? '')
         } else if (intent.action.type === 'clear-filter') {
           setFilterDraft('')
+        }
+        // Attach the scroll ceiling (terminal-height dependent, so the
+        // reducer can't compute it) — see the scroll-help reducer case.
+        if (intent.action.type === 'scroll-help') {
+          dispatch({ ...intent.action, maxOffset: workspaceHelpMaxOffset(rowsRef.current) })
+          break
         }
         dispatch(intent.action)
         break

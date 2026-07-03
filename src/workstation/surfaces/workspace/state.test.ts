@@ -203,6 +203,22 @@ describe('workspace state reducer', () => {
     expect(up.helpScrollOffset).toBe(0)
   })
 
+  it('scroll-help ceiling-clamps against the provided maxOffset', () => {
+    const opened = applyWorkspaceAction(baseState, { type: 'toggle-help' })
+    // Holding j past the end used to keep incrementing the offset
+    // invisibly; k then unwound the excess before the view moved.
+    const down = applyWorkspaceAction(opened, { type: 'scroll-help', delta: 50, maxOffset: 12 })
+    expect(down.helpScrollOffset).toBe(12)
+    const up = applyWorkspaceAction(down, { type: 'scroll-help', delta: -1, maxOffset: 12 })
+    expect(up.helpScrollOffset).toBe(11)
+  })
+
+  it('scroll-help treats a negative maxOffset as zero', () => {
+    const opened = applyWorkspaceAction(baseState, { type: 'toggle-help' })
+    const down = applyWorkspaceAction(opened, { type: 'scroll-help', delta: 5, maxOffset: -3 })
+    expect(down.helpScrollOffset).toBe(0)
+  })
+
   it('reopening the help overlay resets the scroll offset to the top', () => {
     const opened = applyWorkspaceAction(baseState, { type: 'toggle-help' })
     const scrolled = applyWorkspaceAction(opened, { type: 'scroll-help', delta: 6 })

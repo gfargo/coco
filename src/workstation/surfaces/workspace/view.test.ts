@@ -189,6 +189,16 @@ describe('renderWorkspaceApp', () => {
     expect(tree).toMatchSnapshot()
   })
 
+  it('shows the live draft while re-editing an applied filter', () => {
+    // The committed-filter chip used to win over the draft, so `/`
+    // with a filter active gave zero feedback while typing.
+    const committed = applyWorkspaceAction(baseState(), { type: 'set-filter', filter: 'lib' })
+    const editing = applyWorkspaceAction(committed, { type: 'set-focus', focus: 'filter' })
+    const tree = render(editing, { filterDraft: 'libx' })
+    expect(JSON.stringify(tree)).toContain('filter: libx_')
+    expect(JSON.stringify(tree)).not.toContain('filter: lib ')
+  })
+
   it('snapshots the dirty tab', () => {
     const state = applyWorkspaceAction(baseState(), { type: 'set-tab', tab: 'dirty' })
     const tree = render(state)

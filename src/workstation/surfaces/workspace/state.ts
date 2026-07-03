@@ -135,7 +135,7 @@ export type WorkspaceAction =
   | { type: 'set-status'; status?: string }
   | { type: 'toggle-help' }
   | { type: 'close-help' }
-  | { type: 'scroll-help'; delta: number }
+  | { type: 'scroll-help'; delta: number; maxOffset?: number }
   | { type: 'toggle-theme-picker' }
   | { type: 'move-theme-picker'; delta: number; presetCount: number }
   | { type: 'append-theme-picker-filter'; value: string }
@@ -413,9 +413,16 @@ export function applyWorkspaceAction(
       return { ...state, showHelp: false, helpScrollOffset: 0 }
     }
     case 'scroll-help': {
-      // Floor-clamp at 0 only; the renderer ceiling-clamps against the
-      // real content height so `j` past the end sticks at the last row.
-      return { ...state, helpScrollOffset: Math.max(0, state.helpScrollOffset + action.delta) }
+      // Floor-clamp at 0; ceiling-clamp when the dispatcher provides
+      // the real content bound (runtime computes it from the terminal
+      // height). Without the ceiling the offset kept climbing past the
+      // end invisibly — the renderer's display clamp hid it, but `k`
+      // then spent N presses unwinding the excess before the view
+      // moved.
+      const next = Math.max(0, state.helpScrollOffset + action.delta)
+      const clamped =
+        action.maxOffset !== undefined ? Math.min(next, Math.max(0, action.maxOffset)) : next
+      return { ...state, helpScrollOffset: clamped }
     }
     case 'toggle-theme-picker': {
       return {

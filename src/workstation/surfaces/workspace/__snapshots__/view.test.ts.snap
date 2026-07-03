@@ -5315,7 +5315,7 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the URL field 1`] = `
       color="cyan"
       dimColor={false}
     >
-      [List]
+      [Clone]
     </Text>
   </Box>
   <Box
@@ -5882,19 +5882,19 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the destination field 
       color="cyan"
       dimColor={false}
     >
-      [List]
+      [Clone]
     </Text>
   </Box>
   <Box
     flexDirection="row"
-    height={27}
+    height={26}
   >
     <Box
       borderColor="gray"
       borderStyle="classic"
       flexDirection="column"
       flexShrink={0}
-      height={27}
+      height={26}
       paddingX={1}
       width={22}
     >
@@ -5995,7 +5995,7 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the destination field 
       borderStyle="classic"
       flexDirection="column"
       flexGrow={1}
-      height={27}
+      height={26}
       paddingX={1}
     >
       <Box
