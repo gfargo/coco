@@ -144,7 +144,20 @@ describe('createRefreshDebouncer', () => {
  * filters by filename, which survives any number of renames.
  */
 describe('createRefreshWatcher rename survival', () => {
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 150))
+  // Poll until the watcher has fired, up to a generous ceiling. A fixed
+  // 150ms sleep between replacements was timing-flaky under CI load
+  // (macOS + coverage): the two replacements' events coalesced into a
+  // single debounce settle, or the second settle hadn't landed before
+  // close(). Waiting for each settle BEFORE issuing the next
+  // replacement makes the sequencing deterministic — and if the
+  // watcher genuinely orphans after the first rename (the regression),
+  // the wait times out and the count assertion still fails.
+  const waitFor = async (predicate: () => boolean, timeoutMs = 5000): Promise<void> => {
+    const deadline = Date.now() + timeoutMs
+    while (!predicate() && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+  }
 
   it('keeps firing for repeated lock+rename replacements of .git/index', async () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'coco-watch-'))
@@ -161,12 +174,15 @@ describe('createRefreshWatcher rename survival', () => {
     })
 
     try {
-      // Two full lock+rename cycles, letting each debounce window settle.
-      for (const version of ['v1', 'v2']) {
-        writeFileSync(join(gitDir, 'index.lock'), version)
-        renameSync(join(gitDir, 'index.lock'), join(gitDir, 'index'))
-        await settle()
-      }
+      writeFileSync(join(gitDir, 'index.lock'), 'v1')
+      renameSync(join(gitDir, 'index.lock'), join(gitDir, 'index'))
+      await waitFor(() => kinds.length >= 1)
+
+      // The second replacement is the regression: an inode-following
+      // fs.watch is orphaned by the first rename and never fires again.
+      writeFileSync(join(gitDir, 'index.lock'), 'v2')
+      renameSync(join(gitDir, 'index.lock'), join(gitDir, 'index'))
+      await waitFor(() => kinds.length >= 2)
     } finally {
       watcher.close()
       rmSync(repoRoot, { recursive: true, force: true })
@@ -175,5 +191,5 @@ describe('createRefreshWatcher rename survival', () => {
     // One settle per replacement — the second rename is the regression.
     expect(kinds.length).toBeGreaterThanOrEqual(2)
     expect(kinds).toContain('worktree')
-  })
+  }, 15000)
 })
