@@ -78,7 +78,14 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
   // same file across all three (renderer / input / workflow handlers).
   const visibleGroups = groupWorktreeFiles(visibleFiles)
   const surfaceRows = buildStatusSurfaceRows(visibleGroups)
-  const listRows = Math.max(4, bodyRows - 5)
+  // Row budget (#1392): the base reserve covers borders + title + the
+  // two scroll indicators, but the 1/2/3 mask indicator row (rendered
+  // only when the mask is narrowed) must be counted too — with all
+  // three showing the panel grew one row past its box.
+  const listRows = Math.max(
+    4,
+    bodyRows - 5 - (isStatusFilterMaskActive(state.statusFilterMask) ? 1 : 0)
+  )
   // Row budget = the panel interior (border 2 + paddingX 2), NOT a
   // hardcoded 140 (#1390): a monorepo path longer than the panel used
   // to wrap, shifting the windowed list and pushing the panel past

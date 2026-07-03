@@ -667,7 +667,16 @@ export function renderHistoryPanel(
   // breaks down and the dividers would read as noise.
   const fullGraphSpacing = state.fullGraph && !state.filter
   const dateBucketingNow = !dateBucketingEnabled || state.filter ? undefined : now
-  const chromeRows = showPendingRow ? 5 : 4
+  // Hoisted so the row budget can count the banner (#1392) — it used
+  // to be computed inline in the return, invisible to chromeRows.
+  const currentBranchRef = context.branches?.localBranches.find((branch) => branch.current)
+  const upstreamBanner = formatUpstreamAheadBanner(currentBranchRef, { ascii: theme.ascii })
+  // Conditional single-line chrome must be budgeted (#1392): with the
+  // upstream-ahead banner and the path:/author: fetch indicator both
+  // showing, the panel grew past its box and pushed the footer down.
+  const chromeRows = (showPendingRow ? 5 : 4)
+    + (upstreamBanner ? 1 : 0)
+    + (state.historyFetchArgs ? 1 : 0)
   const listRows = rowMode === 'stacked'
     ? Math.max(2, Math.floor((bodyRows - chromeRows) / 2))
     : Math.max(3, bodyRows - chromeRows)
@@ -710,15 +719,12 @@ export function renderHistoryPanel(
   // Two wording variants (behind-only vs diverged) live in the
   // helper; render is identical aside from the formatted string.
   // Warning yellow = same semantic as the remote-tracking chip kind.
-  ...((() => {
-    const currentBranchRef = context.branches?.localBranches.find((branch) => branch.current)
-    const banner = formatUpstreamAheadBanner(currentBranchRef, { ascii: theme.ascii })
-    if (!banner) return []
-    return [h(Text, {
+  ...(upstreamBanner
+    ? [h(Text, {
       key: 'upstream-ahead-banner',
       color: theme.noColor ? undefined : theme.colors.warning,
-    }, banner)]
-  })()),
+    }, upstreamBanner)]
+    : []),
   // Server-side filter indicator (#776). Only rendered when the user
   // has an active path:/author: prefix; clears when they Ctrl+U.
   ...(state.historyFetchArgs
