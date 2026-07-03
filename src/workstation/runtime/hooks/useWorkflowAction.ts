@@ -74,6 +74,12 @@ import {
   pushCurrentBranch,
   renameBranch,
   setUpstream,
+  forcePushBranch,
+  forcePushCurrentBranch,
+  isDivergedPullError,
+  isNonFastForwardPushError,
+  pullCurrentBranchMerge,
+  pullCurrentBranchRebase,
 } from '../../../git/branchActions'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
@@ -134,6 +140,10 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'fetch-selected-branch': { kind: 'fetch', label: 'Fetching branch from remote…' },
   'pull-selected-branch': { kind: 'pull', label: 'Pulling branch from remote…' },
   'push-selected-branch': { kind: 'push', label: 'Pushing branch to remote…' },
+  'force-push-current-branch': { kind: 'push', label: 'Force-pushing (with lease)…' },
+  'force-push-selected-branch': { kind: 'push', label: 'Force-pushing branch (with lease)…' },
+  'pull-rebase-current': { kind: 'pull', label: 'Pulling with rebase…' },
+  'pull-merge-current': { kind: 'pull', label: 'Pulling with merge…' },
 }
 
 /**
@@ -1038,6 +1048,18 @@ export function useWorkflowAction(
         if (!branch) return { ok: false, message: 'No branch selected' }
         return pushBranch(git, branch)
       },
+      'force-push-current-branch': async () => forcePushCurrentBranch(git),
+      'force-push-selected-branch': async () => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        return forcePushBranch(git, branch)
+      },
+      'pull-rebase-current': async () => pullCurrentBranchRebase(git),
+      'pull-merge-current': async () => pullCurrentBranchMerge(git),
       'add-to-gitignore': async () => addToGitignore(git, payload || ''),
       'rename-branch': async () => {
         const newName = payload?.trim()
@@ -1393,7 +1415,47 @@ export function useWorkflowAction(
         })
       }
     }
-    // A branch checked out in a worktree can't be deleted
+    // #1356 — a push rejected non-fast-forward (post-amend/rebase) gets
+    // a with-lease force offer instead of a dead-end. The y-confirm
+    // carries its own warning copy; --force-with-lease still refuses if
+    // the remote moved since the last fetch.
+    if (
+      (id === 'push-current-branch' || id === 'push-selected-branch') &&
+      !result?.ok &&
+      isNonFastForwardPushError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+    ) {
+      dispatch({
+        type: 'setPendingConfirmation',
+        value: id === 'push-current-branch' ? 'force-push-current-branch' : 'force-push-selected-branch',
+      })
+    }
+    // #1356 — a diverged `pull --ff-only` offers the rebase/merge
+    // recovery choice instead of git's raw refusal. Only fires for the
+    // CURRENT branch (the predicate excludes the fetch-refspec rejection
+    // non-current pulls produce — rebase/merge don't apply there).
+    if (
+      (id === 'pull-current-branch' || id === 'pull-selected-branch') &&
+      !result?.ok &&
+      isDivergedPullError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+    ) {
+      dispatch({
+        type: 'setPendingChoice',
+        value: {
+          id: 'diverged-pull-recovery',
+          title: 'Local and remote have diverged',
+          warning: 'A fast-forward pull is not possible. Choose how to reconcile.',
+          options: [
+            { key: 'r', label: 'Pull with rebase (replay local commits on top)', workflowId: 'pull-rebase-current' },
+            { key: 'm', label: 'Pull with merge (create a merge commit)', workflowId: 'pull-merge-current' },
+          ],
+        },
+      })
+    }
+    // A branch checked out in a worktree can't be deleted — and unlike
+    // the unmerged case, `git branch -D` won't force it either, so we
+    // don't offer a confirmation. Replace git's raw rejection with a
+    // clear "free up the worktree first" message that names where the
+    // branch is still in use.
     if (
       (id === 'delete-branch' || id === 'force-delete-branch') &&
       !result?.ok &&
@@ -1473,6 +1535,10 @@ export function useWorkflowAction(
       'checkout-branch',
       'fixup-into-commit',
       'autosquash-rebase',
+      'force-push-current-branch',
+      'force-push-selected-branch',
+      'pull-rebase-current',
+      'pull-merge-current',
       // Resolving a checkout conflict changes HEAD (checkout) and/or the
       // ref set (branch delete), so the graph needs a refresh.
       'conflict-remove-worktree-checkout',

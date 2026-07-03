@@ -159,6 +159,11 @@ export function renderConfirmationPanel(
     // branch — name the reason so the force isn't a blind "y again".
     : state.pendingConfirmationId === 'force-delete-branch'
     ? 'Not fully merged. Force-delete (git branch -D) is irreversible.'
+    // Push was rejected non-fast-forward — name what the force actually
+    // does and its remaining safety net so the y isn't blind.
+    : state.pendingConfirmationId === 'force-push-current-branch' ||
+      state.pendingConfirmationId === 'force-push-selected-branch'
+    ? 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.'
     // Rebase-onto carries a per-invocation warning naming both branches
     // (built in inkInput from the cursored + current branch). Fall back
     // to a static line if the payload is somehow absent.

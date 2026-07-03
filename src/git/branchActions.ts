@@ -189,6 +189,76 @@ export function parseCheckedOutWorktreePath(message: string | undefined): string
   return match?.[1]
 }
 
+/**
+ * True when a push was rejected because the remote moved (non-fast-
+ * forward). Matches git's phrasings across versions: "non-fast-forward",
+ * "fetch first", "stale info" (force-with-lease refusal), and the
+ * summary "failed to push some refs". Callers join message + details
+ * before testing — runAction splits the error across both.
+ */
+export function isNonFastForwardPushError(message: string | undefined): boolean {
+  return /non-fast-forward|fetch first|stale info|failed to push some refs/i.test(message || '')
+}
+
+/**
+ * True when `pull --ff-only` refused because local and remote diverged.
+ * Deliberately does NOT match the bare "non-fast-forward" fetch-refspec
+ * rejection (non-current-branch pulls) — the rebase/merge recovery
+ * choice only makes sense for the checked-out branch.
+ */
+export function isDivergedPullError(message: string | undefined): boolean {
+  return /not possible to fast-forward|have diverged/i.test(message || '')
+}
+
+/**
+ * `push --force-with-lease` for the current branch — the recovery path
+ * offered when an ordinary push is rejected non-fast-forward after an
+ * amend / rebase / autosquash. With-lease refuses to clobber remote
+ * commits that arrived since the last fetch, unlike bare --force.
+ */
+export function forcePushCurrentBranch(git: SimpleGit): Promise<BranchActionResult> {
+  return runAction(
+    () => git.raw(['push', '--force-with-lease']),
+    'Force-pushed current branch (with lease)'
+  )
+}
+
+/** See {@link forcePushCurrentBranch} — the cursored-branch variant. */
+export function forcePushBranch(
+  git: SimpleGit,
+  branch: BranchRef
+): Promise<BranchActionResult> {
+  if (branch.type !== 'local') {
+    return Promise.resolve({ ok: false, message: 'Only local branches can be pushed.' })
+  }
+  if (!branch.upstream || !branch.remote) {
+    return Promise.resolve({
+      ok: false,
+      message: `${branch.shortName} has no upstream — an ordinary push (-u) creates it; force is never needed there.`,
+    })
+  }
+  return runAction(
+    () => git.raw(['push', '--force-with-lease', branch.remote as string, branch.shortName]),
+    `Force-pushed ${branch.shortName} to ${branch.upstream} (with lease)`
+  )
+}
+
+/** Divergence recovery: replay local commits on top of the remote. */
+export function pullCurrentBranchRebase(git: SimpleGit): Promise<BranchActionResult> {
+  return runAction(
+    () => git.raw(['pull', '--rebase']),
+    'Pulled with rebase — local commits replayed on top of the remote'
+  )
+}
+
+/** Divergence recovery: merge the remote into the local branch. */
+export function pullCurrentBranchMerge(git: SimpleGit): Promise<BranchActionResult> {
+  return runAction(
+    () => git.raw(['pull', '--no-rebase']),
+    'Pulled with merge — created a merge commit from the remote'
+  )
+}
+
 export function fetchRemotes(git: SimpleGit): Promise<BranchActionResult> {
   return runAction(
     () => git.raw(['fetch', '--all', '--prune']),
