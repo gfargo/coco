@@ -28,7 +28,12 @@ describe('log tag actions', () => {
       'release v0.34.0',
     ])
     expect(git.raw).toHaveBeenNthCalledWith(3, ['tag', '-d', '0.34.0'])
-    expect(git.raw).toHaveBeenNthCalledWith(4, ['push', 'origin', '0.34.0'])
-    expect(git.raw).toHaveBeenNthCalledWith(5, ['push', 'origin', ':0.34.0'])
+    // Remote-side refspecs stay fully qualified. The bare forms are
+    // ambiguous against a same-named remote branch: push errors with
+    // "matches more than one", and delete resolves against ANY matching
+    // ref — `:0.34.0` deleted a remote BRANCH named 0.34.0 when the tag
+    // itself had never been pushed.
+    expect(git.raw).toHaveBeenNthCalledWith(4, ['push', 'origin', 'refs/tags/0.34.0'])
+    expect(git.raw).toHaveBeenNthCalledWith(5, ['push', 'origin', ':refs/tags/0.34.0'])
   })
 })
