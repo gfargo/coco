@@ -1,7 +1,10 @@
 import type ReactTypes from 'react'
+import type { GitLogRow } from '../../../commands/log/data'
 import { createLogInkState } from '../inkViewModel'
 import { checkoutReflogEntry } from '../../../git/reflogActions'
-import { pullCurrentBranch, pushBranch } from '../../../git/branchActions'
+import { checkoutBranch, checkoutBranchByName, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
+import { cherryPickCommit } from '../../../git/historyActions'
+import { createStash } from '../../../git/stashActions'
 import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowAction'
 
 /**
@@ -24,6 +27,25 @@ jest.mock('../../../git/branchActions', () => {
     ...actual,
     pushBranch: jest.fn(),
     pullCurrentBranch: jest.fn(),
+    pullCurrentBranchRebase: jest.fn(),
+    checkoutBranch: jest.fn(),
+    checkoutBranchByName: jest.fn(),
+  }
+})
+
+jest.mock('../../../git/historyActions', () => {
+  const actual = jest.requireActual('../../../git/historyActions')
+  return {
+    ...actual,
+    cherryPickCommit: jest.fn(),
+  }
+})
+
+jest.mock('../../../git/stashActions', () => {
+  const actual = jest.requireActual('../../../git/stashActions')
+  return {
+    ...actual,
+    createStash: jest.fn(),
   }
 })
 
@@ -302,6 +324,230 @@ describe('result status carries the outcome kind (#1349)', () => {
       type: 'setStatus',
       value: 'Pulled main from origin',
       kind: 'success',
+    }))
+  })
+})
+
+const checkoutBranchMock = checkoutBranch as jest.MockedFunction<typeof checkoutBranch>
+const checkoutBranchByNameMock = checkoutBranchByName as jest.MockedFunction<typeof checkoutBranchByName>
+const cherryPickCommitMock = cherryPickCommit as jest.MockedFunction<typeof cherryPickCommit>
+const createStashMock = createStash as jest.MockedFunction<typeof createStash>
+const pullCurrentBranchRebaseMock = pullCurrentBranchRebase as jest.MockedFunction<typeof pullCurrentBranchRebase>
+
+// A NON-current local branch so the checkout-branch handler actually
+// calls git instead of short-circuiting on "Already on <branch>".
+const otherBranch = {
+  type: 'local',
+  name: 'refs/heads/feature/other',
+  shortName: 'feature/other',
+  hash: 'def',
+  current: false,
+  upstream: undefined,
+  remote: undefined,
+  date: '2026-05-01',
+  subject: 'feat',
+  ahead: 0,
+  behind: 0,
+} as never
+
+describe('dirty-checkout recovery (#1360)', () => {
+  beforeEach(() => {
+    checkoutBranchMock.mockReset()
+    checkoutBranchByNameMock.mockReset()
+    createStashMock.mockReset()
+  })
+
+  it('offers stash & switch when the checkout is refused for uncommitted changes', async () => {
+    checkoutBranchMock.mockResolvedValue({
+      ok: false,
+      message: 'error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/app.ts\nPlease commit your changes or stash them before you switch branches.\nAborting',
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [otherBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('checkout-branch')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'dirty-checkout-recovery',
+        options: [
+          expect.objectContaining({
+            key: 's',
+            workflowId: 'stash-and-checkout-branch',
+            payload: 'feature/other',
+          }),
+        ],
+      }),
+    }))
+  })
+
+  it('does NOT offer it for unrelated checkout failures', async () => {
+    checkoutBranchMock.mockResolvedValue({
+      ok: false,
+      message: "error: pathspec 'feature/other' did not match any file(s) known to git",
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [otherBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('checkout-branch')
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingChoice' }))
+  })
+
+  it('stash-and-checkout-branch stashes first, then switches, and hints at gz', async () => {
+    createStashMock.mockResolvedValue({ ok: true, message: 'Created stash: WIP before switching to feature/other' })
+    checkoutBranchByNameMock.mockResolvedValue({ ok: true, message: 'Checked out feature/other' })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('stash-and-checkout-branch', 'feature/other')
+    expect(createStashMock).toHaveBeenCalledWith(expect.anything(), 'WIP before switching to feature/other')
+    expect(checkoutBranchByNameMock).toHaveBeenCalledWith(expect.anything(), 'feature/other')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: expect.stringContaining('(gz)'),
+      kind: 'success',
+    }))
+    // HEAD moved — the branch cursor snaps home like every checkout path.
+    expect(dispatch).toHaveBeenCalledWith({ type: 'resetBranchSelection' })
+  })
+
+  it('a failed stash aborts before the switch is attempted', async () => {
+    createStashMock.mockResolvedValue({ ok: false, message: 'fatal: unable to write new index file' })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('stash-and-checkout-branch', 'feature/other')
+    expect(checkoutBranchByNameMock).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      kind: 'error',
+    }))
+  })
+})
+
+const commitRow: GitLogRow = {
+  type: 'commit',
+  graph: '*',
+  shortHash: 'abc1234',
+  hash: 'abc123456789',
+  parents: ['def567890123'],
+  date: '2026-04-29',
+  author: 'Coco Test',
+  refs: [],
+  message: 'feat: add thing',
+}
+
+describe('operation conflict recovery (#1360)', () => {
+  beforeEach(() => {
+    cherryPickCommitMock.mockReset()
+    pullCurrentBranchMock.mockReset()
+  })
+
+  it('a conflicted cherry-pick raises the conflicts/abort choice and keeps the error on dismissal', async () => {
+    cherryPickCommitMock.mockResolvedValue({
+      ok: false,
+      message: 'error: could not apply abc1234... feat: add thing',
+      details: ['CONFLICT (content): Merge conflict in src/app.ts'],
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: createLogInkState([commitRow]),
+    }))
+
+    await runWorkflowAction('cherry-pick-commit')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'operation-conflict-recovery',
+        title: 'Cherry-pick stopped on conflicts',
+        // Declining the recovery must leave git's raw error visible.
+        keepStatusOnDismiss: true,
+        options: [
+          expect.objectContaining({ key: 'x', intent: 'open-conflicts' }),
+          expect.objectContaining({ key: 'a', workflowId: 'abort-operation', destructive: true }),
+        ],
+      }),
+    }))
+    // The raw error still landed on the status line first.
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'error: could not apply abc1234... feat: add thing',
+      kind: 'error',
+    }))
+  })
+
+  it('detects conflicts when only the details lines carry the CONFLICT marker', async () => {
+    cherryPickCommitMock.mockResolvedValue({
+      ok: false,
+      message: 'Auto-merging src/app.ts',
+      details: ['CONFLICT (content): Merge conflict in src/app.ts'],
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: createLogInkState([commitRow]),
+    }))
+
+    await runWorkflowAction('cherry-pick-commit')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({ id: 'operation-conflict-recovery' }),
+    }))
+  })
+
+  it('does NOT raise the choice for non-conflict cherry-pick failures', async () => {
+    cherryPickCommitMock.mockResolvedValue({
+      ok: false,
+      message: "fatal: bad revision 'abc123456789'",
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: createLogInkState([commitRow]),
+    }))
+
+    await runWorkflowAction('cherry-pick-commit')
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingChoice' }))
+  })
+
+  it('a conflicted pull --rebase raises the same recovery choice', async () => {
+    pullCurrentBranchRebaseMock.mockResolvedValue({
+      ok: false,
+      message: 'CONFLICT (content): Merge conflict in src/app.ts\nerror: could not apply abc1234... feat',
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('pull-rebase-current')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'operation-conflict-recovery',
+        title: 'Pull stopped on conflicts',
+      }),
     }))
   })
 })

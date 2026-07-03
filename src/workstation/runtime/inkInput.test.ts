@@ -5668,6 +5668,74 @@ describe('triage filter cycling (#882 phase 6)', () => {
     })
   })
 
+  describe('operation-conflict-recovery choice prompt (#1360)', () => {
+    function conflictRecoveryState() {
+      // The workflow runner lands the raw git error on the status line
+      // FIRST, then raises the recovery prompt on top of it.
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setStatus',
+        value: 'error: could not apply abc1234... feat: add thing',
+        kind: 'error',
+      })
+      state = applyLogInkAction(state, {
+        type: 'setPendingChoice',
+        value: {
+          id: 'operation-conflict-recovery',
+          title: 'Cherry-pick stopped on conflicts',
+          keepStatusOnDismiss: true,
+          options: [
+            { key: 'x', label: 'Open conflicts view', intent: 'open-conflicts' },
+            { key: 'a', label: 'Abort the operation', workflowId: 'abort-operation', destructive: true },
+          ],
+        },
+      })
+      return state
+    }
+
+    it('x (open-conflicts intent) pushes the conflicts view and closes the prompt', () => {
+      const state = conflictRecoveryState()
+      const after = applyInput(state, 'x')
+      expect(after.activeView).toBe('conflicts')
+      expect(after.pendingChoice).toBeUndefined()
+      // The sticky error stays put — the view push carries no setStatus.
+      expect(after.statusMessage).toBe('error: could not apply abc1234... feat: add thing')
+    })
+
+    it('a runs the abort-operation workflow and closes the prompt', () => {
+      const state = conflictRecoveryState()
+      const events = getLogInkInputEvents(state, 'a')
+      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'abort-operation', payload: undefined })
+      const after = applyInput(state, 'a')
+      expect(after.pendingChoice).toBeUndefined()
+    })
+
+    it('Esc dismisses but keeps the raw error status visible (keepStatusOnDismiss)', () => {
+      const state = conflictRecoveryState()
+      const after = applyInput(state, '', { escape: true })
+      expect(after.pendingChoice).toBeUndefined()
+      expect(after.statusMessage).toBe('error: could not apply abc1234... feat: add thing')
+      expect(after.statusKind).toBe('error')
+    })
+
+    it('a prompt WITHOUT keepStatusOnDismiss still overwrites the status with cancelled', () => {
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setStatus',
+        value: 'some earlier status',
+      })
+      state = applyLogInkAction(state, {
+        type: 'setPendingChoice',
+        value: {
+          id: 'diverged-pull-recovery',
+          title: 'Local and remote have diverged',
+          options: [{ key: 'r', label: 'Pull with rebase', workflowId: 'pull-rebase-current' }],
+        },
+      })
+      const after = applyInput(state, '', { escape: true })
+      expect(after.pendingChoice).toBeUndefined()
+      expect(after.statusMessage).toBe('cancelled')
+    })
+  })
+
   describe('modal prompt keyboard precedence (#1342)', () => {
     const choice = {
       id: 'diverged-pull-recovery',

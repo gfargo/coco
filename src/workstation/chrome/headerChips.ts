@@ -32,6 +32,7 @@ import { forgeNouns } from './forgeNouns'
 import type { LogInkTheme } from './theme'
 import { getPullRequestStateGlyph } from './iconography'
 import type { GitProviderType } from '../../git/providerData'
+import type { GitOperationType } from '../../git/operationData'
 
 export type HeaderChip = {
   /**
@@ -60,12 +61,24 @@ export type HeaderChipId =
   | 'repo'
   | 'branch'
   | 'dirty'
+  | 'operation'
   | 'bisecting'
   | 'pr'
   | 'view'
   | 'loading'
   | 'mode'
   | 'search'
+
+/**
+ * Chip copy for the in-progress merge-machinery operations (#1360).
+ * `none` never renders a chip, so the map covers only the real four.
+ */
+const OPERATION_CHIP_LABELS: Record<Exclude<GitOperationType, 'none'>, string> = {
+  merge: 'MERGING',
+  rebase: 'REBASING',
+  'cherry-pick': 'CHERRY-PICKING',
+  revert: 'REVERTING',
+}
 
 export type BuildHeaderChipsInput = {
   appLabel: string
@@ -79,6 +92,19 @@ export type BuildHeaderChipsInput = {
   dirty: boolean
   /** True when `context.bisect.active` — renders its own warning chip. */
   bisecting: boolean
+  /**
+   * In-progress merge-machinery operation from `context.operation`
+   * (#1360). `undefined` / `'none'` omits the chip; anything else
+   * renders `⚠ REBASING` / `⚠ MERGING` / … so a half-finished
+   * operation is never invisible. Bisect keeps its own chip above.
+   */
+  operation?: GitOperationType
+  /**
+   * Conflicted-file count for the operation chip — appends
+   * `(3 conflicts)` when > 0. Ignored when no operation is in
+   * progress.
+   */
+  operationConflicts?: number
   /**
    * Pull request state for the current branch, if any. `undefined`
    * omits the PR chip entirely (no "no PR" placeholder).
@@ -172,6 +198,25 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       bold: false,
     }
   chips.push(dirtyChip)
+
+  // In-progress operation — only when the merge machinery left the repo
+  // mid-flight (#1360). Same warning treatment as the bisect chip: an
+  // operation waiting on the user must be visible from every view, not
+  // just the conflicts surface. The conflict count rides along so the
+  // chip doubles as a progress meter while conflicts are resolved.
+  if (input.operation && input.operation !== 'none') {
+    const conflicts = input.operationConflicts ?? 0
+    const suffix = conflicts > 0
+      ? ` (${conflicts} conflict${conflicts === 1 ? '' : 's'})`
+      : ''
+    chips.push({
+      id: 'operation',
+      label: `${theme.ascii ? '!' : '⚠'} ${OPERATION_CHIP_LABELS[input.operation]}${suffix}`,
+      color: theme.colors.warning,
+      dim: false,
+      bold: true,
+    })
+  }
 
   // Bisect — only when active. Distinct chip so users entering the TUI
   // mid-bisect see it immediately (#784). Warning color because bisect

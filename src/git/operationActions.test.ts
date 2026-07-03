@@ -1,6 +1,7 @@
 import {
     abortOperation,
     continueOperation,
+    isOperationConflictError,
     operationActionTestInternals,
     resolveConflictKeepCurrentBranch,
     resolveConflictKeepIncoming,
@@ -150,6 +151,33 @@ describe('log operation actions', () => {
 
       expect(result.ok).toBe(false)
       expect(result.message).toContain('error: path not found')
+    })
+  })
+
+  describe('isOperationConflictError (#1360)', () => {
+    it('matches conflict output across the merge-machinery operations', () => {
+      // Merge / pull --no-rebase.
+      expect(isOperationConflictError(
+        'Auto-merging src/app.ts\nCONFLICT (content): Merge conflict in src/app.ts\nAutomatic merge failed; fix conflicts and then commit the result.'
+      )).toBe(true)
+      // Cherry-pick / rebase replay.
+      expect(isOperationConflictError('error: could not apply abc1234... feat: add thing')).toBe(true)
+      // Revert.
+      expect(isOperationConflictError('error: could not revert abc1234... feat: add thing')).toBe(true)
+      // Rebase's hint block (sometimes the only line callers hold).
+      expect(isOperationConflictError(
+        'Resolve all conflicts manually, mark them as resolved with "git add/rm <conflicted_files>"'
+      )).toBe(true)
+      // Non-content conflict flavors carry the CONFLICT ( prefix.
+      expect(isOperationConflictError('CONFLICT (modify/delete): src/app.ts deleted in HEAD')).toBe(true)
+    })
+
+    it('does NOT match unrelated failures', () => {
+      expect(isOperationConflictError("fatal: bad revision 'nope'")).toBe(false)
+      expect(isOperationConflictError('error: Your local changes to the following files would be overwritten by merge:')).toBe(false)
+      expect(isOperationConflictError('fatal: Not possible to fast-forward, aborting.')).toBe(false)
+      expect(isOperationConflictError('! [rejected] main -> main (non-fast-forward)')).toBe(false)
+      expect(isOperationConflictError(undefined)).toBe(false)
     })
   })
 })

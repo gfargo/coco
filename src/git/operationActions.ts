@@ -69,6 +69,29 @@ function getOperationCommand(
   }
 }
 
+/**
+ * True when a failed merge-machinery action (cherry-pick / revert /
+ * rebase / pull) stopped on CONFLICTS — i.e. the repo is now sitting
+ * mid-operation waiting for the user — as opposed to failing outright
+ * for an unrelated reason (bad ref, network, hook rejection). Matches
+ * git's conflict phrasings across versions and operations:
+ *
+ *   - "CONFLICT (content): Merge conflict in <file>"   (all operations)
+ *   - "Automatic merge failed; fix conflicts and then commit the result."
+ *     (merge / pull --no-rebase)
+ *   - "error: could not apply <sha>..."                (cherry-pick / rebase)
+ *   - "error: could not revert <sha>..."               (revert)
+ *   - "Resolve all conflicts manually, mark them as resolved..."
+ *     (rebase's hint block)
+ *
+ * Callers should join `message` + `details` before testing — several
+ * action modules split git's multi-line stderr across both fields
+ * (same contract as `isNonFastForwardPushError`).
+ */
+export function isOperationConflictError(message: string | undefined): boolean {
+  return /CONFLICT \(|Merge conflict in |Automatic merge failed|could not apply|could not revert|Resolve all conflicts manually/i.test(message || '')
+}
+
 export function continueOperation(
   git: SimpleGit,
   operation: GitOperationType

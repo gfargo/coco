@@ -77,7 +77,12 @@ export type LogInkChoiceOption = {
    * (reset soft/mixed/hard, merge strategy merge/squash/rebase).
    */
   payload?: string
-  intent?: 'switch-worktree'
+  /**
+   * `switch-worktree` opens the conflicting worktree as a nested repo
+   * frame (#1175); `open-conflicts` pushes the conflicts view (#1360).
+   * Both are pure navigation and bypass the workflow runner.
+   */
+  intent?: 'switch-worktree' | 'open-conflicts'
 }
 
 /**
@@ -91,6 +96,14 @@ export type LogInkChoicePrompt = {
   title: string
   warning?: string
   options: LogInkChoiceOption[]
+  /**
+   * When true, dismissing the prompt (n / Esc) leaves the current
+   * status line untouched instead of overwriting it with "cancelled".
+   * Used by recovery prompts raised ON TOP of a sticky error status
+   * (#1360) — declining the recovery must keep git's raw error visible,
+   * because the error is still the truth about what happened.
+   */
+  keepStatusOnDismiss?: boolean
 }
 
 /**

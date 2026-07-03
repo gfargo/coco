@@ -5,6 +5,7 @@ import {
   deleteBranch,
   isBranchCheckedOutElsewhereError,
   isBranchNotFullyMergedError,
+  isDirtyWorktreeCheckoutError,
   parseCheckedOutWorktreePath,
   fetchBranch,
   fetchRemotes,
@@ -267,6 +268,42 @@ describe('log branch actions', () => {
       expect(isBranchNotFullyMergedError('Not Fully Merged')).toBe(true)
       expect(isBranchNotFullyMergedError('Cannot delete the current branch.')).toBe(false)
       expect(isBranchNotFullyMergedError(undefined)).toBe(false)
+    })
+  })
+
+  describe('isDirtyWorktreeCheckoutError (#1360)', () => {
+    it('matches the tracked-changes refusal from checkout and switch', () => {
+      expect(
+        isDirtyWorktreeCheckoutError(
+          'error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/app.ts\nPlease commit your changes or stash them before you switch branches.\nAborting'
+        )
+      ).toBe(true)
+      expect(
+        isDirtyWorktreeCheckoutError('Your local changes would be overwritten by switch.')
+      ).toBe(true)
+    })
+
+    it('matches the untracked-files refusal', () => {
+      expect(
+        isDirtyWorktreeCheckoutError(
+          'error: The following untracked working tree files would be overwritten by checkout:\n\tnotes.md\nPlease move or remove them before you switch branches.'
+        )
+      ).toBe(true)
+    })
+
+    it('does NOT match the merge-flavored overwrite (pull recovery owns that) or other errors', () => {
+      // A dirty `git pull` refusal says "by merge" — that failure routes
+      // through the pull recovery flows, not stash-&-switch.
+      expect(
+        isDirtyWorktreeCheckoutError('error: Your local changes to the following files would be overwritten by merge:')
+      ).toBe(false)
+      expect(
+        isDirtyWorktreeCheckoutError("error: pathspec 'nope' did not match any file(s) known to git")
+      ).toBe(false)
+      expect(
+        isDirtyWorktreeCheckoutError("fatal: 'feat/x' is already used by worktree at '/repo/wt'")
+      ).toBe(false)
+      expect(isDirtyWorktreeCheckoutError(undefined)).toBe(false)
     })
   })
 

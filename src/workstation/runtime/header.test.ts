@@ -132,6 +132,45 @@ describe('createLogInkHeader', () => {
     expect(collectText(tree)).toContain('main')
   })
 
+  it('renders the in-progress operation chip with the conflict count from context.operation (#1360)', () => {
+    const base = makeRuntimeValue()
+    const tree = renderHeader(makeRuntimeValue({
+      context: {
+        ...base.context,
+        operation: {
+          operation: 'rebase',
+          conflictedFiles: [
+            { path: 'src/a.ts', indexStatus: 'U', worktreeStatus: 'U' },
+            { path: 'src/b.ts', indexStatus: 'U', worktreeStatus: 'U' },
+            { path: 'src/c.ts', indexStatus: 'U', worktreeStatus: 'U' },
+          ],
+          conflictMarkers: [],
+          hooks: { hooksPath: '', configuredHooks: [] },
+          aiConflictHelpAvailable: true,
+        },
+      } as unknown as LogInkContext,
+    }))
+    expect(collectText(tree)).toContain('REBASING (3 conflicts)')
+  })
+
+  it('omits the operation chip when context.operation reports none in progress', () => {
+    const base = makeRuntimeValue()
+    const tree = renderHeader(makeRuntimeValue({
+      context: {
+        ...base.context,
+        operation: {
+          operation: 'none',
+          conflictedFiles: [],
+          conflictMarkers: [],
+          hooks: { hooksPath: '', configuredHooks: [] },
+          aiConflictHelpAvailable: false,
+        },
+      } as unknown as LogInkContext,
+    }))
+    expect(collectText(tree)).not.toContain('MERGING')
+    expect(collectText(tree)).not.toContain('REBASING')
+  })
+
   it('wraps the chips in a 3-high bordered Box (layout unchanged)', () => {
     const tree = renderHeader(makeRuntimeValue())
     const props = (tree as unknown as { props: StubProps }).props
