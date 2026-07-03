@@ -328,8 +328,12 @@ function renderCommitHistoryRow(
     ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-chip`, selected, remoteNames)
     : { node: null, width: 0, chip: undefined }
   const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip))
+  // The "just landed" marker prepends 2 cells (`▎ ` / `* `) — the
+  // stacked variant budgets it via recentMarkerWidth, and omitting it
+  // here made marked rows wrap for ~5s after every commit (#1390).
+  const recentMarkerWidth = isRecent ? 2 : 0
   const fixedWidth =
-    graphWidth + 1 + commit.shortHash.length + 1 + dateSegmentWidth + chip.width
+    graphWidth + 1 + commit.shortHash.length + 1 + dateSegmentWidth + chip.width + recentMarkerWidth
   // Refs trail the message and shrink first when the row is narrow:
   // the user can always see the full ref list in the inspector, so
   // the headline subject keeps priority over decoration.
@@ -509,7 +513,8 @@ function renderPendingCommitRow(
   Text: LogInkComponents['Text'],
   worktree: NonNullable<LogInkContext['worktree']>,
   selected: boolean,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  panelWidth: number
 ): ReactTypes.ReactElement {
   const parts: string[] = []
   if (worktree.stagedCount) {
@@ -533,7 +538,7 @@ function renderPendingCommitRow(
       ? theme.colors.selectionForeground
       : (theme.noColor ? undefined : theme.colors.accent),
     backgroundColor: selected && !theme.noColor ? theme.colors.selection : undefined,
-  }, truncateCells(label, 140))
+  }, truncateCells(label, Math.max(20, panelWidth - 4)))
 }
 
 /**
@@ -681,7 +686,7 @@ export function renderHistoryPanel(
   const realSelectionSuppressed = state.pendingCommitFocused
 
   const pendingNode = showPendingRow
-    ? renderPendingCommitRow(h, Text, worktree!, pendingRowSelected, theme)
+    ? renderPendingCommitRow(h, Text, worktree!, pendingRowSelected, theme, width)
     : null
 
   return h(Box, {

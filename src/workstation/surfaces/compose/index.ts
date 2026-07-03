@@ -240,15 +240,17 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
       ...renderStreamingPreviewLines(h, components, compose.streamingPreview, bodyTextWidth, theme),
     ]
     : []),
-  ...(compose.message ? [h(Text, undefined, ''), h(Text, { key: 'compose-msg' }, truncateCells(compose.message, 140))] : []),
+  // Panel-width budget, not a hardcoded 140 (#1390) — long result /
+  // detail / hint lines wrapped and pushed the panel past bodyRows.
+  ...(compose.message ? [h(Text, undefined, ''), h(Text, { key: 'compose-msg' }, truncateCells(compose.message, Math.max(20, width - 4)))] : []),
   ...(compose.details || []).map((line, index) => h(Text, {
     key: `compose-detail-${index}`,
     dimColor: true,
-  }, truncateCells(`  ${line}`, 140))),
+  }, truncateCells(`  ${line}`, Math.max(20, width - 4)))),
   ...(!hasStagedFiles && noStagedHint
     ? [
       h(Text, { key: 'compose-no-staged-spacer' }, ''),
-      h(Text, { key: 'compose-no-staged', dimColor: true }, truncateCells(noStagedHint, 140)),
+      h(Text, { key: 'compose-no-staged', dimColor: true }, truncateCells(noStagedHint, Math.max(20, width - 4))),
     ]
     : []),
   h(Box, { flexGrow: 1 }),
