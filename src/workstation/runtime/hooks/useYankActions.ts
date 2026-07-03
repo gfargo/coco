@@ -139,7 +139,22 @@ export function useYankActions(
     let value: string | undefined
     let label: string | undefined
 
-    const view = state.activeView
+    // Sidebar-focused yank (#1388): the cursored SIDEBAR entity wins
+    // over the view behind it. The dispatcher's sidebar arms
+    // (isBranch/Tag/StashActionTarget) were effectively dead code —
+    // this resolver only consulted activeView, so `y` on a sidebar
+    // branch copied the history commit and labeled it as such.
+    const sidebarEntity =
+      state.focus === 'sidebar'
+        ? state.sidebarTab === 'branches'
+          ? ('branches' as const)
+          : state.sidebarTab === 'tags'
+            ? ('tags' as const)
+            : state.sidebarTab === 'stashes'
+              ? ('stash' as const)
+              : undefined
+        : undefined
+    const view = sidebarEntity ?? state.activeView
     if (view === 'history') {
       const commit = state.filteredCommits[state.selectedIndex]
       if (commit) {
@@ -326,6 +341,8 @@ export function useYankActions(
     state.diffSource,
     state.filter,
     state.filteredCommits,
+    state.focus,
+    state.sidebarTab,
     state.selectedBranchIndex,
     state.selectedIndex,
     state.selectedIssueIndex,
