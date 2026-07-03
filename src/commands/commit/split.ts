@@ -400,6 +400,8 @@ export async function applyCommitSplitPlan({
 
   await git.raw(['reset'])
 
+  logger.startSpinner(`Applying ${applicableGroups.length} commits…`)
+
   const commitHashes: string[] = []
   const failures: { title: string; reason: string }[] = []
 
@@ -466,6 +468,7 @@ export async function applyCommitSplitPlan({
   // groups landed, some failed) is returned with a warning summary
   // so the user keeps the work that did land.
   if (commitHashes.length === 0) {
+    logger.stopSpinner('Split apply failed', { mode: 'fail', color: 'red' })
     const detail = failures.map((f) => `  - ${f.title}: ${f.reason}`).join('\n')
     throw new Error(
       `Split apply created zero commits across ${applicableGroups.length} group(s).\n${detail}`
@@ -476,12 +479,21 @@ export async function applyCommitSplitPlan({
     const partial = failures
       .map((f) => `${f.title} (${f.reason.split('\n')[0]})`)
       .join('; ')
+    logger.stopSpinner(
+      `${commitHashes.length} of ${applicableGroups.length} commits applied`,
+      { mode: 'warn', color: 'yellow' }
+    )
     return {
       commitHashes,
       message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}`,
       fallback,
     }
   }
+
+  logger.stopSpinner(
+    `${commitHashes.length} commit${commitHashes.length === 1 ? '' : 's'} applied`,
+    { mode: 'succeed', color: 'green' }
+  )
 
   return {
     commitHashes,
@@ -636,6 +648,8 @@ export async function prepareCommitSplitPlan({
   const resolvedPlanLlm = planLlm ?? llm
   const resolvedPlanModel = planService?.model ?? config.service.model
 
+  logger.startSpinner('Generating split plan…')
+
   const { plan, fallback } = await generateValidatedCommitSplitPlan({
     llm: resolvedPlanLlm,
     prompt: COMMIT_SPLIT_PROMPT,
@@ -664,6 +678,12 @@ export async function prepareCommitSplitPlan({
     // exhaustion instead of returning the single-group fallback.
     strict: Boolean(argv.strictSplit ?? config.strictSplit),
   })
+
+  const groupCount = plan.groups.filter((g) => !g.unclaimed).length
+  logger.stopSpinner(
+    `Split plan ready (${groupCount} commit${groupCount === 1 ? '' : 's'})`,
+    { mode: 'succeed', color: 'green' }
+  )
 
   return { plan, context: { changes, hunkInventory }, fallback }
 }
