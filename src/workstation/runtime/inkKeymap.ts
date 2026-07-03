@@ -1099,8 +1099,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   // global cluster don't fit alongside the switcher at the 80-col floor,
   // so both are trimmed (the dropped keys stay reachable via `?`).
   if (options.singlePane) {
+    // No `v peek` on the staging diff (#1389): `v` is line-select
+    // there (the input layer gates the peek off it), and advertising
+    // peek over select was how line-staging silently vanished on
+    // narrow terminals.
+    const onWorktreeDiff = options.activeView === 'diff' && options.diffSource === 'worktree'
     const lead =
-      options.focus === 'sidebar'
+      options.focus === 'sidebar' || onWorktreeDiff
         ? [singlePaneSwitcherHint(options.focus)]
         : [singlePaneSwitcherHint(options.focus), 'v peek']
     return {

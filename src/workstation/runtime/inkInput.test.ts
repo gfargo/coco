@@ -5322,6 +5322,43 @@ describe('triage filter cycling (#882 phase 6)', () => {
       expect(state.peekReturnFocus).toBe('commits')
     })
 
+    it('v stays line-select on the staging diff — peek must not shadow it (#1389)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'navigateOpenDiffForWorktreeFile', fileIndex: 0 })
+      expect(state.activeView).toBe('diff')
+
+      const events = getLogInkInputEvents(state, 'v', {}, { ...singlePane, worktreeDiffLineCount: 20 })
+      expect(events.find((event) =>
+        event.type === 'action' && event.action.type === 'togglePeek'
+      )).toBeUndefined()
+    })
+
+    it('a stale line-select anchor does not swallow Esc on a commit diff (#1389)', () => {
+      let state = createLogInkState(rows)
+      // Set an anchor on the staging diff, hop out, then open a commit
+      // diff — the push clears the anchor, and even if one leaked, the
+      // Esc gate only fires on the worktree diff.
+      state = applyLogInkAction(state, { type: 'navigateOpenDiffForWorktreeFile', fileIndex: 0 })
+      state = applyLogInkAction(state, { type: 'setDiffLineSelectAnchor', value: 3 })
+      state = applyLogInkAction(state, { type: 'popView' })
+      const firstCommit = rows.find((row) => row.type === 'commit')
+      state = applyLogInkAction(state, {
+        type: 'navigateOpenDiffForCommit',
+        sha: firstCommit && 'hash' in firstCommit ? firstCommit.hash : '',
+        commitIndex: 0,
+      })
+      expect(state.activeView).toBe('diff')
+      expect(state.diffLineSelectAnchor).toBeUndefined()
+
+      // Belt-and-suspenders: force a stale anchor and confirm Esc pops
+      // instead of clearing invisible state.
+      const stale = { ...state, diffLineSelectAnchor: 3 }
+      const events = getLogInkInputEvents(stale, '', { escape: true }, {})
+      expect(events.find((event) =>
+        event.type === 'action' && event.action.type === 'setDiffLineSelectAnchor'
+      )).toBeUndefined()
+    })
+
     it('v again snaps back to the original pane and clears the ticket', () => {
       let state = createLogInkState(rows)
       state = applyInput(state, 'v', {}, singlePane)
