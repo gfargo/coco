@@ -102,6 +102,13 @@ export function useConflictResolutionActions(
       })
       if (!mountedRef.current) return
 
+      // Ownership check (#1386): a re-invocation aborted this call
+      // after installing its own controller + loading state — our
+      // cancelled/error dispatches would clear the new run's overlay.
+      // The finally below only clears the ref when it still points at
+      // us, so `!==` here always means "superseded".
+      if (abortRef.current !== controller) return
+
       if (!result.ok) {
         if (result.cancelled) {
           dispatch({ type: 'clearConflictResolution' })

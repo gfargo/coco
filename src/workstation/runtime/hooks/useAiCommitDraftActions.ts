@@ -116,6 +116,8 @@ export function useAiCommitDraftActions(
           // workstation) mid-stream, React warns about updates on
           // an unmounted component. Drop the chunk silently.
           if (!mountedRef.current) return
+          // Superseded (#1386): a newer invocation owns the preview.
+          if (aiDraftAbortRef.current !== controller) return
           // Dispatch the full accumulated text — the preview chrome
           // helper does the last-N-lines slicing at render time, so
           // re-doing the slice here would be wasted work. Per-chunk
@@ -132,6 +134,14 @@ export function useAiCommitDraftActions(
       // post-await dispatch if the user quit while the LLM call was
       // in flight. Same pattern as `refreshHistoryRows` upstream.
       if (!mountedRef.current) return
+
+      // Ownership check (#1386): a rapid re-invocation (Esc then `I`
+      // again) aborted this call AFTER dispatching its own loading
+      // state — our cancelled/result dispatches would clobber it
+      // (spinner + streaming preview vanish while the new LLM call is
+      // running). The finally below only clears the ref when it still
+      // points at us, so `!==` here always means "superseded".
+      if (aiDraftAbortRef.current !== controller) return
 
       // Cancel path (#881 phase 3). User pressed Esc during the
       // stream; reducer drops loading + preview, status line shows
@@ -165,8 +175,9 @@ export function useAiCommitDraftActions(
       // that lets an error escape would otherwise strand the
       // spinner permanently with no user-facing recovery short of
       // quitting. Surface a generic failure and clear the loading
-      // state so the user can re-try.
-      if (mountedRef.current) {
+      // state so the user can re-try. Ownership-gated (#1386) like the
+      // happy path — a superseding invocation owns the loading state.
+      if (mountedRef.current && aiDraftAbortRef.current === controller) {
         dispatch({ type: 'commitCompose', action: { type: 'setLoading', value: false } })
         dispatch({
           type: 'setStatus',
