@@ -170,12 +170,27 @@ export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): React
         6,
         Math.max(...windowed.map((p) => `#${p.number}`.length), 3)
       )
+      // Width-responsive column caps (#1391). The fixed caps (16
+      // author + 24 branch) plus the other columns totalled ~68 cells
+      // while the main panel interior is ~50-64 at common terminal
+      // widths — every row with a long author/branch wrapped, double-
+      // lining the whole list. Author and branch now shrink first:
+      // the interior minus the immovable columns (cursor, number,
+      // state, merge/review glyphs, inter-column gaps) splits between
+      // a title reserve and the author/branch pair.
+      const interior = Math.max(20, width - 4)
+      const immovable = 22 + numberColWidth
+      const remaining = Math.max(0, interior - immovable)
+      const titleReserve = Math.max(12, Math.floor(remaining * 0.45))
+      const authorBranchBudget = Math.max(10, remaining - titleReserve)
+      const authorCap = Math.max(4, Math.min(16, Math.floor(authorBranchBudget * 0.4)))
+      const branchCap = Math.max(6, Math.min(24, authorBranchBudget - authorCap))
       const authorColWidth = Math.min(
-        16,
+        authorCap,
         Math.max(...windowed.map((p) => (p.author || '').length), 4)
       )
       const branchColWidth = Math.min(
-        24,
+        branchCap,
         Math.max(...windowed.map((p) => p.headRefName.length), 6)
       )
 
