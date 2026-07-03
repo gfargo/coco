@@ -79,6 +79,11 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
   const visibleGroups = groupWorktreeFiles(visibleFiles)
   const surfaceRows = buildStatusSurfaceRows(visibleGroups)
   const listRows = Math.max(4, bodyRows - 5)
+  // Row budget = the panel interior (border 2 + paddingX 2), NOT a
+  // hardcoded 140 (#1390): a monorepo path longer than the panel used
+  // to wrap, shifting the windowed list and pushing the panel past
+  // bodyRows (the body Box has no overflow clipping).
+  const rowBudget = Math.max(20, width - 4)
   const selectedIndex = state.selectedWorktreeFileIndex
   const headerFocused = state.statusGroupHeaderFocused
   // Resolve the cursor's row index in the flat (header-and-file) row
@@ -123,7 +128,7 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
           dimColor: !headerSelected && rowIndex > cursorRowIndex,
           backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
           color: headerSelected && !theme.noColor ? theme.colors.selectionForeground : undefined,
-        }, truncateCells(text, 140))
+        }, truncateCells(text, rowBudget))
       }
       const isSelected = !headerFocused && row.flatIndex === selectedIndex
       const cursorPart = `${isSelected ? '>' : ' '} `
@@ -137,7 +142,7 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
       // slice we lazily-loaded on boot; missing context → no badge.
       const lfsBadge = context.lfs && isPathLfsTracked(context.lfs, row.file.path) ? ' LFS' : ''
       const tail = `${row.file.indexStatus}${row.file.worktreeStatus} ${row.file.path}${lfsBadge}`
-      const tailTrunc = truncateCells(tail, Math.max(0, 140 - cellWidth(cursorPart) - dotCells - 2))
+      const tailTrunc = truncateCells(tail, Math.max(0, rowBudget - cellWidth(cursorPart) - dotCells - 2))
       return h(Text, {
         key: `status-file-${row.flatIndex}-${rowIndex}`,
         dimColor: !isSelected && rowIndex > cursorRowIndex,
@@ -201,5 +206,5 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
   ...fallbackLines.map((line, index) => h(Text, {
     key: `status-surface-fallback-${index}`,
     dimColor: index > 0,
-  }, truncateCells(line, 140))))
+  }, truncateCells(line, rowBudget))))
 }

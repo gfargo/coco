@@ -163,15 +163,42 @@ function renderInspectorRefs(
   h: typeof ReactTypes.createElement,
   Text: LogInkComponents['Text'],
   refs: string[],
-  repository: ProviderRepository | undefined
+  repository: ProviderRepository | undefined,
+  budget: number
 ): ReactTypes.ReactElement[] {
+  // Cell-budgeted (#1390): the refs line was the ONE inspector header
+  // line without truncation, and a branch-tip commit
+  // (`HEAD -> main, origin/main, origin/HEAD`) wrapped the narrow
+  // inspector 2-3 lines — pushing the file list past the panel — every
+  // time the cursor rested on it. Refs are OSC-8 hyperlink spans, so
+  // we budget whole refs (with a "+N more" overflow marker) rather
+  // than slicing through escape sequences.
+  const MORE_RESERVE = 8
   const out: ReactTypes.ReactElement[] = []
-  refs.forEach((ref, index) => {
+  let used = 0
+  for (let index = 0; index < refs.length; index += 1) {
+    const ref = refs[index]
+    const isLast = index === refs.length - 1
+    const reserve = isLast ? 0 : MORE_RESERVE
+    if (index > 0 && used + 2 + cellWidth(ref) + reserve > budget) {
+      out.push(h(Text, { key: 'ref-more' }, ` +${refs.length - index} more`))
+      break
+    }
     if (index > 0) {
       out.push(h(Text, { key: `ref-sep-${index}` }, ', '))
+      used += 2
+    }
+    const room = budget - used - reserve
+    if (cellWidth(ref) > room) {
+      out.push(h(Text, { key: `ref-${index}` }, truncateCells(ref, Math.max(4, room))))
+      if (!isLast) {
+        out.push(h(Text, { key: 'ref-more' }, ` +${refs.length - index - 1} more`))
+      }
+      break
     }
     out.push(h(Text, { key: `ref-${index}` }, formatHyperlink(ref, buildRefUrl(repository, ref))))
-  })
+    used += cellWidth(ref)
+  }
   return out
 }
 
@@ -388,7 +415,8 @@ export function renderHistoryInspector(
     buildCommitUrl(repository, detail.hash)
   )
   const refNodes = detail.refs.length
-    ? renderInspectorRefs(h, Text, detail.refs, repository)
+    // 'Refs:   ' prefix = 8 cells; the rest of the interior is the budget.
+    ? renderInspectorRefs(h, Text, detail.refs, repository, Math.max(8, width - 4 - 8))
     : null
 
   // Inspector reorder (PR — drop duplicative Workflows trailer):

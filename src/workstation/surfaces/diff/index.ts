@@ -220,7 +220,9 @@ export function renderDiffSurface(
     },
     h(Box, { justifyContent: 'space-between' },
       h(Text, { bold: true }, panelTitle(splitActive ? 'Stash diff (split)' : 'Stash diff', focused)),
-      h(Text, { dimColor: true }, stashIdentity.subtitle)
+      // Cell-budgeted (#1390): default WIP stash subjects run 60+ chars
+      // and wrapped the space-between header row, stealing a body row.
+      h(Text, { dimColor: true }, truncateCells(stashIdentity.subtitle, Math.max(10, width - 4 - 20)))
     ),
     ...headerLines.map((line, index) => h(Text, {
       key: `stash-diff-header-${index}`,
@@ -351,7 +353,9 @@ export function renderDiffSurface(
     },
     h(Box, { justifyContent: 'space-between' },
       h(Text, { bold: true }, panelTitle(splitActive ? 'Diff (split)' : 'Diff', focused)),
-      h(Text, { dimColor: true }, selectedDetailFile?.path || 'no file')
+      // Path middle-elides into the budget (#1390) so a deep monorepo
+      // path can't wrap the header row.
+      h(Text, { dimColor: true }, truncatePathCells(selectedDetailFile?.path || 'no file', Math.max(10, width - 4 - 14)))
     ),
     ...headerLines.map((line, index) => h(Text, {
       key: `diff-surface-header-${index}`,
@@ -426,7 +430,8 @@ export function renderDiffSurface(
     // Use the path of the file actually being diffed (the grouped/visible
     // selection feeds the loaded diff) — `worktreeFile` indexes the raw,
     // ungrouped file list and can name a different file than the diff body.
-    h(Text, { dimColor: true }, worktreeDiff?.filePath || worktreeFile?.path || 'no file')
+    // Middle-elided into the budget (#1390) so it can't wrap the header.
+    h(Text, { dimColor: true }, truncatePathCells(worktreeDiff?.filePath || worktreeFile?.path || 'no file', Math.max(10, width - 4 - 6)))
   ),
   ...headerLines.map((line, index) => h(Text, {
     key: `diff-surface-header-${index}`,
