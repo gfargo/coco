@@ -1806,6 +1806,50 @@ describe('log Ink input interactions', () => {
       expect(state.repoStack).toHaveLength(2)
     })
 
+    it('help type-to-filter: / opens, typing narrows, Enter keeps, Esc is two-stage (#1355)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleHelp' })
+
+      // `/` enters filter mode; printable keys append.
+      state = applyInput(state, '/', {})
+      expect(state.helpFilterMode).toBe(true)
+      state = applyInput(state, 's', {})
+      state = applyInput(state, 't', {})
+      expect(state.helpFilter).toBe('st')
+
+      // j must append while filtering, not scroll.
+      state = applyInput(state, 'j', {})
+      expect(state.helpFilter).toBe('stj')
+      expect(state.helpScrollOffset).toBe(0)
+      state = applyInput(state, '', { backspace: true })
+      expect(state.helpFilter).toBe('st')
+
+      // Enter keeps the filter, returns j/k to scrolling.
+      state = applyInput(state, '', { return: true })
+      expect(state.helpFilterMode).toBe(false)
+      expect(state.helpFilter).toBe('st')
+      state = applyInput(state, 'j', {})
+      expect(state.helpScrollOffset).toBe(1)
+
+      // Two-stage Esc: first clears the committed filter, second closes.
+      state = applyInput(state, '', { escape: true })
+      expect(state.helpFilter).toBe('')
+      expect(state.showHelp).toBe(true)
+      state = applyInput(state, '', { escape: true })
+      expect(state.showHelp).toBe(false)
+    })
+
+    it('reopening help starts with a clean filter (#1355)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleHelp' })
+      state = applyInput(state, '/', {})
+      state = applyInput(state, 'x', {})
+      state = applyLogInkAction(state, { type: 'toggleHelp' })
+      state = applyLogInkAction(state, { type: 'toggleHelp' })
+      expect(state.helpFilter).toBe('')
+      expect(state.helpFilterMode).toBe(false)
+    })
+
     describe('submodules-view drill-in (PR 4 / #932)', () => {
       function submodulesViewState() {
         return createLogInkState(rows, {

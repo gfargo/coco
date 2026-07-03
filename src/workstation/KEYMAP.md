@@ -77,7 +77,7 @@ Available in every view (unless an overlay/mode has claimed the keyboard):
 |-----|--------|
 | `q` | Quit |
 | `Ctrl+C` | Quit (hard) |
-| `?` | Toggle help overlay (full categorized help) |
+| `?` | Toggle help overlay (full categorized help; "This view" section first, `/` type-to-filter inside, two-stage Esc clears the filter then closes) |
 | `:` | Command palette |
 | `/` | Enter filter mode |
 | `g` | Chord prefix (see below) |

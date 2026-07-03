@@ -422,10 +422,31 @@ export function renderHelpPanel(
     focus: state.focus,
   })
 
+  // Type-to-filter (#1355): narrow rows by key / label / description,
+  // case-insensitive substring. Subgroups and sections that filter to
+  // empty drop out entirely so matches aren't buried under headings.
+  const helpQuery = state.helpFilter.trim().toLowerCase()
+  const bindingMatches = (binding: (typeof sections)[number]['bindings'][number]): boolean => {
+    if (!helpQuery) return true
+    return (
+      formatBindingKeys(binding).toLowerCase().includes(helpQuery) ||
+      binding.label.toLowerCase().includes(helpQuery) ||
+      binding.description.toLowerCase().includes(helpQuery)
+    )
+  }
+
+  let matchedAny = false
   for (const section of sections) {
+    const subgroups = section.subgroups
+      .map((subgroup) => ({ ...subgroup, bindings: subgroup.bindings.filter(bindingMatches) }))
+      .filter((subgroup) => subgroup.bindings.length > 0)
+    if (subgroups.length === 0) {
+      continue
+    }
+    matchedAny = true
     body.push(h(Text, { key: `${section.title}-spacer` }, ''))
     body.push(h(Text, { bold: true, key: section.title }, section.title))
-    section.subgroups.forEach((subgroup, subgroupIndex) => {
+    subgroups.forEach((subgroup, subgroupIndex) => {
       // Dim subgroup heading; first subgroup follows the section
       // title directly so we skip the leading spacer to keep the
       // visual hierarchy tight (section title → subgroup → bindings).
@@ -443,13 +464,18 @@ export function renderHelpPanel(
       })
     })
   }
+  if (!matchedAny && helpQuery) {
+    body.push(h(Text, { key: 'help-no-match', dimColor: true },
+      `No bindings match "${state.helpFilter}" — esc clears the filter.`))
+  }
 
   // Reserve rows for: title (1), border (2), padding (0). The "more
   // above" / "more below" hints take 1 row each when present and are
   // accounted for inside the window calculation below. When no
   // bodyRows is provided, fall back to rendering everything (legacy
   // path; tests pass undefined).
-  const titleAndChromeRows = 3
+  const filterRow = state.helpFilterMode || state.helpFilter ? 1 : 0
+  const titleAndChromeRows = 3 + filterRow
   const visibleRows = bodyRows > 0
     ? Math.max(4, bodyRows - titleAndChromeRows)
     : body.length
@@ -463,6 +489,13 @@ export function renderHelpPanel(
   const children: ReactTypes.ReactNode[] = [
     h(Text, { bold: true, key: 'title' }, panelTitle('Help', focused)),
   ]
+  // Filter input line (#1355). Rendered while typing (cursor shown)
+  // and while a committed filter narrows the list, so the narrowing is
+  // never invisible.
+  if (state.helpFilterMode || state.helpFilter) {
+    children.push(h(Text, { key: 'help-filter' },
+      `filter: ${state.helpFilter}${state.helpFilterMode ? '_' : ''}`))
+  }
 
   // Visual hint that there's content scrolled above. The dim style
   // matches the rest of the chrome's "metadata" voice and avoids

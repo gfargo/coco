@@ -1717,7 +1717,34 @@ export function getLogInkInputEvents(
   // `return []` so a stray keypress can't drop the user into the
   // wrong surface.
   if (state.showHelp) {
+    // Type-to-filter (#1355) — `/` opens a text input that narrows the
+    // 30+ binding rows. While it owns the keyboard, printable keys
+    // append; Enter keeps the filter and returns j/k to scrolling;
+    // Esc clears (mirrors the palette's two-stage Esc).
+    if (state.helpFilterMode) {
+      if (key.escape) {
+        return [action({ type: 'clearHelpFilter' })]
+      }
+      if (key.return) {
+        return [action({ type: 'commitHelpFilter' })]
+      }
+      if (key.backspace || key.delete) {
+        return [action({ type: 'backspaceHelpFilter' })]
+      }
+      if (inputValue && !key.ctrl && !key.meta) {
+        return [action({ type: 'appendHelpFilter', value: inputValue })]
+      }
+      return []
+    }
+    if (inputValue === '/') {
+      return [action({ type: 'openHelpFilter' })]
+    }
     if (key.escape || inputValue === '?') {
+      // Two-stage Esc: a committed filter clears first, then the
+      // overlay closes — same contract as the command palette.
+      if (key.escape && state.helpFilter) {
+        return [action({ type: 'clearHelpFilter' })]
+      }
       return [action({ type: 'toggleHelp' })]
     }
     if (inputValue === 'q') {

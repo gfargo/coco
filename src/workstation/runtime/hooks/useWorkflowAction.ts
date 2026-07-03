@@ -159,6 +159,33 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
  * Returns `undefined` for non-delete workflows (and when nothing is
  * selected), which the runner treats as "no pending marker".
  */
+/**
+ * Workflow ids whose SUCCESS rewrote local history — the moments where
+ * advertising the reflog time machine actually matters (#1355). The
+ * shared result dispatch appends `gr reflog to recover` for these.
+ * Deliberately excludes ref-only moves (checkout, fetch/pull/push) and
+ * additive commits: recovery hints on operations nobody regrets are
+ * noise.
+ */
+const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
+  'reset-hard-to-commit',
+  'reset-soft-to-commit',
+  'reset-mixed-to-commit',
+  'cherry-pick-commit',
+  'revert-commit',
+  'fixup-into-commit',
+  'autosquash-rebase',
+  'interactive-rebase-to-commit',
+  'execute-rebase-plan',
+  'rebase-onto-branch',
+  'amend-head',
+  'reword-head',
+])
+
+export function isHistoryRewriteWorkflow(id: string): boolean {
+  return HISTORY_REWRITE_WORKFLOW_IDS.has(id)
+}
+
 export function resolvePendingItemAction(
   id: string,
   state: LogInkState,
@@ -1478,9 +1505,14 @@ export function useWorkflowAction(
     // Handlers that return no result (pure-navigation ones) keep the
     // neutral info treatment. Recovery escalations below may follow up
     // with their own prompt/warning on top of the error status.
+    // Momentum hint (#1355): after a history rewrite lands, advertise
+    // the reflog time machine AT the moment it matters — recovery
+    // exists but was never surfaced when the user might want it.
+    const historyRewriteHint =
+      result?.ok && isHistoryRewriteWorkflow(id) ? ' · gr reflog to recover' : ''
     dispatch({
       type: 'setStatus',
-      value: result?.message || 'Workflow action complete',
+      value: `${result?.message || 'Workflow action complete'}${historyRewriteHint}`,
       kind: result ? (result.ok ? 'success' : 'error') : undefined,
     })
     // A safe `delete-branch` (`git branch -d`) refuses branches that

@@ -472,6 +472,19 @@ export type LogInkState = {
    */
   helpScrollOffset: number
   /**
+   * Type-to-filter query for the help overlay (#1355). Narrows the
+   * 30+ binding rows by key / label / description. Cleared whenever
+   * the overlay opens or closes.
+   */
+  helpFilter: string
+  /**
+   * True while the help overlay's filter input owns the keyboard
+   * (opened with `/`). While set, printable keys append to
+   * `helpFilter` instead of scrolling; Enter keeps the filter and
+   * returns to scroll keys; Esc clears it.
+   */
+  helpFilterMode: boolean
+  /**
    * Which-key view-keys strip (#1137). When true, the detail panel shows a
    * compact list of the single-key actions available in the current view,
    * sourced from `LOG_INK_KEY_BINDINGS`. Opened by the `g?` chord; the
@@ -1099,6 +1112,11 @@ export type LogInkAction =
   | { type: 'toggleGraph' }
   | { type: 'toggleHelp' }
   | { type: 'scrollHelp'; delta: number }
+  | { type: 'openHelpFilter' }
+  | { type: 'appendHelpFilter'; value: string }
+  | { type: 'backspaceHelpFilter' }
+  | { type: 'commitHelpFilter' }
+  | { type: 'clearHelpFilter' }
   | { type: 'toggleViewKeys' }
   | { type: 'toggleCommandPalette' }
   | { type: 'toggleThemePicker' }
@@ -1865,6 +1883,8 @@ export function createLogInkState(
     fullGraph: options.fullGraph ?? true,
     showHelp: false,
     helpScrollOffset: 0,
+    helpFilter: '',
+    helpFilterMode: false,
     showViewKeys: false,
     showCommandPalette: false,
     workflowActionId: undefined,
@@ -2729,6 +2749,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         showCommandPalette: false,
         showHelp: false,
         helpScrollOffset: 0,
+        helpFilter: '',
+        helpFilterMode: false,
         showViewKeys: false,
         pendingKey: undefined,
       }
@@ -2747,6 +2769,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // next open always starts at the top — feels more predictable
         // than picking up where the user last scrolled.
         helpScrollOffset: 0,
+        helpFilter: '',
+        helpFilterMode: false,
         showCommandPalette: false,
         // Opening full help supersedes the compact view-keys strip — this
         // is the progressive-disclosure step (`?` from the strip expands
@@ -2763,6 +2787,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // overlays; opening it closes anything else that was showing.
         showHelp: false,
         helpScrollOffset: 0,
+        helpFilter: '',
+        helpFilterMode: false,
         showCommandPalette: false,
         pendingKey: undefined,
       }
@@ -2775,6 +2801,19 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         helpScrollOffset: Math.max(0, state.helpScrollOffset + action.delta),
       }
+    case 'openHelpFilter':
+      return { ...state, helpFilterMode: true }
+    case 'appendHelpFilter':
+      // Typing narrows from the top — reset the scroll so the first
+      // match is visible instead of whatever row the user had reached.
+      return { ...state, helpFilter: state.helpFilter + action.value, helpScrollOffset: 0 }
+    case 'backspaceHelpFilter':
+      return { ...state, helpFilter: state.helpFilter.slice(0, -1), helpScrollOffset: 0 }
+    case 'commitHelpFilter':
+      // Enter keeps the narrowed list but returns j/k to scrolling.
+      return { ...state, helpFilterMode: false }
+    case 'clearHelpFilter':
+      return { ...state, helpFilter: '', helpFilterMode: false, helpScrollOffset: 0 }
     case 'toggleCommandPalette': {
       const opening = !state.showCommandPalette
       return {
@@ -2782,6 +2821,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         showCommandPalette: opening,
         showHelp: false,
         helpScrollOffset: 0,
+        helpFilter: '',
+        helpFilterMode: false,
         showViewKeys: false,
         // Reset palette interaction state on every open/close so the next
         // session starts from a clean slate.
