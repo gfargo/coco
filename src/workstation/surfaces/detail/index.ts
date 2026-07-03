@@ -29,6 +29,7 @@ import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatHyperlink } from '../../chrome/hyperlinks'
+import { clampListWindowStart } from '../../chrome/layout'
 import { forgeNouns } from '../../chrome/forgeNouns'
 import type {
   InspectorAction,
@@ -218,7 +219,10 @@ function renderCommitFileList(
   }
 
   const clamped = Math.max(0, Math.min(selectedIndex, files.length - 1))
-  const startIndex = Math.max(0, clamped - Math.floor(maxRows / 2))
+  // Missed adoption site of the #1340 clamp (#1394): centering without
+  // the lower bound under-filled the window when the cursor sat near
+  // the last file.
+  const startIndex = clampListWindowStart(clamped, files.length, maxRows)
   const visible = files.slice(startIndex, startIndex + maxRows)
 
   return visible.map((file, offset) => {
