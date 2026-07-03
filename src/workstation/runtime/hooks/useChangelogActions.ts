@@ -182,6 +182,14 @@ export function useChangelogActions(
     try {
       const result = await runChangelogTextWorkflow(argv, { signal: controller.signal })
 
+      // Ownership check (#1386): a rapid regenerate (`r`) aborted this
+      // call after installing its own controller + loading view — our
+      // cancelled/error dispatches would paint "Cancelled — press r to
+      // regenerate" over the NEW generation's loading state. The
+      // finally below only clears the ref when it still points at us,
+      // so `!==` here always means "superseded".
+      if (changelogAbortRef.current !== controller) return
+
       // Cancel path (#1338): the user pressed Esc mid-generation. Move
       // the view out of its loading state (r regenerates) and show a
       // neutral — not error — status line.
