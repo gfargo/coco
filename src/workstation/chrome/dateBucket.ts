@@ -13,8 +13,12 @@
  *
  * The `key` is what the renderer dedupes on (consecutive commits in
  * the same bucket share one header). The `label` is what gets
- * printed in the divider. Day-granularity comparison is in UTC so
- * timezone offsets never bump a commit between buckets.
+ * printed in the divider. Day-granularity comparison uses the
+ * VIEWER's local calendar day on both sides (#1336): commit dates
+ * arrive as viewer-local days (`--date=format-local:%Y-%m-%d` in
+ * commands/log/data.ts) and `now` is truncated to the viewer's local
+ * day, so "Today" always means the user's own today. (`Date.UTC` in
+ * the math below is just a timezone-free day-arithmetic device.)
  *
  * Malformed inputs (missing or unparseable iso) return a fallback
  * bucket whose key is `unknown`; the renderer can choose to emit a
@@ -42,10 +46,13 @@ export function getDateBucket(iso: string | undefined, now: Date): DateBucket {
     return { key: 'unknown', label: 'Unknown date' }
   }
 
-  const commitUtc = Date.UTC(year, month - 1, day)
-  const nowUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const commitDay = Date.UTC(year, month - 1, day)
+  // Viewer-LOCAL day components (#1336) — the commit day is already in
+  // the viewer's zone, so the reference day must be too, or a commit
+  // made after UTC midnight (e.g. 8pm Pacific) lands under Yesterday.
+  const nowDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
   const oneDay = 24 * 60 * 60 * 1000
-  const days = Math.floor((nowUtc - commitUtc) / oneDay)
+  const days = Math.floor((nowDay - commitDay) / oneDay)
 
   // Future-dated commits (clock skew, bad commit dates) collapse to
   // today rather than confusing the user with an "in the future"
@@ -58,7 +65,7 @@ export function getDateBucket(iso: string | undefined, now: Date): DateBucket {
   // Inside the same calendar month → one "earlier this month" bucket
   // so the user sees a single section rather than per-day groupings
   // for a commit-heavy week.
-  if (year === now.getUTCFullYear() && month - 1 === now.getUTCMonth()) {
+  if (year === now.getFullYear() && month - 1 === now.getMonth()) {
     return { key: 'earlier-this-month', label: 'Earlier this month' }
   }
 

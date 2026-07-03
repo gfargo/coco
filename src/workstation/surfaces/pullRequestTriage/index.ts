@@ -13,6 +13,7 @@
 import type * as ReactTypes from 'react'
 import type { PullRequestListItem } from '../../../git/pullRequestListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { clampListWindowStart } from '../../chrome/layout'
 import { forgeNouns } from '../../chrome/forgeNouns'
 import {
   formatLogInkForgeNoRemote,
@@ -20,7 +21,7 @@ import {
   formatLogInkLoading,
   formatLogInkPullRequestTriageEmpty,
 } from '../../chrome/surfaceStates'
-import { truncateCells } from '../../chrome/text'
+import { cellWidth, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import { PULL_REQUEST_FILTER_LABELS } from '../../../git/triageFilterPresets'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
@@ -150,7 +151,7 @@ export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): React
       Math.min(state.selectedPullRequestTriageIndex, Math.max(0, visible.length - 1))
     )
     const listRows = Math.max(4, bodyRows - 4)
-    const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+    const startIndex = clampListWindowStart(selected, visible.length, listRows)
     const windowed = visible.slice(startIndex, startIndex + listRows)
     const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
     const presetLabel = `▼ ${PULL_REQUEST_FILTER_LABELS[state.selectedPullRequestFilter]}`
@@ -187,15 +188,29 @@ export function renderPullRequestTriageSurface(ctx: SurfaceRenderContext): React
         const stateStr = stateLabel.padEnd(6)
         const mergeStr = mergeableGlyph(pr.mergeStateStatus, pr.mergeable)
         const reviewStr = reviewGlyph(pr.reviewDecision)
-        const authorStr = (pr.author || '').padEnd(authorColWidth)
+        // Truncate before padding: padEnd never shortens, so an author
+        // longer than the capped column would silently widen the row.
+        const authorStr = truncateCells(pr.author || '', authorColWidth).padEnd(authorColWidth)
         const branchStr = truncateCells(pr.headRefName, branchColWidth).padEnd(branchColWidth)
-        const labelStr = (pr.labels || []).length
-          ? ` [${(pr.labels || []).join(' ')}]`
-          : ''
+        // Title and labels share the remaining row width. Labels are
+        // budgeted (they can be arbitrarily long) but never squeeze the
+        // title below a readable minimum — past that the labels
+        // truncate instead. Cell math, not .length: labels/titles can
+        // contain emoji/wide glyphs, and the merge/review glyphs are
+        // non-ASCII.
         const head = `${cursor} `
         const prefix = `${numStr}  ${stateStr}  ${mergeStr}  ${reviewStr}  ${authorStr}  ${branchStr}  `
-        const titleBudget = Math.max(8, width - 4 - head.length - prefix.length)
+        const available = Math.max(8, width - 4 - cellWidth(head) - cellWidth(prefix))
+        const rawLabelStr = (pr.labels || []).length
+          ? ` [${(pr.labels || []).join(' ')}]`
+          : ''
+        // Labels reserve at most a third of the shared space; the title
+        // takes the rest, then labels fill whatever the title actually
+        // left (a short title hands its slack back to the labels).
+        const labelReserve = Math.min(cellWidth(rawLabelStr), Math.floor(available / 3))
+        const titleBudget = Math.max(8, available - labelReserve)
         const titleStr = truncateCells(pr.title, titleBudget)
+        const labelStr = truncateCells(rawLabelStr, Math.max(0, available - cellWidth(titleStr)))
 
         return h(Text, {
           key: `pr-triage-${index}`,

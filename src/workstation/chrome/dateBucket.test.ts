@@ -2,8 +2,11 @@ import { getDateBucket } from './dateBucket'
 
 describe('getDateBucket', () => {
   // Fix `now` to a mid-month Thursday so all buckets are reachable
-  // without overflowing month boundaries in the assertions.
-  const NOW = new Date(Date.UTC(2026, 4, 14)) // 2026-05-14
+  // without overflowing month boundaries in the assertions. Local-
+  // component constructor (not Date.UTC): bucketing compares the
+  // VIEWER's local day (#1336), so a UTC-instant `now` would make
+  // these assertions timezone-sensitive on contributor machines.
+  const NOW = new Date(2026, 4, 14) // 2026-05-14 local
 
   it('returns today for the same UTC day', () => {
     expect(getDateBucket('2026-05-14', NOW)).toEqual({ key: 'today', label: 'Today' })
@@ -27,7 +30,7 @@ describe('getDateBucket', () => {
     // 2026-04-30 → calendar April; NOW is May → different bucket.
     // 2026-05-01 is in May but within last-week range, so bucket is
     // last-week. Use a date that's both in current month AND > 13d.
-    const earlyNow = new Date(Date.UTC(2026, 4, 30)) // 2026-05-30
+    const earlyNow = new Date(2026, 4, 30) // 2026-05-30 local
     expect(getDateBucket('2026-05-01', earlyNow)).toEqual({
       key: 'earlier-this-month',
       label: 'Earlier this month',
@@ -66,5 +69,22 @@ describe('getDateBucket', () => {
       key: 'yesterday',
       label: 'Yesterday',
     })
+  })
+
+  it('buckets by the VIEWER\'s local day, not the UTC day (#1336)', () => {
+    // Simulate a Pacific-evening viewer: local calendar still on the
+    // 14th while UTC has rolled over to the 15th. A commit dated on the
+    // viewer's local today must read "Today" — the old getUTC* math
+    // filed it under "Yesterday".
+    const pacificEvening = {
+      getFullYear: () => 2026,
+      getMonth: () => 4,
+      getDate: () => 14,
+      getUTCFullYear: () => 2026,
+      getUTCMonth: () => 4,
+      getUTCDate: () => 15,
+    } as unknown as Date
+    expect(getDateBucket('2026-05-14', pacificEvening)).toEqual({ key: 'today', label: 'Today' })
+    expect(getDateBucket('2026-05-13', pacificEvening)).toEqual({ key: 'yesterday', label: 'Yesterday' })
   })
 })

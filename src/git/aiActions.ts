@@ -4,6 +4,7 @@ import { ChangelogOptions } from '../commands/changelog/config'
 import { runCommitWorkflow } from './commitWorkflowActions'
 import { HistoryCommitRef } from './historyActions'
 import { TagRangeSummary } from './tagData'
+import { LangChainCancelledError } from '../lib/langchain/errors'
 import { Logger } from '../lib/utils/logger'
 
 export type LogAiAction =
@@ -279,15 +280,23 @@ export async function runPullRequestBodyWorkflow(
  *   - { ok: false, message } on changelog handler error or empty output
  */
 export async function runChangelogTextWorkflow(
-  input: Partial<ChangelogOptions> = {}
-): Promise<{ ok: boolean; message: string; text?: string }> {
+  input: Partial<ChangelogOptions> = {},
+  options: { signal?: AbortSignal } = {}
+): Promise<{ ok: boolean; message: string; text?: string; cancelled?: boolean }> {
   const argv = createChangelogArgv(input)
 
   let text = ''
   try {
-    const result = await generateChangelogResult(argv, new Logger({ silent: true }))
+    const result = await generateChangelogResult(argv, new Logger({ silent: true }), {
+      signal: options.signal,
+    })
     text = result.text.trim()
   } catch (error) {
+    // User cancellation (#1338) is intent, not failure — flag it so the
+    // caller can show a neutral "cancelled" status instead of an error.
+    if (error instanceof LangChainCancelledError) {
+      return { ok: false, cancelled: true, message: 'Changelog generation cancelled.' }
+    }
     return { ok: false, message: (error as Error).message }
   }
 

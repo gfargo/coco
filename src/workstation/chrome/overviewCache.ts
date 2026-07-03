@@ -88,7 +88,12 @@ export function writeCachedCommits(repoPath: string, rows: GitLogRow[]): void {
   }
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, JSON.stringify(envelope))
+    // tmp+rename so a crash mid-write can't leave truncated JSON (the
+    // read path would silently treat it as "no cache"). pid-suffixed
+    // tmp keeps concurrent coco instances off each other's tmp file.
+    const tmp = `${file}.${process.pid}.tmp`
+    fs.writeFileSync(tmp, JSON.stringify(envelope))
+    fs.renameSync(tmp, file)
   } catch {
     // Best-effort persistence; swallow.
   }

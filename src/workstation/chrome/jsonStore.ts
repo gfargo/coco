@@ -109,7 +109,15 @@ export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
       const file = resolvePath(key)
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true })
-        fs.writeFileSync(file, JSON.stringify(envelope, null, indent))
+        // tmp+rename (same as themePersistence) so a crash/SIGKILL
+        // mid-write can't leave truncated JSON — the read path would
+        // treat that as "no data" and silently drop the store. The
+        // pid suffix keeps two coco instances from clobbering each
+        // other's tmp file; rename is atomic, so concurrent writers
+        // degrade to last-writer-wins instead of corruption.
+        const tmp = `${file}.${process.pid}.tmp`
+        fs.writeFileSync(tmp, JSON.stringify(envelope, null, indent))
+        fs.renameSync(tmp, file)
       } catch {
         // Best-effort persistence.
       }

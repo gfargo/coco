@@ -1,7 +1,11 @@
 import { PromptTemplate } from '@langchain/core/prompts'
 import { Runnable } from '@langchain/core/runnables'
 import { handleLangChainError, isNetworkError } from '../errorHandler'
-import { LangChainExecutionError, LangChainNetworkError } from '../errors'
+import {
+  LangChainCancelledError,
+  LangChainExecutionError,
+  LangChainNetworkError,
+} from '../errors'
 import { validateRequired } from '../validation'
 import { getLlm } from './getLlm'
 import { getLlmMetadata } from './llmMetadata'
@@ -22,6 +26,15 @@ type ExecuteChainInput<T> = {
   logger?: Logger
   tokenizer?: TokenCounter
   metadata?: Partial<LlmCallMetadata>
+  /**
+   * Optional user-cancellation signal (#1338). Forwarded into
+   * `chain.invoke(variables, { signal })` so the underlying HTTP
+   * request tears down when the signal fires. Aborts surface as
+   * `LangChainCancelledError` — the same contract as
+   * `executeChainStreaming` — so callers can treat a cancel as user
+   * intent rather than a failure.
+   */
+  signal?: AbortSignal
 }
 
 /**
@@ -41,6 +54,7 @@ export const executeChain = async <T>({
   logger,
   tokenizer,
   metadata,
+  signal,
 }: ExecuteChainInput<T>): Promise<T> => {
   validateRequired(llm, 'llm', 'executeChain')
   validateRequired(prompt, 'prompt', 'executeChain')
@@ -61,13 +75,23 @@ export const executeChain = async <T>({
   const effectiveProvider = provider || llmInfo.provider
   const effectiveEndpoint = endpoint || llmInfo.endpoint
 
+  // Pre-aborted signal: the user cancelled between scheduling and
+  // request setup. Bail before any network activity — same contract as
+  // executeChainStreaming.
+  if (signal?.aborted) {
+    throw new LangChainCancelledError('executeChain: Cancelled before invocation', undefined, {
+      provider: effectiveProvider,
+      endpoint: effectiveEndpoint,
+    })
+  }
+
   try {
     const renderedPrompt = await prompt.format(variables)
     const promptTokens = estimatePromptTokens(tokenizer, renderedPrompt)
 
     const chain = prompt.pipe(llm).pipe(parser)
     const startedAt = Date.now()
-    const result = (await chain.invoke(variables)) as T
+    const result = (await chain.invoke(variables, signal ? { signal } : undefined)) as T
     const elapsedMs = Date.now() - startedAt
 
     logLlmCall(logger, {
@@ -89,8 +113,26 @@ export const executeChain = async <T>({
 
     return result
   } catch (error) {
+    // Cancellation classifier (#1338) — mirrors executeChainStreaming:
+    // an aborted user signal (post-throw check) or a thrown standard
+    // `AbortError` means "user wanted out", not "the call failed".
+    const aborted =
+      signal?.aborted ||
+      (error instanceof Error && error.name === 'AbortError')
+    if (aborted && !(error instanceof LangChainCancelledError)) {
+      throw new LangChainCancelledError(
+        error instanceof Error ? error.message : 'Chain invocation aborted by user',
+        undefined,
+        { provider: effectiveProvider, endpoint: effectiveEndpoint },
+      )
+    }
+
     // Re-throw LangChain errors as-is
-    if (error instanceof LangChainExecutionError || error instanceof LangChainNetworkError) {
+    if (
+      error instanceof LangChainExecutionError ||
+      error instanceof LangChainNetworkError ||
+      error instanceof LangChainCancelledError
+    ) {
       throw error
     }
 

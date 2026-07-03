@@ -1031,6 +1031,16 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     )
     switch (intent.kind) {
       case 'action':
+        // Keep the local prompt draft in lockstep with the committed
+        // filter (#1347): opening the prompt seeds the draft from the
+        // active filter (so a resume-seeded or previously-applied
+        // filter shows in the prompt instead of a stale/empty draft),
+        // and the list-level Esc clear resets the draft along with it.
+        if (intent.action.type === 'set-focus' && intent.action.focus === 'filter') {
+          setFilterDraft(state.filter ?? '')
+        } else if (intent.action.type === 'clear-filter') {
+          setFilterDraft('')
+        }
         dispatch(intent.action)
         break
       case 'apply-theme':

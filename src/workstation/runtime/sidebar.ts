@@ -19,7 +19,6 @@ import type { LogInkContextStatus } from '../chrome/context'
 import { isLogInkContextKeyLoading } from '../chrome/context'
 import { branchRowMarker, sidebarTabCount } from '../chrome/iconography'
 import { getSidebarVisibleWindow } from '../chrome/sidebarSelection'
-import { sortBranches, sortTags } from '../chrome/sorting'
 import { inlineSpinnerGlyph } from '../chrome/spinner'
 import { cellWidth, truncateCells, truncatePathCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
@@ -28,6 +27,7 @@ import type {
   LogInkState,
 } from '../../workstation/runtime/inkViewModel'
 import { getLogInkSidebarTabs, isPendingItemAction } from '../../workstation/runtime/inkViewModel'
+import { buildFilteredLists, type FilteredLists } from './hooks/buildFilteredLists'
 import type { LogInkComponents, LogInkContext } from './types'
 import { focusBorderColor, panelTitle, sidebarTabLabel } from './utils'
 
@@ -159,7 +159,8 @@ function renderActiveSidebarContent(
   width: number,
   bodyRows: number,
   theme: LogInkTheme,
-  spinnerFrame: number
+  spinnerFrame: number,
+  lists: FilteredLists
 ): ReactTypes.ReactElement[] {
   // Inline pending-delete glyph: while a row's delete is in flight it
   // shows this spinner in place of its leading marker (branches /
@@ -197,7 +198,11 @@ function renderActiveSidebarContent(
     if (!branches) {
       return [h(Text, { key: 'tab-branches-empty', dimColor: true }, '  Branches unavailable')]
     }
-    const sortedBranches = sortBranches(branches.localBranches, state.branchSort)
+    // Render from the SAME sorted+filtered list the input layer clamps
+    // against and every branch workflow resolves from (#1341) — the
+    // unfiltered list here meant Enter/D/R could target a different
+    // branch than the highlighted row while a filter was active.
+    const sortedBranches = lists.filteredBranchList
     const headerRows: ReactTypes.ReactElement[] = [
       h(Text, { key: 'tab-branches-current', dimColor: true },
         truncateCells(`  Current: ${branches.currentBranch || '<detached>'}`, width - 4)),
@@ -228,7 +233,7 @@ function renderActiveSidebarContent(
     if (isLogInkContextKeyLoading(contextStatus, 'tags')) {
       return [h(Text, { key: 'tab-tags-loading', dimColor: true }, '  Loading tags…')]
     }
-    const tags = sortTags(context.tags?.tags || [], state.tagSort)
+    const tags = lists.filteredTagList
     if (tags.length === 0) {
       return [h(Text, { key: 'tab-tags-empty', dimColor: true }, '  No tags found')]
     }
@@ -248,7 +253,7 @@ function renderActiveSidebarContent(
     if (isLogInkContextKeyLoading(contextStatus, 'stashes')) {
       return [h(Text, { key: 'tab-stashes-loading', dimColor: true }, '  Loading stashes…')]
     }
-    const stashes = context.stashes?.stashes || []
+    const stashes = lists.filteredStashList
     if (stashes.length === 0) {
       return [h(Text, { key: 'tab-stashes-empty', dimColor: true }, '  No stashes found')]
     }
@@ -268,7 +273,7 @@ function renderActiveSidebarContent(
   if (isLogInkContextKeyLoading(contextStatus, 'worktreeList')) {
     return [h(Text, { key: 'tab-worktrees-loading', dimColor: true }, '  Loading worktrees…')]
   }
-  const worktrees = context.worktreeList?.worktrees || []
+  const worktrees = lists.filteredWorktreeList
   if (worktrees.length === 0) {
     return [h(Text, { key: 'tab-worktrees-empty', dimColor: true }, '  No linked worktrees')]
   }
@@ -299,6 +304,24 @@ export function renderSidebar(
   const { Box, Text } = components
   const focused = state.focus === 'sidebar'
   const tabs = getLogInkSidebarTabs()
+  // One shared derivation for every list tab (#1341): the same
+  // sorted+filtered bundle the input layer clamps against and the
+  // workflow runner resolves targets from. Rendering the raw context
+  // lists here let the highlighted row and the acted-on row diverge
+  // whenever a filter was active.
+  const lists = buildFilteredLists(context, state.filter, {
+    branchSort: state.branchSort,
+    tagSort: state.tagSort,
+  })
+  const filteredTabCount = (tab: LogInkSidebarTab): number | undefined => {
+    switch (tab) {
+      case 'branches': return lists.filteredBranchList.length
+      case 'tags': return lists.filteredTagList.length
+      case 'stashes': return lists.filteredStashList.length
+      case 'worktrees': return lists.filteredWorktreeList.length
+      default: return undefined
+    }
+  }
 
   // Accordion layout — every tab's title is visible on its own line, but
   // only the active tab expands its content underneath. Switching tabs
@@ -311,8 +334,15 @@ export function renderSidebar(
   const tabBlocks = tabs.flatMap((tab, tabIndex) => {
     const isActive = tab === state.sidebarTab
     const count = sidebarTabCount(tab, context)
-    const labelWithCount = count !== undefined
-      ? `${sidebarTabLabel(tab)} (${count})`
+    // With a live filter, surface the narrowing as `n/N` so the user
+    // can see the list is filtered (#1341) — the rows below only show
+    // the matches.
+    const narrowed = state.filter ? filteredTabCount(tab) : undefined
+    const countLabel = narrowed !== undefined && count !== undefined && narrowed !== count
+      ? `${narrowed}/${count}`
+      : count
+    const labelWithCount = countLabel !== undefined
+      ? `${sidebarTabLabel(tab)} (${countLabel})`
       : sidebarTabLabel(tab)
     const headerText = isActive ? `[${labelWithCount}]` : labelWithCount
     const headerSelected = isActive && headerFocused
@@ -332,7 +362,7 @@ export function renderSidebar(
       inverse: headerSelected,
     }, headerText))
     if (isActive) {
-      blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, bodyRows, theme, spinnerFrame))
+      blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, bodyRows, theme, spinnerFrame, lists))
     }
     return blocks
   })

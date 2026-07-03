@@ -222,14 +222,14 @@ export function useLoadMoreHistory(
   // Stable identity + refs sidesteps the race entirely: the function
   // never changes, and every call reads the latest state.
   const loadMoreStateRef = React.useRef({
-    commitsLength: state.commits.length,
+    mainHistoryCommitCount: state.mainHistoryCommitCount,
     filteredCommitsLength: state.filteredCommits.length,
     historyFetchArgs: state.historyFetchArgs,
     hasMoreCommits,
     logArgv,
   })
   loadMoreStateRef.current = {
-    commitsLength: state.commits.length,
+    mainHistoryCommitCount: state.mainHistoryCommitCount,
     filteredCommitsLength: state.filteredCommits.length,
     historyFetchArgs: state.historyFetchArgs,
     hasMoreCommits,
@@ -267,10 +267,14 @@ export function useLoadMoreHistory(
     // stay graph-consistent with the boot fetch (a window that
     // dropped stashes mid-stream would render with broken junctions).
     const stashHashes = await getStashCommitHashes(git).catch(() => [])
+    // Skip by the MAIN-ordering offset, not `commits.length` (#1337):
+    // anchored context loads merge rows that aren't a prefix of this
+    // ordering, so the total loaded count overshoots the offset and a
+    // count-based skip silently drops the commits ranked in the gap.
     const nextRows = await safe(
       getLogRows(git, mergedArgv, {
         limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
-        skip: snap.commitsLength,
+        skip: snap.mainHistoryCommitCount,
         extraRefs: stashHashes,
       })
     )
@@ -290,7 +294,9 @@ export function useLoadMoreHistory(
     }
 
     if (nextRows?.length) {
-      dispatch({ type: 'appendRows', rows: nextRows })
+      // Tag the append with its fetched main-ordering commit count so
+      // the reducer advances the pagination offset (#1337).
+      dispatch({ type: 'appendRows', rows: nextRows, mainOrderingCount: nextCommitCount })
     }
 
     setHasMoreCommits(nextCommitCount >= LOG_INTERACTIVE_DEFAULT_LIMIT)

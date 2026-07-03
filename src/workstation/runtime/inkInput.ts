@@ -60,6 +60,7 @@ export type LogInkInputEvent =
   | { type: 'startCreatePullRequest' }
   | { type: 'cancelPullRequestBodyDraft' }
   | { type: 'startChangelogView' }
+  | { type: 'cancelChangelog' }
   | { type: 'startRebasePlan' }
   | { type: 'regenerateChangelog' }
   | { type: 'yankChangelog' }
@@ -1132,6 +1133,96 @@ export function getLogInkInputEvents(
     return []
   }
 
+  // Multi-option prompt (#1181) — the n-way generalization of the y/n
+  // confirmation. Match the keypress against the prompt's options; each
+  // either runs a workflow or fires a built-in navigation intent.
+  //
+  // Sits directly under the input prompt and ABOVE the compose-editing
+  // and filter-mode intercepts (#1342): choice prompts are raised
+  // asynchronously (worktree-checkout conflict, diverged-pull recovery,
+  // …), so the user may be mid-typing when one appears. The overlay
+  // renders on top; the keyboard must belong to it, not to the text
+  // mode underneath.
+  if (state.pendingChoice) {
+    const option = state.pendingChoice.options.find((opt) => opt.key === inputValue)
+    if (option) {
+      // `switch-worktree` is pure navigation — open the worktree as a
+      // nested repo frame. Handled here rather than via the workflow
+      // runner, whose post-action context refresh would mis-target the
+      // frame we just pushed.
+      if (option.intent === 'switch-worktree' && state.worktreeCheckoutConflict) {
+        const conflict = state.worktreeCheckoutConflict
+        return [
+          action({ type: 'pushRepoFrame', label: conflict.branch, workdir: conflict.worktreePath }),
+          action({ type: 'setStatus', value: `Switched to worktree ${conflict.worktreePath} (${conflict.branch})` }),
+          action({ type: 'setPendingChoice', value: undefined }),
+          action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
+        ]
+      }
+      if (option.workflowId) {
+        // The workflow runner owns the live context + clears any
+        // conflict state once it resolves.
+        return [
+          { type: 'runWorkflowAction', id: option.workflowId },
+          action({ type: 'setPendingChoice', value: undefined }),
+        ]
+      }
+      return [action({ type: 'setPendingChoice', value: undefined })]
+    }
+    if (inputValue === 'n' || key.escape) {
+      return [
+        action({ type: 'setPendingChoice', value: undefined }),
+        ...(state.worktreeCheckoutConflict
+          ? [action({ type: 'setWorktreeCheckoutConflict', value: undefined })]
+          : []),
+        action({ type: 'setStatus', value: 'cancelled' }),
+      ]
+    }
+    return []
+  }
+
+  // Workflow y/n confirmation. Same modality rule as pendingChoice
+  // above (#1342): confirmations can be raised asynchronously (e.g.
+  // the force-push escalation after a rejected push), so they must
+  // outrank editing / filter text modes for the keyboard.
+  if (state.pendingConfirmationId) {
+    if (inputValue === 'y') {
+      const workflowAction = getLogInkWorkflowActionById(state.pendingConfirmationId)
+
+      if (workflowAction?.id === 'ai-commit-summary') {
+        return [
+          { type: 'runAiCommitDraft' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+
+      // Destructive + provider workflow actions (delete-branch, delete-tag,
+      // drop-stash, remove-worktree, abort-operation, create-pr, …) defer
+      // to the runtime — it has the live context needed to identify the
+      // selected item and run the right action function.
+      if (workflowAction) {
+        return [
+          { type: 'runWorkflowAction', id: workflowAction.id, payload: state.pendingConfirmationPayload },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+
+      return [
+        action({ type: 'setPendingConfirmation', value: undefined }),
+        action({ type: 'setStatus', value: 'workflow action queued' }),
+      ]
+    }
+
+    if (inputValue === 'n' || key.escape) {
+      return [
+        action({ type: 'setPendingConfirmation', value: undefined }),
+        action({ type: 'setStatus', value: 'workflow action cancelled' }),
+      ]
+    }
+
+    return []
+  }
+
   // Cancel in-flight AI commit draft (#881 phase 3). When the compose
   // state has a draft in flight (loading === true), Esc aborts the
   // LLM call and the runtime handler cleans up (clear loading, clear
@@ -1170,6 +1261,16 @@ export function getLogInkInputEvents(
   // they decide to bail.
   if (state.pendingPullRequestBodyDraft && key.escape) {
     return [{ type: 'cancelPullRequestBodyDraft' }]
+  }
+
+  // Cancel in-flight changelog generation (#1338). Same invariant as
+  // the two cancels above: Esc must cancel any in-flight AI call from
+  // ANY view — the changelog runs 5-15s after `L`, and without this
+  // Esc merely popped the view while the call ran to completion and
+  // billed tokens. The runtime aborts the controller; the workflow's
+  // cancelled path transitions the view out of loading.
+  if (state.changelogView.status === 'loading' && key.escape) {
+    return [{ type: 'cancelChangelog' }]
   }
 
   // Pending AI draft confirmation (audit finding #7). When the AI
@@ -1296,85 +1397,6 @@ export function getLogInkInputEvents(
     return []
   }
 
-  // Multi-option prompt (#1181) — the n-way generalization of the y/n
-  // confirmation. Match the keypress against the prompt's options; each
-  // either runs a workflow or fires a built-in navigation intent.
-  if (state.pendingChoice) {
-    const option = state.pendingChoice.options.find((opt) => opt.key === inputValue)
-    if (option) {
-      // `switch-worktree` is pure navigation — open the worktree as a
-      // nested repo frame. Handled here rather than via the workflow
-      // runner, whose post-action context refresh would mis-target the
-      // frame we just pushed.
-      if (option.intent === 'switch-worktree' && state.worktreeCheckoutConflict) {
-        const conflict = state.worktreeCheckoutConflict
-        return [
-          action({ type: 'pushRepoFrame', label: conflict.branch, workdir: conflict.worktreePath }),
-          action({ type: 'setStatus', value: `Switched to worktree ${conflict.worktreePath} (${conflict.branch})` }),
-          action({ type: 'setPendingChoice', value: undefined }),
-          action({ type: 'setWorktreeCheckoutConflict', value: undefined }),
-        ]
-      }
-      if (option.workflowId) {
-        // The workflow runner owns the live context + clears any
-        // conflict state once it resolves.
-        return [
-          { type: 'runWorkflowAction', id: option.workflowId },
-          action({ type: 'setPendingChoice', value: undefined }),
-        ]
-      }
-      return [action({ type: 'setPendingChoice', value: undefined })]
-    }
-    if (inputValue === 'n' || key.escape) {
-      return [
-        action({ type: 'setPendingChoice', value: undefined }),
-        ...(state.worktreeCheckoutConflict
-          ? [action({ type: 'setWorktreeCheckoutConflict', value: undefined })]
-          : []),
-        action({ type: 'setStatus', value: 'cancelled' }),
-      ]
-    }
-    return []
-  }
-
-  if (state.pendingConfirmationId) {
-    if (inputValue === 'y') {
-      const workflowAction = getLogInkWorkflowActionById(state.pendingConfirmationId)
-
-      if (workflowAction?.id === 'ai-commit-summary') {
-        return [
-          { type: 'runAiCommitDraft' },
-          action({ type: 'setPendingConfirmation', value: undefined }),
-        ]
-      }
-
-      // Destructive + provider workflow actions (delete-branch, delete-tag,
-      // drop-stash, remove-worktree, abort-operation, create-pr, …) defer
-      // to the runtime — it has the live context needed to identify the
-      // selected item and run the right action function.
-      if (workflowAction) {
-        return [
-          { type: 'runWorkflowAction', id: workflowAction.id, payload: state.pendingConfirmationPayload },
-          action({ type: 'setPendingConfirmation', value: undefined }),
-        ]
-      }
-
-      return [
-        action({ type: 'setPendingConfirmation', value: undefined }),
-        action({ type: 'setStatus', value: 'workflow action queued' }),
-      ]
-    }
-
-    if (inputValue === 'n' || key.escape) {
-      return [
-        action({ type: 'setPendingConfirmation', value: undefined }),
-        action({ type: 'setStatus', value: 'workflow action cancelled' }),
-      ]
-    }
-
-    return []
-  }
-
   if (state.pendingMutationConfirmation) {
     if (inputValue === 'y') {
       if (state.pendingMutationConfirmation === 'discard-draft') {
@@ -1424,6 +1446,14 @@ export function getLogInkInputEvents(
       // when it eventually lands (it checks `state.splitPlan?.status`
       // before dispatching setSplitPlanReady).
       return [{ type: 'cancelCommitSplit' }]
+    }
+
+    // `q` quits from the overlay like it does from help / view-keys
+    // (#1348) — EXCEPT mid-apply, where quitting would abandon a
+    // half-applied split. Loading is safe to quit from (same soft-
+    // cancel semantics as Esc).
+    if (inputValue === 'q' && state.splitPlan.status !== 'applying') {
+      return [{ type: 'cancelCommitSplit' }, { type: 'exit' }]
     }
 
     // Apply only fires from the 'ready' state. While loading we have
@@ -2070,6 +2100,13 @@ export function getLogInkInputEvents(
     if (inputValue === 'r') {
       return [{ type: 'regenerateChangelog' }]
     }
+    // While loading / errored there's no line count yet — swallow the
+    // scroll keys instead of letting them fall through to the global
+    // move handler, which used to scroll the HISTORY cursor invisibly
+    // beneath this surface (#1348).
+    if (inputValue === 'j' || inputValue === 'k' || key.upArrow || key.downArrow || key.pageUp || key.pageDown) {
+      return []
+    }
   }
 
   if (inputValue === 'g') {
@@ -2129,7 +2166,14 @@ export function getLogInkInputEvents(
   // rendering (#785). Scoped to the diff view so the letter stays free
   // for other surfaces. The chord branch above already claimed `gd`,
   // so by the time we get here `pendingKey` is not `g`.
-  if (inputValue === 'd' && state.activeView === 'diff') {
+  //
+  // NOT on the staging (worktree) diff (#1344): that renderer is
+  // unified-only (staging is the primary action there), so the toggle
+  // used to report "Switched to side-by-side" while nothing changed —
+  // and the flipped mode then leaked into the next commit/stash diff.
+  // The footer already hides the `d` hint there; the handler now
+  // matches it.
+  if (inputValue === 'd' && state.activeView === 'diff' && !isWorktreeDiffTarget(state)) {
     const next = state.diffViewMode === 'unified' ? 'split' : 'unified'
     return [
       action({ type: 'toggleDiffViewMode' }),

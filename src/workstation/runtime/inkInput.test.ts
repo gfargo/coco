@@ -2597,6 +2597,52 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('Esc cancels in-flight changelog generation (#1338)', () => {
+    it('dispatches cancelChangelog when Esc is pressed while the changelog is loading', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'changelog' })
+      state = applyLogInkAction(state, {
+        type: 'setChangelogLoading',
+        branch: 'feat/x',
+        baseLabel: 'vs main',
+      })
+      expect(state.changelogView.status).toBe('loading')
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toEqual([{ type: 'cancelChangelog' }])
+    })
+
+    it('fires from any view while the generation is in flight (invariant #5)', () => {
+      // The user pressed L, chord-navigated away while waiting, and
+      // wants out — Esc must still cancel even off the changelog view.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setChangelogLoading',
+        branch: 'feat/x',
+        baseLabel: 'vs main',
+      })
+      expect(state.activeView).toBe('history')
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).toEqual([{ type: 'cancelChangelog' }])
+    })
+
+    it('does not steal Esc once the changelog is ready (normal Esc preserved)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'changelog' })
+      state = applyLogInkAction(state, {
+        type: 'setChangelogReady',
+        branch: 'feat/x',
+        baseLabel: 'vs main',
+        text: '## changelog',
+        generatedAt: 1750000000000,
+      })
+
+      const events = getLogInkInputEvents(state, '', { escape: true })
+      expect(events).not.toContainEqual({ type: 'cancelChangelog' })
+    })
+  })
+
   describe('s cycles sort modes (P4.2)', () => {
     it('cycles branch sort when active view is branches', () => {
       let state = createLogInkState(rows)
@@ -3220,8 +3266,8 @@ describe('log Ink input interactions', () => {
   })
 
   describe('d toggles diff view mode (#785)', () => {
-    it('emits toggleDiffViewMode + a status hint when pressed in the diff view', () => {
-      const state = { ...createLogInkState(rows), activeView: 'diff' as const }
+    it('emits toggleDiffViewMode + a status hint when pressed on a commit diff', () => {
+      const state = { ...createLogInkState(rows), activeView: 'diff' as const, diffSource: 'commit' as const }
       const events = getLogInkInputEvents(state, 'd')
 
       expect(events).toEqual([
@@ -3237,6 +3283,7 @@ describe('log Ink input interactions', () => {
       const state = {
         ...createLogInkState(rows),
         activeView: 'diff' as const,
+        diffSource: 'commit' as const,
         diffViewMode: 'split' as const,
       }
       const events = getLogInkInputEvents(state, 'd')
@@ -3245,6 +3292,20 @@ describe('log Ink input interactions', () => {
         type: 'action',
         action: { type: 'setStatus', value: 'Switched to unified diff', kind: 'success' },
       })
+    })
+
+    // Regression (#1344): the staging (worktree) diff renders unified-
+    // only, so the toggle used to report "Switched to side-by-side"
+    // while nothing changed — and the flipped mode leaked into the next
+    // commit/stash diff. The handler now matches the footer (no d hint
+    // on the worktree diff).
+    it('is inert on the staging diff (worktree / untagged source)', () => {
+      const state = { ...createLogInkState(rows), activeView: 'diff' as const }
+      const events = getLogInkInputEvents(state, 'd')
+      const actionTypes = events
+        .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
+        .map((event) => event.action.type)
+      expect(actionTypes).not.toContain('toggleDiffViewMode')
     })
 
     it('does not toggle the mode when pressed outside the diff view', () => {
@@ -5158,6 +5219,73 @@ describe('triage filter cycling (#882 phase 6)', () => {
       // Still showing the prompt; nothing fired.
       expect(after.pendingChoice).toBeDefined()
       expect(after.repoStack.length).toBe(state.repoStack.length)
+    })
+  })
+
+  describe('modal prompt keyboard precedence (#1342)', () => {
+    const choice = {
+      id: 'diverged-pull-recovery',
+      title: 'Branches diverged',
+      options: [
+        { key: 'r', label: 'Pull with rebase', workflowId: 'pull-rebase-current' },
+        { key: 'm', label: 'Pull with merge', workflowId: 'pull-merge-current' },
+      ],
+    }
+
+    it('a choice prompt raised during filter typing owns the keyboard', () => {
+      // The prompt can be raised asynchronously while the user is
+      // mid-filter; its option keys must answer the prompt, not append
+      // to the filter text underneath the overlay.
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleFilterMode' })
+      state = applyLogInkAction(state, { type: 'appendFilter', value: 'ab' })
+      state = applyLogInkAction(state, { type: 'setPendingChoice', value: choice })
+
+      const events = getLogInkInputEvents(state, 'r')
+      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'pull-rebase-current' })
+
+      const after = applyInput(state, 'r')
+      expect(after.pendingChoice).toBeUndefined()
+      expect(after.filter).toBe('ab')
+    })
+
+    it('a y/n confirmation raised during compose editing owns the keyboard', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'setEditing', value: true },
+      })
+      state = applyLogInkAction(state, {
+        type: 'setPendingConfirmation',
+        value: 'delete-branch',
+        payload: 'feat/x',
+      })
+
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'delete-branch',
+        payload: 'feat/x',
+      })
+
+      const after = applyInput(state, 'y')
+      expect(after.pendingConfirmationId).toBeUndefined()
+      // The `y` never leaked into the compose field being edited.
+      expect(after.commitCompose.summary).toBe('')
+      expect(after.commitCompose.body).toBe('')
+    })
+
+    it('n declines the confirmation instead of appending to the filter', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleFilterMode' })
+      state = applyLogInkAction(state, {
+        type: 'setPendingConfirmation',
+        value: 'delete-branch',
+      })
+
+      const after = applyInput(state, 'n')
+      expect(after.pendingConfirmationId).toBeUndefined()
+      expect(after.filter).toBe('')
     })
   })
 })

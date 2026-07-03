@@ -278,3 +278,15 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
     ...paneWidths,
   }
 }
+
+/**
+ * Start index for a cursor-centered list window that stays FULL at the
+ * end of the list (#1340). Centering alone (`selected - rows/2`) leaves
+ * the panel half-empty once the cursor nears the last entries — the
+ * lower clamp pulls the window back so `listRows` items render whenever
+ * that many exist. Shared by every list surface so the math can't drift
+ * per-surface again.
+ */
+export function clampListWindowStart(selected: number, count: number, listRows: number): number {
+  return Math.max(0, Math.min(Math.max(0, count - listRows), selected - Math.floor(listRows / 2)))
+}

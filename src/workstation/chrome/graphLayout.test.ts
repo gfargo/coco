@@ -128,6 +128,28 @@ describe('computeGraphLayout', () => {
     ])
   })
 
+  it('draws a connector when a merge parent resolves to an already-open lane (#1335)', () => {
+    // X merges F in (opening F's lane), then M2 merges F AGAIN. When
+    // M2's extra parent resolves to the existing F lane, the layout
+    // must still emit an edge from the merge dot (column 0) into that
+    // lane — before the fix M2 rendered a ◆ with a single descending
+    // line and the second-parent edge was invisible.
+    const layout = computeGraphLayout([
+      c('X', 'M2', 'F'),
+      c('M2', 'A', 'F'),
+      c('F', 'A'),
+      c('A'),
+    ])
+    const m2 = layout.rows[1]
+
+    expect(m2).toMatchObject({ column: 0, isMerge: true })
+    expect(m2.edges).toEqual([
+      { laneId: 0, from: 0, to: 0 }, // trunk continues toward A
+      { laneId: 1, from: 1, to: 1 }, // F lane's own vertical continuity
+      { laneId: 1, from: 0, to: 1 }, // NEW: merge-dot connector into the F lane
+    ])
+  })
+
   it('does not crash when a parent hash is outside the loaded window', () => {
     // A's parent was never loaded (paginated off): its lane simply runs
     // to the bottom of the window with a straight edge, no throw.

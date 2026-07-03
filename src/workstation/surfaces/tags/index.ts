@@ -10,6 +10,7 @@
 
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
+import { clampListWindowStart } from '../../chrome/layout'
 import { formatHyperlink } from '../../chrome/hyperlinks'
 import { formatSortIndicator, sortTags } from '../../chrome/sorting'
 import { inlineSpinnerGlyph } from '../../chrome/spinner'
@@ -37,7 +38,7 @@ export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: numbe
     : sortedAll
   const selected = Math.max(0, Math.min(state.selectedTagIndex, Math.max(0, tags.length - 1)))
   const listRows = Math.max(4, bodyRows - 4)
-  const startIndex = Math.max(0, selected - Math.floor(listRows / 2))
+  const startIndex = clampListWindowStart(selected, tags.length, listRows)
   const visible = tags.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const sortLabel = ` | ${formatSortIndicator(state.tagSort, { ascii: theme.ascii })}`

@@ -147,7 +147,7 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `i` | Open the **rebase plan** surface for `<commit>^..HEAD` (in-TUI interactive rebase; the $EDITOR variant stays in the `:` palette) |
 | `f` | Fixup: commit staged changes as `fixup!` of the cursored commit (confirm; offers immediate autosquash) |
 | `B` | Create branch here |
-| `L` | Open the changelog view |
+| `L` | Open the changelog view (`Esc` while it's generating cancels the LLM call) |
 | `r` | Refresh |
 
 ### Status (staging)

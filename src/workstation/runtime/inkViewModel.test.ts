@@ -344,6 +344,49 @@ describe('log Ink view model', () => {
     expect(commitHashes).toHaveLength(4)
   })
 
+  it('advances the main-ordering pagination offset only for load-more pages (#1337)', () => {
+    const olderCommit = (hash: string): (typeof rows)[number] => ({
+      type: 'commit',
+      graph: '*',
+      shortHash: hash.slice(0, 7),
+      hash,
+      parents: [],
+      date: '2026-04-25',
+      author: 'Coco Test',
+      refs: [],
+      message: `chore: ${hash.slice(0, 7)}`,
+    })
+
+    let state = createLogInkState(rows)
+    expect(state.mainHistoryCommitCount).toBe(3)
+
+    // Anchored context load: rows merged from getLogRowsAnchoredOn are
+    // NOT a prefix of the main ordering — the offset must not move,
+    // even though commits.length grows.
+    state = applyLogInkAction(state, {
+      type: 'appendRows',
+      rows: [olderCommit('aaaaaaa0000001')],
+    })
+    expect(state.commits).toHaveLength(4)
+    expect(state.mainHistoryCommitCount).toBe(3)
+
+    // Load-more page: advances by the FETCHED count (pre-dedup), not
+    // the post-dedup delta — one of the two rows below is the anchored
+    // commit already merged above, but git's skip offset still counts
+    // it.
+    state = applyLogInkAction(state, {
+      type: 'appendRows',
+      rows: [olderCommit('aaaaaaa0000001'), olderCommit('bbbbbbb0000002')],
+      mainOrderingCount: 2,
+    })
+    expect(state.commits).toHaveLength(5)
+    expect(state.mainHistoryCommitCount).toBe(5)
+
+    // A wholesale replacement resets the offset to the fresh window.
+    state = applyLogInkAction(state, { type: 'replaceRows', rows })
+    expect(state.mainHistoryCommitCount).toBe(3)
+  })
+
   it('tracks selected changed files and diff preview paging', () => {
     let state = createLogInkState(rows)
 
@@ -621,6 +664,37 @@ describe('log Ink view model', () => {
 
     state = applyLogInkAction(state, { type: 'setPendingMutationConfirmation', value: undefined })
     expect(state.pendingMutationConfirmation).toBeUndefined()
+  })
+
+  it('choice and confirmation prompts displace each other (#1342)', () => {
+    const choice = {
+      id: 'diverged-pull-recovery',
+      title: 'Branches diverged',
+      options: [{ key: 'r', label: 'Pull with rebase', workflowId: 'pull-rebase-current' }],
+    }
+
+    // Raising a confirmation while a choice prompt is open closes the
+    // choice — otherwise input precedence would shadow the confirm and
+    // its `y` would be matched against choice option keys.
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: choice })
+    state = applyLogInkAction(state, {
+      type: 'setPendingConfirmation',
+      value: 'delete-branch',
+      payload: 'feat/x',
+    })
+    expect(state.pendingChoice).toBeUndefined()
+    expect(state.pendingConfirmationId).toBe('delete-branch')
+
+    // …and the mirror direction.
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: choice })
+    expect(state.pendingConfirmationId).toBeUndefined()
+    expect(state.pendingConfirmationPayload).toBeUndefined()
+    expect(state.pendingChoice).toEqual(choice)
+
+    // Clearing one leaves the other untouched.
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: undefined })
+    expect(state.pendingChoice).toBeUndefined()
   })
 
   describe('navigation primitives', () => {
@@ -1871,6 +1945,23 @@ describe('log Ink view model', () => {
         userSidebarTab: before.userSidebarTab,
         branchSort: before.branchSort,
         tagSort: before.tagSort,
+        // Per-repo state captured for the pop restore (#1343).
+        compareBase: undefined,
+        blamePath: undefined,
+        fileHistoryPath: undefined,
+        changelogCache: {},
+        selectedWorktreeFileIndex: 0,
+        selectedBranchIndex: 0,
+        selectedTagIndex: 0,
+        selectedStashIndex: 0,
+        selectedWorktreeListIndex: 0,
+        selectedConflictFileIndex: 0,
+        selectedReflogIndex: 0,
+        selectedRemoteIndex: 0,
+        selectedBlameIndex: 0,
+        selectedFileHistoryIndex: 0,
+        selectedIssueIndex: 0,
+        selectedPullRequestTriageIndex: 0,
       })
       expect(before.selectedIndex).toBeGreaterThan(0)
     })
@@ -2036,6 +2127,50 @@ describe('log Ink view model', () => {
       const after = applyLogInkAction(before, { type: 'pushRepoFrame', label: 'vendor/lib' })
       expect(after.pendingConfirmationId).toBeUndefined()
       expect(after.pendingConfirmationPayload).toBeUndefined()
+    })
+
+    // #1343 — compare base, blame / file-history paths, the branch-keyed
+    // changelog cache, and per-list cursors are all meaningful only
+    // against the repo that produced them. Push must clear them (a
+    // parent-repo path or ref must never hydrate against the
+    // submodule's git) and pop must restore the parent's.
+    it('pushRepoFrame clears per-repo state; popRepoFrame restores it (#1343)', () => {
+      let parent = createLogInkState(rows, { repoLabel: 'coco' })
+      parent = applyLogInkAction(parent, {
+        type: 'setCompareBase',
+        value: { kind: 'branch', ref: 'main', label: 'main' },
+      })
+      parent = applyLogInkAction(parent, { type: 'navigateOpenBlameForPath', path: 'src/app.ts' })
+      parent = applyLogInkAction(parent, {
+        type: 'navigateOpenFileHistoryForPath',
+        path: 'src/app.ts',
+      })
+      parent = applyLogInkAction(parent, {
+        type: 'setChangelogReady',
+        branch: 'main',
+        text: '## parent changelog',
+        baseLabel: 'origin/main',
+        generatedAt: 1750000000000,
+      })
+      parent = applyLogInkAction(parent, { type: 'moveBranch', delta: 3, count: 10 })
+
+      const inside = applyLogInkAction(parent, {
+        type: 'pushRepoFrame',
+        label: 'vendor/lib',
+        workdir: '/abs/coco/vendor/lib',
+      })
+      expect(inside.compareBase).toBeUndefined()
+      expect(inside.blamePath).toBeUndefined()
+      expect(inside.fileHistoryPath).toBeUndefined()
+      expect(inside.changelogCache).toEqual({})
+      expect(inside.selectedBranchIndex).toBe(0)
+
+      const popped = applyLogInkAction(inside, { type: 'popRepoFrame' })
+      expect(popped.compareBase).toEqual({ kind: 'branch', ref: 'main', label: 'main' })
+      expect(popped.blamePath).toBe('src/app.ts')
+      expect(popped.fileHistoryPath).toBe('src/app.ts')
+      expect(popped.changelogCache.main).toBeDefined()
+      expect(popped.selectedBranchIndex).toBe(3)
     })
   })
 })
