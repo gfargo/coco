@@ -1,5 +1,6 @@
 import {
   addPullRequestAssignee,
+  checkoutPullRequestByNumber,
   addPullRequestLabel,
   approvePullRequest,
   approvePullRequestByNumber,
@@ -361,5 +362,35 @@ describe('destructive PR by-number actions (#882 phase 5)', () => {
         'pr', 'review', '962', '--request-changes', '--body=please address X',
       ])
     })
+  })
+})
+
+describe('checkoutPullRequestByNumber (#1363)', () => {
+  it('runs gh pr checkout <n> and reports the switch', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]): Promise<string> => {
+      calls.push(args)
+      return "Switched to branch 'feat/pr-branch'\n"
+    }
+    const result = await checkoutPullRequestByNumber(962, runner)
+    expect(calls[0]).toEqual(['pr', 'checkout', '962'])
+    expect(result.ok).toBe(true)
+    expect(result.message).toBe("Switched to branch 'feat/pr-branch'")
+  })
+
+  it('falls back to a synthesized message when gh is silent', async () => {
+    const runner = async (): Promise<string> => ''
+    const result = await checkoutPullRequestByNumber(3, runner)
+    expect(result).toEqual({ ok: true, message: 'Checked out pull request #3' })
+  })
+
+  it('surfaces a dirty-worktree refusal as { ok: false }', async () => {
+    const failure = Object.assign(new Error('Command failed: gh pr checkout 3'), {
+      stderr: 'error: Your local changes to the following files would be overwritten by checkout',
+    })
+    const runner = jest.fn().mockRejectedValueOnce(failure).mockResolvedValue('ok')
+    const result = await checkoutPullRequestByNumber(3, runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('would be overwritten by checkout')
   })
 })
