@@ -2119,11 +2119,20 @@ export function getLogInkInputEvents(
   if (state.activeView === 'bisect' && state.focus === 'commits') {
     // Gated off once the bisect has terminated: the completion panel
     // rebinds y/Y to yank the first-bad sha (#879 item 3), and there
-    // is no candidate left to mark.
-    if (inputValue === 'y' && !key.ctrl && !key.meta && !context.bisectCompletionSha) {
+    // is no candidate left to mark. Also gated on an ACTIVE session —
+    // like `s`/`R`, marking is meaningless from the empty-state view
+    // and used to surface a raw `git bisect` error ("You need to
+    // start by \"git bisect start\"") on the status line.
+    if (
+      inputValue === 'y' &&
+      !key.ctrl &&
+      !key.meta &&
+      context.bisectActive &&
+      !context.bisectCompletionSha
+    ) {
       return [{ type: 'runWorkflowAction', id: 'bisect-good' }]
     }
-    if (inputValue === 'b' && state.pendingKey !== 'g') {
+    if (inputValue === 'b' && state.pendingKey !== 'g' && context.bisectActive) {
       return [{ type: 'runWorkflowAction', id: 'bisect-bad' }]
     }
     if (inputValue === 's') {
@@ -2145,7 +2154,7 @@ export function getLogInkInputEvents(
         }),
       ]
     }
-    if (inputValue === 'x') {
+    if (inputValue === 'x' && context.bisectActive) {
       return [action({ type: 'setPendingConfirmation', value: 'bisect-reset' })]
     }
     // #879 item 5 — `R` (capital) on an active bisect view opens an
@@ -2176,10 +2185,13 @@ export function getLogInkInputEvents(
   // is 'ready' — scroll keystrokes early-return when changelogLineCount
   // is missing so they no-op gracefully during loading / error states.
   if (state.activeView === 'changelog') {
-    if (inputValue === 'j' && context.changelogLineCount) {
+    // Arrows are synonyms for j/k here like on every other surface —
+    // they used to be swallowed by the loading-state guard below even
+    // when the view was ready, leaving ↓/↑ silently dead.
+    if ((inputValue === 'j' || key.downArrow) && context.changelogLineCount) {
       return [action({ type: 'pageChangelog', delta: 1, lineCount: context.changelogLineCount })]
     }
-    if (inputValue === 'k' && context.changelogLineCount) {
+    if ((inputValue === 'k' || key.upArrow) && context.changelogLineCount) {
       return [action({ type: 'pageChangelog', delta: -1, lineCount: context.changelogLineCount })]
     }
     if (key.pageDown && context.changelogLineCount) {
@@ -2449,8 +2461,15 @@ export function getLogInkInputEvents(
   // Status surface intercepts 1/2/3 before the sidebar-tab numeric
   // jump (#776): each key toggles a staging-category bit on the
   // visibility mask. The reducer snaps back to all-on if all three
-  // bits go off so the user always has rendered files.
-  if (state.activeView === 'status' && (inputValue === '1' || inputValue === '2' || inputValue === '3')) {
+  // bits go off so the user always has rendered files. NOT while the
+  // sidebar is focused — its footer advertises "1-5 jump", and the
+  // mask intercept silently ate 1/2/3 (toggling center-pane state)
+  // while the sidebar stayed put.
+  if (
+    state.activeView === 'status' &&
+    state.focus !== 'sidebar' &&
+    (inputValue === '1' || inputValue === '2' || inputValue === '3')
+  ) {
     const kind: 'staged' | 'unstaged' | 'untracked' =
       inputValue === '1' ? 'staged' : inputValue === '2' ? 'unstaged' : 'untracked'
     return [action({ type: 'toggleStatusFilterMask', kind })]
@@ -4073,6 +4092,16 @@ export function getLogInkInputEvents(
   }
 
   const workflowAction = getLogInkWorkflowActionByKey(inputValue)
+
+  // The registry fall-through must respect the per-view allowlist:
+  // `C` on every opted-in view already matched `isCreatePrView` above,
+  // so reaching here means the active view (rebase, blame,
+  // file-history) deliberately did NOT opt in — firing the workflow
+  // anyway reintroduced exactly the hazard the allowlist exists to
+  // remove (a PR-creation flow launching mid-rebase-plan).
+  if (workflowAction?.id === 'create-pr' && !isCreatePrView(state.activeView)) {
+    return []
+  }
 
   if (workflowAction?.requiresConfirmation) {
     return [action({ type: 'setPendingConfirmation', value: workflowAction.id })]

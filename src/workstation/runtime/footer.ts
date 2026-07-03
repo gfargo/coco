@@ -121,6 +121,7 @@ export function renderFooter(
     showHelp: state.showHelp,
     sidebarTab: state.sidebarTab,
     sidebarItemCount,
+    bisectActive: Boolean(context.bisect?.active),
     compareBaseSet: Boolean(state.compareBase),
     splitPlanStatus: state.splitPlan?.status,
     singlePane: singlePane && !overlayForcesPane,
