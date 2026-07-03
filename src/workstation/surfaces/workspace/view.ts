@@ -13,6 +13,7 @@ import type { TextProps } from 'ink'
 import type { LogInkTheme } from '../../chrome/theme'
 import { renderThemePickerOverlay } from '../../runtime/overlays'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+import { truncateCells } from '../../chrome/text'
 
 import type { WorkspaceComponents } from './runtime'
 import { type PathCompletionResult } from './pathCompletion'
@@ -91,6 +92,8 @@ function focusLabel(focus: WorkspaceState['focus']): string {
       return 'Filter'
     case 'add-repo':
       return 'Add'
+    case 'clone-repo':
+      return 'Clone'
     case 'confirm-delete':
       return 'Confirm'
     default:
@@ -469,10 +472,14 @@ function renderListBody(
   })
   const visibleRepos = selectVisibleRepos(state)
 
-  const filterChip = state.filter
-    ? `  ·  filter: ${state.filter}`
-    : state.focus === 'filter'
-      ? `  ·  filter: ${deps.filterDraft}_`
+  // The live draft wins while the prompt is open — checking the
+  // committed filter first meant re-editing an applied filter (`/` with
+  // one active) showed the stale committed text with no cursor, and
+  // typing gave zero feedback until Enter.
+  const filterChip = state.focus === 'filter'
+    ? `  ·  filter: ${deps.filterDraft}_`
+    : state.filter
+      ? `  ·  filter: ${state.filter}`
       : ''
   // Half-circle ◐ reads as "in progress" without animation; pairs
   // nicely with the text so the column doesn't depend on color alone.
@@ -557,6 +564,38 @@ function renderHelpRow(
     ),
     React.createElement(Text, null, row.description)
   )
+}
+
+/**
+ * Total scrollable body rows in the help overlay — one title per
+ * section, optional subtitle, its rows, and an inter-section spacer.
+ * MUST mirror the body construction in `renderHelpOverlay` below.
+ */
+function workspaceHelpBodyRowCount(): number {
+  const sections = buildWorkspaceHelpSections()
+  return sections.reduce(
+    (count, section, index) =>
+      count +
+      1 +
+      (section.subtitle ? 1 : 0) +
+      section.rows.length +
+      (index < sections.length - 1 ? 1 : 0),
+    0
+  )
+}
+
+/**
+ * Ceiling for `helpScrollOffset` at the given terminal height. The
+ * reducer clamps against this (passed with the scroll action) so the
+ * offset can't grow past the end invisibly — holding `j` at the bottom
+ * used to keep incrementing state, and `k` then spent N presses
+ * unwinding the excess before the view moved.
+ */
+export function workspaceHelpMaxOffset(rows: number): number {
+  const HEADER_ROWS = 3
+  const overlayChromeRows = 4
+  const visibleRows = Math.max(4, rows - HEADER_ROWS - FOOTER_HEIGHT - overlayChromeRows)
+  return Math.max(0, workspaceHelpBodyRowCount() - visibleRows)
 }
 
 function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
@@ -784,7 +823,13 @@ function renderCloneRepoPrompt(deps: RenderWorkspaceAppDeps): ReactTypes.ReactEl
   const { Box, Text } = ink
   const urlActive = cloneField === 'url' && !cloning
   const targetActive = cloneField === 'target' && !cloning
-  const completionLine = cloneCompletion.completions.slice(0, 8).join('  ')
+  // Truncate to the panel interior — a directory with many matches
+  // would otherwise wrap the line and push the modal past its
+  // reserved height.
+  const completionLine = truncateCells(
+    cloneCompletion.completions.slice(0, 8).join('  '),
+    Math.max(20, deps.columns - 8)
+  )
   const hint = cloning
     ? 'Cloning… this can take a moment for large repos.'
     : cloneField === 'url'
@@ -872,8 +917,16 @@ function computeBodyHeight(deps: RenderWorkspaceAppDeps): number {
   const FOOTER_ROWS = FOOTER_HEIGHT
   const onboardingRows = buildWorkspaceOnboarding(deps.state).show ? 5 : 0
   const addRepoRows = deps.state.focus === 'add-repo' ? 5 : 0
-  // Clone modal is one row taller (URL + Into + hint + completion).
-  const cloneRows = deps.state.focus === 'clone-repo' ? 6 : 0
+  // Clone modal: border (2) + title + URL + Into + hint = 6, plus the
+  // completion line exactly when the renderer shows it (target field
+  // active with matches) — reserving 6 flat overflowed the screen by
+  // one row mid-tab-completion, clipping the footer where clone errors
+  // are surfaced.
+  const cloneCompletionRow =
+    deps.cloneField === 'target' && !deps.cloning && deps.cloneCompletion.completions.length > 0
+      ? 1
+      : 0
+  const cloneRows = deps.state.focus === 'clone-repo' ? 6 + cloneCompletionRow : 0
   const confirmRows = deps.state.focus === 'confirm-delete' ? 5 : 0
   const reserved = HEADER_ROWS + FOOTER_ROWS + onboardingRows + addRepoRows + cloneRows + confirmRows
   return Math.max(8, deps.rows - reserved)
