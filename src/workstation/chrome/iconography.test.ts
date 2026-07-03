@@ -313,10 +313,20 @@ describe('log Ink iconography', () => {
   })
 
   describe('getStageStatusDotColor (P3.3)', () => {
-    it('maps unstaged → danger, staged → warning, untracked → muted', () => {
-      expect(getStageStatusDotColor('unstaged', colorTheme)).toBe('red')
-      expect(getStageStatusDotColor('staged', colorTheme)).toBe('yellow')
+    it('maps staged → green, unstaged → yellow, untracked → muted (#1353 — git convention)', () => {
+      // Matches git porcelain / lazygit / gitui: staged is the "safe,
+      // ready" green, unstaged the "modified" yellow. The old mapping
+      // (staged yellow, unstaged red) was inverted from every peer and
+      // drained red of its destructive meaning.
+      expect(getStageStatusDotColor('staged', colorTheme)).toBe(
+        colorTheme.colors.gitAdded ?? colorTheme.colors.success
+      )
+      expect(getStageStatusDotColor('unstaged', colorTheme)).toBe(
+        colorTheme.colors.gitModified ?? colorTheme.colors.warning
+      )
       expect(getStageStatusDotColor('untracked', colorTheme)).toBe('gray')
+      // Never the danger red — that's reserved for destructive actions.
+      expect(getStageStatusDotColor('unstaged', colorTheme)).not.toBe(colorTheme.colors.danger)
     })
 
     it('returns undefined under monochrome (drop the dot — it would carry no info)', () => {

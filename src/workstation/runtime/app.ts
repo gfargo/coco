@@ -1170,6 +1170,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     worktreeDiffOffset: state.worktreeDiffOffset,
     diffLineSelectAnchor: state.diffLineSelectAnchor,
     refreshWorktreeContext,
+    // #1353 — optimistic stage/unstage flip on the loaded overview,
+    // scoped to the active frame (same depth convention as
+    // refreshWorktreeContext).
+    mutateWorktreeOverview: (updater) =>
+      setContext((current) => ({ ...current, worktree: updater(current.worktree) }), runtimes.length - 1),
+    visibleWorktreeFilesGrouped,
+    selectedWorktreeFileIndex: state.selectedWorktreeFileIndex,
+    statusFilterMask: state.statusFilterMask,
     setWorktreeDiff,
     setWorktreeHunks,
   })

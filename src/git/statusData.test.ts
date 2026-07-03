@@ -4,6 +4,7 @@ import {
   findGroupForIndex,
   flattenWorktreeGroups,
   groupWorktreeFiles,
+  optimisticToggleWorktreeOverview,
   parsePorcelainStatus,
 } from './statusData'
 
@@ -149,5 +150,60 @@ describe('log status data', () => {
       expect(findGroupForIndex(groups, 99)).toBeUndefined()
       expect(findGroupForIndex(groups, -1)).toBeUndefined()
     })
+  })
+})
+
+describe('optimisticToggleWorktreeOverview (#1353)', () => {
+  const overview = {
+    files: [
+      { path: 'a.ts', indexStatus: 'M', worktreeStatus: ' ', state: 'staged' },
+      { path: 'b.ts', indexStatus: ' ', worktreeStatus: 'M', state: 'unstaged' },
+      { path: 'c.ts', indexStatus: '?', worktreeStatus: '?', state: 'untracked' },
+    ] as WorktreeFile[],
+    stagedCount: 1,
+    unstagedCount: 1,
+    untrackedCount: 1,
+  }
+
+  it('flips an unstaged file into the staged group and recounts', () => {
+    const next = optimisticToggleWorktreeOverview(overview, 'b.ts')
+    expect(next.files.find((f) => f.path === 'b.ts')).toMatchObject({
+      state: 'staged',
+      indexStatus: 'M',
+      worktreeStatus: ' ',
+    })
+    expect(next).toMatchObject({ stagedCount: 2, unstagedCount: 0, untrackedCount: 1 })
+  })
+
+  it('flips an untracked file to staged-added', () => {
+    const next = optimisticToggleWorktreeOverview(overview, 'c.ts')
+    expect(next.files.find((f) => f.path === 'c.ts')).toMatchObject({
+      state: 'staged',
+      indexStatus: 'A',
+    })
+    expect(next.untrackedCount).toBe(0)
+  })
+
+  it('flips a staged file back to unstaged', () => {
+    const next = optimisticToggleWorktreeOverview(overview, 'a.ts')
+    expect(next.files.find((f) => f.path === 'a.ts')).toMatchObject({
+      state: 'unstaged',
+      indexStatus: ' ',
+      worktreeStatus: 'M',
+    })
+    expect(next).toMatchObject({ stagedCount: 0, unstagedCount: 2 })
+  })
+
+  it('leaves other files and the original overview untouched', () => {
+    const next = optimisticToggleWorktreeOverview(overview, 'b.ts')
+    expect(next.files.find((f) => f.path === 'a.ts')?.state).toBe('staged')
+    expect(overview.files.find((f) => f.path === 'b.ts')?.state).toBe('unstaged')
+    expect(overview.stagedCount).toBe(1)
+  })
+
+  it('is a no-op for an unknown path', () => {
+    const next = optimisticToggleWorktreeOverview(overview, 'zzz.ts')
+    expect(next.files).toEqual(overview.files)
+    expect(next.stagedCount).toBe(1)
   })
 })

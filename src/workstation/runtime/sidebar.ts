@@ -109,8 +109,11 @@ function renderActiveStatusTabContent(
   }
   const colorOf = (state: 'staged' | 'unstaged' | 'untracked'): string | undefined => {
     if (theme.noColor) return undefined
-    if (state === 'staged') return theme.colors.warning
-    if (state === 'unstaged') return theme.colors.danger
+    // Convention-aligned (#1353): staged = green, unstaged = yellow,
+    // matching git porcelain / lazygit / gitui and the status surface's
+    // stage dot; danger stays reserved for destructive actions.
+    if (state === 'staged') return theme.colors.gitAdded ?? theme.colors.success
+    if (state === 'unstaged') return theme.colors.gitModified ?? theme.colors.warning
     return theme.colors.muted
   }
   const summaryRow = (count: number, label: string, key: string, kind: 'staged' | 'unstaged' | 'untracked') =>
