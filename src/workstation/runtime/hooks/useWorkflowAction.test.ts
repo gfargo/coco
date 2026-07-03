@@ -207,6 +207,70 @@ describe('push/pull failure recovery (#1356)', () => {
   })
 })
 
+describe('overlapping invocations do not clear each other\'s loaders (#1385)', () => {
+  it('an earlier-finishing remote op leaves a later op\'s loader in place', async () => {
+    // A = pull (starts first, finishes first), B = push (starts while A
+    // is in flight, finishes last). Before the ownership guard, A's
+    // finally unconditionally dispatched `setRemoteOp undefined` and
+    // killed B's loader while B's git call was still running.
+    let resolvePull: (value: { ok: boolean; message: string }) => void = () => undefined
+    pullCurrentBranchMock.mockReset()
+    pullCurrentBranchMock.mockImplementation(
+      () => new Promise((resolve) => { resolvePull = resolve })
+    )
+    let resolvePush: (value: { ok: boolean; message: string }) => void = () => undefined
+    pushBranchMock.mockReset()
+    pushBranchMock.mockImplementation(
+      () => new Promise((resolve) => { resolvePush = resolve })
+    )
+
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [localBranch], currentBranch: 'main' } } as never,
+    }))
+
+    const remoteOpClears = () =>
+      dispatch.mock.calls.filter(
+        ([action]) => action.type === 'setRemoteOp' && action.value === undefined
+      )
+
+    // A starts: pull loader installed, handler pending.
+    const pullRun = runWorkflowAction('pull-current-branch')
+    // B starts mid-A: push loader replaces the pull loader.
+    const pushRun = runWorkflowAction('push-selected-branch')
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'setRemoteOp',
+      value: expect.objectContaining({ kind: 'push' }),
+    })
+
+    // A finishes while B is still in flight — its finally must NOT
+    // clear the loader B installed.
+    resolvePull({ ok: true, message: 'Pulled main from origin' })
+    await pullRun
+    expect(remoteOpClears()).toHaveLength(0)
+
+    // B finishes — as the latest claim it clears the loader exactly once.
+    resolvePush({ ok: true, message: 'Pushed main to origin' })
+    await pushRun
+    expect(remoteOpClears()).toHaveLength(1)
+  })
+
+  it('a solo invocation still clears its own loader (no overlap)', async () => {
+    pullCurrentBranchMock.mockReset()
+    pullCurrentBranchMock.mockResolvedValue({ ok: true, message: 'Pulled main from origin' })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('pull-current-branch')
+    expect(dispatch).toHaveBeenCalledWith({ type: 'setRemoteOp', value: undefined })
+  })
+})
+
 describe('result status carries the outcome kind (#1349)', () => {
   it('a failing handler dispatches statusKind error', async () => {
     pullCurrentBranchMock.mockResolvedValue({

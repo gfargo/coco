@@ -57,7 +57,8 @@ import {getBranchOverview} from '../../git/branchData'
 import {getLfsAttributeStatus} from '../../git/lfsAttributes'
 import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
-import {LOG_INTERACTIVE_DEFAULT_LIMIT, buildToggleGraphArgs, getCommitRows, getLogRows} from '../../commands/log/data'
+import {LOG_INTERACTIVE_DEFAULT_LIMIT, getCommitRows, getLogRows} from '../../commands/log/data'
+import {buildHistoryRefetchArgv, resolveHistoryRefetch} from './historyRefetchResolver'
 import {LogInkContextKey, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
@@ -694,12 +695,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       // a late `replaceRows` would swap that repo's commits into
       // whichever frame is active now.
       const issuedAtDepth = repoFrameDepthRef.current
+      // Same single-source argv derivation as the merged history
+      // refetch effect (#1385) — graph mode AND server-side filter —
+      // so a post-operation refresh can never swap in rows fetched
+      // with a different topology than the one on screen. The bare
+      // fetch-args fallback preserves the old behavior for callers
+      // that mounted without a logArgv (non-interactive embeds).
       const fetchArgs = state.historyFetchArgs
-      const mergedArgv: LogArgv = {
-        ...logArgv,
-        ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
-        ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
-      } as LogArgv
+      const mergedArgv: LogArgv = logArgv
+        ? buildHistoryRefetchArgv(logArgv, state.fullGraph, fetchArgs)
+        : ({
+            ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
+            ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
+          } as LogArgv)
       // Stash commits as graph roots so post-operation refreshes
       // keep the same rich graph the boot loader assembled. Without
       // this, every commit / split-apply / etc. would drop stash
@@ -725,7 +733,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         setHasMoreCommits(computeHasMoreCommits(logArgv, fresh))
       }
     } catch { /* ignore — stale rows beat blank rows */ }
-  }, [dispatch, git, logArgv, setHasMoreCommits, state.historyFetchArgs])
+  }, [dispatch, git, logArgv, setHasMoreCommits, state.historyFetchArgs, state.fullGraph])
+
+  // #1385 — per-frame monotonic request ids for the two context
+  // refreshers below. Frame-tagging (#994) pins each refresh's WRITE to
+  // the frame it was issued from, but nothing sequenced two overlapping
+  // refreshes on the SAME frame: a watcher-triggered silent refresh and
+  // a manual `r` could resolve out of order, and the earlier-started
+  // 13-way Promise.all batch — resolving last — replaced the fresher
+  // context wholesale (e.g. a deleted branch reappearing until the next
+  // event). Each call claims the next id for its frame before awaiting
+  // and drops its resolve if a newer claim exists by the time it lands.
+  const refreshContextRequestRef = React.useRef<Record<number, number>>({})
+  const refreshWorktreeRequestRef = React.useRef<Record<number, number>>({})
 
   const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
     // Loud refresh (manual `r`): flip everything to 'loading' so the user
@@ -742,11 +762,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // parent frame (the one whose `git` was used for the fetch),
     // not on the freshly-pushed submodule frame.
     const issuedAtDepth = runtimes.length - 1
+    const requestId = (refreshContextRequestRef.current[issuedAtDepth] ?? 0) + 1
+    refreshContextRequestRef.current[issuedAtDepth] = requestId
     if (!options.silent) {
       dispatch({ type: 'setStatus', value: 'refreshing repository context' })
       setContextStatus(createLogInkContextStatus('loading'), issuedAtDepth)
     }
     const next = await loadLogInkContext(git)
+    // #1385 — a newer refresh was issued for this frame while ours was
+    // in flight; its snapshot is fresher than ours, so drop this one
+    // (the newer request owns the 'ready' flip and the status line).
+    if (refreshContextRequestRef.current[issuedAtDepth] !== requestId) {
+      return
+    }
     setContext(next, issuedAtDepth)
     setContextStatus(createLogInkContextStatus('ready'), issuedAtDepth)
     if (!options.silent) {
@@ -758,6 +786,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     // #994 — same frame-tagging as refreshContext above. Worktree
     // loads are usually fast but still race-prone on slow disks.
     const issuedAtDepth = runtimes.length - 1
+    // #1385 — same per-frame sequencing as refreshContext above.
+    const requestId = (refreshWorktreeRequestRef.current[issuedAtDepth] ?? 0) + 1
+    refreshWorktreeRequestRef.current[issuedAtDepth] = requestId
     if (!options.silent) {
       setContextStatus(
         (current) => updateLogInkContextStatus(current, 'worktree', 'loading'),
@@ -765,6 +796,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       )
     }
     const worktree = await safe(getWorktreeOverview(git))
+
+    // #1385 — a newer worktree refresh was issued for this frame while
+    // ours was in flight. Skip the context write (the newer request's
+    // snapshot is fresher) but still return OUR overview: callers await
+    // this function for the result of the refresh they themselves
+    // issued, and that contract holds regardless of who writes the
+    // shared context.
+    if (refreshWorktreeRequestRef.current[issuedAtDepth] !== requestId) {
+      return worktree
+    }
 
     setContext(
       (current) => ({
@@ -1450,124 +1491,78 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     loadCommitContextRef,
   })
 
-  // Server-side history filter (#776). When the user submits `path:foo`
-  // or `author:foo`, the filter parser dispatches setHistoryFetchArgs;
-  // this effect picks up the change, re-runs `getLogRows` with merged
-  // args, and replaces the rows. Clearing the fetch args (Ctrl+U inside
-  // filter mode) re-fetches with the original logArgv so the user gets
-  // the live full log back, not a stale snapshot of the initial rows.
-  const historyFetchEffectInitialized = React.useRef(false)
-  const historyFetchRequestRef = React.useRef(0)
+  // Merged history refetch (#1385): server-side filter (#776), graph
+  // mode toggle (`g`, #791 follow-up), and repo-frame switches all
+  // funnel through ONE effect.
+  //
+  // These used to be two sibling effects — one keyed on
+  // `state.historyFetchArgs`, one on `state.fullGraph` — both listing
+  // the active frame's `git` with mount-consumed first-run-skip refs.
+  // Every drill-in/out therefore ran BOTH bodies: two concurrent
+  // `getLogRows` calls whose argv genuinely diverged (the filter fetch
+  // ignored `fullGraph`; the graph fetch ignored the filter), and
+  // whichever resolved last decided — nondeterministically — whether
+  // the frame showed full/compact and filtered/unfiltered rows, plus
+  // contradictory status lines. One effect means one merged argv
+  // (`buildHistoryRefetchArgv` consults BOTH dimensions) and one
+  // request id, so a superseded fetch always drops. The prev-value ref
+  // exists only to pick the right status copy (`resolveHistoryRefetch`)
+  // — filter submit, graph toggle, or frame switch.
+  const historyRefetchInitialized = React.useRef(false)
+  const historyRefetchRequestRef = React.useRef(0)
+  const historyRefetchPrevRef = React.useRef<{
+    fullGraph: boolean
+    fetchArgs: LogInkState['historyFetchArgs']
+  } | undefined>(undefined)
   React.useEffect(() => {
     if (!logArgv) return
+    const prev = historyRefetchPrevRef.current
+    historyRefetchPrevRef.current = {
+      fullGraph: state.fullGraph,
+      fetchArgs: state.historyFetchArgs,
+    }
     // Skip the first run — initial rows came in via deps.rows; we only
-    // want to fetch in response to *changes* to historyFetchArgs.
-    if (!historyFetchEffectInitialized.current) {
-      historyFetchEffectInitialized.current = true
+    // want to fetch in response to *changes*.
+    if (!historyRefetchInitialized.current) {
+      historyRefetchInitialized.current = true
       return
     }
 
-    const requestId = historyFetchRequestRef.current + 1
-    historyFetchRequestRef.current = requestId
-    const fetchArgs = state.historyFetchArgs
-    const merged: LogArgv = {
-      ...logArgv,
-      ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
-      ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
-    }
-    const description = fetchArgs?.author
-      ? `author:${fetchArgs.author}`
-      : fetchArgs?.path
-        ? `path:${fetchArgs.path}`
-        : undefined
-
-    dispatch({
-      type: 'setStatus',
-      value: description ? `Refetching with ${description}` : 'Restoring full log',
+    const requestId = historyRefetchRequestRef.current + 1
+    historyRefetchRequestRef.current = requestId
+    const plan = resolveHistoryRefetch({
+      logArgv,
+      fullGraph: state.fullGraph,
+      fetchArgs: state.historyFetchArgs,
+      fetchArgsChanged: prev !== undefined && prev.fetchArgs !== state.historyFetchArgs,
+      fullGraphChanged: prev !== undefined && prev.fullGraph !== state.fullGraph,
     })
 
+    dispatch({ type: 'setStatus', value: plan.pendingStatus })
+
     void (async () => {
+      // Include stash commits as graph roots so the re-fetch sees the
+      // same rich graph the boot loader assembles. Without this, any
+      // refetch would lose the stash anchors that loadRowsWithStashes
+      // seeded on boot.
       const stashHashes = await getStashCommitHashes(git).catch(() => [])
-      const nextRows = await safe(getLogRows(git, merged, {
+      const nextRows = await safe(getLogRows(git, plan.argv, {
         limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
         extraRefs: stashHashes,
       }))
-      if (!mountedRef.current || historyFetchRequestRef.current !== requestId) {
+      if (!mountedRef.current || historyRefetchRequestRef.current !== requestId) {
         return
       }
       if (!nextRows) {
-        dispatch({ type: 'setStatus', value: 'Failed to refetch with active filter', kind: 'error' })
+        dispatch({ type: 'setStatus', value: plan.errorStatus, kind: 'error' })
         return
       }
       dispatch({ type: 'replaceRows', rows: nextRows })
       const matched = getCommitRows(nextRows).length
       setHasMoreCommits(matched >= LOG_INTERACTIVE_DEFAULT_LIMIT)
-      dispatch({
-        type: 'setStatus',
-        value: description
-          ? `Showing ${matched} commits matching ${description}`
-          : 'Showing full log',
-        kind: 'success',
-      })
+      dispatch({ type: 'setStatus', value: plan.successStatus(matched), kind: 'success' })
     })()
-  }, [dispatch, git, logArgv, state.historyFetchArgs])
-
-  // Graph mode toggle (`g` key, #791 follow-up). The header label flips
-  // between "compact graph" and "full graph", but unless we re-fetch with
-  // the right `view`, the underlying rows still come from the user's
-  // initial argv (default `--first-parent --no-merges`) and the renderer
-  // has no topology to draw — defeating the per-lane / junction work.
-  // Mirrors the historyFetchArgs effect: skip first run, request-id ref
-  // for stale-completion guard, swap rows in place via replaceRows.
-  const toggleGraphEffectInitialized = React.useRef(false)
-  const toggleGraphRequestRef = React.useRef(0)
-  React.useEffect(() => {
-    if (!logArgv) return
-    if (!toggleGraphEffectInitialized.current) {
-      toggleGraphEffectInitialized.current = true
-      return
-    }
-
-    const requestId = toggleGraphRequestRef.current + 1
-    toggleGraphRequestRef.current = requestId
-    const merged = buildToggleGraphArgs(logArgv, state.fullGraph)
-
-    dispatch({
-      type: 'setStatus',
-      value: state.fullGraph
-        ? 'Loading full topology…'
-        : 'Loading compact history…',
-    })
-
-    void (async () => {
-      // Include stash commits as graph roots so the toggle's re-fetch
-      // sees the same rich graph the boot loader assembles. Without
-      // this, flipping `\` into full mode and back loses the stash
-      // anchors that loadRowsWithStashes seeded on boot.
-      const stashHashes = await getStashCommitHashes(git).catch(() => [])
-      const nextRows = await safe(getLogRows(git, merged, {
-        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
-        extraRefs: stashHashes,
-      }))
-      if (!mountedRef.current || toggleGraphRequestRef.current !== requestId) {
-        return
-      }
-      if (!nextRows) {
-        dispatch({ type: 'setStatus', value: 'Failed to refetch graph rows', kind: 'error' })
-        return
-      }
-      dispatch({ type: 'replaceRows', rows: nextRows })
-      const matched = getCommitRows(nextRows).length
-      setHasMoreCommits(matched >= LOG_INTERACTIVE_DEFAULT_LIMIT)
-      dispatch({
-        type: 'setStatus',
-        value: state.fullGraph
-          ? `Showing ${matched} commits across all branches`
-          : `Showing ${matched} commits (compact)`,
-        kind: 'success',
-      })
-    })()
-  }, [dispatch, git, logArgv, state.fullGraph])
+  }, [dispatch, git, logArgv, state.historyFetchArgs, state.fullGraph])
 
   const commitDiffHunkOffsets = React.useMemo(() => (
     filePreview?.hunks

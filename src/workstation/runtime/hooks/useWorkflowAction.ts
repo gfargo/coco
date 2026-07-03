@@ -301,6 +301,20 @@ export function useWorkflowAction(
   // commit's parent to rebase from.
   const lastFixupTargetRef = React.useRef<{ hash: string; shortHash: string; message: string } | null>(null)
 
+  // Ownership tokens for the shared loader state (#1385). Workflow
+  // keystrokes stay live while a remote op runs, so two invocations can
+  // overlap — e.g. `F` (fetch) then `p` (push) mid-fetch. Without a
+  // guard, the fetch's `finally` unconditionally dispatched
+  // `setRemoteOp undefined` and killed the push's loader while the push
+  // was still running (and likewise for the per-row pending spinner).
+  // Each invocation that installs a loader claims the next token; the
+  // `finally` clears the loader only when its claim is still the latest
+  // — i.e. no later invocation has installed its own loader since. Same
+  // identity-check-before-cleanup shape as the AbortController guard in
+  // `useChangelogActions`' finally.
+  const remoteOpClaimRef = React.useRef(0)
+  const pendingItemActionClaimRef = React.useRef(0)
+
   const runWorkflowAction = React.useCallback(async (id: string, payload?: string) => {
     // Resolve the live snapshot first — every name below shadows what the
     // old closure captured, keeping the ~1,200-line body byte-identical.
@@ -1438,7 +1452,9 @@ export function useWorkflowAction(
     // hands straight off to the freshly-fetched rows instead of
     // flashing the stale list for a frame in between.
     const remoteOp = REMOTE_OP_LOADERS[id]
+    let remoteOpClaim = 0
     if (remoteOp) {
+      remoteOpClaim = ++remoteOpClaimRef.current
       dispatch({ type: 'setRemoteOp', value: remoteOp })
     }
     // Mark the cursored row as busy so it shows an inline pending
@@ -1448,7 +1464,9 @@ export function useWorkflowAction(
     // with the new current branch, and a failure (e.g. an unmerged
     // branch) restores the row's normal icon alongside the error status.
     const pendingItemAction = resolvePendingItemAction(id, state, context)
+    let pendingItemActionClaim = 0
     if (pendingItemAction) {
+      pendingItemActionClaim = ++pendingItemActionClaimRef.current
       dispatch({ type: 'setPendingItemAction', value: pendingItemAction })
     }
     try {
@@ -1742,14 +1760,18 @@ export function useWorkflowAction(
     } finally {
       // Always clear the loader — even if a refresh threw — so a
       // failed fetch/pull can't leave the history surface stuck behind
-      // the spinner.
-      if (remoteOp) {
+      // the spinner. Ownership check (#1385): only clear when OUR claim
+      // is still the latest — a later overlapping invocation that
+      // installed its own loader now owns the clear, and yanking it
+      // out from under that still-running op killed its loader early.
+      if (remoteOp && remoteOpClaimRef.current === remoteOpClaim) {
         dispatch({ type: 'setRemoteOp', value: undefined })
       }
       // Same guarantee for the per-row pending spinner (delete or
       // checkout): clear it whether the action succeeded, failed, or the
-      // refresh threw, so no row is left spinning forever.
-      if (pendingItemAction) {
+      // refresh threw, so no row is left spinning forever — with the
+      // same #1385 ownership check.
+      if (pendingItemAction && pendingItemActionClaimRef.current === pendingItemActionClaim) {
         dispatch({ type: 'setPendingItemAction', value: undefined })
       }
     }
