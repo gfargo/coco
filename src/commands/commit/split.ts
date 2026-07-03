@@ -467,12 +467,50 @@ export async function applyCommitSplitPlan({
     previousHead = 'EMPTY'
   }
 
+  // The plan was built against the config-filtered staged list
+  // (ignoredFiles / ignoredExtensions — lockfiles and sourcemaps by
+  // default), but the up-front reset below unstages EVERYTHING. A
+  // staged file that no group claims (because the filter hid it from
+  // the planner) would silently end up unstaged and absent from every
+  // commit — a divergence from regular `coco commit`, which commits
+  // the whole index. Capture those paths now so they can be re-staged
+  // after the loop, preserving the user's staging intent.
+  const stagedBeforeReset = (await git.raw(['diff', '--cached', '--name-only', '-z']))
+    .split('\0')
+    .filter(Boolean)
+  const plannedFiles = new Set<string>()
+  for (const group of plan.groups) {
+    for (const file of group.files || []) {
+      plannedFiles.add(file)
+    }
+    for (const hunkId of group.hunks || []) {
+      const hunk = hunkInventory.byId.get(hunkId)
+      if (hunk) {
+        plannedFiles.add(hunk.filePath)
+      }
+    }
+  }
+  const unplannedStaged = stagedBeforeReset.filter((file) => !plannedFiles.has(file))
+
   await git.raw(['reset'])
 
   logger.startSpinner(`Applying ${applicableGroups.length} commits…`)
 
   const commitHashes: string[] = []
   const failures: { title: string; reason: string }[] = []
+
+  // A failed group can leave its files sitting in the index (add
+  // succeeded, commit rejected by a hook, patch half-applied, …). The
+  // next group's add would then compound on top and its commit would
+  // silently absorb the failed group's files under the wrong message.
+  const clearIndexAfterFailure = async () => {
+    try {
+      await git.raw(['reset'])
+    } catch {
+      // Best-effort — if even reset fails the per-group catch will
+      // surface whatever git is unhappy about on the next iteration.
+    }
+  }
 
   for (const group of applicableGroups) {
     const groupFiles = getGroupFiles(group)
@@ -519,6 +557,7 @@ export async function applyCommitSplitPlan({
           title: group.title,
           reason: 'git commit returned success but HEAD did not advance — commit may have been silently skipped',
         })
+        await clearIndexAfterFailure()
         continue
       }
       commitHashes.push(newHead)
@@ -529,8 +568,25 @@ export async function applyCommitSplitPlan({
         title: group.title,
         reason: error instanceof Error ? error.message : String(error),
       })
+      await clearIndexAfterFailure()
     }
   }
+
+  // Restore the staging intent for files the plan never saw (filtered
+  // out by ignoredFiles / ignoredExtensions before planning). They were
+  // staged when the user ran the split; leave them staged so the next
+  // status/compose surface shows them instead of silently dropping
+  // them into the unstaged pile.
+  if (unplannedStaged.length > 0) {
+    try {
+      await git.raw(['add', '--', ...unplannedStaged])
+    } catch {
+      // Best-effort — a path may have vanished from disk mid-apply.
+    }
+  }
+  const unplannedNote = unplannedStaged.length > 0
+    ? ` ${unplannedStaged.length} staged file(s) the plan excluded by config (e.g. lockfiles) were re-staged — commit them separately.`
+    : ''
 
   // If every group failed, throw — there's nothing to recover and
   // the caller needs a clear error path. Partial-success (some
@@ -554,7 +610,7 @@ export async function applyCommitSplitPlan({
     )
     return {
       commitHashes,
-      message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}`,
+      message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}${unplannedNote}`,
       fallback,
     }
   }
@@ -566,7 +622,7 @@ export async function applyCommitSplitPlan({
 
   return {
     commitHashes,
-    message: `Created ${commitHashes.length} split commit(s).`,
+    message: `Created ${commitHashes.length} split commit(s).${unplannedNote}`,
     fallback,
   }
 }
