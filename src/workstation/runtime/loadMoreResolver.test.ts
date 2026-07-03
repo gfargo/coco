@@ -1,8 +1,11 @@
 import { LOG_INTERACTIVE_DEFAULT_LIMIT } from '../../commands/log/data'
 import {
   isCursorNearBottom,
+  isStaleFrameResolve,
+  isStaleLoadMoreCompletion,
   pageImpliesMore,
   shouldLoadMore,
+  type LoadMoreCompletionSnapshot,
   type LoadMoreGuardSnapshot,
 } from './loadMoreResolver'
 
@@ -70,5 +73,75 @@ describe('pageImpliesMore', () => {
   it('is false for a short page (end of history)', () => {
     expect(pageImpliesMore(LOG_INTERACTIVE_DEFAULT_LIMIT - 1)).toBe(false)
     expect(pageImpliesMore(0)).toBe(false)
+  })
+})
+
+// #1384 — frame-scoped stale-completion decisions. The history rows are
+// swapped in place on every repo-frame push / pop, so a resolve issued
+// in one frame must DROP when the stack changed mid-flight rather than
+// splice its rows into whichever frame is active now.
+describe('isStaleFrameResolve', () => {
+  it('accepts a resolve that lands in the frame that issued it', () => {
+    expect(
+      isStaleFrameResolve({ mounted: true, issuedAtDepth: 0, currentDepth: 0 }),
+    ).toBe(false)
+  })
+
+  it('drops after a drill-in (parent fetch resolving in the child frame)', () => {
+    expect(
+      isStaleFrameResolve({ mounted: true, issuedAtDepth: 0, currentDepth: 1 }),
+    ).toBe(true)
+  })
+
+  it('drops after a pop (child fetch resolving back in the parent frame)', () => {
+    expect(
+      isStaleFrameResolve({ mounted: true, issuedAtDepth: 1, currentDepth: 0 }),
+    ).toBe(true)
+  })
+
+  it('drops after unmount regardless of depth', () => {
+    expect(
+      isStaleFrameResolve({ mounted: false, issuedAtDepth: 0, currentDepth: 0 }),
+    ).toBe(true)
+  })
+})
+
+describe('isStaleLoadMoreCompletion', () => {
+  const fresh = (): LoadMoreCompletionSnapshot => ({
+    mounted: true,
+    requestId: 3,
+    currentRequestId: 3,
+    issuedAtDepth: 0,
+    currentDepth: 0,
+  })
+
+  it('accepts the completion of the current request in the issuing frame', () => {
+    expect(isStaleLoadMoreCompletion(fresh())).toBe(false)
+  })
+
+  it('drops after unmount', () => {
+    expect(isStaleLoadMoreCompletion({ ...fresh(), mounted: false })).toBe(true)
+  })
+
+  it('drops when a newer request superseded this one', () => {
+    expect(isStaleLoadMoreCompletion({ ...fresh(), currentRequestId: 4 })).toBe(true)
+  })
+
+  it('drops when the repo-frame depth changed mid-flight (drill-in)', () => {
+    expect(isStaleLoadMoreCompletion({ ...fresh(), currentDepth: 1 })).toBe(true)
+  })
+
+  it('drops a push → pop round trip back to the SAME depth via the rescoped request family', () => {
+    // The frame push and pop each bump the request family, so even
+    // though the depth matches again, the id no longer does.
+    expect(
+      isStaleLoadMoreCompletion({
+        ...fresh(),
+        issuedAtDepth: 0,
+        currentDepth: 0,
+        requestId: 3,
+        currentRequestId: 5,
+      }),
+    ).toBe(true)
   })
 })

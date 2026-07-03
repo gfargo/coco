@@ -80,3 +80,66 @@ export function isCursorNearBottom(
 export function pageImpliesMore(pageCommitCount: number): boolean {
   return pageCommitCount >= LOG_INTERACTIVE_DEFAULT_LIMIT
 }
+
+/**
+ * The completion-time snapshot a frame-scoped history-row resolve checks
+ * before writing (#1384). `issuedAtDepth` is the repo-frame depth
+ * (`repoStack.length - 1`) captured when the fetch was dispatched;
+ * `currentDepth` is the live depth when it resolves.
+ */
+export type FrameScopedResolveSnapshot = {
+  /** Whether the component is still mounted (mirrors `mountedRef`). */
+  mounted: boolean
+  /** Repo-frame depth captured when the fetch was dispatched. */
+  issuedAtDepth: number
+  /** Live repo-frame depth at resolve time. */
+  currentDepth: number
+}
+
+/**
+ * Stale-completion decision for the frame-scoped row loaders
+ * (`loadCommitContext`, `refreshHistoryRows`) — #1384.
+ *
+ * The history ROWS live in the single reducer state and are swapped
+ * in place on every repo-frame push / pop (unlike the context, which
+ * is stored per frame and can be *routed* to the issuing frame via
+ * `setContext(next, targetDepth)`, the #994 pattern). A row write has
+ * no frame to route to — if the frame stack changed while the fetch
+ * was in flight, the only safe move is to DROP the resolve: an
+ * append / replace from the parent frame would splice parent-repo
+ * commits into the child frame's history (or vice versa after a pop).
+ */
+export function isStaleFrameResolve(snap: FrameScopedResolveSnapshot): boolean {
+  return !snap.mounted || snap.currentDepth !== snap.issuedAtDepth
+}
+
+/**
+ * The completion-time snapshot `loadMoreCommits` checks — the
+ * frame-scoped decision above plus the pre-existing monotonic
+ * request-id family (`loadMoreRequestRef`).
+ */
+export type LoadMoreCompletionSnapshot = FrameScopedResolveSnapshot & {
+  /** The request id this fetch was issued with. */
+  requestId: number
+  /** The live request id at resolve time (mirrors `loadMoreRequestRef`). */
+  currentRequestId: number
+}
+
+/**
+ * Stale-completion decision for the `loadMoreCommits` resolve (#1384).
+ *
+ * Three ways a completion goes stale:
+ *   1. the component unmounted;
+ *   2. the request-id family moved on — a newer page fetch was issued,
+ *      or a repo-frame push / pop rescoped the family (the runtime
+ *      bumps `loadMoreRequestRef` on every frame transition so a
+ *      pre-push fetch can never satisfy the guard post-push, even
+ *      after a push → pop round trip back to the SAME depth);
+ *   3. the repo-frame depth changed — belt-and-braces with (2) for
+ *      the render tick before the rescope bump lands.
+ */
+export function isStaleLoadMoreCompletion(snap: LoadMoreCompletionSnapshot): boolean {
+  if (!snap.mounted) return true
+  if (snap.currentRequestId !== snap.requestId) return true
+  return snap.currentDepth !== snap.issuedAtDepth
+}

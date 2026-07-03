@@ -46,6 +46,14 @@
  * cancellation logic, the dispatch payloads, and every dependency array
  * are byte-for-byte the same as the original `app.ts` cluster.
  *
+ * #1384 layered the repo-frame discipline on top: both loaders capture
+ * the repo-stack depth at dispatch and drop their resolve when the
+ * frame stack changed mid-flight (the pure decisions live in
+ * `loadMoreResolver.ts`), and a rescope effect bumps
+ * `loadMoreRequestRef` / resets the in-flight flags on every frame
+ * push / pop so a parent-frame page can never splice into a child
+ * frame's history.
+ *
  * `mountedRef`, `loadingMoreCommitsRef`, and `loadMoreRequestRef` stay
  * declared in `app.ts` (they are shared with — or, for `mountedRef`, read
  * by — many other clusters) and are passed in.
@@ -76,6 +84,7 @@ import {
 } from '../../../commands/log/data'
 import { getStashCommitHashes } from '../../../git/stashData'
 import type { LogInkAction, LogInkState } from '../inkViewModel'
+import { isStaleFrameResolve, isStaleLoadMoreCompletion } from '../loadMoreResolver'
 import type { LoadCommitContextFn } from './useHistoryCursorSync'
 
 /**
@@ -204,6 +213,30 @@ export function useLoadMoreHistory(
     loadingMoreCommitsRef.current = loadingMoreCommits
   }, [loadingMoreCommits])
 
+  // #1384 — rescope the pagination request family on every repo-frame
+  // push / pop. The history rows are swapped in place per frame (the
+  // git-keyed refetch effects in app.ts replace them), but nothing used
+  // to invalidate an in-flight page fetch: a parent-frame page resolving
+  // after a submodule drill-in passed the request-id guard and spliced
+  // parent-repo commits into the child frame's graph. Bumping the id on
+  // every frame transition means a pre-transition fetch can never
+  // satisfy the guard — even after a push → pop round trip back to the
+  // same depth. The in-flight flags are reset too: the stale completion
+  // returns early WITHOUT clearing them (by design — it must not
+  // clobber a newer fetch's state), so without this reset a dropped
+  // completion would leave `loadingMoreCommitsRef` true forever and
+  // permanently disable pagination in the new frame.
+  React.useEffect(() => {
+    loadMoreRequestRef.current += 1
+    loadingMoreCommitsRef.current = false
+    setLoadingMoreCommits(false)
+  }, [
+    state.repoStack.length,
+    loadMoreRequestRef,
+    loadingMoreCommitsRef,
+    setLoadingMoreCommits,
+  ])
+
   // STABLE useCallback (empty deps) for loadMoreCommits. The function
   // reads the volatile state (commit counts, fetch args, hasMore) via
   // refs that update on every render so the identity stays constant.
@@ -227,6 +260,10 @@ export function useLoadMoreHistory(
     historyFetchArgs: state.historyFetchArgs,
     hasMoreCommits,
     logArgv,
+    // #1384 — repo-frame depth, captured at dispatch and re-read at
+    // resolve so a fetch issued in one frame drops instead of splicing
+    // its rows into whichever frame is active when it lands.
+    repoFrameDepth: state.repoStack.length - 1,
   })
   loadMoreStateRef.current = {
     mainHistoryCommitCount: state.mainHistoryCommitCount,
@@ -234,6 +271,7 @@ export function useLoadMoreHistory(
     historyFetchArgs: state.historyFetchArgs,
     hasMoreCommits,
     logArgv,
+    repoFrameDepth: state.repoStack.length - 1,
   }
 
   const loadMoreCommits = React.useCallback(async (
@@ -250,6 +288,10 @@ export function useLoadMoreHistory(
     loadingMoreCommitsRef.current = true
     const requestId = loadMoreRequestRef.current + 1
     loadMoreRequestRef.current = requestId
+    // #1384 — frame-tag the fetch (same discipline as the #994 context
+    // loaders): capture the depth it was issued from so the resolve can
+    // drop when the repo-frame stack changed mid-flight.
+    const issuedAtDepth = snap.repoFrameDepth
     setLoadingMoreCommits(true)
     dispatch({
       type: 'setStatus',
@@ -279,7 +321,18 @@ export function useLoadMoreHistory(
       })
     )
 
-    if (!mountedRef.current || loadMoreRequestRef.current !== requestId) {
+    // Stale-completion guard (#1384): unmounted, superseded request id
+    // (a newer fetch OR the frame push/pop rescope bump), or a repo-
+    // frame depth change. A stale completion must NOT touch the
+    // loading flags or `hasMoreCommits` — they now belong to the new
+    // frame (the rescope effect above resets them on frame moves).
+    if (isStaleLoadMoreCompletion({
+      mounted: mountedRef.current,
+      requestId,
+      currentRequestId: loadMoreRequestRef.current,
+      issuedAtDepth,
+      currentDepth: loadMoreStateRef.current.repoFrameDepth,
+    })) {
       return { fired: false, addedCommits: 0 }
     }
 
@@ -344,14 +397,22 @@ export function useLoadMoreHistory(
    * reintroduce the render-order race that bit the previous chain.
    * All volatile state (logArgv, mostly) is read via refs.
    */
-  const loadCommitContextStateRef = React.useRef({ logArgv })
-  loadCommitContextStateRef.current = { logArgv }
+  const loadCommitContextStateRef = React.useRef({
+    logArgv,
+    repoFrameDepth: state.repoStack.length - 1,
+  })
+  loadCommitContextStateRef.current = {
+    logArgv,
+    repoFrameDepth: state.repoStack.length - 1,
+  }
 
   const loadCommitContext = React.useCallback(async (
     target: { hash: string; label: string }
   ): Promise<void> => {
     const snap = loadCommitContextStateRef.current
     if (!snap.logArgv) return
+    // #1384 — frame-tag the anchored fetch; see `loadMoreCommits`.
+    const issuedAtDepth = snap.repoFrameDepth
     dispatch({
       type: 'setStatus',
       value: `Loading commits around ${target.label}…`,
@@ -364,7 +425,15 @@ export function useLoadMoreHistory(
       // `loadRowsWithStashes`; `appendRows` deduplicates by hash so
       // the merged result keeps both views without double-counting.
       const rows = await getLogRowsAnchoredOn(git, snap.logArgv, target.hash, {})
-      if (!mountedRef.current) return
+      // #1384 — drop the resolve when the repo-frame stack changed
+      // mid-flight: the anchored rows belong to the frame that issued
+      // the fetch, and `appendRows` would splice them into whichever
+      // frame is active now.
+      if (isStaleFrameResolve({
+        mounted: mountedRef.current,
+        issuedAtDepth,
+        currentDepth: loadCommitContextStateRef.current.repoFrameDepth,
+      })) return
       if (rows.length > 0) {
         dispatch({ type: 'appendRows', rows })
         // Don't dispatch a setStatus here — the cursor-sync effect
@@ -379,7 +448,13 @@ export function useLoadMoreHistory(
         })
       }
     } catch (error) {
-      if (mountedRef.current) {
+      // Same frame-scoped drop for the failure path (#1384): a stale
+      // frame's error message would mislabel the ACTIVE frame's state.
+      if (!isStaleFrameResolve({
+        mounted: mountedRef.current,
+        issuedAtDepth,
+        currentDepth: loadCommitContextStateRef.current.repoFrameDepth,
+      })) {
         dispatch({
           type: 'setStatus',
           value: `Failed to load context for ${target.label}: ${

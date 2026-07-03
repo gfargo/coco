@@ -66,6 +66,7 @@ function createDeps(over: Partial<UseWorkflowActionDeps>): UseWorkflowActionDeps
     refreshContext: jest.fn().mockResolvedValue(undefined),
     refreshHistoryRows: jest.fn().mockResolvedValue(undefined),
     refreshWorktreeContext: jest.fn().mockResolvedValue(undefined),
+    runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
     setContext: jest.fn(),
     setContextStatus: jest.fn(),
     forge: {} as UseWorkflowActionDeps['forge'],

@@ -120,6 +120,7 @@ import { executeRebasePlan } from '../../../git/rebasePlanActions'
 import { initSubmodule, syncSubmodule, updateSubmodule } from '../../../git/submoduleActions'
 import { addRemote, pruneRemote, removeRemote, setRemoteUrl } from '../../../git/remoteActions'
 import { matchesPromotedFilter } from '../promotedFilter'
+import type { RepoStackRuntimes } from '../repoStackRuntime'
 import type { LogInkContext } from '../types'
 
 // Element types are derived from `LogInkContext` indexed access so they track
@@ -233,6 +234,14 @@ export type UseWorkflowActionDeps = {
    * awaits-and-ignores it, so `Promise<unknown>` is the precise contract.
    */
   refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<unknown>
+  /**
+   * The repo-stack runtimes (#1384) — `runtimes.length - 1` at keystroke
+   * time is the frame-tag depth the cache-invalidation helpers pass to
+   * `setContext` / `setContextStatus`, so a triage mutation that finishes
+   * after a repo-frame push / pop still writes to (or is dropped with)
+   * the frame that issued it.
+   */
+  runtimes: RepoStackRuntimes
   /** Frame-aware context setter (used by the issue / PR cache-invalidation helpers). */
   setContext: (
     arg: LogInkContext | ((prev: LogInkContext) => LogInkContext),
@@ -303,6 +312,7 @@ export function useWorkflowAction(
       refreshContext,
       refreshHistoryRows,
       refreshWorktreeContext,
+      runtimes,
       setContext,
       setContextStatus,
       forge,
@@ -313,6 +323,13 @@ export function useWorkflowAction(
       filteredIssueList,
       filteredPullRequestTriageList,
     } = depsRef.current
+    // #1384 — capture the repo-frame depth at keystroke time, BEFORE any
+    // handler awaits. The invalidation helpers below run after the git /
+    // forge mutation resolves; frame-tagging their writes means a
+    // drill-in (or pop) that happens mid-mutation can't get its list
+    // cleared by the parent frame's completion — the write lands on the
+    // issuing frame, or silently drops if that frame was popped.
+    const issuedAtDepth = runtimes.length - 1
 
     // `worktreeDirty` is a pure derivation of the (already-threaded) whole
     // `context.worktree` — derived from the same live snapshot.
@@ -372,8 +389,11 @@ export function useWorkflowAction(
           }
         }
         return next
-      })
-      setContextStatus((current) => updateLogInkContextStatus(current, 'issueList', 'idle'))
+      }, issuedAtDepth)
+      setContextStatus(
+        (current) => updateLogInkContextStatus(current, 'issueList', 'idle'),
+        issuedAtDepth,
+      )
       clearGitHubListCache()
     }
     const invalidatePullRequestListCaches = (pullRequestNumber?: number): void => {
@@ -389,8 +409,11 @@ export function useWorkflowAction(
           }
         }
         return next
-      })
-      setContextStatus((current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'))
+      }, issuedAtDepth)
+      setContextStatus(
+        (current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'),
+        issuedAtDepth,
+      )
       clearGitHubListCache()
     }
 
