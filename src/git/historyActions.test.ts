@@ -3,6 +3,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   amendHeadCommit,
+  checkoutOrDeleteFromRef,
   cherryPickCommit,
   compareCommits,
   copyCommitHash,
@@ -37,6 +38,57 @@ describe('log history actions', () => {
     await expect(historyActionTestInternals.isHeadCommit(git as never, 'abcdef1234567890')).resolves.toBe(true)
     await expect(historyActionTestInternals.isHeadCommit(git as never, 'abcdef1')).resolves.toBe(true)
     await expect(historyActionTestInternals.isHeadCommit(git as never, '1234567')).resolves.toBe(false)
+  })
+
+  describe('checkoutOrDeleteFromRef (#1383)', () => {
+    // The ref-verify guard is the safety line: a stale selector
+    // (`stash@{2}` after the stash list changed) used to be
+    // indistinguishable from "path deleted at ref" and fell through
+    // to `git rm --force`, deleting the user's file.
+    it('refuses to touch the worktree when the ref does not resolve', async () => {
+      const raw = jest.fn().mockImplementation(async (args: string[]) => {
+        if (args[0] === 'rev-parse') {
+          throw new Error("fatal: Needed a single revision")
+        }
+        return ''
+      })
+      const git = { raw }
+
+      const result = await checkoutOrDeleteFromRef(git as never, 'stash@{2}', 'src/a.ts', 'stash@{2}')
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('no longer resolves')
+      const destructive = raw.mock.calls.filter(([args]) => args[0] === 'rm' || args[0] === 'checkout')
+      expect(destructive).toEqual([])
+    })
+
+    it('checks the file out when it exists at the ref', async () => {
+      const raw = jest.fn().mockResolvedValue('')
+      const git = { raw }
+
+      const result = await checkoutOrDeleteFromRef(git as never, 'abc1234', 'src/a.ts', 'abc1234')
+
+      expect(result).toEqual({ ok: true, message: 'Checked out src/a.ts from abc1234' })
+      expect(raw).toHaveBeenCalledWith(['checkout', 'abc1234', '--', 'src/a.ts'])
+    })
+
+    it('mirrors a deletion only when the ref resolves but the path is absent', async () => {
+      const raw = jest.fn().mockImplementation(async (args: string[]) => {
+        if (args[0] === 'cat-file') {
+          throw new Error('fatal: Not a valid object name')
+        }
+        return ''
+      })
+      const git = { raw }
+
+      const result = await checkoutOrDeleteFromRef(git as never, 'abc1234', 'src/gone.ts', 'abc1234')
+
+      expect(result).toEqual({
+        ok: true,
+        message: 'Removed src/gone.ts (mirrors deletion from abc1234)',
+      })
+      expect(raw).toHaveBeenCalledWith(['rm', '--force', '--quiet', '--', 'src/gone.ts'])
+    })
   })
 
   it('amends HEAD with staged changes', async () => {
