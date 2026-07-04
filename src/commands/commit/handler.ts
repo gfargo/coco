@@ -70,7 +70,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       logger.log(LOGO)
     }
   } else {
-    logger.setConfig({ silent: true })
+    logger.setConfig({ quiet: true })
   }
 
   if (config.service.provider === 'ollama') {

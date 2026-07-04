@@ -56,7 +56,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
       logger.log(LOGO)
     }
   } else {
-    logger.setConfig({ silent: true })
+    logger.setConfig({ quiet: true })
   }
 
   let structured: { title: string; summary: string } | undefined
