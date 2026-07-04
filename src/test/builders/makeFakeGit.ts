@@ -54,6 +54,13 @@ export function deriveStatus(worktree: FakeWorktreeFile[]): StatusResult {
     const code = `${index}${working_dir}`
 
     switch (code) {
+      // ' A': intent-to-add (`git add -N`) — staged as an empty blob, so
+      // the index column stays blank and the real content shows up as an
+      // unstaged addition. ' D'/' M': a tracked file deleted/edited in the
+      // worktree with the deletion/edit never staged (plain `rm`/edit, no
+      // `git add`). All three are real `git status --porcelain` output,
+      // and simple-git's own StatusSummary parser maps them the same way
+      // (see the `parser3(' ', 'A'|'D'|'M', ...)` entries it registers).
       case ' A':
         status.created.push(path)
         break

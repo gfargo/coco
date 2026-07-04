@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { getChanges } from './getChanges' // Assuming the path to the function
+import { deriveStatus } from '../../test/builders/makeFakeGit'
 
 jest.mock('simple-git')
 
@@ -15,16 +16,18 @@ describe('getChanges', () => {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   const git: jest.Mocked<SimpleGit> = {
-    status: jest.fn().mockResolvedValue({
-      files: [
-        { path: 'file1.txt', working_dir: 'M', index: 'M' },
-        { path: 'file2.js', working_dir: 'M', index: ' ' },
-        { path: 'file3.txt', working_dir: '?', index: '?' },
-        { path: 'dir/file4.txt', working_dir: ' ', index: 'M' },
-        { path: 'dir/file5.js', working_dir: ' ', index: 'M' },
-      ],
-      renamed: [{ from: 'oldFile.txt', to: 'file1.txt' }],
-    }),
+    status: jest.fn().mockResolvedValue(
+      // file1.txt is staged+renamed with a further worktree edit ('RM'),
+      // matching the staged-AND-unstaged classification the original
+      // hand-rolled fixture asserted for it.
+      deriveStatus([
+        { path: 'file1.txt', index: 'R', working_dir: 'M', from: 'oldFile.txt' },
+        { path: 'file2.js', index: ' ', working_dir: 'M' },
+        { path: 'file3.txt', index: '?', working_dir: '?' },
+        { path: 'dir/file4.txt', index: 'M', working_dir: ' ' },
+        { path: 'dir/file5.js', index: 'M', working_dir: ' ' },
+      ])
+    ),
   }
 
   afterEach(() => {
