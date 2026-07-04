@@ -75,6 +75,25 @@ Test scenarios (deterministic temp git repo states) come from the [`@gfargo/git-
 
 If you're contributing TUI changes, read `src/workstation/README.md` first.
 
+### Validating your changes
+
+Every PR must pass three checks with zero new problems. Run them all before pushing:
+
+```bash
+npm run lint                       # eslint src bin
+npx tsc --noEmit -p tsconfig.json  # typecheck (the build does not typecheck for you)
+npm run test:jest                  # full jest suite
+```
+
+A few environment gotchas that trip people up:
+
+- **Node ≥ 22 is required** (`.nvmrc` = 22.22.2). On older Node, jest fails immediately with `Preset ts-jest not found` — that means "wrong Node version," not a config problem.
+- **`npm run test:jest` runs its own pre-step** (`build:info` + a tree-sitter WASM copy) via `pretest:jest`. If you invoke `jest` directly instead, run that pre-step first or ~20 suites fail on a missing generated module: `npm run build:info && node bin/copyTreeSitterWasm.mjs`.
+- **To reproduce CI exactly** (some date and module-loading tests are environment-sensitive), match CI's settings: `TZ=UTC NODE_OPTIONS=--experimental-vm-modules npx jest`.
+- **`refreshWatcher.test.ts` is timing-sensitive** under heavy parallel load; if it's the only failure, re-run it alone to confirm before assuming it's real.
+
+Contributors and agents share these conventions: conventional branch prefixes (`feat/`, `fix/`, `chore/`, …); no `Co-Authored-By` / "Generated with …" trailers in commits or PR bodies; and when two overlapping PRs are both green, combination-test them (merge current `main` in locally and re-run the suite) before merging the second — each branch's own green CI predates the other's changes. `AGENTS.md` carries the same guidance for AI agents.
+
 ### Testing the workstation (`coco ui`)
 
 Coco ships with a scenario library that spins up deterministic temp git repos for manual + automated testing. List the available scenarios, then create one and run `coco ui` against it:
