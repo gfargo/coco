@@ -2,6 +2,7 @@ import commandExecutor, { extractMissingOllamaModel, isPromptCancellation } from
 import { loadConfig } from '../config/utils/loadConfig'
 import { Logger } from './logger'
 import { CommandHandler } from '../types'
+import { LangChainAuthenticationError, LangChainNetworkError } from '../langchain/errors'
 
 jest.mock('../config/utils/loadConfig')
 
@@ -9,14 +10,17 @@ const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
 
 describe('commandExecutor — global --quiet wiring', () => {
   let logSpy: jest.SpyInstance
+  let stderrSpy: jest.SpyInstance
 
   beforeEach(() => {
     mockLoadConfig.mockReturnValue({ verbose: false } as never)
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined)
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true)
   })
 
   afterEach(() => {
     logSpy.mockRestore()
+    stderrSpy.mockRestore()
     jest.clearAllMocks()
   })
 
@@ -26,6 +30,8 @@ describe('commandExecutor — global --quiet wiring', () => {
     }
     await commandExecutor(handler)({ quiet: true } as never)
     expect(logSpy).not.toHaveBeenCalled()
+    // No spurious stderr output for a successful run
+    expect(stderrSpy).not.toHaveBeenCalled()
   })
 
   it('leaves logger.log output intact without --quiet', async () => {
@@ -34,6 +40,50 @@ describe('commandExecutor — global --quiet wiring', () => {
     }
     await commandExecutor(handler)({ quiet: false } as never)
     expect(logSpy).toHaveBeenCalled()
+  })
+
+  it('emits auth error to stderr even when --quiet is set', async () => {
+    const handler: CommandHandler<never> = async () => {
+      throw new LangChainAuthenticationError('bad key', 'openai')
+    }
+    await commandExecutor(handler)({ quiet: true } as never)
+    expect(stderrSpy).toHaveBeenCalled()
+    // The auth error must not leak to stdout
+    expect(logSpy).not.toHaveBeenCalled()
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('emits network error to stderr even when --quiet is set', async () => {
+    const handler: CommandHandler<never> = async () => {
+      throw new LangChainNetworkError('connection refused', 'https://api.openai.com', 'openai')
+    }
+    await commandExecutor(handler)({ quiet: true } as never)
+    expect(stderrSpy).toHaveBeenCalled()
+    expect(logSpy).not.toHaveBeenCalled()
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('emits generic error to stderr even when --quiet is set', async () => {
+    const handler: CommandHandler<never> = async () => {
+      throw new Error('downstream failure')
+    }
+    await commandExecutor(handler)({ quiet: true } as never)
+    expect(stderrSpy).toHaveBeenCalled()
+    expect(logSpy).not.toHaveBeenCalled()
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('emits error to stderr when logger was silenced via quiet:true in handler (non-interactive mode)', async () => {
+    const handler: CommandHandler<never> = async (_argv, logger) => {
+      // This is what commit/handler.ts and recap/handler.ts do in non-interactive mode
+      logger.setConfig({ quiet: true })
+      throw new Error('downstream failure after silencing')
+    }
+    await commandExecutor(handler)({} as never)
+    expect(stderrSpy).toHaveBeenCalled()
+    // Must not appear on stdout
+    expect(logSpy).not.toHaveBeenCalled()
+    expect(process.exitCode).toBe(1)
   })
 })
 
