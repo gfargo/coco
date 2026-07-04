@@ -28,6 +28,7 @@ import {
   IDLE_TIPS_INTERVAL_MS,
   pickIdleTip,
 } from '../../chrome/idleTips'
+import { isSnapshotMode } from '../../chrome/snapshotMode'
 
 export type UseIdleTipDeps = {
   /** Whether idle tips are enabled (opt-in via `logTui.idleTips`). */
@@ -54,6 +55,9 @@ export function resolveIdleTip(
   statusMessage: string | undefined,
   provider: GitProviderType | undefined,
 ): string | undefined {
+  // Suppress tip rotation in snapshot mode to keep VHS captures
+  // and screenshot stills deterministic (snapshotMode.ts invariant).
+  if (isSnapshotMode()) return undefined
   return idleTipsEnabled && !statusMessage
     ? pickIdleTip(tickIndex, provider)
     : undefined
