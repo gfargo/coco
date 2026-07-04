@@ -525,7 +525,7 @@ IMPORTANT RULES:
   const MODE =
     (INTERACTIVE && 'interactive') || (config.commit && 'interactive') || config?.mode || 'stdout'
 
-  handleResult({
+  await handleResult({
     result: commitMsg as string,
     interactiveModeCallback: async (result) => {
       const noVerify = argv.noVerify || config.noVerify || false
