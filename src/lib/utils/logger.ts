@@ -50,6 +50,32 @@ export class Logger {
     return this
   }
 
+  /**
+   * Write a diagnostic/error message to stderr so it never contaminates
+   * piped stdout output (e.g. `coco commit > msg.txt`).
+   *
+   * Behaves like `log()` but writes to `process.stderr` instead of
+   * `console.log`. The `silent` guard still applies — `--quiet` suppresses
+   * diagnostics on both fds consistently.
+   *
+   * Pass an empty `options` object (`{}`) to skip chalk re-wrapping when
+   * the message is already ANSI-coloured by the caller.
+   */
+  public error(message: string, options: LoggerOptions = { color: 'red' }): Logger {
+    if (this.config?.silent) {
+      return this
+    }
+    let outputMessage = message
+
+    if (options.color) {
+      outputMessage = chalk[options.color](outputMessage)
+    }
+
+    process.stderr.write(outputMessage + '\n')
+
+    return this
+  }
+
   public verbose(message: string, options: LoggerOptions = {}): Logger {
     if (!this.config?.verbose || this.config?.silent) {
       return this

@@ -284,7 +284,7 @@ IMPORTANT RULES:
               logger.log('\nPlease run `coco init` to set up commitlint, then try again.', { color: 'blue' })
               commandExit(0)
             case 'abort':
-              logger.log('\nAborting commit operation.', { color: 'red' })
+              logger.error('\nAborting commit operation.', { color: 'red' })
               commandExit(1)
           }
         } else {
@@ -424,7 +424,7 @@ IMPORTANT RULES:
                 logger.log('\nPlease run `coco init` to set up commitlint, then try again.', { color: 'blue' })
                 commandExit(0)
               case 'abort':
-                logger.log('\nAborting commit due to missing dependencies.', { color: 'red' })
+                logger.error('\nAborting commit due to missing dependencies.', { color: 'red' })
                 commandExit(1)
             }
           }
@@ -481,7 +481,7 @@ IMPORTANT RULES:
                   fullMessage
                 )
               case 'abort':
-                logger.log('\nAborting commit due to validation errors.', { color: 'red' })
+                logger.error('\nAborting commit due to validation errors.', { color: 'red' })
                 commandExit(1)
             }
           }
@@ -547,7 +547,7 @@ IMPORTANT RULES:
         } catch (error) {
           if (error instanceof PreCommitHookError) {
             // Display friendly hook failure output
-            logger.log('\n✖ Commit blocked by pre-commit hook', { color: 'red' })
+            logger.error('\n✖ Commit blocked by pre-commit hook', { color: 'red' })
             logger.log('\nHook output:', { color: 'yellow' })
             logger.log(SEPERATOR)
             logger.log(error.hookOutput)
@@ -582,11 +582,11 @@ IMPORTANT RULES:
                 logger.log('⚠️  Skipping hooks with --no-verify...', { color: 'yellow' })
                 await attemptCommit(true)
               } else {
-                logger.log('\nCommit aborted.', { color: 'red' })
+                logger.error('\nCommit aborted.', { color: 'red' })
                 commandExit(1)
               }
             } else {
-              logger.log(
+              logger.error(
                 '\nFix the issues above and try again, or use --no-verify to skip hooks.',
                 { color: 'yellow' }
               )

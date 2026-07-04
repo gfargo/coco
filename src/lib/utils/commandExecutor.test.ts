@@ -9,14 +9,17 @@ const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
 
 describe('commandExecutor — global --quiet wiring', () => {
   let logSpy: jest.SpyInstance
+  let stderrSpy: jest.SpyInstance
 
   beforeEach(() => {
     mockLoadConfig.mockReturnValue({ verbose: false } as never)
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined)
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true)
   })
 
   afterEach(() => {
     logSpy.mockRestore()
+    stderrSpy.mockRestore()
     jest.clearAllMocks()
   })
 
@@ -34,6 +37,28 @@ describe('commandExecutor — global --quiet wiring', () => {
     }
     await commandExecutor(handler)({ quiet: false } as never)
     expect(logSpy).toHaveBeenCalled()
+  })
+
+  it('routes error messages to stderr, not stdout', async () => {
+    const handler: CommandHandler<never> = async () => {
+      throw new Error('boom')
+    }
+    await commandExecutor(handler)({ quiet: false } as never)
+    // The generic error formatter writes to stderr via logger.error
+    expect(stderrSpy).toHaveBeenCalled()
+    // Nothing about the error should leak to stdout
+    const stdoutCalls = (logSpy.mock.calls as string[][]).flat().join(' ')
+    expect(stdoutCalls).not.toMatch(/Failed to execute/)
+    expect(stdoutCalls).not.toMatch(/boom/)
+  })
+
+  it('silences logger.error output when --quiet is set', async () => {
+    const handler: CommandHandler<never> = async () => {
+      throw new Error('quiet error')
+    }
+    await commandExecutor(handler)({ quiet: true } as never)
+    // With --quiet (silent: true) error output is also suppressed
+    expect(stderrSpy).not.toHaveBeenCalled()
   })
 })
 

@@ -182,7 +182,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
         return [branchChanges]
       default:
-        logger.log(`Invalid timeframe: ${timeframe}`, { color: 'red' })
+        logger.error(`Invalid timeframe: ${timeframe}`, { color: 'red' })
         return []
     }
   }
@@ -272,7 +272,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         // Log the error but don't exit
-        logger.log(`Error parsing LLM response: ${errorMessage}`, { color: 'red' })
+        logger.error(`Error parsing LLM response: ${errorMessage}`, { color: 'red' })
 
         // Always return a fallback message instead of exiting
         const fallbackMessage = `

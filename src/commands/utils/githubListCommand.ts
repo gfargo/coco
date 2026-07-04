@@ -124,13 +124,13 @@ export function createGitHubListHandler<
       const overview = await spec.fetch(git, filter, provider)
 
       if (!overview.available) {
-        logger.log(chalk.red(overview.message || 'No supported remote (GitHub or GitLab) detected.'))
+        logger.error(overview.message || 'No supported remote (GitHub or GitLab) detected.', { color: 'red' })
         commandExit(1)
         return
       }
 
       if (!overview.authenticated) {
-        logger.log(chalk.yellow(overview.message || 'No authenticated forge CLI detected.'))
+        logger.log(overview.message || 'No authenticated forge CLI detected.', { color: 'yellow' })
         logger.log(
           chalk.dim(
             `Authenticate the matching CLI (GitHub \`gh\` or GitLab \`glab\`) to enable ${spec.triageLabel}.`
@@ -141,7 +141,7 @@ export function createGitHubListHandler<
       }
 
       if (overview.message) {
-        logger.log(chalk.red(overview.message))
+        logger.error(overview.message, { color: 'red' })
         commandExit(1)
         return
       }

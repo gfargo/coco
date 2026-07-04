@@ -49,6 +49,7 @@ describe('amend command', () => {
       log: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
+      error: jest.fn(),
     } as unknown as Logger
 
     git = {

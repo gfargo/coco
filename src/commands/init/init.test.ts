@@ -57,6 +57,7 @@ function createLogger(): Logger {
     log: jest.fn(),
     verbose: jest.fn(),
     setConfig: jest.fn(),
+    error: jest.fn(),
     startTimer: jest.fn().mockReturnThis(),
     stopTimer: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),
@@ -252,7 +253,7 @@ describe('init command', () => {
 
     await handler(createArgv({ scope: 'project' }), logger)
 
-    expect(logger.log).toHaveBeenCalledWith('Invalid JSON for service fields. Skipping.', {
+    expect(logger.error).toHaveBeenCalledWith('Invalid JSON for service fields. Skipping.', {
       color: 'red',
     })
     expect(mockLogResult).toHaveBeenCalled()

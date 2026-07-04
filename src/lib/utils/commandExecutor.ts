@@ -24,34 +24,34 @@ function formatNetworkError(error: LangChainNetworkError, logger: Logger): void 
   const endpoint = error.endpoint || 'unknown endpoint'
   const provider = error.provider || 'LLM service'
 
-  logger.log('\nFailed to execute command', { color: 'yellow' })
-  logger.log(`\nError: Unable to connect to ${provider}`, { color: 'red' })
+  logger.error('\nFailed to execute command', { color: 'yellow' })
+  logger.error(`\nError: Unable to connect to ${provider}`, { color: 'red' })
 
   if (error.endpoint) {
-    logger.log(`       Endpoint: ${endpoint}`, { color: 'red' })
+    logger.error(`       Endpoint: ${endpoint}`, { color: 'red' })
   }
 
-  logger.log('\nTroubleshooting:', { color: 'cyan' })
+  logger.error('\nTroubleshooting:', { color: 'cyan' })
 
   // Provider-specific troubleshooting
   if (provider === 'ollama' || endpoint.includes('11434')) {
-    logger.log('  • Is Ollama running? Try: ollama serve', { color: 'white' })
-    logger.log('  • Check if the endpoint is correct in your config', { color: 'white' })
-    logger.log(`  • Verify Ollama is accessible: curl ${endpoint}/api/version`, { color: 'white' })
+    logger.error('  • Is Ollama running? Try: ollama serve', { color: 'white' })
+    logger.error('  • Check if the endpoint is correct in your config', { color: 'white' })
+    logger.error(`  • Verify Ollama is accessible: curl ${endpoint}/api/version`, { color: 'white' })
   } else if (provider === 'openai' || endpoint.includes('openai')) {
-    logger.log('  • Check your internet connection', { color: 'white' })
-    logger.log('  • Verify the API endpoint is accessible', { color: 'white' })
-    logger.log('  • If using a custom baseURL, verify it is correct', { color: 'white' })
+    logger.error('  • Check your internet connection', { color: 'white' })
+    logger.error('  • Verify the API endpoint is accessible', { color: 'white' })
+    logger.error('  • If using a custom baseURL, verify it is correct', { color: 'white' })
   } else if (provider === 'anthropic') {
-    logger.log('  • Check your internet connection', { color: 'white' })
-    logger.log('  • Verify the Anthropic API is accessible', { color: 'white' })
+    logger.error('  • Check your internet connection', { color: 'white' })
+    logger.error('  • Verify the Anthropic API is accessible', { color: 'white' })
   } else {
-    logger.log('  • Check your internet connection', { color: 'white' })
-    logger.log('  • Verify the service endpoint is correct', { color: 'white' })
-    logger.log('  • Ensure the LLM service is running and accessible', { color: 'white' })
+    logger.error('  • Check your internet connection', { color: 'white' })
+    logger.error('  • Verify the service endpoint is correct', { color: 'white' })
+    logger.error('  • Ensure the LLM service is running and accessible', { color: 'white' })
   }
 
-  logger.log('  • Run `coco doctor` to verify your configured provider + endpoint', { color: 'white' })
+  logger.error('  • Run `coco doctor` to verify your configured provider + endpoint', { color: 'white' })
 
   logger.verbose(`\nOriginal error: ${error.message}`, { color: 'gray' })
 }
@@ -71,31 +71,31 @@ function formatAuthenticationError(error: LangChainAuthenticationError, logger: 
   const provider = error.provider || 'LLM service'
   const endpoint = error.endpoint
 
-  logger.log('\nFailed to execute command', { color: 'yellow' })
-  logger.log(`\nError: Authentication failed${error.provider ? ` for ${provider}` : ''}`, { color: 'red' })
+  logger.error('\nFailed to execute command', { color: 'yellow' })
+  logger.error(`\nError: Authentication failed${error.provider ? ` for ${provider}` : ''}`, { color: 'red' })
 
   if (endpoint) {
-    logger.log(`       Endpoint: ${endpoint}`, { color: 'red' })
+    logger.error(`       Endpoint: ${endpoint}`, { color: 'red' })
   }
 
-  logger.log('\nTroubleshooting:', { color: 'cyan' })
-  logger.log('  • Verify your API key is correct and has not expired', { color: 'white' })
+  logger.error('\nTroubleshooting:', { color: 'cyan' })
+  logger.error('  • Verify your API key is correct and has not expired', { color: 'white' })
 
   // Provider-specific env var hint when we know the provider.
   if (provider === 'openai' || provider === 'OpenAI') {
-    logger.log('  • Set `OPENAI_API_KEY` in your shell or `service.authentication.credentials.apiKey` in config', { color: 'white' })
+    logger.error('  • Set `OPENAI_API_KEY` in your shell or `service.authentication.credentials.apiKey` in config', { color: 'white' })
   } else if (provider === 'anthropic' || provider === 'Anthropic') {
-    logger.log('  • Set `ANTHROPIC_API_KEY` in your shell or `service.authentication.credentials.apiKey` in config', { color: 'white' })
+    logger.error('  • Set `ANTHROPIC_API_KEY` in your shell or `service.authentication.credentials.apiKey` in config', { color: 'white' })
   } else if (provider === 'ollama' || provider === 'Ollama') {
-    logger.log('  • Ollama usually does not need a key — check `service.endpoint` and that `ollama serve` is running', { color: 'white' })
+    logger.error('  • Ollama usually does not need a key — check `service.endpoint` and that `ollama serve` is running', { color: 'white' })
   } else if (provider === 'openai-compatible') {
-    logger.log('  • OpenAI-compatible endpoints need both `service.endpoint` and a valid API key', { color: 'white' })
+    logger.error('  • OpenAI-compatible endpoints need both `service.endpoint` and a valid API key', { color: 'white' })
   } else {
-    logger.log('  • Ensure the API key is set in your environment or config', { color: 'white' })
+    logger.error('  • Ensure the API key is set in your environment or config', { color: 'white' })
   }
 
-  logger.log('  • Run `coco init` to (re)configure your provider + key', { color: 'white' })
-  logger.log('  • Run `coco doctor` to inspect the active config sources', { color: 'white' })
+  logger.error('  • Run `coco init` to (re)configure your provider + key', { color: 'white' })
+  logger.error('  • Run `coco doctor` to inspect the active config sources', { color: 'white' })
 
   logger.verbose(`\nOriginal error: ${error.message}`, { color: 'gray' })
 }
@@ -111,8 +111,8 @@ function formatAuthenticationError(error: LangChainAuthenticationError, logger: 
  * in with `--verbose` for the trace.
  */
 function formatGenericError(error: Error, logger: Logger): void {
-  logger.log('\nFailed to execute command', { color: 'yellow' })
-  logger.log(`\nError: ${error.message}`, { color: 'red' })
+  logger.error('\nFailed to execute command', { color: 'yellow' })
+  logger.error(`\nError: ${error.message}`, { color: 'red' })
   if (error.stack) {
     logger.verbose(`\n${error.stack}`, { color: 'gray' })
   }
@@ -155,11 +155,11 @@ export function extractMissingOllamaModel(error: unknown): string | null {
  * letting the raw "model not found" bubble through the generic formatter.
  */
 function formatModelNotFoundError(model: string, logger: Logger): void {
-  logger.log(`\nError: Ollama model "${model}" isn't available locally`, { color: 'red' })
-  logger.log('\nLikely fixes:', { color: 'yellow' })
-  logger.log(`  • Pull it: ollama pull ${model}`, { color: 'white' })
-  logger.log('  • See what you have: ollama list', { color: 'white' })
-  logger.log('  • Run `coco doctor` to check your provider + model', { color: 'white' })
+  logger.error(`\nError: Ollama model "${model}" isn't available locally`, { color: 'red' })
+  logger.error('\nLikely fixes:', { color: 'yellow' })
+  logger.error(`  • Pull it: ollama pull ${model}`, { color: 'white' })
+  logger.error('  • See what you have: ollama list', { color: 'white' })
+  logger.error('  • Run `coco doctor` to check your provider + model', { color: 'white' })
 }
 
 /**
@@ -221,7 +221,7 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
       // run) is a normal action, not a crash — exit cleanly with a gentle
       // note instead of the generic "Failed to execute command" path.
       if (isPromptCancellation(error)) {
-        logger.log('\nCancelled.', { color: 'yellow' })
+        logger.error('\nCancelled.', { color: 'yellow' })
         process.exitCode = 130 // 128 + SIGINT, the conventional "interrupted" code
         return
       }
@@ -238,7 +238,7 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
         formatGenericError(error as Error, logger)
       }
 
-      logger.log('\nThanks for using coco, make it a great day! 👋🤖', { color: 'blue' })
+      logger.error('\nThanks for using coco, make it a great day! 👋🤖', { color: 'blue' })
       process.exitCode = 1
     }
   }

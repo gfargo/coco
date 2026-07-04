@@ -30,19 +30,19 @@ export async function handleValidationErrors(
   }
 
   // Display validation errors and warnings
-  logger.log('\nCommit message validation failed:', { color: 'yellow' })
+  logger.error('\nCommit message validation failed:', { color: 'yellow' })
 
   if (validationResult.errors.length > 0) {
-    logger.log('\nErrors:', { color: 'red' })
+    logger.error('\nErrors:', { color: 'red' })
     validationResult.errors.forEach((error) => {
-      logger.log(`  • ${error}`, { color: 'red' })
+      logger.error(`  • ${error}`, { color: 'red' })
     })
   }
 
   if (validationResult.warnings.length > 0) {
-    logger.log('\nWarnings:', { color: 'yellow' })
+    logger.error('\nWarnings:', { color: 'yellow' })
     validationResult.warnings.forEach((warning) => {
-      logger.log(`  • ${warning}`, { color: 'yellow' })
+      logger.error(`  • ${warning}`, { color: 'yellow' })
     })
   }
 
@@ -89,9 +89,9 @@ export async function handleValidationErrors(
         
         if (!editedValidationResult.valid) {
           // Show validation errors for the edited message
-          options.logger.log('\nEdited commit message also has validation issues:', { color: 'yellow' })
+          options.logger.error('\nEdited commit message also has validation issues:', { color: 'yellow' })
           editedValidationResult.errors.forEach((error) => {
-            options.logger.log(`  • ${error}`, { color: 'red' })
+            options.logger.error(`  • ${error}`, { color: 'red' })
           })
           
           // Recursively handle validation errors for the edited message
