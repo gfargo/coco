@@ -803,15 +803,7 @@
   dependencies:
     escalade "^3.2.0"
 
-"@commitlint/types@^21.0.1":
-  version "21.1.0"
-  resolved "https://registry.yarnpkg.com/@commitlint/types/-/types-21.1.0.tgz#174651d9d728f79603b4248a7c54a285761a21fe"
-  integrity sha512-YodnnnH1Cp+08nP8HGNJAIuB6L3/vdCTHVRTfF8Ik/wRCLOTsU9zwv3yO1cSPQRDa9CLYtE+UJ2K67r7CwMSFw==
-  dependencies:
-    conventional-commits-parser "^6.3.0"
-    picocolors "^1.1.1"
-
-"@commitlint/types@^21.1.0":
+"@commitlint/types@^21.0.1", "@commitlint/types@^21.1.0":
   version "21.1.0"
   resolved "https://registry.yarnpkg.com/@commitlint/types/-/types-21.1.0.tgz#174651d9d728f79603b4248a7c54a285761a21fe"
   integrity sha512-YodnnnH1Cp+08nP8HGNJAIuB6L3/vdCTHVRTfF8Ik/wRCLOTsU9zwv3yO1cSPQRDa9CLYtE+UJ2K67r7CwMSFw==
@@ -1025,9 +1017,9 @@
   integrity sha512-d9zaMRSTIKDLhctzH12MtXvJKSSUhaHcjV+2Z+GK+EEY7XKpP5yR4x+N3TAcHTcu963nIr+TMcCb4DBCYX1z6Q==
 
 "@gfargo/git-scenarios@^1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@gfargo/git-scenarios/-/git-scenarios-1.0.0.tgz#ab958a8d5b29ebf9fb4b58eb6e892e225da840c5"
-  integrity sha512-52pfJKJDpXJAu1SkhyzDYWYIzwJCg4pJGD8iZaZDfqXIbLsGxwfSxjs+KiRzh8WT9g+EicCrBIh3BxVOdRi5GA==
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@gfargo/git-scenarios/-/git-scenarios-1.1.0.tgz#702244e26f16f7f8a40f09717edb8e760f7fae46"
+  integrity sha512-150gKhtydHF47urhpNUdRFplu+UypkzpqS9bjgieaRjLbewAo+pUFRtHhAdXWGtcGNk1QYKS3oN86XNYLN/fkQ==
 
 "@google/generative-ai@^0.24.1":
   version "0.24.1"
