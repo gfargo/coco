@@ -37,7 +37,7 @@ export const handler: CommandHandler<LogArgv> = async (argv) => {
   // instance are both bound to the targeted repo.
   const git = applyRepoFlag(argv)
   const config = loadConfig<Config, LogArgv>(argv)
-  const format = argv.format === 'json' ? 'json' : 'table'
+  const format = argv.format === 'json' || argv.json ? 'json' : 'table'
 
   if (argv.commit) {
     const detail = await getCommitDetail(git, argv.commit)

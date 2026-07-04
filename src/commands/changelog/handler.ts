@@ -113,6 +113,14 @@ export async function generateChangelogResult(
     handleMissingApiKey(logger, config, { command: 'changelog' })
   }
 
+  // Mirrors the pattern in recap/handler.ts: never let git/LLM status
+  // chrome leak onto stdout in non-interactive mode, since that's the
+  // same stream `--json` output (or a redirected `> CHANGELOG.md`) uses.
+  const INTERACTIVE = argv.json ? false : isInteractive(config)
+  if (!INTERACTIVE) {
+    logger.setConfig({ silent: true })
+  }
+
   const llm = getLlm(provider, model as LLMModel, { ...config, service: changelogService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
   const tokenizer = await getTokenCounter(
@@ -260,7 +268,7 @@ export async function generateChangelogResult(
       ...config,
       prompt: config.prompt || (CHANGELOG_PROMPT.template as string),
       logger,
-      interactive: argv.json ? false : isInteractive(config),
+      interactive: INTERACTIVE,
       review: {
         enableFullRetry: false,
       },
@@ -337,6 +345,7 @@ export async function generateChangelogResult(
     noResult: async () => {
       if (config.range) {
         logger.log(`No commits found in the provided range.`, { color: 'yellow' })
+        if (argv.json) emitJson(null)
         commandExit(0)
       }
 
@@ -346,6 +355,7 @@ export async function generateChangelogResult(
       // branch at baseline). This is the trailing summary, not an
       // error.
       logger.log(`No commits found in the current branch.`, { color: 'yellow' })
+      if (argv.json) emitJson(null)
       commandExit(0)
     },
   })

@@ -831,6 +831,50 @@ describe('command integration with temp git repos', () => {
     expect(mockExecuteChain).not.toHaveBeenCalled()
   })
 
+  it('changelog --json on detached HEAD emits only JSON, no status chrome, on real stdout', async () => {
+    mockLoadConfig.mockImplementation((argv) => createConfig({
+      ...(argv as Record<string, unknown>),
+      mode: 'stdout',
+    }))
+
+    await detachedHeadScenario.setup(repo)
+
+    // A real (non-stubbed) Logger is required here: the hand-rolled
+    // createLogger() test double's `.log` is a jest.fn() that always
+    // "fires" regardless of `setConfig({ silent: true })`, so it can't
+    // catch a silencing regression — only a real Logger writing to the
+    // real (spied) stdout can.
+    const logger = new Logger({})
+    try {
+      await changelogHandler({
+        $0: 'coco',
+        _: ['changelog'],
+        branch: '',
+        range: '',
+        tag: '',
+        sinceLastTag: false,
+        withDiff: false,
+        onlyDiff: false,
+        interactive: false,
+        json: true,
+        verbose: false,
+        version: false,
+        help: false,
+      } as Arguments<ChangelogOptions>, logger)
+    } catch (error) {
+      // commandExit(0) throws CommandExitError — that's the success
+      // signal here. Rethrow anything else.
+      if (!isCommandExitError(error)) {
+        throw error
+      }
+      expect((error as { code: number }).code).toBe(0)
+    }
+
+    expect(stdout.trim()).toBe('null')
+    expect(stdout).not.toMatch(/HEAD is detached/i)
+    expect(mockExecuteChain).not.toHaveBeenCalled()
+  })
+
   it('reviews real working tree changes from a temp git repo', async () => {
     mockLoadConfig.mockReturnValue(createConfig({
       mode: 'stdout',
@@ -1012,6 +1056,59 @@ describe('command integration with temp git repos', () => {
     }))
   })
 
+  it('honors the global --json flag on its own (no --format)', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await twoCommitFeatureScenario.setup(repo)
+
+    await logHandler({
+      $0: 'coco',
+      _: ['log'],
+      json: true,
+      limit: 2,
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<LogOptions>, createLogger())
+
+    const entries = JSON.parse(stdout)
+
+    expect(entries).toHaveLength(2)
+    expect(entries[0]).toEqual(expect.objectContaining({
+      message: 'feat: add feature module',
+      shortHash: expect.any(String),
+      hash: expect.any(String),
+      refs: expect.any(Array),
+    }))
+  })
+
+  it('skips the interactive TUI when --json is combined with -i', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await twoCommitFeatureScenario.setup(repo)
+
+    await logHandler({
+      $0: 'coco',
+      _: ['log'],
+      json: true,
+      interactive: true,
+      limit: 2,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<LogOptions>, createLogger())
+
+    const entries = JSON.parse(stdout)
+
+    expect(entries).toHaveLength(2)
+    expect(stdout).not.toContain('Changed files:')
+  })
+
   it('shows changed files for a selected commit', async () => {
     mockLoadConfig.mockReturnValue(createConfig({
       mode: 'stdout',
@@ -1036,5 +1133,36 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('feat: add feature module')
     expect(stdout).toContain('Changed files:')
     expect(stdout).toContain('A  src/feature.ts')
+  })
+
+  it('honors the global --json flag on the --commit detail path', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await twoCommitFeatureScenario.setup(repo)
+
+    const commit = (await repo.git.revparse(['HEAD'])).trim()
+
+    await logHandler({
+      $0: 'coco',
+      _: ['log'],
+      commit,
+      json: true,
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<LogOptions>, createLogger())
+
+    const detail = JSON.parse(stdout)
+
+    expect(detail).toEqual(expect.objectContaining({
+      hash: commit,
+      message: 'feat: add feature module',
+      files: expect.arrayContaining([
+        expect.objectContaining({ status: 'A', path: 'src/feature.ts' }),
+      ]),
+    }))
   })
 })
