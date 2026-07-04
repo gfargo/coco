@@ -1,7 +1,7 @@
 import { LangChainValidationError, LangChainConfigurationError } from './errors'
 import { LLMProvider, LLMModel, LLMService } from './types'
 import { LLM_PROVIDER_IDS } from './providers/registry'
-import { detectProviderMismatch } from './modelValidity'
+import { detectProviderMismatch, getDeprecatedReplacement } from './modelValidity'
 
 /**
  * Validates that a required parameter is not null or undefined
@@ -100,6 +100,18 @@ export function validateModel(
       `${functionName ? `${functionName}: ` : ''}Model '${model}' is a ${mismatchOwner} model, not a ${provider} model. ` +
         `Set service.model to a ${provider} model, or change service.provider to '${mismatchOwner}'.`,
       { model, provider, owner: mismatchOwner, functionName }
+    )
+  }
+
+  // Retired/superseded ids (see `DEPRECATED_MODELS`) 404 against the provider's
+  // API — catch them here, before the network call, instead of letting the
+  // request fail mid-generation with a cryptic provider error.
+  const replacement = getDeprecatedReplacement(model)
+  if (replacement) {
+    throw new LangChainValidationError(
+      `${functionName ? `${functionName}: ` : ''}Model '${model}' has been retired and is no longer available. ` +
+        `Update service.model to '${replacement}', or run 'coco doctor' to apply the fix automatically.`,
+      { model, provider, replacement, functionName }
     )
   }
 }

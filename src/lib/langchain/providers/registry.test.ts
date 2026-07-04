@@ -48,7 +48,7 @@ describe('provider registry', () => {
 
 describe('getLlm via registry', () => {
   it('builds an OpenAI model and records provider metadata', () => {
-    const llm = getLlm('openai', 'gpt-4o' as LLMModel, makeConfig({ provider: 'openai', model: 'gpt-4o' }))
+    const llm = getLlm('openai', 'gpt-5.4-mini' as LLMModel, makeConfig({ provider: 'openai', model: 'gpt-5.4-mini' }))
     expect(llm).toBeInstanceOf(ChatOpenAI)
     expect(getLlmMetadata(llm).provider).toBe('openai')
   })
@@ -56,8 +56,8 @@ describe('getLlm via registry', () => {
   it('builds an Anthropic model and records provider metadata', () => {
     const llm = getLlm(
       'anthropic',
-      'claude-3-5-sonnet-latest' as LLMModel,
-      makeConfig({ provider: 'anthropic', model: 'claude-3-5-sonnet-latest' })
+      'claude-sonnet-4-6' as LLMModel,
+      makeConfig({ provider: 'anthropic', model: 'claude-sonnet-4-6' })
     )
     expect(llm).toBeInstanceOf(ChatAnthropic)
     expect(getLlmMetadata(llm).provider).toBe('anthropic')
@@ -86,10 +86,10 @@ describe('getLlm via registry', () => {
   it('builds an Azure OpenAI model and records provider metadata', () => {
     const llm = getLlm(
       'azure',
-      'gpt-4o' as LLMModel,
+      'gpt-5.4-mini' as LLMModel,
       makeConfig({
         provider: 'azure',
-        model: 'gpt-4o',
+        model: 'gpt-5.4-mini',
         instanceName: 'my-instance',
         deploymentName: 'gpt-4o',
         apiVersion: '2024-10-21',
@@ -108,10 +108,10 @@ describe('getLlm via registry', () => {
 
     const llm = getLlm(
       'bedrock',
-      'anthropic.claude-3-5-sonnet-20241022-v2:0' as LLMModel,
+      'anthropic.claude-sonnet-4-6' as LLMModel,
       makeConfig({
         provider: 'bedrock',
-        model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        model: 'anthropic.claude-sonnet-4-6',
         region: 'us-east-1',
         authentication: { type: 'None' },
       })

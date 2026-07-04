@@ -21,12 +21,12 @@ type ProviderCase = {
 }
 
 const CASES: ProviderCase[] = [
-  { provider: 'openai', model: 'gpt-4o' },
+  { provider: 'openai', model: 'gpt-5.4-mini' },
   { provider: 'gemini', model: 'gemini-2.5-flash' },
   { provider: 'mistral', model: 'mistral-small-latest' },
   {
     provider: 'azure',
-    model: 'gpt-4o',
+    model: 'gpt-5.4-mini',
     extraService: { instanceName: 'inst', deploymentName: 'gpt-4o', apiVersion: '2024-10-21' },
   },
 ]
@@ -78,7 +78,7 @@ describe('bedrock config forwarding', () => {
     return {
       service: {
         provider: 'bedrock',
-        model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        model: 'anthropic.claude-sonnet-4-6',
         authentication: { type: 'None' },
         maxConcurrent: 1,
         region: 'us-east-1',
@@ -90,7 +90,7 @@ describe('bedrock config forwarding', () => {
   it('forwards region and defaults temperature to 0.2', () => {
     const llm = getLlm(
       'bedrock',
-      'anthropic.claude-3-5-sonnet-20241022-v2:0' as LLMModel,
+      'anthropic.claude-sonnet-4-6' as LLMModel,
       bedrockConfig()
     )
     expect((llm as { region?: string }).region).toBe('us-east-1')
@@ -100,7 +100,7 @@ describe('bedrock config forwarding', () => {
   it('omits credentials when none are configured (defers to the AWS chain)', () => {
     const llm = getLlm(
       'bedrock',
-      'anthropic.claude-3-5-sonnet-20241022-v2:0' as LLMModel,
+      'anthropic.claude-sonnet-4-6' as LLMModel,
       bedrockConfig()
     )
     expect((llm as { credentials?: unknown }).credentials).toBeUndefined()
@@ -109,7 +109,7 @@ describe('bedrock config forwarding', () => {
   it('passes explicit credentials only when both id and secret are present', () => {
     const llm = getLlm(
       'bedrock',
-      'anthropic.claude-3-5-sonnet-20241022-v2:0' as LLMModel,
+      'anthropic.claude-sonnet-4-6' as LLMModel,
       bedrockConfig({ accessKeyId: 'AKIA', secretAccessKey: 'secret', sessionToken: 'tok' })
     )
     expect((llm as { credentials?: { accessKeyId?: string } }).credentials).toEqual({
@@ -122,7 +122,7 @@ describe('bedrock config forwarding', () => {
   it('ignores a lone accessKeyId without a secret', () => {
     const llm = getLlm(
       'bedrock',
-      'anthropic.claude-3-5-sonnet-20241022-v2:0' as LLMModel,
+      'anthropic.claude-sonnet-4-6' as LLMModel,
       bedrockConfig({ accessKeyId: 'AKIA' })
     )
     expect((llm as { credentials?: unknown }).credentials).toBeUndefined()
