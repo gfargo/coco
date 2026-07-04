@@ -803,15 +803,7 @@
   dependencies:
     escalade "^3.2.0"
 
-"@commitlint/types@^21.0.1":
-  version "21.1.0"
-  resolved "https://registry.yarnpkg.com/@commitlint/types/-/types-21.1.0.tgz#174651d9d728f79603b4248a7c54a285761a21fe"
-  integrity sha512-YodnnnH1Cp+08nP8HGNJAIuB6L3/vdCTHVRTfF8Ik/wRCLOTsU9zwv3yO1cSPQRDa9CLYtE+UJ2K67r7CwMSFw==
-  dependencies:
-    conventional-commits-parser "^6.3.0"
-    picocolors "^1.1.1"
-
-"@commitlint/types@^21.1.0":
+"@commitlint/types@^21.0.1", "@commitlint/types@^21.1.0":
   version "21.1.0"
   resolved "https://registry.yarnpkg.com/@commitlint/types/-/types-21.1.0.tgz#174651d9d728f79603b4248a7c54a285761a21fe"
   integrity sha512-YodnnnH1Cp+08nP8HGNJAIuB6L3/vdCTHVRTfF8Ik/wRCLOTsU9zwv3yO1cSPQRDa9CLYtE+UJ2K67r7CwMSFw==
@@ -1518,9 +1510,9 @@
     zod "^3.25.76 || ^4"
 
 "@langchain/aws@^1.3.9":
-  version "1.4.1"
-  resolved "https://registry.yarnpkg.com/@langchain/aws/-/aws-1.4.1.tgz#486ac6f659542de26be21920fa4bd4a5284c1647"
-  integrity sha512-WUr//A4xbMgtnE1TP40/Rm2pXPS05hc/jLqCplEkhWGeOOD47gzwt2leItRMrFQ9E81tcKGP4PgSL3YZHoet8w==
+  version "1.4.2"
+  resolved "https://registry.yarnpkg.com/@langchain/aws/-/aws-1.4.2.tgz#99e737612decf3cc604a23e0a8d0a4ea1aed5383"
+  integrity sha512-QpgB7ogkPxHICXezWQx5GkwulCK5HvbsCEkWLMK3VRHaibHC9UMxJCI/78XDXSsGU6EDMmRXjbNR+2q0kxx++Q==
   dependencies:
     "@aws-sdk/client-bedrock-agent-runtime" "^3.1059.0"
     "@aws-sdk/client-bedrock-runtime" "^3.1059.0"
