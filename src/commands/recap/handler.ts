@@ -303,8 +303,9 @@ ${errorMessage}
     if (agentError) {
       emitJson({ error: agentError.message })
       commandExit(1)
+    } else {
+      emitJson(structured ?? null)
     }
-    emitJson(structured ?? null)
     return
   }
 

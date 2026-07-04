@@ -1133,4 +1133,35 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('Changed files:')
     expect(stdout).toContain('A  src/feature.ts')
   })
+
+  it('honors the global --json flag on the --commit detail path', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+
+    await twoCommitFeatureScenario.setup(repo)
+
+    const commit = (await repo.git.revparse(['HEAD'])).trim()
+
+    await logHandler({
+      $0: 'coco',
+      _: ['log'],
+      commit,
+      json: true,
+      interactive: false,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<LogOptions>, createLogger())
+
+    const detail = JSON.parse(stdout)
+
+    expect(detail).toEqual(expect.objectContaining({
+      hash: commit,
+      message: 'feat: add feature module',
+      files: expect.arrayContaining([
+        expect.objectContaining({ status: 'A', path: 'src/feature.ts' }),
+      ]),
+    }))
+  })
 })
