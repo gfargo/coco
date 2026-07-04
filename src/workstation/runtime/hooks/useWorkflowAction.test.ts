@@ -3,8 +3,9 @@ import type { GitLogRow } from '../../../commands/log/data'
 import { createLogInkState } from '../inkViewModel'
 import { checkoutReflogEntry } from '../../../git/reflogActions'
 import { checkoutBranch, checkoutBranchByName, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
-import { cherryPickCommit } from '../../../git/historyActions'
+import { cherryPickCommit, autosquashRebase } from '../../../git/historyActions'
 import { createStash } from '../../../git/stashActions'
+import { continueOperation } from '../../../git/operationActions'
 import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowAction'
 
 /**
@@ -38,6 +39,7 @@ jest.mock('../../../git/historyActions', () => {
   return {
     ...actual,
     cherryPickCommit: jest.fn(),
+    autosquashRebase: jest.fn(),
   }
 })
 
@@ -46,6 +48,14 @@ jest.mock('../../../git/stashActions', () => {
   return {
     ...actual,
     createStash: jest.fn(),
+  }
+})
+
+jest.mock('../../../git/operationActions', () => {
+  const actual = jest.requireActual('../../../git/operationActions')
+  return {
+    ...actual,
+    continueOperation: jest.fn(),
   }
 })
 
@@ -333,6 +343,8 @@ const checkoutBranchByNameMock = checkoutBranchByName as jest.MockedFunction<typ
 const cherryPickCommitMock = cherryPickCommit as jest.MockedFunction<typeof cherryPickCommit>
 const createStashMock = createStash as jest.MockedFunction<typeof createStash>
 const pullCurrentBranchRebaseMock = pullCurrentBranchRebase as jest.MockedFunction<typeof pullCurrentBranchRebase>
+const autosquashRebaseMock = autosquashRebase as jest.MockedFunction<typeof autosquashRebase>
+const continueOperationMock = continueOperation as jest.MockedFunction<typeof continueOperation>
 
 // A NON-current local branch so the checkout-branch handler actually
 // calls git instead of short-circuiting on "Already on <branch>".
@@ -547,6 +559,217 @@ describe('operation conflict recovery (#1360)', () => {
       value: expect.objectContaining({
         id: 'operation-conflict-recovery',
         title: 'Pull stopped on conflicts',
+      }),
+    }))
+  })
+})
+
+const pullRequestItem = (number: number) =>
+  ({
+    number,
+    title: `PR #${number}`,
+    author: 'octocat',
+    headRefName: `feature/pr-${number}`,
+    baseRefName: 'main',
+    labels: [],
+    assignees: [],
+  }) as never
+
+describe('dirty-checkout recovery — sibling paths (#1430)', () => {
+  beforeEach(() => {
+    checkoutBranchByNameMock.mockReset()
+    createStashMock.mockReset()
+  })
+
+  it('checkout-created-branch on a dirty tree offers stash & switch keyed to the payload branch name', async () => {
+    checkoutBranchByNameMock.mockResolvedValue({
+      ok: false,
+      message: 'error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/app.ts\nPlease commit your changes or stash them before you switch branches.\nAborting',
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    // No branch/PR context at all — `resolvePendingItemAction` has no case
+    // for `checkout-created-branch`, so `pendingItemAction` is `undefined`
+    // here. The branch name must come from `payload`, not that lookup.
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('checkout-created-branch', 'feature/new-thing')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'dirty-checkout-recovery',
+        title: "Uncommitted changes block switching to 'feature/new-thing'",
+        options: [
+          expect.objectContaining({
+            key: 's',
+            workflowId: 'stash-and-checkout-branch',
+            payload: 'feature/new-thing',
+          }),
+        ],
+      }),
+    }))
+  })
+
+  it('triage-pr-checkout on a dirty tree offers stash & switch keyed to the PR number from payload', async () => {
+    const forge = { checkoutPullRequestByNumber: jest.fn().mockResolvedValue({
+      ok: false,
+      message: 'error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/app.ts\nPlease commit your changes or stash them before you switch branches.\nAborting',
+    }) } as never
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch, forge }))
+
+    // The PR-diff `C` path carries the viewed PR's number as payload.
+    await runWorkflowAction('triage-pr-checkout', '962')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'dirty-checkout-recovery',
+        title: 'Uncommitted changes block checking out PR #962',
+        options: [
+          expect.objectContaining({
+            key: 's',
+            workflowId: 'stash-and-checkout-pr',
+            payload: '962',
+          }),
+        ],
+      }),
+    }))
+  })
+
+  it('triage-pr-checkout on a dirty tree keys off the cursored row when no payload is given', async () => {
+    const forge = { checkoutPullRequestByNumber: jest.fn().mockResolvedValue({
+      ok: false,
+      message: 'error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/app.ts\nPlease commit your changes or stash them before you switch branches.\nAborting',
+    }) } as never
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      forge,
+      context: { pullRequestList: { pullRequests: [pullRequestItem(7)] } } as never,
+      filteredPullRequestTriageList: [pullRequestItem(7)],
+    }))
+
+    await runWorkflowAction('triage-pr-checkout')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'dirty-checkout-recovery',
+        title: 'Uncommitted changes block checking out PR #7',
+        options: [
+          expect.objectContaining({
+            key: 's',
+            workflowId: 'stash-and-checkout-pr',
+            payload: '7',
+          }),
+        ],
+      }),
+    }))
+  })
+
+  it('stash-and-checkout-pr stashes first, then checks out the PR, and hints at gz', async () => {
+    createStashMock.mockResolvedValue({ ok: true, message: 'Created stash: WIP before checking out PR #962' })
+    const checkoutPullRequestByNumber = jest.fn().mockResolvedValue({ ok: true, message: 'Checked out PR #962' })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      forge: { checkoutPullRequestByNumber } as never,
+    }))
+
+    await runWorkflowAction('stash-and-checkout-pr', '962')
+    expect(createStashMock).toHaveBeenCalledWith(expect.anything(), 'WIP before checking out PR #962')
+    expect(checkoutPullRequestByNumber).toHaveBeenCalledWith(962)
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: expect.stringContaining('(gz)'),
+      kind: 'success',
+    }))
+    // HEAD moved — the branch cursor snaps home like every checkout path.
+    expect(dispatch).toHaveBeenCalledWith({ type: 'resetBranchSelection' })
+  })
+
+  it('stash-and-checkout-pr aborts before checking out if the stash fails', async () => {
+    createStashMock.mockResolvedValue({ ok: false, message: 'fatal: unable to write new index file' })
+    const checkoutPullRequestByNumber = jest.fn()
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      forge: { checkoutPullRequestByNumber } as never,
+    }))
+
+    await runWorkflowAction('stash-and-checkout-pr', '962')
+    expect(checkoutPullRequestByNumber).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      kind: 'error',
+    }))
+  })
+})
+
+describe('operation conflict recovery — sibling paths (#1430)', () => {
+  beforeEach(() => {
+    autosquashRebaseMock.mockReset()
+    continueOperationMock.mockReset()
+  })
+
+  it('autosquash-rebase stopping on conflicts raises the conflicts/abort choice', async () => {
+    autosquashRebaseMock.mockResolvedValue({
+      ok: false,
+      message: 'error: could not apply abc1234... fixup! feat: add thing',
+      details: ['CONFLICT (content): Merge conflict in src/app.ts'],
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: createLogInkState([commitRow]),
+    }))
+
+    await runWorkflowAction('autosquash-rebase')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'operation-conflict-recovery',
+        title: 'Rebase stopped on conflicts',
+        keepStatusOnDismiss: true,
+      }),
+    }))
+  })
+
+  it.each([
+    ['rebase', 'Rebase stopped on conflicts'],
+    ['cherry-pick', 'Cherry-pick stopped on conflicts'],
+    ['revert', 'Revert stopped on conflicts'],
+    ['merge', 'Merge stopped on conflicts'],
+  ] as const)('continue-operation stopping on a further %s conflict titles it "%s"', async (operation, title) => {
+    continueOperationMock.mockResolvedValue({
+      ok: false,
+      message: 'CONFLICT (content): Merge conflict in src/app.ts\nerror: could not apply abc1234... feat',
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { operation: { operation, conflictedFiles: [] } } as never,
+    }))
+
+    await runWorkflowAction('continue-operation')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'operation-conflict-recovery',
+        title,
+        keepStatusOnDismiss: true,
       }),
     }))
   })
