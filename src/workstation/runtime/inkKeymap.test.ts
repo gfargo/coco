@@ -109,7 +109,7 @@ describe('log Ink keymap', () => {
       splitPlanStatus: 'applying',
     })).toEqual({
       contextual: ['applying split…'],
-      global: ['q quit'],
+      global: [],
     })
 
     expect(getLogInkFooterHints({

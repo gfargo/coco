@@ -864,25 +864,6 @@ const FOOTER_FIXTURES: Record<string, () => Fixture> = {
 // Test 1 — every advertised footer hint fires something
 // ─────────────────────────────────────────────────────────────────────
 
-/**
- * Genuine dead-hint findings this test uncovered, NOT informational text
- * — real hints promising a real key that the dispatcher deliberately
- * (or accidentally) swallows. Per the task brief these must not be
- * papered over with an `ALLOWLIST` entry (that field is reserved for
- * status text). Each is instead tracked below as an `it.failing` case:
- * visible in the test run, not silently skipped, and it will fail loudly
- * (an "unexpectedly passing" test) the moment someone fixes the
- * underlying dispatcher gap — which is the point.
- *
- * Keyed by `${fixtureId}::${hint}` so the main sweep below can skip
- * exactly these two known cases while still checking every other hint
- * the same fixture advertises.
- */
-const KNOWN_DEAD_HINTS = new Set<string>([
-  'historyCompareBase::esc back',
-  'splitPlanApplying::q quit',
-])
-
 describe('footer hint honesty — every advertised key fires an event', () => {
   for (const [fixtureId, build] of Object.entries(FOOTER_FIXTURES)) {
     it(`fixture "${fixtureId}"`, () => {
@@ -893,7 +874,6 @@ describe('footer hint honesty — every advertised key fires an event', () => {
       const failures: string[] = []
       for (const hint of allHints) {
         if (isAllowlisted(hint)) continue
-        if (KNOWN_DEAD_HINTS.has(`${fixtureId}::${hint}`)) continue
         const results = fireHint(state, context, hint)
         for (const { sequence, events } of results) {
           if (events.length === 0) {
@@ -905,37 +885,6 @@ describe('footer hint honesty — every advertised key fires an event', () => {
       expect(failures).toEqual([])
     })
   }
-
-  // ── Known, reported, NOT fixed here (see task summary) ───────────────
-  describe('known dead hints (tracked as expected failures — see final report)', () => {
-    it.failing(
-      'historyCompareBase: "esc back" never fires — activeView "history" is always the ' +
-      'navigation-stack root (navigateHome resets the stack instead of pushing "history" ' +
-      'onto it), so Esc has nothing to pop; the compare flow also has no Esc-cancel path. ' +
-      'The footer\'s compareBaseSet branch for the plain history view advertises "esc back" ' +
-      'unconditionally, copied from the branches/tags variants where it IS reachable (those ' +
-      'views are always pushed, so Esc pops them fine).',
-      () => {
-        const { state, context } = historyCompareFixture()
-        for (const { events } of fireHint(state, context, 'esc back')) {
-          expect(events.length).toBeGreaterThan(0)
-        }
-      }
-    )
-
-    it.failing(
-      'splitPlanApplying: "q quit" never fires — inkInput.ts deliberately excludes ' +
-      '`state.splitPlan.status === \'applying\'` from the q-quits-the-overlay branch (to avoid ' +
-      'abandoning a half-applied split), but computeLogInkFooterHints keeps advertising ' +
-      '"q quit" in the global cluster for all three split-plan phases uniformly.',
-      () => {
-        const { state, context } = splitPlanApplyingFixture()
-        for (const { events } of fireHint(state, context, 'q quit')) {
-          expect(events.length).toBeGreaterThan(0)
-        }
-      }
-    )
-  })
 })
 
 // ─────────────────────────────────────────────────────────────────────
