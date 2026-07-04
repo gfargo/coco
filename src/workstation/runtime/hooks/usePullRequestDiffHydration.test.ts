@@ -118,6 +118,7 @@ describe('usePullRequestDiffHydration', () => {
       diffSource: 'pr',
       prDiffNumber: 41,
       pullRequestList: overview('gen-1'),
+      refreshToken: 0,
       setPrDiffLines: jest.fn(),
       setPrDiffLoading: jest.fn(),
       setPrDiffError: jest.fn(),
@@ -217,6 +218,44 @@ describe('usePullRequestDiffHydration', () => {
     await flushEffect()
     expect(deps.getPullRequestDiffByNumber).toHaveBeenCalledTimes(2)
     expect(deps.setPrDiffLines).toHaveBeenLastCalledWith(['+fixed'])
+    expect(deps.setPrDiffError).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('a refreshToken bump alone (OSS-452) is a cache hit — same generation, no refetch', async () => {
+    const { React, flushEffect } = hookHarness()
+    const deps = makeDeps()
+    usePullRequestDiffHydration(React, deps)
+    await flushEffect()
+    expect(deps.getPullRequestDiffByNumber).toHaveBeenCalledTimes(1)
+
+    // A background refresh preserved `pullRequestList`'s reference (the
+    // OSS-452 fix) but still bumps the token so the effect re-evaluates.
+    deps.setPrDiffLoading.mockClear()
+    usePullRequestDiffHydration(React, { ...deps, refreshToken: 1 })
+    await flushEffect()
+    expect(deps.getPullRequestDiffByNumber).toHaveBeenCalledTimes(1)
+    expect(deps.setPrDiffLines).toHaveBeenLastCalledWith(['+x'])
+    expect(deps.setPrDiffLoading).not.toHaveBeenCalledWith(true)
+  })
+
+  it('a refreshToken bump after a failed fetch (OSS-452) retries and clears the error', async () => {
+    const { React, flushEffect } = hookHarness()
+    const deps = makeDeps({
+      getPullRequestDiffByNumber: jest
+        .fn()
+        .mockResolvedValueOnce({ ok: false, message: 'network error' })
+        .mockResolvedValue({ ok: true, lines: ['+recovered'] }),
+    })
+    usePullRequestDiffHydration(React, deps)
+    await flushEffect()
+    expect(deps.setPrDiffError).toHaveBeenCalledWith('network error')
+
+    // Same `pullRequestList` reference (no triage refetch), but a silent
+    // background refresh bumped the token — retry must fire, not go inert.
+    usePullRequestDiffHydration(React, { ...deps, refreshToken: 1 })
+    await flushEffect()
+    expect(deps.getPullRequestDiffByNumber).toHaveBeenCalledTimes(2)
+    expect(deps.setPrDiffLines).toHaveBeenLastCalledWith(['+recovered'])
     expect(deps.setPrDiffError).toHaveBeenLastCalledWith(undefined)
   })
 
