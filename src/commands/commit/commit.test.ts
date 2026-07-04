@@ -19,6 +19,7 @@ import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { Logger } from '../../lib/utils/logger'
 import { SimpleGit } from 'simple-git'
 import { Config } from '../../commands/types'
+import { deriveStatus } from '../../test/builders/makeFakeGit'
 
 jest.mock('../../lib/utils/commitlintValidator', () => ({
   hasCommitlintConfig: jest.fn().mockResolvedValue(false),
@@ -110,13 +111,13 @@ describe('commit command', () => {
     } as unknown as Logger
 
     mockGetRepo.mockReturnValue({
-      status: jest.fn().mockResolvedValue({
-        files: [
+      status: jest.fn().mockResolvedValue(
+        deriveStatus([
           { path: 'file1.txt', index: 'A', working_dir: ' ' },
           { path: 'file2.txt', index: 'M', working_dir: 'M' },
           { path: 'file3.txt', index: '?', working_dir: '?' },
-        ],
-      }),
+        ])
+      ),
       revparse: jest.fn().mockResolvedValue('mock-branch-name'),
       commit: jest.fn().mockResolvedValue(undefined),
     } as unknown as SimpleGit)

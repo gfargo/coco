@@ -17,6 +17,7 @@ import type { FileChange } from '../../lib/types'
 import { applyCommitSplitPlan, type CommitSplitPlan } from './split'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { Logger } from '../../lib/utils/logger'
+import { makeFakeGit } from '../../test/builders/makeFakeGit'
 
 jest.mock('../../lib/simple-git/createCommit', () => ({
   createCommit: jest.fn(),
@@ -24,49 +25,6 @@ jest.mock('../../lib/simple-git/createCommit', () => ({
 }))
 
 const mockedCreateCommit = createCommit as jest.MockedFunction<typeof createCommit>
-
-/**
- * Fake `git` recording an ordered op log of the index choreography.
- * HEAD advances only when the `createCommit` mock chose to advance it.
- */
-function makeFakeGit(options: { stagedBeforeReset: string[] }) {
-  const ops: string[] = []
-  let head = 0
-
-  const git = {
-    raw: jest.fn(async (args: string[]) => {
-      if (args[0] === 'diff' && args.includes('--cached')) {
-        ops.push('list-staged')
-        return options.stagedBeforeReset.join('\0') + (options.stagedBeforeReset.length ? '\0' : '')
-      }
-      ops.push(args.join(' '))
-      return ''
-    }),
-    add: jest.fn(async (files: string[]) => {
-      ops.push(`stage ${(Array.isArray(files) ? files : [files]).join(',')}`)
-      return ''
-    }),
-    // The staged list must contain the PLANNED files: the apply-time
-    // drift check (#1396) verifies every file-mode claim is still
-    // staged before the up-front reset, and `files` feeds its per-file
-    // worktree-edit probe. A placeholder name here tripped the guard
-    // the moment #1381 and #1407 landed together.
-    status: jest.fn(async () => ({
-      staged: options.stagedBeforeReset,
-      created: [],
-      renamed: [],
-      modified: [],
-      deleted: [],
-      not_added: [],
-      files: [],
-    })),
-    revparse: jest.fn(async () => `head-${head}`),
-    advanceHead: () => {
-      head += 1
-    },
-  }
-  return { git, ops }
-}
 
 function fileChange(filePath: string): FileChange {
   return { filePath, status: 'modified', summary: `${filePath} changed` }
@@ -88,7 +46,7 @@ describe('applyCommitSplitPlan apply-loop safety', () => {
   afterEach(() => jest.clearAllMocks())
 
   it("resets a failed group's staging before the next group commits", async () => {
-    const { git, ops } = makeFakeGit({ stagedBeforeReset: ['a.ts', 'b.ts'] })
+    const { git, ops } = makeFakeGit.staged(['a.ts', 'b.ts'])
     // Group A's commit is rejected (hook); group B succeeds.
     mockedCreateCommit
       .mockImplementationOnce(async () => {
@@ -128,9 +86,7 @@ describe('applyCommitSplitPlan apply-loop safety', () => {
   })
 
   it('re-stages staged files the plan never claimed (config-filtered lockfiles)', async () => {
-    const { git, ops } = makeFakeGit({
-      stagedBeforeReset: ['a.ts', 'yarn.lock'],
-    })
+    const { git, ops } = makeFakeGit.staged(['a.ts', 'yarn.lock'])
     mockedCreateCommit.mockImplementation(async () => {
       git.advanceHead()
       return {} as never
@@ -152,7 +108,7 @@ describe('applyCommitSplitPlan apply-loop safety', () => {
   })
 
   it('does not add a re-stage note when every staged file was planned', async () => {
-    const { git, ops } = makeFakeGit({ stagedBeforeReset: ['a.ts'] })
+    const { git, ops } = makeFakeGit.staged(['a.ts'])
     mockedCreateCommit.mockImplementation(async () => {
       git.advanceHead()
       return {} as never

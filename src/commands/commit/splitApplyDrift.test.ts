@@ -13,6 +13,7 @@ import type { FileChange } from '../../lib/types'
 import { applyCommitSplitPlan, type CommitSplitPlan } from './split'
 import { createCommit } from '../../lib/simple-git/createCommit'
 import { Logger } from '../../lib/utils/logger'
+import { makeFakeGit } from '../../test/builders/makeFakeGit'
 
 jest.mock('../../lib/simple-git/createCommit', () => ({
   createCommit: jest.fn(),
@@ -20,30 +21,6 @@ jest.mock('../../lib/simple-git/createCommit', () => ({
 }))
 
 const mockedCreateCommit = createCommit as jest.MockedFunction<typeof createCommit>
-
-type FreshFile = { path: string; index: string; working_dir: string }
-
-function makeFakeGit(options: { staged: string[]; files?: FreshFile[] }) {
-  let head = 0
-  const git = {
-    raw: jest.fn(async () => ''),
-    add: jest.fn(async () => ''),
-    status: jest.fn(async () => ({
-      staged: options.staged,
-      created: [],
-      renamed: [],
-      modified: [],
-      deleted: [],
-      not_added: [],
-      files: options.files ?? [],
-    })),
-    revparse: jest.fn(async () => `head-${head}`),
-    advanceHead: () => {
-      head += 1
-    },
-  }
-  return git
-}
 
 function fileChange(filePath: string): FileChange {
   return { filePath, status: 'modified', summary: `${filePath} changed` }
@@ -65,7 +42,7 @@ describe('applyCommitSplitPlan drift check (#1396)', () => {
   afterEach(() => jest.clearAllMocks())
 
   it('refuses when a planned file is no longer staged at apply time', async () => {
-    const git = makeFakeGit({ staged: [] })
+    const { git } = makeFakeGit([])
 
     await expect(
       applyCommitSplitPlan({
@@ -85,10 +62,7 @@ describe('applyCommitSplitPlan drift check (#1396)', () => {
   })
 
   it('refuses when a planned file gained unstaged edits since the plan', async () => {
-    const git = makeFakeGit({
-      staged: ['a.ts'],
-      files: [{ path: 'a.ts', index: 'M', working_dir: 'M' }],
-    })
+    const { git } = makeFakeGit([{ path: 'a.ts', index: 'M', working_dir: 'M' }])
 
     await expect(
       applyCommitSplitPlan({
@@ -105,10 +79,7 @@ describe('applyCommitSplitPlan drift check (#1396)', () => {
   })
 
   it('applies cleanly when the fresh state matches the snapshot', async () => {
-    const git = makeFakeGit({
-      staged: ['a.ts'],
-      files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }],
-    })
+    const { git } = makeFakeGit.staged(['a.ts'])
     mockedCreateCommit.mockImplementation(async () => {
       git.advanceHead()
       return {} as never
