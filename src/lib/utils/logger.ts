@@ -14,7 +14,24 @@ export interface SpinnerOptions {
 
 export interface Config {
   verbose?: boolean
+  /**
+   * `silent` suppresses all non-error output (status lines, spinners, timers).
+   * Kept for backward-compatibility; internally treated identically to `quiet`.
+   * Prefer `quiet` for new code.
+   */
   silent?: boolean
+  /**
+   * `quiet` suppresses non-error status output (banners, spinners, log lines)
+   * while leaving `error()` calls unaffected.  This is what `--quiet` and
+   * non-interactive mode should use — the intent is "less chrome", not
+   * "silence everything including failures".
+   */
+  quiet?: boolean
+}
+
+/** Returns true when status output should be suppressed (silent OR quiet). */
+function isMuted(config: Config | undefined): boolean {
+  return !!(config?.silent || config?.quiet)
 }
 
 export class Logger {
@@ -36,7 +53,7 @@ export class Logger {
   }
 
   public log(message: string, options: LoggerOptions = { color: 'blue' }): Logger {
-    if (this.config?.silent) {
+    if (isMuted(this.config)) {
       return this
     }
     let outputMessage = message
@@ -51,20 +68,11 @@ export class Logger {
   }
 
   /**
-   * Write a diagnostic/error message to stderr so it never contaminates
-   * piped stdout output (e.g. `coco commit > msg.txt`).
-   *
-   * Behaves like `log()` but writes to `process.stderr` instead of
-   * `console.log`. The `silent` guard still applies — `--quiet` suppresses
-   * diagnostics on both fds consistently.
-   *
-   * Pass an empty `options` object (`{}`) to skip chalk re-wrapping when
-   * the message is already ANSI-coloured by the caller.
+   * Always writes to stderr, regardless of `silent` or `quiet`.
+   * Use this for error messages that must reach the user even when status
+   * output is suppressed.
    */
   public error(message: string, options: LoggerOptions = { color: 'red' }): Logger {
-    if (this.config?.silent) {
-      return this
-    }
     let outputMessage = message
 
     if (options.color) {
@@ -77,7 +85,7 @@ export class Logger {
   }
 
   public verbose(message: string, options: LoggerOptions = {}): Logger {
-    if (!this.config?.verbose || this.config?.silent) {
+    if (!this.config?.verbose || isMuted(this.config)) {
       return this
     }
 
@@ -92,7 +100,7 @@ export class Logger {
   }
 
   public stopTimer(message?: string, options: LoggerOptions = { color: 'yellow' }): Logger {
-    if (!this.config?.verbose || !this.timerStart || this.config?.silent) {
+    if (!this.config?.verbose || !this.timerStart || isMuted(this.config)) {
       return this
     }
 
@@ -112,7 +120,7 @@ export class Logger {
     message: string,
     options: Omit<SpinnerOptions, 'mode'> = { color: 'green' }
   ): Logger {
-    if (this.config?.silent) {
+    if (isMuted(this.config)) {
       return this
     }
     const spinnerMessage = options.color ? chalk[options.color](message) : message
@@ -125,13 +133,26 @@ export class Logger {
     message: string | undefined = '',
     options: SpinnerOptions = { mode: 'succeed', color: 'green' }
   ): Logger {
-    if (this.config?.silent) {
+    if (isMuted(this.config)) {
       return this
     }
     const spinnerMessage = options?.color ? chalk[options.color](message) : message
     this.spinner?.[options.mode || 'succeed'](spinnerMessage)
     this.spinner = null
 
+    return this
+  }
+
+  /**
+   * Stops an active spinner without rendering any final message.
+   * Called before writing error output to avoid interleaving spinner
+   * control characters with error lines.
+   */
+  public stopSpinnerIfActive(): Logger {
+    if (this.spinner) {
+      this.spinner.stop()
+      this.spinner = null
+    }
     return this
   }
 }

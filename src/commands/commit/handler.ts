@@ -70,7 +70,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       logger.log(LOGO)
     }
   } else {
-    logger.setConfig({ silent: true })
+    logger.setConfig({ quiet: true })
   }
 
   if (config.service.provider === 'ollama') {
@@ -525,7 +525,7 @@ IMPORTANT RULES:
   const MODE =
     (INTERACTIVE && 'interactive') || (config.commit && 'interactive') || config?.mode || 'stdout'
 
-  handleResult({
+  await handleResult({
     result: commitMsg as string,
     interactiveModeCallback: async (result) => {
       const noVerify = argv.noVerify || config.noVerify || false

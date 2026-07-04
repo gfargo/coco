@@ -199,10 +199,12 @@ async function applyUsageTelemetry(argv: unknown, options: Config, logger: Logge
 function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: CommandHandler<T>) {
   return async (argv: T) => {
     const options = loadConfig(argv)
-    // `--quiet` flips the logger silent so coco's status chrome is suppressed.
+    // `--quiet` flips the logger quiet so coco's status chrome is suppressed.
     // Results still reach stdout (handleResult / emitJson write directly).
+    // Note: `quiet` (not `silent`) is used intentionally — quiet suppresses
+    // status output only; error() calls always reach stderr regardless.
     const quiet = (argv as { quiet?: boolean })?.quiet === true
-    const logger = new Logger(quiet ? { ...options, silent: true } : options)
+    const logger = new Logger(quiet ? { ...options, quiet: true } : options)
 
     // Arm self-hosted forge detection (vanity hostnames) for this run.
     setForgeHostOverrides((options as Config).forgeHosts)
@@ -225,6 +227,10 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
         process.exitCode = 130 // 128 + SIGINT, the conventional "interrupted" code
         return
       }
+
+      // Stop any running spinner before writing error output so its control
+      // characters don't interleave with the error lines on stderr.
+      logger.stopSpinnerIfActive()
 
       // Handle specific error types with helpful messages
       const missingOllamaModel = extractMissingOllamaModel(error)

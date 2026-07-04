@@ -9,8 +9,8 @@
  *   - the spinner advances on a 80ms tick during loading states
  *   - the idle-tip rotation swaps copy every 8 seconds
  *
- * Idle tips are off by default (opt-in via `logTui.idleTips`) so we
- * already have that one. Spinner only ticks during loading states so
+ * `useIdleTip` gates tip rotation behind `isSnapshotMode()` so captures
+ * never see footer copy change. Spinner only ticks during loading states so
  * a static screenshot of a settled view doesn't see spinner motion.
  *
  * The remaining knob is `now` — the wall-clock value relative-date

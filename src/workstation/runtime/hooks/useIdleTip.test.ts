@@ -52,3 +52,34 @@ describe('resolveIdleTip', () => {
     expect(githubTip).not.toEqual(gitlabTip)
   })
 })
+
+describe('resolveIdleTip — snapshot mode', () => {
+  const ORIGINAL = process.env.COCO_SNAPSHOT_NOW
+
+  beforeEach(() => {
+    process.env.COCO_SNAPSHOT_NOW = '2026-05-27T12:00:00Z'
+  })
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) {
+      delete process.env.COCO_SNAPSHOT_NOW
+    } else {
+      process.env.COCO_SNAPSHOT_NOW = ORIGINAL
+    }
+  })
+
+  it('returns undefined even when tips are enabled and idle', () => {
+    expect(resolveIdleTip(1, true, undefined, undefined)).toBeUndefined()
+  })
+
+  it('returns undefined at every tick index', () => {
+    for (const tick of [1, 2, 5, 100]) {
+      expect(resolveIdleTip(tick, true, undefined, undefined)).toBeUndefined()
+    }
+  })
+
+  it('returns undefined regardless of provider', () => {
+    expect(resolveIdleTip(1, true, undefined, 'github')).toBeUndefined()
+    expect(resolveIdleTip(1, true, undefined, 'gitlab')).toBeUndefined()
+  })
+})

@@ -37,7 +37,11 @@ type ListOverview = {
 type BaseListArgv = {
   /** Global `--repo <dir>` flag consumed by applyRepoFlag. */
   repo?: string
-  noCache?: boolean
+  /**
+   * Whether caching is enabled. Corresponds to the `--cache` / `--no-cache`
+   * CLI flags (default: true — pass `--no-cache` to disable).
+   */
+  cache?: boolean
   refresh?: boolean
   json?: boolean
 }
@@ -99,7 +103,7 @@ export function createGitHubListHandler<
     const repoPath = process.cwd()
     const filter = spec.buildFilter(argv)
 
-    const cacheEnabled = !argv.noCache
+    const cacheEnabled = argv.cache !== false
     let items: Item[] | undefined
     let fromCache = false
     let cacheAgeMs: number | undefined
