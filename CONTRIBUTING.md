@@ -17,9 +17,11 @@ Thank you for considering contributing to Commit Copilot! We appreciate your int
 
 ## Quick start
 
+Package manager is **Yarn (v1)**, despite the npm-style script names — see `AGENTS.md`. Install with `yarn install`, not `npm install`: npm won't respect `yarn.lock` or the `resolutions` dependency pins, and CI rejects a committed `package-lock.json`.
+
 ```bash
 git clone https://github.com/<your-fork>/coco && cd coco
-npm install
+yarn install
 npm run dev          # watch mode (use `npm run dev:tui` for coco ui / log -i / workspace)
 ```
 
@@ -28,6 +30,8 @@ Before opening a PR, run the full validation suite — the same gates CI runs:
 ```bash
 npm test             # lint + jest + build + packaged-CLI smoke
 ```
+
+See `AGENTS.md` for the full breakdown of environment gotchas (Node version, worktree caveats, CI-parity env vars) behind these commands.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (this project dogfoods `coco commit`). Keep each PR small and focused, and make sure it passes the suite above on its own.
 
