@@ -1,3 +1,4 @@
+import { OutputParserException } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { Runnable } from '@langchain/core/runnables'
 import { handleLangChainError, isNetworkError } from '../errorHandler'
@@ -5,6 +6,7 @@ import {
   LangChainCancelledError,
   LangChainExecutionError,
   LangChainNetworkError,
+  LangChainSchemaParseError,
 } from '../errors'
 import { validateRequired } from '../validation'
 import { getLlm } from './getLlm'
@@ -124,6 +126,23 @@ export const executeChain = async <T>({
         error instanceof Error ? error.message : 'Chain invocation aborted by user',
         undefined,
         { provider: effectiveProvider, endpoint: effectiveEndpoint },
+      )
+    }
+
+    // Schema/format parse failures (#1460 / OSS-503): classify separately
+    // from a generic LangChainExecutionError so `withRetry`'s default
+    // predicate can skip retrying an identical call that's unlikely to
+    // parse differently the second time.
+    if (error instanceof OutputParserException) {
+      throw new LangChainSchemaParseError(
+        `executeChain: Failed to parse schema output: ${error.message}`,
+        {
+          promptInputVariables: prompt.inputVariables,
+          variableKeys: Object.keys(variables),
+          parserType: parser.constructor.name,
+          provider: effectiveProvider,
+          endpoint: effectiveEndpoint,
+        }
       )
     }
 

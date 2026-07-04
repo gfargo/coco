@@ -18,12 +18,12 @@ export interface RetryOptions {
 
 /**
  * Default retry predicate — retries any *non-permanent* error: everything
- * except validation / configuration / authentication failures. This is
- * intentionally broader than `errorHandler.isRetryableError` (the shared
- * *transient* predicate): generic retries here re-roll on e.g. unparseable
- * schema output, not just network/rate-limit blips. Transient ⊂ this set.
- * Callers that only want to retry transient errors should pass
- * `shouldRetry: isRetryableError` explicitly.
+ * except validation / configuration / authentication / schema-parse
+ * failures. This is intentionally broader than `errorHandler.isRetryableError`
+ * (the shared *transient* predicate): generic retries here also cover
+ * execution errors and timeouts, not just network/rate-limit blips.
+ * Transient ⊂ this set. Callers that only want to retry transient errors
+ * should pass `shouldRetry: isRetryableError` explicitly.
  */
 function defaultShouldRetry(error: Error): boolean {
   // Don't retry validation errors or configuration errors
@@ -39,6 +39,13 @@ function defaultShouldRetry(error: Error): boolean {
   // Never retry a user cancellation (LangChainCancelledError et al) —
   // the abort was intent, and a retry would re-issue the aborted call.
   if (error.name.includes('Cancelled')) {
+    return false
+  }
+
+  // Don't retry schema/format parse failures (#1460 / OSS-503) — retrying
+  // the identical prompt+model rarely produces different output, so it's
+  // wasted spend. Let the caller fall through to its fallback parser.
+  if (error.name.includes('SchemaParse')) {
     return false
   }
 

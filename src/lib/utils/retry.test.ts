@@ -67,6 +67,19 @@ describe('retry utilities', () => {
       )
       expect(operation).toHaveBeenCalledTimes(1)
     })
+
+    it('never retries a schema parse failure by default (#1460 / OSS-503)', async () => {
+      // Retrying the identical prompt+model rarely produces different
+      // output — the default predicate must not re-bill the same call.
+      const err = new Error('bad json')
+      err.name = 'LangChainSchemaParseError'
+      const operation = jest.fn().mockRejectedValue(err)
+
+      await expect(withRetry(operation, { maxAttempts: 3, backoffMs: 1 })).rejects.toThrow(
+        'bad json'
+      )
+      expect(operation).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('withTimeout', () => {

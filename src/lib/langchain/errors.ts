@@ -39,6 +39,20 @@ export class LangChainExecutionError extends LangChainError {
 }
 
 /**
+ * Schema/format parse failures (#1460 / OSS-503) — the model's output could
+ * not be parsed into the requested shape (bad JSON, schema mismatch). A
+ * subclass of `LangChainExecutionError` so existing `instanceof
+ * LangChainExecutionError` call sites still treat it as a LangChain error,
+ * while `withRetry`'s default predicate can single it out to avoid
+ * re-billing an identical call that's unlikely to parse differently.
+ */
+export class LangChainSchemaParseError extends LangChainExecutionError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, context)
+  }
+}
+
+/**
  * Authentication-related errors (missing API keys, invalid credentials, etc.)
  *
  * Carries `provider` + `endpoint` context so the formatter (in
