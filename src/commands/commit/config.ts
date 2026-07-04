@@ -103,7 +103,6 @@ export const options = {
   includeBranchName: {
     description: 'Include the current branch name in the commit prompt for context',
     type: 'boolean',
-    default: true,
   },
   noDiff: {
     description: 'Only pass basic "git status" result instead of providing entire diff',

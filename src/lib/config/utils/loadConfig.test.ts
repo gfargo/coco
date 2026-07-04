@@ -99,4 +99,47 @@ describe('loadConfig', () => {
       expect(config.ignoredFiles).toContain(fileName)
     }
   })
+
+  it('does not let an unset argv key clobber config-sourced verbose/includeBranchName (#1437)', () => {
+    // Repro for #1437: yargs used to materialize `default:`-ed options
+    // (verbose, includeBranchName) into argv on every run, so the final
+    // `{ ...config, ...argv }` merge in loadConfig always overwrote the
+    // documented config value with the yargs default. Once those
+    // `default:` entries are removed, yargs omits the key from argv when
+    // the flag isn't passed — argv here mirrors that post-fix shape.
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? ['.coco.config.json'].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === '.coco.config.json') {
+        return JSON.stringify({ verbose: true, includeBranchName: false })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
+
+    expect(config.verbose).toBe(true)
+    expect(config.includeBranchName).toBe(false)
+  })
+
+  it('still lets an explicitly-passed argv flag override config for verbose/includeBranchName (#1437)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? ['.coco.config.json'].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === '.coco.config.json') {
+        return JSON.stringify({ verbose: true, includeBranchName: false })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      verbose: false,
+      includeBranchName: true,
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.verbose).toBe(false)
+    expect(config.includeBranchName).toBe(true)
+  })
 })
