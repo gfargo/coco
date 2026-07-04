@@ -1,4 +1,3 @@
-import { type TiktokenModel } from '@langchain/openai'
 import { LLMModel } from '../../lib/langchain/types'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
@@ -29,7 +28,7 @@ import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { commandExit } from '../../lib/utils/commandExit'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import {
     ChangelogArgv,
     ChangelogOptions,
@@ -123,9 +122,7 @@ export async function generateChangelogResult(
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: changelogService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
-  const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-  )
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
   let structured: ChangelogResponse | undefined
 

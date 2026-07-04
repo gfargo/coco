@@ -1,4 +1,3 @@
-import { type TiktokenModel } from '@langchain/openai'
 import { LLMModel } from '../../lib/langchain/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -24,7 +23,7 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, SEPERATOR, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { commandExit } from '../../lib/utils/commandExit'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import { withRetry } from '../../lib/utils/retry'
 import {
@@ -51,9 +50,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     handleMissingApiKey(logger, config, { command: 'commit' })
   }
 
-  const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-  )
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })

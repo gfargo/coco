@@ -14,7 +14,7 @@ import { loadConfig } from '../lib/config/utils/loadConfig'
 import { executeChain } from '../lib/langchain/utils/executeChain'
 import { executeChainWithSchema } from '../lib/langchain/utils/executeChainWithSchema'
 import { getLlm } from '../lib/langchain/utils/getLlm'
-import { getTokenCounter } from '../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../lib/utils/tokenizer'
 import { Logger } from '../lib/utils/logger'
 import { Config } from '../commands/types'
 import {
@@ -69,7 +69,9 @@ const mockExecuteChainWithSchema = executeChainWithSchema as jest.MockedFunction
   typeof executeChainWithSchema
 >
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
-const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
+  typeof getTokenCounterForProvider
+>
 const mockLoadSummarizationChain = loadSummarizationChain as jest.MockedFunction<
   typeof loadSummarizationChain
 >
@@ -137,7 +139,7 @@ describe('command integration with temp git repos', () => {
     })
 
     mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
-    mockGetTokenCounter.mockResolvedValue((text: string) => Math.ceil(text.length / 4))
+    mockGetTokenCounterForProvider.mockResolvedValue((text: string) => Math.ceil(text.length / 4))
     mockExecuteChain.mockResolvedValue({
       title: 'Generated changelog',
       content: '- Summarized feature work',

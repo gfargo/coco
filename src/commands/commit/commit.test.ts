@@ -10,7 +10,7 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
@@ -71,7 +71,9 @@ const mockGetApiKeyForModel = getApiKeyForModel as jest.MockedFunction<typeof ge
 const mockGetModelAndProviderFromConfig = getModelAndProviderFromConfig as jest.MockedFunction<
   typeof getModelAndProviderFromConfig
 >
-const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
+  typeof getTokenCounterForProvider
+>
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
 
 // Mock prompts
@@ -182,7 +184,7 @@ describe('commit command', () => {
       provider: 'openai',
       model: 'gpt-4o',
     })
-    mockGetTokenCounter.mockResolvedValue(jest.fn())
+    mockGetTokenCounterForProvider.mockResolvedValue(jest.fn())
     mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
 
     // Mock prompts

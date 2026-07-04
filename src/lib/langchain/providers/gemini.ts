@@ -23,4 +23,7 @@ export const geminiProvider: ProviderDefinition = {
   label: 'Google Gemini',
   requiresAuth: true,
   createLlm: createGeminiLlm,
+  // Approximation vs. the gpt-4o tiktoken baseline, per the AI-core
+  // token-counting audit — no synchronous local Gemini tokenizer available.
+  tokenCorrectionFactor: 1.1,
 }

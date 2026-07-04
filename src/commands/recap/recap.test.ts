@@ -12,7 +12,7 @@ import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { handleResult } from '../../lib/ui/handleResult'
 import { Logger } from '../../lib/utils/logger'
 import { SimpleGit } from 'simple-git'
@@ -57,7 +57,9 @@ const mockGetModelAndProviderFromConfig = getModelAndProviderFromConfig as jest.
   typeof getModelAndProviderFromConfig
 >
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
-const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
+  typeof getTokenCounterForProvider
+>
 const mockHandleResult = handleResult as jest.MockedFunction<typeof handleResult>
 
 
@@ -111,7 +113,7 @@ describe('recap command', () => {
       model: 'gpt-4o',
     })
     mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
-    mockGetTokenCounter.mockResolvedValue((text: string) => text.length)
+    mockGetTokenCounterForProvider.mockResolvedValue((text: string) => text.length)
     mockGetChanges.mockResolvedValue({
       staged: [],
       unstaged: [],

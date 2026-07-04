@@ -1,5 +1,4 @@
 import { Arguments } from 'yargs'
-import { type TiktokenModel } from '@langchain/openai'
 import { SimpleGit } from 'simple-git'
 
 import { loadConfig } from '../../lib/config/utils/loadConfig'
@@ -25,7 +24,7 @@ import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { Logger } from '../../lib/utils/logger'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import {
   CommitArgv,
@@ -188,9 +187,7 @@ export async function generateCommitDraft({
     }
   }
 
-  const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-  )
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
   const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, {
     ...config,

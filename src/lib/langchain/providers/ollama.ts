@@ -27,4 +27,8 @@ export const ollamaProvider: ProviderDefinition = {
   requiresAuth: false,
   createLlm: createOllamaLlm,
   resolveEndpoint: resolveOllamaEndpoint,
+  // Approximation vs. the gpt-4o tiktoken baseline, per the AI-core
+  // token-counting audit — locally-hosted models vary too widely to pin
+  // down a single tokenizer, so this tracks the Claude/Llama-class estimate.
+  tokenCorrectionFactor: 1.2,
 }

@@ -1,4 +1,3 @@
-import { TiktokenModel } from '@langchain/openai'
 import { LLMModel } from '../../lib/langchain/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -23,7 +22,7 @@ import { emitJson } from '../../lib/ui/emitJson'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { commandExit } from '../../lib/utils/commandExit'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { RecapArgv, RecapLlmResponseSchema, RecapOptions } from './config'
 import { noResult } from './noResult'
 import { RECAP_PROMPT } from './prompt'
@@ -43,9 +42,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     handleMissingApiKey(logger, config, { command: 'recap' })
   }
 
-  const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-  )
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: recapService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })

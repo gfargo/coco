@@ -1,4 +1,3 @@
-import { TiktokenModel } from '@langchain/openai'
 import { LLMModel } from '../../lib/langchain/types'
 import chalk from 'chalk'
 import { z } from 'zod'
@@ -23,7 +22,7 @@ import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
 import { commandExit } from '../../lib/utils/commandExit'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbackItem } from './config'
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
@@ -49,9 +48,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     handleMissingApiKey(logger, config, { command: 'review' })
   }
 
-  const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-  )
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: reviewService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
