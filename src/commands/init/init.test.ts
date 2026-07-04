@@ -231,6 +231,8 @@ describe('init command', () => {
 
     expect(mockAppendToProjectJsonConfig).not.toHaveBeenCalled()
     expect(mockCheckAndHandlePackageInstallation).not.toHaveBeenCalled()
+    // File-type question must not be asked when the user cancelled
+    expect(questions.selectProjectConfigFileType).not.toHaveBeenCalled()
     expect(logger.log).toHaveBeenCalledWith('\ninit cancelled.', { color: 'yellow' })
   })
 
@@ -240,7 +242,6 @@ describe('init command', () => {
     jest.spyOn(questions, 'selectDefaultGitBranch').mockResolvedValue('main')
     jest.spyOn(questions, 'inputModelTemperature').mockResolvedValue(0.2)
     jest.spyOn(questions, 'inputTokenLimit').mockResolvedValue(4096)
-    jest.spyOn(questions, 'enableVerboseMode').mockResolvedValue(false)
     jest.spyOn(questions, 'inputRequestTimeout').mockResolvedValue(30000)
     jest.spyOn(questions, 'inputRequestMaxRetries').mockResolvedValue(2)
     jest.spyOn(questions, 'inputServiceFields').mockResolvedValue('{bad json')
