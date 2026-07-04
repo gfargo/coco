@@ -21,6 +21,13 @@ export type EnforcePromptBudgetResult = {
   truncated: boolean
 }
 
+/**
+ * Default reserved token count for the model's response, shared with callers
+ * that need to budget a sub-component (e.g. a diff summary) ahead of the
+ * final prompt-level `enforcePromptBudget` check.
+ */
+export const DEFAULT_RESPONSE_TOKEN_RESERVE = 512
+
 async function renderPrompt(
   prompt: PromptLike,
   variables: Record<string, string>

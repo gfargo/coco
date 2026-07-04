@@ -12,7 +12,10 @@ import { LangChainCancelledError } from '../../lib/langchain/errors'
 import { executeChainStreaming } from '../../lib/langchain/utils/executeChainStreaming'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
-import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
+import {
+  DEFAULT_RESPONSE_TOKEN_RESERVE,
+  enforcePromptBudget,
+} from '../../lib/langchain/utils/enforcePromptBudget'
 import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessage'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
@@ -235,32 +238,6 @@ export async function generateCommitDraft({
     }
   }
 
-  const summary = config.noDiff && !changeSource
-    ? `Staged files:\n${changes.map((c) => `${c.status}: ${c.filePath}`).join('\n')}`
-    : await fileChangeParser({
-      changes,
-      commit: diffLabel,
-      options: createFileChangeParserOptions({
-        command: 'commit',
-        tokenizer,
-        git,
-        llm: summaryLlm,
-        logger,
-        provider,
-        model: String(summaryService.model),
-        service: config.service,
-      }),
-    })
-
-  if (!summary || !summary.length) {
-    return {
-      ok: false,
-      draft: '',
-      warnings: ['Diff summary was empty after parsing staged changes.'],
-      validationErrors: [],
-    }
-  }
-
   const schema = useConventional
     ? ConventionalCommitMessageResponseSchema
     : CommitMessageResponseSchema
@@ -310,13 +287,56 @@ export async function generateCommitDraft({
   }
 
   const baseVariables: Record<string, string> = {
-    summary,
+    summary: '',
     format_instructions: formatInstructions,
     additional_context: additionalContext,
     commit_history: commitHistory,
     branch_name_context: branchNameContext,
     commitlint_rules_context: commitlintRulesContext,
   }
+
+  // Reconciles the summarizer's `|| 4096` fallback (createFileChangeParserOptions
+  // -> summarizeDiffs) with the prompt budget below — both must share one number,
+  // not the summarizer's 4096 vs the prompt's stray 2048.
+  const promptTokenLimit = config.service.tokenLimit || 4096
+
+  // Budget the summary to leave headroom for the rest of the rendered prompt
+  // (format instructions, commit history, branch context, commitlint rules) plus
+  // the reserved response tokens, so a summary that legitimately maxes out its
+  // target doesn't push the full prompt over budget and get silently re-trimmed.
+  const overheadTokenCount = tokenizer(await prompt.format(baseVariables))
+  const summaryTokenBudget = Math.max(
+    512,
+    promptTokenLimit - overheadTokenCount - DEFAULT_RESPONSE_TOKEN_RESERVE
+  )
+
+  const summary = config.noDiff && !changeSource
+    ? `Staged files:\n${changes.map((c) => `${c.status}: ${c.filePath}`).join('\n')}`
+    : await fileChangeParser({
+      changes,
+      commit: diffLabel,
+      options: createFileChangeParserOptions({
+        command: 'commit',
+        tokenizer,
+        git,
+        llm: summaryLlm,
+        logger,
+        provider,
+        model: String(summaryService.model),
+        service: { ...config.service, tokenLimit: summaryTokenBudget },
+      }),
+    })
+
+  if (!summary || !summary.length) {
+    return {
+      ok: false,
+      draft: '',
+      warnings: [...warnings, 'Diff summary was empty after parsing staged changes.'],
+      validationErrors: [],
+    }
+  }
+
+  baseVariables.summary = summary
 
   const maxParsingAttempts = config.service.provider === 'ollama' && 'maxParsingAttempts' in config.service
     ? config.service.maxParsingAttempts || 3
@@ -341,7 +361,7 @@ export async function generateCommitDraft({
       prompt,
       variables,
       tokenizer,
-      maxTokens: config.service.tokenLimit || 2048,
+      maxTokens: promptTokenLimit,
     })
 
     // Streaming path (#881 phase 2). Active when the caller supplied
