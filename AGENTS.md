@@ -58,6 +58,31 @@ npm run scenario create <name>   # temp git scenario for hand-testing the TUI
 npm run screenshot:sync          # regenerate marketing assets → .www
 ```
 
+## Validating your changes
+
+The full gate a PR must pass — run all three, expect zero new problems:
+
+```bash
+npm run lint                       # eslint src bin
+npx tsc --noEmit -p tsconfig.json  # typecheck (not part of build)
+npm run test:jest                  # full jest suite
+```
+
+Gotchas that cost time if you skip them (most of these bit real contributors):
+
+- **Node ≥ 22 is mandatory** (`.nvmrc` = 22.22.2; engines pins `^22.22.2 || ^24.15.0 || >=26.0.0`). On older Node, jest fails immediately with `Preset ts-jest not found` — that error means "wrong Node," not "bad config." If your shell defaults to an old Node, put a ≥22 install first on `PATH`.
+- **Generate before you test.** `npm run test:jest` skips the `pretest:jest` step that `npm test` runs, so a bare `jest` invocation fails ~20 suites on a missing generated module. Either use `npm run test:jest` (runs the pre-step), or run the pre-step yourself once: `npm run build:info && node bin/copyTreeSitterWasm.mjs`. (In a git worktree the WASM copy exits non-zero — harmless; the module it needs resolves from the root checkout.)
+- **Match CI's environment or timezone/ESM tests diverge.** CI runs jest with `TZ=UTC NODE_OPTIONS=--experimental-vm-modules`. Date-bucketing and a few module-loading suites are environment-sensitive; a green run locally in a non-UTC zone can still fail in CI. Reproduce CI exactly with:
+  `TZ=UTC NODE_OPTIONS=--experimental-vm-modules npx jest`
+- **Working from a git worktree?** It has no `node_modules` of its own — resolve the jest/eslint/tsc binaries from the root checkout's `node_modules/.bin/` and run them with the worktree as CWD.
+- **One flaky test to know about:** `src/workstation/chrome/refreshWatcher.test.ts` (rename-survival) is timing-sensitive under heavy parallel load on macOS. If it's the *only* failure, re-run it in isolation to confirm before treating it as real.
+
+## Working with the team's conventions
+
+- **Branches** use conventional prefixes (`feat/`, `fix/`, `chore/`, `docs/`, `test/`, `perf/`, `refactor/`) — never the auto-generated `claude/…` prefix.
+- **No self-attribution in git.** Do not add `Co-Authored-By` or "Generated with …" trailers to commits or PR bodies.
+- **Parallel PRs get combination-tested before merge.** Two branches that are each green against the `main` they forked from can still break `main` together (a new production guard invalidating another PR's test fixture; two branches editing the same dispatch region). Before merging the second of an overlapping pair, merge current `main` into it locally and run the full suite — don't trust each branch's own green CI.
+
 ## House style
 
 - Match the surrounding code's idiom, naming, and comment density.
