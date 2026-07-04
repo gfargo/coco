@@ -113,6 +113,7 @@ function createLogger(): Logger {
     log: jest.fn(),
     verbose: jest.fn(),
     setConfig: jest.fn(),
+    error: jest.fn(),
     startTimer: jest.fn().mockReturnThis(),
     stopTimer: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),

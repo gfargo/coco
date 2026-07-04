@@ -120,6 +120,7 @@ describe('commit command', () => {
       log: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
+      error: jest.fn(),
       startTimer: jest.fn().mockReturnThis(),
       stopTimer: jest.fn(),
       startSpinner: jest.fn().mockReturnThis(),

@@ -223,7 +223,7 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
       // run) is a normal action, not a crash — exit cleanly with a gentle
       // note instead of the generic "Failed to execute command" path.
       if (isPromptCancellation(error)) {
-        logger.log('\nCancelled.', { color: 'yellow' })
+        logger.error('\nCancelled.', { color: 'yellow' })
         process.exitCode = 130 // 128 + SIGINT, the conventional "interrupted" code
         return
       }

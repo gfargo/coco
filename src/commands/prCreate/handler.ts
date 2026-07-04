@@ -35,7 +35,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   const nouns = forgeNouns(provider)
 
   if (provider !== 'github' && provider !== 'gitlab' && provider !== 'bitbucket') {
-    logger.log(
+    logger.error(
       overview.repository.message || 'No supported remote (GitHub, GitLab, or Bitbucket) detected.',
       { color: 'red' }
     )
@@ -53,7 +53,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
 
   const head = overview.currentBranch
   if (!head) {
-    logger.log('Could not determine the current branch (detached HEAD?).', { color: 'red' })
+    logger.error('Could not determine the current branch (detached HEAD?).', { color: 'red' })
     commandExit(1)
     return
   }
@@ -89,7 +89,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   if (!title || !body) {
     const generated = await runPullRequestBodyWorkflow({ baseBranch: base })
     if (!generated.ok) {
-      logger.log(generated.message || `Failed to generate a ${nouns.singularLower} body.`, { color: 'red' })
+      logger.error(generated.message || `Failed to generate a ${nouns.singularLower} body.`, { color: 'red' })
       commandExit(1)
       return
     }
@@ -98,7 +98,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   }
 
   if (!title) {
-    logger.log(`Could not produce a ${nouns.singularLower} title.`, { color: 'red' })
+    logger.error(`Could not produce a ${nouns.singularLower} title.`, { color: 'red' })
     commandExit(1)
     return
   }
@@ -168,7 +168,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   }
 
   if (!result.ok) {
-    logger.log(result.message, { color: 'red' })
+    logger.error(result.message, { color: 'red' })
     for (const detail of result.details || []) logger.log(detail, { color: 'gray' })
     commandExit(1)
     return

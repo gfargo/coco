@@ -12,13 +12,13 @@ import { handler } from './handler'
 describe('coco cache <subcommand>', () => {
   let tmpRoot: string
   let originalXdgCacheHome: string | undefined
-  let logger: { log: jest.Mock }
+  let logger: { log: jest.Mock; error: jest.Mock }
 
   beforeEach(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-cache-cmd-'))
     originalXdgCacheHome = process.env.XDG_CACHE_HOME
     process.env.XDG_CACHE_HOME = tmpRoot
-    logger = { log: jest.fn() }
+    logger = { log: jest.fn(), error: jest.fn() }
   })
 
   afterEach(() => {
@@ -74,7 +74,7 @@ describe('coco cache <subcommand>', () => {
       name: 'CommandExitError',
       code: 1,
     })
-    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Unknown cache subcommand'))
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Unknown cache subcommand'), expect.anything())
   })
 
   describe('tree-sitter subcommands (#933 phase 7)', () => {

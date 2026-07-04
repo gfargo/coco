@@ -172,7 +172,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         try {
           config.service.fields = JSON.parse(fieldsJson)
         } catch (e) {
-          logger.log('Invalid JSON for service fields. Skipping.', { color: 'red' })
+          logger.error('Invalid JSON for service fields. Skipping.', { color: 'red' })
           
           logger.verbose(`Error parsing service fields: ${(e as Error).message}`, {
             color: 'red',
@@ -289,7 +289,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         logger.log(`${PASS()} Verified: no issues found in your new config.`, { color: 'green' })
       } else {
         if (errors.length > 0) {
-          logger.log(`${FAIL()} ${errors.length} error(s) found in the persisted config:`, { color: 'red' })
+          logger.error(`${FAIL()} ${errors.length} error(s) found in the persisted config:`, { color: 'red' })
           for (const diagnostic of errors) {
             logger.log(`  ${chalk.red(diagnostic.message)}`)
           }
@@ -345,7 +345,7 @@ async function installCommitlintPackages(scope: 'global' | 'project', logger: Lo
     }
   } catch (error) {
     logger.stopSpinner('Failed to install commitlint packages')
-    logger.log(`Error installing commitlint packages: ${(error as Error).message}`, { color: 'red' })
+    logger.error(`Error installing commitlint packages: ${(error as Error).message}`, { color: 'red' })
     logger.log('You can install them manually later:', { color: 'yellow' })
     
     if (scope === 'global') {

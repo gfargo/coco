@@ -268,7 +268,7 @@ export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
       fs.writeFileSync(configPath, JSON.stringify(raw, null, 2) + '\n')
       logger.log(chalk.green(`\nWrote ${fixable.length} fix(es) to ${configPath}`))
     } catch (e) {
-      logger.log(chalk.red(`Failed to apply fixes: ${(e as Error).message}`))
+      logger.error(chalk.red(`Failed to apply fixes: ${(e as Error).message}`), {})
     }
   } else {
     const fixable = diagnostics.filter((d) => d.autoFix)

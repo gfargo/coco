@@ -105,7 +105,7 @@ export async function generateChangelogResult(
   ].filter(Boolean)
 
   if (exclusiveOptions.length > 1) {
-    logger.log(`Options ${exclusiveOptions.join(', ')} cannot be used together.`, { color: 'red' })
+    logger.error(`Options ${exclusiveOptions.join(', ')} cannot be used together.`, { color: 'red' })
     commandExit(1)
   }
 
@@ -146,7 +146,7 @@ export async function generateChangelogResult(
     } else if (config.range && config.range.includes(':')) {
       const [from, to] = config.range.split(':')
       if (!from || !to) {
-        logger.log(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
+        logger.error(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
         commandExit(1)
       }
       commits = await getCommitLogRangeDetails(from, to, { git, noMerges: true })
