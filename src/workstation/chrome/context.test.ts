@@ -3,6 +3,7 @@ import {
   createLogInkContextStatus,
   isLogInkContextKeyLoading,
   isLogInkContextLoading,
+  mergeRefreshedContext,
   updateLogInkContextStatus,
 } from './context'
 
@@ -22,5 +23,32 @@ describe('log Ink context loading state', () => {
     expect(next.branches).toBe('ready')
     expect(next.provider).toBe('loading')
     expect(loading.branches).toBe('loading')
+  })
+})
+
+describe('mergeRefreshedContext', () => {
+  it('preserves lazy-loaded slices the fresh snapshot does not carry', () => {
+    const previous = {
+      branches: ['main'],
+      pullRequestList: { items: [{ number: 962 }] },
+      issueList: { items: [{ number: 1 }] },
+    }
+    const next = { branches: ['main', 'dev'] }
+
+    const merged = mergeRefreshedContext(previous, next)
+
+    expect(merged.pullRequestList).toBe(previous.pullRequestList)
+    expect(merged.issueList).toBe(previous.issueList)
+    expect(merged.branches).toEqual(['main', 'dev'])
+  })
+
+  it('overwrites boot-fetched keys even when the fresh value is undefined', () => {
+    const previous = { branches: ['main'], pullRequestList: { items: [] } }
+    const next = { branches: undefined }
+
+    const merged = mergeRefreshedContext(previous, next)
+
+    expect(merged.branches).toBeUndefined()
+    expect(merged.pullRequestList).toBe(previous.pullRequestList)
   })
 })
