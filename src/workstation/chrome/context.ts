@@ -45,6 +45,17 @@ export function isLogInkContextLoading(status: LogInkContextStatus): boolean {
   return Object.values(status).some((state) => state === 'loading')
 }
 
+/**
+ * Merge a fresh boot-load snapshot onto the previous context. `next` only
+ * carries the keys `loadLogInkContext` owns (boot-fetched slices) — lazy-
+ * loaded slices it doesn't fetch (`pullRequestList`, `issueList`, per-item
+ * detail/blame caches) must survive untouched, or every refresh silently
+ * clears them (OSS-452).
+ */
+export function mergeRefreshedContext<T extends object>(previous: T, next: Partial<T>): T {
+  return { ...previous, ...next }
+}
+
 export function isLogInkContextKeyLoading(
   status: LogInkContextStatus,
   key: LogInkContextKey

@@ -929,6 +929,24 @@ export function useWorkflowAction(
           ? { ok: true, message: `Stashed changes and switched to ${name} — the stash is waiting on the stash surface (gz)` }
           : { ok: false, message: `Stashed changes, but the switch still failed: ${checkout.message}` }
       },
+      // Recovery follow-up for a dirty-worktree `gh pr checkout` refusal
+      // (#1430). Same shape as `stash-and-checkout-branch`, but the retry
+      // target is a PR number (rides in `payload`) checked out via the
+      // forge rather than a local branch name.
+      'stash-and-checkout-pr': async () => {
+        const prNumber = Number(payload)
+        if (!payload || !Number.isInteger(prNumber) || prNumber <= 0) {
+          return { ok: false, message: 'PR number required' }
+        }
+        const stashed = await createStash(git, `WIP before checking out PR #${prNumber}`)
+        if (!stashed.ok) {
+          return { ok: false, message: `Stash failed — staying put: ${stashed.message}` }
+        }
+        const checkout = await forge.checkoutPullRequestByNumber(prNumber)
+        return checkout.ok
+          ? { ok: true, message: `Stashed changes and checked out PR #${prNumber} — the stash is waiting on the stash surface (gz)` }
+          : { ok: false, message: `Stashed changes, but the checkout still failed: ${checkout.message}` }
+      },
       // #0.71 — submodule maintenance. Resolve the target from the
       // filtered list so the cursor index lines up with what's on screen
       // (a filtered-out submodule can never be the action target). The
@@ -1734,24 +1752,49 @@ export function useWorkflowAction(
     // checkout; Esc keeps the changes (and the current branch) in
     // place. The cursor hasn't moved (the checkout failed), so the
     // branch name captured for the row spinner is the retry target.
+    // #1430 — the identical refusal also dead-ends the post-create-branch
+    // switch (`checkout-created-branch`) and `gh pr checkout`
+    // (`triage-pr-checkout`). Those two carry their retry identity
+    // differently: `checkout-created-branch` has no `resolvePendingItemAction`
+    // case, so the branch name rides in `payload` instead; `triage-pr-checkout`
+    // resolves a PR NUMBER (from `payload` when invoked off the PR-diff view,
+    // else the cursored triage row) and retries via a dedicated
+    // `stash-and-checkout-pr` handler.
     if (
-      id === 'checkout-branch' &&
+      (id === 'checkout-branch' || id === 'checkout-created-branch' || id === 'triage-pr-checkout') &&
       !result?.ok &&
       isDirtyWorktreeCheckoutError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
     ) {
-      const branchName = pendingItemAction?.id
-      if (branchName) {
-        dispatch({
-          type: 'setPendingChoice',
-          value: {
-            id: 'dirty-checkout-recovery',
-            title: `Uncommitted changes block switching to '${branchName}'`,
-            warning: 'Stash & switch stashes everything (including untracked files), then retries the checkout. The stash stays put for you to pop later.',
-            options: [
-              { key: 's', label: 'Stash changes & switch', workflowId: 'stash-and-checkout-branch', payload: branchName },
-            ],
-          },
-        })
+      if (id === 'triage-pr-checkout') {
+        const prNumber = payload?.trim() || pendingItemAction?.id
+        if (prNumber) {
+          dispatch({
+            type: 'setPendingChoice',
+            value: {
+              id: 'dirty-checkout-recovery',
+              title: `Uncommitted changes block checking out PR #${prNumber}`,
+              warning: 'Stash & switch stashes everything (including untracked files), then retries the checkout. The stash stays put for you to pop later.',
+              options: [
+                { key: 's', label: 'Stash changes & switch', workflowId: 'stash-and-checkout-pr', payload: prNumber },
+              ],
+            },
+          })
+        }
+      } else {
+        const branchName = id === 'checkout-created-branch' ? payload?.trim() : pendingItemAction?.id
+        if (branchName) {
+          dispatch({
+            type: 'setPendingChoice',
+            value: {
+              id: 'dirty-checkout-recovery',
+              title: `Uncommitted changes block switching to '${branchName}'`,
+              warning: 'Stash & switch stashes everything (including untracked files), then retries the checkout. The stash stays put for you to pop later.',
+              options: [
+                { key: 's', label: 'Stash changes & switch', workflowId: 'stash-and-checkout-branch', payload: branchName },
+              ],
+            },
+          })
+        }
       }
     }
     // #1360 — a cherry-pick / revert / rebase / pull that stopped on
@@ -1761,19 +1804,36 @@ export function useWorkflowAction(
     // conflicts view, or abort the operation to unwind. Esc dismisses
     // the prompt but keeps the raw error status visible underneath
     // (`keepStatusOnDismiss`) — the repo really is mid-operation.
+    // #1430 — `autosquash-rebase` runs a real rebase and can stop on
+    // conflicts the same way `rebase-onto-branch`/`interactive-rebase` can.
     const conflictRecoveryTitles: Record<string, string> = {
       'cherry-pick-commit': 'Cherry-pick stopped on conflicts',
       'revert-commit': 'Revert stopped on conflicts',
       'rebase-onto-branch': 'Rebase stopped on conflicts',
       'interactive-rebase': 'Rebase stopped on conflicts',
       'execute-rebase-plan': 'Rebase stopped on conflicts',
+      'autosquash-rebase': 'Rebase stopped on conflicts',
       'pull-current-branch': 'Pull stopped on conflicts',
       'pull-selected-branch': 'Pull stopped on conflicts',
       'pull-rebase-current': 'Pull stopped on conflicts',
       'pull-merge-current': 'Pull stopped on conflicts',
     }
+    // `continue-operation` covers merge/rebase/cherry-pick/revert, so its
+    // title can't be a static string like the siblings above — it stops on
+    // a FURTHER conflict mid-sequence, and the operation type in progress
+    // is known via `context.operation?.operation`.
+    const continueOperationTitles: Record<string, string> = {
+      merge: 'Merge stopped on conflicts',
+      rebase: 'Rebase stopped on conflicts',
+      'cherry-pick': 'Cherry-pick stopped on conflicts',
+      revert: 'Revert stopped on conflicts',
+    }
+    const conflictRecoveryTitle =
+      id === 'continue-operation'
+        ? continueOperationTitles[context.operation?.operation ?? '']
+        : conflictRecoveryTitles[id]
     if (
-      conflictRecoveryTitles[id] &&
+      conflictRecoveryTitle &&
       !result?.ok &&
       isOperationConflictError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
     ) {
@@ -1781,7 +1841,7 @@ export function useWorkflowAction(
         type: 'setPendingChoice',
         value: {
           id: 'operation-conflict-recovery',
-          title: conflictRecoveryTitles[id],
+          title: conflictRecoveryTitle,
           warning: 'The repository is mid-operation. Resolve the conflicts and continue, or abort to unwind.',
           keepStatusOnDismiss: true,
           options: [
@@ -1852,6 +1912,9 @@ export function useWorkflowAction(
       // Stash & switch (#1360) changes HEAD the same way a plain
       // checkout does.
       'stash-and-checkout-branch',
+      // Stash & switch onto a PR (#1430) moves HEAD via `gh pr checkout`
+      // the same way `triage-pr-checkout` does.
+      'stash-and-checkout-pr',
     ])
     if (result?.ok && historyMutatingIds.has(id)) {
       await refreshHistoryRows()
@@ -1866,7 +1929,7 @@ export function useWorkflowAction(
     // (resolvePendingItemAction → action 'checkout'), so a silent
     // stale-while-revalidate swap keeps the list readable and just
     // repaints the current-branch marker once the new context lands.
-    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch' || id === 'triage-pr-checkout' || id === 'stash-and-checkout-branch') && result?.ok) {
+    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch' || id === 'triage-pr-checkout' || id === 'stash-and-checkout-branch' || id === 'stash-and-checkout-pr') && result?.ok) {
       dispatch({ type: 'resetBranchSelection' })
       await refreshContext({ silent: true })
     } else {
@@ -1907,7 +1970,8 @@ export function useWorkflowAction(
     }
     // Stash & switch (#1360) empties the worktree into a stash — refresh
     // so the staged/unstaged/untracked counts drop to zero immediately.
-    if (result?.ok && id === 'stash-and-checkout-branch') {
+    // #1430 — same for the PR variant.
+    if (result?.ok && (id === 'stash-and-checkout-branch' || id === 'stash-and-checkout-pr')) {
       await refreshWorktreeContext()
     }
     if (result?.ok && id === 'drop-stash') {

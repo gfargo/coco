@@ -28,6 +28,11 @@ export interface CommitOptions extends BaseCommandOptions {
    * one commit. Default: false (fallback is enabled).
    */
   strictSplit?: boolean
+  /**
+   * Only pass basic "git status" result instead of providing the entire
+   * diff to the LLM (reduces token usage for large changesets).
+   */
+  noDiff?: boolean
 }
 
 export type CommitArgv = Arguments<CommitOptions>

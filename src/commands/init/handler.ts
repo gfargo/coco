@@ -122,7 +122,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     // Bedrock authenticates through the AWS credential chain — there is no
     // coco-managed API key to prompt for. Point the user at the env vars
     // the AWS SDK resolves automatically.
-    console.log(
+    logger.log(
       'AWS Bedrock uses the standard AWS credential chain (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION). Set those in your environment.'
     )
   }
@@ -152,8 +152,6 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         temperature: await questions.inputModelTemperature(),
         tokenLimit: await questions.inputTokenLimit(),
       }
-
-      config.verbose = await questions.enableVerboseMode()
 
       if (llmProvider === 'ollama') {
         ;(config.service as OllamaLLMService).endpoint = await questions.inputOllamaEndpoint()
@@ -220,20 +218,22 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     message: approvalMessage,
   })
 
-  let configFilePath = ''
-
-  switch (scope) {
-    case 'project':
-      const fileTypeSelection = await questions.selectProjectConfigFileType()
-      configFilePath = await getProjectConfigFilePath(fileTypeSelection)
-      break
-    case 'global':
-    default:
-      configFilePath = getPathToUsersGitConfig()
-      break
-  }
-
   if (isApproved) {
+    // Resolve the config file path only after approval — so a user who
+    // answers "no" is never asked which file format to write.
+    let configFilePath = ''
+    switch (scope) {
+      case 'project': {
+        const fileTypeSelection = await questions.selectProjectConfigFileType()
+        configFilePath = await getProjectConfigFilePath(fileTypeSelection)
+        break
+      }
+      case 'global':
+      default:
+        configFilePath = getPathToUsersGitConfig()
+        break
+    }
+
     if (configFilePath.endsWith('.gitconfig')) {
       await appendToGitConfig(configFilePath, config)
     } else if (configFilePath.endsWith('.env')) {
