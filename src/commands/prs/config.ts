@@ -22,10 +22,11 @@ export interface PrsOptions extends BaseCommandOptions {
    */
   refresh?: boolean
   /**
-   * Disable cache entirely — skip read AND write. Useful when
-   * piping into tooling that manages its own freshness.
+   * Disable cache entirely — skip read AND write. Pass `--no-cache` on the
+   * CLI (the boolean negation of the `cache` flag). Useful when piping into
+   * tooling that manages its own freshness.
    */
-  noCache?: boolean
+  cache?: boolean
 }
 
 export type PrsArgv = Arguments<PrsOptions>
@@ -87,10 +88,15 @@ export const options = {
     description: 'Force fresh `gh` call (writes through to cache).',
     default: false,
   },
-  'no-cache': {
+  // Declared as `cache: boolean` (default true) so that the standard yargs
+  // boolean-negation syntax `--no-cache` is recognised as the logical inverse
+  // of a declared flag. Declaring it as `'no-cache'` would NOT be recognised
+  // as a negation under .strictOptions() — yargs would treat --no-cache as
+  // negating an undeclared `--cache` flag and emit "Unknown argument: cache".
+  cache: {
     type: 'boolean',
-    description: 'Skip the disk cache entirely (no read, no write).',
-    default: false,
+    description: 'Skip the disk cache entirely (no read, no write). Pass --no-cache to disable.',
+    default: true,
   },
 } as Record<string, Options>
 

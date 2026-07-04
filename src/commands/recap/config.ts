@@ -43,6 +43,12 @@ export const options = {
   'last-tag': {
     alias: 'tag',
     type: 'boolean',
+    // NOTE: `--tag` is a boolean alias for `--last-tag` here (means "since the
+    // last tag"). This diverges from `coco changelog --tag <name>` where `--tag`
+    // is a STRING pointing to a specific tag. Passing `coco recap --tag v1.0.0`
+    // therefore treats `v1.0.0` as a positional and silently recaps since the
+    // last tag instead. Reconciling this semantic divergence is tracked as a
+    // follow-up task (#1438).
     description: 'Recap for last tag',
   },
   currentBranch: {
