@@ -62,7 +62,7 @@ export function handleMissingApiKey(
   ]
 
   for (const line of lines) {
-    logger.log(line)
+    logger.error(line, {})
   }
 
   // Tag the exit message with the failing command so process supervisors

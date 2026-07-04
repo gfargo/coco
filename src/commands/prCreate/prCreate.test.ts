@@ -45,7 +45,7 @@ describe('pr create command', () => {
       version: false,
       help: false,
     } as Arguments<PrCreateOptions>
-    logger = { log: jest.fn(), verbose: jest.fn(), setConfig: jest.fn() } as unknown as Logger
+    logger = { log: jest.fn(), verbose: jest.fn(), setConfig: jest.fn(), error: jest.fn() } as unknown as Logger
 
     mockApplyRepoFlag.mockReturnValue({} as SimpleGit)
     mockLoadConfig.mockReturnValue({ service: { provider: 'openai' } } as unknown as Config)

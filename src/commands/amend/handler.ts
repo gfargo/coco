@@ -29,7 +29,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
   try {
     await git.revparse(['--verify', 'HEAD'])
   } catch {
-    logger.log('No commit to amend — the repository has no commits yet.', { color: 'red' })
+    logger.error('No commit to amend — the repository has no commits yet.', { color: 'red' })
     commandExit(1)
     return
   }
@@ -79,7 +79,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
 
   if (!result.ok || !result.draft) {
     for (const warning of result.warnings) logger.log(warning, { color: 'yellow' })
-    for (const error of result.validationErrors) logger.log(error, { color: 'red' })
+    for (const error of result.validationErrors) logger.error(error, { color: 'red' })
     commandExit(1)
     return
   }
@@ -139,7 +139,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
     )
   } catch (error) {
     if (error instanceof PreCommitHookError) {
-      logger.log('Amend blocked by a git hook:', { color: 'red' })
+      logger.error('Amend blocked by a git hook:', { color: 'red' })
       logger.log(error.hookOutput, { color: 'gray' })
       commandExit(1)
       return

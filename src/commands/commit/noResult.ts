@@ -14,13 +14,13 @@ export async function noResult({ git, logger }: NoResultInput): Promise<void> {
   const hasUntracked = untracked && untracked.length > 0
 
   if (hasStaged) {
-    logger.log(`Staged files detected, but no summary generated...`, { color: 'red' })
+    logger.error(`Staged files detected, but no summary generated...`, { color: 'red' })
     logger.log(
       `Files are likely either:\n  • changed files are ignored\n  • file diff is too large.`,
       { color: 'yellow' }
     )
   } else if (hasUnstaged || hasUntracked) {
-    logger.log('Forget something? No staged changes found... 👻', { color: 'red' })
+    logger.error('Forget something? No staged changes found... 👻', { color: 'red' })
 
     if (hasUnstaged) {
       logger.log('\nChanges not staged for commit:', { color: 'yellow' })

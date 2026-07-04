@@ -59,7 +59,7 @@ import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
 import {LOG_INTERACTIVE_DEFAULT_LIMIT, getCommitRows, getLogRows} from '../../commands/log/data'
 import {buildHistoryRefetchArgv, resolveHistoryRefetch} from './historyRefetchResolver'
-import {LogInkContextKey, createLogInkContextStatus, updateLogInkContextStatus} from '../chrome/context'
+import {LogInkContextKey, createLogInkContextStatus, mergeRefreshedContext, updateLogInkContextStatus} from '../chrome/context'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
 import {PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex} from '../chrome/selectionRectify'
@@ -485,6 +485,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     prDiffLoading, setPrDiffLoading,
     prDiffError, setPrDiffError,
   } = usePullRequestDiffState(React)
+  // OSS-452 — bumped every time `refreshContext` settles so the diff
+  // hydration effect re-evaluates even when `pullRequestList`'s reference
+  // is now preserved across refreshes (see `mergeRefreshedContext`). Without
+  // this, a failed `gh pr diff` fetch's `r`-to-retry only worked once: the
+  // unchanged `pullRequestList` reference meant the effect's deps never
+  // changed on a second refresh.
+  const [prDiffRefreshToken, setPrDiffRefreshToken] = React.useState(0)
   // Load-more pagination state, owned by `useHistoryPaginationState` (app.ts
   // decomposition item 3 / #1237). The `useState` pair stays in this exact
   // slot; the setters are shared (the loader `useLoadMoreHistory` below plus
@@ -793,8 +800,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     if (refreshContextRequestRef.current[issuedAtDepth] !== requestId) {
       return
     }
-    setContext(next, issuedAtDepth)
+    // OSS-452 — merge, don't replace: `next` only carries the boot-fetched
+    // keys `loadLogInkContext` owns. A wholesale replace silently wiped
+    // lazily-loaded slices (`pullRequestList`, `issueList`, per-item detail
+    // caches) on every refresh, including the fs-watcher's silent ones,
+    // which degraded the PR-diff view mid-read (see mergeRefreshedContext).
+    setContext((current) => mergeRefreshedContext(current, next), issuedAtDepth)
     setContextStatus(createLogInkContextStatus('ready'), issuedAtDepth)
+    // Force the PR-diff hydration effect to re-evaluate even though
+    // `pullRequestList`'s reference is now preserved — otherwise a failed
+    // `gh pr diff` fetch's `r`-to-retry goes inert after the first refresh.
+    setPrDiffRefreshToken((token) => token + 1)
     if (!options.silent) {
       dispatch({ type: 'setStatus', value: 'repository context refreshed' })
     }
@@ -1064,6 +1080,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     diffSource: state.diffSource,
     prDiffNumber: state.prDiffNumber,
     pullRequestList: context.pullRequestList,
+    refreshToken: prDiffRefreshToken,
     setPrDiffLines,
     setPrDiffLoading,
     setPrDiffError,

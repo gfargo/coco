@@ -79,6 +79,7 @@ describe('recap command', () => {
       log: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
+      error: jest.fn(),
       startTimer: jest.fn().mockReturnThis(),
       stopTimer: jest.fn(),
       startSpinner: jest.fn().mockReturnThis(),
@@ -240,6 +241,49 @@ describe('recap command', () => {
       summary: 'mocked summary message from git commit message',
     })
     expect(mockHandleResult).not.toHaveBeenCalled()
+  })
+
+  it('emits a JSON error envelope and exits non-zero when the LLM call fails with --json', async () => {
+    argv.json = true
+    mockExecuteChain.mockRejectedValue(new Error('boom'))
+
+    const writes: string[] = []
+    const writeSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(((chunk: string) => {
+        writes.push(String(chunk))
+        return true
+      }) as never)
+
+    try {
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+    } finally {
+      writeSpy.mockRestore()
+    }
+
+    const jsonCall = writes.find((message) => {
+      try {
+        JSON.parse(message)
+        return true
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    expect(JSON.parse(jsonCall as string)).toEqual({ error: 'boom' })
+  })
+
+  it('still prints the fallback markdown but exits non-zero on LLM failure without --json', async () => {
+    mockExecuteChain.mockRejectedValue(new Error('boom'))
+
+    await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+
+    expect(mockHandleResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: expect.stringContaining('Failed to parse the response'),
+      })
+    )
   })
 
   it('trims oversized rendered recap prompts before execution', async () => {
