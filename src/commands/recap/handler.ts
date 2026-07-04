@@ -60,6 +60,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
   }
 
   let structured: { title: string; summary: string } | undefined
+  let agentError: Error | undefined
 
   const { 'last-month': lastMonth, 'last-tag': lastTag, yesterday, 'last-week': lastWeek } = argv
 
@@ -270,7 +271,8 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
         return response ? `${response.title}\n\n${response.summary}` : 'no response'
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
+        agentError = error instanceof Error ? error : new Error(String(error))
+        const errorMessage = agentError.message
         // Log the error but don't exit
         logger.log(`Error parsing LLM response: ${errorMessage}`, { color: 'red' })
 
@@ -298,6 +300,10 @@ ${errorMessage}
   if (argv.json) {
     // emitJson writes to stdout directly, so the silenced logger (non-interactive
     // mode, or global --quiet) doesn't suppress the payload.
+    if (agentError) {
+      emitJson({ error: agentError.message })
+      commandExit(1)
+    }
     emitJson(structured ?? null)
     return
   }
@@ -314,4 +320,8 @@ ${errorMessage}
     mode: MODE as 'interactive' | 'stdout',
   })
   logLlmTelemetrySummary(logger, 'recap')
+
+  if (agentError && MODE !== 'interactive') {
+    commandExit(1)
+  }
 }

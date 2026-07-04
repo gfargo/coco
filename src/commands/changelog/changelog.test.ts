@@ -41,6 +41,10 @@ jest.mock('../../lib/ui/generateAndReviewLoop', () => ({
       return ''
     }
     const context = await parser(changes, '', options)
+    if (!context.length) {
+      await noResult(options)
+      return ''
+    }
     return await agent(context, options)
   }),
 }))
@@ -168,5 +172,26 @@ describe('changelog command', () => {
     expect(mockHandleResult).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'stdout' })
     )
+  })
+
+  it('emits JSON null (not colored status text) when there are no commits and --json is passed', async () => {
+    argv.json = true
+    mockGetCommitLogCurrentBranch.mockResolvedValue([])
+
+    const writes: string[] = []
+    const writeSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(((chunk: string) => {
+        writes.push(String(chunk))
+        return true
+      }) as never)
+
+    try {
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 0 })
+    } finally {
+      writeSpy.mockRestore()
+    }
+
+    expect(writes.map((w) => w.trim())).toContain('null')
   })
 })
