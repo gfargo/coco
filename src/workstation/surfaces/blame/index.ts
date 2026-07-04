@@ -59,7 +59,9 @@ export function renderBlameSurface(
   const lines = blame && blame.ok ? blame.lines : []
   const failureMessage = blame && !blame.ok ? blame.message : undefined
 
-  const listRows = Math.max(4, bodyRows - 4)
+  // Row budget: border(2) + title(1) + path(1) + both scroll indicators
+  // (2, worst case) = 6 rows of chrome the list itself doesn't occupy.
+  const listRows = Math.max(4, bodyRows - 6)
   const selected = Math.max(0, Math.min(state.selectedBlameIndex, Math.max(0, lines.length - 1)))
   // Window around the cursor — never render the whole file.
   const windowStart = Math.max(

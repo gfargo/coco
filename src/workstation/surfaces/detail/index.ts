@@ -485,6 +485,14 @@ export function renderHistoryInspector(
   // "Text string ' ' must be rendered inside <Text> component"
   // because Box only accepts component children, never bare strings.
   const activeTab = state.inspectorTab
+  // The two tab labels are fixed-width (bracketed vs space-padded reads
+  // the same length either way); the trailing hint is the only part
+  // that can be dropped, so only show it when it actually fits — the
+  // at-rest inspector column (~20-32 cells) is narrower than
+  // labels + hint combined and this row isn't otherwise truncated.
+  const tabLabelsWidth = cellWidth('[Inspector]') + cellWidth('[Actions]')
+  const tabHint = '  · ←/→ switch'
+  const showTabHint = focused && (width - 4 - tabLabelsWidth) >= cellWidth(tabHint)
   const tabHeader = h(Box, { key: 'inspector-tabs', flexDirection: 'row' },
     h(Text, {
       bold: activeTab === 'inspector',
@@ -494,8 +502,8 @@ export function renderHistoryInspector(
       bold: activeTab === 'actions',
       dimColor: activeTab !== 'actions',
     }, activeTab === 'actions' ? '[Actions]' : ' Actions '),
-    ...(focused
-      ? [h(Text, { key: 'inspector-tabs-hint', dimColor: true }, '  · ←/→ switch')]
+    ...(showTabHint
+      ? [h(Text, { key: 'inspector-tabs-hint', dimColor: true }, tabHint)]
       : []))
 
   // Tabbed mode (short terminals): render only the active tab's

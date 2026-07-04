@@ -31,6 +31,7 @@ import {
 } from '../chrome/layout'
 import { renderToLines } from './testSupport/renderToLines'
 import type { LogInkComponents, SurfaceRenderContext } from './types'
+import type { GitCommitDetail } from '../../commands/log/data'
 
 import { renderBisectSurface } from '../surfaces/bisect/index'
 import { renderBlameSurface, type BlameSurfaceData } from '../surfaces/blame/index'
@@ -52,6 +53,18 @@ import { renderStatusSurface } from '../surfaces/status/index'
 import { renderSubmodulesSurface } from '../surfaces/submodules/index'
 import { renderTagsSurface } from '../surfaces/tags/index'
 import { renderWorktreesSurface } from '../surfaces/worktrees/index'
+import {
+  renderBranchPreviewPanel,
+  renderCommitDiffDetail,
+  renderCommitPanel,
+  renderComposeContextPanel,
+  renderHistoryInspector,
+  renderIssueTriagePreviewPanel,
+  renderPullRequestTriagePreviewPanel,
+  renderStashPreviewPanel,
+  renderSubmodulePreviewPanel,
+  renderTagPreviewPanel,
+} from '../surfaces/detail/index'
 import {
   buildWorkspaceColumnHeaders,
   buildWorkspaceListWindow,
@@ -85,6 +98,18 @@ function paneSize(layout: ReturnType<typeof getLogInkLayout>): { width: number; 
   return { width: layout.mainPanelWidth, bodyRows: layout.bodyRows }
 }
 
+// Every registered surface's outermost Box sets `borderStyle` (with no
+// `paddingY`, confirmed per-surface), so each render costs 2 physical
+// rows — top + bottom border — beyond the content lines `renderToLines`
+// counts (the flattener has no concept of border chrome; it only knows
+// about `Box`/`Text` children). `bodyRows` is the height the runtime
+// hands the panel (`app.ts`'s `height: layout.bodyRows` wrapper), so the
+// row-budget invariant must charge those 2 rows against that budget too
+// — otherwise a surface could render exactly `bodyRows` content lines,
+// add its border on top, and silently push the footer down by 2 rows
+// while this test still passed.
+const BORDER_ROWS = 2
+
 // --- Adversarial fixture data, reused across surfaces -----------------
 
 const LONG_PATH = 'packages/apps/web/src/components/very/deeply/nested/module/index.tsx'
@@ -93,11 +118,20 @@ const LONG_BRANCH = 'feature/very-long-branch-name-for-a-monorepo-service-that-k
 // branch" status chip, the changelog title, a PR's head/base ref
 // summary, the upstream-ahead banner) concatenate their fields without
 // budgeting against the panel width the way row content does via
-// `truncateCells` — so they wrap in a real terminal rather than
-// visually corrupting the panel. Using `LONG_BRANCH` there would flag
-// that pre-existing, unrelated gap rather than the row-overflow bug
-// class this harness targets, so those specific fields use a shorter
-// (still realistically long) branch name instead.
+// `truncateCells` — e.g. `branches/index.ts`'s `headerRight` and
+// `iconography.ts`'s `formatUpstreamAheadBanner` both interpolate a
+// branch/upstream name straight into a `Text` child with no
+// `truncateCells` call. That's a real, pre-existing gap (tracked
+// separately — those call sites should budget against `width` the same
+// way every row does), not something this harness's generic
+// (non-keyed) flattener can respect on the current geometries without
+// either special-casing which lines are "headers" (defeating the
+// point of a surface-agnostic loop) or asserting a known-false
+// invariant on every run. `LONG_BRANCH` there would only demonstrate
+// the already-known gap on every single run, so those specific fields
+// use a shorter (still realistically long) branch name instead; the
+// row-content assertions above (over 20 surfaces, each with 60-300
+// adversarial rows) are what actually re-derives the harness's value.
 const MODERATE_BRANCH = 'feat/checkout-flow'
 const EMOJI_CJK = '🎉 修复问题 fix: 你好世界 🚀 emoji test'
 const TAB_CONTENT = '\tfunc\tmain() {\n\t\treturn 1\n\t}'
@@ -694,7 +728,375 @@ describe.each(SURFACES)('$name render budget', ({ build }) => {
     for (const line of lines) {
       expect(cellWidth(line)).toBeLessThanOrEqual(interior)
     }
-    expect(lines.length).toBeLessThanOrEqual(bodyRows)
+    // +BORDER_ROWS: the panel's own top/bottom border isn't part of
+    // `lines` (see the constant's comment above) but still consumes
+    // rows out of the `bodyRows` budget the runtime actually allots it.
+    expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+  })
+})
+
+// --- Detail / inspector / preview surface family ----------------------
+//
+// These don't take the shared `ctx` object — `renderDetailPanel`
+// (`detailPanel.ts`) dispatches to one of ~10 bespoke, positionally-
+// argued renderers in `surfaces/detail/index.ts` depending on the
+// active view + selection. Registered separately from `SURFACES` above
+// (different call shape, different pane width) so the inspector pane
+// gets the same width / row-budget coverage as the three tiled panels.
+
+// The inspector's width depends on focus (narrow at rest, wider when
+// tabbed into) and, at the floor geometry, on which pane is visible in
+// single-pane mode — the shared `GEOMETRIES` layouts (computed with no
+// focus override) resolve `detailWidth` to 0 there since the default
+// visible pane is `main`. Mirrors `paneSize`'s reasoning above, tailored
+// to the inspector: force it as the single visible pane at the floor
+// (what a user actually sees after Tab on a narrow terminal); take the
+// at-rest width at the default geometry (narrower, harder to fit, than
+// the focused width the runtime would actually use once tabbed in).
+const DETAIL_GEOMETRIES = [
+  ['80x24 (floor, inspector visible)', getLogInkLayout({
+    columns: LOG_INK_MIN_COLUMNS,
+    rows: LOG_INK_MIN_ROWS,
+    inspectorFocused: true,
+    forcedPane: 'inspector',
+  })],
+  ['120x40 (default, inspector at rest)', getLogInkLayout({
+    columns: LOG_INK_DEFAULT_COLUMNS,
+    rows: LOG_INK_DEFAULT_ROWS,
+  })],
+] as const
+
+function detailPaneSize(layout: ReturnType<typeof getLogInkLayout>): { width: number; bodyRows: number } {
+  return { width: layout.detailWidth, bodyRows: layout.bodyRows }
+}
+
+const COMMIT_DETAIL: GitCommitDetail = {
+  shortHash: '0000000',
+  hash: '0'.repeat(40),
+  parents: ['1'.repeat(40)],
+  date: '2026-05-18',
+  author: `${EMOJI_CJK} contributor with an extremely long display name`,
+  refs: [`HEAD -> ${LONG_BRANCH}`, `origin/${LONG_BRANCH}`, 'tag: v10.0.0-release-candidate'],
+  message: `${EMOJI_CJK} ${LONG_PATH} commit message headline that keeps going`,
+  body: times(20, (i) => (i % 4 === 0 ? TAB_CONTENT : `${EMOJI_CJK} body line ${i} ${LONG_PATH}`)).join('\n'),
+  files: times(60, (i) => ({
+    status: 'M',
+    path: `${LONG_PATH}/file-${i}.ts`,
+    additions: i,
+    deletions: i % 5,
+  })),
+  stats: { filesChanged: 60, insertions: 4000, deletions: 900 },
+}
+
+type DetailSurfaceEntry = {
+  name: string
+  build: (width: number, bodyRows: number, layout: ReturnType<typeof getLogInkLayout>) => ReactElement
+}
+
+const DETAIL_SURFACES: DetailSurfaceEntry[] = [
+  {
+    name: 'detail: commitPanel (status / worktree-diff inspector)',
+    build: (width) => {
+      const base = createLogInkState([])
+      return renderCommitPanel(
+        createElement,
+        components,
+        baseState({
+          commitCompose: {
+            ...base.commitCompose,
+            summary: `${EMOJI_CJK} ${LONG_PATH} generated summary line`,
+            body: times(30, (i) => (i % 5 === 0 ? TAB_CONTENT : `${EMOJI_CJK} ${LONG_PATH} body ${i}`)).join('\n'),
+            details: times(5, (i) => `${EMOJI_CJK} trailer ${i} ${LONG_PATH}`),
+            editing: false,
+            field: 'body',
+          },
+        }),
+        {
+          worktree: {
+            files: times(40, (i) => ({
+              path: `${LONG_PATH}/f-${i}.ts`,
+              indexStatus: 'M',
+              worktreeStatus: ' ',
+              state: 'staged' as const,
+            })),
+            stagedCount: 40,
+            unstagedCount: 0,
+            untrackedCount: 0,
+          },
+        },
+        createLogInkContextStatus('ready'),
+        width,
+        theme,
+        true
+      )
+    },
+  },
+  {
+    name: 'detail: commitDiffDetail (diff, commit-sourced)',
+    build: (width) => renderCommitDiffDetail(
+      createElement,
+      components,
+      baseState({ selectedFileIndex: 0 }),
+      COMMIT_DETAIL,
+      false,
+      width,
+      theme,
+      true
+    ),
+  },
+  {
+    name: 'detail: composeContextPanel (compose / pending-commit worktree summary)',
+    build: (width) => {
+      const base = createLogInkState([])
+      return renderComposeContextPanel(
+        createElement,
+        components,
+        baseState({ commitCompose: { ...base.commitCompose, loading: true } }),
+        {
+          worktree: {
+            files: [
+              ...times(20, (i) => ({
+                path: `${LONG_PATH}/staged-${i}.ts`,
+                indexStatus: 'M',
+                worktreeStatus: ' ',
+                state: 'staged' as const,
+              })),
+              ...times(20, (i) => ({
+                path: `${LONG_PATH}/unstaged-${i}.ts`,
+                indexStatus: ' ',
+                worktreeStatus: 'M',
+                state: 'unstaged' as const,
+              })),
+            ],
+            stagedCount: 20,
+            unstagedCount: 20,
+            untrackedCount: 0,
+          },
+        },
+        createLogInkContextStatus('ready'),
+        width,
+        theme,
+        true
+      )
+    },
+  },
+  {
+    name: 'detail: branchPreviewPanel',
+    build: (width) => renderBranchPreviewPanel(
+      createElement,
+      components,
+      baseState({ selectedBranchIndex: 0 }),
+      {
+        branches: {
+          currentBranch: MODERATE_BRANCH,
+          dirty: false,
+          localBranches: times(30, (i) => ({
+            type: 'local' as const,
+            name: `${LONG_BRANCH}-${i}`,
+            shortName: `${LONG_BRANCH}-${i}`,
+            hash: `${i}`.padStart(7, '0'),
+            current: i === 0,
+            date: '2026-05-18',
+            subject: `${EMOJI_CJK} ${LONG_PATH} subject ${i}`,
+            upstream: `origin/${LONG_BRANCH}-${i}`,
+            ahead: i,
+            behind: i % 3,
+          })),
+          remoteBranches: [],
+        },
+      },
+      createLogInkContextStatus('ready'),
+      width,
+      theme,
+      true
+    ),
+  },
+  {
+    name: 'detail: tagPreviewPanel',
+    build: (width) => renderTagPreviewPanel(
+      createElement,
+      components,
+      baseState({ selectedTagIndex: 0 }),
+      {
+        tags: {
+          tags: times(30, (i) => ({
+            name: `v${i}.0.0-${LONG_BRANCH}`,
+            hash: `${i}`.padStart(7, '0'),
+            date: '2026-05-18',
+            subject: `${EMOJI_CJK} ${LONG_PATH} release ${i}`,
+          })),
+        },
+      },
+      createLogInkContextStatus('ready'),
+      width,
+      theme,
+      true
+    ),
+  },
+  {
+    name: 'detail: stashPreviewPanel',
+    build: (width) => renderStashPreviewPanel(
+      createElement,
+      components,
+      baseState({ selectedStashIndex: 0 }),
+      {
+        stashes: {
+          stashes: times(30, (i) => ({
+            ref: `stash@{${i}}`,
+            hash: `${i}`.padStart(7, '0'),
+            baseHash: `${i}`.padStart(7, '0'),
+            date: '2026-05-18',
+            branch: `${LONG_BRANCH}-${i}`,
+            message: `${EMOJI_CJK} ${LONG_PATH} stash message ${i}`,
+            files: times(20, (f) => `${LONG_PATH}/file-${f}.ts`),
+          })),
+        },
+      },
+      createLogInkContextStatus('ready'),
+      width,
+      theme,
+      true
+    ),
+  },
+  {
+    name: 'detail: submodulePreviewPanel',
+    build: (width) => renderSubmodulePreviewPanel(
+      createElement,
+      components,
+      baseState({ selectedSubmoduleIndex: 0 }),
+      {
+        submodules: {
+          hasSubmodules: true,
+          entries: times(30, (i) => ({
+            name: `${LONG_PATH}/vendor-${i}`,
+            path: `${LONG_PATH}/vendor-${i}`,
+            pinnedSha: `${i}`.padStart(40, '0'),
+            flag: (['clean', 'modified', 'uninitialized', 'conflicted'] as const)[i % 4],
+            trackingBranch: LONG_BRANCH,
+            url: `git@github.com:org/${LONG_PATH}-${i}.git`,
+          })),
+        },
+      },
+      createLogInkContextStatus('ready'),
+      width,
+      theme,
+      true
+    ),
+  },
+  {
+    name: 'detail: issueTriagePreviewPanel',
+    build: (width) => renderIssueTriagePreviewPanel(
+      createElement,
+      components,
+      baseState({ selectedIssueIndex: 0 }),
+      {
+        issueList: {
+          available: true,
+          authenticated: true,
+          issues: times(30, (i) => ({
+            number: i + 1,
+            title: `${EMOJI_CJK} ${LONG_PATH} issue title ${i}`,
+            url: `https://github.com/o/r/issues/${i + 1}`,
+            state: i % 2 ? 'OPEN' : 'CLOSED',
+            author: `${LONG_BRANCH}-author-${i}`,
+            assignees: [`assignee-${i}`, `assignee-${i}-two`],
+            labels: ['bug', 'help wanted', 'good first issue', 'documentation', 'needs-triage'],
+            comments: i,
+            createdAt: '2026-01-01',
+            updatedAt: '2026-01-02',
+          })),
+        },
+      },
+      createLogInkContextStatus('ready'),
+      width,
+      theme,
+      true
+    ),
+  },
+  {
+    name: 'detail: pullRequestTriagePreviewPanel',
+    build: (width) => renderPullRequestTriagePreviewPanel(
+      createElement,
+      components,
+      baseState({ selectedPullRequestTriageIndex: 0 }),
+      {
+        pullRequestList: {
+          available: true,
+          authenticated: true,
+          pullRequests: times(30, (i) => ({
+            number: i + 1,
+            title: `${EMOJI_CJK} ${LONG_PATH} pull request title ${i}`,
+            url: `https://github.com/o/r/pull/${i + 1}`,
+            state: 'OPEN',
+            isDraft: i % 3 === 0,
+            headRefName: `${LONG_BRANCH}-${i}`,
+            baseRefName: 'main',
+            author: `${LONG_BRANCH}-author-${i}`,
+            labels: ['enhancement', 'help wanted', 'breaking-change', 'needs-review'],
+            createdAt: '2026-01-01',
+            updatedAt: '2026-01-02',
+          })),
+        },
+      },
+      createLogInkContextStatus('ready'),
+      width,
+      theme,
+      true
+    ),
+  },
+  {
+    name: 'detail: historyInspector',
+    build: (width, _bodyRows, layout) => renderHistoryInspector(
+      createElement,
+      components,
+      baseState({
+        selectedFileIndex: 0,
+        inspectorTab: 'inspector',
+        inspectorActionIndex: 0,
+      }),
+      {},
+      createLogInkContextStatus('ready'),
+      COMMIT_DETAIL,
+      false,
+      undefined,
+      false,
+      width,
+      layout.inspectorTabbed,
+      theme,
+      true
+    ),
+  },
+]
+
+describe.each(DETAIL_SURFACES)('$name render budget', ({ build }) => {
+  it.each(DETAIL_GEOMETRIES)('%s: stays within its width budget', (_label, layout) => {
+    const { width, bodyRows } = detailPaneSize(layout)
+    const tree = build(width, bodyRows, layout)
+    const lines = renderToLines(tree, Text, Box)
+
+    const interior = Math.max(20, width - 4)
+    for (const line of lines) {
+      expect(cellWidth(line)).toBeLessThanOrEqual(interior)
+    }
+    // No row-budget assertion here (unlike `SURFACES` above): confirmed
+    // by measurement, not assumption — `renderCommitPanel`,
+    // `renderCommitDiffDetail`, `renderComposeContextPanel`, and
+    // `renderHistoryInspector` don't accept a `bodyRows` parameter at
+    // all (see their signatures in `surfaces/detail/index.ts` and their
+    // call sites in `runtime/detailPanel.ts`), so unlike every surface
+    // above they have no mechanism to budget their body/file-list/
+    // actions sections against the space the runtime actually gives
+    // them. That's a real, pre-existing gap this harness surfaced: even
+    // a routine commit (an 8-line message, a dozen changed files —
+    // nothing adversarial) renders `historyInspector` at ~31 content
+    // rows against the 80x24 floor's ~17-row interior. Asserting a row
+    // budget here would either fail permanently until each of these
+    // renderers is redesigned to accept and honor `bodyRows` (a
+    // multi-file change touching shared preview formatters too, well
+    // beyond this harness's scope), or require quietly shrinking the
+    // fixtures below what real usage produces — reintroducing the
+    // exact loosening this suite exists to prevent. Tracked as a
+    // follow-up; flagged in the PR rather than silently asserted here.
   })
 })
 
