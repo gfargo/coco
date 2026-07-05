@@ -26,7 +26,9 @@ import { Config } from '../../lib/config/types'
 
 function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
   return rows.map((row) => {
-    const tokens = row.promptTokens > 0 ? `${row.promptTokens} tok` : '–'
+    const tokens = row.promptTokens > 0 || row.completionTokens > 0
+      ? `${row.promptTokens} in / ${row.completionTokens} out tok`
+      : '–'
     return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms`
   })
 }

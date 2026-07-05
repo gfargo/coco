@@ -1,4 +1,6 @@
+import type { AIMessage } from '@langchain/core/messages'
 import { OutputParserException } from '@langchain/core/output_parsers'
+import type { LLMResult } from '@langchain/core/outputs'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { Runnable } from '@langchain/core/runnables'
 import { handleLangChainError, isNetworkError } from '../errorHandler'
@@ -93,7 +95,34 @@ export const executeChain = async <T>({
 
     const chain = prompt.pipe(llm).pipe(parser)
     const startedAt = Date.now()
-    const result = (await chain.invoke(variables, signal ? { signal } : undefined)) as T
+
+    // `pipe(parser)` means the intermediate `AIMessage` (and its
+    // `usage_metadata`) is consumed internally before `executeChain` sees
+    // the parsed result — the callback is the only way to observe it.
+    // Providers attach `usage_metadata.output_tokens` on the completed
+    // chat-model run; older/proxied providers may only populate the
+    // legacy `llmOutput.tokenUsage.completionTokens`. Left `undefined`
+    // (never defaulted to 0) when neither is present.
+    let completionTokens: number | undefined
+    const usageCallback = {
+      handleLLMEnd: (output: LLMResult) => {
+        const generation = output.generations[0]?.[0] as { message?: AIMessage } | undefined
+        const outputTokens = generation?.message?.usage_metadata?.output_tokens
+        if (typeof outputTokens === 'number') {
+          completionTokens = outputTokens
+          return
+        }
+        const legacyCompletionTokens = output.llmOutput?.tokenUsage?.completionTokens
+        if (typeof legacyCompletionTokens === 'number') {
+          completionTokens = legacyCompletionTokens
+        }
+      },
+    }
+
+    const result = (await chain.invoke(variables, {
+      ...(signal ? { signal } : {}),
+      callbacks: [usageCallback],
+    })) as T
     const elapsedMs = Date.now() - startedAt
 
     logLlmCall(logger, {
@@ -102,6 +131,7 @@ export const executeChain = async <T>({
       parserType: parser.constructor.name,
       variableKeys: Object.keys(variables),
       promptTokens,
+      completionTokens,
       elapsedMs,
       ...metadata,
     })

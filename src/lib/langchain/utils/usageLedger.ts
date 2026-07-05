@@ -26,6 +26,8 @@ export type UsageRecord = {
   provider?: string
   model?: string
   promptTokens?: number
+  /** Output/completion tokens, when the provider's usage metadata reports them. */
+  completionTokens?: number
   elapsedMs?: number
   /** Readable `owner/repo` (or directory name) the call ran against. */
   repo?: string
@@ -35,6 +37,7 @@ export type UsageAggregate = {
   key: string
   calls: number
   promptTokens: number
+  completionTokens: number
   totalMs: number
   avgMs: number
 }
@@ -130,6 +133,7 @@ export function recordUsage(metadata: LlmCallMetadata): void {
     provider: metadata.provider,
     model: metadata.model,
     promptTokens: metadata.promptTokens,
+    completionTokens: metadata.completionTokens,
     elapsedMs: metadata.elapsedMs,
     ...(repoTag ? { repo: repoTag } : {}),
   }
@@ -187,12 +191,13 @@ export function readUsageRecords(filePath: string = getUsageLogPath()): UsageRec
 }
 
 function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): UsageAggregate[] {
-  const byKey = new Map<string, { calls: number; promptTokens: number; totalMs: number }>()
+  const byKey = new Map<string, { calls: number; promptTokens: number; completionTokens: number; totalMs: number }>()
   for (const r of records) {
     const key = keyOf(r) || 'unknown'
-    const current = byKey.get(key) || { calls: 0, promptTokens: 0, totalMs: 0 }
+    const current = byKey.get(key) || { calls: 0, promptTokens: 0, completionTokens: 0, totalMs: 0 }
     current.calls += 1
     current.promptTokens += r.promptTokens || 0
+    current.completionTokens += r.completionTokens || 0
     current.totalMs += r.elapsedMs || 0
     byKey.set(key, current)
   }
@@ -201,6 +206,7 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       key,
       calls: v.calls,
       promptTokens: v.promptTokens,
+      completionTokens: v.completionTokens,
       totalMs: v.totalMs,
       avgMs: v.calls > 0 ? Math.round(v.totalMs / v.calls) : 0,
     }))

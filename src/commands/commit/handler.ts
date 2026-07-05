@@ -34,6 +34,7 @@ import {
 } from './config'
 import { noResult } from './noResult'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
+import { salvageCommitMessageFromText } from './salvageCommitMessage'
 import { handleCommitSplit, isCommitSplitCommand } from './split'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
@@ -349,34 +350,7 @@ IMPORTANT RULES:
               )
             },
           },
-          fallbackParser: (text: string) => {
-            // First try to parse as JSON in case it's valid JSON with unusual formatting
-            try {
-              // Remove markdown code blocks if present
-              let cleanText = text.trim()
-              const codeBlockMatch = cleanText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-              if (codeBlockMatch && codeBlockMatch[1]) {
-                cleanText = codeBlockMatch[1].trim()
-              }
-
-              const parsed = JSON.parse(cleanText)
-              if (parsed &&
-                  typeof parsed === 'object' &&
-                  typeof parsed.title === 'string' &&
-                  typeof parsed.body === 'string' &&
-                  parsed.title.length > 0) {
-                return parsed
-              }
-            } catch {
-              // JSON parsing failed, fall through to text splitting
-            }
-
-            // Fallback to simple text splitting
-            return {
-              title: text.split('\n')[0] || 'Auto-generated commit',
-              body: text.split('\n').slice(1).join('\n') || 'Generated commit message',
-            }
-          },
+          fallbackParser: salvageCommitMessageFromText,
           onFallback: () => {
             logger.verbose('Max retry attempts reached. Falling back to simple text output.', {
               color: 'red',

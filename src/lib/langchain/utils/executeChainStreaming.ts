@@ -116,6 +116,58 @@ function coerceChunkText(messageChunk: unknown): string {
   return ''
 }
 
+/** Content-part `type`s that are genuinely non-textual — never worth stringifying. */
+const NON_TEXTUAL_PART_TYPES = new Set(['image_url', 'image', 'audio', 'file'])
+
+/**
+ * Best-effort fallback for content parts `coerceChunkText` can't turn into
+ * text — a provider that wraps structured output (JSON) in a non-`.text`
+ * content part instead of a plain string (audit finding #2). Narrowly
+ * scoped to parts that plausibly carry structured/text data (`json`,
+ * `partial_json`, `input` fields, or a `source_type: 'text'` block);
+ * genuinely non-textual parts (images, audio, files) are left dropped so a
+ * bad match can't feed garbage into the schema parser.
+ */
+/**
+ * Providers typically attach `usage_metadata` on the final streamed chunk
+ * (some may attach partial/cumulative values on more than one chunk) —
+ * callers should always take the LAST seen value, never sum across chunks.
+ */
+function extractCompletionTokens(messageChunk: unknown): number | undefined {
+  if (!messageChunk || typeof messageChunk !== 'object') return undefined
+  const outputTokens = (messageChunk as { usage_metadata?: { output_tokens?: number } })
+    .usage_metadata?.output_tokens
+  return typeof outputTokens === 'number' ? outputTokens : undefined
+}
+
+function coerceChunkNonTextFallback(messageChunk: unknown): string {
+  if (!messageChunk || typeof messageChunk !== 'object' || !('content' in messageChunk)) return ''
+  const content = (messageChunk as { content: unknown }).content
+  if (!Array.isArray(content)) return ''
+
+  return content
+    .map((part) => {
+      if (!part || typeof part !== 'object') return ''
+      const record = part as Record<string, unknown>
+      if (typeof record.type === 'string' && NON_TEXTUAL_PART_TYPES.has(record.type)) return ''
+      if ('text' in record) return '' // already handled by coerceChunkText
+
+      for (const field of ['json', 'partial_json', 'input']) {
+        const value = record[field]
+        if (typeof value === 'string') return value
+        if (value !== undefined) {
+          try {
+            return JSON.stringify(value)
+          } catch {
+            return ''
+          }
+        }
+      }
+      return ''
+    })
+    .join('')
+}
+
 /**
  * Streaming variant of `executeChain`. Pipes the prompt into the LLM,
  * consumes the resulting async iterable, fires `onChunk` with each text
@@ -198,6 +250,14 @@ export async function executeChainStreaming<T>({
 
     let chunkCount = 0
     let callbackFailureCount = 0
+    // Audit finding #2: some providers wrap structured output in a
+    // content part that lacks a `.text` field (e.g. `{ type: 'json', json:
+    // {...} }`), so `coerceChunkText` finds nothing even though the model
+    // DID emit content. Track a best-effort stringified fallback
+    // separately from `accumulated` so a stream made entirely of such
+    // parts doesn't spuriously throw "no text chunks" — the parser still
+    // gets a chance to work with the fallback text.
+    let nonTextFallback = ''
     // Audit finding #13: cap consecutive callback failures so a
     // genuinely broken render handler can't tie up the LLM call
     // silently for the user's entire wait. Five strikes (out of an
@@ -205,9 +265,24 @@ export async function executeChainStreaming<T>({
     // to ride out a transient blip but small enough to bail before
     // the user finishes waiting on a useless stream.
     const MAX_CALLBACK_FAILURES = 5
+    let completionTokens: number | undefined
     for await (const messageChunk of stream) {
+      const chunkCompletionTokens = extractCompletionTokens(messageChunk)
+      if (chunkCompletionTokens !== undefined) completionTokens = chunkCompletionTokens
+
       const text = coerceChunkText(messageChunk)
-      if (!text) continue
+      if (!text) {
+        // No plain-text part on this chunk — see if it carries a
+        // structured/textual fallback before giving up on it entirely.
+        // Not fed to `onChunk`: there's no sensible incremental preview
+        // for a partial JSON fragment, only a best-effort final parse.
+        const fallbackText = coerceChunkNonTextFallback(messageChunk)
+        if (fallbackText) {
+          nonTextFallback += fallbackText
+          chunkCount += 1
+        }
+        continue
+      }
       accumulated += text
       chunkCount += 1
       try {
@@ -239,14 +314,22 @@ export async function executeChainStreaming<T>({
       }
     }
 
-    if (!accumulated) {
+    if (chunkCount === 0) {
       throw new LangChainExecutionError(
         'executeChainStreaming: Stream completed with no text chunks',
         { variables, promptInputVariables: prompt.inputVariables },
       )
     }
 
-    const result = (await parser.invoke(accumulated)) as T
+    if (!accumulated && nonTextFallback) {
+      logger?.verbose(
+        `executeChainStreaming: no .text content parts arrived; falling back to ${nonTextFallback.length} stringified non-text chars for parsing.`,
+        { color: 'yellow' },
+      )
+    }
+
+    const textForParser = accumulated || nonTextFallback
+    const result = (await parser.invoke(textForParser)) as T
     const elapsedMs = Date.now() - startedAt
 
     logLlmCall(logger, {
@@ -255,6 +338,7 @@ export async function executeChainStreaming<T>({
       parserType: parser.constructor.name,
       variableKeys: Object.keys(variables),
       promptTokens,
+      completionTokens,
       elapsedMs,
       // Surfaced in observability so consumers can spot the streaming
       // path in their logs without correlating across tools. `chunks`
@@ -271,7 +355,7 @@ export async function executeChainStreaming<T>({
         {
           variables,
           promptInputVariables: prompt.inputVariables,
-          accumulatedLength: accumulated.length,
+          accumulatedLength: textForParser.length,
         },
       )
     }

@@ -1,5 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
@@ -9,6 +10,7 @@ function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatMode
     // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
     // respected instead of being coerced to the 0.2 default.
     temperature: config.service.temperature ?? 0.2,
+    maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
   }
 
   // Custom base URL for OpenAI-compatible APIs (OpenRouter, etc.).

@@ -1,5 +1,6 @@
 import { ChatMistralAI } from '@langchain/mistralai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createMistralLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
@@ -8,6 +9,7 @@ function createMistralLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatMod
     model,
     temperature: config.service.temperature ?? 0.2,
     maxConcurrency: config.service.maxConcurrent,
+    maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
   }
 
   // Merge Mistral-specific fields forwarded from service config.

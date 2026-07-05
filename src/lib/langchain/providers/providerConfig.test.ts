@@ -13,22 +13,26 @@
 import { Config } from '../../../commands/types'
 import { LLMModel } from '../types'
 import { getLlm } from '../utils/getLlm'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 
 type ProviderCase = {
   provider: 'openai' | 'gemini' | 'mistral' | 'azure' | 'anthropic'
   model: string
   extraService?: Record<string, unknown>
+  /** Field name the provider's LangChain client stores the output-token cap under. */
+  maxTokensField: 'maxTokens' | 'maxOutputTokens'
 }
 
 const CASES: ProviderCase[] = [
-  { provider: 'openai', model: 'gpt-5.4-mini' },
-  { provider: 'gemini', model: 'gemini-2.5-flash' },
-  { provider: 'mistral', model: 'mistral-small-latest' },
-  { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+  { provider: 'openai', model: 'gpt-5.4-mini', maxTokensField: 'maxTokens' },
+  { provider: 'gemini', model: 'gemini-2.5-flash', maxTokensField: 'maxOutputTokens' },
+  { provider: 'mistral', model: 'mistral-small-latest', maxTokensField: 'maxTokens' },
+  { provider: 'anthropic', model: 'claude-sonnet-4-6', maxTokensField: 'maxTokens' },
   {
     provider: 'azure',
     model: 'gpt-5.4-mini',
     extraService: { instanceName: 'inst', deploymentName: 'gpt-4o', apiVersion: '2024-10-21' },
+    maxTokensField: 'maxTokens',
   },
 ]
 
@@ -72,6 +76,20 @@ describe.each(CASES)('provider config forwarding — $provider', (c) => {
     )
     expect(temperatureOf(llm)).toBe(0.71)
   })
+
+  it('defaults the output-token cap to DEFAULT_MAX_OUTPUT_TOKENS', () => {
+    const llm = getLlm(c.provider, c.model as LLMModel, makeConfig(c)) as unknown as Record<string, unknown>
+    expect(llm[c.maxTokensField]).toBe(DEFAULT_MAX_OUTPUT_TOKENS)
+  })
+
+  it('lets service.fields override the default output-token cap', () => {
+    const llm = getLlm(
+      c.provider,
+      c.model as LLMModel,
+      makeConfig(c, { fields: { [c.maxTokensField]: 8192 } })
+    ) as unknown as Record<string, unknown>
+    expect(llm[c.maxTokensField]).toBe(8192)
+  })
 })
 
 describe('bedrock config forwarding', () => {
@@ -96,6 +114,18 @@ describe('bedrock config forwarding', () => {
     )
     expect((llm as { region?: string }).region).toBe('us-east-1')
     expect(temperatureOf(llm)).toBe(0.2)
+  })
+
+  it('defaults the output-token cap and lets service.fields override it', () => {
+    const llm = getLlm('bedrock', 'anthropic.claude-sonnet-4-6' as LLMModel, bedrockConfig())
+    expect((llm as { maxTokens?: number }).maxTokens).toBe(DEFAULT_MAX_OUTPUT_TOKENS)
+
+    const overridden = getLlm(
+      'bedrock',
+      'anthropic.claude-sonnet-4-6' as LLMModel,
+      bedrockConfig({ fields: { maxTokens: 8192 } })
+    )
+    expect((overridden as { maxTokens?: number }).maxTokens).toBe(8192)
   })
 
   it('omits credentials when none are configured (defers to the AWS chain)', () => {

@@ -1,6 +1,7 @@
 import { AzureChatOpenAI } from '@langchain/openai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { AzureLLMService } from '../types'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
@@ -13,6 +14,7 @@ function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel
     azureOpenAIApiVersion: svc.apiVersion,
     temperature: config.service.temperature ?? 0.2,
     maxConcurrency: config.service.maxConcurrent,
+    maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
   }
 
   // Merge Azure-specific fields forwarded from service config.

@@ -1,6 +1,7 @@
 import { ChatBedrockConverse } from '@langchain/aws'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { BedrockLLMService } from '../types'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createBedrockLlm({ model, config }: CreateLlmArgs): BaseChatModel {
@@ -9,6 +10,7 @@ function createBedrockLlm({ model, config }: CreateLlmArgs): BaseChatModel {
   const bedrockConfig: ConstructorParameters<typeof ChatBedrockConverse>[0] = {
     model,
     region: svc.region,
+    maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
     // Bedrock authenticates via the AWS credential chain by default
     // (env: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION, or a
     // shared profile). Only pass explicit credentials when both pieces are

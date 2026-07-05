@@ -1,6 +1,7 @@
 import { ChatOllama } from '@langchain/ollama'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { Config } from '../../../commands/types'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 /** Fallback when no endpoint is configured. Inlined here (rather than imported
@@ -14,11 +15,20 @@ function resolveOllamaEndpoint(config: Config): string {
 }
 
 function createOllamaLlm({ model, config }: CreateLlmArgs): BaseChatModel {
-  return new ChatOllama({
+  const ollamaConfig: ConstructorParameters<typeof ChatOllama>[0] = {
     baseUrl: resolveOllamaEndpoint(config),
     maxConcurrency: config.service.maxConcurrent,
     model,
-  })
+    numPredict: DEFAULT_MAX_OUTPUT_TOKENS,
+  }
+
+  // Merge Ollama-specific fields forwarded from service config (e.g. an
+  // explicit `numPredict` override).
+  if ('fields' in config.service && config.service.fields) {
+    Object.assign(ollamaConfig, config.service.fields)
+  }
+
+  return new ChatOllama(ollamaConfig)
 }
 
 export const ollamaProvider: ProviderDefinition = {

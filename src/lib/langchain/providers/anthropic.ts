@@ -1,5 +1,6 @@
 import { ChatAnthropic } from '@langchain/anthropic'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
@@ -10,6 +11,7 @@ function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatM
     // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
     // respected instead of being coerced to the 0.2 default.
     temperature: config.service.temperature ?? 0.2,
+    maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
   }
 
   // Custom endpoint for proxies / gateways.
