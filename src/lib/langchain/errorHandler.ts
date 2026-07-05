@@ -63,8 +63,8 @@ const TRANSIENT_ERROR_PATTERNS = [
  *
  * Deliberately distinct from `utils/retry`'s `defaultShouldRetry`, which is
  * broader: that one retries *any* non-permanent error (anything that isn't a
- * validation / configuration / authentication failure) so schema-output retries
- * can re-roll on e.g. unparseable model output. Transient ⊂ defaultShouldRetry.
+ * validation / configuration / authentication / schema-parse failure), not
+ * just transient network/rate-limit signals. Transient ⊂ defaultShouldRetry.
  */
 export function isRetryableError(error: unknown): boolean {
   if (isNetworkError(error)) return true
