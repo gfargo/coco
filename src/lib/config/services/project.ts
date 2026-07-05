@@ -6,6 +6,38 @@ import { ajv } from '../../ajv'
 const validate = ajv.compile(schema)
 
 /**
+ * A repo-committed `.coco.json` / `.coco.config.json` is untrusted content —
+ * anyone who can get a victim to `git clone` a repo controls this file. Only
+ * "tuning" knobs are honored from it; anything that decides WHERE a request
+ * goes or WHAT credentials it carries must come from a trusted layer (the
+ * built-in default, XDG config, `~/.gitconfig`, or env vars), never from the
+ * repo itself. Otherwise a hostile repo can point `service.baseURL` /
+ * `endpoint` / `authentication` / `fields` at an attacker's server and the
+ * victim's real API key (and staged diffs) get sent there on `coco commit`.
+ *
+ * `provider` is intentionally allowlisted: switching provider alone, with
+ * baseURL/endpoint/authentication/fields still pinned to trusted values, can
+ * at worst misroute to a different provider's OFFICIAL endpoint using a key
+ * the user already had configured for it — a nuisance, not an exfiltration
+ * vector.
+ */
+export const TRUSTED_PROJECT_SERVICE_KEYS = [
+  'model',
+  'tokenLimit',
+  'temperature',
+  'maxConcurrent',
+  'minTokensForSummary',
+  'maxFileTokens',
+  'maxParsingAttempts',
+  'dynamicModels',
+  'dynamicModelPreference',
+  'streaming',
+  'fastPath',
+  'requestOptions',
+  'provider',
+] as const
+
+/**
  * Config is loaded many times per command run — `loadConfig` is called
  * independently from the command handler, the command executor, the
  * default router, doctor, etc. Each call re-runs `loadProjectJsonConfig`,
@@ -18,7 +50,11 @@ const validate = ajv.compile(schema)
  */
 const warnedKeys = new Set<string>()
 
-function warnOnce(kind: 'parse' | 'validation', resolvedPath: string, message: string): void {
+function warnOnce(
+  kind: 'parse' | 'validation' | 'untrusted-service-fields',
+  resolvedPath: string,
+  message: string
+): void {
   const key = `${kind}:${resolvedPath}`
   if (warnedKeys.has(key)) return
   warnedKeys.add(key)
@@ -94,9 +130,44 @@ export function loadProjectJsonConfig<ConfigType = Config>(
     if (parsed) {
     // Removing $schema from the project config to avoid validation errors.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { $schema, ...projectConfig } = parsed
+    const { $schema, service: projectService, ...projectConfig } = parsed
 
     const merged = { ...config, ...projectConfig } as Config
+
+    // `service` is deep-merged (not shallow-spread like the rest of
+    // projectConfig above) and filtered through the trust boundary: only
+    // TRUSTED_PROJECT_SERVICE_KEYS from the repo-local file are honored.
+    // See the comment on TRUSTED_PROJECT_SERVICE_KEYS for why.
+    if (projectService) {
+      const safeServiceOverrides: Record<string, unknown> = {}
+      const rejectedKeys: string[] = []
+
+      for (const [key, value] of Object.entries(projectService)) {
+        if ((TRUSTED_PROJECT_SERVICE_KEYS as readonly string[]).includes(key)) {
+          safeServiceOverrides[key] = value
+        } else {
+          rejectedKeys.push(key)
+        }
+      }
+
+      if (rejectedKeys.length > 0) {
+        warnOnce(
+          'untrusted-service-fields',
+          resolvedPath,
+          `[coco] Warning: ${resolvedPath} tried to set service field(s) that a repo-local ` +
+          `config is not trusted to control: ${rejectedKeys.join(', ')}.\n` +
+          `  These determine where your requests go and/or what credentials they carry, so ` +
+          `they are ignored when set from a project file (anyone who can get you to clone a ` +
+          `repo could otherwise redirect your diffs and API key to their own server).\n` +
+          `  Configure them via an env var, \`~/.gitconfig\`, or your global (XDG) config instead.`
+        )
+      }
+
+      merged.service = {
+        ...config.service,
+        ...safeServiceOverrides,
+      } as Config['service']
+    }
 
     // Validate the merged result, but DON'T throw on failure.
     // Reasons:
