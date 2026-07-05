@@ -136,7 +136,7 @@ function sameRegionContent(a: ConflictRegion, b: ConflictRegion): boolean {
 }
 
 async function resolveWorktreeFile(git: SimpleGit, path: string): Promise<string> {
-  const root = (await git.revparse(['--show-toplevel'])).trim()
+  const root = resolvePath((await git.revparse(['--show-toplevel'])).trim())
   const resolved = resolvePath(root, path)
   const rootWithSep = root.endsWith(sep) ? root : root + sep
   if (resolved !== root && !resolved.startsWith(rootWithSep)) {
