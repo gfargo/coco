@@ -7,11 +7,9 @@ function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatM
     anthropicApiKey: apiKey,
     maxConcurrency: config.service.maxConcurrent,
     model,
-  }
-
-  // Respect the base temperature, overridable by the per-service field.
-  if (typeof config.service.temperature === 'number') {
-    anthropicConfig.temperature = config.service.temperature
+    // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
+    // respected instead of being coerced to the 0.2 default.
+    temperature: config.service.temperature ?? 0.2,
   }
 
   // Custom endpoint for proxies / gateways.

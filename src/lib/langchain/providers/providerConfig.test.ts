@@ -15,7 +15,7 @@ import { LLMModel } from '../types'
 import { getLlm } from '../utils/getLlm'
 
 type ProviderCase = {
-  provider: 'openai' | 'gemini' | 'mistral' | 'azure'
+  provider: 'openai' | 'gemini' | 'mistral' | 'azure' | 'anthropic'
   model: string
   extraService?: Record<string, unknown>
 }
@@ -24,6 +24,7 @@ const CASES: ProviderCase[] = [
   { provider: 'openai', model: 'gpt-5.4-mini' },
   { provider: 'gemini', model: 'gemini-2.5-flash' },
   { provider: 'mistral', model: 'mistral-small-latest' },
+  { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   {
     provider: 'azure',
     model: 'gpt-5.4-mini',
