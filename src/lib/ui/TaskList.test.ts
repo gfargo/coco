@@ -4,7 +4,10 @@ import { AutoFixConfig } from '../autofix/types'
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 jest.mock('../autofix', () => ({ runAutoFix: jest.fn() }))
-jest.mock('../utils/execPromise', () => ({ execPromise: jest.fn() }))
+const mockExecFile = jest.fn((_cmd: string, _args: string[], callback: (err: Error | null) => void) => {
+  callback(null)
+})
+jest.mock('child_process', () => ({ execFile: (...args: unknown[]) => mockExecFile(...(args as [string, string[], (err: Error | null) => void])) }))
 jest.mock('./helpers', () => ({
   bannerWithHeader: (_s: string) => _s,
   DIVIDER: '---',
@@ -13,8 +16,10 @@ jest.mock('./helpers', () => ({
   statusColor: () => (s: string) => s,
 }))
 
+type KeypressKey = { name: string; ctrl?: boolean }
+
 const mockRlClose = jest.fn()
-let keypressHandler: ((ch: string, key: { name: string }) => void) | null = null
+let keypressHandler: ((ch: string, key: KeypressKey) => void) | null = null
 
 jest.mock('readline', () => ({
   createInterface: jest.fn(() => ({ close: mockRlClose })),
@@ -22,11 +27,11 @@ jest.mock('readline', () => ({
 }))
 
 const mockStdinSetRawMode = jest.fn()
-const mockStdinOn = jest.fn((event: string, handler: (ch: string, key: { name: string }) => void) => {
+const mockStdinOn = jest.fn((event: string, handler: (ch: string, key: KeypressKey) => void) => {
   if (event === 'keypress') keypressHandler = handler
 })
 const mockStdinRemoveListener = jest.fn(
-  (event: string, handler: (ch: string, key: { name: string }) => void) => {
+  (event: string, handler: (ch: string, key: KeypressKey) => void) => {
     if (event === 'keypress' && keypressHandler === handler) keypressHandler = null
   }
 )
@@ -47,10 +52,8 @@ Object.defineProperty(process, 'stdin', {
 
 import { TaskList } from './TaskList'
 import { runAutoFix } from '../autofix'
-import { execPromise } from '../utils/execPromise'
 
 const mockRunAutoFix = runAutoFix as jest.Mock
-const mockExecPromise = execPromise as jest.Mock
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -83,11 +86,11 @@ beforeEach(() => {
     fn()
     return 0 as unknown as NodeJS.Timeout
   }) as typeof setTimeout)
-  mockStdinOn.mockImplementation((event: string, handler: (ch: string, key: { name: string }) => void) => {
+  mockStdinOn.mockImplementation((event: string, handler: (ch: string, key: KeypressKey) => void) => {
     if (event === 'keypress') keypressHandler = handler
   })
   mockStdinRemoveListener.mockImplementation(
-    (event: string, handler: (ch: string, key: { name: string }) => void) => {
+    (event: string, handler: (ch: string, key: KeypressKey) => void) => {
       if (event === 'keypress' && keypressHandler === handler) keypressHandler = null
     }
   )
@@ -131,7 +134,6 @@ describe('TaskList — keyboard shortcut "a"', () => {
 
 describe('TaskList — keyboard shortcuts', () => {
   it('opens the current file when key "o" is pressed', async () => {
-    mockExecPromise.mockResolvedValue(undefined)
     const expectedEditor = process.env.EDITOR || 'code'
 
     const tl = new TaskList([makeItem({ filePath: 'src/open-me.ts' })])
@@ -141,7 +143,50 @@ describe('TaskList — keyboard shortcuts', () => {
     await press('q')
     await startPromise.catch(() => undefined)
 
-    expect(mockExecPromise).toHaveBeenCalledWith(`${expectedEditor} src/open-me.ts`)
+    expect(mockExecFile).toHaveBeenCalledWith(
+      expectedEditor,
+      ['src/open-me.ts'],
+      expect.any(Function)
+    )
+  })
+
+  it('tokenizes an $EDITOR value with flags into separate args', async () => {
+    const originalEditor = process.env.EDITOR
+    process.env.EDITOR = 'code -w'
+
+    const tl = new TaskList([makeItem({ filePath: 'src/open-me.ts' })])
+    const startPromise = tl.start()
+
+    await press('o')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockExecFile).toHaveBeenCalledWith(
+      'code',
+      ['-w', 'src/open-me.ts'],
+      expect.any(Function)
+    )
+
+    process.env.EDITOR = originalEditor
+  })
+
+  it('logs an error and does not crash when the editor exec fails', async () => {
+    mockExecFile.mockImplementationOnce((_cmd, _args, callback) => {
+      callback(new Error('command not found'))
+    })
+
+    const tl = new TaskList([makeItem({ filePath: 'src/open-me.ts' })])
+    const startPromise = tl.start()
+
+    await press('o')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    const hasErrorMsg = logCalls.some(
+      (arg) => typeof arg === 'string' && arg.includes('Failed to open src/open-me.ts')
+    )
+    expect(hasErrorMsg).toBe(true)
   })
 
   it.each([
@@ -207,7 +252,36 @@ describe('TaskList — keyboard shortcuts', () => {
     await startPromise.catch(() => undefined)
 
     expect(mockRunAutoFix).not.toHaveBeenCalled()
-    expect(mockExecPromise).not.toHaveBeenCalled()
+    expect(mockExecFile).not.toHaveBeenCalled()
+    expect(mockRlClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('exits like "q" when Ctrl+C is pressed', async () => {
+    const tl = new TaskList([makeItem()])
+    const startPromise = tl.start()
+
+    for (let i = 0; i < 10 && !keypressHandler; i++) {
+      await Promise.resolve()
+    }
+    keypressHandler?.('', { name: 'c', ctrl: true })
+    await startPromise.catch(() => undefined)
+
+    expect(mockRlClose).toHaveBeenCalledTimes(1)
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    const hasSummary = logCalls.some(
+      (arg) => typeof arg === 'string' && arg.includes('Review Summary:')
+    )
+    expect(hasSummary).toBe(true)
+  })
+
+  it('does nothing on a bare "c" keypress without ctrl', async () => {
+    const tl = new TaskList([makeItem()])
+    const startPromise = tl.start()
+
+    await press('c')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
     expect(mockRlClose).toHaveBeenCalledTimes(1)
   })
 })

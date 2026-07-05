@@ -14,6 +14,7 @@ import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/lang
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { Logger } from '../../lib/utils/logger'
+import { TaskList } from '../../lib/ui/TaskList'
 
 jest.mock('../../lib/simple-git/getRepo')
 jest.mock('../../lib/simple-git/getChanges')
@@ -39,9 +40,10 @@ jest.mock('../../lib/ui/generateAndReviewLoop', () => ({
     return await agent(context, options)
   }),
 }))
+const mockTaskListStart = jest.fn()
 jest.mock('../../lib/ui/TaskList', () => ({
   TaskList: jest.fn().mockImplementation(() => ({
-    start: jest.fn(),
+    start: mockTaskListStart,
   })),
 }))
 
@@ -60,6 +62,7 @@ const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
 const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
   typeof getTokenCounterForProvider
 >
+const MockTaskList = TaskList as unknown as jest.Mock
 
 describe('review command', () => {
   let argv: Arguments<ReviewOptions>
@@ -234,5 +237,57 @@ describe('review command', () => {
       expect.stringContaining('Rendered prompt exceeded token budget'),
       { color: 'yellow' }
     )
+  })
+
+  describe('non-interactive TTY handling (no --json)', () => {
+    let originalStdinIsTTY: PropertyDescriptor | undefined
+    let originalStdoutIsTTY: PropertyDescriptor | undefined
+
+    beforeEach(() => {
+      originalStdinIsTTY = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY')
+      originalStdoutIsTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
+    })
+
+    afterEach(() => {
+      if (originalStdinIsTTY) {
+        Object.defineProperty(process.stdin, 'isTTY', originalStdinIsTTY)
+      } else {
+        delete (process.stdin as { isTTY?: boolean }).isTTY
+      }
+      if (originalStdoutIsTTY) {
+        Object.defineProperty(process.stdout, 'isTTY', originalStdoutIsTTY)
+      } else {
+        delete (process.stdout as { isTTY?: boolean }).isTTY
+      }
+    })
+
+    it('prints findings as text and skips TaskList when not a TTY', async () => {
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true })
+      Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true })
+
+      await handler(argv, logger)
+
+      expect(MockTaskList).not.toHaveBeenCalled()
+      const logCalls = (logger.log as jest.Mock).mock.calls.flat()
+      expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('Review finding'))).toBe(true)
+      expect(
+        logCalls.some(
+          (arg) => typeof arg === 'string' && arg.includes('re-run with --json for machine-readable output')
+        )
+      ).toBe(true)
+    })
+
+    it('still shows the interactive TaskList when both stdin and stdout are a TTY', async () => {
+      Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true })
+      Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true })
+
+      await handler(argv, logger)
+
+      expect(MockTaskList).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ title: 'Review finding' })]),
+        expect.anything()
+      )
+      expect(mockTaskListStart).toHaveBeenCalledTimes(1)
+    })
   })
 })
