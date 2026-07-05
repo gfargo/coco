@@ -8,7 +8,7 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
@@ -37,7 +37,9 @@ const mockResolveDynamicService = resolveDynamicService as jest.MockedFunction<
   typeof resolveDynamicService
 >
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
-const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
+  typeof getTokenCounterForProvider
+>
 const mockFileChangeParser = fileChangeParser as jest.MockedFunction<typeof fileChangeParser>
 const mockGetChanges = getChanges as jest.MockedFunction<typeof getChanges>
 const mockGetCurrentBranchName = getCurrentBranchName as jest.MockedFunction<
@@ -111,7 +113,7 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
       model: task === 'commit' ? 'commit-model' : 'summarize-model',
     }) as ReturnType<typeof resolveDynamicService>)
     mockGetLlm.mockReturnValue({} as ReturnType<typeof getLlm>)
-    mockGetTokenCounter.mockResolvedValue(charTokenizer)
+    mockGetTokenCounterForProvider.mockResolvedValue(charTokenizer)
     mockGetChanges.mockResolvedValue({
       staged: [{ filePath: 'src/index.ts', status: 'modified', summary: 'changed' }],
       unstaged: [],
