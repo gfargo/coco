@@ -92,10 +92,15 @@ export function resolveDiffSummaryCacheRepoPath(cwd: string = process.cwd()): st
     }).trim()
     if (toplevel) {
       // git always prints forward-slash paths, even on Windows, so
-      // normalize through realpathSync to get a native-separator,
-      // canonical form that matches how callers already reference cwd.
+      // normalize through realpathSync.native to get a native-separator,
+      // fully canonical form. Windows resolves a child process's cwd to
+      // its long-name form internally (even if a short 8.3 name like
+      // `RUNNER~1` was passed in), so git's output is already long-form;
+      // realpathSync.native (unlike plain realpathSync) also expands any
+      // remaining short-name segments, keeping this in sync with however
+      // the caller's cwd was spelled.
       try {
-        root = fs.realpathSync(toplevel)
+        root = fs.realpathSync.native(toplevel)
       } catch {
         root = toplevel
       }
