@@ -75,7 +75,7 @@ Gotchas that cost time if you skip them (most of these bit real contributors):
 - **Match CI's environment or timezone/ESM tests diverge.** CI runs jest with `TZ=UTC NODE_OPTIONS=--experimental-vm-modules`. Date-bucketing and a few module-loading suites are environment-sensitive; a green run locally in a non-UTC zone can still fail in CI. Reproduce CI exactly with:
   `TZ=UTC NODE_OPTIONS=--experimental-vm-modules npx jest`
 - **Working from a git worktree?** It has no `node_modules` of its own — resolve the jest/eslint/tsc binaries from the root checkout's `node_modules/.bin/` and run them with the worktree as CWD.
-- **One flaky test to know about:** `src/workstation/chrome/refreshWatcher.test.ts` (rename-survival) is timing-sensitive under heavy parallel load on macOS. If it's the *only* failure, re-run it in isolation to confirm before treating it as real.
+- **One flaky test to know about:** `src/workstation/chrome/refreshWatcher.test.ts` (rename-survival) is timing-sensitive under heavy parallel load on macOS; CI now retries it once automatically via `jest.retryTimes`. A failure that only shows up on the second attempt in CI logs is expected — treat consistent failure across both attempts as real.
 
 ## Working with the team's conventions
 

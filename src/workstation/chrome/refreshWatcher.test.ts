@@ -144,6 +144,13 @@ describe('createRefreshDebouncer', () => {
  * filters by filename, which survives any number of renames.
  */
 describe('createRefreshWatcher rename survival', () => {
+  // Environment-sensitive residue: real fs.watch + real timing under a
+  // loaded CI runner can still drop an individual replacement's events
+  // outright (see the comment on `waitFor` below). Retry once so a single
+  // environment-driven flake doesn't stall the whole CI run — a genuine
+  // regression fails both attempts.
+  jest.retryTimes(1, { logErrorsBeforeRetry: true })
+
   // Poll until the watcher has fired, up to a generous ceiling. A fixed
   // 150ms sleep between replacements was timing-flaky under CI load
   // (macOS + coverage): the two replacements' events coalesced into a
