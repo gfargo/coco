@@ -7,7 +7,7 @@ import { LLMService } from '../../lib/langchain/types'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
-import { createCommit } from '../../lib/simple-git/createCommit'
+import { PreCommitHookError, createCommit } from '../../lib/simple-git/createCommit'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { FileChange } from '../../lib/types'
@@ -15,6 +15,10 @@ import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import { Logger } from '../../lib/utils/logger'
 import { TokenCounter } from '../../lib/utils/tokenizer'
 import { confirmPrompt } from '../../lib/ui/inquirerPrompts'
+import {
+    HookFailureRecoveryChoice,
+    promptHookFailureRecovery,
+} from '../../lib/ui/hookFailurePrompt'
 import { CommitOptions } from './config'
 import {
     DEFAULT_MAX_PLAN_ATTEMPTS,
@@ -429,6 +433,7 @@ export async function applyCommitSplitPlan({
   logger,
   noVerify,
   fallback,
+  onHookFailure,
 }: {
   plan: CommitSplitPlan
   changes: Awaited<ReturnType<typeof getChanges>>
@@ -443,6 +448,17 @@ export async function applyCommitSplitPlan({
    * the degraded plan.
    */
   fallback?: import('./splitPlanGenerator').SplitPlanFallbackInfo
+  /**
+   * Optional recovery callback invoked when a group's commit is
+   * rejected by a pre-commit hook. Lets interactive CLI callers show
+   * the hook output and prompt for retry/skip/abort — the same UX
+   * regular `coco commit` already has. Omitted by non-interactive
+   * callers (and always by the Workstation/Ink path, which can't run
+   * blocking inquirer prompts): without it, a hook failure is simply
+   * recorded and the loop moves on to the next group, matching the
+   * pre-existing behavior.
+   */
+  onHookFailure?: (info: { title: string; hookOutput: string }) => Promise<HookFailureRecoveryChoice>
 }): Promise<CommitSplitApplyResult> {
   validatePlanForStagedFiles(plan, changes.staged, hunkInventory)
   assertNoUnstagedOverlap(plan, changes, hunkInventory)
@@ -517,7 +533,8 @@ export async function applyCommitSplitPlan({
   logger.startSpinner(`Applying ${applicableGroups.length} commits…`)
 
   const commitHashes: string[] = []
-  const failures: { title: string; reason: string }[] = []
+  const failures: { title: string; reason: string; hookOutput?: string }[] = []
+  let aborted = false
 
   // A failed group can leave its files sitting in the index (add
   // succeeded, commit rejected by a hook, patch half-applied, …). The
@@ -535,60 +552,94 @@ export async function applyCommitSplitPlan({
   for (const group of applicableGroups) {
     const groupFiles = getGroupFiles(group)
     const groupHunks = getGroupHunks(group).map((hunkId) => hunkInventory.byId.get(hunkId))
+    // Per-group override so "Skip hooks" only bypasses hooks for the
+    // group that got stuck, not every remaining group in the plan.
+    let groupNoVerify = noVerify
 
-    try {
-      if (groupFiles.length > 0) {
-        await git.add(groupFiles)
-      }
+    // Loop so a Retry/Skip choice from `onHookFailure` can re-attempt
+    // this same group's add + commit without falling through to the
+    // next group.
+    while (true) {
+      try {
+        if (groupFiles.length > 0) {
+          await git.add(groupFiles)
+        }
 
-      if (groupHunks.length > 0) {
-        const patch = buildPatchForHunks(groupHunks.filter((hunk): hunk is StagedHunk => Boolean(hunk)))
-        await applyPatchToIndex(patch, git)
-      }
+        if (groupHunks.length > 0) {
+          const patch = buildPatchForHunks(groupHunks.filter((hunk): hunk is StagedHunk => Boolean(hunk)))
+          await applyPatchToIndex(patch, git)
+        }
 
-      // Sanity-check the staged set before committing — if everything
-      // got dropped (e.g. .gitignore filtered all the group's files,
-      // or the paths point at things that don't exist on disk), git
-      // commit would throw "nothing to commit" mid-loop. Surface a
-      // clearer error instead.
-      const status = await git.status()
-      const stagedAfterAdd = status.staged.length + status.created.length + status.renamed.length
-      if (stagedAfterAdd === 0) {
+        // Sanity-check the staged set before committing — if everything
+        // got dropped (e.g. .gitignore filtered all the group's files,
+        // or the paths point at things that don't exist on disk), git
+        // commit would throw "nothing to commit" mid-loop. Surface a
+        // clearer error instead.
+        const status = await git.status()
+        const stagedAfterAdd = status.staged.length + status.created.length + status.renamed.length
+        if (stagedAfterAdd === 0) {
+          failures.push({
+            title: group.title,
+            reason: `git add succeeded but nothing ended up staged — paths may not exist on disk or be gitignored. files=[${groupFiles.join(', ')}]`,
+          })
+          break
+        }
+
+        // Avoid the literal string "undefined" in the commit body when
+        // the LLM omitted the body field — fall back to title-only.
+        const body = group.body ? `\n\n${group.body}` : ''
+        await createCommit(`${group.title}${body}`.trim(), git, undefined, { noVerify: groupNoVerify })
+
+        // Verify the commit actually advanced HEAD. Some hooks can
+        // exit success without committing (e.g. `--no-verify`-mode
+        // hooks misconfigured to skip silently). If HEAD didn't move,
+        // we didn't create a commit — record it as a failure instead
+        // of returning a misleading success.
+        const newHead = (await git.revparse(['HEAD'])).trim()
+        if (newHead === previousHead) {
+          failures.push({
+            title: group.title,
+            reason: 'git commit returned success but HEAD did not advance — commit may have been silently skipped',
+          })
+          await clearIndexAfterFailure()
+          break
+        }
+        commitHashes.push(newHead)
+        previousHead = newHead
+        logger.verbose(`Created split commit ${newHead.slice(0, 8)}: ${group.title}`, { color: 'green' })
+        break
+      } catch (error) {
+        if (error instanceof PreCommitHookError && onHookFailure) {
+          await clearIndexAfterFailure()
+          const choice = await onHookFailure({ title: group.title, hookOutput: error.hookOutput })
+
+          if (choice === 'retry') {
+            continue
+          }
+          if (choice === 'skip') {
+            groupNoVerify = true
+            continue
+          }
+
+          // abort: stop processing remaining groups, but keep whatever
+          // already landed so partial success is preserved and reported.
+          failures.push({ title: group.title, reason: error.message, hookOutput: error.hookOutput })
+          aborted = true
+          break
+        }
+
         failures.push({
           title: group.title,
-          reason: `git add succeeded but nothing ended up staged — paths may not exist on disk or be gitignored. files=[${groupFiles.join(', ')}]`,
-        })
-        continue
-      }
-
-      // Avoid the literal string "undefined" in the commit body when
-      // the LLM omitted the body field — fall back to title-only.
-      const body = group.body ? `\n\n${group.body}` : ''
-      await createCommit(`${group.title}${body}`.trim(), git, undefined, { noVerify })
-
-      // Verify the commit actually advanced HEAD. Some hooks can
-      // exit success without committing (e.g. `--no-verify`-mode
-      // hooks misconfigured to skip silently). If HEAD didn't move,
-      // we didn't create a commit — record it as a failure instead
-      // of returning a misleading success.
-      const newHead = (await git.revparse(['HEAD'])).trim()
-      if (newHead === previousHead) {
-        failures.push({
-          title: group.title,
-          reason: 'git commit returned success but HEAD did not advance — commit may have been silently skipped',
+          reason: error instanceof Error ? error.message : String(error),
+          hookOutput: error instanceof PreCommitHookError ? error.hookOutput : undefined,
         })
         await clearIndexAfterFailure()
-        continue
+        break
       }
-      commitHashes.push(newHead)
-      previousHead = newHead
-      logger.verbose(`Created split commit ${newHead.slice(0, 8)}: ${group.title}`, { color: 'green' })
-    } catch (error) {
-      failures.push({
-        title: group.title,
-        reason: error instanceof Error ? error.message : String(error),
-      })
-      await clearIndexAfterFailure()
+    }
+
+    if (aborted) {
+      break
     }
   }
 
@@ -607,6 +658,9 @@ export async function applyCommitSplitPlan({
   const unplannedNote = unplannedStaged.length > 0
     ? ` ${unplannedStaged.length} staged file(s) the plan excluded by config (e.g. lockfiles) were re-staged — commit them separately.`
     : ''
+  const abortedNote = aborted
+    ? ' Stopped after the hook failure was aborted — remaining groups were not attempted.'
+    : ''
 
   // If every group failed, throw — there's nothing to recover and
   // the caller needs a clear error path. Partial-success (some
@@ -616,7 +670,7 @@ export async function applyCommitSplitPlan({
     logger.stopSpinner('Split apply failed', { mode: 'fail', color: 'red' })
     const detail = failures.map((f) => `  - ${f.title}: ${f.reason}`).join('\n')
     throw new Error(
-      `Split apply created zero commits across ${applicableGroups.length} group(s).\n${detail}`
+      `Split apply created zero commits across ${applicableGroups.length} group(s).${abortedNote}\n${detail}`
     )
   }
 
@@ -630,7 +684,7 @@ export async function applyCommitSplitPlan({
     )
     return {
       commitHashes,
-      message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}${unplannedNote}`,
+      message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}${unplannedNote}${abortedNote}`,
       fallback,
     }
   }
@@ -858,6 +912,7 @@ export async function handleCommitSplit({
   llm,
   planLlm,
   planService,
+  interactive,
 }: {
   argv: Arguments<CommitOptions>
   config: Config & CommitOptions
@@ -867,6 +922,15 @@ export async function handleCommitSplit({
   llm: ReturnType<typeof getLlm>
   planLlm?: ReturnType<typeof getLlm>
   planService?: LLMService
+  /**
+   * Whether the CLI is running with an interactive prompt UI (matches
+   * the caller's `INTERACTIVE` check). Threaded through so a group's
+   * pre-commit-hook failure can offer the same Retry / Skip hooks /
+   * Abort recovery regular `coco commit` has, and degrade to a
+   * one-shot "fix and retry" message with no blocking prompt when
+   * there's no TTY to answer it. Defaults to `false`.
+   */
+  interactive?: boolean
 }): Promise<string> {
   const result = await prepareCommitSplitPlan({
     argv,
@@ -884,6 +948,20 @@ export async function handleCommitSplit({
   }
 
   const { plan, context, fallback, dedupeWarnings } = result
+
+  const onHookFailure = async ({
+    title,
+    hookOutput,
+  }: {
+    title: string
+    hookOutput: string
+  }): Promise<HookFailureRecoveryChoice> =>
+    promptHookFailureRecovery({
+      logger,
+      header: `✖ Commit blocked by pre-commit hook — group: "${title}"`,
+      hookOutput,
+      interactive: Boolean(interactive),
+    })
 
   // --plan: print the plan and exit (opt-out from the default apply prompt).
   if (argv.plan) {
@@ -912,6 +990,7 @@ export async function handleCommitSplit({
       logger,
       noVerify: argv.noVerify || config.noVerify || false,
       fallback,
+      onHookFailure,
     })
     if (applied.fallback) {
       return [
@@ -952,6 +1031,7 @@ export async function handleCommitSplit({
     logger,
     noVerify: argv.noVerify || config.noVerify || false,
     fallback,
+    onHookFailure,
   })
   if (applied.fallback) {
     return [

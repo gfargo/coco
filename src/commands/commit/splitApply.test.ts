@@ -15,12 +15,18 @@
 
 import type { FileChange } from '../../lib/types'
 import { applyCommitSplitPlan, type CommitSplitPlan } from './split'
-import { createCommit } from '../../lib/simple-git/createCommit'
+import { createCommit, PreCommitHookError } from '../../lib/simple-git/createCommit'
 import { Logger } from '../../lib/utils/logger'
 
 jest.mock('../../lib/simple-git/createCommit', () => ({
   createCommit: jest.fn(),
-  PreCommitHookError: class PreCommitHookError extends Error {},
+  PreCommitHookError: class PreCommitHookError extends Error {
+    hookOutput: string
+    constructor(hookOutput: string) {
+      super('Pre-commit hook failed')
+      this.hookOutput = hookOutput
+    }
+  },
 }))
 
 const mockedCreateCommit = createCommit as jest.MockedFunction<typeof createCommit>
@@ -171,5 +177,152 @@ describe('applyCommitSplitPlan apply-loop safety', () => {
 
     expect(ops.filter((op) => op.startsWith('add --'))).toEqual([])
     expect(result.message).not.toContain('re-staged')
+  })
+})
+
+describe('applyCommitSplitPlan onHookFailure recovery (OSS-662)', () => {
+  const logger = new Logger({ silent: true })
+
+  afterEach(() => jest.clearAllMocks())
+
+  it('retries the same group when onHookFailure resolves "retry"', async () => {
+    const { git } = makeFakeGit({ stagedBeforeReset: ['a.ts'] })
+    mockedCreateCommit
+      .mockImplementationOnce(async () => {
+        throw new PreCommitHookError('lint failed on a.ts')
+      })
+      .mockImplementationOnce(async (_msg, _git, _cb, options) => {
+        expect(options).toMatchObject({ noVerify: false })
+        git.advanceHead()
+        return {} as never
+      })
+
+    const onHookFailure = jest.fn().mockResolvedValue('retry')
+    const plan = makePlan([{ title: 'feat: a', files: ['a.ts'] }])
+
+    const result = await applyCommitSplitPlan({
+      plan,
+      changes: { staged: [fileChange('a.ts')], unstaged: [], untracked: [] },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+      onHookFailure,
+    })
+
+    expect(onHookFailure).toHaveBeenCalledTimes(1)
+    expect(onHookFailure).toHaveBeenCalledWith({ title: 'feat: a', hookOutput: 'lint failed on a.ts' })
+    expect(mockedCreateCommit).toHaveBeenCalledTimes(2)
+    expect(result.commitHashes).toEqual(['head-1'])
+    expect(result.message).toContain('Created 1 split commit')
+  })
+
+  it('retries with --no-verify for only the stuck group when onHookFailure resolves "skip"', async () => {
+    const { git } = makeFakeGit({ stagedBeforeReset: ['a.ts', 'b.ts'] })
+    mockedCreateCommit
+      .mockImplementationOnce(async () => {
+        throw new PreCommitHookError('lint failed on a.ts')
+      })
+      .mockImplementationOnce(async (_msg, _git, _cb, options) => {
+        expect(options).toMatchObject({ noVerify: true })
+        git.advanceHead()
+        return {} as never
+      })
+      .mockImplementationOnce(async (_msg, _git, _cb, options) => {
+        // Group B must NOT inherit group A's --no-verify skip.
+        expect(options).toMatchObject({ noVerify: false })
+        git.advanceHead()
+        return {} as never
+      })
+
+    const onHookFailure = jest.fn().mockResolvedValue('skip')
+    const plan = makePlan([
+      { title: 'feat: a', files: ['a.ts'] },
+      { title: 'feat: b', files: ['b.ts'] },
+    ])
+
+    const result = await applyCommitSplitPlan({
+      plan,
+      changes: { staged: [fileChange('a.ts'), fileChange('b.ts')], unstaged: [], untracked: [] },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+      onHookFailure,
+    })
+
+    expect(mockedCreateCommit).toHaveBeenCalledTimes(3)
+    expect(result.commitHashes).toEqual(['head-1', 'head-2'])
+  })
+
+  it('stops processing remaining groups and reports partial success when onHookFailure resolves "abort"', async () => {
+    const { git } = makeFakeGit({ stagedBeforeReset: ['a.ts', 'b.ts', 'c.ts'] })
+    mockedCreateCommit
+      .mockImplementationOnce(async () => {
+        git.advanceHead()
+        return {} as never
+      })
+      .mockImplementationOnce(async () => {
+        throw new PreCommitHookError('lint failed on b.ts')
+      })
+
+    const onHookFailure = jest.fn().mockResolvedValue('abort')
+    const plan = makePlan([
+      { title: 'feat: a', files: ['a.ts'] },
+      { title: 'feat: b', files: ['b.ts'] },
+      { title: 'feat: c', files: ['c.ts'] },
+    ])
+
+    const result = await applyCommitSplitPlan({
+      plan,
+      changes: {
+        staged: [fileChange('a.ts'), fileChange('b.ts'), fileChange('c.ts')],
+        unstaged: [],
+        untracked: [],
+      },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+      onHookFailure,
+    })
+
+    // Only groups A and B were attempted — C (after the abort) is untouched.
+    expect(mockedCreateCommit).toHaveBeenCalledTimes(2)
+    expect(onHookFailure).toHaveBeenCalledTimes(1)
+    expect(result.commitHashes).toEqual(['head-1'])
+    expect(result.message).toContain('1 of 3')
+    expect(result.message).toContain('aborted')
+  })
+
+  it('records the failure and continues to the next group when no onHookFailure callback is supplied', async () => {
+    const { git } = makeFakeGit({ stagedBeforeReset: ['a.ts', 'b.ts'] })
+    mockedCreateCommit
+      .mockImplementationOnce(async () => {
+        throw new PreCommitHookError('lint failed on a.ts')
+      })
+      .mockImplementationOnce(async () => {
+        git.advanceHead()
+        return {} as never
+      })
+
+    const plan = makePlan([
+      { title: 'feat: a', files: ['a.ts'] },
+      { title: 'feat: b', files: ['b.ts'] },
+    ])
+
+    const result = await applyCommitSplitPlan({
+      plan,
+      changes: { staged: [fileChange('a.ts'), fileChange('b.ts')], unstaged: [], untracked: [] },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+    })
+
+    expect(mockedCreateCommit).toHaveBeenCalledTimes(2)
+    expect(result.commitHashes).toEqual(['head-1'])
+    expect(result.message).toContain('1 of 2')
+    expect(result.message).not.toContain('aborted')
   })
 })
