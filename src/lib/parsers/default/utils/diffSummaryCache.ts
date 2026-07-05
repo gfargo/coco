@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
@@ -14,9 +15,11 @@ import * as path from 'node:path'
  * pipeline runs the LLM as before), and write failures are
  * swallowed silently. The cache is never load-bearing.
  *
- * Repos are keyed by a short hash of their absolute path. No PII
- * in the cache filename, and re-creating a repo at the same path
- * keeps the same cache.
+ * Repos are keyed by a short hash of their absolute path — the git
+ * toplevel, not `process.cwd()` (#1463), so `coco commit` run from a
+ * subdirectory hits the same cache file as a run from the repo root.
+ * No PII in the cache filename, and re-creating a repo at the same
+ * path keeps the same cache.
  *
  * Cache key: `sha256(diff + ':' + model + ':' + promptHash)`.
  *   - diff: the literal diff text being summarized
@@ -64,6 +67,36 @@ function repoKey(repoPath: string): string {
 
 export function getDiffSummaryCachePath(repoPath: string): string {
   return path.join(resolveCacheDir(), `summaries.${repoKey(repoPath)}.json`)
+}
+
+let cachedRepoRoot: { cwd: string; root: string } | undefined
+
+/**
+ * Resolve the repo identity used as the cache key: the git toplevel
+ * for `cwd`, not `cwd` itself (#1463). `coco commit` run from a
+ * subdirectory previously produced a different cache file than a run
+ * from the repo root, so cache hits were missed depending on
+ * invocation directory. Falls back to `cwd` when it isn't inside a
+ * git repo (or `git` isn't available) so the cache still has a stable
+ * identity. Memoized per `cwd` since it can't change mid-process.
+ */
+export function resolveDiffSummaryCacheRepoPath(cwd: string = process.cwd()): string {
+  if (cachedRepoRoot?.cwd === cwd) return cachedRepoRoot.root
+
+  let root = cwd
+  try {
+    const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (toplevel) root = toplevel
+  } catch {
+    // Not a git repo, or git unavailable — fall back to cwd.
+  }
+
+  cachedRepoRoot = { cwd, root }
+  return root
 }
 
 /**

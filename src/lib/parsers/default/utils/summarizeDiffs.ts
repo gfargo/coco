@@ -7,6 +7,7 @@ import { TokenCounter } from '../../../utils/tokenizer'
 import {
   diffSummaryKey,
   readDiffSummary,
+  resolveDiffSummaryCacheRepoPath,
   touchDiffSummary,
   writeDiffSummary,
 } from './diffSummaryCache'
@@ -63,7 +64,7 @@ export async function summarizeDirectoryDiff(
   // directory-level summary is reused instead of paying for another
   // map_reduce pass.
   const cacheModel = typeof metadata?.model === 'string' ? metadata.model : undefined
-  const cacheRepo = process.cwd()
+  const cacheRepo = resolveDiffSummaryCacheRepoPath()
   const cachePayload = directory.diffs
     .map((diff) => `${diff.file}\x1e${diff.diff}`)
     .join('\x1d')

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -8,6 +9,7 @@ import {
   diffSummaryKey,
   getDiffSummaryCachePath,
   readDiffSummary,
+  resolveDiffSummaryCacheRepoPath,
   touchDiffSummary,
   writeDiffSummary,
 } from './diffSummaryCache'
@@ -186,6 +188,31 @@ describe('diffSummaryCache (#845, PR 5)', () => {
 
     it('returns removed=false when the cache file did not exist', () => {
       expect(clearDiffSummaryCache('/repo/never-cached')).toEqual({ ok: true, removed: false })
+    })
+  })
+
+  describe('resolveDiffSummaryCacheRepoPath (#1463)', () => {
+    it('resolves a subdirectory to the same toplevel as the repo root', () => {
+      const repoRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'coco-diff-repo-')))
+      execFileSync('git', ['init', '-q'], { cwd: repoRoot })
+      const subDir = path.join(repoRoot, 'nested', 'dir')
+      fs.mkdirSync(subDir, { recursive: true })
+
+      try {
+        expect(resolveDiffSummaryCacheRepoPath(repoRoot)).toBe(repoRoot)
+        expect(resolveDiffSummaryCacheRepoPath(subDir)).toBe(repoRoot)
+      } finally {
+        fs.rmSync(repoRoot, { recursive: true, force: true })
+      }
+    })
+
+    it('falls back to cwd when not inside a git repo', () => {
+      const notARepo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'coco-diff-norepo-')))
+      try {
+        expect(resolveDiffSummaryCacheRepoPath(notARepo)).toBe(notARepo)
+      } finally {
+        fs.rmSync(notARepo, { recursive: true, force: true })
+      }
     })
   })
 
