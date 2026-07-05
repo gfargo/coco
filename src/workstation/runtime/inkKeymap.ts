@@ -1183,9 +1183,13 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     }
   }
   if (options.splitPlanStatus === 'applying') {
+    // No `q quit` here (unlike the loading/ready phases above) — the
+    // dispatcher deliberately blocks quitting mid-apply to avoid
+    // abandoning a half-applied split, so advertising it would be a
+    // footer lie.
     return {
       contextual: ['applying split…'],
-      global: ['q quit'],
+      global: [],
     }
   }
 
