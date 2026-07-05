@@ -64,7 +64,9 @@ export function renderFileHistorySurface(
   const commits = history && history.ok ? history.commits : []
   const failureMessage = history && !history.ok ? history.message : undefined
 
-  const listRows = Math.max(4, bodyRows - 4)
+  // Row budget: border(2) + title(1) + path(1) + both scroll indicators
+  // (2, worst case) = 6 rows of chrome the list itself doesn't occupy.
+  const listRows = Math.max(4, bodyRows - 6)
   const selected = Math.max(
     0,
     Math.min(state.selectedFileHistoryIndex, Math.max(0, commits.length - 1)),

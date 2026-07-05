@@ -161,8 +161,11 @@ export function renderConflictsSurface(ctx: SurfaceRenderContext): ReactTypes.Re
   // takes the majority of the pane — the file list shrinks to a
   // context strip.
   const session = state.conflictResolution
+  // The context-strip cap (3, was 4) leaves room for the panel's own
+  // border, which the proposal panel's block budget below floors at a
+  // minimum size and can't shrink further to compensate.
   const listRows = session
-    ? Math.max(2, Math.min(4, bodyRows - 4))
+    ? Math.max(2, Math.min(3, bodyRows - 4))
     : Math.max(4, bodyRows - 4)
   const startIndex = clampListWindowStart(selected, conflictedFiles.length, listRows)
   const visible = conflictedFiles.slice(startIndex, startIndex + listRows)
