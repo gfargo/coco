@@ -6,6 +6,7 @@ import { Logger } from '../../../utils/logger'
 import {
   diffSummaryKey,
   readDiffSummary,
+  resolveDiffSummaryCacheRepoPath,
   touchDiffSummary,
   writeDiffSummary,
 } from './diffSummaryCache'
@@ -234,7 +235,7 @@ async function summarizeFileDiff(
   // `coco commit` re-runs after small edits, the unchanged files
   // never go to the LLM.
   const cacheModel = typeof metadata?.model === 'string' ? metadata.model : undefined
-  const cacheRepo = process.cwd()
+  const cacheRepo = resolveDiffSummaryCacheRepoPath()
   const cacheKey = isCacheEnabled() && cacheModel
     ? diffSummaryKey(fileDiff.diff, cacheModel, SUMMARIZE_PROMPT_HASH)
     : undefined
