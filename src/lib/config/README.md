@@ -120,7 +120,7 @@ For user-facing configuration documentation, use the GitHub wiki as the source o
     apiKey = your-openai-api-key
 ```
 
-#### Project Config (`.coco.config.json`)
+#### Project Config (`.coco.json`, or legacy `.coco.config.json`)
 
 ```json
 {
@@ -131,11 +131,20 @@ For user-facing configuration documentation, use the GitHub wiki as the source o
   "service": {
     "provider": "openai",
     "model": "gpt-4",
-    "fields": {
-      "apiKey": "your-openai-api-key"
-    }
+    "temperature": 0.3
   }
 }
 ```
+
+**Trust boundary:** this file is typically committed to the repo, so it's
+untrusted content — anyone who can get you to `git clone` a repo controls it.
+Only "tuning" `service` fields (`model`, `temperature`, `tokenLimit`,
+`provider`, and similar) are honored from a project file. Anything that
+decides *where* a request goes or *what credentials* it carries —
+`authentication`, `baseURL`, `endpoint`, `fields`, and provider-specific
+connection fields (e.g. Azure's `instanceName`/`deploymentName`, Bedrock's
+`region`/`accessKeyId`) — is always ignored here and must instead come from
+an env var, your global (XDG) config, or `~/.gitconfig`. `coco` warns if a
+project file tries to set one of these.
 
 These examples demonstrate how the configuration files should be structured to align with the new `Config` or `ConfigWithServiceObject` types.

@@ -77,44 +77,39 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     service: service,
   }
 
+  // Project-scoped config gets committed to the repo, and the hardened
+  // project-config loader (see project.ts) never honors credentials or
+  // endpoints from a repo-local file — anyone who can get a victim to clone
+  // the repo would otherwise control where their API key and diffs get
+  // sent. So for project scope we skip collecting a real API key / custom
+  // Ollama endpoint entirely; they'd be written to disk but silently
+  // ignored on load, which is a worse (confusing auth failure) experience
+  // than just not asking.
+  const isProjectScope = scope === 'project'
+  const providersNeedingApiKey: Partial<Record<LLMProvider, { label: string; envVar: string }>> = {
+    openai: { label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
+    anthropic: { label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
+    gemini: { label: 'Google Gemini', envVar: 'GEMINI_API_KEY' },
+    mistral: { label: 'Mistral', envVar: 'MISTRAL_API_KEY' },
+    azure: { label: 'Azure OpenAI', envVar: 'AZURE_OPENAI_API_KEY' },
+  }
+
   let apiKey = '' as string
-  if (llmProvider === 'openai') {
-    apiKey = await questions.inputApiKey('OpenAI', 'OPENAI_API_KEY')
+  const apiKeyProvider = providersNeedingApiKey[llmProvider]
+  if (apiKeyProvider) {
+    if (isProjectScope) {
+      logger.log(
+        chalk.dim(
+          `Skipping API key prompt for project scope — repo-committed config can't hold credentials safely. ` +
+          `Set ${apiKeyProvider.envVar} via env var, or use \`coco init --scope global\` instead.`
+        )
+      )
+    } else {
+      apiKey = await questions.inputApiKey(apiKeyProvider.label, apiKeyProvider.envVar)
 
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
-    }
-  }
-
-  if (llmProvider === 'anthropic') {
-    apiKey = await questions.inputApiKey('Anthropic', 'ANTHROPIC_API_KEY')
-
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
-    }
-  }
-
-  if (llmProvider === 'gemini') {
-    apiKey = await questions.inputApiKey('Google Gemini', 'GEMINI_API_KEY')
-
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
-    }
-  }
-
-  if (llmProvider === 'mistral') {
-    apiKey = await questions.inputApiKey('Mistral', 'MISTRAL_API_KEY')
-
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
-    }
-  }
-
-  if (llmProvider === 'azure') {
-    apiKey = await questions.inputApiKey('Azure OpenAI', 'AZURE_OPENAI_API_KEY')
-
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
+      if (config.service.authentication.type === 'APIKey') {
+        config.service.authentication.credentials.apiKey = '•••••••••••••••'
+      }
     }
   }
 
@@ -154,7 +149,17 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       }
 
       if (llmProvider === 'ollama') {
-        ;(config.service as OllamaLLMService).endpoint = await questions.inputOllamaEndpoint()
+        if (isProjectScope) {
+          logger.log(
+            chalk.dim(
+              `Skipping custom Ollama endpoint prompt for project scope — repo-committed config can't ` +
+              `steer where requests go safely. Using the default (${(config.service as OllamaLLMService).endpoint}). ` +
+              `Set COCO_SERVICE_ENDPOINT via env var, or use \`coco init --scope global\` instead.`
+            )
+          )
+        } else {
+          ;(config.service as OllamaLLMService).endpoint = await questions.inputOllamaEndpoint()
+        }
       }
 
       config.service.requestOptions = {
