@@ -153,7 +153,7 @@ export function buildSyntheticArgv<T>(argv: DefaultRouteArgv): T {
     $0: argv.$0,
     repo: argv.repo,
     cwd: argv.cwd,
-    verbose: argv.verbose ?? false,
+    verbose: argv.verbose,
     interactive: true,
     version: false,
     help: false,

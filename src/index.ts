@@ -62,7 +62,6 @@ y.option('verbose', {
   type: 'boolean',
   alias: 'v',
   description: 'Print verbose diagnostic output (stack traces on errors, debug spans).',
-  default: false,
   global: true,
 })
 

@@ -275,6 +275,36 @@ describe('commit command', () => {
     expect(mockFileChangeParser).not.toHaveBeenCalled()
   })
 
+  // Regression for #1437: yargs used to always populate argv.includeBranchName
+  // (via `default: true`), so the handler's `argv.includeBranchName !== undefined`
+  // guard always short-circuited and a documented `includeBranchName: false`
+  // from config was never honored. `undefined` here mirrors a real invocation
+  // where the flag wasn't passed on the command line.
+  it('omits the branch name from the prompt when config disables it and no flag was passed (#1437)', async () => {
+    ;(argv as unknown as { includeBranchName?: boolean }).includeBranchName = undefined
+
+    mockLoadConfig.mockReturnValue({
+      service: {
+        authentication: { type: 'apiKey' },
+        provider: 'openai',
+        model: 'gpt-4o',
+      },
+      hideCocoBanner: false,
+      noDiff: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      includeBranchName: false,
+      conventionalCommits: false,
+      openInEditor: false,
+      mode: 'stdout',
+    } as unknown as Config)
+
+    await handler(argv, logger)
+
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+    expect(variables.branch_name_context).toBe('')
+  })
+
   describe('interactive commit flow (awaited handleResult)', () => {
     beforeEach(() => {
       argv.interactive = true
