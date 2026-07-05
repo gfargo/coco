@@ -2562,7 +2562,7 @@ export function getLogInkInputEvents(
         hunkOffsets: context.prDiffFileOffsets,
       })]
     }
-    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+    if (state.activeView === 'diff' && state.diffSource === 'commit' && context.commitDiffHunkOffsets?.length) {
       return [action({
         type: 'jumpCommitDiffHunk',
         delta: -1,
@@ -2601,7 +2601,7 @@ export function getLogInkInputEvents(
         hunkOffsets: context.prDiffFileOffsets,
       })]
     }
-    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+    if (state.activeView === 'diff' && state.diffSource === 'commit' && context.commitDiffHunkOffsets?.length) {
       return [action({
         type: 'jumpCommitDiffHunk',
         delta: 1,
