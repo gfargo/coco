@@ -90,7 +90,16 @@ export function resolveDiffSummaryCacheRepoPath(cwd: string = process.cwd()): st
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim()
-    if (toplevel) root = toplevel
+    if (toplevel) {
+      // git always prints forward-slash paths, even on Windows, so
+      // normalize through realpathSync to get a native-separator,
+      // canonical form that matches how callers already reference cwd.
+      try {
+        root = fs.realpathSync(toplevel)
+      } catch {
+        root = toplevel
+      }
+    }
   } catch {
     // Not a git repo, or git unavailable — fall back to cwd.
   }
