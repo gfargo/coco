@@ -1,4 +1,5 @@
 import type { FileDiff } from '../../../types'
+import { getTreeSitterParser } from '../__tree_sitter__/runtime'
 import {
   renderEvalReportMarkdown,
   runStructuralExtractEval,
@@ -7,6 +8,16 @@ import {
 function fileDiff(file: string, diff: string, tokenCount = 600): FileDiff {
   return { file, diff, summary: '', tokenCount }
 }
+
+// Pre-warm the tree-sitter WASM engine + TS language before any `it()`
+// runs. Without this, the first `dispatchStructuralParser` call anywhere
+// in this file pays the full `Parser.init()` + `Language.load()` cost
+// inside that test's default 5000ms timeout — under CPU pressure (e.g. a
+// loaded coverage runner) that cost can exceed the budget and the test
+// times out, even though nothing about the assertions themselves is flaky.
+beforeAll(async () => {
+  await getTreeSitterParser('typescript')
+}, 30_000)
 
 describe('runStructuralExtractEval', () => {
   it('reports zero LLM saves when only one config is supplied', async () => {

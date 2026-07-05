@@ -1,0 +1,72 @@
+name: Main broken alert
+
+# Post-merge safety net (OSS-459 / coco#1422): two independently-green PRs
+# can still combine into a red main. This watches completed `CI` runs and
+# files/updates a GitHub issue within minutes when a push to `main` goes
+# red, so the break is loud immediately instead of surfacing on the next
+# PR's CI. Uses `workflow_run` (rather than a job in ci.yml) so this
+# script always runs off the default-branch version of itself, regardless
+# of what triggered the CI run.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  alert:
+    if: github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // Marker is an HTML comment unique to this workflow, so dedup
+            // can't collide with an unrelated `bug`-labeled issue.
+            const marker = '<!-- main-broken-alert -->'
+            const conclusion = context.payload.workflow_run.conclusion
+            const runUrl = context.payload.workflow_run.html_url
+            const sha = context.payload.workflow_run.head_sha
+
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'bug',
+            })
+            const existing = openIssues.find(i => i.body && i.body.includes(marker))
+
+            if (conclusion === 'failure') {
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  body: `Still red at ${sha}: ${runUrl}`,
+                })
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: '🔴 main is broken — CI failing on push',
+                  labels: ['bug'],
+                  body: `${marker}\nCI failed on a push to \`main\` (${sha}).\n\nFailed run: ${runUrl}\n\nLikely cause: two independently-green PRs combined into a broken main (see OSS-459 / coco#1422). Investigate and fix or revert before building on top of this commit.`,
+                })
+              }
+            } else if (conclusion === 'success' && existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `main is green again at ${sha}: ${runUrl}`,
+              })
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: 'closed',
+              })
+            }

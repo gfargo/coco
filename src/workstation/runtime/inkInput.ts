@@ -1903,6 +1903,20 @@ export function getLogInkInputEvents(
     return [action({ type: 'togglePeek' })]
   }
 
+  // Compare-flow cancel via Esc (#779) when there's no view to pop.
+  // History is always the nav-stack root (navigateHome resets the
+  // stack instead of pushing "history" onto it), so a compareBase-armed
+  // Esc previously had no target — the footer advertised "esc back" but
+  // nothing fired. Treat it as an explicit cancel, mirroring the
+  // same-ref `m` toggle above but without requiring the cursor to still
+  // be parked on the base ref.
+  if (key.escape && state.compareBase && state.activeView === 'history' && state.viewStack.length <= 1) {
+    return [
+      action({ type: 'clearCompareBase' }),
+      action({ type: 'setStatus', value: `Cleared compare base ${state.compareBase.label}` }),
+    ]
+  }
+
   if (key.escape && state.viewStack.length > 1) {
     return [action({ type: 'popView' })]
   }
@@ -2548,7 +2562,7 @@ export function getLogInkInputEvents(
         hunkOffsets: context.prDiffFileOffsets,
       })]
     }
-    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+    if (state.activeView === 'diff' && state.diffSource === 'commit' && context.commitDiffHunkOffsets?.length) {
       return [action({
         type: 'jumpCommitDiffHunk',
         delta: -1,
@@ -2587,7 +2601,7 @@ export function getLogInkInputEvents(
         hunkOffsets: context.prDiffFileOffsets,
       })]
     }
-    if (state.activeView === 'diff' && context.commitDiffHunkOffsets?.length) {
+    if (state.activeView === 'diff' && state.diffSource === 'commit' && context.commitDiffHunkOffsets?.length) {
       return [action({
         type: 'jumpCommitDiffHunk',
         delta: 1,

@@ -36,4 +36,12 @@ export type ProviderDefinition = {
    * URL or a custom OpenAI baseURL). Optional.
    */
   resolveEndpoint?: (config: Config) => string | undefined
+  /**
+   * Multiplier applied to the gpt-4o tiktoken baseline count when this
+   * provider has no synchronous local tokenizer of its own. Undefined (the
+   * OpenAI/Azure case, whose tokenizer *is* tiktoken-family) means no
+   * correction — a factor of 1. May depend on the specific model id (e.g.
+   * Bedrock hosts multiple model families under one provider).
+   */
+  tokenCorrectionFactor?: number | ((model: string) => number)
 }

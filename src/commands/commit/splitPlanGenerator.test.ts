@@ -178,6 +178,60 @@ describe('generateValidatedCommitSplitPlan', () => {
     expect(result.plan.groups).toHaveLength(1)
     expect(result.plan.groups[0].files).toEqual(['a.ts', 'b.ts'])
     expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(1)
+    // #1462: the plan validates cleanly, but `a.ts` was silently
+    // dropped from the group the model also placed it in — surface
+    // that so a "clean-looking" split doesn't hide a wrong placement.
+    expect(result.dedupeWarnings).toEqual([
+      {
+        kind: 'file',
+        id: 'a.ts',
+        keptGroupIndex: 0,
+        keptGroupTitle: 'feat: shared',
+        droppedGroupIndices: [1],
+        droppedGroupTitles: ['chore: misc'],
+      },
+    ])
+  })
+
+  it('leaves dedupeWarnings undefined when the winning attempt has no duplicates', async () => {
+    const validPlan: CommitSplitPlan = {
+      groups: [
+        { title: 'a', files: ['a.ts'], hunks: [] },
+        { title: 'b', files: ['b.ts'], hunks: [] },
+      ],
+    }
+    mockExecuteChainWithSchema.mockResolvedValueOnce(validPlan)
+
+    const result = await generateValidatedCommitSplitPlan(baseArgs())
+
+    expect(result.dedupeWarnings).toBeUndefined()
+  })
+
+  it('only surfaces dedupeWarnings from the winning attempt, not a re-rolled earlier one', async () => {
+    // Attempt 1 has a duplicate file AND an unrelated unknown file —
+    // the unknown-file issue has no rescue, so validation still fails
+    // and the loop retries. Attempt 2 is clean. The stale duplicate
+    // from attempt 1 must not leak into the final result.
+    const attempt1: CommitSplitPlan = {
+      groups: [
+        { title: 'a', files: ['a.ts'], hunks: [] },
+        { title: 'b', files: ['a.ts', 'ghost.ts'], hunks: [] },
+      ],
+    }
+    const attempt2: CommitSplitPlan = {
+      groups: [
+        { title: 'a', files: ['a.ts'], hunks: [] },
+        { title: 'b', files: ['b.ts'], hunks: [] },
+      ],
+    }
+    mockExecuteChainWithSchema
+      .mockResolvedValueOnce(attempt1)
+      .mockResolvedValueOnce(attempt2)
+
+    const result = await generateValidatedCommitSplitPlan(baseArgs())
+
+    expect(result.attempts).toBe(2)
+    expect(result.dedupeWarnings).toBeUndefined()
   })
 
   it('rescues missing files by appending a misc group (#921 regression)', async () => {

@@ -37,7 +37,11 @@ type ListOverview = {
 type BaseListArgv = {
   /** Global `--repo <dir>` flag consumed by applyRepoFlag. */
   repo?: string
-  noCache?: boolean
+  /**
+   * Whether caching is enabled. Corresponds to the `--cache` / `--no-cache`
+   * CLI flags (default: true — pass `--no-cache` to disable).
+   */
+  cache?: boolean
   refresh?: boolean
   json?: boolean
 }
@@ -99,7 +103,7 @@ export function createGitHubListHandler<
     const repoPath = process.cwd()
     const filter = spec.buildFilter(argv)
 
-    const cacheEnabled = !argv.noCache
+    const cacheEnabled = argv.cache !== false
     let items: Item[] | undefined
     let fromCache = false
     let cacheAgeMs: number | undefined
@@ -124,13 +128,13 @@ export function createGitHubListHandler<
       const overview = await spec.fetch(git, filter, provider)
 
       if (!overview.available) {
-        logger.log(chalk.red(overview.message || 'No supported remote (GitHub or GitLab) detected.'))
+        logger.error(overview.message || 'No supported remote (GitHub or GitLab) detected.', { color: 'red' })
         commandExit(1)
         return
       }
 
       if (!overview.authenticated) {
-        logger.log(chalk.yellow(overview.message || 'No authenticated forge CLI detected.'))
+        logger.log(overview.message || 'No authenticated forge CLI detected.', { color: 'yellow' })
         logger.log(
           chalk.dim(
             `Authenticate the matching CLI (GitHub \`gh\` or GitLab \`glab\`) to enable ${spec.triageLabel}.`
@@ -141,7 +145,7 @@ export function createGitHubListHandler<
       }
 
       if (overview.message) {
-        logger.log(chalk.red(overview.message))
+        logger.error(overview.message, { color: 'red' })
         commandExit(1)
         return
       }

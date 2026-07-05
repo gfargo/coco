@@ -29,3 +29,21 @@ describe('validateModel (#1243 — per-provider validity)', () => {
     expect(() => validateModel('   ', 'openai')).toThrow(/non-empty string/)
   })
 })
+
+describe('validateModel (#1456 — deprecated model ids)', () => {
+  it('rejects a known-deprecated model before any request is made', () => {
+    expect(() => validateModel('gpt-4o', 'openai')).toThrow(LangChainValidationError)
+    expect(() => validateModel('gpt-4o', 'openai')).toThrow(/retired/)
+    expect(() => validateModel('gpt-4o', 'openai')).toThrow(/gpt-5\.4-mini/)
+  })
+
+  it('surfaces the curated replacement for deprecated ids across providers', () => {
+    expect(() => validateModel('claude-3-5-sonnet-latest', 'anthropic')).toThrow(
+      /claude-sonnet-4-6/,
+    )
+    expect(() => validateModel('gemini-1.5-flash', 'gemini')).toThrow(/gemini-2\.5-flash/)
+    expect(() =>
+      validateModel('anthropic.claude-3-5-sonnet-20241022-v2:0', 'bedrock'),
+    ).toThrow(/anthropic\.claude-sonnet-4-6/)
+  })
+})

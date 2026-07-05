@@ -15,6 +15,15 @@ export type LlmCallMetadata = {
   parserType?: string
   variableKeys?: string[]
   promptTokens?: number
+  /**
+   * Output/completion tokens the provider reports via its usage metadata
+   * (`AIMessage.usage_metadata.output_tokens` or the legacy
+   * `llmOutput.tokenUsage.completionTokens`). Optional and left `undefined`
+   * (never `0`) when a provider doesn't populate usage metadata — a
+   * fabricated zero would misrepresent `coco doctor --cost` as a confirmed
+   * measurement.
+   */
+  completionTokens?: number
   elapsedMs?: number
   inputDocuments?: number
   inputChunks?: number
@@ -43,6 +52,7 @@ type LlmBenchCall = {
   provider?: string
   model?: string
   promptTokens?: number
+  completionTokens?: number
   elapsedMs?: number
   inputDocuments?: number
   inputChunks?: number
@@ -53,6 +63,7 @@ const benchCalls: LlmBenchCall[] = []
 type LlmTelemetrySummary = {
   calls: number
   promptTokens: number
+  completionTokens: number
   elapsedMs: number
   inputDocuments: number
   inputChunks: number
@@ -87,6 +98,7 @@ function recordBenchCall(metadata: LlmCallMetadata): void {
     provider: metadata.provider,
     model: metadata.model,
     promptTokens: metadata.promptTokens,
+    completionTokens: metadata.completionTokens,
     elapsedMs: metadata.elapsedMs,
     inputDocuments: metadata.inputDocuments,
     inputChunks: metadata.inputChunks,
@@ -108,6 +120,7 @@ export function logLlmCall(logger: Logger | undefined, metadata: LlmCallMetadata
     metadata.model ? `model=${metadata.model}` : undefined,
     metadata.retryAttempt ? `retryAttempt=${metadata.retryAttempt}` : undefined,
     metadata.promptTokens !== undefined ? `promptTokens=${metadata.promptTokens}` : undefined,
+    metadata.completionTokens !== undefined ? `completionTokens=${metadata.completionTokens}` : undefined,
     metadata.elapsedMs !== undefined ? `elapsedMs=${metadata.elapsedMs}` : undefined,
     metadata.inputDocuments !== undefined ? `inputDocuments=${metadata.inputDocuments}` : undefined,
     metadata.inputChunks !== undefined ? `inputChunks=${metadata.inputChunks}` : undefined,
@@ -123,6 +136,7 @@ function recordLlmTelemetry(metadata: LlmCallMetadata): void {
   const current = telemetryByCommand.get(command) || {
     calls: 0,
     promptTokens: 0,
+    completionTokens: 0,
     elapsedMs: 0,
     inputDocuments: 0,
     inputChunks: 0,
@@ -132,6 +146,7 @@ function recordLlmTelemetry(metadata: LlmCallMetadata): void {
 
   current.calls += 1
   current.promptTokens += metadata.promptTokens || 0
+  current.completionTokens += metadata.completionTokens || 0
   current.elapsedMs += metadata.elapsedMs || 0
   current.inputDocuments += metadata.inputDocuments || 0
   current.inputChunks += metadata.inputChunks || 0
@@ -154,6 +169,7 @@ export function logLlmTelemetrySummary(logger: Logger | undefined, command: stri
     `command=${command}`,
     `calls=${summary.calls}`,
     summary.promptTokens > 0 ? `promptTokens=${summary.promptTokens}` : undefined,
+    summary.completionTokens > 0 ? `completionTokens=${summary.completionTokens}` : undefined,
     summary.elapsedMs > 0 ? `elapsedMs=${summary.elapsedMs}` : undefined,
     summary.inputDocuments > 0 ? `inputDocuments=${summary.inputDocuments}` : undefined,
     summary.inputChunks > 0 ? `inputChunks=${summary.inputChunks}` : undefined,

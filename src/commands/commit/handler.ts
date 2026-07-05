@@ -1,4 +1,3 @@
-import { type TiktokenModel } from '@langchain/openai'
 import { LLMModel } from '../../lib/langchain/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -24,7 +23,7 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { LOGO, SEPERATOR, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { commandExit } from '../../lib/utils/commandExit'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import { withRetry } from '../../lib/utils/retry'
 import {
@@ -35,6 +34,7 @@ import {
 } from './config'
 import { noResult } from './noResult'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
+import { salvageCommitMessageFromText } from './salvageCommitMessage'
 import { handleCommitSplit, isCommitSplitCommand } from './split'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
@@ -51,9 +51,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     handleMissingApiKey(logger, config, { command: 'commit' })
   }
 
-  const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-  )
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
@@ -70,7 +68,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       logger.log(LOGO)
     }
   } else {
-    logger.setConfig({ silent: true })
+    logger.setConfig({ quiet: true })
   }
 
   if (config.service.provider === 'ollama') {
@@ -284,7 +282,7 @@ IMPORTANT RULES:
               logger.log('\nPlease run `coco init` to set up commitlint, then try again.', { color: 'blue' })
               commandExit(0)
             case 'abort':
-              logger.log('\nAborting commit operation.', { color: 'red' })
+              logger.error('\nAborting commit operation.', { color: 'red' })
               commandExit(1)
           }
         } else {
@@ -352,34 +350,7 @@ IMPORTANT RULES:
               )
             },
           },
-          fallbackParser: (text: string) => {
-            // First try to parse as JSON in case it's valid JSON with unusual formatting
-            try {
-              // Remove markdown code blocks if present
-              let cleanText = text.trim()
-              const codeBlockMatch = cleanText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-              if (codeBlockMatch && codeBlockMatch[1]) {
-                cleanText = codeBlockMatch[1].trim()
-              }
-
-              const parsed = JSON.parse(cleanText)
-              if (parsed &&
-                  typeof parsed === 'object' &&
-                  typeof parsed.title === 'string' &&
-                  typeof parsed.body === 'string' &&
-                  parsed.title.length > 0) {
-                return parsed
-              }
-            } catch {
-              // JSON parsing failed, fall through to text splitting
-            }
-
-            // Fallback to simple text splitting
-            return {
-              title: text.split('\n')[0] || 'Auto-generated commit',
-              body: text.split('\n').slice(1).join('\n') || 'Generated commit message',
-            }
-          },
+          fallbackParser: salvageCommitMessageFromText,
           onFallback: () => {
             logger.verbose('Max retry attempts reached. Falling back to simple text output.', {
               color: 'red',
@@ -424,7 +395,7 @@ IMPORTANT RULES:
                 logger.log('\nPlease run `coco init` to set up commitlint, then try again.', { color: 'blue' })
                 commandExit(0)
               case 'abort':
-                logger.log('\nAborting commit due to missing dependencies.', { color: 'red' })
+                logger.error('\nAborting commit due to missing dependencies.', { color: 'red' })
                 commandExit(1)
             }
           }
@@ -481,7 +452,7 @@ IMPORTANT RULES:
                   fullMessage
                 )
               case 'abort':
-                logger.log('\nAborting commit due to validation errors.', { color: 'red' })
+                logger.error('\nAborting commit due to validation errors.', { color: 'red' })
                 commandExit(1)
             }
           }
@@ -525,7 +496,7 @@ IMPORTANT RULES:
   const MODE =
     (INTERACTIVE && 'interactive') || (config.commit && 'interactive') || config?.mode || 'stdout'
 
-  handleResult({
+  await handleResult({
     result: commitMsg as string,
     interactiveModeCallback: async (result) => {
       const noVerify = argv.noVerify || config.noVerify || false
@@ -547,7 +518,7 @@ IMPORTANT RULES:
         } catch (error) {
           if (error instanceof PreCommitHookError) {
             // Display friendly hook failure output
-            logger.log('\n✖ Commit blocked by pre-commit hook', { color: 'red' })
+            logger.error('\n✖ Commit blocked by pre-commit hook', { color: 'red' })
             logger.log('\nHook output:', { color: 'yellow' })
             logger.log(SEPERATOR)
             logger.log(error.hookOutput)
@@ -582,11 +553,11 @@ IMPORTANT RULES:
                 logger.log('⚠️  Skipping hooks with --no-verify...', { color: 'yellow' })
                 await attemptCommit(true)
               } else {
-                logger.log('\nCommit aborted.', { color: 'red' })
+                logger.error('\nCommit aborted.', { color: 'red' })
                 commandExit(1)
               }
             } else {
-              logger.log(
+              logger.error(
                 '\nFix the issues above and try again, or use --no-verify to skip hooks.',
                 { color: 'yellow' }
               )

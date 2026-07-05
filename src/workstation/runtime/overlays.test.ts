@@ -11,7 +11,7 @@ import { createLogInkContextStatus } from '../chrome/context'
 import { createLogInkTheme } from '../chrome/theme'
 import { createLogInkState } from '../../workstation/runtime/inkViewModel'
 import { renderDetailPanel } from './detailPanel'
-import { renderChoicePanel, renderConfirmationPanel, renderSplitPlanOverlay } from './overlays'
+import { renderChoicePanel, renderConfirmationPanel, renderHelpPanel, renderSplitPlanOverlay } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
 type StubProps = Record<string, unknown>
@@ -221,6 +221,53 @@ describe('split-plan overlay — unclaimed group (#1180)', () => {
   })
 })
 
+describe('split-plan overlay — dedupe rescue warning (#1462)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  function stateWithDedupeWarning() {
+    return {
+      ...createLogInkState([]),
+      splitPlan: {
+        status: 'ready' as const,
+        scrollOffset: 0,
+        plan: {
+          groups: [
+            { title: 'feat: docs', files: ['docs/page.tsx'], hunks: [] },
+            { title: 'chore: misc', files: ['package.json'], hunks: [] },
+          ],
+        },
+        dedupeWarnings: [
+          {
+            kind: 'file' as const,
+            id: 'docs/page.tsx',
+            keptGroupIndex: 0,
+            keptGroupTitle: 'feat: docs',
+            droppedGroupIndices: [1],
+            droppedGroupTitles: ['chore: misc'],
+          },
+        ],
+      },
+    }
+  }
+
+  it('renders a warning banner naming the file and the kept/dropped commits', () => {
+    const text = flattenText(
+      renderSplitPlanOverlay(createElement, components, stateWithDedupeWarning(), 100, 40, theme, false)
+    )
+    expect(text).toContain('auto-resolved')
+    expect(text).toContain('docs/page.tsx')
+    expect(text).toContain('kept in "feat: docs"')
+    expect(text).toContain('dropped from "chore: misc"')
+  })
+
+  it('renders no warning banner when there are no dedupe warnings', () => {
+    const state = stateWithDedupeWarning()
+    state.splitPlan.dedupeWarnings = []
+    const text = flattenText(renderSplitPlanOverlay(createElement, components, state, 100, 40, theme, false))
+    expect(text).not.toContain('auto-resolved')
+  })
+})
+
 describe('choice panel — worktree-checkout conflict (#1175, #1181)', () => {
   const components: LogInkComponents = { Box, Text }
 
@@ -250,5 +297,39 @@ describe('choice panel — worktree-checkout conflict (#1175, #1181)', () => {
   it('surfaces the dirty-worktree warning', () => {
     const text = flattenText(renderChoicePanel(createElement, components, conflictPrompt(true), 120, theme, false))
     expect(text).toContain('uncommitted changes')
+  })
+})
+
+describe('help overlay filter line cell-truncation (#1431)', () => {
+  const components: LogInkComponents = { Box, Text }
+  const width = 40
+  const longFilter = 'a'.repeat(200)
+
+  it('truncates the in-progress filter input line instead of wrapping', () => {
+    const state = {
+      ...createLogInkState([]),
+      showHelp: true,
+      helpFilterMode: true,
+      helpFilter: longFilter,
+    }
+    const text = flattenText(renderHelpPanel(createElement, components, state, width, theme, false))
+    expect(text).toContain('filter:')
+    expect(text).not.toContain(longFilter)
+    // The longest run of the filter's repeated character left in the
+    // output must respect the panel's row budget (width - 4), not wrap.
+    const longestRun = Math.max(...(text.match(/a+/g) ?? ['']).map((run) => run.length))
+    expect(longestRun).toBeLessThanOrEqual(width - 4)
+  })
+
+  it('truncates the no-match line instead of wrapping', () => {
+    const state = {
+      ...createLogInkState([]),
+      showHelp: true,
+      helpFilterMode: false,
+      helpFilter: longFilter,
+    }
+    const text = flattenText(renderHelpPanel(createElement, components, state, width, theme, false))
+    expect(text).toContain('No bindings match')
+    expect(text).not.toContain(longFilter)
   })
 })

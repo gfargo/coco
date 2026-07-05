@@ -7,6 +7,7 @@ import { TokenCounter } from '../../../utils/tokenizer'
 import {
   diffSummaryKey,
   readDiffSummary,
+  resolveDiffSummaryCacheRepoPath,
   touchDiffSummary,
   writeDiffSummary,
 } from './diffSummaryCache'
@@ -63,7 +64,7 @@ export async function summarizeDirectoryDiff(
   // directory-level summary is reused instead of paying for another
   // map_reduce pass.
   const cacheModel = typeof metadata?.model === 'string' ? metadata.model : undefined
-  const cacheRepo = process.cwd()
+  const cacheRepo = resolveDiffSummaryCacheRepoPath()
   const cachePayload = directory.diffs
     .map((diff) => `${diff.file}\x1e${diff.diff}`)
     .join('\x1d')
@@ -135,6 +136,18 @@ export async function summarizeDirectoryDiff(
 }
 
 /**
+ * Separator marking the start of each directory block in the rendered
+ * summary. Consumers (e.g. `enforcePromptBudget`) split on this to trim
+ * whole directory blocks instead of slicing through arbitrary characters.
+ */
+export const DIRECTORY_BLOCK_SEPARATOR = '\n-------\n'
+
+/**
+ * Prefix marking a per-file bullet line within a directory block.
+ */
+export const FILE_BULLET_PREFIX = ' • '
+
+/**
  * Default output formatter for directory diffs.
  *
  * TODO: Future improvements to consider:
@@ -145,15 +158,14 @@ export async function summarizeDirectoryDiff(
  * - Visual diff indicators showing magnitude of changes
  */
 const defaultOutputCallback = (group: DirectoryDiff) => {
-  let output = `
--------\n* changes in "/${group.path}"\n\n`
+  let output = `${DIRECTORY_BLOCK_SEPARATOR}* changes in "/${group.path}"\n\n`
 
   if (group.summary) {
-    output += `${group.diffs.map((diff) => ` • ${diff.summary}`).join('\n')}\n\nSummary:\n\n${
+    output += `${group.diffs.map((diff) => `${FILE_BULLET_PREFIX}${diff.summary}`).join('\n')}\n\nSummary:\n\n${
       group.summary
     }\n\n`
   } else {
-    output += `${group.diffs.map((diff) => ` • ${diff.summary}\n\n${diff.diff}`).join('\n\n')}\n\n`
+    output += `${group.diffs.map((diff) => `${FILE_BULLET_PREFIX}${diff.summary}\n\n${diff.diff}`).join('\n\n')}\n\n`
   }
 
   return output

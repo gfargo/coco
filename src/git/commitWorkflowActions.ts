@@ -1,5 +1,4 @@
 import { Arguments } from 'yargs'
-import { type TiktokenModel } from '@langchain/openai'
 import { SimpleGit } from 'simple-git'
 import { handler as commitHandler } from '../commands/commit/handler'
 import { CommitOptions } from '../commands/commit/config'
@@ -10,6 +9,7 @@ import {
   applyCommitSplitPlan,
   prepareCommitSplitPlan,
 } from '../commands/commit/split'
+import { DuplicateRescueNote } from '../commands/commit/splitPlanValidation'
 import { LangChainCancelledError } from '../lib/langchain/errors'
 import { LLMModel } from '../lib/langchain/types'
 import {
@@ -23,7 +23,7 @@ import { createCommit, PreCommitHookError } from '../lib/simple-git/createCommit
 import { getRepo } from '../lib/simple-git/getRepo'
 import { isCommandExitError } from '../lib/utils/commandExit'
 import { Logger } from '../lib/utils/logger'
-import { getTokenCounter } from '../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../lib/utils/tokenizer'
 
 export type CommitWorkflowAction = 'commit' | 'split-plan' | 'split-apply'
 
@@ -287,6 +287,13 @@ export type CommitSplitPlanResult =
        * knows the plan isn't a real LLM split.
        */
       fallback?: import('../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
+      /**
+       * Set when a dedupe rescue silently dropped a file/hunk
+       * placement the model had also put in an earlier group (#1462).
+       * Threaded from `prepareCommitSplitPlan` so the workstation
+       * overlay can surface the same warning the CLI preview shows.
+       */
+      dedupeWarnings?: DuplicateRescueNote[]
     }
   | {
       ok: false
@@ -334,9 +341,7 @@ export async function runCommitSplitPlanWorkflow(
   }
 
   try {
-    const tokenizer = await getTokenCounter(
-      provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-    )
+    const tokenizer = await getTokenCounterForProvider(provider, String(model))
     const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
     const planLlm = getLlm(provider, splitService.model as LLMModel, {
       ...config,
@@ -367,6 +372,7 @@ export async function runCommitSplitPlanWorkflow(
       plan: result.plan,
       planContext: result.context,
       fallback: result.fallback,
+      dedupeWarnings: result.dedupeWarnings,
     }
   } catch (error) {
     // User abort (Esc during generation) is intent, not failure — let

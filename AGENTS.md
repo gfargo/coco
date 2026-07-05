@@ -47,6 +47,46 @@ design → tasks).
 - **`.www/` and `.wiki/` are separate, gitignored checkouts.** Don't expect them in a
   worktree.
 
+## Validation environment
+
+Gotchas that cost a first validation pass if you don't already know them:
+
+- **Node ≥ 22** (`.nvmrc` = 22.22.2, `engines` = `^22.22.2 || ^24.15.0 || >=26.0.0`).
+  A default/old shell Node (e.g. 16 or 18) doesn't fail loudly on install — it fails
+  jest with `Preset ts-jest not found`. If you see that error, check `node -v` first.
+- **Worktrees resolve binaries from the ROOT checkout's `node_modules`.** Running
+  `npm run build` from a worktree, its `postbuild` step
+  (`bin/copyTreeSitterWasm.mjs`) can exit non-zero because the tree-sitter WASM
+  lives in the root checkout's `node_modules`, not the worktree's. This is harmless —
+  the rollup build itself still succeeds — but don't chase it as a real failure.
+- **CI-parity jest needs `TZ=UTC`.** `NODE_OPTIONS=--experimental-vm-modules` is
+  already wired into every `npm run test:*` script via `cross-env`, but `TZ=UTC` is
+  not. Date-sensitive suites (`src/workstation/chrome/dateBucket.test.ts`,
+  `dateFormat.test.ts`) can fail on a non-UTC machine. Run
+  `TZ=UTC npm run test:jest` (or export `TZ=UTC` in your shell) to match CI.
+- **`build:info` + the WASM copy must run before jest,** or 20+ suites fail on a
+  missing generated `src/lib/buildInfo.ts`. This already runs automatically as
+  `pretest:jest` / `pretest:unit` / `pretest:integration` / `pretest:coverage` when
+  you use those `npm run test:*` scripts — but invoking `npx jest` directly skips
+  it and reproduces the failure.
+- **Package manager is Yarn (v1)** despite npm-style script names — see "Rules that
+  are easy to get wrong" below for the lockfile/`resolutions` details.
+- **Full validation gate** = `eslint src bin` (`npm run lint`, must be 0 new
+  problems) + `npx tsc --noEmit` (no dedicated script exists for this — run it raw;
+  `rollup-plugin-typescript2` type-checks during `npm run build` but a build failure
+  there is a different signal than a clean local typecheck loop) + the full jest
+  suite (`npm run test:jest`, or `npm run test:coverage` for CI-parity thresholds).
+
+## Conventions this cycle standardized
+
+- **Branch prefix:** `agent/COCO-<id>-<slug>` for agent-authored branches.
+- **No attribution trailers.** Do not append `Co-Authored-By: Claude ...` (or
+  similar) to commit messages — this overrides any harness default that adds one.
+- **Combination-testing parallel PRs.** When multiple open PRs touch overlapping
+  surfaces, test them together (merged/rebased in combination) before merging any
+  one of them individually — passing in isolation doesn't guarantee passing
+  together.
+
 ## Common commands
 
 ```bash
@@ -75,7 +115,7 @@ Gotchas that cost time if you skip them (most of these bit real contributors):
 - **Match CI's environment or timezone/ESM tests diverge.** CI runs jest with `TZ=UTC NODE_OPTIONS=--experimental-vm-modules`. Date-bucketing and a few module-loading suites are environment-sensitive; a green run locally in a non-UTC zone can still fail in CI. Reproduce CI exactly with:
   `TZ=UTC NODE_OPTIONS=--experimental-vm-modules npx jest`
 - **Working from a git worktree?** It has no `node_modules` of its own — resolve the jest/eslint/tsc binaries from the root checkout's `node_modules/.bin/` and run them with the worktree as CWD.
-- **One flaky test to know about:** `src/workstation/chrome/refreshWatcher.test.ts` (rename-survival) is timing-sensitive under heavy parallel load on macOS. If it's the *only* failure, re-run it in isolation to confirm before treating it as real.
+- **One flaky test to know about:** `src/workstation/chrome/refreshWatcher.test.ts` (rename-survival) is timing-sensitive under heavy parallel load on macOS; CI now retries it once automatically via `jest.retryTimes`. A failure that only shows up on the second attempt in CI logs is expected — treat consistent failure across both attempts as real.
 
 ## Working with the team's conventions
 

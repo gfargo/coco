@@ -168,15 +168,13 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
  * additive commits: recovery hints on operations nobody regrets are
  * noise.
  */
-const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
-  'reset-hard-to-commit',
-  'reset-soft-to-commit',
-  'reset-mixed-to-commit',
+export const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
+  'reset-to-commit',
   'cherry-pick-commit',
   'revert-commit',
   'fixup-into-commit',
   'autosquash-rebase',
-  'interactive-rebase-to-commit',
+  'interactive-rebase',
   'execute-rebase-plan',
   'rebase-onto-branch',
   'amend-head',
@@ -186,6 +184,70 @@ const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
 export function isHistoryRewriteWorkflow(id: string): boolean {
   return HISTORY_REWRITE_WORKFLOW_IDS.has(id)
 }
+
+/**
+ * Workflow ids whose SUCCESS changes the commits shown in the history pane
+ * (#945 follow-up) — either by rewriting/creating local commits or by
+ * moving which branch's history is being viewed. The runner does an
+ * explicit `refreshHistoryRows()` for these; metadata-only mutations
+ * (delete-tag, set-upstream, etc.) are deliberately excluded.
+ */
+export const HISTORY_MUTATING_WORKFLOW_IDS = new Set([
+  'checkout-branch',
+  'fixup-into-commit',
+  'autosquash-rebase',
+  // Amend/reword rewrite the HEAD commit in place (#1350).
+  'amend-head',
+  'reword-head',
+  'execute-rebase-plan',
+  'force-push-current-branch',
+  'force-push-selected-branch',
+  'pull-rebase-current',
+  'pull-merge-current',
+  // Resolving a checkout conflict changes HEAD (checkout) and/or the
+  // ref set (branch delete), so the graph needs a refresh.
+  'conflict-remove-worktree-checkout',
+  'conflict-remove-worktree-branch',
+  'continue-operation',
+  'pull-current-branch',
+  // Fetch / pull / push bring in new commits and move
+  // remote-tracking refs (origin/main, ahead/behind) — refresh the
+  // graph so they appear instead of staying pinned to the pre-sync
+  // state. (A successful push advances the local origin/<branch>
+  // ref, so the chip should hop to the pushed commit.)
+  'fetch-remotes',
+  'fetch-selected-branch',
+  'pull-selected-branch',
+  'push-current-branch',
+  'push-selected-branch',
+  'cherry-pick-commit',
+  'revert-commit',
+  'reset-to-commit',
+  'interactive-rebase',
+  // Rebasing the current branch onto a ref rewrites its commits —
+  // refresh the graph so the replayed history (or the mid-rebase
+  // conflict state) shows instead of staying pinned to the pre-rebase
+  // tip.
+  'rebase-onto-branch',
+  'bisect-good',
+  'bisect-bad',
+  'bisect-skip',
+  'bisect-reset',
+  // Checking out the newly-created branch from create-branch-here
+  // changes HEAD — refresh the graph so the current-branch marker
+  // and history view reflect the switch (#1326).
+  'checkout-created-branch',
+  // `gh pr checkout <n>` fetches the PR branch and moves HEAD onto
+  // it — refresh so the PR's commits and the current-branch marker
+  // appear (#1363).
+  'triage-pr-checkout',
+  // Stash & switch (#1360) changes HEAD the same way a plain
+  // checkout does.
+  'stash-and-checkout-branch',
+  // Stash & switch onto a PR (#1430) moves HEAD via `gh pr checkout`
+  // the same way `triage-pr-checkout` does.
+  'stash-and-checkout-pr',
+])
 
 export function resolvePendingItemAction(
   id: string,
@@ -929,6 +991,24 @@ export function useWorkflowAction(
           ? { ok: true, message: `Stashed changes and switched to ${name} — the stash is waiting on the stash surface (gz)` }
           : { ok: false, message: `Stashed changes, but the switch still failed: ${checkout.message}` }
       },
+      // Recovery follow-up for a dirty-worktree `gh pr checkout` refusal
+      // (#1430). Same shape as `stash-and-checkout-branch`, but the retry
+      // target is a PR number (rides in `payload`) checked out via the
+      // forge rather than a local branch name.
+      'stash-and-checkout-pr': async () => {
+        const prNumber = Number(payload)
+        if (!payload || !Number.isInteger(prNumber) || prNumber <= 0) {
+          return { ok: false, message: 'PR number required' }
+        }
+        const stashed = await createStash(git, `WIP before checking out PR #${prNumber}`)
+        if (!stashed.ok) {
+          return { ok: false, message: `Stash failed — staying put: ${stashed.message}` }
+        }
+        const checkout = await forge.checkoutPullRequestByNumber(prNumber)
+        return checkout.ok
+          ? { ok: true, message: `Stashed changes and checked out PR #${prNumber} — the stash is waiting on the stash surface (gz)` }
+          : { ok: false, message: `Stashed changes, but the checkout still failed: ${checkout.message}` }
+      },
       // #0.71 — submodule maintenance. Resolve the target from the
       // filtered list so the cursor index lines up with what's on screen
       // (a filtered-out submodule can never be the action target). The
@@ -1565,6 +1645,16 @@ export function useWorkflowAction(
     }
     try {
     const result = await handler()
+    // #1429 — a recovery prompt raised below resolves `git` from the
+    // frame that was ACTIVE when the user answers it, not the one that
+    // issued the call. If the user drilled into (or popped out of) a
+    // repo frame while this awaited, re-targeting the prompt would act
+    // on the wrong repo (or a destructive option would fire against it
+    // silently). Read `depsRef.current` fresh — the destructured
+    // `runtimes` above is a stale pre-await snapshot — same trick
+    // `app.ts`'s `repoFrameDepthRef` already relies on for the sibling
+    // #1384 cases. Drop the prompt rather than re-target it.
+    const frameChanged = depsRef.current.runtimes.length - 1 !== issuedAtDepth
     // #1349 — color the shared result dispatch by OUTCOME. Before this,
     // a failed cherry-pick and a successful push both rendered as the
     // blue ℹ info style; the status system already distinguishes
@@ -1640,7 +1730,8 @@ export function useWorkflowAction(
     if (
       (id === 'pull-current-branch' || id === 'pull-selected-branch') &&
       !result?.ok &&
-      isDivergedPullError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+      isDivergedPullError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')) &&
+      !frameChanged
     ) {
       dispatch({
         type: 'setPendingChoice',
@@ -1683,7 +1774,7 @@ export function useWorkflowAction(
     // #1357 — after a successful fixup, offer to fold it in right away.
     // Declining leaves the fixup! commit for a later autosquash (hinted
     // in the success message).
-    if (id === 'fixup-into-commit' && result?.ok && lastFixupTargetRef.current) {
+    if (id === 'fixup-into-commit' && result?.ok && lastFixupTargetRef.current && !frameChanged) {
       const target = lastFixupTargetRef.current
       dispatch({
         type: 'setPendingChoice',
@@ -1700,7 +1791,10 @@ export function useWorkflowAction(
     if (id === 'checkout-branch' && !result?.ok && isBranchCheckedOutElsewhereError(result?.message)) {
       const worktreePath = parseCheckedOutWorktreePath(result?.message)
       const branchName = pendingItemAction?.id
-      if (worktreePath && branchName) {
+      if (worktreePath && branchName && frameChanged) {
+        // #1429 — the frame changed mid-await; dropping silently here (no
+        // fallback dispatch) matches the other recovery-prompt guards below.
+      } else if (worktreePath && branchName) {
         const worktree = context.worktreeList?.worktrees?.find((w) => w.path === worktreePath)
         const dirty = worktree?.dirty ?? false
         dispatch({
@@ -1734,24 +1828,50 @@ export function useWorkflowAction(
     // checkout; Esc keeps the changes (and the current branch) in
     // place. The cursor hasn't moved (the checkout failed), so the
     // branch name captured for the row spinner is the retry target.
+    // #1430 — the identical refusal also dead-ends the post-create-branch
+    // switch (`checkout-created-branch`) and `gh pr checkout`
+    // (`triage-pr-checkout`). Those two carry their retry identity
+    // differently: `checkout-created-branch` has no `resolvePendingItemAction`
+    // case, so the branch name rides in `payload` instead; `triage-pr-checkout`
+    // resolves a PR NUMBER (from `payload` when invoked off the PR-diff view,
+    // else the cursored triage row) and retries via a dedicated
+    // `stash-and-checkout-pr` handler.
     if (
-      id === 'checkout-branch' &&
+      (id === 'checkout-branch' || id === 'checkout-created-branch' || id === 'triage-pr-checkout') &&
       !result?.ok &&
-      isDirtyWorktreeCheckoutError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+      isDirtyWorktreeCheckoutError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')) &&
+      !frameChanged
     ) {
-      const branchName = pendingItemAction?.id
-      if (branchName) {
-        dispatch({
-          type: 'setPendingChoice',
-          value: {
-            id: 'dirty-checkout-recovery',
-            title: `Uncommitted changes block switching to '${branchName}'`,
-            warning: 'Stash & switch stashes everything (including untracked files), then retries the checkout. The stash stays put for you to pop later.',
-            options: [
-              { key: 's', label: 'Stash changes & switch', workflowId: 'stash-and-checkout-branch', payload: branchName },
-            ],
-          },
-        })
+      if (id === 'triage-pr-checkout') {
+        const prNumber = payload?.trim() || pendingItemAction?.id
+        if (prNumber) {
+          dispatch({
+            type: 'setPendingChoice',
+            value: {
+              id: 'dirty-checkout-recovery',
+              title: `Uncommitted changes block checking out PR #${prNumber}`,
+              warning: 'Stash & switch stashes everything (including untracked files), then retries the checkout. The stash stays put for you to pop later.',
+              options: [
+                { key: 's', label: 'Stash changes & switch', workflowId: 'stash-and-checkout-pr', payload: prNumber },
+              ],
+            },
+          })
+        }
+      } else {
+        const branchName = id === 'checkout-created-branch' ? payload?.trim() : pendingItemAction?.id
+        if (branchName) {
+          dispatch({
+            type: 'setPendingChoice',
+            value: {
+              id: 'dirty-checkout-recovery',
+              title: `Uncommitted changes block switching to '${branchName}'`,
+              warning: 'Stash & switch stashes everything (including untracked files), then retries the checkout. The stash stays put for you to pop later.',
+              options: [
+                { key: 's', label: 'Stash changes & switch', workflowId: 'stash-and-checkout-branch', payload: branchName },
+              ],
+            },
+          })
+        }
       }
     }
     // #1360 — a cherry-pick / revert / rebase / pull that stopped on
@@ -1761,27 +1881,45 @@ export function useWorkflowAction(
     // conflicts view, or abort the operation to unwind. Esc dismisses
     // the prompt but keeps the raw error status visible underneath
     // (`keepStatusOnDismiss`) — the repo really is mid-operation.
+    // #1430 — `autosquash-rebase` runs a real rebase and can stop on
+    // conflicts the same way `rebase-onto-branch`/`interactive-rebase` can.
     const conflictRecoveryTitles: Record<string, string> = {
       'cherry-pick-commit': 'Cherry-pick stopped on conflicts',
       'revert-commit': 'Revert stopped on conflicts',
       'rebase-onto-branch': 'Rebase stopped on conflicts',
       'interactive-rebase': 'Rebase stopped on conflicts',
       'execute-rebase-plan': 'Rebase stopped on conflicts',
+      'autosquash-rebase': 'Rebase stopped on conflicts',
       'pull-current-branch': 'Pull stopped on conflicts',
       'pull-selected-branch': 'Pull stopped on conflicts',
       'pull-rebase-current': 'Pull stopped on conflicts',
       'pull-merge-current': 'Pull stopped on conflicts',
     }
+    // `continue-operation` covers merge/rebase/cherry-pick/revert, so its
+    // title can't be a static string like the siblings above — it stops on
+    // a FURTHER conflict mid-sequence, and the operation type in progress
+    // is known via `context.operation?.operation`.
+    const continueOperationTitles: Record<string, string> = {
+      merge: 'Merge stopped on conflicts',
+      rebase: 'Rebase stopped on conflicts',
+      'cherry-pick': 'Cherry-pick stopped on conflicts',
+      revert: 'Revert stopped on conflicts',
+    }
+    const conflictRecoveryTitle =
+      id === 'continue-operation'
+        ? continueOperationTitles[context.operation?.operation ?? '']
+        : conflictRecoveryTitles[id]
     if (
-      conflictRecoveryTitles[id] &&
+      conflictRecoveryTitle &&
       !result?.ok &&
-      isOperationConflictError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+      isOperationConflictError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')) &&
+      !frameChanged
     ) {
       dispatch({
         type: 'setPendingChoice',
         value: {
           id: 'operation-conflict-recovery',
-          title: conflictRecoveryTitles[id],
+          title: conflictRecoveryTitle,
           warning: 'The repository is mid-operation. Resolve the conflicts and continue, or abort to unwind.',
           keepStatusOnDismiss: true,
           options: [
@@ -1798,62 +1936,7 @@ export function useWorkflowAction(
     // the history pane shows stale data even after the operation
     // succeeds. Cheap one-off `git log` call; doesn't fire on
     // metadata-only mutations (delete-tag, set-upstream, etc.).
-    const historyMutatingIds = new Set([
-      'checkout-branch',
-      'fixup-into-commit',
-      'autosquash-rebase',
-      // Amend/reword rewrite the HEAD commit in place (#1350).
-      'amend-head',
-      'reword-head',
-      'execute-rebase-plan',
-      'force-push-current-branch',
-      'force-push-selected-branch',
-      'pull-rebase-current',
-      'pull-merge-current',
-      // Resolving a checkout conflict changes HEAD (checkout) and/or the
-      // ref set (branch delete), so the graph needs a refresh.
-      'conflict-remove-worktree-checkout',
-      'conflict-remove-worktree-branch',
-      'continue-operation',
-      'pull-current-branch',
-      // Fetch / pull / push bring in new commits and move
-      // remote-tracking refs (origin/main, ahead/behind) — refresh the
-      // graph so they appear instead of staying pinned to the pre-sync
-      // state. (A successful push advances the local origin/<branch>
-      // ref, so the chip should hop to the pushed commit.)
-      'fetch-remotes',
-      'fetch-selected-branch',
-      'pull-selected-branch',
-      'push-current-branch',
-      'push-selected-branch',
-      'cherry-pick-commit',
-      'revert-commit',
-      'reset-hard-to-commit',
-      'reset-soft-to-commit',
-      'reset-mixed-to-commit',
-      'interactive-rebase-to-commit',
-      // Rebasing the current branch onto a ref rewrites its commits —
-      // refresh the graph so the replayed history (or the mid-rebase
-      // conflict state) shows instead of staying pinned to the pre-rebase
-      // tip.
-      'rebase-onto-branch',
-      'bisect-good',
-      'bisect-bad',
-      'bisect-skip',
-      'bisect-reset',
-      // Checking out the newly-created branch from create-branch-here
-      // changes HEAD — refresh the graph so the current-branch marker
-      // and history view reflect the switch (#1326).
-      'checkout-created-branch',
-      // `gh pr checkout <n>` fetches the PR branch and moves HEAD onto
-      // it — refresh so the PR's commits and the current-branch marker
-      // appear (#1363).
-      'triage-pr-checkout',
-      // Stash & switch (#1360) changes HEAD the same way a plain
-      // checkout does.
-      'stash-and-checkout-branch',
-    ])
-    if (result?.ok && historyMutatingIds.has(id)) {
+    if (result?.ok && HISTORY_MUTATING_WORKFLOW_IDS.has(id)) {
       await refreshHistoryRows()
     }
 
@@ -1866,7 +1949,7 @@ export function useWorkflowAction(
     // (resolvePendingItemAction → action 'checkout'), so a silent
     // stale-while-revalidate swap keeps the list readable and just
     // repaints the current-branch marker once the new context lands.
-    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch' || id === 'triage-pr-checkout' || id === 'stash-and-checkout-branch') && result?.ok) {
+    if ((id === 'checkout-branch' || id === 'conflict-remove-worktree-checkout' || id === 'checkout-created-branch' || id === 'triage-pr-checkout' || id === 'stash-and-checkout-branch' || id === 'stash-and-checkout-pr') && result?.ok) {
       dispatch({ type: 'resetBranchSelection' })
       await refreshContext({ silent: true })
     } else {
@@ -1907,7 +1990,8 @@ export function useWorkflowAction(
     }
     // Stash & switch (#1360) empties the worktree into a stash — refresh
     // so the staged/unstaged/untracked counts drop to zero immediately.
-    if (result?.ok && id === 'stash-and-checkout-branch') {
+    // #1430 — same for the PR variant.
+    if (result?.ok && (id === 'stash-and-checkout-branch' || id === 'stash-and-checkout-pr')) {
       await refreshWorktreeContext()
     }
     if (result?.ok && id === 'drop-stash') {

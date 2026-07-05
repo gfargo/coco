@@ -173,4 +173,21 @@ describe('apply/read against a real worktree file', () => {
     const written = readFileSync(join(dir, 'app.txt'), 'utf8')
     expect(written).toContain('line 1\nline 2')
   })
+
+  it('refuses to read a path that escapes the worktree root', async () => {
+    const result = await getConflictFileRegions(git, '../outside.txt')
+    expect(result).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('outside worktree root'),
+    })
+  })
+
+  it('refuses to write a path that escapes the worktree root', async () => {
+    const { regions } = parseConflictRegions(CONFLICT)
+    const result = await applyConflictResolution(git, '../outside.txt', regions[0], 'resolved')
+    expect(result).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('outside worktree root'),
+    })
+  })
 })

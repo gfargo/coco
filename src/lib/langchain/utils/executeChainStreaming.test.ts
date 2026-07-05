@@ -1,3 +1,6 @@
+import { BaseChatModel } from '@langchain/core/language_models/chat_models'
+import { AIMessageChunk } from '@langchain/core/messages'
+import { ChatGenerationChunk, ChatResult } from '@langchain/core/outputs'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { StringOutputParser } from '@langchain/core/output_parsers'
 import { FakeListChatModel } from '@langchain/core/utils/testing'
@@ -12,6 +15,73 @@ import {
   executeChainStreaming,
   StreamingChunk,
 } from './executeChainStreaming'
+
+/**
+ * Stands in for a provider that streams structured output wrapped in
+ * non-`.text` content parts (e.g. `{ type: 'json', json: {...} }`) instead
+ * of plain text deltas. `FakeListChatModel` only ever emits string content,
+ * so this hand-rolled model overrides `_streamResponseChunks` to yield
+ * arbitrary content-array chunks and exercise `executeChainStreaming`'s
+ * non-text fallback path (audit finding #2).
+ */
+class FakeNonTextChunkChatModel extends BaseChatModel {
+  constructor(private readonly contentParts: unknown[]) {
+    super({})
+  }
+
+  _llmType(): string {
+    return 'fake-non-text-chunk'
+  }
+
+  async _generate(): Promise<ChatResult> {
+    throw new Error('FakeNonTextChunkChatModel only supports streaming')
+  }
+
+  async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
+    for (const part of this.contentParts) {
+      yield new ChatGenerationChunk({
+        message: new AIMessageChunk({ content: [part] as never }),
+        text: '',
+      })
+    }
+  }
+}
+
+/**
+ * Stands in for a provider that attaches `usage_metadata` to the final
+ * streamed chunk only (the common case — see audit finding #4). Yields
+ * plain-text chunks like a real provider, with `usage_metadata` set on the
+ * last one so `executeChainStreaming` can exercise last-seen-value capture.
+ */
+class FakeUsageStreamChatModel extends BaseChatModel {
+  constructor(
+    private readonly textChunks: string[],
+    private readonly usage: { input_tokens: number; output_tokens: number; total_tokens: number }
+  ) {
+    super({})
+  }
+
+  _llmType(): string {
+    return 'fake-usage-stream'
+  }
+
+  async _generate(): Promise<ChatResult> {
+    throw new Error('FakeUsageStreamChatModel only supports streaming')
+  }
+
+  async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
+    for (let i = 0; i < this.textChunks.length; i++) {
+      const isLast = i === this.textChunks.length - 1
+      yield new ChatGenerationChunk({
+        message: new AIMessageChunk({
+          content: this.textChunks[i],
+          usage_metadata: isLast ? this.usage : undefined,
+        }),
+        text: this.textChunks[i],
+      })
+    }
+  }
+}
 
 const prompt = PromptTemplate.fromTemplate('Answer this: {question}')
 const variables = { question: 'noop' }
@@ -204,6 +274,115 @@ describe('executeChainStreaming', () => {
         logger: silentLogger(),
       }),
     ).rejects.toThrow(/Stream completed with no text chunks/)
+  })
+
+  describe('non-text content-part fallback (audit finding #2)', () => {
+    it('falls back to stringified content when the model streams JSON parts instead of text', async () => {
+      const llm = new FakeNonTextChunkChatModel([
+        { type: 'json', json: { title: 'fix(auth): handle expired tokens' } },
+        { type: 'json', json: { body: 'Refresh before expiry.' } },
+      ])
+      const { chunks, onChunk } = chunkRecorder()
+
+      const result = await executeChainStreaming<string>({
+        llm: asLlm(llm as unknown as FakeListChatModel),
+        prompt,
+        variables,
+        parser: new StringOutputParser(),
+        onChunk,
+        logger: silentLogger(),
+      })
+
+      // No `.text` parts arrived, so no incremental preview chunks fire —
+      // only the final parse uses the stringified fallback.
+      expect(chunks).toHaveLength(0)
+      expect(result).toBe(
+        '{"title":"fix(auth): handle expired tokens"}{"body":"Refresh before expiry."}'
+      )
+    })
+
+    it('still throws "no text chunks" when the stream is genuinely empty', async () => {
+      // Regression guard: the fallback must not mask a truly empty stream —
+      // only chunks carrying SOME usable content should count.
+      const llm = new FakeListChatModel({ responses: [''] })
+      const { onChunk } = chunkRecorder()
+
+      await expect(
+        executeChainStreaming<string>({
+          llm: asLlm(llm),
+          prompt,
+          variables,
+          parser: new StringOutputParser(),
+          onChunk,
+          logger: silentLogger(),
+        }),
+      ).rejects.toThrow(/Stream completed with no text chunks/)
+    })
+
+    it('drops genuinely non-textual parts (e.g. images) rather than stringifying them', async () => {
+      const llm = new FakeNonTextChunkChatModel([
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+      ])
+      const { onChunk } = chunkRecorder()
+
+      await expect(
+        executeChainStreaming<string>({
+          llm: asLlm(llm as unknown as FakeListChatModel),
+          prompt,
+          variables,
+          parser: new StringOutputParser(),
+          onChunk,
+          logger: silentLogger(),
+        }),
+      ).rejects.toThrow(/Stream completed with no text chunks/)
+    })
+
+    it('prefers accumulated text over the non-text fallback when both are present', async () => {
+      const llm = new FakeNonTextChunkChatModel([
+        { type: 'text', text: 'hello' },
+        { type: 'json', json: { ignored: true } },
+      ])
+      const { onChunk } = chunkRecorder()
+
+      const result = await executeChainStreaming<string>({
+        llm: asLlm(llm as unknown as FakeListChatModel),
+        prompt,
+        variables,
+        parser: new StringOutputParser(),
+        onChunk,
+        logger: silentLogger(),
+      })
+
+      expect(result).toBe('hello')
+    })
+  })
+
+  describe('completion-token capture (audit finding #4)', () => {
+    it('captures usage_metadata from the last streamed chunk, not earlier ones', async () => {
+      const llm = new FakeUsageStreamChatModel(['hello', ' world'], {
+        input_tokens: 12,
+        output_tokens: 34,
+        total_tokens: 46,
+      })
+      const logger = { verbose: jest.fn() } as unknown as Logger
+      const { onChunk } = chunkRecorder()
+
+      const result = await executeChainStreaming<string>({
+        llm: asLlm(llm as unknown as FakeListChatModel),
+        prompt,
+        variables,
+        parser: new StringOutputParser(),
+        onChunk,
+        logger,
+        metadata: { task: 'commit-message' },
+      })
+
+      expect(result).toBe('hello world')
+      expect(logger.verbose).toHaveBeenCalledWith(
+        expect.stringContaining('completionTokens=34'),
+        { color: 'cyan' }
+      )
+    })
   })
 
   it('rejects when required inputs are missing', async () => {

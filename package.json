@@ -1,6 +1,6 @@
 {
   "name": "git-coco",
-  "version": "0.77.0",
+  "version": "0.78.0",
   "description": "git-coco — AI git commits, changelogs, code review, and PR/MR creation, plus a terminal workstation. Works on GitHub, GitHub Enterprise, and GitLab; supports OpenAI, Anthropic, Gemini, Mistral, Azure, Bedrock, and local Ollama.",
   "keywords": [
     "git",
@@ -70,6 +70,7 @@
     "test:publish": "npm run lint && npm run build && npm run test:cli && npm pack --dry-run",
     "test:cli": "tsx bin/smokeCli.ts",
     "bench": "tsx bin/benchmark.ts",
+    "bench:workstation": "tsx bin/benchmarkWorkstation.ts",
     "scenario": "tsx bin/scenarioRunner.ts",
     "screenshot": "tsx bin/screenshot.ts",
     "screenshot:sync": "tsx bin/syncScreenshots.ts",

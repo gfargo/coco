@@ -57,6 +57,7 @@ function createLogger(): Logger {
     log: jest.fn(),
     verbose: jest.fn(),
     setConfig: jest.fn(),
+    error: jest.fn(),
     startTimer: jest.fn().mockReturnThis(),
     stopTimer: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),
@@ -152,6 +153,11 @@ describe('init command', () => {
     await handler(createArgv({ scope: 'project' }), logger)
 
     expect(questions.whatScope).not.toHaveBeenCalled()
+    // Project-scoped config is repo-committed, and the hardened project
+    // config loader never honors credentials from a repo-local file — so
+    // init doesn't collect a real API key for project scope, leaving the
+    // inert placeholder untouched (the value the loader would ignore anyway).
+    expect(questions.inputApiKey).not.toHaveBeenCalled()
     expect(mockAppendToProjectJsonConfig).toHaveBeenCalledWith(
       '/repo/.coco.config.json',
       expect.objectContaining({
@@ -159,7 +165,7 @@ describe('init command', () => {
           provider: 'openai',
           authentication: expect.objectContaining({
             credentials: expect.objectContaining({
-              apiKey: 'secret-api-key',
+              apiKey: '',
             }),
           }),
         }),
@@ -169,6 +175,60 @@ describe('init command', () => {
       global: false,
       logger,
     })
+  })
+
+  it('collects and writes a real API key for global scope', async () => {
+    mockLoadConfig.mockReturnValue({
+      scope: 'global',
+      dryRun: false,
+    } as unknown as Config)
+
+    await handler(createArgv({ scope: 'global' }), logger)
+
+    expect(questions.inputApiKey).toHaveBeenCalledWith('OpenAI', 'OPENAI_API_KEY')
+    expect(mockAppendToGitConfig).toHaveBeenCalledWith(
+      '/home/coco/.gitconfig',
+      expect.objectContaining({
+        service: expect.objectContaining({
+          authentication: expect.objectContaining({
+            credentials: expect.objectContaining({
+              apiKey: 'secret-api-key',
+            }),
+          }),
+        }),
+      })
+    )
+  })
+
+  it('skips the custom Ollama endpoint prompt for project scope', async () => {
+    jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('ollama')
+    jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('llama3')
+    jest.spyOn(questions, 'configureAdvancedOptions').mockResolvedValue(true)
+    jest.spyOn(questions, 'selectMode').mockResolvedValue('stdout')
+    jest.spyOn(questions, 'selectDefaultGitBranch').mockResolvedValue('main')
+    jest.spyOn(questions, 'inputModelTemperature').mockResolvedValue(0.2)
+    jest.spyOn(questions, 'inputTokenLimit').mockResolvedValue(4096)
+    jest.spyOn(questions, 'inputOllamaEndpoint').mockResolvedValue('http://attacker.example:11434')
+    jest.spyOn(questions, 'inputRequestTimeout').mockResolvedValue(30000)
+    jest.spyOn(questions, 'inputRequestMaxRetries').mockResolvedValue(2)
+    mockConfirm
+      .mockResolvedValueOnce(false) // additional service fields prompt
+      .mockResolvedValueOnce(false) // ignores prompt
+      .mockResolvedValueOnce(false) // commit prompt prompt
+      .mockResolvedValueOnce(true) // approval
+    mockOllamaService()
+
+    await handler(createArgv({ scope: 'project' }), logger)
+
+    expect(questions.inputOllamaEndpoint).not.toHaveBeenCalled()
+    expect(mockAppendToProjectJsonConfig).toHaveBeenCalledWith(
+      '/repo/.coco.config.json',
+      expect.objectContaining({
+        service: expect.objectContaining({
+          endpoint: 'http://localhost:11434',
+        }),
+      })
+    )
   })
 
   it('writes project json config for the recommended .coco.json format', async () => {
@@ -231,6 +291,8 @@ describe('init command', () => {
 
     expect(mockAppendToProjectJsonConfig).not.toHaveBeenCalled()
     expect(mockCheckAndHandlePackageInstallation).not.toHaveBeenCalled()
+    // File-type question must not be asked when the user cancelled
+    expect(questions.selectProjectConfigFileType).not.toHaveBeenCalled()
     expect(logger.log).toHaveBeenCalledWith('\ninit cancelled.', { color: 'yellow' })
   })
 
@@ -240,7 +302,6 @@ describe('init command', () => {
     jest.spyOn(questions, 'selectDefaultGitBranch').mockResolvedValue('main')
     jest.spyOn(questions, 'inputModelTemperature').mockResolvedValue(0.2)
     jest.spyOn(questions, 'inputTokenLimit').mockResolvedValue(4096)
-    jest.spyOn(questions, 'enableVerboseMode').mockResolvedValue(false)
     jest.spyOn(questions, 'inputRequestTimeout').mockResolvedValue(30000)
     jest.spyOn(questions, 'inputRequestMaxRetries').mockResolvedValue(2)
     jest.spyOn(questions, 'inputServiceFields').mockResolvedValue('{bad json')
@@ -252,7 +313,7 @@ describe('init command', () => {
 
     await handler(createArgv({ scope: 'project' }), logger)
 
-    expect(logger.log).toHaveBeenCalledWith('Invalid JSON for service fields. Skipping.', {
+    expect(logger.error).toHaveBeenCalledWith('Invalid JSON for service fields. Skipping.', {
       color: 'red',
     })
     expect(mockLogResult).toHaveBeenCalled()

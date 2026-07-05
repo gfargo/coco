@@ -10,7 +10,7 @@ import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { handleResult } from '../../lib/ui/handleResult'
 import { Logger } from '../../lib/utils/logger'
 
@@ -41,6 +41,10 @@ jest.mock('../../lib/ui/generateAndReviewLoop', () => ({
       return ''
     }
     const context = await parser(changes, '', options)
+    if (!context.length) {
+      await noResult(options)
+      return ''
+    }
     return await agent(context, options)
   }),
 }))
@@ -57,7 +61,9 @@ const mockGetModelAndProviderFromConfig = getModelAndProviderFromConfig as jest.
   typeof getModelAndProviderFromConfig
 >
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
-const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
+  typeof getTokenCounterForProvider
+>
 const mockHandleResult = handleResult as jest.MockedFunction<typeof handleResult>
 
 describe('changelog command', () => {
@@ -78,6 +84,7 @@ describe('changelog command', () => {
       log: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
+      error: jest.fn(),
       startTimer: jest.fn().mockReturnThis(),
       stopTimer: jest.fn(),
       startSpinner: jest.fn().mockReturnThis(),
@@ -108,7 +115,7 @@ describe('changelog command', () => {
       model: 'gpt-4o',
     })
     mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
-    mockGetTokenCounter.mockResolvedValue((text: string) => text.length)
+    mockGetTokenCounterForProvider.mockResolvedValue((text: string) => text.length)
     mockGetCommitLogCurrentBranch.mockResolvedValue([
       {
         hash: 'abc1234',
@@ -168,5 +175,26 @@ describe('changelog command', () => {
     expect(mockHandleResult).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'stdout' })
     )
+  })
+
+  it('emits JSON null (not colored status text) when there are no commits and --json is passed', async () => {
+    argv.json = true
+    mockGetCommitLogCurrentBranch.mockResolvedValue([])
+
+    const writes: string[] = []
+    const writeSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(((chunk: string) => {
+        writes.push(String(chunk))
+        return true
+      }) as never)
+
+    try {
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 0 })
+    } finally {
+      writeSpy.mockRestore()
+    }
+
+    expect(writes.map((w) => w.trim())).toContain('null')
   })
 })

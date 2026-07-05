@@ -1,4 +1,3 @@
-import { TiktokenModel } from '@langchain/openai'
 import { LLMModel } from '../../lib/langchain/types'
 import chalk from 'chalk'
 import { z } from 'zod'
@@ -23,7 +22,7 @@ import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
 import { commandExit } from '../../lib/utils/commandExit'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbackItem } from './config'
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
@@ -35,6 +34,19 @@ const ReviewFeedbackResponseSchema = z.preprocess(
   (value) => (Array.isArray(value) ? value : [value]),
   ReviewFeedbackItemArraySchema
 )
+
+function formatFindings(findings: ReviewFeedbackItem[]): string {
+  return findings
+    .map((task: ReviewFeedbackItem) => {
+      const color = severityColor(task.severity)
+      return color(
+        `[${task.severity}] ${chalk.bold(task.title)} (${task.category})\n ${chalk.dim(
+          `→ "${task.filePath}"`
+        )}`
+      )
+    })
+    .join('\n\n')
+}
 
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const git = applyRepoFlag(argv)
@@ -49,9 +61,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     handleMissingApiKey(logger, config, { command: 'review' })
   }
 
-  const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-  )
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
   const llm = getLlm(provider, model as LLMModel, { ...config, service: reviewService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
@@ -198,6 +208,13 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     return changes.join('\n')
   }
 
+  // `generateAndReviewLoop`'s non-interactive branch overwrites its returned
+  // result with the `reviewParser`-formatted display string (by design, for
+  // callers whose R is already string-shaped). Review's R is a structured
+  // array, so capture it directly from the agent instead of trusting the
+  // loop's return value.
+  let capturedFindings: ReviewFeedbackItem[] = []
+
   const recap = await generateAndReviewLoop<string[], ReviewFeedbackItem[]>({
     label: 'review',
     options: {
@@ -269,19 +286,12 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       }) as ReviewFeedbackItem[]
 
       // sort by severity
-      return response.sort((a: ReviewFeedbackItem, b: ReviewFeedbackItem) => b.severity - a.severity)
+      const sorted = response.sort((a: ReviewFeedbackItem, b: ReviewFeedbackItem) => b.severity - a.severity)
+      capturedFindings = sorted
+      return sorted
     },
     reviewParser(result: ReviewFeedbackItem[]) {
-      return result
-        .map((task: ReviewFeedbackItem) => {
-          const color = severityColor(task.severity)
-          return color(
-            `[${task.severity}] ${chalk.bold(task.title)} (${task.category})\n ${chalk.dim(
-              `→ "${task.filePath}"`
-            )}`
-          )
-        })
-        .join('\n\n')
+      return formatFindings(result)
     },
     noResult: async () => {
       await noResult({ git, logger })
@@ -289,7 +299,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     },
   })
 
-  const findings = (recap as ReviewFeedbackItem[]) ?? []
+  const findings = Array.isArray(recap) ? recap : capturedFindings
 
   // `--severity <n>`: CI gate. After surfacing the review, exit non-zero
   // if any finding is at or above the threshold so pipelines can block on it.
@@ -305,9 +315,16 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     return
   }
 
-  const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined })
-  logLlmTelemetrySummary(logger, 'review')
-  await reviewer.start()
+  const canShowTaskList = process.stdin.isTTY && process.stdout.isTTY
+  if (!canShowTaskList) {
+    logger.log(chalk.bold('Review findings:\n'))
+    logger.log(formatFindings(findings))
+    logger.log(chalk.dim('\nNon-interactive session detected — re-run with --json for machine-readable output.'))
+  } else {
+    const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined })
+    logLlmTelemetrySummary(logger, 'review')
+    await reviewer.start()
+  }
 
   if (exceedsThreshold) {
     logger.log(

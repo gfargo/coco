@@ -7,6 +7,9 @@ import { FileChange } from '../../lib/types'
 import { CommitSplitPlan, CommitSplitPlanSchema } from './splitPlanTypes'
 import {
   buildSplitPlanFallback,
+  detectDuplicateFileNotes,
+  detectDuplicateHunkNotes,
+  DuplicateRescueNote,
   dropEmptyGroups,
   formatPlanValidationFeedback,
   formatPlanValidationIssuesError,
@@ -78,6 +81,17 @@ export interface GenerateSplitPlanResult {
    * combined commit message (or re-roll the planner).
    */
   fallback?: SplitPlanFallbackInfo
+  /**
+   * Set when `rescueDuplicateFiles`/`rescueDuplicateHunks` silently
+   * dropped a file/hunk placement the model had ALSO put in an
+   * earlier group (#1462 — the model considered more than one "home"
+   * for it, the rescue picked the first one, and the plan still
+   * passed validation). Absent when the winning attempt had no
+   * duplicate placements to rescue. Only reflects the WINNING
+   * attempt — a duplicate on an earlier, re-rolled attempt doesn't
+   * carry over.
+   */
+  dedupeWarnings?: DuplicateRescueNote[]
 }
 
 /**
@@ -163,6 +177,10 @@ export async function generateValidatedCommitSplitPlan({
     //
     // All rescues are no-ops when there's nothing to rescue, so
     // running them unconditionally costs nothing on healthy plans.
+    const dedupeNotes = [
+      ...detectDuplicateFileNotes(rawPlan),
+      ...detectDuplicateHunkNotes(rawPlan),
+    ]
     const dedupedFiles = rescueDuplicateFiles(rawPlan)
     const dedupedHunks = rescueDuplicateHunks(dedupedFiles)
     const phantomRescued = rescuePhantomHunks(dedupedHunks, staged, hunkInventory)
@@ -175,7 +193,11 @@ export async function generateValidatedCommitSplitPlan({
       if (attempt > 1 && logger) {
         logger.verbose(`Plan validated after ${attempt} attempts.`, { color: 'green' })
       }
-      return { plan, attempts: attempt }
+      return {
+        plan,
+        attempts: attempt,
+        dedupeWarnings: dedupeNotes.length ? dedupeNotes : undefined,
+      }
     }
 
     lastIssues = issues

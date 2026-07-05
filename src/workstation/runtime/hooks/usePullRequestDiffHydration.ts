@@ -146,6 +146,15 @@ export type UsePullRequestDiffHydrationDeps = {
    * the object and invalidates every cached patch.
    */
   pullRequestList: PullRequestListOverview | undefined
+  /**
+   * Bumped whenever `refreshContext` settles (OSS-452). `pullRequestList`'s
+   * reference is now preserved across refreshes (see `mergeRefreshedContext`
+   * in `chrome/context.ts`), so this is the only signal that forces the
+   * effect to re-evaluate after a background refresh — without it, a failed
+   * `gh pr diff` fetch's `r`-to-retry only worked once (the unchanged
+   * `pullRequestList` reference meant the deps never changed on a retry).
+   */
+  refreshToken: number
   /** Writer for the loaded patch lines. */
   setPrDiffLines: ReactTypes.Dispatch<ReactTypes.SetStateAction<string[] | undefined>>
   /** Loading-flag setter for the patch fetch. */
@@ -169,6 +178,7 @@ export function usePullRequestDiffHydration(
     diffSource,
     prDiffNumber,
     pullRequestList,
+    refreshToken,
     setPrDiffLines,
     setPrDiffLoading,
     setPrDiffError,
@@ -216,5 +226,5 @@ export function usePullRequestDiffHydration(
       setPrDiffLoading(false)
     })()
     return () => { active = false }
-  }, [getPullRequestDiffByNumber, activeView, diffSource, prDiffNumber, pullRequestList])
+  }, [getPullRequestDiffByNumber, activeView, diffSource, prDiffNumber, pullRequestList, refreshToken])
 }

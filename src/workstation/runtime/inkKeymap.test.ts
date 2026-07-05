@@ -109,7 +109,7 @@ describe('log Ink keymap', () => {
       splitPlanStatus: 'applying',
     })).toEqual({
       contextual: ['applying split…'],
-      global: ['q quit'],
+      global: [],
     })
 
     expect(getLogInkFooterHints({
@@ -304,6 +304,18 @@ describe('log Ink keymap', () => {
       // Honest help footer (#1355): every advertised key is live in
       // the help handler; / opens the overlay's type-to-filter.
       contextual: ['? close', '/ filter', 'j/k scroll'],
+      global: ['q quit'],
+    })
+
+    expect(getLogInkFooterHints({
+      filterMode: false,
+      focus: 'commits',
+      showHelp: true,
+      helpFilterMode: true,
+    })).toEqual({
+      // While typing a help filter, `? close` / `/ filter` / `j/k scroll`
+      // no longer apply — the input swallows them (#1431).
+      contextual: ['enter keep', 'esc clear', 'type to filter'],
       global: ['q quit'],
     })
 

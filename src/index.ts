@@ -62,7 +62,6 @@ y.option('verbose', {
   type: 'boolean',
   alias: 'v',
   description: 'Print verbose diagnostic output (stack traces on errors, debug spans).',
-  default: false,
   global: true,
 })
 
@@ -220,7 +219,13 @@ import { runPrefetchFromEnv } from './lib/parsers/default/__tree_sitter__/prefet
 
 async function main(): Promise<void> {
   await runPrefetchFromEnv()
-  y.help().parse(process.argv.slice(2))
+  // .strictOptions() rejects unknown option names (e.g. `--interactve` typos)
+  // with a clear "Unknown argument" error and non-zero exit. We use
+  // .strictOptions() rather than .strict() so that positional arguments
+  // (e.g. `cache <subcommand>`) are still accepted.
+  // --no-<flag> negations of declared booleans are automatically allowed by
+  // yargs and are not affected by this setting.
+  y.strictOptions().help().parse(process.argv.slice(2))
 }
 
 main().catch((error) => {

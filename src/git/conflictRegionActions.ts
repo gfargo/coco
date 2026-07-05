@@ -1,6 +1,7 @@
-import { readFileSync, renameSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { readFileSync } from 'fs'
+import { resolve as resolvePath, sep } from 'path'
 import { SimpleGit } from 'simple-git'
+import { writeFileAtomic } from '../lib/utils/atomicFileWrite'
 import { BranchActionResult } from './branchActions'
 
 /**
@@ -135,8 +136,13 @@ function sameRegionContent(a: ConflictRegion, b: ConflictRegion): boolean {
 }
 
 async function resolveWorktreeFile(git: SimpleGit, path: string): Promise<string> {
-  const root = (await git.revparse(['--show-toplevel'])).trim()
-  return join(root, path)
+  const root = resolvePath((await git.revparse(['--show-toplevel'])).trim())
+  const resolved = resolvePath(root, path)
+  const rootWithSep = root.endsWith(sep) ? root : root + sep
+  if (resolved !== root && !resolved.startsWith(rootWithSep)) {
+    throw new Error(`Refusing to resolve path outside worktree root: ${path}`)
+  }
+  return resolved
 }
 
 /**
@@ -201,9 +207,7 @@ export async function applyConflictResolution(
     const next = nextLines.join('\n')
 
     // tmp+rename so a crash mid-write can't leave a half-resolved file.
-    const tmp = `${file}.${process.pid}.coco-resolve.tmp`
-    writeFileSync(tmp, next)
-    renameSync(tmp, file)
+    writeFileAtomic(file, next)
 
     const remaining = parseConflictRegions(next).regions.length
     return {

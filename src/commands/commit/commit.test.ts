@@ -10,7 +10,7 @@ import { handleResult } from '../../lib/ui/handleResult'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
@@ -19,6 +19,10 @@ import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { Logger } from '../../lib/utils/logger'
 import { SimpleGit } from 'simple-git'
 import { Config } from '../../commands/types'
+import { deriveStatus } from '../../test/builders/makeFakeGit'
+import { createCommit, PreCommitHookError } from '../../lib/simple-git/createCommit'
+import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
+import { selectPrompt } from '../../lib/ui/inquirerPrompts'
 
 jest.mock('../../lib/utils/commitlintValidator', () => ({
   hasCommitlintConfig: jest.fn().mockResolvedValue(false),
@@ -45,6 +49,15 @@ jest.mock('../../lib/langchain/utils/executeChainWithSchema')
 jest.mock('../../lib/langchain/utils/getPrompt')
 jest.mock('../../lib/simple-git/getCurrentBranchName')
 jest.mock('../../lib/simple-git/getPreviousCommits')
+jest.mock('../../lib/simple-git/createCommit', () => {
+  const actual = jest.requireActual('../../lib/simple-git/createCommit')
+  return {
+    ...actual,
+    createCommit: jest.fn(),
+  }
+})
+jest.mock('../../lib/langchain/utils/observability')
+jest.mock('../../lib/ui/inquirerPrompts')
 
 const mockGetRepo = getRepo as jest.MockedFunction<typeof getRepo>
 const mockGetChanges = getChanges as jest.MockedFunction<typeof getChanges>
@@ -59,7 +72,9 @@ const mockGetApiKeyForModel = getApiKeyForModel as jest.MockedFunction<typeof ge
 const mockGetModelAndProviderFromConfig = getModelAndProviderFromConfig as jest.MockedFunction<
   typeof getModelAndProviderFromConfig
 >
-const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
+  typeof getTokenCounterForProvider
+>
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
 
 // Mock prompts
@@ -77,6 +92,11 @@ const mockGetCurrentBranchName = getCurrentBranchName as jest.MockedFunction<
   typeof getCurrentBranchName
 >
 const mockGetPreviousCommits = getPreviousCommits as jest.MockedFunction<typeof getPreviousCommits>
+const mockCreateCommit = createCommit as jest.MockedFunction<typeof createCommit>
+const mockLogLlmTelemetrySummary = logLlmTelemetrySummary as jest.MockedFunction<
+  typeof logLlmTelemetrySummary
+>
+const mockSelectPrompt = selectPrompt as jest.MockedFunction<typeof selectPrompt>
 
 describe('commit command', () => {
   let argv: Arguments<CommitOptions>
@@ -103,6 +123,7 @@ describe('commit command', () => {
       log: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
+      error: jest.fn(),
       startTimer: jest.fn().mockReturnThis(),
       stopTimer: jest.fn(),
       startSpinner: jest.fn().mockReturnThis(),
@@ -110,13 +131,13 @@ describe('commit command', () => {
     } as unknown as Logger
 
     mockGetRepo.mockReturnValue({
-      status: jest.fn().mockResolvedValue({
-        files: [
+      status: jest.fn().mockResolvedValue(
+        deriveStatus([
           { path: 'file1.txt', index: 'A', working_dir: ' ' },
           { path: 'file2.txt', index: 'M', working_dir: 'M' },
           { path: 'file3.txt', index: '?', working_dir: '?' },
-        ],
-      }),
+        ])
+      ),
       revparse: jest.fn().mockResolvedValue('mock-branch-name'),
       commit: jest.fn().mockResolvedValue(undefined),
     } as unknown as SimpleGit)
@@ -164,7 +185,7 @@ describe('commit command', () => {
       provider: 'openai',
       model: 'gpt-4o',
     })
-    mockGetTokenCounter.mockResolvedValue(jest.fn())
+    mockGetTokenCounterForProvider.mockResolvedValue(jest.fn())
     mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
 
     // Mock prompts
@@ -253,5 +274,87 @@ describe('commit command', () => {
     // When noDiff is true, fileChangeParser should NOT be called
     // because we bypass diff parsing and just use file status
     expect(mockFileChangeParser).not.toHaveBeenCalled()
+  })
+
+  // Regression for #1437: yargs used to always populate argv.includeBranchName
+  // (via `default: true`), so the handler's `argv.includeBranchName !== undefined`
+  // guard always short-circuited and a documented `includeBranchName: false`
+  // from config was never honored. `undefined` here mirrors a real invocation
+  // where the flag wasn't passed on the command line.
+  it('omits the branch name from the prompt when config disables it and no flag was passed (#1437)', async () => {
+    ;(argv as unknown as { includeBranchName?: boolean }).includeBranchName = undefined
+
+    mockLoadConfig.mockReturnValue({
+      service: {
+        authentication: { type: 'apiKey' },
+        provider: 'openai',
+        model: 'gpt-4o',
+      },
+      hideCocoBanner: false,
+      noDiff: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      includeBranchName: false,
+      conventionalCommits: false,
+      openInEditor: false,
+      mode: 'stdout',
+    } as unknown as Config)
+
+    await handler(argv, logger)
+
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+    expect(variables.branch_name_context).toBe('')
+  })
+
+  describe('interactive commit flow (awaited handleResult)', () => {
+    beforeEach(() => {
+      argv.interactive = true
+      mockHandleResult.mockImplementation(async ({ mode, result, interactiveModeCallback }) => {
+        if (mode === 'interactive' && interactiveModeCallback) {
+          await interactiveModeCallback(result)
+        }
+      })
+    })
+
+    it('propagates a CommandExitError when the user chooses to abort a hook failure', async () => {
+      mockCreateCommit.mockRejectedValue(new PreCommitHookError('lint failed'))
+      mockSelectPrompt.mockResolvedValue('abort')
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({
+        name: 'CommandExitError',
+        code: 1,
+      })
+    })
+
+    it('propagates non-hook createCommit failures instead of orphaning them', async () => {
+      mockCreateCommit.mockRejectedValue(new Error('GPG signing failed'))
+
+      await expect(handler(argv, logger)).rejects.toThrow('GPG signing failed')
+      expect(mockSelectPrompt).not.toHaveBeenCalled()
+    })
+
+    it('logs telemetry only after the interactive commit flow completes', async () => {
+      mockCreateCommit.mockRejectedValue(new PreCommitHookError('lint failed'))
+      mockSelectPrompt.mockResolvedValue('abort')
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError' })
+
+      expect(mockSelectPrompt).toHaveBeenCalled()
+      expect(mockLogLlmTelemetrySummary).not.toHaveBeenCalled()
+    })
+
+    it('resolves and logs success + telemetry on the happy path', async () => {
+      mockCreateCommit.mockResolvedValue({} as Awaited<ReturnType<typeof createCommit>>)
+
+      await handler(argv, logger)
+
+      expect(mockCreateCommit).toHaveBeenCalled()
+      expect(mockLogSuccess).toHaveBeenCalled()
+      expect(mockLogLlmTelemetrySummary).toHaveBeenCalledWith(logger, 'commit')
+
+      const successOrder = mockLogSuccess.mock.invocationCallOrder[0]
+      const telemetryOrder = mockLogLlmTelemetrySummary.mock.invocationCallOrder[0]
+      expect(successOrder).toBeLessThan(telemetryOrder)
+    })
   })
 })

@@ -54,6 +54,7 @@ describe('Conventional Commits Handler', () => {
       log: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
+      error: jest.fn(),
     } as unknown as Logger
 
     // Default mocks
@@ -62,7 +63,7 @@ describe('Conventional Commits Handler', () => {
       defaultBranch: 'main',
       service: {
         provider: 'openai',
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         authentication: {
           type: 'APIKey',
           credentials: { apiKey: 'mock-api-key' },
@@ -74,7 +75,7 @@ describe('Conventional Commits Handler', () => {
     mockGetApiKeyForModel.mockReturnValue('mock-api-key')
     mockGetModelAndProviderFromConfig.mockReturnValue({
       provider: 'openai',
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
     })
 
     mockGenerateAndReviewLoop.mockResolvedValue('mock commit message')
@@ -109,7 +110,7 @@ describe('Conventional Commits Handler', () => {
         defaultBranch: 'main',
         service: {
           provider: 'openai',
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           authentication: {
             type: 'APIKey',
             credentials: { apiKey: 'mock-api-key' },
@@ -185,7 +186,8 @@ describe('Conventional Commits Handler', () => {
       // at coco init / coco doctor / the env var. Loose-match the
       // headline so we don't tie the test to copy tweaks but still
       // catch a regression that would silently print nothing.
-      const printedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0]).join('\n')
+      // Note: handleMissingApiKey uses logger.error (stderr), not logger.log (stdout).
+      const printedLines = (logger.error as jest.Mock).mock.calls.map((call) => call[0]).join('\n')
       expect(printedLines).toContain('Missing API key')
     })
 

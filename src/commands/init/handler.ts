@@ -77,44 +77,40 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     service: service,
   }
 
+  // Project-scoped config gets committed to the repo, and the hardened
+  // project-config loader (see project.ts) never honors credentials or
+  // endpoints from a repo-local file — anyone who can get a victim to clone
+  // the repo would otherwise control where their API key and diffs get
+  // sent. So for project scope we skip collecting a real API key / custom
+  // Ollama endpoint entirely; they'd be written to disk but silently
+  // ignored on load, which is a worse (confusing auth failure) experience
+  // than just not asking.
+  const isProjectScope = scope === 'project'
+  const inputPromptByProvider: Partial<Record<LLMProvider, { label: string; envVar: string }>> = {
+    openai: { label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
+    anthropic: { label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
+    gemini: { label: 'Google Gemini', envVar: 'GEMINI_API_KEY' },
+    mistral: { label: 'Mistral', envVar: 'MISTRAL_API_KEY' },
+    azure: { label: 'Azure OpenAI', envVar: 'AZURE_OPENAI_API_KEY' },
+  }
+
   let apiKey = '' as string
-  if (llmProvider === 'openai') {
-    apiKey = await questions.inputApiKey('OpenAI', 'OPENAI_API_KEY')
+  const inputPrompt = inputPromptByProvider[llmProvider]
+  if (inputPrompt) {
+    if (isProjectScope) {
+      const envVarName: string = inputPrompt.envVar
+      logger.log(
+        chalk.dim(
+          `Skipping API key prompt for project scope — repo-committed config can't hold credentials safely. ` +
+          `Set ${envVarName} via env var, or use \`coco init --scope global\` instead.`
+        )
+      )
+    } else {
+      apiKey = await questions.inputApiKey(inputPrompt.label, inputPrompt.envVar)
 
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
-    }
-  }
-
-  if (llmProvider === 'anthropic') {
-    apiKey = await questions.inputApiKey('Anthropic', 'ANTHROPIC_API_KEY')
-
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
-    }
-  }
-
-  if (llmProvider === 'gemini') {
-    apiKey = await questions.inputApiKey('Google Gemini', 'GEMINI_API_KEY')
-
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
-    }
-  }
-
-  if (llmProvider === 'mistral') {
-    apiKey = await questions.inputApiKey('Mistral', 'MISTRAL_API_KEY')
-
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
-    }
-  }
-
-  if (llmProvider === 'azure') {
-    apiKey = await questions.inputApiKey('Azure OpenAI', 'AZURE_OPENAI_API_KEY')
-
-    if (config.service.authentication.type === 'APIKey') {
-      config.service.authentication.credentials.apiKey = '•••••••••••••••'
+      if (config.service.authentication.type === 'APIKey') {
+        config.service.authentication.credentials.apiKey = '•••••••••••••••'
+      }
     }
   }
 
@@ -122,7 +118,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     // Bedrock authenticates through the AWS credential chain — there is no
     // coco-managed API key to prompt for. Point the user at the env vars
     // the AWS SDK resolves automatically.
-    console.log(
+    logger.log(
       'AWS Bedrock uses the standard AWS credential chain (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION). Set those in your environment.'
     )
   }
@@ -153,10 +149,18 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         tokenLimit: await questions.inputTokenLimit(),
       }
 
-      config.verbose = await questions.enableVerboseMode()
-
       if (llmProvider === 'ollama') {
-        ;(config.service as OllamaLLMService).endpoint = await questions.inputOllamaEndpoint()
+        if (isProjectScope) {
+          logger.log(
+            chalk.dim(
+              `Skipping custom Ollama endpoint prompt for project scope — repo-committed config can't ` +
+              `steer where requests go safely. Using the default (${(config.service as OllamaLLMService).endpoint}). ` +
+              `Set COCO_SERVICE_ENDPOINT via env var, or use \`coco init --scope global\` instead.`
+            )
+          )
+        } else {
+          ;(config.service as OllamaLLMService).endpoint = await questions.inputOllamaEndpoint()
+        }
       }
 
       config.service.requestOptions = {
@@ -174,7 +178,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         try {
           config.service.fields = JSON.parse(fieldsJson)
         } catch (e) {
-          logger.log('Invalid JSON for service fields. Skipping.', { color: 'red' })
+          logger.error('Invalid JSON for service fields. Skipping.', { color: 'red' })
           
           logger.verbose(`Error parsing service fields: ${(e as Error).message}`, {
             color: 'red',
@@ -220,20 +224,22 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     message: approvalMessage,
   })
 
-  let configFilePath = ''
-
-  switch (scope) {
-    case 'project':
-      const fileTypeSelection = await questions.selectProjectConfigFileType()
-      configFilePath = await getProjectConfigFilePath(fileTypeSelection)
-      break
-    case 'global':
-    default:
-      configFilePath = getPathToUsersGitConfig()
-      break
-  }
-
   if (isApproved) {
+    // Resolve the config file path only after approval — so a user who
+    // answers "no" is never asked which file format to write.
+    let configFilePath = ''
+    switch (scope) {
+      case 'project': {
+        const fileTypeSelection = await questions.selectProjectConfigFileType()
+        configFilePath = await getProjectConfigFilePath(fileTypeSelection)
+        break
+      }
+      case 'global':
+      default:
+        configFilePath = getPathToUsersGitConfig()
+        break
+    }
+
     if (configFilePath.endsWith('.gitconfig')) {
       await appendToGitConfig(configFilePath, config)
     } else if (configFilePath.endsWith('.env')) {
@@ -289,7 +295,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         logger.log(`${PASS()} Verified: no issues found in your new config.`, { color: 'green' })
       } else {
         if (errors.length > 0) {
-          logger.log(`${FAIL()} ${errors.length} error(s) found in the persisted config:`, { color: 'red' })
+          logger.error(`${FAIL()} ${errors.length} error(s) found in the persisted config:`, { color: 'red' })
           for (const diagnostic of errors) {
             logger.log(`  ${chalk.red(diagnostic.message)}`)
           }
@@ -345,7 +351,7 @@ async function installCommitlintPackages(scope: 'global' | 'project', logger: Lo
     }
   } catch (error) {
     logger.stopSpinner('Failed to install commitlint packages')
-    logger.log(`Error installing commitlint packages: ${(error as Error).message}`, { color: 'red' })
+    logger.error(`Error installing commitlint packages: ${(error as Error).message}`, { color: 'red' })
     logger.log('You can install them manually later:', { color: 'yellow' })
     
     if (scope === 'global') {

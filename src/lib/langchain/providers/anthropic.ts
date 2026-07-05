@@ -1,5 +1,6 @@
 import { ChatAnthropic } from '@langchain/anthropic'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
@@ -7,11 +8,10 @@ function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatM
     anthropicApiKey: apiKey,
     maxConcurrency: config.service.maxConcurrent,
     model,
-  }
-
-  // Respect the base temperature, overridable by the per-service field.
-  if (typeof config.service.temperature === 'number') {
-    anthropicConfig.temperature = config.service.temperature
+    // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
+    // respected instead of being coerced to the 0.2 default.
+    temperature: config.service.temperature ?? 0.2,
+    maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
   }
 
   // Custom endpoint for proxies / gateways.
@@ -34,4 +34,7 @@ export const anthropicProvider: ProviderDefinition = {
   createLlm: createAnthropicLlm,
   resolveEndpoint: (config) =>
     'baseURL' in config.service ? config.service.baseURL : undefined,
+  // Claude tokenizes code ~1.15-1.3x more tokens than the gpt-4o tiktoken
+  // baseline (per the AI-core token-counting audit); 1.2 is a middle estimate.
+  tokenCorrectionFactor: 1.2,
 }

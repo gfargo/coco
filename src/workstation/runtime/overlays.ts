@@ -466,7 +466,7 @@ export function renderHelpPanel(
   }
   if (!matchedAny && helpQuery) {
     body.push(h(Text, { key: 'help-no-match', dimColor: true },
-      `No bindings match "${state.helpFilter}" — esc clears the filter.`))
+      truncateCells(`No bindings match "${state.helpFilter}" — esc clears the filter.`, width - 4)))
   }
 
   // Reserve rows for: title (1), border (2), padding (0). The "more
@@ -494,7 +494,7 @@ export function renderHelpPanel(
   // never invisible.
   if (state.helpFilterMode || state.helpFilter) {
     children.push(h(Text, { key: 'help-filter' },
-      `filter: ${state.helpFilter}${state.helpFilterMode ? '_' : ''}`))
+      truncateCells(`filter: ${state.helpFilter}${state.helpFilterMode ? '_' : ''}`, width - 4)))
   }
 
   // Visual hint that there's content scrolled above. The dim style
@@ -823,6 +823,24 @@ export function renderSplitPlanOverlay(
   // rather than a phantom commit (#1180).
   const committedGroups = plan.groups.filter((group) => !group.unclaimed)
   const lines: string[] = []
+
+  // #1462: a dedupe rescue silently dropped a file/hunk placement the
+  // model had also put in an earlier group — the plan still validates
+  // cleanly, so without this the user has no hint a placement was
+  // auto-resolved. Same `⚠` visual language as the `unclaimed` note
+  // above, surfaced before the group listing so it's seen up front.
+  const dedupeWarnings = overlay.dedupeWarnings || []
+  if (dedupeWarnings.length > 0) {
+    lines.push(
+      `⚠ ${dedupeWarnings.length} placement${dedupeWarnings.length === 1 ? '' : 's'} auto-resolved — model listed the same ${dedupeWarnings.length === 1 ? 'item' : 'items'} in more than one commit:`
+    )
+    dedupeWarnings.forEach((note) => {
+      const dropped = note.droppedGroupTitles.join(', ')
+      lines.push(`  · ${note.id}: kept in "${note.keptGroupTitle}", dropped from "${dropped}"`)
+    })
+    lines.push('')
+  }
+
   let commitNumber = 0
   plan.groups.forEach((group) => {
     if (group.unclaimed) {

@@ -172,7 +172,7 @@ export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
   if (subcommand === 'clear') {
     const result = clearDiffSummaryCache(repoPath)
     if (!result.ok) {
-      logger.log(chalk.red(`Failed to clear diff-summary cache at ${cachePath}`))
+      logger.error(chalk.red(`Failed to clear diff-summary cache at ${cachePath}`), {})
       commandExit(1, 'cache clear failed')
     }
     if (result.removed) {
@@ -274,7 +274,7 @@ export const handler: CommandHandler<CacheArgv> = async (argv, logger) => {
     return
   }
 
-  logger.log(chalk.red(`Unknown cache subcommand: ${subcommand}`))
+  logger.error(chalk.red(`Unknown cache subcommand: ${subcommand}`), {})
   logger.log(chalk.dim('Use one of: clear, info, parsers, prefetch, clear-parsers, clear-github'))
   commandExit(1, `unknown cache subcommand: ${subcommand}`)
 }

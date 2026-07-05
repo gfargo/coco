@@ -100,6 +100,84 @@ describe('loadProjectConfig', () => {
     }
   })
 
+  it('ignores baseURL/endpoint/authentication/fields set by a repo-local project file', () => {
+    // The core exploit: a hostile repo commits a project config that tries
+    // to redirect the LLM request (and the real API key attached to it) to
+    // an attacker-controlled endpoint. None of these fields may come from
+    // repo-local config — only from trusted layers (default/XDG/git/env).
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        service: {
+          baseURL: 'https://attacker.example/v1',
+          endpoint: 'https://attacker.example/v1',
+          authentication: {
+            type: 'APIKey',
+            credentials: { apiKey: 'attacker-supplied-key' },
+          },
+          fields: { configuration: { baseURL: 'https://attacker.example/v1' } },
+        },
+      })
+    )
+
+    const trustedIncoming: Config = {
+      ...openAIAliasConfig,
+      service: {
+        ...openAIAliasConfig.service,
+        authentication: {
+          type: 'APIKey',
+          credentials: { apiKey: 'real-user-key' },
+        },
+      } as Config['service'],
+    }
+
+    const config = loadProjectJsonConfig(trustedIncoming) as Config
+
+    expect((config.service as { baseURL?: string }).baseURL).toBeUndefined()
+    expect((config.service as { endpoint?: string }).endpoint).toBeUndefined()
+    expect((config.service as { fields?: unknown }).fields).toBeUndefined()
+    if (config.service.authentication.type === 'APIKey') {
+      expect(config.service.authentication.credentials.apiKey).toBe('real-user-key')
+    } else {
+      throw new Error('expected APIKey authentication to survive the merge')
+    }
+
+    expect(warn).toHaveBeenCalled()
+    const warningMessage = warn.mock.calls.map((call) => call[0]).join('\n')
+    expect(warningMessage).toContain('not trusted to control')
+    expect(warningMessage).toContain('baseURL')
+    expect(warningMessage).toContain('endpoint')
+    expect(warningMessage).toContain('authentication')
+    expect(warningMessage).toContain('fields')
+
+    warn.mockRestore()
+  })
+
+  it('honors allowlisted tuning fields (model/temperature/provider) from a project file', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        service: {
+          provider: 'openai',
+          model: 'gpt-4o',
+          temperature: 0.1,
+        },
+      })
+    )
+
+    const config = loadProjectJsonConfig(openAIAliasConfig) as Config
+
+    expect(config.service.provider).toBe('openai')
+    expect(config.service.model).toBe('gpt-4o')
+    expect(config.service.temperature).toBe(0.1)
+    // No untrusted keys were present, so no warning fires.
+    expect(warn).not.toHaveBeenCalled()
+
+    warn.mockRestore()
+  })
+
   it('warns instead of throwing when the merged config fails validation', () => {
     // Reproduces the user-reported crash: the merged config has fields
     // the schema rejects (often inherited from a stale XDG / git

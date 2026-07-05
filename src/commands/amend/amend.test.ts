@@ -49,6 +49,7 @@ describe('amend command', () => {
       log: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
+      error: jest.fn(),
     } as unknown as Logger
 
     git = {
@@ -72,11 +73,18 @@ describe('amend command', () => {
 
   afterEach(() => jest.clearAllMocks())
 
-  it('amends the last commit with the regenerated message by default', async () => {
+  it('previews the regenerated message by default without amending', async () => {
     await handler(argv, logger)
     expect(mockGenerate).toHaveBeenCalledWith(
       expect.objectContaining({ changeSource: expect.objectContaining({ commitRef: 'HEAD' }) })
     )
+    expect(mockCreateCommit).not.toHaveBeenCalled()
+    expect(logger.log).toHaveBeenCalledWith('feat: regenerated message')
+  })
+
+  it('amends the last commit when --apply is passed', async () => {
+    argv.apply = true
+    await handler(argv, logger)
     expect(mockCreateCommit).toHaveBeenCalledWith(
       'feat: regenerated message',
       expect.anything(),
@@ -123,6 +131,7 @@ describe('amend command', () => {
 
   it('passes --no-verify through to the amend commit', async () => {
     argv.noVerify = true
+    argv.apply = true
     await handler(argv, logger)
     expect(mockCreateCommit).toHaveBeenCalledWith(
       expect.any(String),

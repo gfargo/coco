@@ -1,5 +1,4 @@
 import { Arguments } from 'yargs'
-import { type TiktokenModel } from '@langchain/openai'
 import { SimpleGit } from 'simple-git'
 
 import { loadConfig } from '../../lib/config/utils/loadConfig'
@@ -12,7 +11,10 @@ import { LangChainCancelledError } from '../../lib/langchain/errors'
 import { executeChainStreaming } from '../../lib/langchain/utils/executeChainStreaming'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
-import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
+import {
+  DEFAULT_RESPONSE_TOKEN_RESERVE,
+  enforcePromptBudget,
+} from '../../lib/langchain/utils/enforcePromptBudget'
 import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessage'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
@@ -25,7 +27,7 @@ import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { Logger } from '../../lib/utils/logger'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import {
   CommitArgv,
@@ -34,6 +36,7 @@ import {
   ConventionalCommitMessageResponseSchema,
 } from './config'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
+import { salvageCommitMessageFromText } from './salvageCommitMessage'
 
 export type CommitDraftInput = {
   git: SimpleGit
@@ -124,46 +127,6 @@ IMPORTANT RULES:
  * are surfaced as `validationErrors`/`warnings` rather than driving an
  * interactive retry flow — the TUI can re-invoke or let the user edit.
  */
-/**
- * Fallback parser shared between the non-streaming
- * `executeChainWithSchema` call and the streaming path (#881 phase 2).
- *
- * Extracted from the inline `fallbackParser` option so the streaming
- * path can use the same lossy-but-permissive recovery for accumulated
- * text. Strips markdown code fences, attempts strict JSON parse, and
- * falls back to "first line is title, rest is body" when JSON parsing
- * fails entirely.
- *
- * Returned shape always satisfies the schema's structural requirements
- * (`title` + `body` strings) but the *content* may be the last-ditch
- * "Auto-generated commit" placeholder. Callers should treat this as a
- * best-effort salvage, not a parse confirmation.
- */
-function salvageCommitMessageFromText(text: string): { title: string; body: string } {
-  try {
-    let cleanText = text.trim()
-    const codeBlockMatch = cleanText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-    if (codeBlockMatch && codeBlockMatch[1]) {
-      cleanText = codeBlockMatch[1].trim()
-    }
-    const parsed = JSON.parse(cleanText)
-    if (
-      parsed && typeof parsed === 'object' &&
-      typeof parsed.title === 'string' &&
-      typeof parsed.body === 'string' &&
-      parsed.title.length > 0
-    ) {
-      return parsed
-    }
-  } catch {
-    // fall through to line-split salvage
-  }
-  return {
-    title: text.split('\n')[0] || 'Auto-generated commit',
-    body: text.split('\n').slice(1).join('\n') || 'Generated commit message',
-  }
-}
-
 export async function generateCommitDraft({
   git,
   argv,
@@ -188,9 +151,7 @@ export async function generateCommitDraft({
     }
   }
 
-  const tokenizer = await getTokenCounter(
-    provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-  )
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
   const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
   const summaryLlm = getLlm(provider, summaryService.model as LLMModel, {
     ...config,
@@ -231,32 +192,6 @@ export async function generateCommitDraft({
       ok: false,
       draft: '',
       warnings: [changeSource ? 'No changes detected to summarize.' : 'No staged changes detected.'],
-      validationErrors: [],
-    }
-  }
-
-  const summary = config.noDiff && !changeSource
-    ? `Staged files:\n${changes.map((c) => `${c.status}: ${c.filePath}`).join('\n')}`
-    : await fileChangeParser({
-      changes,
-      commit: diffLabel,
-      options: createFileChangeParserOptions({
-        command: 'commit',
-        tokenizer,
-        git,
-        llm: summaryLlm,
-        logger,
-        provider,
-        model: String(summaryService.model),
-        service: config.service,
-      }),
-    })
-
-  if (!summary || !summary.length) {
-    return {
-      ok: false,
-      draft: '',
-      warnings: ['Diff summary was empty after parsing staged changes.'],
       validationErrors: [],
     }
   }
@@ -310,13 +245,56 @@ export async function generateCommitDraft({
   }
 
   const baseVariables: Record<string, string> = {
-    summary,
+    summary: '',
     format_instructions: formatInstructions,
     additional_context: additionalContext,
     commit_history: commitHistory,
     branch_name_context: branchNameContext,
     commitlint_rules_context: commitlintRulesContext,
   }
+
+  // Reconciles the summarizer's `|| 4096` fallback (createFileChangeParserOptions
+  // -> summarizeDiffs) with the prompt budget below — both must share one number,
+  // not the summarizer's 4096 vs the prompt's stray 2048.
+  const promptTokenLimit = config.service.tokenLimit || 4096
+
+  // Budget the summary to leave headroom for the rest of the rendered prompt
+  // (format instructions, commit history, branch context, commitlint rules) plus
+  // the reserved response tokens, so a summary that legitimately maxes out its
+  // target doesn't push the full prompt over budget and get silently re-trimmed.
+  const overheadTokenCount = tokenizer(await prompt.format(baseVariables))
+  const summaryTokenBudget = Math.max(
+    512,
+    promptTokenLimit - overheadTokenCount - DEFAULT_RESPONSE_TOKEN_RESERVE
+  )
+
+  const summary = config.noDiff && !changeSource
+    ? `Staged files:\n${changes.map((c) => `${c.status}: ${c.filePath}`).join('\n')}`
+    : await fileChangeParser({
+      changes,
+      commit: diffLabel,
+      options: createFileChangeParserOptions({
+        command: 'commit',
+        tokenizer,
+        git,
+        llm: summaryLlm,
+        logger,
+        provider,
+        model: String(summaryService.model),
+        service: { ...config.service, tokenLimit: summaryTokenBudget },
+      }),
+    })
+
+  if (!summary || !summary.length) {
+    return {
+      ok: false,
+      draft: '',
+      warnings: [...warnings, 'Diff summary was empty after parsing staged changes.'],
+      validationErrors: [],
+    }
+  }
+
+  baseVariables.summary = summary
 
   const maxParsingAttempts = config.service.provider === 'ollama' && 'maxParsingAttempts' in config.service
     ? config.service.maxParsingAttempts || 3
@@ -341,7 +319,7 @@ export async function generateCommitDraft({
       prompt,
       variables,
       tokenizer,
-      maxTokens: config.service.tokenLimit || 2048,
+      maxTokens: promptTokenLimit,
     })
 
     // Streaming path (#881 phase 2). Active when the caller supplied

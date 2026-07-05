@@ -8,6 +8,7 @@ export interface AmendOptions extends BaseCommandOptions {
   additional?: string
   noVerify: boolean
   dryRun?: boolean
+  apply?: boolean
 }
 
 export type AmendArgv = Arguments<AmendOptions>
@@ -43,6 +44,12 @@ export const options = {
   dryRun: {
     type: 'boolean',
     description: 'Print the regenerated message without amending the commit',
+    default: false,
+  },
+  apply: {
+    type: 'boolean',
+    description:
+      'Apply the regenerated message and amend the commit without confirmation (default in stdout mode is preview-only). Ignored when -i is also passed — the interactive prompt still confirms.',
     default: false,
   },
   // `--json` is a global flag (see src/index.ts).

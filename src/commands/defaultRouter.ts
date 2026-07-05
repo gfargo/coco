@@ -146,17 +146,26 @@ async function probeIsGitRepo(): Promise<boolean> {
  * workstation, and it intentionally does NOT set `all` — yargs's
  * `default: true` for `coco ui` never runs here, so the ui→log argv
  * mapping has to re-assert that default (#1169).
+ *
+ * `interactive` defaults to `true` (the `ui`/`workspace`/`init`
+ * routes all expect it), but callers can override it — the legacy
+ * `commit` route needs to inherit normal mode resolution instead of
+ * being forced into interactive mode (#1442).
  */
-export function buildSyntheticArgv<T>(argv: DefaultRouteArgv): T {
+export function buildSyntheticArgv<T>(
+  argv: DefaultRouteArgv,
+  overrides: Partial<{ interactive: boolean }> = {}
+): T {
   return ({
     _: ['$0'],
     $0: argv.$0,
     repo: argv.repo,
     cwd: argv.cwd,
-    verbose: argv.verbose ?? false,
+    verbose: argv.verbose,
     interactive: true,
     version: false,
     help: false,
+    ...overrides,
   } as unknown) as T
 }
 
@@ -209,7 +218,14 @@ export const defaultRouteHandler: CommandHandler<DefaultRouteArgv> = async (
       return
     case 'commit':
     default:
-      await commitHandler(buildSyntheticArgv<CommitArgv>(argv), logger)
+      // Don't force interactive mode here — the legacy escape hatch
+      // promises scripts the same stdout-by-default behavior as
+      // `coco commit`, so let commitHandler's own
+      // `argv.interactive || isInteractive(config)` resolution decide (#1442).
+      await commitHandler(
+        buildSyntheticArgv<CommitArgv>(argv, { interactive: Boolean(argv.interactive) }),
+        logger
+      )
       return
   }
 }

@@ -12,7 +12,7 @@ import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
-import { getTokenCounter } from '../../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { handleResult } from '../../lib/ui/handleResult'
 import { Logger } from '../../lib/utils/logger'
 import { SimpleGit } from 'simple-git'
@@ -57,7 +57,9 @@ const mockGetModelAndProviderFromConfig = getModelAndProviderFromConfig as jest.
   typeof getModelAndProviderFromConfig
 >
 const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
-const mockGetTokenCounter = getTokenCounter as jest.MockedFunction<typeof getTokenCounter>
+const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
+  typeof getTokenCounterForProvider
+>
 const mockHandleResult = handleResult as jest.MockedFunction<typeof handleResult>
 
 
@@ -79,6 +81,7 @@ describe('recap command', () => {
       log: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
+      error: jest.fn(),
       startTimer: jest.fn().mockReturnThis(),
       stopTimer: jest.fn(),
       startSpinner: jest.fn().mockReturnThis(),
@@ -110,7 +113,7 @@ describe('recap command', () => {
       model: 'gpt-4o',
     })
     mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
-    mockGetTokenCounter.mockResolvedValue((text: string) => text.length)
+    mockGetTokenCounterForProvider.mockResolvedValue((text: string) => text.length)
     mockGetChanges.mockResolvedValue({
       staged: [],
       unstaged: [],
@@ -240,6 +243,49 @@ describe('recap command', () => {
       summary: 'mocked summary message from git commit message',
     })
     expect(mockHandleResult).not.toHaveBeenCalled()
+  })
+
+  it('emits a JSON error envelope and exits non-zero when the LLM call fails with --json', async () => {
+    argv.json = true
+    mockExecuteChain.mockRejectedValue(new Error('boom'))
+
+    const writes: string[] = []
+    const writeSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(((chunk: string) => {
+        writes.push(String(chunk))
+        return true
+      }) as never)
+
+    try {
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+    } finally {
+      writeSpy.mockRestore()
+    }
+
+    const jsonCall = writes.find((message) => {
+      try {
+        JSON.parse(message)
+        return true
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    expect(JSON.parse(jsonCall as string)).toEqual({ error: 'boom' })
+  })
+
+  it('still prints the fallback markdown but exits non-zero on LLM failure without --json', async () => {
+    mockExecuteChain.mockRejectedValue(new Error('boom'))
+
+    await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+
+    expect(mockHandleResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: expect.stringContaining('Failed to parse the response'),
+      })
+    )
   })
 
   it('trims oversized rendered recap prompts before execution', async () => {
