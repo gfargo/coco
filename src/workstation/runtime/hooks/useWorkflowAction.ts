@@ -168,15 +168,13 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
  * additive commits: recovery hints on operations nobody regrets are
  * noise.
  */
-const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
-  'reset-hard-to-commit',
-  'reset-soft-to-commit',
-  'reset-mixed-to-commit',
+export const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
+  'reset-to-commit',
   'cherry-pick-commit',
   'revert-commit',
   'fixup-into-commit',
   'autosquash-rebase',
-  'interactive-rebase-to-commit',
+  'interactive-rebase',
   'execute-rebase-plan',
   'rebase-onto-branch',
   'amend-head',
@@ -186,6 +184,70 @@ const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
 export function isHistoryRewriteWorkflow(id: string): boolean {
   return HISTORY_REWRITE_WORKFLOW_IDS.has(id)
 }
+
+/**
+ * Workflow ids whose SUCCESS changes the commits shown in the history pane
+ * (#945 follow-up) — either by rewriting/creating local commits or by
+ * moving which branch's history is being viewed. The runner does an
+ * explicit `refreshHistoryRows()` for these; metadata-only mutations
+ * (delete-tag, set-upstream, etc.) are deliberately excluded.
+ */
+export const HISTORY_MUTATING_WORKFLOW_IDS = new Set([
+  'checkout-branch',
+  'fixup-into-commit',
+  'autosquash-rebase',
+  // Amend/reword rewrite the HEAD commit in place (#1350).
+  'amend-head',
+  'reword-head',
+  'execute-rebase-plan',
+  'force-push-current-branch',
+  'force-push-selected-branch',
+  'pull-rebase-current',
+  'pull-merge-current',
+  // Resolving a checkout conflict changes HEAD (checkout) and/or the
+  // ref set (branch delete), so the graph needs a refresh.
+  'conflict-remove-worktree-checkout',
+  'conflict-remove-worktree-branch',
+  'continue-operation',
+  'pull-current-branch',
+  // Fetch / pull / push bring in new commits and move
+  // remote-tracking refs (origin/main, ahead/behind) — refresh the
+  // graph so they appear instead of staying pinned to the pre-sync
+  // state. (A successful push advances the local origin/<branch>
+  // ref, so the chip should hop to the pushed commit.)
+  'fetch-remotes',
+  'fetch-selected-branch',
+  'pull-selected-branch',
+  'push-current-branch',
+  'push-selected-branch',
+  'cherry-pick-commit',
+  'revert-commit',
+  'reset-to-commit',
+  'interactive-rebase',
+  // Rebasing the current branch onto a ref rewrites its commits —
+  // refresh the graph so the replayed history (or the mid-rebase
+  // conflict state) shows instead of staying pinned to the pre-rebase
+  // tip.
+  'rebase-onto-branch',
+  'bisect-good',
+  'bisect-bad',
+  'bisect-skip',
+  'bisect-reset',
+  // Checking out the newly-created branch from create-branch-here
+  // changes HEAD — refresh the graph so the current-branch marker
+  // and history view reflect the switch (#1326).
+  'checkout-created-branch',
+  // `gh pr checkout <n>` fetches the PR branch and moves HEAD onto
+  // it — refresh so the PR's commits and the current-branch marker
+  // appear (#1363).
+  'triage-pr-checkout',
+  // Stash & switch (#1360) changes HEAD the same way a plain
+  // checkout does.
+  'stash-and-checkout-branch',
+  // Stash & switch onto a PR (#1430) moves HEAD via `gh pr checkout`
+  // the same way `triage-pr-checkout` does.
+  'stash-and-checkout-pr',
+])
 
 export function resolvePendingItemAction(
   id: string,
@@ -1858,65 +1920,7 @@ export function useWorkflowAction(
     // the history pane shows stale data even after the operation
     // succeeds. Cheap one-off `git log` call; doesn't fire on
     // metadata-only mutations (delete-tag, set-upstream, etc.).
-    const historyMutatingIds = new Set([
-      'checkout-branch',
-      'fixup-into-commit',
-      'autosquash-rebase',
-      // Amend/reword rewrite the HEAD commit in place (#1350).
-      'amend-head',
-      'reword-head',
-      'execute-rebase-plan',
-      'force-push-current-branch',
-      'force-push-selected-branch',
-      'pull-rebase-current',
-      'pull-merge-current',
-      // Resolving a checkout conflict changes HEAD (checkout) and/or the
-      // ref set (branch delete), so the graph needs a refresh.
-      'conflict-remove-worktree-checkout',
-      'conflict-remove-worktree-branch',
-      'continue-operation',
-      'pull-current-branch',
-      // Fetch / pull / push bring in new commits and move
-      // remote-tracking refs (origin/main, ahead/behind) — refresh the
-      // graph so they appear instead of staying pinned to the pre-sync
-      // state. (A successful push advances the local origin/<branch>
-      // ref, so the chip should hop to the pushed commit.)
-      'fetch-remotes',
-      'fetch-selected-branch',
-      'pull-selected-branch',
-      'push-current-branch',
-      'push-selected-branch',
-      'cherry-pick-commit',
-      'revert-commit',
-      'reset-hard-to-commit',
-      'reset-soft-to-commit',
-      'reset-mixed-to-commit',
-      'interactive-rebase-to-commit',
-      // Rebasing the current branch onto a ref rewrites its commits —
-      // refresh the graph so the replayed history (or the mid-rebase
-      // conflict state) shows instead of staying pinned to the pre-rebase
-      // tip.
-      'rebase-onto-branch',
-      'bisect-good',
-      'bisect-bad',
-      'bisect-skip',
-      'bisect-reset',
-      // Checking out the newly-created branch from create-branch-here
-      // changes HEAD — refresh the graph so the current-branch marker
-      // and history view reflect the switch (#1326).
-      'checkout-created-branch',
-      // `gh pr checkout <n>` fetches the PR branch and moves HEAD onto
-      // it — refresh so the PR's commits and the current-branch marker
-      // appear (#1363).
-      'triage-pr-checkout',
-      // Stash & switch (#1360) changes HEAD the same way a plain
-      // checkout does.
-      'stash-and-checkout-branch',
-      // Stash & switch onto a PR (#1430) moves HEAD via `gh pr checkout`
-      // the same way `triage-pr-checkout` does.
-      'stash-and-checkout-pr',
-    ])
-    if (result?.ok && historyMutatingIds.has(id)) {
+    if (result?.ok && HISTORY_MUTATING_WORKFLOW_IDS.has(id)) {
       await refreshHistoryRows()
     }
 
