@@ -1,5 +1,4 @@
 import { Arguments } from 'yargs'
-import { type TiktokenModel } from '@langchain/openai'
 import { SimpleGit } from 'simple-git'
 import { handler as commitHandler } from '../commands/commit/handler'
 import { CommitOptions } from '../commands/commit/config'
@@ -23,7 +22,7 @@ import { createCommit, PreCommitHookError } from '../lib/simple-git/createCommit
 import { getRepo } from '../lib/simple-git/getRepo'
 import { isCommandExitError } from '../lib/utils/commandExit'
 import { Logger } from '../lib/utils/logger'
-import { getTokenCounter } from '../lib/utils/tokenizer'
+import { getTokenCounterForProvider } from '../lib/utils/tokenizer'
 
 export type CommitWorkflowAction = 'commit' | 'split-plan' | 'split-apply'
 
@@ -334,9 +333,7 @@ export async function runCommitSplitPlanWorkflow(
   }
 
   try {
-    const tokenizer = await getTokenCounter(
-      provider === 'openai' ? (model as TiktokenModel) : 'gpt-4o'
-    )
+    const tokenizer = await getTokenCounterForProvider(provider, String(model))
     const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
     const planLlm = getLlm(provider, splitService.model as LLMModel, {
       ...config,

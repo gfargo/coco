@@ -32,4 +32,7 @@ export const anthropicProvider: ProviderDefinition = {
   createLlm: createAnthropicLlm,
   resolveEndpoint: (config) =>
     'baseURL' in config.service ? config.service.baseURL : undefined,
+  // Claude tokenizes code ~1.15-1.3x more tokens than the gpt-4o tiktoken
+  // baseline (per the AI-core token-counting audit); 1.2 is a middle estimate.
+  tokenCorrectionFactor: 1.2,
 }

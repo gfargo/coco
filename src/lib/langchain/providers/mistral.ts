@@ -23,4 +23,7 @@ export const mistralProvider: ProviderDefinition = {
   label: 'Mistral',
   requiresAuth: true,
   createLlm: createMistralLlm,
+  // Approximation vs. the gpt-4o tiktoken baseline, per the AI-core
+  // token-counting audit — no synchronous local Mistral tokenizer available.
+  tokenCorrectionFactor: 1.15,
 }

@@ -34,6 +34,20 @@ function createBedrockLlm({ model, config }: CreateLlmArgs): BaseChatModel {
   return new ChatBedrockConverse(bedrockConfig)
 }
 
+/**
+ * Bedrock hosts several model families under one provider, each tokenizing
+ * differently from the gpt-4o tiktoken baseline. Sniff the model id for a
+ * known family and fall back to a generic non-OpenAI estimate for anything
+ * else (custom ARNs, unlisted model ids) rather than throwing.
+ */
+function bedrockTokenCorrectionFactor(model: string): number {
+  const id = model.toLowerCase()
+  if (id.includes('claude')) return 1.2
+  if (id.includes('llama')) return 1.2
+  if (id.includes('mistral')) return 1.15
+  return 1.15
+}
+
 export const bedrockProvider: ProviderDefinition = {
   id: 'bedrock',
   label: 'AWS Bedrock',
@@ -41,4 +55,5 @@ export const bedrockProvider: ProviderDefinition = {
   requiresAuth: false,
   createLlm: createBedrockLlm,
   resolveEndpoint: undefined,
+  tokenCorrectionFactor: bedrockTokenCorrectionFactor,
 }
