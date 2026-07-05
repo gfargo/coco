@@ -20,7 +20,8 @@ import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { handleResult } from '../../lib/ui/handleResult'
-import { LOGO, SEPERATOR, isInteractive } from '../../lib/ui/helpers'
+import { LOGO, isInteractive } from '../../lib/ui/helpers'
+import { promptHookFailureRecovery } from '../../lib/ui/hookFailurePrompt'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
@@ -95,6 +96,7 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       llm,
       planLlm: splitLlm,
       planService: splitService,
+      interactive: INTERACTIVE,
     })
 
     const splitMode = INTERACTIVE ? 'interactive' : (config.mode || 'stdout')
@@ -517,50 +519,22 @@ IMPORTANT RULES:
           logSuccess()
         } catch (error) {
           if (error instanceof PreCommitHookError) {
-            // Display friendly hook failure output
-            logger.error('\n✖ Commit blocked by pre-commit hook', { color: 'red' })
-            logger.log('\nHook output:', { color: 'yellow' })
-            logger.log(SEPERATOR)
-            logger.log(error.hookOutput)
-            logger.log(SEPERATOR)
+            const choice = await promptHookFailureRecovery({
+              logger,
+              header: '✖ Commit blocked by pre-commit hook',
+              hookOutput: error.hookOutput,
+              interactive: INTERACTIVE,
+            })
 
-            if (INTERACTIVE) {
-              const { selectPrompt } = await import('../../lib/ui/inquirerPrompts')
-              const choice = await selectPrompt<'retry' | 'skip' | 'abort'>({
-                message: 'How would you like to proceed?',
-                choices: [
-                  {
-                    name: '🔄 Retry',
-                    value: 'retry',
-                    description: 'Fix the issues above and retry the commit',
-                  },
-                  {
-                    name: '⚠️  Skip hooks',
-                    value: 'skip',
-                    description: 'Retry with --no-verify to bypass pre-commit hooks (use with care)',
-                  },
-                  {
-                    name: '💣 Abort',
-                    value: 'abort',
-                    description: 'Abort the commit',
-                  },
-                ],
-              })
-
-              if (choice === 'retry') {
-                await attemptCommit(false)
-              } else if (choice === 'skip') {
-                logger.log('⚠️  Skipping hooks with --no-verify...', { color: 'yellow' })
-                await attemptCommit(true)
-              } else {
-                logger.error('\nCommit aborted.', { color: 'red' })
-                commandExit(1)
-              }
+            if (choice === 'retry') {
+              await attemptCommit(false)
+            } else if (choice === 'skip') {
+              logger.log('⚠️  Skipping hooks with --no-verify...', { color: 'yellow' })
+              await attemptCommit(true)
             } else {
-              logger.error(
-                '\nFix the issues above and try again, or use --no-verify to skip hooks.',
-                { color: 'yellow' }
-              )
+              if (INTERACTIVE) {
+                logger.error('\nCommit aborted.', { color: 'red' })
+              }
               commandExit(1)
             }
           } else {
