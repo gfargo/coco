@@ -86,7 +86,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // ignored on load, which is a worse (confusing auth failure) experience
   // than just not asking.
   const isProjectScope = scope === 'project'
-  const providersNeedingApiKey: Partial<Record<LLMProvider, { label: string; envVar: string }>> = {
+  const inputPromptByProvider: Partial<Record<LLMProvider, { label: string; envVar: string }>> = {
     openai: { label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
     anthropic: { label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
     gemini: { label: 'Google Gemini', envVar: 'GEMINI_API_KEY' },
@@ -95,17 +95,18 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   }
 
   let apiKey = '' as string
-  const apiKeyProvider = providersNeedingApiKey[llmProvider]
-  if (apiKeyProvider) {
+  const inputPrompt = inputPromptByProvider[llmProvider]
+  if (inputPrompt) {
     if (isProjectScope) {
+      const envVarName: string = inputPrompt.envVar
       logger.log(
         chalk.dim(
           `Skipping API key prompt for project scope — repo-committed config can't hold credentials safely. ` +
-          `Set ${apiKeyProvider.envVar} via env var, or use \`coco init --scope global\` instead.`
+          `Set ${envVarName} via env var, or use \`coco init --scope global\` instead.`
         )
       )
     } else {
-      apiKey = await questions.inputApiKey(apiKeyProvider.label, apiKeyProvider.envVar)
+      apiKey = await questions.inputApiKey(inputPrompt.label, inputPrompt.envVar)
 
       if (config.service.authentication.type === 'APIKey') {
         config.service.authentication.credentials.apiKey = '•••••••••••••••'
