@@ -63,7 +63,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
     return
   }
 
-  if (staged.length > 0 && !previewOnly) {
+  if (staged.length > 0 && INTERACTIVE) {
     logger.log(
       `Note: ${staged.length} staged change${staged.length === 1 ? '' : 's'} will be folded into the amended commit.`,
       { color: 'yellow' }
@@ -126,6 +126,9 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
         return
       }
     }
+  } else if (!argv.apply) {
+    logger.log(message)
+    return
   }
 
   try {

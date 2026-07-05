@@ -5,7 +5,7 @@
 ## Core Commands
 
 - `commit` - Generates commit messages based on staged changes with intelligent commitlint integration; `--split` mode plans multi-commit decompositions of large staged sets
-- `amend` - Regenerates the last commit's message from its diff (folding in any staged changes) and rewrites it via `git commit --amend`; supports `-i`, `--dry-run`, `--json`, `-c`, `-a`, `-n`
+- `amend` - Regenerates the last commit's message from its diff (folding in any staged changes); previews the message by default in stdout mode and only rewrites it via `git commit --amend` with `-i` (interactive confirm) or `--apply`; supports `-i`, `--apply`, `--dry-run`, `--json`, `-c`, `-a`, `-n`
 - `changelog` - Creates changelogs for branches, commit ranges, or since-last-tag windows
 - `pr create` - Generates a pull request title and body from the branch diff and opens it via the GitHub CLI (`gh`) on GitHub/GHE or the GitLab CLI (`glab`) on GitLab; supports `-b/--base`, `-d/--draft`, `--title`/`--body`, `-w/--web`, `-i`, `--dry-run`, `--json`
 - `recap` - Summarizes changes from working tree or time-based ranges
