@@ -63,7 +63,7 @@ describe('Conventional Commits Handler', () => {
       defaultBranch: 'main',
       service: {
         provider: 'openai',
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         authentication: {
           type: 'APIKey',
           credentials: { apiKey: 'mock-api-key' },
@@ -75,7 +75,7 @@ describe('Conventional Commits Handler', () => {
     mockGetApiKeyForModel.mockReturnValue('mock-api-key')
     mockGetModelAndProviderFromConfig.mockReturnValue({
       provider: 'openai',
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
     })
 
     mockGenerateAndReviewLoop.mockResolvedValue('mock commit message')
@@ -110,7 +110,7 @@ describe('Conventional Commits Handler', () => {
         defaultBranch: 'main',
         service: {
           provider: 'openai',
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           authentication: {
             type: 'APIKey',
             credentials: { apiKey: 'mock-api-key' },
