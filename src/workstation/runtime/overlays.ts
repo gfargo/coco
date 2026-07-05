@@ -466,7 +466,7 @@ export function renderHelpPanel(
   }
   if (!matchedAny && helpQuery) {
     body.push(h(Text, { key: 'help-no-match', dimColor: true },
-      `No bindings match "${state.helpFilter}" — esc clears the filter.`))
+      truncateCells(`No bindings match "${state.helpFilter}" — esc clears the filter.`, width - 4)))
   }
 
   // Reserve rows for: title (1), border (2), padding (0). The "more
@@ -494,7 +494,7 @@ export function renderHelpPanel(
   // never invisible.
   if (state.helpFilterMode || state.helpFilter) {
     children.push(h(Text, { key: 'help-filter' },
-      `filter: ${state.helpFilter}${state.helpFilterMode ? '_' : ''}`))
+      truncateCells(`filter: ${state.helpFilter}${state.helpFilterMode ? '_' : ''}`, width - 4)))
   }
 
   // Visual hint that there's content scrolled above. The dim style
