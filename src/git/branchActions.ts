@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { BranchRef } from './branchData'
+import { rejectFlagLike } from './forgeArgGuards'
 
 export type BranchActionResult = {
   ok: boolean
@@ -99,6 +100,9 @@ export function createBranch(
   // without switching onto it. The workstation then prompts the user with
   // a Y/n overlay asking whether to check it out, matching the
   // create-branch-here behavior (#1326).
+  const nameError = rejectFlagLike(branchName, `Branch name '${branchName}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
   return runAction(
     () => git.raw(['branch', branchName, startPoint]),
     `Created branch ${branchName} from ${startPoint}`
@@ -121,6 +125,9 @@ export function renameBranch(
   oldName: string,
   newName: string
 ): Promise<BranchActionResult> {
+  const nameError = rejectFlagLike(newName, `Branch name '${newName}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
   return runAction(
     () => git.raw(['branch', '-m', oldName, newName]),
     `Renamed ${oldName} to ${newName}`
@@ -327,6 +334,9 @@ export async function setUpstream(
 ): Promise<BranchActionResult> {
   const cleaned = target.trim()
   if (!cleaned) return { ok: false, message: 'Upstream ref required' }
+
+  const targetError = rejectFlagLike(cleaned, `Upstream ref '${cleaned}'`)
+  if (targetError) return { ok: false, message: targetError }
 
   const remotes = await listRemotes(git)
   const slash = cleaned.indexOf('/')

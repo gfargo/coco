@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'child_process'
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
+import { rejectFlagLike } from './forgeArgGuards'
 import { getInProgressOperationType } from './operationData'
 import { buildProviderUrl, getProviderOverview } from './providerData'
 
@@ -504,6 +505,9 @@ export function createBranchFromCommit(
     })
   }
 
+  const nameError = rejectFlagLike(trimmedName, `Branch name '${trimmedName}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
   return guardNoInProgressOperation(git).then((blocked) => (
     blocked || runAction(
       () => git.raw(['branch', trimmedName, commit.hash]),
@@ -541,6 +545,9 @@ export function createTagAtCommit(
       message: 'Tag name required.',
     })
   }
+
+  const nameError = rejectFlagLike(trimmedName, `Tag name '${trimmedName}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
 
   return guardNoInProgressOperation(git).then((blocked) => (
     blocked || runAction(

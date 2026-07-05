@@ -36,4 +36,22 @@ describe('log tag actions', () => {
     expect(git.raw).toHaveBeenNthCalledWith(4, ['push', 'origin', 'refs/tags/0.34.0'])
     expect(git.raw).toHaveBeenNthCalledWith(5, ['push', 'origin', ':refs/tags/0.34.0'])
   })
+
+  it('rejects a flag-like tag name to avoid arg injection', async () => {
+    const git = { raw: jest.fn() }
+
+    await expect(createLightweightTag(git as never, '-d', 'abc1234')).resolves.toEqual({
+      ok: false,
+      message: "Tag name '-d' cannot start with '-'.",
+    })
+    await expect(createAnnotatedTag(git as never, '--force', 'abc1234', 'msg')).resolves.toEqual({
+      ok: false,
+      message: "Tag name '--force' cannot start with '-'.",
+    })
+    await expect(deleteLocalTag(git as never, '-d')).resolves.toEqual({
+      ok: false,
+      message: "Tag name '-d' cannot start with '-'.",
+    })
+    expect(git.raw).not.toHaveBeenCalled()
+  })
 })

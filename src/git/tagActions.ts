@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { rejectFlagLike } from './forgeArgGuards'
 
 export type TagActionResult = {
   ok: boolean
@@ -26,6 +27,9 @@ export function createLightweightTag(
   tagName: string,
   target: string
 ): Promise<TagActionResult> {
+  const nameError = rejectFlagLike(tagName, `Tag name '${tagName}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
   return runAction(
     () => git.raw(['tag', tagName, target]),
     `Created tag ${tagName}`
@@ -38,6 +42,9 @@ export function createAnnotatedTag(
   target: string,
   message: string
 ): Promise<TagActionResult> {
+  const nameError = rejectFlagLike(tagName, `Tag name '${tagName}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
   return runAction(
     () => git.raw(['tag', '-a', tagName, target, '-m', message]),
     `Created annotated tag ${tagName}`
@@ -45,6 +52,9 @@ export function createAnnotatedTag(
 }
 
 export function deleteLocalTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
+  const nameError = rejectFlagLike(tagName, `Tag name '${tagName}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
   return runAction(
     () => git.raw(['tag', '-d', tagName]),
     `Deleted local tag ${tagName}`
