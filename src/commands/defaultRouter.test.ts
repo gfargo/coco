@@ -1,7 +1,13 @@
-import { buildSyntheticArgv, decideDefaultRoute, type DefaultRouteArgv } from './defaultRouter'
+import { buildSyntheticArgv, decideDefaultRoute, defaultRouteHandler, type DefaultRouteArgv } from './defaultRouter'
 import { createLogArgvFromUiArgv } from './ui/handler'
 import { UiArgv } from './ui/config'
 import { buildLogArgs, getLogView } from './log/data'
+import { handler as commitHandler } from './commit/handler'
+import { Logger } from '../lib/utils/logger'
+
+jest.mock('./commit/handler', () => ({
+  handler: jest.fn(),
+}))
 
 function routeArgv(overrides: Partial<DefaultRouteArgv> = {}): DefaultRouteArgv {
   return {
@@ -130,5 +136,52 @@ describe('bare `coco` → workstation history view (#1169 regression)', () => {
     // graph in #1169 — these must be absent on the bare-`coco` path.
     expect(args).not.toContain('--first-parent')
     expect(args).not.toContain('--no-merges')
+  })
+})
+
+describe('buildSyntheticArgv interactive override', () => {
+  it('defaults `interactive` to true when no override is given (ui/workspace/init regression guard)', () => {
+    const synthetic = buildSyntheticArgv<UiArgv>(routeArgv())
+    expect(synthetic.interactive).toBe(true)
+  })
+
+  it('honors an `interactive: false` override', () => {
+    const synthetic = buildSyntheticArgv<UiArgv>(routeArgv(), { interactive: false })
+    expect(synthetic.interactive).toBe(false)
+  })
+})
+
+describe('legacy `--commit`/COCO_DEFAULT=commit route does not force interactive mode (#1442)', () => {
+  const originalCocoDefault = process.env.COCO_DEFAULT
+
+  afterEach(() => {
+    if (originalCocoDefault === undefined) {
+      delete process.env.COCO_DEFAULT
+    } else {
+      process.env.COCO_DEFAULT = originalCocoDefault
+    }
+    jest.clearAllMocks()
+  })
+
+  it('invokes commitHandler with interactive: false when routed via COCO_DEFAULT=commit', async () => {
+    process.env.COCO_DEFAULT = 'commit'
+    const logger = new Logger({ silent: true })
+
+    await defaultRouteHandler(routeArgv(), logger)
+
+    expect(commitHandler).toHaveBeenCalledTimes(1)
+    const mockCommitHandler = commitHandler as jest.Mock
+    expect(mockCommitHandler.mock.calls[0][0].interactive).toBe(false)
+  })
+
+  it('invokes commitHandler with interactive: false when routed via explicit --commit flag', async () => {
+    delete process.env.COCO_DEFAULT
+    const logger = new Logger({ silent: true })
+
+    await defaultRouteHandler(routeArgv({ commit: true }), logger)
+
+    expect(commitHandler).toHaveBeenCalledTimes(1)
+    const mockCommitHandler = commitHandler as jest.Mock
+    expect(mockCommitHandler.mock.calls[0][0].interactive).toBe(false)
   })
 })
