@@ -1583,6 +1583,16 @@ export function useWorkflowAction(
     }
     try {
     const result = await handler()
+    // #1429 — a recovery prompt raised below resolves `git` from the
+    // frame that was ACTIVE when the user answers it, not the one that
+    // issued the call. If the user drilled into (or popped out of) a
+    // repo frame while this awaited, re-targeting the prompt would act
+    // on the wrong repo (or a destructive option would fire against it
+    // silently). Read `depsRef.current` fresh — the destructured
+    // `runtimes` above is a stale pre-await snapshot — same trick
+    // `app.ts`'s `repoFrameDepthRef` already relies on for the sibling
+    // #1384 cases. Drop the prompt rather than re-target it.
+    const frameChanged = depsRef.current.runtimes.length - 1 !== issuedAtDepth
     // #1349 — color the shared result dispatch by OUTCOME. Before this,
     // a failed cherry-pick and a successful push both rendered as the
     // blue ℹ info style; the status system already distinguishes
@@ -1658,7 +1668,8 @@ export function useWorkflowAction(
     if (
       (id === 'pull-current-branch' || id === 'pull-selected-branch') &&
       !result?.ok &&
-      isDivergedPullError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+      isDivergedPullError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')) &&
+      !frameChanged
     ) {
       dispatch({
         type: 'setPendingChoice',
@@ -1701,7 +1712,7 @@ export function useWorkflowAction(
     // #1357 — after a successful fixup, offer to fold it in right away.
     // Declining leaves the fixup! commit for a later autosquash (hinted
     // in the success message).
-    if (id === 'fixup-into-commit' && result?.ok && lastFixupTargetRef.current) {
+    if (id === 'fixup-into-commit' && result?.ok && lastFixupTargetRef.current && !frameChanged) {
       const target = lastFixupTargetRef.current
       dispatch({
         type: 'setPendingChoice',
@@ -1718,7 +1729,10 @@ export function useWorkflowAction(
     if (id === 'checkout-branch' && !result?.ok && isBranchCheckedOutElsewhereError(result?.message)) {
       const worktreePath = parseCheckedOutWorktreePath(result?.message)
       const branchName = pendingItemAction?.id
-      if (worktreePath && branchName) {
+      if (worktreePath && branchName && frameChanged) {
+        // #1429 — the frame changed mid-await; dropping silently here (no
+        // fallback dispatch) matches the other recovery-prompt guards below.
+      } else if (worktreePath && branchName) {
         const worktree = context.worktreeList?.worktrees?.find((w) => w.path === worktreePath)
         const dirty = worktree?.dirty ?? false
         dispatch({
@@ -1763,7 +1777,8 @@ export function useWorkflowAction(
     if (
       (id === 'checkout-branch' || id === 'checkout-created-branch' || id === 'triage-pr-checkout') &&
       !result?.ok &&
-      isDirtyWorktreeCheckoutError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+      isDirtyWorktreeCheckoutError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')) &&
+      !frameChanged
     ) {
       if (id === 'triage-pr-checkout') {
         const prNumber = payload?.trim() || pendingItemAction?.id
@@ -1835,7 +1850,8 @@ export function useWorkflowAction(
     if (
       conflictRecoveryTitle &&
       !result?.ok &&
-      isOperationConflictError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+      isOperationConflictError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')) &&
+      !frameChanged
     ) {
       dispatch({
         type: 'setPendingChoice',

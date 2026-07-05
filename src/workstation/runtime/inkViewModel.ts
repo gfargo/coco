@@ -1486,6 +1486,11 @@ function withPushedRepoFrame(
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
     pendingMutationConfirmation: undefined,
+    // #1429 — a choice prompt raised in the parent (or its worktree-
+    // checkout-conflict sibling) references the PARENT repo's git call;
+    // it can't be answered meaningfully after drilling into a submodule.
+    pendingChoice: undefined,
+    worktreeCheckoutConflict: undefined,
     // #1343 — none of these survive the repo boundary. The compare
     // base, blame / file-history paths, and the branch-keyed changelog
     // cache all reference the PARENT repo's objects; the per-list
@@ -1583,6 +1588,11 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
     pendingMutationConfirmation: undefined,
+    // #1429 — mirror of the push-time clear above; a choice prompt from
+    // the popped (child) frame is equally meaningless once back in the
+    // parent's context.
+    pendingChoice: undefined,
+    worktreeCheckoutConflict: undefined,
   }
 }
 
@@ -2765,6 +2775,16 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // confirmation dismisses any open choice prompt so a `y` meant
         // for the confirm can't be matched against choice option keys.
         pendingChoice: action.value ? undefined : state.pendingChoice,
+        // A confirmation must be what's actually on screen (#1429): help,
+        // view-keys, and the command palette all render above it and eat
+        // its keys, so raising one closes those overlays the same way
+        // toggleHelp/toggleViewKeys/toggleCommandPalette close each other.
+        showHelp: action.value ? false : state.showHelp,
+        showViewKeys: action.value ? false : state.showViewKeys,
+        showCommandPalette: action.value ? false : state.showCommandPalette,
+        helpScrollOffset: action.value ? 0 : state.helpScrollOffset,
+        helpFilter: action.value ? '' : state.helpFilter,
+        helpFilterMode: action.value ? false : state.helpFilterMode,
         pendingKey: undefined,
       }
     case 'setWorktreeCheckoutConflict':
@@ -2778,6 +2798,13 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingChoice: action.value,
         pendingConfirmationId: action.value ? undefined : state.pendingConfirmationId,
         pendingConfirmationPayload: action.value ? undefined : state.pendingConfirmationPayload,
+        // Same overlay-precedence fix as setPendingConfirmation above (#1429).
+        showHelp: action.value ? false : state.showHelp,
+        showViewKeys: action.value ? false : state.showViewKeys,
+        showCommandPalette: action.value ? false : state.showCommandPalette,
+        helpScrollOffset: action.value ? 0 : state.helpScrollOffset,
+        helpFilter: action.value ? '' : state.helpFilter,
+        helpFilterMode: action.value ? false : state.helpFilterMode,
         pendingKey: undefined,
       }
     case 'setPendingMutationConfirmation':
