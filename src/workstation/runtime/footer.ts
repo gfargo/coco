@@ -119,6 +119,7 @@ export function renderFooter(
     pendingKey: state.pendingKey,
     showCommandPalette: state.showCommandPalette,
     showHelp: state.showHelp,
+    helpFilterMode: state.helpFilterMode,
     sidebarTab: state.sidebarTab,
     sidebarItemCount,
     bisectActive: Boolean(context.bisect?.active),

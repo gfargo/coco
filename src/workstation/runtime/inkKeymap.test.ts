@@ -310,6 +310,18 @@ describe('log Ink keymap', () => {
     expect(getLogInkFooterHints({
       filterMode: false,
       focus: 'commits',
+      showHelp: true,
+      helpFilterMode: true,
+    })).toEqual({
+      // While typing a help filter, `? close` / `/ filter` / `j/k scroll`
+      // no longer apply — the input swallows them (#1431).
+      contextual: ['enter keep', 'esc clear', 'type to filter'],
+      global: ['q quit'],
+    })
+
+    expect(getLogInkFooterHints({
+      filterMode: false,
+      focus: 'commits',
       showCommandPalette: true,
       showHelp: false,
     })).toEqual({

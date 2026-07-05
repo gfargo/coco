@@ -668,6 +668,9 @@ export type GetLogInkFooterHintsOptions = {
   filterMode: boolean
   focus: LogInkFocus
   showHelp: boolean
+  /** True while the help overlay's own type-to-filter input is active
+   *  (distinct from `filterMode`, the commit-list search filter). */
+  helpFilterMode?: boolean
   showCommandPalette?: boolean
   /**
    * Split-plan overlay state (#907 / #919). When `'ready'`, the footer
@@ -1142,6 +1145,12 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
   }
 
   if (options.showHelp) {
+    if (options.helpFilterMode) {
+      return {
+        contextual: ['enter keep', 'esc clear', 'type to filter'],
+        global: ['q quit'],
+      }
+    }
     // Every key here is live inside the help handler — the old set
     // advertised `tab focus` and `/ search` while the handler
     // swallowed both ("a footer that lies about a key is a bug",

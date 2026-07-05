@@ -258,6 +258,11 @@ const ALLOWLIST = new Set<string>([
   'tab: [sidebar] main inspector',
   'tab: sidebar [main] inspector',
   'tab: sidebar main [inspector]',
+  // Help-filter footer (#1431) — "type to filter" is a printable-key
+  // affordance ("any character narrows the list"), not a single
+  // fireable key like the other hints, so it can't be parsed into a
+  // press sequence the way `enter keep` / `esc clear` can.
+  'type to filter',
 ])
 
 /**
@@ -327,6 +332,17 @@ function helpFixture(): Fixture {
   return {
     state,
     options: { activeView: 'history', focus: 'commits', filterMode: false, showHelp: true },
+    context: {},
+  }
+}
+
+function helpFilterFixture(): Fixture {
+  let state = createLogInkState(rows)
+  state = applyLogInkAction(state, { type: 'toggleHelp' })
+  state = applyLogInkAction(state, { type: 'openHelpFilter' })
+  return {
+    state,
+    options: { activeView: 'history', focus: 'commits', filterMode: false, showHelp: true, helpFilterMode: true },
     context: {},
   }
 }
@@ -816,6 +832,7 @@ const FOOTER_FIXTURES: Record<string, () => Fixture> = {
   historyCompareBase: historyCompareFixture,
   filterMode: filterModeFixture,
   help: helpFixture,
+  helpFilter: helpFilterFixture,
   commandPalette: commandPaletteFixture,
   splitPlanReady: splitPlanReadyFixture,
   splitPlanLoading: splitPlanLoadingFixture,
