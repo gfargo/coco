@@ -26,6 +26,7 @@ import {
     CommitSplitPlanSchema,
 } from './splitPlanTypes'
 import {
+    DuplicateRescueNote,
     formatPlanValidationIssuesError,
     getPlanValidationIssues,
     hasPlanValidationIssues,
@@ -123,6 +124,25 @@ export function formatCommitSplitPlan(plan: CommitSplitPlan): string {
       return `## ${index + 1}. ${group.title}${body}${rationale}\n\n${sections.join('\n\n')}`
     })
     .join('\n\n---\n\n')
+}
+
+/**
+ * Render the "the model listed this in more than one commit" notes
+ * (#1462) captured by `detectDuplicateFileNotes`/`detectDuplicateHunkNotes`.
+ * The dedupe rescue silently keeps the FIRST group's claim and drops the
+ * rest, which otherwise produces a plan that passes validation cleanly
+ * with no hint that a placement was auto-resolved. Uses group TITLES
+ * (captured at detection time, before any group could be renumbered or
+ * dropped by `dropEmptyGroups`) rather than group index numbers, which
+ * can drift from what's actually printed in the final plan.
+ */
+export function formatDedupeWarnings(notes: DuplicateRescueNote[]): string {
+  return notes
+    .map((note) => {
+      const dropped = note.droppedGroupTitles.join(', ')
+      return `⚠ ${note.kind} ${note.id}: kept in "${note.keptGroupTitle}", dropped from "${dropped}" (model listed it in more than one commit)`
+    })
+    .join('\n')
 }
 
 type StagedHunk = {
@@ -695,6 +715,13 @@ export async function prepareCommitSplitPlan({
        * re-roll the planner for another try).
        */
       fallback?: import('./splitPlanGenerator').SplitPlanFallbackInfo
+      /**
+       * Set when a dedupe rescue silently dropped a file/hunk
+       * placement the model had also put in an earlier group (#1462).
+       * Preview / apply UIs should show this alongside the plan so a
+       * validation-clean split doesn't hide an auto-resolved placement.
+       */
+      dedupeWarnings?: DuplicateRescueNote[]
     }
   | { empty: true }
 > {
@@ -783,7 +810,7 @@ export async function prepareCommitSplitPlan({
 
   logger.startSpinner('Generating split plan…')
 
-  const { plan, fallback } = await generateValidatedCommitSplitPlan({
+  const { plan, fallback, dedupeWarnings } = await generateValidatedCommitSplitPlan({
     llm: resolvedPlanLlm,
     prompt: COMMIT_SPLIT_PROMPT,
     variables: {
@@ -819,7 +846,7 @@ export async function prepareCommitSplitPlan({
     { mode: 'succeed', color: 'green' }
   )
 
-  return { plan, context: { changes, hunkInventory }, fallback }
+  return { plan, context: { changes, hunkInventory }, fallback, dedupeWarnings }
 }
 
 export async function handleCommitSplit({
@@ -856,19 +883,23 @@ export async function handleCommitSplit({
     return 'No staged changes found.'
   }
 
-  const { plan, context, fallback } = result
+  const { plan, context, fallback, dedupeWarnings } = result
 
   // --plan: print the plan and exit (opt-out from the default apply prompt).
   if (argv.plan) {
+    const lines: string[] = []
     if (fallback) {
-      return [
+      lines.push(
         `Note: showing the single-commit fallback plan (${fallback.reason}).`,
         'Re-run with a stronger model or use --strict-split to surface the planner error.',
-        '',
-        formatCommitSplitPlan(plan),
-      ].join('\n')
+        ''
+      )
     }
-    return formatCommitSplitPlan(plan)
+    if (dedupeWarnings?.length) {
+      lines.push(formatDedupeWarnings(dedupeWarnings), '')
+    }
+    lines.push(formatCommitSplitPlan(plan))
+    return lines.join('\n')
   }
 
   // --apply: skip the confirmation prompt and apply directly.
@@ -897,6 +928,9 @@ export async function handleCommitSplit({
       `Note: showing the single-commit fallback plan (${fallback.reason}).\n` +
       'Re-run with a stronger model or use --strict-split to surface the planner error.\n'
     )
+  }
+  if (dedupeWarnings?.length) {
+    logger.log(`${formatDedupeWarnings(dedupeWarnings)}\n`)
   }
   logger.log(formatCommitSplitPlan(plan))
   logger.log('') // blank line before the prompt

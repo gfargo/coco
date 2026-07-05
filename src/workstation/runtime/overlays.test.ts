@@ -221,6 +221,53 @@ describe('split-plan overlay — unclaimed group (#1180)', () => {
   })
 })
 
+describe('split-plan overlay — dedupe rescue warning (#1462)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  function stateWithDedupeWarning() {
+    return {
+      ...createLogInkState([]),
+      splitPlan: {
+        status: 'ready' as const,
+        scrollOffset: 0,
+        plan: {
+          groups: [
+            { title: 'feat: docs', files: ['docs/page.tsx'], hunks: [] },
+            { title: 'chore: misc', files: ['package.json'], hunks: [] },
+          ],
+        },
+        dedupeWarnings: [
+          {
+            kind: 'file' as const,
+            id: 'docs/page.tsx',
+            keptGroupIndex: 0,
+            keptGroupTitle: 'feat: docs',
+            droppedGroupIndices: [1],
+            droppedGroupTitles: ['chore: misc'],
+          },
+        ],
+      },
+    }
+  }
+
+  it('renders a warning banner naming the file and the kept/dropped commits', () => {
+    const text = flattenText(
+      renderSplitPlanOverlay(createElement, components, stateWithDedupeWarning(), 100, 40, theme, false)
+    )
+    expect(text).toContain('auto-resolved')
+    expect(text).toContain('docs/page.tsx')
+    expect(text).toContain('kept in "feat: docs"')
+    expect(text).toContain('dropped from "chore: misc"')
+  })
+
+  it('renders no warning banner when there are no dedupe warnings', () => {
+    const state = stateWithDedupeWarning()
+    state.splitPlan.dedupeWarnings = []
+    const text = flattenText(renderSplitPlanOverlay(createElement, components, state, 100, 40, theme, false))
+    expect(text).not.toContain('auto-resolved')
+  })
+})
+
 describe('choice panel — worktree-checkout conflict (#1175, #1181)', () => {
   const components: LogInkComponents = { Box, Text }
 

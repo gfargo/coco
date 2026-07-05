@@ -934,6 +934,13 @@ export type SplitPlanState = {
    * the planner.
    */
   fallback?: import('../../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
+  /**
+   * Set when a dedupe rescue silently dropped a file/hunk placement
+   * the model had also put in an earlier group (#1462). Surfaces as a
+   * warning banner in the overlay so a validation-clean plan doesn't
+   * hide an auto-resolved placement from the user before they apply.
+   */
+  dedupeWarnings?: import('../../commands/commit/splitPlanValidation').DuplicateRescueNote[]
 }
 
 export type LogInkStatusFilterMask = {
@@ -1174,6 +1181,7 @@ export type LogInkAction =
       plan: CommitSplitPlan
       planContext: CommitSplitPlanContext
       fallback?: import('../../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
+      dedupeWarnings?: import('../../commands/commit/splitPlanValidation').DuplicateRescueNote[]
     }
   | { type: 'setSplitPlanApplying' }
   | { type: 'setSplitPlanError'; error: string }
@@ -3121,6 +3129,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           planContext: action.planContext,
           scrollOffset: 0,
           fallback: action.fallback,
+          dedupeWarnings: action.dedupeWarnings,
         },
         pendingKey: undefined,
       }

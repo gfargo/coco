@@ -180,6 +180,7 @@ export function useCommitSplitActions(
       plan: result.plan,
       planContext: result.planContext,
       fallback: result.fallback,
+      dedupeWarnings: result.dedupeWarnings,
     })
     const readyMessage = result.fallback
       ? `Split planner exhausted retries — showing single-commit fallback. y/Enter to apply as one commit, r to re-roll, Esc to cancel.`

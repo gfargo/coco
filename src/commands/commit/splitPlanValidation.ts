@@ -199,6 +199,94 @@ export function rescueDuplicateHunks(plan: CommitSplitPlan): CommitSplitPlan {
 }
 
 /**
+ * Records that a dedupe rescue (`rescueDuplicateFiles` /
+ * `rescueDuplicateHunks`) dropped a file/hunk placement the model had
+ * ALSO put in an earlier group — i.e. the model considered more than
+ * one "home" for it and the rescue silently picked the first one.
+ *
+ * `keptGroupIndex` / `droppedGroupIndices` are indices into the RAW
+ * (pre-rescue) plan's `groups[]`. The matching `*Title` fields are
+ * captured from that same raw plan at detection time — later rescue
+ * passes (`dropEmptyGroups` in particular) can remove or renumber
+ * groups in the final plan, so resolving titles by index against the
+ * post-rescue plan would drift; capturing them up front avoids that.
+ */
+export interface DuplicateRescueNote {
+  kind: 'file' | 'hunk'
+  id: string
+  keptGroupIndex: number
+  keptGroupTitle: string
+  droppedGroupIndices: number[]
+  droppedGroupTitles: string[]
+}
+
+/**
+ * Shared walk for `detectDuplicateFileNotes` / `detectDuplicateHunkNotes`.
+ * Mirrors the "first occurrence wins" order `rescueDuplicateFiles` /
+ * `rescueDuplicateHunks` use, but only records a note for CROSS-group
+ * duplicates — a file/hunk repeated twice within the same group's own
+ * array has no ambiguity about its intended home, so it's not reported.
+ */
+function detectDuplicateNotes(
+  plan: CommitSplitPlan,
+  kind: DuplicateRescueNote['kind'],
+  getIds: (group: CommitSplitGroup) => string[]
+): DuplicateRescueNote[] {
+  const firstGroupIndex = new Map<string, number>()
+  const droppedGroupIndices = new Map<string, number[]>()
+
+  plan.groups.forEach((group, groupIndex) => {
+    for (const id of getIds(group)) {
+      const keptIndex = firstGroupIndex.get(id)
+      if (keptIndex === undefined) {
+        firstGroupIndex.set(id, groupIndex)
+        continue
+      }
+      if (keptIndex === groupIndex) {
+        // Repeat within the same group — not a cross-group placement
+        // conflict, nothing to surface.
+        continue
+      }
+      const dropped = droppedGroupIndices.get(id) || []
+      dropped.push(groupIndex)
+      droppedGroupIndices.set(id, dropped)
+    }
+  })
+
+  const titleOf = (groupIndex: number) => plan.groups[groupIndex]?.title ?? ''
+
+  return [...droppedGroupIndices.entries()].map(([id, droppedIndices]) => {
+    const keptIndex = firstGroupIndex.get(id) as number
+    return {
+      kind,
+      id,
+      keptGroupIndex: keptIndex,
+      keptGroupTitle: titleOf(keptIndex),
+      droppedGroupIndices: droppedIndices,
+      droppedGroupTitles: droppedIndices.map(titleOf),
+    }
+  })
+}
+
+/**
+ * Detects (without mutating) every file that `rescueDuplicateFiles`
+ * would drop from a later group because an earlier group already
+ * claimed it. Run on the RAW plan (before any rescue pass) so callers
+ * can surface a warning about the placement the rescue silently chose.
+ */
+export function detectDuplicateFileNotes(plan: CommitSplitPlan): DuplicateRescueNote[] {
+  return detectDuplicateNotes(plan, 'file', getGroupFiles)
+}
+
+/**
+ * Hunk-level counterpart to `detectDuplicateFileNotes`, mirroring what
+ * `rescueDuplicateHunks` would drop.
+ */
+export function detectDuplicateHunkNotes(plan: CommitSplitPlan): DuplicateRescueNote[] {
+  return detectDuplicateNotes(plan, 'hunk', getGroupHunks)
+}
+
+/**
  * Salvage a plan that references hunk IDs not in the inventory by
  * promoting those hunks to file-level assignments. The LLM commonly
  * does this when the staged set is all new/added files (no

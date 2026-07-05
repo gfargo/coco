@@ -1,6 +1,8 @@
 import { FileChange } from '../../lib/types'
 import {
   buildSplitPlanFallback,
+  detectDuplicateFileNotes,
+  detectDuplicateHunkNotes,
   dropEmptyGroups,
   formatPlanValidationFeedback,
   formatPlanValidationIssuesError,
@@ -639,6 +641,110 @@ describe('splitPlanValidation', () => {
       expect(rescued.groups[0].files).toEqual(['a.ts'])
       expect(rescued.groups[1].files).toEqual(['b.ts'])
       expect(rescued.groups[1].hunks).toEqual([])
+    })
+  })
+
+  describe('detectDuplicateFileNotes', () => {
+    it('returns no notes when no file is duplicated', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: ['a.ts'], hunks: [] },
+          { title: 'b', files: ['b.ts'], hunks: [] },
+        ],
+      }
+
+      expect(detectDuplicateFileNotes(plan)).toEqual([])
+    })
+
+    it('reports a file duplicated across two groups, kept in the first', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: docs', files: ['docs/page.tsx', 'docs/layout.tsx'], hunks: [] },
+          { title: 'chore: misc', files: ['docs/page.tsx', 'package.json'], hunks: [] },
+        ],
+      }
+
+      expect(detectDuplicateFileNotes(plan)).toEqual([
+        {
+          kind: 'file',
+          id: 'docs/page.tsx',
+          keptGroupIndex: 0,
+          keptGroupTitle: 'feat: docs',
+          droppedGroupIndices: [1],
+          droppedGroupTitles: ['chore: misc'],
+        },
+      ])
+    })
+
+    it('collects every later group for a file duplicated 3+ times', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: ['x.ts'], hunks: [] },
+          { title: 'b', files: ['x.ts'], hunks: [] },
+          { title: 'c', files: ['x.ts'], hunks: [] },
+        ],
+      }
+
+      expect(detectDuplicateFileNotes(plan)).toEqual([
+        {
+          kind: 'file',
+          id: 'x.ts',
+          keptGroupIndex: 0,
+          keptGroupTitle: 'a',
+          droppedGroupIndices: [1, 2],
+          droppedGroupTitles: ['b', 'c'],
+        },
+      ])
+    })
+
+    it('does not report a file repeated within a single group', () => {
+      // No "wrong home" ambiguity here — it's the same group both times.
+      const plan: CommitSplitPlan = {
+        groups: [{ title: 'a', files: ['a.ts', 'a.ts', 'b.ts'], hunks: [] }],
+      }
+
+      expect(detectDuplicateFileNotes(plan)).toEqual([])
+    })
+  })
+
+  describe('detectDuplicateHunkNotes', () => {
+    it('returns no notes when no hunk is duplicated', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: [], hunks: ['a.ts::hunk-1'] },
+          { title: 'b', files: [], hunks: ['b.ts::hunk-1'] },
+        ],
+      }
+
+      expect(detectDuplicateHunkNotes(plan)).toEqual([])
+    })
+
+    it('reports a hunk duplicated across two groups, kept in the first', () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'a', files: [], hunks: ['a.ts::hunk-1', 'a.ts::hunk-2'] },
+          { title: 'b', files: [], hunks: ['a.ts::hunk-1', 'b.ts::hunk-1'] },
+        ],
+      }
+
+      expect(detectDuplicateHunkNotes(plan)).toEqual([
+        {
+          kind: 'hunk',
+          id: 'a.ts::hunk-1',
+          keptGroupIndex: 0,
+          keptGroupTitle: 'a',
+          droppedGroupIndices: [1],
+          droppedGroupTitles: ['b'],
+        },
+      ])
+    })
+
+    it('does not report a hunk repeated within a single group', () => {
+      const plan: CommitSplitPlan = {
+        groups: [{ title: 'a', files: [], hunks: ['a.ts::hunk-1', 'a.ts::hunk-1'] }],
+      }
+
+      expect(detectDuplicateHunkNotes(plan)).toEqual([])
     })
   })
 
