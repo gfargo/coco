@@ -450,6 +450,24 @@ describe('log history actions', () => {
       expect(git.raw).not.toHaveBeenCalled()
     })
 
+    it('rejects a flag-like name to avoid arg injection', async () => {
+      const git = {
+        revparse: jest.fn(),
+        raw: jest.fn(),
+      }
+
+      await expect(createBranchFromCommit(git as never, '-D', commit)).resolves.toEqual({
+        ok: false,
+        message: "Branch name '-D' cannot start with '-'.",
+      })
+      await expect(createTagAtCommit(git as never, '-D', commit)).resolves.toEqual({
+        ok: false,
+        message: "Tag name '-D' cannot start with '-'.",
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+      expect(git.revparse).not.toHaveBeenCalled()
+    })
+
     it('blocks while another git operation is in progress', async () => {
       const tempDir = mkdtempSync(join(tmpdir(), 'coco-history-here-'))
       const mergeHead = join(tempDir, 'MERGE_HEAD')

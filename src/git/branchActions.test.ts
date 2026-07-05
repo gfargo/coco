@@ -142,6 +142,26 @@ describe('log branch actions', () => {
       expect(result.ok).toBe(false)
       expect(result.message).toContain('already exists')
     })
+
+    it('rejects a flag-like branch name to avoid arg injection', async () => {
+      const git = { raw: jest.fn() }
+      await expect(createBranch(git as never, '--force', 'main')).resolves.toEqual({
+        ok: false,
+        message: "Branch name '--force' cannot start with '-'.",
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('renameBranch', () => {
+    it('rejects a flag-like new name to avoid arg injection', async () => {
+      const git = { raw: jest.fn() }
+      await expect(renameBranch(git as never, 'feature/old', '-m')).resolves.toEqual({
+        ok: false,
+        message: "Branch name '-m' cannot start with '-'.",
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
   })
 
   describe('checkoutBranchByName (#1326)', () => {
@@ -460,6 +480,19 @@ describe('log branch actions', () => {
       expect(result.ok).toBe(false)
       expect(result.message).toContain('No remote configured')
       expect(git.raw).not.toHaveBeenCalled()
+    })
+
+    it('rejects a flag-like target to avoid arg injection', async () => {
+      const git = { raw: jest.fn(), getRemotes: jest.fn() }
+
+      const result = await setUpstream(git as never, 'feature/x', '--upload-pack=evil')
+
+      expect(result).toEqual({
+        ok: false,
+        message: "Upstream ref '--upload-pack=evil' cannot start with '-'.",
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+      expect(git.getRemotes).not.toHaveBeenCalled()
     })
   })
 
