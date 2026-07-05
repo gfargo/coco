@@ -8,10 +8,37 @@
  */
 import * as fs from 'fs'
 import { simpleGit } from 'simple-git'
+import { rejectFlagLike } from './forgeArgGuards'
 
 export type CloneResult = {
   ok: boolean
   message: string
+}
+
+const ALLOWED_URL_SCHEMES = new Set(['https', 'http', 'git', 'ssh'])
+
+/**
+ * simple-git's cloneTask builds argv as `['clone', ...args, repo, dir]` with
+ * no `--` separator before `repo` — a remote starting with `-` is parsed by
+ * `git clone` as an option (e.g. `--upload-pack=<cmd>`), and remote-helper
+ * transports like `ext::` / `file::` can execute arbitrary commands or read
+ * arbitrary files. Reject both before the URL ever reaches git.
+ */
+export function validateCloneUrl(remote: string): string | undefined {
+  const flagError = rejectFlagLike(remote, `Remote URL '${remote}'`)
+  if (flagError) return flagError
+
+  const helperMatch = remote.match(/^([a-zA-Z][a-zA-Z0-9+.-]*)::/)
+  if (helperMatch) {
+    return `Remote URL '${remote}' uses the unsupported '${helperMatch[1]}::' transport helper.`
+  }
+
+  const schemeMatch = remote.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//)
+  if (schemeMatch && !ALLOWED_URL_SCHEMES.has(schemeMatch[1].toLowerCase())) {
+    return `Remote URL '${remote}' uses unsupported scheme '${schemeMatch[1]}://'.`
+  }
+
+  return undefined
 }
 
 /**
@@ -39,6 +66,8 @@ export async function cloneRepo(url: string, targetPath: string): Promise<CloneR
   const dest = targetPath.trim()
   if (!remote) return { ok: false, message: 'Enter a remote URL to clone.' }
   if (!dest) return { ok: false, message: 'Enter a destination path.' }
+  const urlError = validateCloneUrl(remote)
+  if (urlError) return { ok: false, message: urlError }
   if (fs.existsSync(dest)) {
     return { ok: false, message: `${dest} already exists — choose another path.` }
   }
