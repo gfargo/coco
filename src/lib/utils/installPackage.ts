@@ -1,4 +1,7 @@
-import { execPromise } from './execPromise'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+
+const execFileAsync = promisify(execFile)
 
 type InstallPackageInput = {
   name: string
@@ -18,7 +21,8 @@ export async function installNpmPackage({
   cwd = process.cwd(),
 }: InstallPackageInput) {
   const version = name.includes('@') ? '' : '@latest'
-  const { stdout, stderr } = await execPromise(`npm i ${name}${version} ${flags.join(' ')} --yes`, { cwd })
+  const args = ['i', `${name}${version}`, ...flags, '--yes']
+  const { stdout, stderr } = await execFileAsync('npm', args, { cwd })
 
   if (stderr) {
     console.error(`Execution error: ${stderr}`)

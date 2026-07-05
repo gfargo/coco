@@ -96,6 +96,21 @@ describe('createJsonStore', () => {
     expect(() => store.write({ ok: true })).not.toThrow()
   })
 
+  ;(process.platform === 'win32' ? it.skip : it)(
+    'writes the file 0600, not the default umask permissions',
+    () => {
+      const store = createJsonStore<{ ok: true }>({
+        subdir: 'test',
+        basename: 'data.json',
+        version: 1,
+        validate: () => ({ ok: true }),
+      })
+      store.write({ ok: true })
+      const mode = fs.statSync(store.path()).mode & 0o777
+      expect(mode).toBe(0o600)
+    }
+  )
+
   it('honors XDG_CACHE_HOME', () => {
     const store = createJsonStore<{ ok: true }>({
       subdir: 'sub',

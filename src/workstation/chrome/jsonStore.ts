@@ -2,6 +2,8 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import { writeFileAtomic } from '../../lib/utils/atomicFileWrite'
+
 /**
  * Shared XDG-friendly JSON persistence used by every chrome cache /
  * preferences module (workspace overview cache, known-repos store,
@@ -112,12 +114,11 @@ export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
         // tmp+rename (same as themePersistence) so a crash/SIGKILL
         // mid-write can't leave truncated JSON — the read path would
         // treat that as "no data" and silently drop the store. The
-        // pid suffix keeps two coco instances from clobbering each
-        // other's tmp file; rename is atomic, so concurrent writers
-        // degrade to last-writer-wins instead of corruption.
-        const tmp = `${file}.${process.pid}.tmp`
-        fs.writeFileSync(tmp, JSON.stringify(envelope, null, indent))
-        fs.renameSync(tmp, file)
+        // random-suffixed 0600/O_EXCL tmp keeps two coco instances from
+        // clobbering (or an attacker from pre-planting) each other's
+        // tmp file; rename is atomic, so concurrent writers degrade to
+        // last-writer-wins instead of corruption.
+        writeFileAtomic(file, JSON.stringify(envelope, null, indent))
       } catch {
         // Best-effort persistence.
       }
