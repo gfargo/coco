@@ -1798,6 +1798,28 @@ describe('log Ink view model', () => {
       })
     })
 
+    it('setSplitPlanReady carries dedupeWarnings onto splitPlan state (#1462)', () => {
+      const dedupeWarnings = [
+        {
+          kind: 'file' as const,
+          id: 'docs/page.tsx',
+          keptGroupIndex: 0,
+          keptGroupTitle: 'feat: docs',
+          droppedGroupIndices: [1],
+          droppedGroupTitles: ['chore: misc'],
+        },
+      ]
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+        dedupeWarnings,
+      })
+
+      expect(state.splitPlan?.dedupeWarnings).toEqual(dedupeWarnings)
+    })
+
     it('setSplitPlanApplying preserves plan + context, transitions status', () => {
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, {

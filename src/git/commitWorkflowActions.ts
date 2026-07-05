@@ -10,6 +10,7 @@ import {
   applyCommitSplitPlan,
   prepareCommitSplitPlan,
 } from '../commands/commit/split'
+import { DuplicateRescueNote } from '../commands/commit/splitPlanValidation'
 import { LangChainCancelledError } from '../lib/langchain/errors'
 import { LLMModel } from '../lib/langchain/types'
 import {
@@ -287,6 +288,13 @@ export type CommitSplitPlanResult =
        * knows the plan isn't a real LLM split.
        */
       fallback?: import('../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
+      /**
+       * Set when a dedupe rescue silently dropped a file/hunk
+       * placement the model had also put in an earlier group (#1462).
+       * Threaded from `prepareCommitSplitPlan` so the workstation
+       * overlay can surface the same warning the CLI preview shows.
+       */
+      dedupeWarnings?: DuplicateRescueNote[]
     }
   | {
       ok: false
@@ -367,6 +375,7 @@ export async function runCommitSplitPlanWorkflow(
       plan: result.plan,
       planContext: result.context,
       fallback: result.fallback,
+      dedupeWarnings: result.dedupeWarnings,
     }
   } catch (error) {
     // User abort (Esc during generation) is intent, not failure — let
