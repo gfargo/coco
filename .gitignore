@@ -79,6 +79,12 @@ commitlint.config.js
 # (regression-detection follow-up).
 .bench/structural-extract-eval/
 
+# Workstation keystroke-latency benchmark output (#1425). Same
+# per-run-vs-baseline split as the diff-condensing benchmark above —
+# `workstation-baseline.json` is committed once a maintainer runs
+# `--update`; per-run files are local noise.
+.bench/workstation-run-*.json
+
 
 # Screenshot captures (regenerated via `npm run screenshot`)
 .screenshots/
