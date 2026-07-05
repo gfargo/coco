@@ -441,7 +441,7 @@ describe('log Ink input interactions', () => {
   })
 
   it('jumps commit-diff hunks bidirectionally on ]/[ in diff view', () => {
-    let state = createLogInkState(rows, { activeView: 'diff' })
+    let state = { ...createLogInkState(rows, { activeView: 'diff' }), diffSource: 'commit' as const } as LogInkState
     const context = { commitDiffHunkOffsets: [2, 8, 14], previewLineCount: 30 }
 
     state = applyInput(state, ']', {}, context)
@@ -5430,6 +5430,19 @@ describe('PR diff view keys (#1363)', () => {
     expect(events).toEqual([
       { type: 'runWorkflowAction', id: 'triage-pr-checkout', payload: '962' },
     ])
+  })
+
+  it('[ and ] no-op while the PR patch is still loading, even with stale commitDiffHunkOffsets (#1432)', () => {
+    // Regression: prDiffFileOffsets is empty until the patch loads, but
+    // commitDiffHunkOffsets derives unconditionally from the history-cursor
+    // file preview and can be non-empty at the same time. The jump must not
+    // fall through to those stale commit-diff offsets while diffSource is 'pr'.
+    let state = prDiffState()
+    const startOffset = state.diffPreviewOffset
+    state = applyInput(state, ']', {}, { commitDiffHunkOffsets: [0, 8, 20] })
+    expect(state.diffPreviewOffset).toBe(startOffset)
+    state = applyInput(state, '[', {}, { commitDiffHunkOffsets: [0, 8, 20] })
+    expect(state.diffPreviewOffset).toBe(startOffset)
   })
 
   it('stash-only verbs stay dead on the PR diff (no cherry-pick / editor target)', () => {
