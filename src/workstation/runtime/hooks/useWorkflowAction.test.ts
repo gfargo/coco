@@ -774,3 +774,104 @@ describe('operation conflict recovery — sibling paths (#1430)', () => {
     }))
   })
 })
+
+describe('frame-scoped recovery prompts (#1429)', () => {
+  beforeEach(() => {
+    pullCurrentBranchMock.mockReset()
+    cherryPickCommitMock.mockReset()
+  })
+
+  it('drops the diverged-pull recovery choice if the repo frame changed while the pull was in flight', async () => {
+    let resolvePull: (value: { ok: boolean; message: string }) => void = () => undefined
+    pullCurrentBranchMock.mockImplementation(
+      () => new Promise((resolve) => { resolvePull = resolve })
+    )
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    // Issue the pull at depth 0, then — before it resolves — simulate a
+    // drill-in (pushRepoFrame) by re-rendering with a deeper runtime
+    // stack. `runWorkflowAction`'s memoized identity is unaffected; only
+    // `depsRef.current` (read fresh post-await) changes.
+    const run = runWorkflowAction('pull-current-branch')
+    harness.beginRender()
+    useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    resolvePull({ ok: false, message: 'fatal: Not possible to fast-forward, aborting.' })
+    await run
+
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingChoice' }))
+    // The underlying error still reaches the status line — only the
+    // choice prompt (which would act on the now-wrong frame) is dropped.
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      kind: 'error',
+    }))
+  })
+
+  it('raises the diverged-pull recovery choice normally when the frame is unchanged', async () => {
+    pullCurrentBranchMock.mockResolvedValue({
+      ok: false,
+      message: 'fatal: Not possible to fast-forward, aborting.',
+    })
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('pull-current-branch')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({ id: 'diverged-pull-recovery' }),
+    }))
+  })
+
+  it('drops the operation-conflict recovery choice if the repo frame changed while the cherry-pick was in flight', async () => {
+    let resolveCherryPick: (value: { ok: boolean; message: string; details?: string[] }) => void = () => undefined
+    cherryPickCommitMock.mockImplementation(
+      () => new Promise((resolve) => { resolveCherryPick = resolve })
+    )
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: createLogInkState([commitRow]),
+      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    const run = runWorkflowAction('cherry-pick-commit')
+    harness.beginRender()
+    useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: createLogInkState([commitRow]),
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    resolveCherryPick({
+      ok: false,
+      message: 'error: could not apply abc1234... feat: add thing',
+      details: ['CONFLICT (content): Merge conflict in src/app.ts'],
+    })
+    await run
+
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingChoice' }))
+    // #1429's headline destructive case: with the prompt dropped, `a`
+    // can no longer reach `abort-operation` against the wrong frame —
+    // but the raw conflict error (with keepStatusOnDismiss's underlying
+    // status) is still visible so the user isn't left with silence.
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'error: could not apply abc1234... feat: add thing',
+      kind: 'error',
+    }))
+  })
+})
