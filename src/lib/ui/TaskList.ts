@@ -1,10 +1,13 @@
 import chalk from 'chalk'
+import { execFile } from 'child_process'
 import * as readline from 'readline'
+import { promisify } from 'util'
 import { ReviewFeedbackItem } from '../../commands/review/config'
 import { runAutoFix } from '../autofix'
 import { AutoFixConfig } from '../autofix/types'
-import { execPromise } from '../utils/execPromise'
 import { bannerWithHeader, DIVIDER, hotKey, severityColor, statusColor } from './helpers'
+
+const execFileAsync = promisify(execFile)
 
 type FeedbackTaskItem = ReviewFeedbackItem & {
   status: 'pending' | 'completed' | 'skipped' | 'omitted'
@@ -63,7 +66,18 @@ export class TaskList {
 
   private async openFile() {
     const item = this.items[this.currentIndex]
-    await execPromise(`${process.env.EDITOR || 'code'} ${item.filePath}`)
+    const editorEnv = process.env.EDITOR || 'code'
+    // $EDITOR commonly includes flags (`code -w`, `vim -f`). Tokenize on
+    // whitespace so the leading word is the executable and the rest are
+    // args — execFile takes the executable and args separately, no shell.
+    const editorParts = editorEnv.trim().split(/\s+/).filter(Boolean)
+    const editor = editorParts[0] || 'code'
+    const editorArgs = [...editorParts.slice(1), item.filePath]
+    try {
+      await execFileAsync(editor, editorArgs)
+    } catch (err) {
+      console.log(chalk.red(`Failed to open ${item.filePath} in ${editor}: ${(err as Error).message}`))
+    }
   }
 
   private markAsComplete() {
@@ -183,7 +197,13 @@ export class TaskList {
         q: 'exit',
       }
 
-      const handleKeypress = (_: string, key: { name: string }) => {
+      const handleKeypress = (_: string, key: { name: string; ctrl?: boolean }) => {
+        if (key?.ctrl && key.name === 'c') {
+          process.stdin.removeListener('keypress', handleKeypress)
+          resolve('exit')
+          return
+        }
+
         const action = key ? actionMap[key.name] : undefined
         if (!action) return
 

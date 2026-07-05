@@ -4,6 +4,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { GitLogRow } from '../../commands/log/data'
+import { writeFileAtomic } from '../../lib/utils/atomicFileWrite'
 
 /**
  * Per-repo disk cache of the last successful commit-log fetch (#808).
@@ -89,11 +90,10 @@ export function writeCachedCommits(repoPath: string, rows: GitLogRow[]): void {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true })
     // tmp+rename so a crash mid-write can't leave truncated JSON (the
-    // read path would silently treat it as "no cache"). pid-suffixed
-    // tmp keeps concurrent coco instances off each other's tmp file.
-    const tmp = `${file}.${process.pid}.tmp`
-    fs.writeFileSync(tmp, JSON.stringify(envelope))
-    fs.renameSync(tmp, file)
+    // read path would silently treat it as "no cache"). Random-suffixed
+    // 0600/O_EXCL tmp keeps concurrent coco instances off each other's
+    // tmp file and closes the predictable-path TOCTOU window.
+    writeFileAtomic(file, JSON.stringify(envelope))
   } catch {
     // Best-effort persistence; swallow.
   }

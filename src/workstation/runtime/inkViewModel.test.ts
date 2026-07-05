@@ -802,6 +802,56 @@ describe('log Ink view model', () => {
     expect(state.pendingChoice).toBeUndefined()
   })
 
+  it('choice and confirmation prompts close help/view-keys/palette overlays (#1429)', () => {
+    const choice = {
+      id: 'operation-conflict-recovery',
+      title: 'Operation conflict',
+      options: [{ key: 'a', label: 'Abort', workflowId: 'abort-operation' }],
+    }
+
+    // Help (and its type-filter) renders above the choice panel and
+    // swallows its keys — raising a choice must close it, mirroring how
+    // toggleHelp/toggleViewKeys/toggleCommandPalette already close each
+    // other.
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    state = applyLogInkAction(state, { type: 'openHelpFilter' })
+    state = applyLogInkAction(state, { type: 'appendHelpFilter', value: 'reb' })
+    expect(state.showHelp).toBe(true)
+
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: choice })
+    expect(state.showHelp).toBe(false)
+    expect(state.helpFilterMode).toBe(false)
+    expect(state.helpFilter).toBe('')
+    expect(state.pendingChoice).toEqual(choice)
+
+    // View-keys strip.
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: undefined })
+    state = applyLogInkAction(state, { type: 'toggleViewKeys' })
+    expect(state.showViewKeys).toBe(true)
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: choice })
+    expect(state.showViewKeys).toBe(false)
+
+    // Command palette.
+    state = applyLogInkAction(state, { type: 'setPendingChoice', value: undefined })
+    state = applyLogInkAction(state, { type: 'toggleCommandPalette' })
+    expect(state.showCommandPalette).toBe(true)
+    state = applyLogInkAction(state, { type: 'setPendingConfirmation', value: 'delete-branch' })
+    expect(state.showCommandPalette).toBe(false)
+    expect(state.pendingConfirmationId).toBe('delete-branch')
+
+    // A confirmation raised over an open help overlay is likewise visible.
+    state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'toggleHelp' })
+    state = applyLogInkAction(state, {
+      type: 'setPendingConfirmation',
+      value: 'delete-branch',
+      payload: 'feat/x',
+    })
+    expect(state.showHelp).toBe(false)
+    expect(state.pendingConfirmationId).toBe('delete-branch')
+  })
+
   describe('navigation primitives', () => {
     it('initializes the view stack with the root view', () => {
       const state = createLogInkState(rows)
@@ -2281,6 +2331,19 @@ describe('log Ink view model', () => {
       })
       parent = applyLogInkAction(parent, { type: 'moveBranch', delta: 3, count: 10 })
 
+      parent = applyLogInkAction(parent, {
+        type: 'setPendingChoice',
+        value: {
+          id: 'diverged-pull-recovery',
+          title: 'Branches diverged',
+          options: [{ key: 'r', label: 'Pull with rebase', workflowId: 'pull-rebase-current' }],
+        },
+      })
+      parent = applyLogInkAction(parent, {
+        type: 'setWorktreeCheckoutConflict',
+        value: { branch: 'feat/x', worktreePath: '/abs/coco/.worktrees/feat-x', dirty: false },
+      })
+
       const inside = applyLogInkAction(parent, {
         type: 'pushRepoFrame',
         label: 'vendor/lib',
@@ -2291,6 +2354,11 @@ describe('log Ink view model', () => {
       expect(inside.fileHistoryPath).toBeUndefined()
       expect(inside.changelogCache).toEqual({})
       expect(inside.selectedBranchIndex).toBe(0)
+      // #1429 — a choice raised in the parent references the parent's git
+      // call; it must not survive the drill-in to be answered against the
+      // child frame.
+      expect(inside.pendingChoice).toBeUndefined()
+      expect(inside.worktreeCheckoutConflict).toBeUndefined()
 
       const popped = applyLogInkAction(inside, { type: 'popRepoFrame' })
       expect(popped.compareBase).toEqual({ kind: 'branch', ref: 'main', label: 'main' })
@@ -2298,6 +2366,10 @@ describe('log Ink view model', () => {
       expect(popped.fileHistoryPath).toBe('src/app.ts')
       expect(popped.changelogCache.main).toBeDefined()
       expect(popped.selectedBranchIndex).toBe(3)
+      // Not restored on pop — they're transient like pendingConfirmationId,
+      // not carried in parentReturn.
+      expect(popped.pendingChoice).toBeUndefined()
+      expect(popped.worktreeCheckoutConflict).toBeUndefined()
     })
   })
 })

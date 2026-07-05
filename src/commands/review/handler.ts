@@ -35,6 +35,19 @@ const ReviewFeedbackResponseSchema = z.preprocess(
   ReviewFeedbackItemArraySchema
 )
 
+function formatFindings(findings: ReviewFeedbackItem[]): string {
+  return findings
+    .map((task: ReviewFeedbackItem) => {
+      const color = severityColor(task.severity)
+      return color(
+        `[${task.severity}] ${chalk.bold(task.title)} (${task.category})\n ${chalk.dim(
+          `→ "${task.filePath}"`
+        )}`
+      )
+    })
+    .join('\n\n')
+}
+
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const git = applyRepoFlag(argv)
   const config = loadConfig<ReviewOptions, ReviewArgv>(argv)
@@ -195,6 +208,13 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     return changes.join('\n')
   }
 
+  // `generateAndReviewLoop`'s non-interactive branch overwrites its returned
+  // result with the `reviewParser`-formatted display string (by design, for
+  // callers whose R is already string-shaped). Review's R is a structured
+  // array, so capture it directly from the agent instead of trusting the
+  // loop's return value.
+  let capturedFindings: ReviewFeedbackItem[] = []
+
   const recap = await generateAndReviewLoop<string[], ReviewFeedbackItem[]>({
     label: 'review',
     options: {
@@ -266,19 +286,12 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       }) as ReviewFeedbackItem[]
 
       // sort by severity
-      return response.sort((a: ReviewFeedbackItem, b: ReviewFeedbackItem) => b.severity - a.severity)
+      const sorted = response.sort((a: ReviewFeedbackItem, b: ReviewFeedbackItem) => b.severity - a.severity)
+      capturedFindings = sorted
+      return sorted
     },
     reviewParser(result: ReviewFeedbackItem[]) {
-      return result
-        .map((task: ReviewFeedbackItem) => {
-          const color = severityColor(task.severity)
-          return color(
-            `[${task.severity}] ${chalk.bold(task.title)} (${task.category})\n ${chalk.dim(
-              `→ "${task.filePath}"`
-            )}`
-          )
-        })
-        .join('\n\n')
+      return formatFindings(result)
     },
     noResult: async () => {
       await noResult({ git, logger })
@@ -286,7 +299,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     },
   })
 
-  const findings = (recap as ReviewFeedbackItem[]) ?? []
+  const findings = Array.isArray(recap) ? recap : capturedFindings
 
   // `--severity <n>`: CI gate. After surfacing the review, exit non-zero
   // if any finding is at or above the threshold so pipelines can block on it.
@@ -302,9 +315,16 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     return
   }
 
-  const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined })
-  logLlmTelemetrySummary(logger, 'review')
-  await reviewer.start()
+  const canShowTaskList = process.stdin.isTTY && process.stdout.isTTY
+  if (!canShowTaskList) {
+    logger.log(chalk.bold('Review findings:\n'))
+    logger.log(formatFindings(findings))
+    logger.log(chalk.dim('\nNon-interactive session detected — re-run with --json for machine-readable output.'))
+  } else {
+    const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined })
+    logLlmTelemetrySummary(logger, 'review')
+    await reviewer.start()
+  }
 
   if (exceedsThreshold) {
     logger.log(

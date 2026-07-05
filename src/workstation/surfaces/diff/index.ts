@@ -126,7 +126,10 @@ export function renderDiffSurface(
   const worktreeFile = flattenWorktreeGroups(
     groupWorktreeFiles(applyStatusFilterMask(worktree?.files || [], state.statusFilterMask))
   )[state.selectedWorktreeFileIndex]
-  const visibleRows = Math.max(4, bodyRows - 4)
+  // Row budget: border(2) + title(1) + the ~3 fixed header lines each
+  // branch below renders (hunk/lines summary, stash/compare identity,
+  // etc.) = 6 rows of chrome the diff body itself doesn't occupy.
+  const visibleRows = Math.max(4, bodyRows - 6)
 
   // Stash diff branch: when the user opened the diff via Enter on a stash
   // row, render the stash patch text directly. The patch is parsed into

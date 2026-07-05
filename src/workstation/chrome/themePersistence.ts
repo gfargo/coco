@@ -2,6 +2,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import { writeFileAtomic } from '../../lib/utils/atomicFileWrite'
 import { getLogInkThemePresets, type LogInkThemePreset } from './theme'
 
 /**
@@ -64,9 +65,7 @@ export function saveThemePreset(preset: LogInkThemePreset): boolean {
 
     fs.mkdirSync(path.dirname(file), { recursive: true })
     // tmp+rename so a crash mid-write can't leave a truncated config.
-    const tmp = `${file}.${process.pid}.tmp`
-    fs.writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`)
-    fs.renameSync(tmp, file)
+    writeFileAtomic(file, `${JSON.stringify(config, null, 2)}\n`)
     return true
   } catch {
     return false

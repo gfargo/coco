@@ -70,6 +70,7 @@
     "test:publish": "npm run lint && npm run build && npm run test:cli && npm pack --dry-run",
     "test:cli": "tsx bin/smokeCli.ts",
     "bench": "tsx bin/benchmark.ts",
+    "bench:workstation": "tsx bin/benchmarkWorkstation.ts",
     "scenario": "tsx bin/scenarioRunner.ts",
     "screenshot": "tsx bin/screenshot.ts",
     "screenshot:sync": "tsx bin/syncScreenshots.ts",
