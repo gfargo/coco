@@ -33,6 +33,7 @@ import {
   ConventionalCommitMessageResponseSchema,
 } from './config'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
+import { salvageCommitMessageFromText } from './salvageCommitMessage'
 
 export type CommitDraftInput = {
   git: SimpleGit
@@ -123,46 +124,6 @@ IMPORTANT RULES:
  * are surfaced as `validationErrors`/`warnings` rather than driving an
  * interactive retry flow — the TUI can re-invoke or let the user edit.
  */
-/**
- * Fallback parser shared between the non-streaming
- * `executeChainWithSchema` call and the streaming path (#881 phase 2).
- *
- * Extracted from the inline `fallbackParser` option so the streaming
- * path can use the same lossy-but-permissive recovery for accumulated
- * text. Strips markdown code fences, attempts strict JSON parse, and
- * falls back to "first line is title, rest is body" when JSON parsing
- * fails entirely.
- *
- * Returned shape always satisfies the schema's structural requirements
- * (`title` + `body` strings) but the *content* may be the last-ditch
- * "Auto-generated commit" placeholder. Callers should treat this as a
- * best-effort salvage, not a parse confirmation.
- */
-function salvageCommitMessageFromText(text: string): { title: string; body: string } {
-  try {
-    let cleanText = text.trim()
-    const codeBlockMatch = cleanText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-    if (codeBlockMatch && codeBlockMatch[1]) {
-      cleanText = codeBlockMatch[1].trim()
-    }
-    const parsed = JSON.parse(cleanText)
-    if (
-      parsed && typeof parsed === 'object' &&
-      typeof parsed.title === 'string' &&
-      typeof parsed.body === 'string' &&
-      parsed.title.length > 0
-    ) {
-      return parsed
-    }
-  } catch {
-    // fall through to line-split salvage
-  }
-  return {
-    title: text.split('\n')[0] || 'Auto-generated commit',
-    body: text.split('\n').slice(1).join('\n') || 'Generated commit message',
-  }
-}
-
 export async function generateCommitDraft({
   git,
   argv,

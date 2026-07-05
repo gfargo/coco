@@ -1,5 +1,6 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createGeminiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
@@ -8,6 +9,7 @@ function createGeminiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatMode
     model,
     temperature: config.service.temperature ?? 0.2,
     maxConcurrency: config.service.maxConcurrent,
+    maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
   }
 
   // Merge Gemini-specific fields forwarded from service config.

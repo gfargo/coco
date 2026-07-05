@@ -8,6 +8,7 @@ import { Config } from '../../../commands/types'
 import { LLMModel } from '../types'
 import { getLlm } from '../utils/getLlm'
 import { getLlmMetadata } from '../utils/llmMetadata'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import {
   LLM_PROVIDER_IDS,
   findProviderDefinition,
@@ -135,5 +136,32 @@ describe('getLlm via registry', () => {
     const meta = getLlmMetadata(llm)
     expect(meta.provider).toBe('ollama')
     expect(meta.endpoint).toBe('http://localhost:11434')
+  })
+
+  it('defaults numPredict and lets service.fields override it for Ollama', () => {
+    const llm = getLlm(
+      'ollama',
+      'llama3' as LLMModel,
+      makeConfig({
+        provider: 'ollama',
+        model: 'llama3',
+        endpoint: 'http://localhost:11434',
+        authentication: { type: 'None' },
+      })
+    )
+    expect((llm as { numPredict?: number }).numPredict).toBe(DEFAULT_MAX_OUTPUT_TOKENS)
+
+    const overridden = getLlm(
+      'ollama',
+      'llama3' as LLMModel,
+      makeConfig({
+        provider: 'ollama',
+        model: 'llama3',
+        endpoint: 'http://localhost:11434',
+        authentication: { type: 'None' },
+        fields: { numPredict: 8192 },
+      })
+    )
+    expect((overridden as { numPredict?: number }).numPredict).toBe(8192)
   })
 })
