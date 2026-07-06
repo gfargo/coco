@@ -402,6 +402,112 @@ context-subtle, are `c`, `C`, and `[`/`]`. Touch their handlers carefully.
 
 ---
 
+## Design doctrine
+
+The interaction-paradigm audit found six paradigms already correct — in
+places best-in-class — but living only as scattered comments and README
+prose. Stated here as doctrine, they (a) stop eroding silently as new views
+and workflows get added, and (b) give the paradigm-debt issues below a
+written spec to converge toward instead of a moving target.
+
+### 1. Dispatch precedence is governance, not convention
+
+Context-specific always beats global, and the collision test is a build
+gate, not a lint. See *The dispatch model* above for the full ordered
+resolver — this doctrine just names why it's load-bearing: a single
+ordered resolver with documented precedence, a canonical map with an
+overload table, and a build-breaking guard on `(key, context)` collisions
+is better key-namespace hygiene than most terminal UIs manage.
+
+- #1447 extends this same "one choke point" principle to the ~30 workflow
+  ids and 10+ view contexts that currently live outside
+  `LOG_INK_KEY_BINDINGS` — until that lands, `g?`/`?`/`:` can't see them.
+- #1445 asks confirmation gating to earn the same status: it's doctrine in
+  prose today but enforced ad hoc at ~30 call sites, not through one
+  registry the way key dispatch is.
+
+### 2. AI-call conventions
+
+Every LLM call the workstation makes follows the same three rules — see
+*Async LLM calls + cancellation* in `README.md` for the full mechanics:
+
+- **Cancel via `AbortController`, from any view.** The callback that owns
+  the call stashes a controller in a ref; the cancel binding reads it
+  synchronously.
+- **Cancellation is a structured result, never a thrown error.** Workflows
+  catch `LangChainCancelledError` and return `{ ok: false, cancelled: true }`
+  so the runtime can skip error styling and retries.
+- **Staged drafts never clobber in-progress typing.** `pendingAiDraft`
+  holds an AI draft until the user explicitly accepts or dismisses it
+  rather than overwriting what they were composing.
+
+No open debt issue tracks this one — it's cited here as the standard new
+AI-backed workflows must match.
+
+### 3. The prompt is the confirmation
+
+A bare keystroke on a hard-to-undo action needs an explicit y-confirm. But
+an action already mediated by an input prompt or a choice menu *has* its
+confirmation — the prompt itself is the deliberate step — and must never
+be gated a second time. `reword-head` (seeds the prompt with the current
+subject, `requiresConfirmation: false`), `gZ` stash-all (an empty message
+is read as "quick WIP stash, go"), and the comment/PR-comment flows all
+follow this rule today.
+
+- #1451 covers the flip side of this: two separate confirmation systems
+  exist with diverging precedence, copy, and cancel vocabulary — doctrine
+  says there should be one.
+- #1448's danger policy is presently scattered across comments, and six
+  operations violate the reversibility⇄mediation rule stated here. That
+  issue's "Proposed rule" is what this section should absorb (and
+  supersede) once it lands.
+
+### 4. Footer vocabulary
+
+The two-row footer — hint band above, status/feedback band below — plus a
+per-kind glyph+color table (loading/error/warning/success/info, each with
+an ASCII fallback under `theme.ascii`/`NO_COLOR`) and priority-ordered hint
+trimming on narrow terminals is the rendering vocabulary for feedback.
+`runtime/footer.ts`'s header comment is the source of truth for the
+mechanics; this doctrine names it as the pattern every future status
+surface should reuse rather than inventing a new one.
+
+- #1449 is the known gap this doctrine doesn't close: statuses render
+  correctly but never expire on a declared lifetime — echo, result,
+  advisory, and ambient messages all need one.
+
+### 5. Momentum hints
+
+Every mutating workflow's success message names the next keypress. Split-
+apply and commit both do this today (`chrome/postApplyHints.ts`:
+`formatSplitApplySuccess`, `COMMIT_MOMENTUM_HINT`) — state it as a
+convention so new mutating workflows copy the pattern by default instead
+of returning a bare "done."
+
+(#1428's dead workflow ids in `HISTORY_REWRITE_WORKFLOW_IDS` /
+`HISTORY_MUTATING_WORKFLOW_IDS` are already fixed — `reset-to-commit` and
+`interactive-rebase` are present in both sets in `useWorkflowAction.ts` —
+so this doctrine applies without caveat; a guard test to keep those sets
+in sync remains a reasonable future hardening.)
+
+### 6. Progressive-disclosure ladder
+
+Help is layered on purpose: onboarding overlay → footer hints → `g?`
+which-key → `?` full help → `:` command palette. Each rung answers a
+narrower, deeper question than the one before it — that architecture is
+right and should hold as views are added.
+
+One content gap is worth naming directly since no separate issue tracks
+it: the onboarding overlay (`overlays.ts::renderOnboardingOverlay`) teaches
+six meta-keys (`?`, `:`, `g h`-style nav chords, `< esc`, `/`, `q`/`ctrl+c`)
+and zero task flows. The flagship flows — stage→commit, split-commit, AI
+draft — live mainly in idle tips, which were opt-in until v0.78 (#1415
+turned them on by default). The bottom rung of the ladder teaches
+navigation but not the product; it should eventually teach one or two task
+flows too, not just where things are.
+
+---
+
 ## Known risks (carried from the TUI audit)
 
 - **Negation-guarded globals** (`C` create-PR gated by `!== 'conflicts'`,

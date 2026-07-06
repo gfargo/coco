@@ -199,6 +199,8 @@ For an inline keypress on an existing view, you only need:
 
 For a global chord (e.g. a new `g <letter>` view selector), the chord goes in `inkKeymap.ts` plus the route into the action / view-switch in the reducer.
 
+KEYMAP.md's [Design doctrine](./KEYMAP.md#design-doctrine) section states the interaction paradigms worth holding new views to — read it alongside the map itself.
+
 ## Calling existing CLI commands from a workstation flow
 
 When a workstation flow needs the full behavior of a `coco <command>` (commit message generation, changelog body for PR creation, etc.), invoke the command's **core generation function** directly with a synthetic `argv` rather than spawning a subprocess. The pattern lives in `src/git/commitWorkflowActions.ts` and `src/git/aiActions.ts`:
