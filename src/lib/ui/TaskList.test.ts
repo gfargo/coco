@@ -134,7 +134,8 @@ describe('TaskList — keyboard shortcut "a"', () => {
 
 describe('TaskList — keyboard shortcuts', () => {
   it('opens the current file when key "o" is pressed', async () => {
-    const expectedEditor = process.env.EDITOR || 'code'
+    const originalEditor = process.env.EDITOR
+    process.env.EDITOR = 'code'
 
     const tl = new TaskList([makeItem({ filePath: 'src/open-me.ts' })])
     const startPromise = tl.start()
@@ -144,10 +145,12 @@ describe('TaskList — keyboard shortcuts', () => {
     await startPromise.catch(() => undefined)
 
     expect(mockExecFile).toHaveBeenCalledWith(
-      expectedEditor,
+      'code',
       ['src/open-me.ts'],
       expect.any(Function)
     )
+
+    process.env.EDITOR = originalEditor
   })
 
   it('tokenizes an $EDITOR value with flags into separate args', async () => {
