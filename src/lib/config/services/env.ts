@@ -198,6 +198,17 @@ function handleServiceEnvVar(
   }
 }
 
+/**
+ * Keys whose env-var values should be coerced to numbers. All other
+ * numeric-looking strings (e.g. a model name that happens to be all digits)
+ * are left as strings so downstream schema validation (type: "string") and
+ * provider-mismatch checks see the correct type. (#1468)
+ */
+const NUMERIC_ENV_KEYS = new Set([
+  'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
+  'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES',
+])
+
 function parseEnvValue(key: string, value: ValuesTypes) {
   switch (true) {
     // Handle undefined values
@@ -214,13 +225,21 @@ function parseEnvValue(key: string, value: ValuesTypes) {
     case typeof value === 'string' && (value === 'false' || value === 'true'):
       return value === 'true'
 
-    // Handle number values
-    case typeof value === 'string' && !isNaN(Number(value)):
+    // Handle number values — only for explicitly numeric keys (#1468)
+    case typeof value === 'string' && NUMERIC_ENV_KEYS.has(key) && !isNaN(Number(value)):
       return Number(value)
 
-    // Handle JSON strings
+    // Handle JSON strings — wrap in try/catch so malformed JSON degrades
+    // gracefully instead of crashing every command (#1468)
     case typeof value === 'string' && value.startsWith('{'):
-      return JSON.parse(value)
+      try {
+        return JSON.parse(value)
+      } catch {
+        console.warn(
+          `[coco] Warning: env var ${toEnvVarName(key)} contains malformed JSON — ignoring.`
+        )
+        return undefined
+      }
 
     default:
       return value

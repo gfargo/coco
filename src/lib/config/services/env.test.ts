@@ -140,4 +140,56 @@ describe('loadEnvConfig', () => {
       }
     })
   })
+
+  describe('parseEnvValue robustness (#1468)', () => {
+    it('does not coerce a numeric-looking model name to a number', () => {
+      process.env.COCO_SERVICE_MODEL = '123'
+      try {
+        const config = loadEnvConfig(defaultConfig)
+        expect(config.service.model).toBe('123')
+        expect(typeof config.service.model).toBe('string')
+      } finally {
+        delete process.env.COCO_SERVICE_MODEL
+      }
+    })
+
+    it('still coerces genuinely numeric keys (timeout, maxRetries)', () => {
+      process.env.COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT = '5000'
+      process.env.COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES = '3'
+      try {
+        const config = loadEnvConfig(defaultConfig)
+        expect(config.service.requestOptions?.timeout).toBe(5000)
+        expect(config.service.requestOptions?.maxRetries).toBe(3)
+      } finally {
+        delete process.env.COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT
+        delete process.env.COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES
+      }
+    })
+
+    it('degrades gracefully on malformed JSON instead of crashing', () => {
+      process.env.COCO_SERVICE_FIELDS = '{bad'
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      try {
+        const config = loadEnvConfig(defaultConfig)
+        // Should not crash and the field should be left undefined / untouched
+        expect(config.service.fields).toBeUndefined()
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('malformed JSON')
+        )
+      } finally {
+        delete process.env.COCO_SERVICE_FIELDS
+        warnSpy.mockRestore()
+      }
+    })
+
+    it('parses valid JSON fields normally', () => {
+      process.env.COCO_SERVICE_FIELDS = '{"temperature": 0.7}'
+      try {
+        const config = loadEnvConfig(defaultConfig)
+        expect(config.service.fields).toEqual({ temperature: 0.7 })
+      } finally {
+        delete process.env.COCO_SERVICE_FIELDS
+      }
+    })
+  })
 })
