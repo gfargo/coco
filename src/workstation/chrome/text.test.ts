@@ -39,8 +39,17 @@ describe('log Ink text helpers', () => {
   })
 
   it('truncates without splitting wide characters past the target width', () => {
-    expect(truncateCells('src/変更-summary.ts', 10)).toBe('src/変...')
+    expect(truncateCells('src/変更-summary.ts', 10)).toBe('src/変更-…')
     expect(cellWidth(truncateCells('emoji ✨ commit message', 12))).toBeLessThanOrEqual(12)
+  })
+
+  it('defaults to the unicode ellipsis, matching truncatePathCells (#1366)', () => {
+    expect(truncateCells('hello world', 8)).toBe('hello w…')
+    expect(cellWidth(truncateCells('hello world', 8))).toBe(8)
+  })
+
+  it('falls back to the ASCII ellipsis under { ascii: true }', () => {
+    expect(truncateCells('hello world', 8, { ascii: true })).toBe('hello...')
   })
 
   describe('wrapCells', () => {

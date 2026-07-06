@@ -381,7 +381,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -1331,7 +1331,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -1789,7 +1789,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -2311,7 +2311,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -2751,7 +2751,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -4131,7 +4131,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -4673,7 +4673,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -5165,7 +5165,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
           width={13}
         >
           <Text>
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -5626,7 +5626,7 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the URL field 1`] = `
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -6193,7 +6193,7 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the destination field 
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -6765,7 +6765,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -7718,7 +7718,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box
@@ -9320,7 +9320,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
           <Text
             dimColor={false}
           >
-            feature/l...
+            feature/lan…
           </Text>
         </Box>
         <Box

@@ -18,6 +18,8 @@ import {
   type LogInkContextStatus,
 } from '../../chrome/context'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
+import type { GitCommitDetail } from '../../../commands/log/data'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
 import {
   renderBranchPreviewPanel,
   renderCommitDiffDetail,
@@ -100,6 +102,22 @@ describe('detail surface — shared-signature preview panels', () => {
   })
 })
 
+const HISTORY_DETAIL: GitCommitDetail = {
+  shortHash: 'abc1234',
+  hash: 'abc1234def5678901234567890123456789abcd',
+  parents: ['0'.repeat(40)],
+  date: '2026-05-18',
+  author: 'Ada Lovelace',
+  refs: ['HEAD -> main', 'origin/main', 'tag: v1.0.0'],
+  message: 'fix(workstation): stop truncating every inspector line into confetti',
+  body: 'Longer body text describing the change in more detail than the subject line.',
+  files: [
+    { status: 'M', path: 'src/workstation/surfaces/detail/index.ts', additions: 24, deletions: 13 },
+    { status: 'A', path: 'src/workstation/chrome/text.ts', additions: 8, deletions: 0 },
+  ],
+  stats: { filesChanged: 2, insertions: 32, deletions: 13 },
+}
+
 describe('renderHistoryInspector', () => {
   function render(detail: undefined, loading: boolean): ReactElement {
     return renderHistoryInspector(
@@ -131,6 +149,48 @@ describe('renderHistoryInspector', () => {
 
   it('structural snapshot — no detail', () => {
     expect(render(undefined, false)).toMatchSnapshot()
+  })
+
+  describe('degrade by omission (#1366)', () => {
+    // At-rest column is 20-32 cells; focused widens to 36-60 (ticket
+    // ranges) — exercise each at a representative width from its band.
+    function renderDetail(focused: boolean, width: number): ReactElement {
+      return renderHistoryInspector(
+        createElement,
+        components,
+        makeState({ inspectorTab: 'inspector', inspectorActionIndex: 0 }),
+        {},
+        createLogInkContextStatus('ready'),
+        HISTORY_DETAIL,
+        false,
+        undefined,
+        false,
+        width,
+        false,
+        theme,
+        focused
+      )
+    }
+
+    it('at rest, shows only the subject, hash · date, stats, and one hint', () => {
+      const text = renderToLines(renderDetail(false, 28), Text, Box).join('\n')
+      expect(text).toContain('fix(workstation)')
+      expect(text).toContain('abc1234')
+      expect(text).toContain('2 files')
+      expect(text).toContain('tab → inspect')
+      expect(text).not.toContain('Refs:')
+      expect(text).not.toContain('Changed files:')
+      expect(text).not.toContain('Actions:')
+      expect(text).not.toContain('index.ts')
+    })
+
+    it('focused, reveals refs, the file list, and the actions section', () => {
+      const text = renderToLines(renderDetail(true, 50), Text, Box).join('\n')
+      expect(text).toContain('Refs:')
+      expect(text).toContain('Changed files:')
+      expect(text).toContain('index.ts')
+      expect(text).toContain('Actions:')
+    })
   })
 })
 

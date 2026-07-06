@@ -131,7 +131,11 @@ export function wrapCells(value: string, width: number): string[] {
   return lines.length > 0 ? lines : [value]
 }
 
-export function truncateCells(value: string, width: number): string {
+export function truncateCells(
+  value: string,
+  width: number,
+  options: { ascii?: boolean } = {}
+): string {
   if (width < 1) {
     return ''
   }
@@ -140,7 +144,11 @@ export function truncateCells(value: string, width: number): string {
     return value
   }
 
-  const suffix = width > 3 ? '...' : ''
+  // Unicode `…` is 1 cell vs. ASCII `...` at 3 — matches `truncatePathCells`'s
+  // dialect so a path elision and a plain truncation never mix markers
+  // (#1366). `theme.ascii` opts back into the 3-cell ASCII form.
+  const ellipsis = options.ascii ? '...' : '…'
+  const suffix = width > cellWidth(ellipsis) ? ellipsis : ''
   const available = width - cellWidth(suffix)
   let used = 0
   let output = ''

@@ -129,7 +129,7 @@ function renderInspectorActionsSection(
       // and the label text still conveys which actions are destructive.
       const selectedFg = isSelected && !theme.noColor ? theme.colors.selectionForeground : undefined
       const keyCell = action.key.padEnd(KEY_COLUMN)
-      const label = truncateCells(action.label, labelBudget)
+      const label = truncateCells(action.label, labelBudget, { ascii: theme.ascii })
       const children: Array<string | ReactTypes.ReactElement> = [
         h(Text, {
           key: `actions-${index}-key`,
@@ -210,16 +210,27 @@ function renderInspectorRefs(
  * when the suffix decorations consume too much of the budget for the
  * path-aware variant to leave a meaningful filename.
  *
+ * The filename is the row's identity, so it outranks the suffix: when
+ * there isn't room for both, the suffix (stats, `[LFS]`, rename note)
+ * is dropped first rather than letting the filename get mangled down
+ * to `dat...` while the stats survive intact (#1366).
+ *
  * Used by the changed-files list AND the compose-context staged /
  * unstaged sections so all three places elide identically — same
  * floor (8 cells), same fallback shape.
  */
 function smartPathLabel(prefix: string, path: string, suffix: string, totalBudget: number): string {
-  const pathBudget = totalBudget - cellWidth(prefix) - cellWidth(suffix)
+  const prefixWidth = cellWidth(prefix)
+  const suffixWidth = cellWidth(suffix)
+  const filenameWidth = cellWidth(path.slice(path.lastIndexOf('/') + 1))
+  const keepSuffix = suffixWidth === 0 || totalBudget - prefixWidth - suffixWidth >= filenameWidth
+  const effectiveSuffix = keepSuffix ? suffix : ''
+
+  const pathBudget = totalBudget - prefixWidth - cellWidth(effectiveSuffix)
   if (pathBudget >= 8) {
-    return `${prefix}${truncatePathCells(path, pathBudget)}${suffix}`
+    return `${prefix}${truncatePathCells(path, pathBudget)}${effectiveSuffix}`
   }
-  return truncateCells(`${prefix}${path}${suffix}`, totalBudget)
+  return truncateCells(`${prefix}${path}${effectiveSuffix}`, totalBudget)
 }
 
 /**
@@ -308,7 +319,7 @@ function renderPreviewPanel(
       key: `preview-${index}`,
       bold: isHeading,
       dimColor: line.emphasis === 'dim',
-    }, truncateCells(line.text, width - 4))
+    }, truncateCells(line.text, width - 4, { ascii: theme.ascii }))
   }))
 }
 
@@ -367,6 +378,39 @@ export function renderSubmoduleEntryLines(
   ]
 }
 
+/**
+ * Condensed at-rest body for `renderHistoryInspector` (#1366): the
+ * subject (wrapped, max 2 lines), `hash · date`, the stats line, and
+ * one dim hint — nothing else. Refs, the file list, the submodule
+ * block, and the actions section are reserved for when the inspector
+ * is focused and has the width (36-60 cells) to show them without
+ * truncating every line.
+ */
+function renderInspectorAtRest(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  detail: GitCommitDetail,
+  width: number,
+  theme: LogInkTheme
+): ReactTypes.ReactElement[] {
+  const innerWidth = width - 4
+  const subjectLines = wrapCells(detail.message, innerWidth).slice(0, 2)
+  const metaLine = `${compactHash(detail.hash)} · ${detail.date}`
+  const statLine = formatCommitStatLine(detail.stats)
+
+  return [
+    ...subjectLines.map((line, index) => h(Text, {
+      key: `at-rest-subject-${index}`,
+    }, truncateCells(line, innerWidth, { ascii: theme.ascii }))),
+    h(Text, { key: 'at-rest-meta', dimColor: true },
+      truncateCells(metaLine, innerWidth, { ascii: theme.ascii })),
+    h(Text, { key: 'at-rest-stats', dimColor: true },
+      truncateCells(statLine, innerWidth, { ascii: theme.ascii })),
+    h(Text, { key: 'at-rest-hint', dimColor: true },
+      truncateCells('tab → inspect', innerWidth, { ascii: theme.ascii })),
+  ]
+}
+
 export function renderHistoryInspector(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -386,11 +430,9 @@ export function renderHistoryInspector(
   const selected = getSelectedInkCommit(state)
 
   if (!detail) {
-    const fallbackLines = [
-      selected?.message || 'No commit selected.',
-      '',
-      loading ? 'Loading commit details...' : 'Commit details unavailable.',
-    ]
+    const fallbackLines = selected
+      ? [selected.message, '', loading ? 'Loading commit details...' : 'Commit details unavailable.']
+      : ['No commit selected — j/k to browse history.']
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
       borderStyle: theme.borderStyle,
@@ -402,11 +444,31 @@ export function renderHistoryInspector(
     ...fallbackLines.map((line, index) => h(Text, {
       key: `detail-${index}`,
       dimColor: index > 1,
-    }, truncateCells(line, width - 4))),
-    ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
-      cursorIndex: state.inspectorActionIndex,
-      cursorActive: focused && state.inspectorTab === 'actions',
-    }))
+    }, truncateCells(line, width - 4, { ascii: theme.ascii }))),
+    ...(focused
+      ? renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
+        cursorIndex: state.inspectorActionIndex,
+        cursorActive: state.inspectorTab === 'actions',
+      })
+      : []))
+  }
+
+  // Degrade by omission (#1366): at rest (unfocused), the inspector
+  // column is only 20-32 cells — too narrow to show refs, the file
+  // list, and the actions section without truncating nearly every
+  // line into confetti. Show a condensed 4-line summary instead and
+  // defer the full detail to when the inspector is focused (36-60
+  // cells), where the tabbed/tall logic below already handles it.
+  if (!focused) {
+    return h(Box, {
+      borderColor: focusBorderColor(theme, focused),
+      borderStyle: theme.borderStyle,
+      flexDirection: 'column',
+      width,
+      paddingX: 1,
+    },
+    h(Text, { bold: true }, panelTitle('Inspector', focused)),
+    ...renderInspectorAtRest(h, Text, detail, width, theme))
   }
 
   const statLine = formatCommitStatLine(detail.stats)
@@ -432,21 +494,21 @@ export function renderHistoryInspector(
   // The Workflows: trailer that used to repeat the repo / branch /
   // status from the top header and left sidebar is intentionally gone.
   const headerNodes: ReactTypes.ReactElement[] = [
-    h(Text, { key: 'detail-msg' }, truncateCells(detail.message, width - 4)),
+    h(Text, { key: 'detail-msg' }, truncateCells(detail.message, width - 4, { ascii: theme.ascii })),
     h(Text, { key: 'detail-spacer-1' }, ''),
     h(Text, { key: 'detail-commit', dimColor: true }, 'Commit: ', commitLink),
-    h(Text, { key: 'detail-author', dimColor: true }, truncateCells(`Author: ${detail.author}`, width - 4)),
-    h(Text, { key: 'detail-date', dimColor: true }, truncateCells(`Date:   ${detail.date}`, width - 4)),
+    h(Text, { key: 'detail-author', dimColor: true }, truncateCells(`Author: ${detail.author}`, width - 4, { ascii: theme.ascii })),
+    h(Text, { key: 'detail-date', dimColor: true }, truncateCells(`Date:   ${detail.date}`, width - 4, { ascii: theme.ascii })),
     refNodes
       ? h(Text, { key: 'detail-refs', dimColor: true }, 'Refs:   ', ...refNodes)
       : h(Text, { key: 'detail-refs', dimColor: true }, 'Refs:   none'),
-    h(Text, { key: 'detail-stat', dimColor: true }, truncateCells(`Stats:  ${statLine}`, width - 4)),
+    h(Text, { key: 'detail-stat', dimColor: true }, truncateCells(`Stats:  ${statLine}`, width - 4, { ascii: theme.ascii })),
     h(Text, { key: 'detail-spacer-2' }, ''),
     ...(detail.body ? detail.body.split('\n').slice(0, 8) : ['No commit body.']).map((line, index) =>
       h(Text, {
         key: `detail-body-${index}`,
         dimColor: true,
-      }, truncateCells(line, width - 4))
+      }, truncateCells(line, width - 4, { ascii: theme.ascii }))
     ),
     h(Text, { key: 'detail-spacer-3' }, ''),
     h(Text, { key: 'detail-files-title' }, 'Changed files:'),
@@ -563,11 +625,9 @@ export function renderCommitDiffDetail(
   const selected = getSelectedInkCommit(state)
 
   if (!detail) {
-    const fallbackLines = [
-      selected?.message || 'No commit selected.',
-      '',
-      loading ? 'Loading commit details...' : 'Commit details unavailable.',
-    ]
+    const fallbackLines = selected
+      ? [selected.message, '', loading ? 'Loading commit details...' : 'Commit details unavailable.']
+      : ['No commit selected — j/k to browse history.']
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
       borderStyle: theme.borderStyle,
@@ -579,7 +639,7 @@ export function renderCommitDiffDetail(
     ...fallbackLines.map((line, index) => h(Text, {
       key: `commit-diff-${index}`,
       dimColor: index > 1,
-    }, truncateCells(line, width - 4))))
+    }, truncateCells(line, width - 4, { ascii: theme.ascii }))))
   }
 
   const statLine = formatCommitStatLine(detail.stats)
@@ -613,19 +673,19 @@ export function renderCommitDiffDetail(
     key: `commit-diff-header-${index}`,
     bold: index === 0,
     dimColor: index > 0 && index < headerLines.length - 1,
-  }, truncateCells(line, width - 4))),
+  }, truncateCells(line, width - 4, { ascii: theme.ascii }))),
   ...bodyLines.map((line, index) => h(Text, {
     key: `commit-diff-body-${index}`,
     dimColor: true,
-  }, truncateCells(line, width - 4))),
+  }, truncateCells(line, width - 4, { ascii: theme.ascii }))),
   ...(bodyLines.length ? [h(Text, { key: 'commit-diff-body-spacer' }, '')] : []),
   ...filesHeader.map((line, index) => h(Text, {
     key: `commit-diff-files-${index}`,
     bold: true,
-  }, truncateCells(line, width - 4))),
+  }, truncateCells(line, width - 4, { ascii: theme.ascii }))),
   ...fileListNodes,
   h(Text, undefined, ''),
-  h(Text, { dimColor: true }, truncateCells(hint, width - 4)))
+  h(Text, { dimColor: true }, truncateCells(hint, width - 4, { ascii: theme.ascii })))
 }
 
 export function renderComposeContextPanel(
@@ -662,14 +722,14 @@ export function renderComposeContextPanel(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Worktree', focused)),
-  h(Text, { dimColor: true }, truncateCells(summary, width - 4)),
+  h(Text, { dimColor: true }, truncateCells(summary, width - 4, { ascii: theme.ascii })),
   h(Text, undefined, ''),
   ...(compose.loading
     ? [h(Text, {
       key: 'compose-context-loading',
       bold: true,
       color: theme.noColor ? undefined : theme.colors.accent,
-    }, truncateCells(theme.ascii ? '[...] AI draft in progress' : '⏳ AI draft in progress', width - 4))]
+    }, truncateCells(theme.ascii ? '[...] AI draft in progress' : '⏳ AI draft in progress', width - 4, { ascii: theme.ascii }))]
     : []),
   ...(stagedFiles.length
     ? [
@@ -891,7 +951,7 @@ export function renderCommitPanel(
     paddingX: 1,
   },
   h(Text, { bold: true }, panelTitle('Commit', focused)),
-  h(Text, { key: 'commit-status', dimColor: true }, truncateCells(statusLine, width - 4)),
+  h(Text, { key: 'commit-status', dimColor: true }, truncateCells(statusLine, width - 4, { ascii: theme.ascii })),
   h(Text, { key: 'commit-spacer-1' }, ''),
   // Summary: dim label + the subject value emphasized so it's easy to spot.
   h(Text, { key: 'commit-summary' },
@@ -906,17 +966,17 @@ export function renderCommitPanel(
     key: `commit-summary-rest-${index}`,
     bold: true,
     color: summaryColor,
-  }, truncateCells(`${' '.repeat(cellWidth(summaryLabel))}${line}`, width - 4))),
+  }, truncateCells(`${' '.repeat(cellWidth(summaryLabel))}${line}`, width - 4, { ascii: theme.ascii }))),
   h(Text, {
     key: 'commit-body-label',
     dimColor: !(compose.field === 'body' && compose.editing),
-  }, truncateCells(`${bodyMarker} Body:`, width - 4)),
+  }, truncateCells(`${bodyMarker} Body:`, width - 4, { ascii: theme.ascii })),
   ...bodyVisualLines.map((line, index) => {
     const isLast = index === bodyVisualLines.length - 1
     return h(Text, {
       key: `commit-body-${index}`,
       dimColor: true,
-    }, truncateCells(`  ${line}${bodyCursor && isLast ? bodyCursor : ''}`, width - 4))
+    }, truncateCells(`  ${line}${bodyCursor && isLast ? bodyCursor : ''}`, width - 4, { ascii: theme.ascii }))
   }),
   h(Text, { key: 'commit-spacer-2' }, ''),
   // Loading indicator + commit result/details stay inline with the body
@@ -928,16 +988,16 @@ export function renderCommitPanel(
       key: 'commit-loading',
       bold: true,
       color: theme.noColor ? undefined : theme.colors.accent,
-    }, truncateCells(theme.ascii ? '[...] Generating AI draft' : '⏳ Generating AI draft…', width - 4))]
+    }, truncateCells(theme.ascii ? '[...] Generating AI draft' : '⏳ Generating AI draft…', width - 4, { ascii: theme.ascii }))]
     : []),
   ...trailerLines.map((line, index) => h(Text, {
     key: `commit-trailer-${index}`,
     dimColor: line.startsWith('  '),
-  }, truncateCells(line, width - 4))),
+  }, truncateCells(line, width - 4, { ascii: theme.ascii }))),
   h(Box, { flexGrow: 1 }),
   loading
     ? null
-    : h(Text, { key: 'commit-state', dimColor: true }, truncateCells(stateLine, width - 4)))
+    : h(Text, { key: 'commit-state', dimColor: true }, truncateCells(stateLine, width - 4, { ascii: theme.ascii })))
 }
 
 /**
