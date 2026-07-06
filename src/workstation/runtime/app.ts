@@ -57,8 +57,8 @@ import {getBranchOverview} from '../../git/branchData'
 import {getLfsAttributeStatus} from '../../git/lfsAttributes'
 import {getSubmoduleOverview} from '../../git/submoduleData'
 import {getRemoteOverview} from '../../git/remoteData'
-import {LOG_INTERACTIVE_DEFAULT_LIMIT, getCommitRows, getLogRows} from '../../commands/log/data'
-import {buildHistoryRefetchArgv, resolveHistoryRefetch} from './historyRefetchResolver'
+import {LOG_INTERACTIVE_DEFAULT_LIMIT, getLogRows} from '../../commands/log/data'
+import {buildHistoryRefetchArgv} from './historyRefetchResolver'
 import {LogInkContextKey, createLogInkContextStatus, mergeRefreshedContext, updateLogInkContextStatus} from '../chrome/context'
 import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
 import {saveThemePreset} from '../chrome/themePersistence'
@@ -216,6 +216,7 @@ import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
 import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
 import {isStaleFrameResolve} from './loadMoreResolver'
 import {computeHasMoreCommits, useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
+import {useHistoryRefetch} from './hooks/useHistoryRefetch'
 import {useOnboarding} from './hooks/useOnboarding'
 import {useRepoStackRuntimes} from './hooks/useRepoStackRuntimes'
 import {useResumeTick} from './hooks/useResumeTick'
@@ -1545,76 +1546,19 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
 
   // Merged history refetch (#1385): server-side filter (#776), graph
   // mode toggle (`g`, #791 follow-up), and repo-frame switches all
-  // funnel through ONE effect.
-  //
-  // These used to be two sibling effects — one keyed on
-  // `state.historyFetchArgs`, one on `state.fullGraph` — both listing
-  // the active frame's `git` with mount-consumed first-run-skip refs.
-  // Every drill-in/out therefore ran BOTH bodies: two concurrent
-  // `getLogRows` calls whose argv genuinely diverged (the filter fetch
-  // ignored `fullGraph`; the graph fetch ignored the filter), and
-  // whichever resolved last decided — nondeterministically — whether
-  // the frame showed full/compact and filtered/unfiltered rows, plus
-  // contradictory status lines. One effect means one merged argv
-  // (`buildHistoryRefetchArgv` consults BOTH dimensions) and one
-  // request id, so a superseded fetch always drops. The prev-value ref
-  // exists only to pick the right status copy (`resolveHistoryRefetch`)
-  // — filter submit, graph toggle, or frame switch.
-  const historyRefetchInitialized = React.useRef(false)
-  const historyRefetchRequestRef = React.useRef(0)
-  const historyRefetchPrevRef = React.useRef<{
-    fullGraph: boolean
-    fetchArgs: LogInkState['historyFetchArgs']
-  } | undefined>(undefined)
-  React.useEffect(() => {
-    if (!logArgv) return
-    const prev = historyRefetchPrevRef.current
-    historyRefetchPrevRef.current = {
-      fullGraph: state.fullGraph,
-      fetchArgs: state.historyFetchArgs,
-    }
-    // Skip the first run — initial rows came in via deps.rows; we only
-    // want to fetch in response to *changes*.
-    if (!historyRefetchInitialized.current) {
-      historyRefetchInitialized.current = true
-      return
-    }
-
-    const requestId = historyRefetchRequestRef.current + 1
-    historyRefetchRequestRef.current = requestId
-    const plan = resolveHistoryRefetch({
-      logArgv,
-      fullGraph: state.fullGraph,
-      fetchArgs: state.historyFetchArgs,
-      fetchArgsChanged: prev !== undefined && prev.fetchArgs !== state.historyFetchArgs,
-      fullGraphChanged: prev !== undefined && prev.fullGraph !== state.fullGraph,
-    })
-
-    dispatch({ type: 'setStatus', value: plan.pendingStatus })
-
-    void (async () => {
-      // Include stash commits as graph roots so the re-fetch sees the
-      // same rich graph the boot loader assembles. Without this, any
-      // refetch would lose the stash anchors that loadRowsWithStashes
-      // seeded on boot.
-      const stashHashes = await getStashCommitHashes(git).catch(() => [])
-      const nextRows = await safe(getLogRows(git, plan.argv, {
-        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
-        extraRefs: stashHashes,
-      }))
-      if (!mountedRef.current || historyRefetchRequestRef.current !== requestId) {
-        return
-      }
-      if (!nextRows) {
-        dispatch({ type: 'setStatus', value: plan.errorStatus, kind: 'error' })
-        return
-      }
-      dispatch({ type: 'replaceRows', rows: nextRows })
-      const matched = getCommitRows(nextRows).length
-      setHasMoreCommits(matched >= LOG_INTERACTIVE_DEFAULT_LIMIT)
-      dispatch({ type: 'setStatus', value: plan.successStatus(matched), kind: 'success' })
-    })()
-  }, [dispatch, git, logArgv, state.historyFetchArgs, state.fullGraph])
+  // funnel through ONE effect. Extracted verbatim into
+  // `useHistoryRefetch` (OSS-463 app.ts decomposition) — see that
+  // module's header for the full history of why this is one merged
+  // effect instead of two sibling ones.
+  useHistoryRefetch(React, {
+    git,
+    dispatch,
+    logArgv,
+    fullGraph: state.fullGraph,
+    historyFetchArgs: state.historyFetchArgs,
+    mountedRef,
+    setHasMoreCommits,
+  })
 
   const commitDiffHunkOffsets = React.useMemo(() => (
     filePreview?.hunks
