@@ -87,7 +87,7 @@ exports[`renderStatusSurface structural snapshot — mixed staged + unstaged + u
   </Box>
   <Text
     bold={true}
-    dimColor={false}
+    dimColor={true}
   >
       ▾ Staged (1)
   </Text>

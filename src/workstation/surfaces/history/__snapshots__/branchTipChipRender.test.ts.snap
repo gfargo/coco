@@ -26,7 +26,7 @@ exports[`renderBranchTipChip — structural snapshots falls back to the legacy "
   "node": <Text>
     <Text
       bold={false}
-      color="yellow"
+      color="gray"
       inverse={true}
     >
        feat/widgets 
@@ -72,7 +72,7 @@ exports[`renderBranchTipChip — structural snapshots renders a remote-tracking 
   "node": <Text>
     <Text
       bold={false}
-      color="yellow"
+      color="gray"
       inverse={true}
     >
        origin/main 
