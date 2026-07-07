@@ -27,17 +27,17 @@ import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../chrome/context'
 import { isLogInkContextLoading } from '../chrome/context'
 import {
-  HEADER_CHIP_SEPARATOR,
-  buildHeaderChips,
-  measureHeaderChipsWidth,
-  type HeaderChip,
+    HEADER_CHIP_SEPARATOR,
+    buildHeaderChips,
+    measureHeaderChipsWidth,
+    type HeaderChip,
 } from '../chrome/headerChips'
-import { truncateCells } from '../chrome/text'
+import { cellWidth, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import {
-  combineLogInkBreadcrumbSegments,
-  formatLogInkBreadcrumb,
-  formatLogInkRepoBreadcrumb,
+    combineLogInkBreadcrumbSegments,
+    formatLogInkBreadcrumb,
+    formatLogInkRepoBreadcrumb,
 } from '../../workstation/runtime/inkKeymap'
 import { useLogInkRuntime } from './runtimeContext'
 import type { LogInkComponents } from './types'
@@ -189,12 +189,10 @@ function renderChipRow(
 }
 
 /**
- * Fallback path for narrow terminals. Concatenates every chip label
- * with separators, then truncates the whole string with
- * `truncateCells` so the ellipsis lands at a cell boundary. Loses the
- * per-chip color treatment in exchange for guaranteed legibility on
- * narrow displays — the same trade-off the pre-redesign single-
- * fragment code made for its inline glyph color split.
+ * Fallback path for narrow terminals. Drops the lowest-priority chips
+ * first until the remaining ones fit the budget, then renders them as
+ * a single truncated string (#1368 item 5). Mode and search never drop;
+ * low-value chips (loading, clean state, app name) drop first.
  */
 function renderFallback(
   h: typeof ReactTypes.createElement,
@@ -203,6 +201,19 @@ function renderFallback(
   theme: LogInkTheme,
   budget: number
 ): ReactTypes.ReactNode {
-  const joined = chips.map((chip) => chip.label).join(HEADER_CHIP_SEPARATOR)
+  // Sort candidates by priority (ascending) so we can drop from the front.
+  const sorted = [...chips].sort((a, b) => (a.priority ?? 50) - (b.priority ?? 50))
+  let kept = [...chips]
+  let joined = kept.map((chip) => chip.label).join(HEADER_CHIP_SEPARATOR)
+
+  // Progressively drop the lowest-priority chip until it fits.
+  let dropIndex = 0
+  while (cellWidth(joined) > budget && dropIndex < sorted.length) {
+    const toDrop = sorted[dropIndex]
+    kept = kept.filter((chip) => chip !== toDrop)
+    joined = kept.map((chip) => chip.label).join(HEADER_CHIP_SEPARATOR)
+    dropIndex++
+  }
+
   return h(Text, { bold: true, color: theme.colors.accent }, truncateCells(joined, budget))
 }

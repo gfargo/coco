@@ -54,6 +54,13 @@ export type HeaderChip = {
   dim: boolean
   /** Bold treatment — used on identity chips (app, branch, mode). */
   bold: boolean
+  /**
+   * Drop priority for narrow terminals (higher = keep longer). When
+   * the full chip row overflows, `renderFallback` drops the lowest-
+   * priority chips first until the remaining ones fit (#1368 item 5).
+   * Default is 50 (mid-tier).
+   */
+  priority?: number
 }
 
 export type HeaderChipId =
@@ -156,6 +163,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
     color: theme.colors.accent,
     dim: false,
     bold: true,
+    priority: 30,
   })
 
   // Repo. Default color — it's contextual but not the headline.
@@ -165,6 +173,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
     color: undefined,
     dim: false,
     bold: false,
+    priority: 35,
   })
 
   // Branch. Carries the branch glyph (⎇ / ASCII fallback) so the chip
@@ -177,6 +186,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
     color: theme.colors.accent,
     dim: false,
     bold: true,
+    priority: 90,
   })
 
   // Dirty/clean. Positive framing on clean (success color + ✓), warning
@@ -189,6 +199,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       color: theme.colors.warning,
       dim: false,
       bold: false,
+      priority: 60,
     }
     : {
       id: 'dirty',
@@ -196,6 +207,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       color: theme.colors.success,
       dim: true,
       bold: false,
+      priority: 20,
     }
   chips.push(dirtyChip)
 
@@ -215,6 +227,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       color: theme.colors.warning,
       dim: false,
       bold: true,
+      priority: 85,
     })
   }
 
@@ -228,6 +241,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       color: theme.colors.warning,
       dim: false,
       bold: true,
+      priority: 85,
     })
   }
 
@@ -254,6 +268,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       color: prGlyph.color,
       dim: prGlyph.dim,
       bold: false,
+      priority: 50,
     })
   }
 
@@ -269,6 +284,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       color: theme.colors.muted,
       dim: true,
       bold: false,
+      priority: 55,
     })
   }
 
@@ -279,6 +295,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       color: theme.colors.muted,
       dim: true,
       bold: false,
+      priority: 15,
     })
   }
 
@@ -296,6 +313,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
     color: modeColor,
     dim: false,
     bold: true,
+    priority: 100,
   })
 
   // Search — only when active. Dim so it doesn't compete with the
@@ -308,6 +326,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       color: theme.colors.muted,
       dim: true,
       bold: false,
+      priority: 95,
     })
   }
 
