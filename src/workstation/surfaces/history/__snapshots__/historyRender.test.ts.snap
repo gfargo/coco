@@ -20,7 +20,7 @@ exports[`renderHistoryPanel structural snapshot — default 3-commit history 1`]
     <Text
       dimColor={true}
     >
-      3/3 commits | full graph | loaded
+      3 commits
     </Text>
   </Box>
   <Text
@@ -170,7 +170,7 @@ exports[`renderHistoryPanel structural snapshot — empty repo 1`] = `
     <Text
       dimColor={true}
     >
-      0/0 commits | full graph | loaded
+      0 commits
     </Text>
   </Box>
   <Text
@@ -201,7 +201,7 @@ exports[`renderHistoryPanel structural snapshot — narrow terminal (tight densi
     <Text
       dimColor={true}
     >
-      3/3 commits | full graph | loaded
+      3 commits
     </Text>
   </Box>
   <Text

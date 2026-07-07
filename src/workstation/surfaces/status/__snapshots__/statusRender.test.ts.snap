@@ -20,7 +20,7 @@ exports[`renderStatusSurface structural snapshot — clean worktree 1`] = `
     <Text
       dimColor={true}
     >
-      0 staged | 0 unstaged | 0 untracked
+      clean
     </Text>
   </Box>
   <Text
@@ -51,7 +51,7 @@ exports[`renderStatusSurface structural snapshot — loading worktree status 1`]
     <Text
       dimColor={true}
     >
-      status loading
+      loading status
     </Text>
   </Box>
   <Text
@@ -82,7 +82,7 @@ exports[`renderStatusSurface structural snapshot — mixed staged + unstaged + u
     <Text
       dimColor={true}
     >
-      1 staged | 1 unstaged | 1 untracked
+      1 staged · 1 unstaged · 1 untracked
     </Text>
   </Box>
   <Text
