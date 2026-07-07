@@ -426,7 +426,8 @@ function renderStackedCommitHistoryRow(
   now: Date,
   laneSegments?: LaneSegment[],
   isRecent: boolean = false,
-  remoteNames?: string[]
+  remoteNames?: string[],
+  bucketed: boolean = false,
 ): ReactTypes.ReactElement {
   const totalWidth = Math.max(20, panelWidth - 4)
   // Suppress child colors on selected rows so each span inherits the
@@ -476,7 +477,7 @@ function renderStackedCommitHistoryRow(
   // filtered against the chip so we don't repeat the branch tip both
   // as a leading chip and a trailing label.
   const indent = ' '.repeat(graphWidth + 1)
-  const dateText = formatCompactRelativeDate(commit.date, now)
+  const dateText = bucketed ? '' : formatCompactRelativeDate(commit.date, now)
   const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
   const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
   const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
@@ -799,7 +800,8 @@ export function renderHistoryPanel(
           Boolean(item.selected) && !realSelectionSuppressed, theme, index,
           width, state.fullGraph, now, item.laneSegments,
           recentCommitsSet.has(item.commit.hash),
-          remoteNames
+          remoteNames,
+          Boolean(dateBucketingNow)
         )
       }
       return renderCommitHistoryRow(
