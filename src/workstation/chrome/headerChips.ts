@@ -194,7 +194,7 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       id: 'dirty',
       label: theme.ascii ? '+ clean' : '✓ clean',
       color: theme.colors.success,
-      dim: false,
+      dim: true,
       bold: false,
     }
   chips.push(dirtyChip)

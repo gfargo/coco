@@ -23,8 +23,8 @@ import { inlineSpinnerGlyph } from '../chrome/spinner'
 import { cellWidth, truncateCells, truncatePathCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import type {
-  LogInkSidebarTab,
-  LogInkState,
+    LogInkSidebarTab,
+    LogInkState,
 } from '../../workstation/runtime/inkViewModel'
 import { getLogInkSidebarTabs, isPendingItemAction } from '../../workstation/runtime/inkViewModel'
 import { buildFilteredLists, type FilteredLists } from './hooks/buildFilteredLists'
@@ -206,15 +206,7 @@ function renderActiveSidebarContent(
     // unfiltered list here meant Enter/D/R could target a different
     // branch than the highlighted row while a filter was active.
     const sortedBranches = lists.filteredBranchList
-    const headerRows: ReactTypes.ReactElement[] = [
-      h(Text, { key: 'tab-branches-current', dimColor: true },
-        truncateCells(`  Current: ${branches.currentBranch || '<detached>'}`, width - 4)),
-      h(Text, { key: 'tab-branches-state', dimColor: true },
-        `  Worktree: ${branches.dirty ? 'dirty' : 'clean'}`),
-      h(Text, { key: 'tab-branches-spacer' }, ''),
-    ]
     return [
-      ...headerRows,
       ...renderSelectableSidebarRows(
         h, Text, sortedBranches, state.selectedBranchIndex, focused, width, theme,
         (branch) => {
