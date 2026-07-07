@@ -217,6 +217,7 @@ import { isStaleFrameResolve } from './loadMoreResolver'
 import { computeHasMoreCommits, useHistoryPaginationState, useLoadMoreHistory } from './hooks/useLoadMoreHistory'
 import { useHistoryRefetch } from './hooks/useHistoryRefetch'
 import { useIssueTriageHydration, usePullRequestTriageHydration } from './hooks/useTriageListHydration'
+import { useDeferredBootLoad } from './hooks/useDeferredBootLoad'
 import { useOnboarding } from './hooks/useOnboarding'
 import { useRepoStackRuntimes } from './hooks/useRepoStackRuntimes'
 import { useResumeTick } from './hooks/useResumeTick'
@@ -627,47 +628,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setState((current) => applyLogInkAction(current, action))
   }, [])
 
-  // Deferred commit-log loader (#808). Runs once on mount when the
-  // caller opted into the lazy boot path. The Ink tree is already on
-  // screen at this point — without this the user stares at a black
-  // terminal during the synchronous git log pre-mount fetch. The
-  // mounted-ref guard prevents a late-resolving promise from
-  // dispatching after the user `q` quits before rows arrive.
-  React.useEffect(() => {
-    if (!loadRows) return
-    // #1384 — the boot fetch runs against the ROOT frame's git; if the
-    // user drills into a submodule before a slow boot load resolves,
-    // the late `replaceRows` would swap root-repo commits into the
-    // child frame. Same frame-tag-and-drop as `refreshHistoryRows`.
-    const issuedAtDepth = repoFrameDepthRef.current
-    let cancelled = false
-    void loadRows()
-      .then((nextRows) => {
-        if (cancelled || isStaleFrameResolve({
-          mounted: mountedRef.current,
-          issuedAtDepth,
-          currentDepth: repoFrameDepthRef.current,
-        })) return
-        dispatch({ type: 'replaceRows', rows: nextRows })
-        // Correct the pagination seed: on a cold cache the component
-        // mounted with zero rows, so the lazy `hasMoreCommits` seed
-        // evaluated false and load-more would stay disabled forever.
-        // The fetched window is the real first page — recompute.
-        setHasMoreCommits(computeHasMoreCommits(logArgv, nextRows))
-      })
-      .catch((error: unknown) => {
-        if (cancelled || !mountedRef.current) return
-        const message = error instanceof Error ? error.message : String(error)
-        dispatch({ type: 'setStatus', value: `Failed to load commits: ${message}`, kind: 'error' })
-        dispatch({ type: 'setBootLoading', value: false })
-      })
-    return () => {
-      cancelled = true
-    }
-    // Intentionally one-shot — re-running the boot load on hot
-    // dispatch / loader changes would refetch the entire log on every
-    // re-render. The loader fires once per app mount and that's it.
-  }, [])
+  // Deferred commit-log loader (#808). Extracted into `useDeferredBootLoad`
+  // (OSS-463 app.ts decomposition) — one-shot mount effect, frame-tagged,
+  // with stale-frame and mounted-ref guards. See that module's header for
+  // the full rationale.
+  useDeferredBootLoad(React, {
+    loadRows,
+    logArgv,
+    dispatch,
+    mountedRef,
+    repoFrameDepthRef,
+    setHasMoreCommits,
+  })
 
   // Auto-dismiss status messages after a short window so transient
   // confirmations ("Pulled current branch", "Edited foo.ts") don't
