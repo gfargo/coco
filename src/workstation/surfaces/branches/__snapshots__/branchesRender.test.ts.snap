@@ -20,7 +20,7 @@ exports[`renderBranchesSurface structural snapshot — empty 1`] = `
     <Text
       dimColor={true}
     >
-      0/0 local | current: main | ▼ name
+      0/0 local · ▼ name
     </Text>
   </Box>
   <Text
@@ -51,7 +51,7 @@ exports[`renderBranchesSurface structural snapshot — populated 1`] = `
     <Text
       dimColor={true}
     >
-      1/1 local | current: main | ▼ name
+      1/1 local · ▼ name
     </Text>
   </Box>
   <Text

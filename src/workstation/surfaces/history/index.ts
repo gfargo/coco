@@ -685,9 +685,13 @@ export function renderHistoryPanel(
     ? 'loading older commits'
     : hasMoreCommits
       ? 'more below'
-      : 'loaded'
-  const title = `${state.filteredCommits.length}/${state.commits.length} commits`
-  const graphMode = state.fullGraph ? 'full graph' : 'compact graph'
+      : undefined
+  // Only show the fraction when a filter is active or rows were trimmed
+  const title = state.filteredCommits.length < state.commits.length
+    ? `${state.filteredCommits.length}/${state.commits.length}`
+    : `${state.commits.length} commits`
+  // Show graph mode only when compact (the exception state worth noting)
+  const graphMode = state.fullGraph ? undefined : 'compact'
 
   const pendingRowSelected = showPendingRow && Boolean(state.pendingCommitFocused) && focused
   // Real-commit selection is suppressed while the cursor is on the pending
@@ -708,7 +712,7 @@ export function renderHistoryPanel(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Commits', focused)),
-    h(Text, { dimColor: true }, `${title} | ${graphMode} | ${loadState}`)
+    h(Text, { dimColor: true }, [title, graphMode, loadState].filter(Boolean).join(' · '))
   ),
   // Upstream-ahead banner. Surfaces "the remote has work you don't"
   // for the current branch — distinct from the chip work in 0.52.0

@@ -55,11 +55,15 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
   const listRows = localBranches.length > baseRows ? Math.max(4, baseRows - 1) : baseRows
   const startIndex = clampListWindowStart(selected, localBranches.length, listRows)
   const visible = localBranches.slice(startIndex, startIndex + listRows)
-  const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
-  const sortLabel = ` | ${formatSortIndicator(state.branchSort, { ascii: theme.ascii })}`
+  const filterLabel = state.filter ? `filter: ${state.filter}` : undefined
+  const sortLabel = formatSortIndicator(state.branchSort, { ascii: theme.ascii })
   const headerRight = loading
     ? 'loading branches'
-    : `${localBranches.length}/${sortedAll.length} local | current: ${branches?.currentBranch || '<detached>'}${filterLabel}${sortLabel}`
+    : [
+      `${localBranches.length}/${sortedAll.length} local`,
+      filterLabel,
+      sortLabel,
+    ].filter(Boolean).join(' · ')
   const emptyLabel = formatLogInkBranchesEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'branches' })
   // Per-column width derived from the visible window (#833) so columns
