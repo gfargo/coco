@@ -158,7 +158,7 @@ describe('prepareCommitSplitPlan / handleCommitSplit — dedupe warnings (#1462)
       llm: {} as never,
     })
 
-    expect(output).toContain('Plan saved')
+    expect(output).toContain('Split cancelled')
     const loggedLines = logSpy.mock.calls.map((call) => call[0])
     const warningLineIndex = loggedLines.findIndex((line) => line.includes('docs/page.tsx: kept in'))
     const planLineIndex = loggedLines.findIndex((line) => line.includes('## 1. feat: docs'))
