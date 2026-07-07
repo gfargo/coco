@@ -67,9 +67,9 @@ describe('sidebar list tabs honor the active filter (#1341)', () => {
     const text = renderBranchesTab('feat')
     expect(text).toContain('feat/login')
     expect(text).not.toContain('fix/crash')
-    // `main` appears in the "Current:" header line but must not appear
-    // as a selectable row — assert via the row marker spacing.
-    expect(text).toContain('Current: main')
+    // `main` is neither a filter match nor shown in a sidebar header
+    // row (the header chip owns that), so it should be absent entirely.
+    expect(text).not.toContain('main')
   })
 
   it('shows the narrowing as n/N in the tab header', () => {
