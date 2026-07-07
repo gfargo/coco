@@ -17,7 +17,7 @@ export type LogInkSurfaceLoadingArgs = {
  * consistently across surfaces. ASCII-safe — never relies on color.
  */
 export function formatLogInkLoading({ resource }: LogInkSurfaceLoadingArgs): string {
-  return `· Loading ${resource}…`
+  return `Loading ${resource}…`
 }
 
 export type LogInkBranchesEmptyArgs = {

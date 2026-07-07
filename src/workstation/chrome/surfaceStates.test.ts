@@ -1,23 +1,23 @@
 import {
-  formatLogInkBlameEmpty,
-  formatLogInkBranchesEmpty,
-  formatLogInkComposeEmpty,
-  formatLogInkHistoryEmpty,
-  formatLogInkLoading,
-  formatLogInkPullRequestDiffEmpty,
-  formatLogInkPullRequestDiffError,
-  formatLogInkStashEmpty,
-  formatLogInkStatusEmpty,
-  formatLogInkTagsEmpty,
+    formatLogInkBlameEmpty,
+    formatLogInkBranchesEmpty,
+    formatLogInkComposeEmpty,
+    formatLogInkHistoryEmpty,
+    formatLogInkLoading,
+    formatLogInkPullRequestDiffEmpty,
+    formatLogInkPullRequestDiffError,
+    formatLogInkStashEmpty,
+    formatLogInkStatusEmpty,
+    formatLogInkTagsEmpty,
 } from './surfaceStates'
 
 describe('log Ink surface states', () => {
   describe('formatLogInkLoading', () => {
     it('renders a uniform leading glyph + text per resource', () => {
-      expect(formatLogInkLoading({ resource: 'branches' })).toBe('· Loading branches…')
-      expect(formatLogInkLoading({ resource: 'tags' })).toBe('· Loading tags…')
-      expect(formatLogInkLoading({ resource: 'stashes' })).toBe('· Loading stashes…')
-      expect(formatLogInkLoading({ resource: 'worktree status' })).toBe('· Loading worktree status…')
+      expect(formatLogInkLoading({ resource: 'branches' })).toBe('Loading branches…')
+      expect(formatLogInkLoading({ resource: 'tags' })).toBe('Loading tags…')
+      expect(formatLogInkLoading({ resource: 'stashes' })).toBe('Loading stashes…')
+      expect(formatLogInkLoading({ resource: 'worktree status' })).toBe('Loading worktree status…')
     })
   })
 

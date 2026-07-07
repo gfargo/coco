@@ -118,7 +118,7 @@ describe('renderFileHistorySurface', () => {
     expect((tree.props as StubProps).width).toBe(120)
     const text = collectText(tree)
     expect(text).toContain('File History')
-    expect(text).toContain('loading history')
+    expect(text).toContain('Loading history…')
     expect(text).toContain('Loading file history')
     expect(text).toContain('src/example.ts')
   })

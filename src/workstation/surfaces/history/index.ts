@@ -682,7 +682,7 @@ export function renderHistoryPanel(
     : Math.max(3, bodyRows - chromeRows)
   const visible = getVisibleLogInkHistory(state, listRows, { fullGraphSpacing, dateBucketingNow })
   const loadState = loadingMoreCommits
-    ? 'loading older commits'
+    ? 'Loading older commits…'
     : hasMoreCommits
       ? 'more below'
       : undefined

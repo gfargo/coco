@@ -58,7 +58,7 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
   const filterLabel = state.filter ? `filter: ${state.filter}` : undefined
   const sortLabel = formatSortIndicator(state.branchSort, { ascii: theme.ascii })
   const headerRight = loading
-    ? 'loading branches'
+    ? 'Loading branches…'
     : [
       `${localBranches.length}/${sortedAll.length} local`,
       filterLabel,

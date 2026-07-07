@@ -69,7 +69,7 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
   let bodyLines: ReactTypes.ReactNode[] = []
 
   if (loading || !overview) {
-    headerRight = 'loading issues'
+    headerRight = 'Loading issues…'
     bodyLines = [
       h(Text, { key: 'issues-loading', dimColor: true }, formatLogInkLoading({ resource: 'issues' })),
     ]

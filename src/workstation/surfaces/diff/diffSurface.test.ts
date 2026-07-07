@@ -224,7 +224,7 @@ describe('PR diff surface (#1363)', () => {
 
   it('shows the surface-states loading line while the patch fetch runs', () => {
     const text = flattenText(buildPr({ loading: true }))
-    expect(text).toContain('· Loading diff for #962…')
+    expect(text).toContain('Loading diff for #962…')
   })
 
   it('surfaces a fetch failure with recovery hints instead of a bare empty state', () => {

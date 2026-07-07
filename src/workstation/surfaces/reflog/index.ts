@@ -39,7 +39,7 @@ export function renderReflogSurface(ctx: SurfaceRenderContext): ReactTypes.React
   const visible = entries.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading
-    ? 'loading reflog'
+    ? 'Loading reflog…'
     : `${entries.length}/${allEntries.length} entries${filterLabel}`
   const emptyLabel = formatLogInkReflogEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'reflog' })
