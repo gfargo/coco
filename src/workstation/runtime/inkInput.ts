@@ -74,7 +74,7 @@ export type LogInkInputEvent =
   | { type: 'startCommitSplit' }
   | { type: 'applyCommitSplit' }
   | { type: 'cancelCommitSplit' }
-  | { type: 'runWorkflowAction'; id: string; payload?: string }
+  | { type: 'runWorkflowAction'; id: string; payload?: string; confirmed?: boolean }
   | { type: 'openFileInEditor'; path: string }
   | { type: 'openConfigInEditor'; scope: 'global' | 'project' }
   | { type: 'yankFromActiveView'; short?: boolean }

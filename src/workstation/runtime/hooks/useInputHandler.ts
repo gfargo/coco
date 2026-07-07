@@ -35,35 +35,36 @@
  */
 
 import {
-  LogInkInputKey,
-  getInspectorActionsForState,
-  getLogInkInputEvents,
+    LogInkInputKey,
+    getInspectorActionsForState,
+    getLogInkInputEvents,
 } from '../inkInput'
 import { findStashFileForOffset } from '../../../git/stashData'
 import { getBisectCompletion } from '../../../git/bisectData'
 import {
-  resolveCommitDiffDrillInTarget,
-  resolveSubmoduleViewDrillInTarget,
+    resolveCommitDiffDrillInTarget,
+    resolveSubmoduleViewDrillInTarget,
 } from '../repoFrameDrillIn'
 import {
-  LOG_INK_DEFAULT_COLUMNS,
-  LAYOUT_SINGLE_PANE_BELOW,
+    LOG_INK_DEFAULT_COLUMNS,
+    LAYOUT_SINGLE_PANE_BELOW,
 } from '../../chrome/layout'
 import type { LogInkThemePreset } from '../../chrome/theme'
 import type { CocoConfigScope } from '../configFiles'
 import {
-  GitCommitDetail,
-  GitCommitFilePreview,
+    GitCommitDetail,
+    GitCommitFilePreview,
 } from '../../../commands/log/data'
 import { WorktreeFileDiff } from '../../../git/worktreeDiffData'
 import {
-  LogInkAction,
-  LogInkState,
-  getSelectedInkCommit,
+    LogInkAction,
+    LogInkState,
+    getSelectedInkCommit,
 } from '../inkViewModel'
 import type { FilteredLists } from './buildFilteredLists'
 import type { StatusSurfaceData } from './buildStatusSurfaceData'
 import type { LogInkContext } from '../types'
+import { getLogInkWorkflowActionById } from '../inkWorkflows'
 
 export type UseInputHandlerDeps = {
   /** The reducer state — active view, selection indices, filter, diff source. */
@@ -573,7 +574,24 @@ export function useInputHandler(
       } else if (event.type === 'yankText') {
         void yankText(event.value, event.label)
       } else if (event.type === 'runWorkflowAction') {
-        void runWorkflowAction(event.id, event.payload)
+        // Centralized confirmation gate (#1445): if the registry declares
+        // requiresConfirmation and the user hasn't already consented
+        // (via y-confirm overlay, choice selection, or input-prompt
+        // submission), redirect to the confirmation overlay. Consent is
+        // detected by: (a) the event carries `confirmed: true`, OR
+        // (b) there's an active pendingConfirmationId matching this id
+        // (meaning the y-press handler emitted us), OR (c) a choice
+        // prompt was just active (meaning an option was picked).
+        const workflow = getLogInkWorkflowActionById(event.id)
+        const alreadyConfirmed =
+          event.confirmed ||
+          state.pendingConfirmationId === event.id ||
+          Boolean(state.pendingChoice)
+        if (workflow?.requiresConfirmation && !alreadyConfirmed) {
+          dispatch({ type: 'setPendingConfirmation', value: event.id, payload: event.payload })
+        } else {
+          void runWorkflowAction(event.id, event.payload)
+        }
       } else if (event.type === 'openFileInEditor') {
         openInEditor(event.path)
       } else if (event.type === 'openConfigInEditor') {
