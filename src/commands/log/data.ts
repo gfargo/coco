@@ -1,7 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { extractLfsPatchChange, renderLfsSummary } from '../../git/lfsPointer'
 import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from '../../git/submoduleDiff'
-import { isEmptyRepo } from '../../lib/simple-git/isEmptyRepo'
 import { LogArgv, LogView } from './config'
 
 export const FIELD_SEPARATOR = '\x1f'
@@ -437,19 +436,20 @@ export async function getLogRows(
   options: LogRowLoadOptions = {}
 ): Promise<GitLogRow[]> {
   // Unborn HEAD short-circuit. Without this, `git log` on a freshly
-  // `git init`'d repo throws "fatal: your current branch 'main' does
-  // not have any commits yet" — fine when the caller can catch and
-  // translate, painful otherwise (the workstation runtime surfaces it
-  // as "Failed to load commits: fatal: ..." in the status line).
-  //
-  // Returning [] is the natural contract: callers that already render
-  // an empty-history surface (`formatLogInkHistoryEmpty`) get the
-  // right experience automatically; `coco log` retains its own
-  // friendlier message via the handler's isEmptyRepo check.
-  if (await isEmptyRepo(git)) {
-    return []
+  // Catch git's "does not have any commits yet" error instead of
+  // probing isEmptyRepo before every fetch (#1364 item 5). The probe
+  // added a subprocess to every getLogRows call (boot, refresh, each
+  // load-more page, graph toggle, filter refetch). Catching the error
+  // is O(0) on non-empty repos.
+  try {
+    return parseLogOutput(await git.raw(buildLogArgs(argv, options)))
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (message.includes('does not have any commits yet') || message.includes('bad default revision')) {
+      return []
+    }
+    throw err
   }
-  return parseLogOutput(await git.raw(buildLogArgs(argv, options)))
 }
 
 export async function getCommitDetail(git: SimpleGit, commit: string): Promise<GitCommitDetail> {
