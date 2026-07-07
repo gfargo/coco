@@ -110,7 +110,9 @@ Feedback on previous attempt (fix every item before responding):
 {previous_attempt_feedback}`)
 
 export function isCommitSplitCommand(argv: Arguments<CommitOptions>): boolean {
-  return Boolean(argv.split || argv.plan || argv.apply || argv._.includes('split'))
+  // --apply alone does not trigger split mode — it must be combined with
+  // --split so the user has reviewed the plan before committing (#1443).
+  return Boolean(argv.split || argv.plan || (argv.apply && argv.split) || argv._.includes('split'))
 }
 
 export function formatCommitSplitPlan(plan: CommitSplitPlan): string {
@@ -1020,7 +1022,7 @@ export async function handleCommitSplit({
   })
 
   if (!shouldApply) {
-    return 'Plan saved — re-run with --apply to commit later, or --plan to print again.'
+    return 'Split cancelled. Re-run with --split to generate a new plan, or --split --plan to preview without applying.'
   }
 
   const applied = await applyCommitSplitPlan({
