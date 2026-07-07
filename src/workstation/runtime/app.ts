@@ -52,31 +52,30 @@
  */
 
 import type * as ReactTypes from 'react'
-import {SimpleGit} from 'simple-git'
-import {getBranchOverview} from '../../git/branchData'
-import {getLfsAttributeStatus} from '../../git/lfsAttributes'
-import {getSubmoduleOverview} from '../../git/submoduleData'
-import {getRemoteOverview} from '../../git/remoteData'
-import {LOG_INTERACTIVE_DEFAULT_LIMIT, getLogRows} from '../../commands/log/data'
-import {buildHistoryRefetchArgv} from './historyRefetchResolver'
-import {LogInkContextKey, createLogInkContextStatus, mergeRefreshedContext, updateLogInkContextStatus} from '../chrome/context'
-import {createLogInkTheme, type LogInkThemePreset} from '../chrome/theme'
-import {saveThemePreset} from '../chrome/themePersistence'
-import {PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex} from '../chrome/selectionRectify'
-import {sortBranches, sortTags} from '../chrome/sorting'
-import {LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout} from '../chrome/layout'
+import { SimpleGit } from 'simple-git'
+import { getBranchOverview } from '../../git/branchData'
+import { getLfsAttributeStatus } from '../../git/lfsAttributes'
+import { getSubmoduleOverview } from '../../git/submoduleData'
+import { getRemoteOverview } from '../../git/remoteData'
+import { LOG_INTERACTIVE_DEFAULT_LIMIT, getLogRows } from '../../commands/log/data'
+import { buildHistoryRefetchArgv } from './historyRefetchResolver'
+import { LogInkContextKey, createLogInkContextStatus, mergeRefreshedContext, updateLogInkContextStatus } from '../chrome/context'
+import { createLogInkTheme, type LogInkThemePreset } from '../chrome/theme'
+import { saveThemePreset } from '../chrome/themePersistence'
+import { PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex } from '../chrome/selectionRectify'
+import { sortBranches, sortTags } from '../chrome/sorting'
+import { LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout } from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
-import {LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getThemePickerSelection} from '../../workstation/runtime/inkViewModel'
-import {getGitOperationOverview} from '../../git/operationData'
-import {getProviderOverview} from '../../git/providerData'
-import {getForgeActions, getForgePullRequestOverview} from '../../git/forgeActions'
-import {issueFilterForPreset, pullRequestFilterForPreset} from '../../git/triageFilterPresets'
-import {getStashCommitHashes, getStashOverview, parseStashDiffFiles} from '../../git/stashData'
-import {getWorktreeOverview} from '../../git/statusData'
-import {getBisectStatus} from '../../git/bisectData'
-import {getReflogOverview} from '../../git/reflogData'
-import {getTagOverview} from '../../git/tagData'
-import {getWorktreeListOverview} from '../../git/worktreeData'
+import { LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getThemePickerSelection } from '../../workstation/runtime/inkViewModel'
+import { getGitOperationOverview } from '../../git/operationData'
+import { getProviderOverview } from '../../git/providerData'
+import { getForgeActions, getForgePullRequestOverview } from '../../git/forgeActions'
+import { getStashCommitHashes, getStashOverview, parseStashDiffFiles } from '../../git/stashData'
+import { getWorktreeOverview } from '../../git/statusData'
+import { getBisectStatus } from '../../git/bisectData'
+import { getReflogOverview } from '../../git/reflogData'
+import { getTagOverview } from '../../git/tagData'
+import { getWorktreeListOverview } from '../../git/worktreeData'
 
 
 async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -196,51 +195,52 @@ import type { LogArgv } from '../../commands/log/config'
 // Promoted-list filter helpers shared by every promoted surface. Live in
 // runtime/ rather than chrome/ because they're tightly coupled to the
 // LogInkState filter-mode shape.
-import {matchesPromotedFilter} from '../runtime/promotedFilter'
-import {useFilteredLists} from './hooks/buildFilteredLists'
-import {useRebasePlanActions} from './hooks/useRebasePlanActions'
-import {useConflictResolutionActions} from './hooks/useConflictResolutionActions'
-import {useBisectCandidateHydration, useBisectCandidateState} from './hooks/useBisectCandidateHydration'
-import {useCommitDetailHydration, useCommitDetailState} from './hooks/useCommitDetailHydration'
-import {useContextHydration} from './hooks/useContextHydration'
-import {useBlameLoadingState, useDetailHydration, useFileHistoryLoadingState} from './hooks/useDetailHydration'
-import {useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState} from './hooks/useDiffHydration'
-import {usePullRequestDiffHydration, usePullRequestDiffState} from './hooks/usePullRequestDiffHydration'
-import {useDiffSyntaxHighlight, useDiffSyntaxState} from './hooks/useDiffSyntaxHighlight'
-import {useIdleTip} from './hooks/useIdleTip'
-import {useRefreshWatcher} from './hooks/useRefreshWatcher'
-import {useActiveRepoRoot, useViewModePersistence} from './hooks/useRepoPersistence'
-import {useSpinnerFrame} from './hooks/useSpinnerFrame'
-import {useStatusSurfaceData} from './hooks/buildStatusSurfaceData'
-import {useStatusAutoDismiss} from './hooks/useStatusAutoDismiss'
-import {useHistoryCursorSync} from './hooks/useHistoryCursorSync'
-import {isStaleFrameResolve} from './loadMoreResolver'
-import {computeHasMoreCommits, useHistoryPaginationState, useLoadMoreHistory} from './hooks/useLoadMoreHistory'
-import {useHistoryRefetch} from './hooks/useHistoryRefetch'
-import {useOnboarding} from './hooks/useOnboarding'
-import {useRepoStackRuntimes} from './hooks/useRepoStackRuntimes'
-import {useResumeTick} from './hooks/useResumeTick'
-import {useWorktreeStageActions} from './hooks/useWorktreeStageActions'
-import {useCommitComposeActions} from './hooks/useCommitComposeActions'
-import {useCommitSplitActions} from './hooks/useCommitSplitActions'
-import {useAiCommitDraftActions} from './hooks/useAiCommitDraftActions'
-import {usePullRequestActions} from './hooks/usePullRequestActions'
-import {useEditorActions} from './hooks/useEditorActions'
-import {useYankActions} from './hooks/useYankActions'
-import {useChangelogActions} from './hooks/useChangelogActions'
-import {useWorkflowAction} from './hooks/useWorkflowAction'
-import {useInputHandler} from './hooks/useInputHandler'
+import { matchesPromotedFilter } from '../runtime/promotedFilter'
+import { useFilteredLists } from './hooks/buildFilteredLists'
+import { useRebasePlanActions } from './hooks/useRebasePlanActions'
+import { useConflictResolutionActions } from './hooks/useConflictResolutionActions'
+import { useBisectCandidateHydration, useBisectCandidateState } from './hooks/useBisectCandidateHydration'
+import { useCommitDetailHydration, useCommitDetailState } from './hooks/useCommitDetailHydration'
+import { useContextHydration } from './hooks/useContextHydration'
+import { useBlameLoadingState, useDetailHydration, useFileHistoryLoadingState } from './hooks/useDetailHydration'
+import { useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState } from './hooks/useDiffHydration'
+import { usePullRequestDiffHydration, usePullRequestDiffState } from './hooks/usePullRequestDiffHydration'
+import { useDiffSyntaxHighlight, useDiffSyntaxState } from './hooks/useDiffSyntaxHighlight'
+import { useIdleTip } from './hooks/useIdleTip'
+import { useRefreshWatcher } from './hooks/useRefreshWatcher'
+import { useActiveRepoRoot, useViewModePersistence } from './hooks/useRepoPersistence'
+import { useSpinnerFrame } from './hooks/useSpinnerFrame'
+import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
+import { useStatusAutoDismiss } from './hooks/useStatusAutoDismiss'
+import { useHistoryCursorSync } from './hooks/useHistoryCursorSync'
+import { isStaleFrameResolve } from './loadMoreResolver'
+import { computeHasMoreCommits, useHistoryPaginationState, useLoadMoreHistory } from './hooks/useLoadMoreHistory'
+import { useHistoryRefetch } from './hooks/useHistoryRefetch'
+import { useIssueTriageHydration, usePullRequestTriageHydration } from './hooks/useTriageListHydration'
+import { useOnboarding } from './hooks/useOnboarding'
+import { useRepoStackRuntimes } from './hooks/useRepoStackRuntimes'
+import { useResumeTick } from './hooks/useResumeTick'
+import { useWorktreeStageActions } from './hooks/useWorktreeStageActions'
+import { useCommitComposeActions } from './hooks/useCommitComposeActions'
+import { useCommitSplitActions } from './hooks/useCommitSplitActions'
+import { useAiCommitDraftActions } from './hooks/useAiCommitDraftActions'
+import { usePullRequestActions } from './hooks/usePullRequestActions'
+import { useEditorActions } from './hooks/useEditorActions'
+import { useYankActions } from './hooks/useYankActions'
+import { useChangelogActions } from './hooks/useChangelogActions'
+import { useWorkflowAction } from './hooks/useWorkflowAction'
+import { useInputHandler } from './hooks/useInputHandler'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
 // per-surface and detail renderers are consumed internally by mainPanel /
 // detailPanel; LogInkApp just calls these top-level pieces.
-import {renderFooter} from '../runtime/footer'
-import {createLogInkHeader} from '../runtime/header'
-import {renderSidebar} from '../runtime/sidebar'
-import {renderMainPanel} from '../runtime/mainPanel'
-import {renderDetailPanel} from '../runtime/detailPanel'
-import {renderOnboardingOverlay} from '../runtime/overlays'
-import {getLogInkRuntimeContext, type LogInkRuntimeContextValue} from '../runtime/runtimeContext'
+import { renderFooter } from '../runtime/footer'
+import { createLogInkHeader } from '../runtime/header'
+import { renderSidebar } from '../runtime/sidebar'
+import { renderMainPanel } from '../runtime/mainPanel'
+import { renderDetailPanel } from '../runtime/detailPanel'
+import { renderOnboardingOverlay } from '../runtime/overlays'
+import { getLogInkRuntimeContext, type LogInkRuntimeContextValue } from '../runtime/runtimeContext'
 
 function predictNextFilter(
   action: Parameters<typeof applyLogInkAction>[1],
@@ -1087,124 +1087,32 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setPrDiffError,
   })
 
-  React.useEffect(() => {
-    if (state.activeView !== 'issues') return
-    if (context.issueList) return
-    const issuedAtDepth = runtimes.length - 1
-    let active = true
-    setContextStatus(
-      (current) => updateLogInkContextStatus(current, 'issueList', 'loading'),
-      issuedAtDepth,
-    )
-    const filter = issueFilterForPreset(state.selectedIssueFilter)
-    void safe(forge.getIssueList(git, filter)).then((value) => {
-      if (!active) return
-      setContext(
-        (current) => ({
-          ...current,
-          issueList: value,
-        }),
-        issuedAtDepth,
-      )
-      setContextStatus(
-        (current) => updateLogInkContextStatus(current, 'issueList', 'ready'),
-        issuedAtDepth,
-      )
-    })
-    return () => {
-      active = false
-    }
-  }, [
+  // Issue and PR triage list hydration — extracted into dedicated hooks
+  // (OSS-463 app.ts decomposition). Same lazy-load + filter-invalidation
+  // pattern, now co-located in `useTriageListHydration.ts`.
+  useIssueTriageHydration(React, {
     git,
-    runtimes.length,
-    state.activeView,
-    context.issueList,
-    state.selectedIssueFilter,
+    forge,
+    activeView: state.activeView,
+    issueList: context.issueList,
+    selectedIssueFilter: state.selectedIssueFilter,
+    frameDepth: runtimes.length - 1,
+    repoFrameDepthRef,
     setContext,
     setContextStatus,
-  ])
+  })
 
-  // Filter cycling: when the preset changes, drop the cached list
-  // so the effect above re-fires with the new filter. Done as a
-  // separate effect (rather than folded into the cycle reducer)
-  // because the reducer is pure — fs / network side-effects live
-  // in `useEffect`.
-  React.useEffect(() => {
-    if (state.activeView !== 'issues') return
-    // #1384 — frame-tag the clear (via the render-fresh depth ref, so
-    // the deliberately-narrow dep array below stays untouched): the
-    // preset belongs to the frame whose view is showing, so the write
-    // must land there, not on whichever frame is active if a push /
-    // pop lands in the same commit window.
-    const issuedAtDepth = repoFrameDepthRef.current
-    setContext(
-      (current) => (current.issueList ? { ...current, issueList: undefined } : current),
-      issuedAtDepth,
-    )
-    setContextStatus(
-      (current) => updateLogInkContextStatus(current, 'issueList', 'idle'),
-      issuedAtDepth,
-    )
-    // We deliberately depend ONLY on the preset — not on
-    // activeView — so re-entering the view doesn't re-fire and
-    // discard the just-loaded data. The activeView guard above
-    // keeps us from clearing data while the user is on a
-    // different surface.
-  }, [state.selectedIssueFilter])
-
-  // Lazy-load the PR triage list (#882 phase 3, filter-aware
-  // since phase 6). Same pattern as the issue effect above.
-  React.useEffect(() => {
-    if (state.activeView !== 'pull-request-triage') return
-    if (context.pullRequestList) return
-    const issuedAtDepth = runtimes.length - 1
-    let active = true
-    setContextStatus(
-      (current) => updateLogInkContextStatus(current, 'pullRequestList', 'loading'),
-      issuedAtDepth,
-    )
-    const filter = pullRequestFilterForPreset(state.selectedPullRequestFilter)
-    void safe(forge.getPullRequestList(git, filter)).then((value) => {
-      if (!active) return
-      setContext(
-        (current) => ({
-          ...current,
-          pullRequestList: value,
-        }),
-        issuedAtDepth,
-      )
-      setContextStatus(
-        (current) => updateLogInkContextStatus(current, 'pullRequestList', 'ready'),
-        issuedAtDepth,
-      )
-    })
-    return () => {
-      active = false
-    }
-  }, [
+  usePullRequestTriageHydration(React, {
     git,
-    runtimes.length,
-    state.activeView,
-    context.pullRequestList,
-    state.selectedPullRequestFilter,
+    forge,
+    activeView: state.activeView,
+    pullRequestList: context.pullRequestList,
+    selectedPullRequestFilter: state.selectedPullRequestFilter,
+    frameDepth: runtimes.length - 1,
+    repoFrameDepthRef,
     setContext,
     setContextStatus,
-  ])
-
-  React.useEffect(() => {
-    if (state.activeView !== 'pull-request-triage') return
-    // #1384 — frame-tagged like the issue preset-clear above.
-    const issuedAtDepth = repoFrameDepthRef.current
-    setContext(
-      (current) =>
-        current.pullRequestList ? { ...current, pullRequestList: undefined } : current,
-      issuedAtDepth,
-    )
-    setContextStatus(
-      (current) => updateLogInkContextStatus(current, 'pullRequestList', 'idle'),
-      issuedAtDepth,
-    )
-  }, [state.selectedPullRequestFilter])
+  })
 
   // Per-item inspector hydration (#882) + on-demand blame hydration
   // (#0.71). When the user rests the cursor on an issue / PR row for
