@@ -670,8 +670,14 @@ export function renderHistoryPanel(
   const chromeRows = (showPendingRow ? 5 : 4)
     + (upstreamBanner ? 1 : 0)
     + (state.historyFetchArgs ? 1 : 0)
+  // Stacked rows take two terminal lines each; graph spacers and
+  // bucket headers take one. In practice the expanded list alternates
+  // commit (2 lines) and transition (1 line), so the average item
+  // costs ~1.5 lines. Dividing by 2 left ~25% of the body blank on
+  // 80×24 terminals (#1368). Using 2/3 of the line budget as the item
+  // count fills the panel without overflow.
   const listRows = rowMode === 'stacked'
-    ? Math.max(2, Math.floor((bodyRows - chromeRows) / 2))
+    ? Math.max(2, Math.floor((bodyRows - chromeRows) * 2 / 3))
     : Math.max(3, bodyRows - chromeRows)
   const visible = getVisibleLogInkHistory(state, listRows, { fullGraphSpacing, dateBucketingNow })
   const loadState = loadingMoreCommits
