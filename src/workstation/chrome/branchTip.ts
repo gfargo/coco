@@ -37,24 +37,38 @@ export type BranchTipChip = {
  * Strip refs that are already represented by a branch tip chip so the
  * trailing `[ref] [ref]` list doesn't repeat what the chip is already
  * showing. The chip carries the primary branch name; the trailing
- * list keeps everything else — including remote-tracking variants
- * (`origin/X`) and `origin/HEAD` — because those convey "remote is
- * also at this commit" info the chip alone doesn't.
+ * list keeps everything else (tags, `origin/HEAD`).
  *
  * Removes:
  *   - exact match of the chipped name (`main`, `feat/foo`)
  *   - `HEAD -> <name>` for the chipped name
- *   - bare `HEAD` when the chip is the HEAD branch (only paranoia;
- *     git typically emits `HEAD -> name` not both, but a detached
- *     fixup commit may have produced both)
+ *   - bare `HEAD` when the chip is the HEAD branch
+ *   - remote-tracking twin(s) of the chipped name (`origin/<name>`,
+ *     `upstream/<name>`) — these duplicate the chip's information
+ *     and consume subject-line budget (#1367 item 1)
  */
-export function filterChippedRefs(refs: string[], chip: BranchTipChip | undefined): string[] {
+export function filterChippedRefs(
+  refs: string[],
+  chip: BranchTipChip | undefined,
+  remoteNames?: string[],
+): string[] {
   if (!chip) return refs
   const headDecoration = `HEAD -> ${chip.name}`
+  // Build a set of remote-tracking variants to exclude.
+  const remoteTrackingTwins = new Set<string>()
+  if (remoteNames && remoteNames.length > 0) {
+    for (const remote of remoteNames) {
+      if (remote) remoteTrackingTwins.add(`${remote}/${chip.name}`)
+    }
+  } else {
+    // Fallback: assume "origin" when no remote list is available.
+    remoteTrackingTwins.add(`origin/${chip.name}`)
+  }
   return refs.filter((ref) => {
     if (ref === chip.name) return false
     if (ref === headDecoration) return false
     if (chip.isHead && ref === 'HEAD') return false
+    if (remoteTrackingTwins.has(ref)) return false
     return true
   })
 }

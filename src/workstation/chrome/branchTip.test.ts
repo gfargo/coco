@@ -91,16 +91,22 @@ describe('getBranchTipChip', () => {
 })
 
 describe('filterChippedRefs', () => {
-  it('removes HEAD -> X and bare X when X is the chip', () => {
+  it('removes HEAD -> X, bare X, and the remote-tracking twin when X is the chip', () => {
     const refs = ['HEAD -> main', 'main', 'origin/main', 'origin/HEAD']
     const chip = { name: 'main', isHead: true, kind: 'head' as const }
-    expect(filterChippedRefs(refs, chip)).toEqual(['origin/main', 'origin/HEAD'])
+    expect(filterChippedRefs(refs, chip, ['origin'])).toEqual(['origin/HEAD'])
   })
 
-  it('removes only the exact chip name for non-HEAD tips', () => {
+  it('removes the remote twin using fallback origin when no remoteNames provided', () => {
+    const refs = ['HEAD -> main', 'main', 'origin/main', 'origin/HEAD']
+    const chip = { name: 'main', isHead: true, kind: 'head' as const }
+    expect(filterChippedRefs(refs, chip)).toEqual(['origin/HEAD'])
+  })
+
+  it('removes only the exact chip name for non-HEAD tips (plus remote twin)', () => {
     const refs = ['claude/issues-prs-cli', 'origin/claude/issues-prs-cli']
     const chip = { name: 'claude/issues-prs-cli', isHead: false, kind: 'remote' as const }
-    expect(filterChippedRefs(refs, chip)).toEqual(['origin/claude/issues-prs-cli'])
+    expect(filterChippedRefs(refs, chip, ['origin'])).toEqual([])
   })
 
   it('removes the chip ref entirely when it is the only ref', () => {
@@ -114,10 +120,10 @@ describe('filterChippedRefs', () => {
     expect(filterChippedRefs(refs, undefined)).toEqual(refs)
   })
 
-  it('preserves tags even when they appear alongside the chipped branch', () => {
+  it('preserves tags even when the remote-tracking twin is removed', () => {
     const refs = ['HEAD -> main', 'main', 'tag: v1.0.0', 'origin/main']
     const chip = { name: 'main', isHead: true, kind: 'head' as const }
-    expect(filterChippedRefs(refs, chip)).toEqual(['tag: v1.0.0', 'origin/main'])
+    expect(filterChippedRefs(refs, chip, ['origin'])).toEqual(['tag: v1.0.0'])
   })
 
   it('strips bare HEAD only when the chip is the HEAD branch', () => {
@@ -126,5 +132,11 @@ describe('filterChippedRefs', () => {
     expect(filterChippedRefs(refs, headChip)).toEqual([])
     const nonHeadChip = { name: 'main', isHead: false, kind: 'local' as const }
     expect(filterChippedRefs(refs, nonHeadChip)).toEqual(['HEAD'])
+  })
+
+  it('removes twins from multiple remotes', () => {
+    const refs = ['HEAD -> feat', 'feat', 'origin/feat', 'upstream/feat', 'tag: v2']
+    const chip = { name: 'feat', isHead: true, kind: 'head' as const }
+    expect(filterChippedRefs(refs, chip, ['origin', 'upstream'])).toEqual(['tag: v2'])
   })
 })

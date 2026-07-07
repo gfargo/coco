@@ -327,7 +327,7 @@ function renderCommitHistoryRow(
   const chip = fullGraph
     ? renderBranchTipChip(h, Text, commit, theme, `${commit.hash}-${index}-chip`, selected, remoteNames)
     : { node: null, width: 0, chip: undefined }
-  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip))
+  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
   // The "just landed" marker prepends 2 cells (`▎ ` / `* `) — the
   // stacked variant budgets it via recentMarkerWidth, and omitting it
   // here made marked rows wrap for ~5s after every commit (#1390).
@@ -477,7 +477,7 @@ function renderStackedCommitHistoryRow(
   // as a leading chip and a trailing label.
   const indent = ' '.repeat(graphWidth + 1)
   const dateText = formatCompactRelativeDate(commit.date, now)
-  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip))
+  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
   const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
   const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
   // If both pieces are empty (date unparseable + no refs), show a
