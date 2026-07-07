@@ -43,7 +43,7 @@ export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: numbe
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const sortLabel = ` | ${formatSortIndicator(state.tagSort, { ascii: theme.ascii })}`
   const headerRight = loading
-    ? 'loading tags'
+    ? 'Loading tags…'
     : `${tags.length}/${sortedAll.length} tags${filterLabel}${sortLabel}`
   const emptyLabel = formatLogInkTagsEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'tags' })

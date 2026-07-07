@@ -121,7 +121,7 @@ export function renderPullRequestTriageSurface(
   let bodyLines: ReactTypes.ReactNode[] = []
 
   if (loading || !overview) {
-    headerRight = `loading ${nouns.pluralLower}`
+    headerRight = `Loading ${nouns.pluralLower}…`
     bodyLines = [
       h(Text, { key: 'pr-triage-loading', dimColor: true }, formatLogInkLoading({ resource: nouns.pluralLower })),
     ]

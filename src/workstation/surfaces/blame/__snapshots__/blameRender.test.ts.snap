@@ -56,7 +56,7 @@ exports[`renderBlameSurface structural snapshot — loading 1`] = `
     <Text
       dimColor={true}
     >
-      loading blame
+      Loading blame…
     </Text>
   </Box>
   <Text
@@ -67,7 +67,7 @@ exports[`renderBlameSurface structural snapshot — loading 1`] = `
   <Text
     dimColor={true}
   >
-    · Loading blame…
+    Loading blame…
   </Text>
 </Box>
 `;

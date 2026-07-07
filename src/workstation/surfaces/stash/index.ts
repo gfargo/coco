@@ -57,7 +57,7 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
   const visible = stashes.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading
-    ? 'loading stashes'
+    ? 'Loading stashes…'
     : `${stashes.length}/${allStashes.length} stashes${filterLabel}`
   const emptyLabel = formatLogInkStashEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'stashes' })

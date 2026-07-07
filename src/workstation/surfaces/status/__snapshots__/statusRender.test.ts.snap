@@ -51,13 +51,13 @@ exports[`renderStatusSurface structural snapshot — loading worktree status 1`]
     <Text
       dimColor={true}
     >
-      loading status
+      Loading status…
     </Text>
   </Box>
   <Text
     dimColor={false}
   >
-    · Loading worktree status…
+    Loading worktree status…
   </Text>
 </Box>
 `;

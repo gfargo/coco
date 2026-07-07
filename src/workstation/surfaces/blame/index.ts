@@ -74,7 +74,7 @@ export function renderBlameSurface(
   const visible = lines.slice(windowStart, windowStart + listRows)
 
   const headerRight = loading
-    ? 'loading blame'
+    ? 'Loading blame…'
     : lines.length
       ? `${selected + 1}/${lines.length} lines`
       : '0 lines'

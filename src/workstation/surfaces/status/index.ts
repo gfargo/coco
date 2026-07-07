@@ -198,7 +198,7 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
         worktree.unstagedCount ? `${worktree.unstagedCount} unstaged` : undefined,
         worktree.untrackedCount ? `${worktree.untrackedCount} untracked` : undefined,
       ].filter(Boolean).join(' · ') || 'clean'
-      : 'loading status')
+      : 'Loading status…')
   ),
   // Mask indicator (#776). Only rendered when the mask is narrower
   // than the all-on default — keeps the chrome clean for users who

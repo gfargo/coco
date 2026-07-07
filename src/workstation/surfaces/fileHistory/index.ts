@@ -81,7 +81,7 @@ export function renderFileHistorySurface(
   const visible = commits.slice(windowStart, windowStart + listRows)
 
   const headerRight = loading
-    ? 'loading history'
+    ? 'Loading history…'
     : commits.length
       ? `${selected + 1}/${commits.length} commits`
       : '0 commits'
