@@ -132,7 +132,7 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
         return h(Text, {
           key: `status-group-${row.group.state}-${rowIndex}`,
           bold: true,
-          dimColor: !headerSelected && rowIndex > cursorRowIndex,
+          dimColor: !headerSelected,
           backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
           color: headerSelected && !theme.noColor ? theme.colors.selectionForeground : undefined,
         }, truncateCells(text, rowBudget))
@@ -152,7 +152,7 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
       const tailTrunc = truncateCells(tail, Math.max(0, rowBudget - cellWidth(cursorPart) - dotCells - 2))
       return h(Text, {
         key: `status-file-${row.flatIndex}-${rowIndex}`,
-        dimColor: !isSelected && rowIndex > cursorRowIndex,
+        dimColor: !isSelected,
         backgroundColor: isSelected && focused && !theme.noColor ? theme.colors.selection : undefined,
         color: isSelected && focused && !theme.noColor ? theme.colors.selectionForeground : undefined,
       },

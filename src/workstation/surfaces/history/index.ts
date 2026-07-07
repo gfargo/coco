@@ -156,19 +156,18 @@ export function renderBranchTipChip(
   //
   //   - HEAD  → success (the user's current branch — bright green)
   //   - local → info    (other local branches — calm blue)
-  //   - remote → warning (remote-tracking refs like origin/main —
-  //                      distinct so "where is upstream?" reads at a glance)
+  //   - remote → muted  (remote-tracking refs like origin/main —
+  //                      a pure fact, not a warning; dim so it doesn't
+  //                      compete with semantic warning uses of yellow)
   //
-  // Without the remote/local split, a chip on `origin/main` looked
-  // identical to a local-branch chip, so users couldn't tell from the
-  // commit list where their upstream actually pointed. The warning hue
-  // (typically a muted yellow / orange) is purposeful: not alarming,
-  // but visibly different from the local blue.
+  // Prior to #1368 remote chips used `warning`, which overloaded
+  // yellow with non-actionable information. Muted keeps the chip
+  // visibly distinct from local blue without the "pay attention" cue.
   const accent =
     chip.kind === 'head'
       ? theme.colors.success
       : chip.kind === 'remote'
-        ? theme.colors.warning
+        ? theme.colors.muted
         : theme.colors.info
   return {
     node: h(Text, {},
