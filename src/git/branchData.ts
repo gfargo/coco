@@ -31,7 +31,7 @@ export function parseBranchRefs(output: string): BranchRef[] {
     .map((line) => line.trimEnd())
     .filter(Boolean)
     .map((line): BranchRef | undefined => {
-      const [refName, shortName, hash, upstream, head, date, subject] = line.split(FIELD_SEPARATOR)
+      const [refName, shortName, hash, upstream, head, date, subject, track] = line.split(FIELD_SEPARATOR)
 
       if (!refName || !shortName) {
         return undefined
@@ -47,6 +47,11 @@ export function parseBranchRefs(output: string): BranchRef[] {
       const type: BranchRefType = refName.startsWith('refs/remotes/') ? 'remote' : 'local'
       const remote = type === 'remote' ? shortName.split('/')[0] : undefined
 
+      // Parse %(upstream:track) — e.g. "[ahead 3, behind 2]", "[ahead 1]",
+      // "[behind 5]", "[gone]", or empty string. Single subprocess for all
+      // branches instead of one rev-list per branch (#1364).
+      const { ahead, behind } = parseUpstreamTrack(track || '')
+
       return {
         type,
         name: refName,
@@ -57,11 +62,25 @@ export function parseBranchRefs(output: string): BranchRef[] {
         remote,
         date,
         subject,
-        ahead: 0,
-        behind: 0,
+        ahead,
+        behind,
       }
     })
     .filter((ref): ref is BranchRef => Boolean(ref))
+}
+
+/**
+ * Parse the `%(upstream:track)` format field from `git for-each-ref`.
+ * Examples: "[ahead 3, behind 2]", "[ahead 1]", "[behind 5]", "[gone]", ""
+ */
+export function parseUpstreamTrack(track: string): Pick<BranchRef, 'ahead' | 'behind'> {
+  if (!track || track === '[gone]') return { ahead: 0, behind: 0 }
+  const aheadMatch = track.match(/ahead (\d+)/)
+  const behindMatch = track.match(/behind (\d+)/)
+  return {
+    ahead: aheadMatch ? parseInt(aheadMatch[1], 10) : 0,
+    behind: behindMatch ? parseInt(behindMatch[1], 10) : 0,
+  }
 }
 
 export function parseDivergence(output: string): Pick<BranchRef, 'ahead' | 'behind'> {
@@ -85,7 +104,7 @@ export async function getBranchOverview(git: SimpleGit): Promise<BranchOverview>
   const [branchOutput, statusOutput, currentBranchOutput] = await Promise.all([
     git.raw([
       'for-each-ref',
-      `--format=%(refname)${FIELD_SEPARATOR}%(refname:short)${FIELD_SEPARATOR}%(objectname:short)${FIELD_SEPARATOR}%(upstream:short)${FIELD_SEPARATOR}%(HEAD)${FIELD_SEPARATOR}%(committerdate:short)${FIELD_SEPARATOR}%(contents:subject)`,
+      `--format=%(refname)${FIELD_SEPARATOR}%(refname:short)${FIELD_SEPARATOR}%(objectname:short)${FIELD_SEPARATOR}%(upstream:short)${FIELD_SEPARATOR}%(HEAD)${FIELD_SEPARATOR}%(committerdate:short)${FIELD_SEPARATOR}%(contents:subject)${FIELD_SEPARATOR}%(upstream:track)`,
       'refs/heads',
       'refs/remotes',
     ]),
@@ -93,23 +112,8 @@ export async function getBranchOverview(git: SimpleGit): Promise<BranchOverview>
     git.raw(['branch', '--show-current']),
   ])
   const refs = parseBranchRefs(branchOutput)
-  const localBranches: BranchRef[] = []
-
-  for (const ref of refs.filter((entry) => entry.type === 'local')) {
-    if (!ref.upstream) {
-      localBranches.push(ref)
-      continue
-    }
-
-    try {
-      localBranches.push({
-        ...ref,
-        ...(await getBranchDivergence(git, ref.shortName, ref.upstream)),
-      })
-    } catch {
-      localBranches.push(ref)
-    }
-  }
+  const localBranches: BranchRef[] = refs
+    .filter((entry) => entry.type === 'local')
 
   return {
     currentBranch: currentBranchOutput.trim() || undefined,
