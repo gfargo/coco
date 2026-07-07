@@ -250,22 +250,15 @@ function renderLaneSegmentSpans(
   let totalLen = 0
 
   segments.forEach((seg, idx) => {
-    // Weight follows the lane, not the row. A tracked lane (`│`, the
-    // commit glyph, the fork/converge diagonals `╲ ╱` — anything that
-    // carries a `laneId`) renders bold so it reads at a consistent
-    // bright weight everywhere it appears: without the bold the base
-    // ANSI palette colors (`cyan`, `magenta`, …) sit a notch duller
-    // than the `*Bright` entries (#791), and earlier the whole fork/
-    // close row was dimmed (#831) — which made a single lane flicker
-    // bright→dim→bright as it passed through each junction. Genuine
-    // non-lane decoration (spaces, standalone `╲`/`╱`, no `laneId`)
-    // stays unbold in the muted color so it recedes on its own.
+    // Lane coloring WITHOUT bold — content (messages, semantic colors)
+    // should outweigh topology (#1368 item 2). Non-lane decoration
+    // (spaces, standalone diagonals) stays in the muted color so it
+    // recedes on its own.
     const hasLane = seg.laneId !== undefined
     const laneColor = options.suppressColor ? undefined : (getLaneColor(seg.laneId, theme) ?? muted)
     elements.push(h(Text, {
       key: `${keyPrefix}-${idx}`,
       color: laneColor,
-      bold: hasLane,
       dimColor: theme.noColor && !hasLane,
     }, seg.text))
     totalLen += seg.text.length
