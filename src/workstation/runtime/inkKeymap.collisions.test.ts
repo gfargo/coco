@@ -219,4 +219,28 @@ describe('LOG_INK_KEY_BINDINGS collision guard', () => {
     const missing = viewsRequiringBindings.filter((v) => !viewsWithBindings.has(v))
     expect(missing).toEqual([])
   })
+
+  it('kind "destructive" implies requiresConfirmation (danger policy #1448)', () => {
+    // #1448 — the danger doctrine: every workflow marked destructive
+    // must either require confirmation OR carry a documented waiver
+    // explaining why confirmation is unnecessary (e.g. undo is cheap,
+    // or the action is input-mediated so the prompt IS the confirm).
+    //
+    // Waivers live here, not in the registry, so adding one is a
+    // reviewed, visible decision. Each entry must carry a justification.
+    const DANGER_WAIVERS = new Set<string>([
+      // apply-hunk-worktree / apply-hunk-index: `git apply -R` cleanly
+      // undoes the patch. Undo is cheap; confirming every hunk-apply
+      // would kill the drill-in-and-apply flow's speed.
+      // (Currently kind: 'normal' so they don't hit this assertion,
+      // but documented here for the doctrine record.)
+    ])
+
+    const actions = getLogInkWorkflowActions()
+    const violations = actions
+      .filter((a) => a.kind === 'destructive' && !a.requiresConfirmation && !DANGER_WAIVERS.has(a.id))
+      .map((a) => a.id)
+
+    expect(violations).toEqual([])
+  })
 })

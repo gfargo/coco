@@ -375,9 +375,9 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       id: 'stage-all-untracked',
       key: '',
       label: 'Stage all untracked files',
-      description: 'Add every untracked file to the index after confirmation.',
-      kind: 'destructive',
-      requiresConfirmation: true,
+      description: 'Add every untracked file to the index.',
+      kind: 'normal',
+      requiresConfirmation: false,
     },
     {
       id: 'delete-branch',
@@ -696,12 +696,14 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       // Reset-to-entry and branch-from-entry reuse the existing
       // `reset-to-commit` / `create-branch-here` workflows (a reflog
       // entry is just a commit by hash); only checkout is reflog-specific.
+      // #1448 — bare keystroke that moves HEAD (detaches). Per the danger
+      // doctrine, HEAD-moving bare-key ops confirm.
       id: 'checkout-reflog-entry',
       key: '',
       label: 'Checkout reflog entry',
-      description: 'Check out the commit at the cursored reflog entry (detaches HEAD).',
-      kind: 'normal',
-      requiresConfirmation: false,
+      description: 'Check out the commit at the cursored reflog entry (detaches HEAD, after confirmation).',
+      kind: 'destructive',
+      requiresConfirmation: true,
     },
     {
       // #0.71 — submodule maintenance actions. All three are scoped

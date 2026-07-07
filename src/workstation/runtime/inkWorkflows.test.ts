@@ -1,8 +1,8 @@
 import {
-  getLogInkWorkflowActionById,
-  getLogInkWorkflowActionByKey,
-  getLogInkWorkflowActions,
-  getLogInkWorkflowSections,
+    getLogInkWorkflowActionById,
+    getLogInkWorkflowActionByKey,
+    getLogInkWorkflowActions,
+    getLogInkWorkflowSections,
 } from './inkWorkflows'
 
 describe('log Ink workflows', () => {
@@ -71,8 +71,8 @@ describe('log Ink workflows', () => {
   it('registers the reflog checkout action as palette-only (view-scoped dispatch is by id)', () => {
     expect(getLogInkWorkflowActionById('checkout-reflog-entry')).toMatchObject({
       key: '',
-      kind: 'normal',
-      requiresConfirmation: false,
+      kind: 'destructive',
+      requiresConfirmation: true,
     })
   })
 

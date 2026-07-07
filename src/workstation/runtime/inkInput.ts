@@ -4037,7 +4037,7 @@ export function getLogInkInputEvents(
     })]
   }
   if (inputValue === 'c' && isReflogActionTarget(state) && context.reflogCount) {
-    return [{ type: 'runWorkflowAction', id: 'checkout-reflog-entry' }]
+    return [action({ type: 'setPendingConfirmation', value: 'checkout-reflog-entry' })]
   }
 
   // #0.71 — submodule maintenance on the cursored row. Scoped to the
