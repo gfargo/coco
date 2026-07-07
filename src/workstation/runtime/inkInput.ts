@@ -837,6 +837,36 @@ export function getLogInkPaletteExecuteEvents(
     case 'viewCreateBranchHere':
     case 'viewCreateTagHere':
     case 'viewChangelog':
+    // #1447 registry backfill — per-view binding ids
+    case 'workflowApplyStash':
+    case 'workflowPopStash':
+    case 'workflowApplyStashIndex':
+    case 'workflowRenameStash':
+    case 'workflowStashBranch':
+    case 'workflowUndoDropStash':
+    case 'workflowPushTag':
+    case 'workflowDeleteRemoteTag':
+    case 'workflowResolveOurs':
+    case 'workflowResolveTheirs':
+    case 'workflowResolveStage':
+    case 'workflowContinueOperation':
+    case 'workflowBisectGood':
+    case 'workflowBisectBad':
+    case 'workflowBisectSkip':
+    case 'workflowBisectReset':
+    case 'workflowBisectRun':
+    case 'workflowCheckoutReflog':
+    case 'workflowRemoteAdd':
+    case 'workflowRemoteSetUrl':
+    case 'workflowRemoteRemove':
+    case 'workflowRemotePrune':
+    case 'workflowSubmoduleInit':
+    case 'workflowSubmoduleUpdate':
+    case 'workflowSubmoduleSync':
+    case 'workflowTriagePrCheckout':
+    case 'workflowTriagePrOpen':
+    case 'workflowTriageIssueOpen':
+    case 'workflowRemoveWorktreeAndBranch':
       // Individual workflow entries; actual dispatch handled by the
       // workflow action lookup below.
       return []
