@@ -19,12 +19,12 @@ import type * as ReactTypes from 'react'
 import type { LogInkContext } from '../types'
 import { matchesPromotedFilter } from '../promotedFilter'
 import {
-  DEFAULT_BRANCH_SORT_MODE,
-  DEFAULT_TAG_SORT_MODE,
-  sortBranches,
-  sortTags,
-  type BranchSortMode,
-  type TagSortMode,
+    DEFAULT_BRANCH_SORT_MODE,
+    DEFAULT_TAG_SORT_MODE,
+    sortBranches,
+    sortTags,
+    type BranchSortMode,
+    type TagSortMode,
 } from '../../chrome/sorting'
 
 // Element types are derived from `LogInkContext` via indexed access so
@@ -202,52 +202,24 @@ export function useFilteredLists(
   filter: string | undefined,
   sorts: FilteredListSorts = {},
 ): FilteredLists {
-  const filteredBranchList = React.useMemo(
-    () => buildFilteredLists(context, filter, sorts).filteredBranchList,
-    [context.branches?.localBranches, filter, sorts.branchSort]
+  // Single computation per filter/data change — the old per-list memos
+  // each called buildFilteredLists (computing ALL 9 lists), meaning a
+  // filter keystroke did 81x the necessary work (#1365 item 3).
+  return React.useMemo(
+    () => buildFilteredLists(context, filter, sorts),
+    [
+      context.branches?.localBranches,
+      context.tags?.tags,
+      context.stashes?.stashes,
+      context.worktreeList?.worktrees,
+      context.reflog?.entries,
+      context.submodules?.entries,
+      context.remotes?.entries,
+      context.issueList?.issues,
+      context.pullRequestList?.pullRequests,
+      filter,
+      sorts.branchSort,
+      sorts.tagSort,
+    ]
   )
-  const filteredTagList = React.useMemo(
-    () => buildFilteredLists(context, filter, sorts).filteredTagList,
-    [context.tags?.tags, filter, sorts.tagSort]
-  )
-  const filteredStashList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredStashList,
-    [context.stashes?.stashes, filter]
-  )
-  const filteredWorktreeList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredWorktreeList,
-    [context.worktreeList?.worktrees, filter]
-  )
-  const filteredReflogList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredReflogList,
-    [context.reflog?.entries, filter]
-  )
-  const filteredSubmoduleList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredSubmoduleList,
-    [context.submodules?.entries, filter]
-  )
-  const filteredRemoteList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredRemoteList,
-    [context.remotes?.entries, filter]
-  )
-  const filteredIssueList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredIssueList,
-    [context.issueList?.issues, filter]
-  )
-  const filteredPullRequestTriageList = React.useMemo(
-    () => buildFilteredLists(context, filter).filteredPullRequestTriageList,
-    [context.pullRequestList?.pullRequests, filter]
-  )
-
-  return {
-    filteredBranchList,
-    filteredTagList,
-    filteredStashList,
-    filteredWorktreeList,
-    filteredReflogList,
-    filteredSubmoduleList,
-    filteredRemoteList,
-    filteredIssueList,
-    filteredPullRequestTriageList,
-  }
 }
