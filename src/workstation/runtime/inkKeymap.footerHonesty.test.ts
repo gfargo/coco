@@ -25,11 +25,11 @@ import { GitLogRow } from '../../commands/log/data'
 import { getLogInkInputEvents, LogInkInputContext, LogInkInputKey } from './inkInput'
 import { getLogInkFooterHints, GetLogInkFooterHintsOptions, LOG_INK_KEY_BINDINGS, LogInkCommandId } from './inkKeymap'
 import {
-  LogInkCompareRef,
-  LogInkState,
-  LogInkView,
-  applyLogInkAction,
-  createLogInkState,
+    LogInkCompareRef,
+    LogInkState,
+    LogInkView,
+    applyLogInkAction,
+    createLogInkState,
 } from './inkViewModel'
 
 const rows: GitLogRow[] = [
@@ -930,6 +930,18 @@ const GENERIC_CONTEXT_FIXTURES: Record<string, () => Fixture> = {
   compose: composeFixture,
   branches: branchesFixture,
   blame: blameFixture,
+  // #1447 registry backfill — per-view-context fixtures for the newly
+  // declared bindings.
+  stash: stashFixture,
+  tags: tagsFixture,
+  conflicts: conflictsFixture,
+  bisect: () => bisectFixture(true),
+  reflog: reflogFixture,
+  remotes: remotesFixture,
+  submodules: submodulesFixture,
+  'pull-request-triage': pullRequestTriageFixture,
+  issues: issuesFixture,
+  worktrees: worktreesFixture,
 }
 
 /**

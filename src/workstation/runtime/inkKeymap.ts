@@ -81,6 +81,36 @@ export type LogInkCommandId =
   | 'viewCreateTagHere'
   | 'viewChangelog'
   | 'yankClipboard'
+  // #1447 registry backfill — per-view-context command ids
+  | 'workflowApplyStash'
+  | 'workflowPopStash'
+  | 'workflowApplyStashIndex'
+  | 'workflowRenameStash'
+  | 'workflowStashBranch'
+  | 'workflowUndoDropStash'
+  | 'workflowPushTag'
+  | 'workflowDeleteRemoteTag'
+  | 'workflowResolveOurs'
+  | 'workflowResolveTheirs'
+  | 'workflowResolveStage'
+  | 'workflowContinueOperation'
+  | 'workflowBisectGood'
+  | 'workflowBisectBad'
+  | 'workflowBisectSkip'
+  | 'workflowBisectReset'
+  | 'workflowBisectRun'
+  | 'workflowCheckoutReflog'
+  | 'workflowRemoteAdd'
+  | 'workflowRemoteSetUrl'
+  | 'workflowRemoteRemove'
+  | 'workflowRemotePrune'
+  | 'workflowSubmoduleInit'
+  | 'workflowSubmoduleUpdate'
+  | 'workflowSubmoduleSync'
+  | 'workflowTriagePrCheckout'
+  | 'workflowTriagePrOpen'
+  | 'workflowTriageIssueOpen'
+  | 'workflowRemoveWorktreeAndBranch'
 
 export type LogInkBindingCategory =
   | 'essentials'
@@ -650,6 +680,224 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     label: 'changelog',
     description: 'Generate a changelog from the current view context.',
     contexts: ['history', 'branches'],
+  },
+  // ── #1447 registry backfill: per-view-context bindings ─────────────
+  // These views had imperative key dispatch in inkInput.ts but zero
+  // entries in this declarative table, making `g?` / `?` / `:` blind
+  // to them. Each entry matches the inkInput handler's per-view guard.
+  //
+  // ── Stash view ─────────────────────────────────────────────────────
+  {
+    id: 'workflowApplyStash',
+    keys: ['a'],
+    label: 'apply stash',
+    description: 'Apply the selected stash without removing it.',
+    contexts: ['stash'],
+  },
+  {
+    id: 'workflowPopStash',
+    keys: ['p'],
+    label: 'pop stash',
+    description: 'Apply the selected stash and remove it from the list.',
+    contexts: ['stash'],
+  },
+  {
+    id: 'workflowApplyStashIndex',
+    keys: ['A'],
+    label: 'apply (keep index)',
+    description: 'Apply the selected stash, reinstating the original index state.',
+    contexts: ['stash'],
+  },
+  {
+    id: 'workflowRenameStash',
+    keys: ['R'],
+    label: 'rename stash',
+    description: 'Change the message of the selected stash entry.',
+    contexts: ['stash'],
+  },
+  {
+    id: 'workflowStashBranch',
+    keys: ['b'],
+    label: 'branch from stash',
+    description: 'Create a branch from the selected stash and drop it.',
+    contexts: ['stash'],
+  },
+  {
+    id: 'workflowUndoDropStash',
+    keys: ['u'],
+    label: 'undo drop',
+    description: 'Recover the last dropped stash from this session.',
+    contexts: ['stash'],
+  },
+  // ── Tags view ──────────────────────────────────────────────────────
+  {
+    id: 'workflowPushTag',
+    keys: ['P'],
+    label: 'push tag',
+    description: 'Push the selected tag to origin.',
+    contexts: ['tags'],
+  },
+  {
+    id: 'workflowDeleteRemoteTag',
+    keys: ['R'],
+    label: 'delete remote tag',
+    description: 'Delete the selected tag from the remote after confirmation.',
+    contexts: ['tags'],
+  },
+  // ── Conflicts view ─────────────────────────────────────────────────
+  {
+    id: 'workflowResolveOurs',
+    keys: ['U'],
+    label: 'keep ours',
+    description: 'Resolve the selected conflict by keeping the current branch version.',
+    contexts: ['conflicts'],
+  },
+  {
+    id: 'workflowResolveTheirs',
+    keys: ['u'],
+    label: 'keep theirs',
+    description: 'Resolve the selected conflict by keeping the incoming version.',
+    contexts: ['conflicts'],
+  },
+  {
+    id: 'workflowResolveStage',
+    keys: ['s'],
+    label: 'mark resolved',
+    description: 'Mark the selected conflict as resolved by staging the file as-is.',
+    contexts: ['conflicts'],
+  },
+  {
+    id: 'workflowContinueOperation',
+    keys: ['C'],
+    label: 'continue',
+    description: 'Continue the in-progress git operation (rebase/merge/cherry-pick --continue).',
+    contexts: ['conflicts'],
+  },
+  // ── Bisect view ────────────────────────────────────────────────────
+  {
+    id: 'workflowBisectGood',
+    keys: ['y'],
+    label: 'mark good',
+    description: 'Mark the current bisect candidate as good.',
+    contexts: ['bisect'],
+  },
+  {
+    id: 'workflowBisectBad',
+    keys: ['b'],
+    label: 'mark bad',
+    description: 'Mark the current bisect candidate as bad.',
+    contexts: ['bisect'],
+  },
+  {
+    id: 'workflowBisectSkip',
+    keys: ['s'],
+    label: 'skip / start',
+    description: 'Skip the current candidate (active bisect) or start a new bisect wizard (empty state).',
+    contexts: ['bisect'],
+  },
+  {
+    id: 'workflowBisectReset',
+    keys: ['x'],
+    label: 'reset bisect',
+    description: 'End the bisect session and restore HEAD after confirmation.',
+    contexts: ['bisect'],
+  },
+  {
+    id: 'workflowBisectRun',
+    keys: ['R'],
+    label: 'bisect run',
+    description: 'Drive the bisect via `git bisect run sh -c <command>`.',
+    contexts: ['bisect'],
+  },
+  // ── Reflog view ────────────────────────────────────────────────────
+  {
+    id: 'workflowCheckoutReflog',
+    keys: ['c'],
+    label: 'checkout entry',
+    description: 'Check out the commit at the cursored reflog entry (detaches HEAD).',
+    contexts: ['reflog'],
+  },
+  // ── Remotes view ───────────────────────────────────────────────────
+  {
+    id: 'workflowRemoteAdd',
+    keys: ['a'],
+    label: 'add remote',
+    description: 'Add a new remote (prompts for name and URL).',
+    contexts: ['remotes'],
+  },
+  {
+    id: 'workflowRemoteSetUrl',
+    keys: ['e'],
+    label: 'set URL',
+    description: 'Repoint the cursored remote at a new URL.',
+    contexts: ['remotes'],
+  },
+  {
+    id: 'workflowRemoteRemove',
+    keys: ['x'],
+    label: 'remove remote',
+    description: 'Remove the cursored remote after confirmation.',
+    contexts: ['remotes'],
+  },
+  {
+    id: 'workflowRemotePrune',
+    keys: ['p'],
+    label: 'prune remote',
+    description: 'Prune stale remote-tracking refs for the cursored remote.',
+    contexts: ['remotes'],
+  },
+  // ── Submodules view ────────────────────────────────────────────────
+  {
+    id: 'workflowSubmoduleInit',
+    keys: ['i'],
+    label: 'init',
+    description: 'Register the cursored submodule in .git/config.',
+    contexts: ['submodules'],
+  },
+  {
+    id: 'workflowSubmoduleUpdate',
+    keys: ['u'],
+    label: 'update',
+    description: 'Fetch and check out the cursored submodule at the pinned commit.',
+    contexts: ['submodules'],
+  },
+  {
+    id: 'workflowSubmoduleSync',
+    keys: ['s'],
+    label: 'sync URL',
+    description: 'Re-sync the cursored submodule remote URL from .gitmodules.',
+    contexts: ['submodules'],
+  },
+  // ── Pull-request triage view ───────────────────────────────────────
+  {
+    id: 'workflowTriagePrCheckout',
+    keys: ['C'],
+    label: 'checkout PR',
+    description: 'Fetch the cursored PR branch and switch onto it.',
+    contexts: ['pull-request-triage'],
+  },
+  {
+    id: 'workflowTriagePrOpen',
+    keys: ['O'],
+    label: 'open in browser',
+    description: 'Open the cursored pull request in the default browser.',
+    contexts: ['pull-request-triage'],
+  },
+  // ── Issues triage view ─────────────────────────────────────────────
+  {
+    id: 'workflowTriageIssueOpen',
+    keys: ['O'],
+    label: 'open in browser',
+    description: 'Open the cursored issue in the default browser.',
+    contexts: ['issues'],
+  },
+  // ── Worktrees view ─────────────────────────────────────────────────
+  {
+    id: 'workflowRemoveWorktreeAndBranch',
+    keys: ['D'],
+    label: 'remove + delete branch',
+    description: 'Remove the selected worktree and delete its tracking branch after confirmation.',
+    contexts: ['worktrees'],
   },
   {
     id: 'quit',
