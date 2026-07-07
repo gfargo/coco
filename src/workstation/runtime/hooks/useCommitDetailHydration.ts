@@ -94,10 +94,10 @@ export type UseCommitDetailHydrationDeps = {
 }
 
 /**
- * Issues the commit-detail loader effect, in its original `app.ts` position.
- * Reproduced verbatim — same `!selected` guard, same `active` cancellation
- * flag, same `safe()` wrapper, same `setDetailLoading` toggles, same
- * `[git, selected?.hash]` dependency array.
+ * Issues the commit-detail loader effect with debouncing and a bounded
+ * hash-keyed cache (#1365 item 2). Rapid j/k cursor moves reset a 120ms
+ * timer so the subprocess never fires; previously-fetched commits render
+ * instantly from cache without a loading flash.
  */
 export function useCommitDetailHydration(
   React: typeof ReactTypes,
@@ -105,33 +105,52 @@ export function useCommitDetailHydration(
 ): void {
   const { git, selected, setDetail, setDetailLoading } = deps
 
+  // Bounded LRU cache keyed by commit hash. Evicts oldest when full.
+  const cacheRef = React.useRef(new Map<string, GitCommitDetail>())
+  const CACHE_MAX = 100
+
   React.useEffect(() => {
     let active = true
 
-    async function loadDetail(): Promise<void> {
-      if (!selected) {
-        setDetail(undefined)
-        // Reset the loading flag too: if the selection clears while a fetch is
-        // in flight, the cleanup flips `active` false so the in-flight branch
-        // below never runs `setDetailLoading(false)` — without this the
-        // inspector is left showing "Loading commit details…" indefinitely.
-        setDetailLoading(false)
-        return
-      }
-
-      setDetailLoading(true)
-      const nextDetail = await safe(getCommitDetail(git, selected.hash))
-
-      if (active) {
-        setDetail(nextDetail)
-        setDetailLoading(false)
-      }
+    if (!selected) {
+      setDetail(undefined)
+      setDetailLoading(false)
+      return
     }
 
-    void loadDetail()
+    // Cache hit — render instantly, no loading flash.
+    const cached = cacheRef.current.get(selected.hash)
+    if (cached) {
+      setDetail(cached)
+      setDetailLoading(false)
+      return
+    }
+
+    // Debounce: wait 120ms before spawning the subprocess.
+    // Rapid j/k resets the timer so we never fetch mid-scroll.
+    setDetailLoading(true)
+    const timer = setTimeout(async () => {
+      const nextDetail = await safe(getCommitDetail(git, selected.hash))
+
+      if (active && nextDetail) {
+        // Store in cache with FIFO eviction.
+        const cache = cacheRef.current
+        if (cache.size >= CACHE_MAX) {
+          const oldest = cache.keys().next().value
+          if (oldest !== undefined) cache.delete(oldest)
+        }
+        cache.set(selected.hash, nextDetail)
+        setDetail(nextDetail)
+        setDetailLoading(false)
+      } else if (active) {
+        setDetail(undefined)
+        setDetailLoading(false)
+      }
+    }, 120)
 
     return () => {
       active = false
+      clearTimeout(timer)
     }
   }, [git, selected?.hash])
 }

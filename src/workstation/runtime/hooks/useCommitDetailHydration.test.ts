@@ -1,7 +1,7 @@
 import { getCommitDetail } from '../../../commands/log/data'
 import {
-  useCommitDetailHydration,
-  useCommitDetailState,
+    useCommitDetailHydration,
+    useCommitDetailState,
 } from './useCommitDetailHydration'
 
 /**
@@ -24,24 +24,37 @@ const getCommitDetailMock = getCommitDetail as jest.MockedFunction<
 >
 
 /** Flush pending microtasks so the effect's awaited `loadDetail` settles. */
-const flush = (): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, 0))
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 10; i++) await Promise.resolve()
+}
+
+/** Advance fake timers + flush microtasks (for debounced effects). */
+const advanceAndFlush = async (ms: number): Promise<void> => {
+  jest.advanceTimersByTime(ms)
+  await flush()
+}
 
 type EffectFn = () => void | (() => void)
 
 /**
  * Records `useEffect` callbacks so the test can invoke them explicitly,
- * mirroring how React would fire them after commit. The hydration hook only
- * reaches for `useEffect`; the state hook only reaches for `useState`.
+ * mirroring how React would fire them after commit. The hydration hook
+ * reaches for `useEffect` and `useRef`; the state hook only for `useState`.
  */
 function makeReact(): {
   React: typeof import('react')
   runEffect: () => void | (() => void)
 } {
   const effects: EffectFn[] = []
+  const refs: Array<{ current: unknown }> = []
   const React = {
     useEffect: (fn: EffectFn) => {
       effects.push(fn)
+    },
+    useRef: (init: unknown) => {
+      const ref = { current: init }
+      refs.push(ref)
+      return ref
     },
   } as unknown as typeof import('react')
   return {
@@ -59,6 +72,11 @@ const git = {} as Parameters<typeof useCommitDetailHydration>[1]['git']
 
 beforeEach(() => {
   getCommitDetailMock.mockReset()
+  jest.useFakeTimers()
+})
+
+afterEach(() => {
+  jest.useRealTimers()
 })
 
 describe('useCommitDetailState', () => {
@@ -101,7 +119,7 @@ describe('useCommitDetailHydration', () => {
     expect(getCommitDetailMock).not.toHaveBeenCalled()
   })
 
-  it('toggles loading, fetches the cursored commit, then stores the detail', async () => {
+  it('debounces 120ms, then fetches the cursored commit and stores the detail', async () => {
     const detail = { hash: 'abc123', files: [] }
     getCommitDetailMock.mockResolvedValue(detail as never)
     const setDetail = jest.fn()
@@ -116,22 +134,21 @@ describe('useCommitDetailHydration', () => {
     })
     runEffect()
 
-    // Loading flips true synchronously, before the await.
+    // Loading flips true synchronously (before debounce fires).
     expect(setDetailLoading).toHaveBeenCalledWith(true)
-    await flush()
+    // But fetch hasn't fired yet (debounce hasn't elapsed).
+    expect(getCommitDetailMock).not.toHaveBeenCalled()
+
+    // Advance past the 120ms debounce + flush the async.
+    await advanceAndFlush(150)
 
     expect(getCommitDetailMock).toHaveBeenCalledWith(git, 'abc123')
     expect(setDetail).toHaveBeenCalledWith(detail)
     expect(setDetailLoading).toHaveBeenLastCalledWith(false)
   })
 
-  it('suppresses a stale write when the effect is cleaned up before the fetch resolves', async () => {
-    let resolveDetail: (value: unknown) => void = () => {}
-    getCommitDetailMock.mockReturnValue(
-      new Promise((resolve) => {
-        resolveDetail = resolve
-      }) as never,
-    )
+  it('cancels the debounced fetch when the effect is cleaned up before it fires', async () => {
+    getCommitDetailMock.mockResolvedValue({ hash: 'def456', files: [] } as never)
     const setDetail = jest.fn()
     const setDetailLoading = jest.fn()
     const { React, runEffect } = makeReact()
@@ -143,11 +160,14 @@ describe('useCommitDetailHydration', () => {
       setDetailLoading,
     })
     const cleanup = runEffect() as () => void
-    cleanup()
-    resolveDetail({ hash: 'def456', files: [] })
-    await flush()
 
-    // active === false, so neither the detail nor the loading-false write lands.
+    // Cleanup fires before the debounce elapses (simulating rapid j/k).
+    cleanup()
+    await advanceAndFlush(150)
+
+    // active === false + timer cleared, so the fetch never fires.
+    expect(getCommitDetailMock).not.toHaveBeenCalled()
+    // Only the initial setDetailLoading(true) landed.
     expect(setDetail).not.toHaveBeenCalled()
     expect(setDetailLoading).toHaveBeenCalledTimes(1)
     expect(setDetailLoading).toHaveBeenCalledWith(true)
