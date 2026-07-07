@@ -13,7 +13,7 @@ describe('lane palette helpers', () => {
     const theme = createLogInkTheme({ preset: 'default', env: {} })
     const palette = getLanePalette(theme)
 
-    expect(palette.length).toBeGreaterThanOrEqual(6)
+    expect(palette.length).toBeGreaterThanOrEqual(4)
     // Default uses ANSI named colors so 16-color terminals render them
     // faithfully without needing truecolor support.
     expect(palette[0]).toBe('cyan')

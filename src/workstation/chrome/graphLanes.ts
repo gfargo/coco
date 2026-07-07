@@ -14,25 +14,21 @@ export type LaneSegment = {
 }
 
 /**
- * Theme-aware lane palette. Default uses bright ANSI named colors that
- * render reliably on 16-color terminals; catppuccin / gruvbox lift
- * accent hues from their respective palettes so the graph stays
- * coherent with the surrounding chrome.
- *
- * Selecting 8 colors gives enough variety to distinguish lanes in
- * practice (most repos peak at 3-4 simultaneous lanes); the modulo
- * lookup wraps cleanly for the rare case of more.
+ * Theme-aware lane palette. Capped at 5 muted hues that exclude the
+ * semantic trio (red/green/yellow) so lanes don't compete with diff
+ * additions, commit status, or warning signals (#1368). Most repos
+ * peak at 3-4 simultaneous lanes; the modulo wraps cleanly for more.
  */
 const DEFAULT_LANE_PALETTE: readonly string[] = [
-  'cyan', 'magenta', 'yellow', 'green', 'blue', 'red', 'cyanBright', 'magentaBright',
+  'cyan', 'magenta', 'blue', 'cyanBright', 'magentaBright',
 ]
 
 const CATPPUCCIN_LANE_PALETTE: readonly string[] = [
-  '#89b4fa', '#f5c2e7', '#f9e2af', '#a6e3a1', '#cba6f7', '#fab387', '#94e2d5', '#f5e0dc',
+  '#89b4fa', '#f5c2e7', '#cba6f7', '#94e2d5', '#b4befe',
 ]
 
 const GRUVBOX_LANE_PALETTE: readonly string[] = [
-  '#83a598', '#d3869b', '#fabd2f', '#b8bb26', '#d65d0e', '#fb4934', '#8ec07c', '#fe8019',
+  '#83a598', '#d3869b', '#8ec07c', '#d65d0e', '#458588',
 ]
 
 export function getLanePalette(theme: LogInkTheme): readonly string[] {
