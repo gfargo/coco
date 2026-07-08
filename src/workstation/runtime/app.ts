@@ -52,150 +52,19 @@
  */
 
 import type * as ReactTypes from 'react'
-import { SimpleGit } from 'simple-git'
-import { getBranchOverview } from '../../git/branchData'
-import { getLfsAttributeStatus } from '../../git/lfsAttributes'
-import { getSubmoduleOverview } from '../../git/submoduleData'
-import { getRemoteOverview } from '../../git/remoteData'
-import { LOG_INTERACTIVE_DEFAULT_LIMIT, getLogRows } from '../../commands/log/data'
-import { buildHistoryRefetchArgv } from './historyRefetchResolver'
-import { LogInkContextKey, createLogInkContextStatus, mergeRefreshedContext, updateLogInkContextStatus } from '../chrome/context'
-import { createLogInkTheme, type LogInkThemePreset } from '../chrome/theme'
 import { saveThemePreset } from '../chrome/themePersistence'
-import { PromotedSelectionsSnapshot, rectifyPromotedSelectionIndex } from '../chrome/selectionRectify'
-import { sortBranches, sortTags } from '../chrome/sorting'
 import { LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout } from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
-import { LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getThemePickerSelection } from '../../workstation/runtime/inkViewModel'
-import { getGitOperationOverview } from '../../git/operationData'
-import { getProviderOverview } from '../../git/providerData'
-import { getForgeActions, getForgePullRequestOverview } from '../../git/forgeActions'
-import { getStashCommitHashes, getStashOverview, parseStashDiffFiles } from '../../git/stashData'
-import { getWorktreeOverview } from '../../git/statusData'
-import { getBisectStatus } from '../../git/bisectData'
-import { getReflogOverview } from '../../git/reflogData'
-import { getTagOverview } from '../../git/tagData'
-import { getWorktreeListOverview } from '../../git/worktreeData'
+import { LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit } from '../../workstation/runtime/inkViewModel'
+import { parseStashDiffFiles } from '../../git/stashData'
 
 
-async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
-  try {
-    return await promise
-  } catch {
-    return undefined
-  }
-}
-
-async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
-  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules, remotes] =
-    await Promise.all([
-      safe(getBranchOverview(git)),
-      safe(getForgePullRequestOverview(git)),
-      safe(getTagOverview(git)),
-      safe(getWorktreeOverview(git)),
-      safe(getStashOverview(git)),
-      safe(getWorktreeListOverview(git)),
-      safe(getGitOperationOverview(git)),
-      safe(getProviderOverview(git)),
-      safe(getReflogOverview(git)),
-      safe(getBisectStatus(git)),
-      safe(getLfsAttributeStatus(git)),
-      safe(getSubmoduleOverview(git)),
-      safe(getRemoteOverview(git)),
-    ])
-
-  return {
-    bisect,
-    branches,
-    lfs,
-    operation,
-    provider,
-    pullRequest,
-    reflog,
-    remotes,
-    stashes,
-    submodules,
-    tags,
-    worktree,
-    worktreeList,
-  }
-}
-
-function loadLogInkContextEntries(git: SimpleGit): Array<{
-  key: LogInkContextKey
-  load: () => Promise<LogInkContext[LogInkContextKey] | undefined>
-}> {
-  // Boot-time per-key fetches. Each load() runs in parallel from
-  // `LogInkApp`'s mount effect. `pullRequest` is intentionally
-  // omitted (#808) — its `gh pr view --json` call duplicates the
-  // slim PR fetch already happening inside `getProviderOverview`,
-  // and the only consumer that needs the *full* enriched response is
-  // the dedicated PR view (`g p`). Lazy-loaded by a separate effect
-  // when the user actually navigates there. Header / yank / workflow
-  // paths read the slim version off `provider.currentPullRequest` so
-  // the chrome stays populated immediately on boot.
-  return [
-    {
-      key: 'branches',
-      load: () => safe(getBranchOverview(git)),
-    },
-    {
-      key: 'tags',
-      load: () => safe(getTagOverview(git)),
-    },
-    {
-      key: 'reflog',
-      load: () => safe(getReflogOverview(git)),
-    },
-    {
-      key: 'bisect',
-      load: () => safe(getBisectStatus(git)),
-    },
-    {
-      key: 'lfs',
-      load: () => safe(getLfsAttributeStatus(git)),
-    },
-    {
-      key: 'submodules',
-      load: () => safe(getSubmoduleOverview(git)),
-    },
-    {
-      key: 'remotes',
-      load: () => safe(getRemoteOverview(git)),
-    },
-    {
-      key: 'worktree',
-      load: () => safe(getWorktreeOverview(git)),
-    },
-    {
-      key: 'stashes',
-      load: () => safe(getStashOverview(git)),
-    },
-    {
-      key: 'worktreeList',
-      load: () => safe(getWorktreeListOverview(git)),
-    },
-    {
-      key: 'operation',
-      load: () => safe(getGitOperationOverview(git)),
-    },
-    {
-      key: 'provider',
-      load: () => safe(getProviderOverview(git)),
-    },
-  ]
-}
-// Entry-point types (LogInkStreams, LogInkOptions) and the orchestration
-// types (DynamicImport, LogInkRuntime) stay in inkRuntime.ts since they're
-// only needed by startInkInteractiveLog.
-
-import type { LogInkComponentDeps, LogInkContext, SurfaceRenderContext } from './types'
-import type { LogArgv } from '../../commands/log/config'
+import type { LogInkComponentDeps, SurfaceRenderContext } from './types'
 
 // Promoted-list filter helpers shared by every promoted surface. Live in
 // runtime/ rather than chrome/ because they're tightly coupled to the
 // LogInkState filter-mode shape.
-import { matchesPromotedFilter } from '../runtime/promotedFilter'
+import { enrichFilterActionWithRectification } from './filterRectification'
 import { useFilteredLists } from './hooks/buildFilteredLists'
 import { useRebasePlanActions } from './hooks/useRebasePlanActions'
 import { useConflictResolutionActions } from './hooks/useConflictResolutionActions'
@@ -213,8 +82,7 @@ import { useSpinnerFrame } from './hooks/useSpinnerFrame'
 import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
 import { useStatusAutoDismiss } from './hooks/useStatusAutoDismiss'
 import { useHistoryCursorSync } from './hooks/useHistoryCursorSync'
-import { isStaleFrameResolve } from './loadMoreResolver'
-import { computeHasMoreCommits, useHistoryPaginationState, useLoadMoreHistory } from './hooks/useLoadMoreHistory'
+import { useHistoryPaginationState, useLoadMoreHistory } from './hooks/useLoadMoreHistory'
 import { useHistoryRefetch } from './hooks/useHistoryRefetch'
 import { useIssueTriageHydration, usePullRequestTriageHydration } from './hooks/useTriageListHydration'
 import { useDeferredBootLoad } from './hooks/useDeferredBootLoad'
@@ -231,6 +99,10 @@ import { useYankActions } from './hooks/useYankActions'
 import { useChangelogActions } from './hooks/useChangelogActions'
 import { useWorkflowAction } from './hooks/useWorkflowAction'
 import { useInputHandler } from './hooks/useInputHandler'
+import { useThemeState } from './hooks/useThemeState'
+import { useContextRefresh, loadLogInkContextEntries } from './hooks/useContextRefresh'
+import { useHistoryRefresh } from './hooks/useHistoryRefresh'
+import { useForgeAdapter } from './hooks/useForgeAdapter'
 
 // Chrome + overlay + dispatcher renderers extracted in phase 5a.7. The
 // per-surface and detail renderers are consumed internally by mainPanel /
@@ -243,127 +115,11 @@ import { renderDetailPanel } from '../runtime/detailPanel'
 import { renderOnboardingOverlay } from '../runtime/overlays'
 import { getLogInkRuntimeContext, type LogInkRuntimeContextValue } from '../runtime/runtimeContext'
 
-function predictNextFilter(
-  action: Parameters<typeof applyLogInkAction>[1],
-  currentFilter: string
-): string | undefined {
-  switch (action.type) {
-    case 'appendFilter':
-      return `${currentFilter}${action.value}`
-    case 'backspaceFilter':
-      return currentFilter.slice(0, -1)
-    case 'clearFilter':
-    case 'clearFilterText':
-      return ''
-    case 'setFilter':
-      return action.value
-    default:
-      return undefined
-  }
-}
-
-/**
- * Build the post-filter selection snapshot for branches / tags / stash so
- * the reducer can preserve the cursor when the previously-selected item is
- * still in the filtered result. Identifies items by a single key per view
- * (branch shortName, tag name, stash ref) — the same matchesPromotedFilter
- * the surfaces use covers the multi-field haystacks.
- */
-function computePromotedSelectionsSnapshot(
-  state: LogInkState,
-  context: LogInkContext,
-  nextFilter: string
-): PromotedSelectionsSnapshot {
-  // Sorted with the surfaces' comparators — the cursor indexes the
-  // SORTED lists, so rectifying in raw ref order preserved the wrong row.
-  const allBranches = sortBranches(context.branches?.localBranches || [], state.branchSort)
-  const filteredBranches = nextFilter
-    ? allBranches.filter((branch) =>
-      matchesPromotedFilter([branch.shortName, branch.upstream || ''], nextFilter))
-    : allBranches
-  const currentBranches = state.filter
-    ? allBranches.filter((branch) =>
-      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter))
-    : allBranches
-  const previousBranchKey = currentBranches[state.selectedBranchIndex]?.shortName
-  const branchIndex = rectifyPromotedSelectionIndex(
-    filteredBranches.map((branch) => branch.shortName),
-    previousBranchKey
-  )
-
-  const allTags = sortTags(context.tags?.tags || [], state.tagSort)
-  const filteredTags = nextFilter
-    ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], nextFilter))
-    : allTags
-  const currentTags = state.filter
-    ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
-    : allTags
-  const previousTagKey = currentTags[state.selectedTagIndex]?.name
-  const tagIndex = rectifyPromotedSelectionIndex(
-    filteredTags.map((tag) => tag.name),
-    previousTagKey
-  )
-
-  const allStashes = context.stashes?.stashes || []
-  const filteredStashes = nextFilter
-    ? allStashes.filter((stash) => matchesPromotedFilter([stash.ref, stash.message], nextFilter))
-    : allStashes
-  const currentStashes = state.filter
-    ? allStashes.filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
-    : allStashes
-  const previousStashKey = currentStashes[state.selectedStashIndex]?.ref
-  const stashIndex = rectifyPromotedSelectionIndex(
-    filteredStashes.map((stash) => stash.ref),
-    previousStashKey
-  )
-
-  return { branchIndex, tagIndex, stashIndex }
-}
-
-function enrichFilterActionWithRectification(
-  action: Parameters<typeof applyLogInkAction>[1],
-  state: LogInkState,
-  context: LogInkContext
-): Parameters<typeof applyLogInkAction>[1] {
-  const nextFilter = predictNextFilter(action, state.filter)
-  if (nextFilter === undefined) {
-    return action
-  }
-  const promotedSelections = computePromotedSelectionsSnapshot(state, context, nextFilter)
-  switch (action.type) {
-    case 'appendFilter':
-    case 'setFilter':
-      return { ...action, promotedSelections }
-    case 'backspaceFilter':
-    case 'clearFilter':
-    case 'clearFilterText':
-      return { ...action, promotedSelections }
-    default:
-      return action
-  }
-}
-
 export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, syntaxHighlightEnabled, theme: baseTheme, themeConfig } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
 
-  // Theme picker (gC) — live preview + apply. `themePreviewPreset` follows
-  // the picker cursor while the overlay is open; `themeSessionPreset` is the
-  // applied choice that survives close. The effective theme is rebuilt from
-  // the original `themeConfig` so ascii/border/noColor + truecolor-downgrade
-  // semantics are preserved; when neither override is set we use the static
-  // `baseTheme` unchanged (so behavior is identical until the picker is used).
-  const [themePreviewPreset, setThemePreviewPreset] = React.useState<LogInkThemePreset | undefined>(undefined)
-  const [themeSessionPreset, setThemeSessionPreset] = React.useState<LogInkThemePreset | undefined>(undefined)
-  const effectiveThemePreset = themePreviewPreset ?? themeSessionPreset
-  const theme = React.useMemo(
-    () =>
-      effectiveThemePreset
-        ? createLogInkTheme({ ...themeConfig, preset: effectiveThemePreset })
-        : baseTheme,
-    [effectiveThemePreset, themeConfig, baseTheme]
-  )
   const { exit } = useApp()
   const windowSize = useWindowSize()
   // Resume-repaint tick (SIGCONT → `fg`), owned by `useResumeTick` (app.ts
@@ -393,17 +149,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     })
   )
 
-  // Theme picker live preview: keep `themePreviewPreset` in sync with the
-  // preset under the picker cursor while the overlay is open; clear it when
-  // the overlay closes so the theme reverts to the applied session preset
-  // (or the original config theme). The derived-theme `useMemo` above does
-  // the actual re-render from this state.
-  const themePickerSelection = state.showThemePicker
-    ? getThemePickerSelection(state)
-    : undefined
-  React.useEffect(() => {
-    setThemePreviewPreset(state.showThemePicker ? themePickerSelection : undefined)
-  }, [state.showThemePicker, themePickerSelection])
+  // Theme state management (gC — live preview + apply), owned by
+  // `useThemeState` (#1418 app.ts decomposition). The hook issues the two
+  // `useState`, the effective-theme `useMemo`, and the picker-sync `useEffect`
+  // in the same order the inline cluster used.
+  const { theme, setThemeSessionPreset } = useThemeState(React, {
+    baseTheme,
+    themeConfig,
+    showThemePicker: state.showThemePicker,
+    state,
+  })
 
   // Nested-repo runtime stack (#931). Each frame holds the live
   // `SimpleGit`, the loaded `LogInkContext`, and the per-key load
@@ -665,189 +420,36 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     mountedRef,
   })
 
-  /**
-   * Re-fetch the head of the commit log and replace `state.rows`.
-   *
-   * The boot loader fires `replaceRows` once on app mount. After
-   * that, NOTHING in the workstation refreshes `state.rows` —
-   * `refreshContext` updates the metadata context (branches, tags,
-   * worktree) but not the commits themselves. The result is that
-   * workstation-side operations that create commits (split-apply,
-   * regular commit, future amend / rebase flows) leave the history
-   * view showing a stale log. The user navigates to `gh`, sees the
-   * pre-operation commits, and concludes the operation didn't run.
-   *
-   * Call this after any operation that creates or rewrites history
-   * locally so the history view reflects reality.
-   *
-   * Best-effort — a failed re-fetch keeps the existing rows on
-   * screen (stale but better than blank). Silent: doesn't surface
-   * a "refreshing…" status message since the caller already owns
-   * the user-facing status copy for whatever just happened.
-   */
-  const refreshHistoryRows = React.useCallback(async () => {
-    try {
-      // #1384 — capture the repo-frame depth BEFORE the awaits (the
-      // same discipline as refreshContext's #994 tag below). The
-      // resolve drops when the frame stack changed mid-flight: this
-      // callback's `git` belongs to the frame it was created for, so
-      // a late `replaceRows` would swap that repo's commits into
-      // whichever frame is active now.
-      const issuedAtDepth = repoFrameDepthRef.current
-      // Same single-source argv derivation as the merged history
-      // refetch effect (#1385) — graph mode AND server-side filter —
-      // so a post-operation refresh can never swap in rows fetched
-      // with a different topology than the one on screen. The bare
-      // fetch-args fallback preserves the old behavior for callers
-      // that mounted without a logArgv (non-interactive embeds).
-      const fetchArgs = state.historyFetchArgs
-      const mergedArgv: LogArgv = logArgv
-        ? buildHistoryRefetchArgv(logArgv, state.fullGraph, fetchArgs)
-        : ({
-            ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
-            ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
-          } as LogArgv)
-      // Stash commits as graph roots so post-operation refreshes
-      // keep the same rich graph the boot loader assembled. Without
-      // this, every commit / split-apply / etc. would drop stash
-      // anchors and the cursor-syncs-history effect would degrade
-      // back to "tip not in loaded window" for older stashes.
-      const stashHashes = await getStashCommitHashes(git).catch(() => [])
-      const fresh = await getLogRows(git, mergedArgv, {
-        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
-        extraRefs: stashHashes,
-      })
-      const staleFrame = isStaleFrameResolve({
-        mounted: mountedRef.current,
-        issuedAtDepth,
-        currentDepth: repoFrameDepthRef.current,
-      })
-      if (!staleFrame && fresh) {
-        dispatch({ type: 'replaceRows', rows: fresh })
-        // Re-arm pagination from the fresh window (#1337): the refresh
-        // truncates the loaded rows back to one page, so a user who had
-        // paged to the end (`hasMoreCommits === false`) must be able to
-        // page back down — otherwise deep history vanishes for the
-        // session after any history-mutating workflow.
-        setHasMoreCommits(computeHasMoreCommits(logArgv, fresh))
-      }
-    } catch { /* ignore — stale rows beat blank rows */ }
-  }, [dispatch, git, logArgv, setHasMoreCommits, state.historyFetchArgs, state.fullGraph])
+  // History refresh callback (#1418 app.ts decomposition). Re-fetches the
+  // head of the commit log after any operation that creates or rewrites
+  // history locally. Owned by `useHistoryRefresh`.
+  const { refreshHistoryRows } = useHistoryRefresh(React, {
+    git,
+    logArgv,
+    dispatch,
+    mountedRef,
+    repoFrameDepthRef,
+    setHasMoreCommits,
+    fullGraph: state.fullGraph,
+    historyFetchArgs: state.historyFetchArgs,
+  })
 
-  // #1385 — per-frame monotonic request ids for the two context
-  // refreshers below. Frame-tagging (#994) pins each refresh's WRITE to
-  // the frame it was issued from, but nothing sequenced two overlapping
-  // refreshes on the SAME frame: a watcher-triggered silent refresh and
-  // a manual `r` could resolve out of order, and the earlier-started
-  // 13-way Promise.all batch — resolving last — replaced the fresher
-  // context wholesale (e.g. a deleted branch reappearing until the next
-  // event). Each call claims the next id for its frame before awaiting
-  // and drops its resolve if a newer claim exists by the time it lands.
-  const refreshContextRequestRef = React.useRef<Record<number, number>>({})
-  const refreshWorktreeRequestRef = React.useRef<Record<number, number>>({})
-
-  const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
-    // Loud refresh (manual `r`): flip everything to 'loading' so the user
-    // sees the surfaces clear, then settle to 'ready' on completion.
-    // Silent refresh (fs.watch trigger): keep the existing data on screen
-    // (stale-while-revalidate) and quietly swap it in once the new fetch
-    // resolves — avoids the every-second flicker the watcher would
-    // otherwise produce on busy repos.
-    //
-    // #994 — capture the depth this refresh was issued from BEFORE
-    // the await. The callback closure also captured `git` from the
-    // same render, so they're consistent: when the user drills into
-    // a submodule mid-await, the resolved data still lands on the
-    // parent frame (the one whose `git` was used for the fetch),
-    // not on the freshly-pushed submodule frame.
-    const issuedAtDepth = runtimes.length - 1
-    const requestId = (refreshContextRequestRef.current[issuedAtDepth] ?? 0) + 1
-    refreshContextRequestRef.current[issuedAtDepth] = requestId
-    if (!options.silent) {
-      dispatch({ type: 'setStatus', value: 'refreshing repository context' })
-      setContextStatus(createLogInkContextStatus('loading'), issuedAtDepth)
-    }
-    const next = await loadLogInkContext(git)
-    // #1385 — a newer refresh was issued for this frame while ours was
-    // in flight; its snapshot is fresher than ours, so drop this one
-    // (the newer request owns the 'ready' flip and the status line).
-    if (refreshContextRequestRef.current[issuedAtDepth] !== requestId) {
-      return
-    }
-    // OSS-452 — merge, don't replace: `next` only carries the boot-fetched
-    // keys `loadLogInkContext` owns. A wholesale replace silently wiped
-    // lazily-loaded slices (`pullRequestList`, `issueList`, per-item detail
-    // caches) on every refresh, including the fs-watcher's silent ones,
-    // which degraded the PR-diff view mid-read (see mergeRefreshedContext).
-    setContext((current) => mergeRefreshedContext(current, next), issuedAtDepth)
-    setContextStatus(createLogInkContextStatus('ready'), issuedAtDepth)
-    // Force the PR-diff hydration effect to re-evaluate even though
-    // `pullRequestList`'s reference is now preserved — otherwise a failed
-    // `gh pr diff` fetch's `r`-to-retry goes inert after the first refresh.
-    setPrDiffRefreshToken((token) => token + 1)
-    if (!options.silent) {
-      dispatch({ type: 'setStatus', value: 'repository context refreshed' })
-    }
-  }, [dispatch, git, runtimes.length, setContext, setContextStatus])
-
-  const refreshWorktreeContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
-    // #994 — same frame-tagging as refreshContext above. Worktree
-    // loads are usually fast but still race-prone on slow disks.
-    const issuedAtDepth = runtimes.length - 1
-    // #1385 — same per-frame sequencing as refreshContext above.
-    const requestId = (refreshWorktreeRequestRef.current[issuedAtDepth] ?? 0) + 1
-    refreshWorktreeRequestRef.current[issuedAtDepth] = requestId
-    if (!options.silent) {
-      setContextStatus(
-        (current) => updateLogInkContextStatus(current, 'worktree', 'loading'),
-        issuedAtDepth,
-      )
-    }
-    const worktree = await safe(getWorktreeOverview(git))
-
-    // #1385 — a newer worktree refresh was issued for this frame while
-    // ours was in flight. Skip the context write (the newer request's
-    // snapshot is fresher) but still return OUR overview: callers await
-    // this function for the result of the refresh they themselves
-    // issued, and that contract holds regardless of who writes the
-    // shared context.
-    if (refreshWorktreeRequestRef.current[issuedAtDepth] !== requestId) {
-      return worktree
-    }
-
-    setContext(
-      (current) => ({
-        ...current,
-        worktree,
-        // Drop the blame cache (#0.71): staging / unstaging / reverting
-        // changes the working-tree contents, so any cached attribution
-        // (especially the "staged" not-yet-committed lines) is now
-        // potentially stale. Re-opening blame re-hydrates from the
-        // fresh tree.
-        blameByPath: undefined,
-        // Drop the file-history cache on worktree refresh for the same
-        // reason: a new commit changes the file log, so stale entries
-        // should be re-fetched when the view is re-opened.
-        fileHistoryByPath: undefined,
-      }),
-      issuedAtDepth,
-    )
-    setContextStatus(
-      (current) => updateLogInkContextStatus(current, 'worktree', 'ready'),
-      issuedAtDepth,
-    )
-    // Returned so callers needing the *fresh* overview (e.g. post-commit
-    // navigation) can read it directly instead of racing the async
-    // `setContext` update, which won't be visible in their closure.
-    return worktree
-  }, [git, runtimes.length, setContext, setContextStatus])
+  // Context refresh callbacks (#1418 app.ts decomposition). Owns
+  // `refreshContext` and `refreshWorktreeContext` — the two async callbacks
+  // that re-fetch git metadata. Also owns the per-frame monotonic
+  // request-id refs that sequence overlapping refreshes.
+  const { refreshContext, refreshWorktreeContext } = useContextRefresh(React, {
+    git,
+    runtimesLength: runtimes.length,
+    dispatch,
+    setContext,
+    setContextStatus,
+    setPrDiffRefreshToken,
+  })
 
   // Live refresh: watch .git metadata + the working tree root and reload
   // context when something changes outside the TUI. Lifted verbatim into
-  // `useRefreshWatcher` (0.72 app.ts decomposition, PR 9) — the async
-  // `revparse` bootstrap, the `cancelled` guard, the 750ms debounce, the
-  // `mountedRef` mount check, and the `watcher?.close()` teardown all carry
-  // over byte-for-byte, as does the dep array.
+  // `useRefreshWatcher` (0.72 app.ts decomposition, PR 9).
   useRefreshWatcher(React, {
     git,
     mountedRef,
@@ -1020,27 +622,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // `state.selectedIssueFilter` triggers the refetch). The
   // existing `context.issueList` guard collapses to a no-op when
   // the preset hasn't changed and data is already loaded.
-  // Forge facade — picks gh (GitHub / GHE) vs glab (GitLab) implementations
-  // from the detected provider, so every list / detail / action below routes
-  // to the right CLI without per-call-site branching.
-  const forgeProvider = context.provider?.repository.provider
-  const forgePath =
-    context.provider?.repository.owner && context.provider?.repository.name
-      ? `${context.provider.repository.owner}/${context.provider.repository.name}`
-      : undefined
-  // Remote host (`gitlab.com` or a self-hosted instance) — threaded so the
-  // GitLab error-path auth re-probe checks the right server.
-  const forgeGitlabHost = context.provider?.repository.host
-  const forgeCurrentBranch = context.provider?.currentBranch
-  const forge = React.useMemo(
-    () => getForgeActions(forgeProvider, {
-      gitlabPath: forgePath,
-      gitlabHost: forgeGitlabHost,
-      bitbucketPath: forgePath,
-      currentBranch: forgeCurrentBranch,
-    }),
-    [forgeProvider, forgePath, forgeGitlabHost, forgeCurrentBranch]
-  )
+  // Forge facade (#1418 app.ts decomposition). Derives the provider /
+  // path / host from `context.provider` and memoizes the `ForgeActions`
+  // instance. Owned by `useForgeAdapter`.
+  const { forge, forgeProvider } = useForgeAdapter(React, { context })
 
   // #1363 — load the PR patch (via the forge facade) once the diff view
   // becomes active with diffSource='pr'. Same lazy-loader shape as the
