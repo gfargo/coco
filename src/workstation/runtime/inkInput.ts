@@ -710,35 +710,35 @@ export function getLogInkPaletteExecuteEvents(
         label: 'Stash message (empty = WIP)',
       })]
     case 'navigateStatus':
-      return [action({ type: 'pushView', value: 'status' })]
+      return [action({ type: 'replaceView', value: 'status' })]
     case 'navigateDiff':
-      return [action({ type: 'pushView', value: 'diff' })]
+      return [action({ type: 'replaceView', value: 'diff' })]
     case 'navigateCompose':
-      return [action({ type: 'pushView', value: 'compose' })]
+      return [action({ type: 'replaceView', value: 'compose' })]
     case 'navigateBranches':
-      return [action({ type: 'pushView', value: 'branches' })]
+      return [action({ type: 'replaceView', value: 'branches' })]
     case 'navigateTags':
-      return [action({ type: 'pushView', value: 'tags' })]
+      return [action({ type: 'replaceView', value: 'tags' })]
     case 'navigateStash':
-      return [action({ type: 'pushView', value: 'stash' })]
+      return [action({ type: 'replaceView', value: 'stash' })]
     case 'navigateWorktrees':
-      return [action({ type: 'pushView', value: 'worktrees' })]
+      return [action({ type: 'replaceView', value: 'worktrees' })]
     case 'navigatePullRequest':
-      return [action({ type: 'pushView', value: 'pull-request' })]
+      return [action({ type: 'replaceView', value: 'pull-request' })]
     case 'navigatePullRequestTriage':
-      return [action({ type: 'pushView', value: 'pull-request-triage' })]
+      return [action({ type: 'replaceView', value: 'pull-request-triage' })]
     case 'navigateIssues':
-      return [action({ type: 'pushView', value: 'issues' })]
+      return [action({ type: 'replaceView', value: 'issues' })]
     case 'navigateConflicts':
-      return [action({ type: 'pushView', value: 'conflicts' })]
+      return [action({ type: 'replaceView', value: 'conflicts' })]
     case 'navigateReflog':
-      return [action({ type: 'pushView', value: 'reflog' })]
+      return [action({ type: 'replaceView', value: 'reflog' })]
     case 'navigateBisect':
-      return [action({ type: 'pushView', value: 'bisect' })]
+      return [action({ type: 'replaceView', value: 'bisect' })]
     case 'navigateSubmodules':
-      return [action({ type: 'pushView', value: 'submodules' })]
+      return [action({ type: 'replaceView', value: 'submodules' })]
     case 'navigateRemotes':
-      return [action({ type: 'pushView', value: 'remotes' })]
+      return [action({ type: 'replaceView', value: 'remotes' })]
     case 'markForCompare':
       // Palette context can't reach the cursored ref (filtered branch /
       // tag lists live in runtime state, not the reducer). Surface a
@@ -1997,42 +1997,42 @@ export function getLogInkInputEvents(
 
   if (state.pendingKey === 'g' && inputValue === 's') {
     return [
-      action({ type: 'pushView', value: 'status' }),
+      action({ type: 'replaceView', value: 'status' }),
       action({ type: 'setStatus', value: 'jumped to status' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'd') {
     return [
-      action({ type: 'pushView', value: 'diff' }),
+      action({ type: 'replaceView', value: 'diff' }),
       action({ type: 'setStatus', value: 'jumped to diff' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'c') {
     return [
-      action({ type: 'pushView', value: 'compose' }),
+      action({ type: 'replaceView', value: 'compose' }),
       action({ type: 'setStatus', value: 'jumped to compose' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'b') {
     return [
-      action({ type: 'pushView', value: 'branches' }),
+      action({ type: 'replaceView', value: 'branches' }),
       action({ type: 'setStatus', value: 'jumped to branches' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 't') {
     return [
-      action({ type: 'pushView', value: 'tags' }),
+      action({ type: 'replaceView', value: 'tags' }),
       action({ type: 'setStatus', value: 'jumped to tags' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'z') {
     return [
-      action({ type: 'pushView', value: 'stash' }),
+      action({ type: 'replaceView', value: 'stash' }),
       action({ type: 'setStatus', value: 'jumped to stash' }),
     ]
   }
@@ -2051,7 +2051,7 @@ export function getLogInkInputEvents(
 
   if (state.pendingKey === 'g' && inputValue === 'w') {
     return [
-      action({ type: 'pushView', value: 'worktrees' }),
+      action({ type: 'replaceView', value: 'worktrees' }),
       action({ type: 'setStatus', value: 'jumped to worktrees' }),
     ]
   }
@@ -2063,7 +2063,7 @@ export function getLogInkInputEvents(
   // exposes m / x / a / R / c action keys scoped to the view.
   if (state.pendingKey === 'g' && inputValue === 'p') {
     return [
-      action({ type: 'pushView', value: 'pull-request' }),
+      action({ type: 'replaceView', value: 'pull-request' }),
       action({ type: 'setStatus', value: 'jumped to pull request' }),
     ]
   }
@@ -2074,7 +2074,7 @@ export function getLogInkInputEvents(
   // read-only list views shipped in #882.
   if (state.pendingKey === 'g' && inputValue === 'P') {
     return [
-      action({ type: 'pushView', value: 'pull-request-triage' }),
+      action({ type: 'replaceView', value: 'pull-request-triage' }),
       action({ type: 'setStatus', value: 'jumped to PR triage' }),
     ]
   }
@@ -2082,14 +2082,14 @@ export function getLogInkInputEvents(
   // `gi` chord (#882 phase 3): jump to the issue triage list.
   if (state.pendingKey === 'g' && inputValue === 'i') {
     return [
-      action({ type: 'pushView', value: 'issues' }),
+      action({ type: 'replaceView', value: 'issues' }),
       action({ type: 'setStatus', value: 'jumped to issues' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'x') {
     return [
-      action({ type: 'pushView', value: 'conflicts' }),
+      action({ type: 'replaceView', value: 'conflicts' }),
       action({ type: 'setStatus', value: 'jumped to conflicts' }),
     ]
   }
@@ -2099,7 +2099,7 @@ export function getLogInkInputEvents(
   // commit-diff for the entry's hash. Loaded lazily by the runtime.
   if (state.pendingKey === 'g' && inputValue === 'r') {
     return [
-      action({ type: 'pushView', value: 'reflog' }),
+      action({ type: 'replaceView', value: 'reflog' }),
       action({ type: 'setStatus', value: 'jumped to reflog' }),
     ]
   }
@@ -2110,7 +2110,7 @@ export function getLogInkInputEvents(
   // know how to start one. The view's surface tells them the next step.
   if (state.pendingKey === 'g' && inputValue === 'B') {
     return [
-      action({ type: 'pushView', value: 'bisect' }),
+      action({ type: 'replaceView', value: 'bisect' }),
       action({ type: 'setStatus', value: 'jumped to bisect' }),
     ]
   }
@@ -2122,7 +2122,7 @@ export function getLogInkInputEvents(
   // empty-state copy can tell the user how to add one.
   if (state.pendingKey === 'g' && inputValue === 'M') {
     return [
-      action({ type: 'pushView', value: 'submodules' }),
+      action({ type: 'replaceView', value: 'submodules' }),
       action({ type: 'setStatus', value: 'jumped to submodules' }),
     ]
   }
@@ -2133,7 +2133,7 @@ export function getLogInkInputEvents(
   // the user at `a add`.
   if (state.pendingKey === 'g' && inputValue === 'n') {
     return [
-      action({ type: 'pushView', value: 'remotes' }),
+      action({ type: 'replaceView', value: 'remotes' }),
       action({ type: 'setStatus', value: 'jumped to remotes' }),
     ]
   }

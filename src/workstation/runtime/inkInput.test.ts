@@ -1,9 +1,9 @@
 import { GitLogRow } from '../../commands/log/data'
 import {
-  getLogInkInputEvents,
-  getLogInkPaletteExecuteEvents,
-  isCreatePrView,
-  isCreateStashView,
+    getLogInkInputEvents,
+    getLogInkPaletteExecuteEvents,
+    isCreatePrView,
+    isCreateStashView,
 } from './inkInput'
 import { getLogInkPaletteCommands } from './inkKeymap'
 import { LogInkState, LogInkView, applyLogInkAction, createLogInkState } from './inkViewModel'
@@ -858,7 +858,7 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 's')
 
-    expect(state.viewStack).toEqual(['history', 'status'])
+    expect(state.viewStack).toEqual(['status'])
     expect(state.activeView).toBe('status')
     expect(state.statusMessage).toBe('jumped to status')
   })
@@ -869,7 +869,7 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 'd')
 
-    expect(state.viewStack).toEqual(['history', 'diff'])
+    expect(state.viewStack).toEqual(['diff'])
     expect(state.activeView).toBe('diff')
     expect(state.statusMessage).toBe('jumped to diff')
   })
@@ -880,7 +880,7 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 'b')
 
-    expect(state.viewStack).toEqual(['history', 'branches'])
+    expect(state.viewStack).toEqual(['branches'])
     expect(state.activeView).toBe('branches')
     expect(state.statusMessage).toBe('jumped to branches')
   })
@@ -891,7 +891,7 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 't')
 
-    expect(state.viewStack).toEqual(['history', 'tags'])
+    expect(state.viewStack).toEqual(['tags'])
     expect(state.activeView).toBe('tags')
     expect(state.statusMessage).toBe('jumped to tags')
   })
@@ -902,7 +902,7 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 'z')
 
-    expect(state.viewStack).toEqual(['history', 'stash'])
+    expect(state.viewStack).toEqual(['stash'])
     expect(state.activeView).toBe('stash')
     expect(state.statusMessage).toBe('jumped to stash')
   })
@@ -1015,7 +1015,7 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 'r')
 
-    expect(state.viewStack).toEqual(['history', 'reflog'])
+    expect(state.viewStack).toEqual(['reflog'])
     expect(state.activeView).toBe('reflog')
     expect(state.statusMessage).toBe('jumped to reflog')
   })
@@ -1238,7 +1238,7 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 'B')
 
-    expect(state.viewStack).toEqual(['history', 'bisect'])
+    expect(state.viewStack).toEqual(['bisect'])
     expect(state.activeView).toBe('bisect')
     expect(state.statusMessage).toBe('jumped to bisect')
   })
@@ -1249,7 +1249,7 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'g')
     state = applyInput(state, 'M')
 
-    expect(state.viewStack).toEqual(['history', 'submodules'])
+    expect(state.viewStack).toEqual(['submodules'])
     expect(state.activeView).toBe('submodules')
     expect(state.statusMessage).toBe('jumped to submodules')
   })
@@ -2132,7 +2132,7 @@ describe('log Ink input interactions', () => {
     expect(state.pendingKey).toBe('g')
 
     state = applyInput(state, 'c')
-    expect(state.viewStack).toEqual(['history', 'compose'])
+    expect(state.viewStack).toEqual(['compose'])
     expect(state.activeView).toBe('compose')
     expect(state.statusMessage).toBe('jumped to compose')
   })
@@ -3585,7 +3585,7 @@ describe('log Ink input interactions', () => {
       const events = getLogInkInputEvents(state, 't')
       expect(events).toContainEqual({
         type: 'action',
-        action: { type: 'pushView', value: 'tags' },
+        action: { type: 'replaceView', value: 'tags' },
       })
     })
 
@@ -3762,12 +3762,12 @@ describe('log Ink input interactions', () => {
         action: { type: 'setPendingKey', value: 'g' },
       })
 
-      // Second press completes gd → pushView 'diff', not toggleDiffViewMode
+      // Second press completes gd → replaceView 'diff', not toggleDiffViewMode
       const chordState = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
       const completeChord = getLogInkInputEvents(chordState, 'd')
       expect(completeChord).toContainEqual({
         type: 'action',
-        action: { type: 'pushView', value: 'diff' },
+        action: { type: 'replaceView', value: 'diff' },
       })
       expect(completeChord).not.toContainEqual({
         type: 'action',
@@ -4815,7 +4815,7 @@ describe('log Ink input interactions', () => {
       // Second key: x pushes conflicts view
       state = applyInput(state, 'x')
       expect(state.activeView).toBe('conflicts')
-      expect(state.viewStack).toEqual(['history', 'conflicts'])
+      expect(state.viewStack).toEqual(['conflicts'])
     })
 
     it('moves cursor up and down in the conflicts view', () => {
