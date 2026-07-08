@@ -44,61 +44,61 @@
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
 import {
-  LogInkContextStatus,
-  updateLogInkContextStatus,
+    LogInkContextStatus,
+    updateLogInkContextStatus,
 } from '../../chrome/context'
 import { forgeNouns } from '../../chrome/forgeNouns'
 import { sortBranches, sortTags } from '../../chrome/sorting'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
 import {
-  LogInkPendingItemAction,
-  LogInkAction,
-  LogInkState,
-  RemoteOpState,
-  getSelectedInkCommit,
+    LogInkPendingItemAction,
+    LogInkAction,
+    LogInkState,
+    RemoteOpState,
+    getSelectedInkCommit,
 } from '../inkViewModel'
 import {
-  checkoutBranch,
-  checkoutBranchByName,
-  createBranch,
-  deleteBranch,
-  isBranchCheckedOutElsewhereError,
-  isBranchNotFullyMergedError,
-  isDirtyWorktreeCheckoutError,
-  parseCheckedOutWorktreePath,
-  fetchBranch,
-  fetchRemotes,
-  pullBranch,
-  pullCurrentBranch,
-  pushBranch,
-  pushCurrentBranch,
-  renameBranch,
-  setUpstream,
-  forcePushBranch,
-  forcePushCurrentBranch,
-  isDivergedPullError,
-  isNonFastForwardPushError,
-  pullCurrentBranchMerge,
-  pullCurrentBranchRebase,
+    checkoutBranch,
+    checkoutBranchByName,
+    createBranch,
+    deleteBranch,
+    isBranchCheckedOutElsewhereError,
+    isBranchNotFullyMergedError,
+    isDirtyWorktreeCheckoutError,
+    parseCheckedOutWorktreePath,
+    fetchBranch,
+    fetchRemotes,
+    pullBranch,
+    pullCurrentBranch,
+    pushBranch,
+    pushCurrentBranch,
+    renameBranch,
+    setUpstream,
+    forcePushBranch,
+    forcePushCurrentBranch,
+    isDivergedPullError,
+    isNonFastForwardPushError,
+    pullCurrentBranchMerge,
+    pullCurrentBranchRebase,
 } from '../../../git/branchActions'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
 import {
-  ResetMode,
-  checkoutFileFromCommit,
-  cherryPickCommit,
-  createBranchFromCommit,
-  createTagAtCommit,
-  defaultOpenUrlRunner,
-  isResetMode,
-  resetToCommit,
-  revertCommit,
-  startInteractiveRebase,
-  createFixupCommit,
-  autosquashRebase,
-  amendHeadCommit,
-  rewordHeadCommit,
+    ResetMode,
+    checkoutFileFromCommit,
+    cherryPickCommit,
+    createBranchFromCommit,
+    createTagAtCommit,
+    defaultOpenUrlRunner,
+    isResetMode,
+    resetToCommit,
+    revertCommit,
+    startInteractiveRebase,
+    createFixupCommit,
+    autosquashRebase,
+    amendHeadCommit,
+    rewordHeadCommit,
 } from '../../../git/historyActions'
 import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStash, popStash, renameStash, restoreStash, stashBranch } from '../../../git/stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
@@ -109,10 +109,10 @@ import { getForgeActions } from '../../../git/forgeActions'
 import { clearGitHubListCache } from '../../../git/githubListCache'
 import { isPullRequestMergeStrategy } from '../../../git/pullRequestActions'
 import {
-  stageAll,
-  stageAllFiles,
-  stagePathspec,
-  unstageAllFiles,
+    stageAll,
+    stageAllFiles,
+    stagePathspec,
+    unstageAllFiles,
 } from '../../../git/statusActions'
 import { applyStatusFilterMask } from '../../../git/statusData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../../git/bisectActions'
@@ -1808,7 +1808,7 @@ export function useWorkflowAction(
             title: `'${branchName}' is checked out in another worktree`,
             warning: `Checked out at ${worktreePath}.${dirty ? ' That worktree has uncommitted changes — removal will be refused until it is clean or stashed.' : ''}`,
             options: [
-              { key: 'y', label: 'Switch to that worktree', intent: 'switch-worktree' },
+              { key: 's', label: 'Switch to that worktree', intent: 'switch-worktree' },
               { key: 'r', label: 'Remove worktree & check out here', workflowId: 'conflict-remove-worktree-checkout', destructive: true },
               { key: 'x', label: 'Remove worktree & delete branch', workflowId: 'conflict-remove-worktree-branch', destructive: true },
             ],
