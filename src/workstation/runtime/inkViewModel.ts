@@ -11,10 +11,10 @@ import {
 } from '../../commands/log/commitCompose'
 import type { CommitSplitPlan, CommitSplitPlanContext } from '../../commands/commit/split'
 import {
-  cycleIssueFilterPreset,
-  cyclePullRequestFilterPreset,
-  type IssueFilterPreset,
-  type PullRequestFilterPreset,
+    cycleIssueFilterPreset,
+    cyclePullRequestFilterPreset,
+    type IssueFilterPreset,
+    type PullRequestFilterPreset,
 } from '../../git/triageFilterPresets'
 import { PromotedSelectionsSnapshot } from '../chrome/selectionRectify'
 import {
@@ -30,7 +30,7 @@ export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
 export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame' | 'file-history' | 'rebase'
-export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-lines' | 'discard-draft'
+export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-lines' | 'discard-draft' | 'discard-rebase-plan'
 
 /**
  * Kinds of list item that can carry an inline pending-spinner while an

@@ -1162,6 +1162,15 @@ export function getLogInkInputEvents(
     const isMultiline = Boolean(state.inputPrompt.multiline)
 
     if (key.escape) {
+      // #1446 — two-stage Esc for input prompts. First Esc clears
+      // non-empty text (the user can keep typing or press Esc again);
+      // second Esc on empty text closes the prompt. Matches the filter,
+      // palette, and theme-picker contracts so the most expensive text
+      // (multiline review bodies, PR descriptions) gets the same
+      // protection as the cheapest (a single-word filter).
+      if (state.inputPrompt.value.length > 0) {
+        return [action({ type: 'clearInputPromptText' })]
+      }
       return [
         action({ type: 'closeInputPrompt' }),
         action({ type: 'setStatus', value: 'cancelled' }),
@@ -1515,6 +1524,13 @@ export function getLogInkInputEvents(
           { type: 'exit' },
         ]
       }
+      if (state.pendingMutationConfirmation === 'discard-rebase-plan') {
+        return [
+          action({ type: 'setPendingMutationConfirmation', value: undefined }),
+          action({ type: 'clearRebasePlan' }),
+          action({ type: 'popView' }),
+        ]
+      }
       return [
         state.pendingMutationConfirmation === 'revert-hunk'
           ? { type: 'revertSelectedHunk' }
@@ -1528,6 +1544,8 @@ export function getLogInkInputEvents(
     if (inputValue === 'n' || key.escape) {
       const cancelMessage = state.pendingMutationConfirmation === 'discard-draft'
         ? 'kept draft — press q again to quit without saving'
+        : state.pendingMutationConfirmation === 'discard-rebase-plan'
+        ? 'kept rebase plan'
         : 'revert cancelled'
       return [
         action({ type: 'setPendingMutationConfirmation', value: undefined }),
@@ -1945,6 +1963,16 @@ export function getLogInkInputEvents(
       action({ type: 'clearCompareBase' }),
       action({ type: 'setStatus', value: `Cleared compare base ${state.compareBase.label}` }),
     ]
+  }
+
+  // #1446 — rebase-plan discard guard. A fully retagged/reordered
+  // rebase plan is expensive to recreate; Esc-ing away should confirm
+  // before silently dropping it, matching the compose-draft pattern.
+  // The confirm is only raised when Esc WOULD pop away from the rebase
+  // view (viewStack > 1) — otherwise there's nowhere to go and Esc
+  // is a no-op anyway.
+  if (key.escape && state.activeView === 'rebase' && state.rebasePlan && state.viewStack.length > 1) {
+    return [action({ type: 'setPendingMutationConfirmation', value: 'discard-rebase-plan' })]
   }
 
   if (key.escape && state.viewStack.length > 1) {

@@ -1,9 +1,9 @@
 import { GitLogRow } from '../../commands/log/data'
 import {
-  getLogInkInputEvents,
-  getLogInkPaletteExecuteEvents,
-  isCreatePrView,
-  isCreateStashView,
+    getLogInkInputEvents,
+    getLogInkPaletteExecuteEvents,
+    isCreatePrView,
+    isCreateStashView,
 } from './inkInput'
 import { getLogInkPaletteCommands } from './inkKeymap'
 import { LogInkState, LogInkView, applyLogInkAction, createLogInkState } from './inkViewModel'
@@ -3938,12 +3938,20 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('Esc on a multi-line prompt cancels the same way as single-line', () => {
+    it('Esc on a multi-line prompt with text clears first, then closes (two-stage #1446)', () => {
       let state = openMultilinePrompt()
       'wip'.split('').forEach((c) => { state = applyInput(state, c) })
-      const events = getLogInkInputEvents(state, '', { escape: true })
-      expect(events).toContainEqual({ type: 'action', action: { type: 'closeInputPrompt' } })
-      expect(events).toContainEqual({
+
+      // First Esc: clears the text but keeps the prompt open.
+      const firstEsc = getLogInkInputEvents(state, '', { escape: true })
+      expect(firstEsc).toContainEqual({ type: 'action', action: { type: 'clearInputPromptText' } })
+
+      // Apply the clear and press Esc again: now the prompt is empty,
+      // so the second Esc closes it.
+      state = applyLogInkAction(state, { type: 'clearInputPromptText' })
+      const secondEsc = getLogInkInputEvents(state, '', { escape: true })
+      expect(secondEsc).toContainEqual({ type: 'action', action: { type: 'closeInputPrompt' } })
+      expect(secondEsc).toContainEqual({
         type: 'action',
         action: { type: 'setStatus', value: 'cancelled' },
       })
