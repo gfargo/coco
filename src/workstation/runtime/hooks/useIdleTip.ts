@@ -24,9 +24,9 @@
 import type * as ReactTypes from 'react'
 import type { GitProviderType } from '../../../git/providerData'
 import {
-  IDLE_TIPS_GRACE_MS,
-  IDLE_TIPS_INTERVAL_MS,
-  pickIdleTip,
+    IDLE_TIPS_GRACE_MS,
+    IDLE_TIPS_INTERVAL_MS,
+    pickIdleTip,
 } from '../../chrome/idleTips'
 import { isSnapshotMode } from '../../chrome/snapshotMode'
 
@@ -35,9 +35,15 @@ export type UseIdleTipDeps = {
   idleTipsEnabled: boolean | undefined
   /**
    * The live `state.statusMessage`. Any explicit message gates the tip off
-   * and resets the rotation cycle.
+   * and resets the rotation cycle — UNLESS `statusTtl` is 'echo' (#1449),
+   * in which case the message is transient and doesn't block tips.
    */
   statusMessage: string | undefined
+  /**
+   * The lifetime class of the current status message (#1449). When 'echo',
+   * the status doesn't suppress the idle-tip channel.
+   */
+  statusTtl: 'echo' | 'result' | 'advisory' | undefined
   /** The active forge provider, for forge-aware tip wording (PR vs MR). */
   provider: GitProviderType | undefined
 }
@@ -54,11 +60,16 @@ export function resolveIdleTip(
   idleTipsEnabled: boolean | undefined,
   statusMessage: string | undefined,
   provider: GitProviderType | undefined,
+  statusTtl?: 'echo' | 'result' | 'advisory',
 ): string | undefined {
   // Suppress tip rotation in snapshot mode to keep VHS captures
   // and screenshot stills deterministic (snapshotMode.ts invariant).
   if (isSnapshotMode()) return undefined
-  return idleTipsEnabled && !statusMessage
+  // #1449 — echo messages don't block tips. They're transient nav
+  // confirmations that expire on the next keystroke anyway; letting
+  // them starve the teaching channel was a design incoherence.
+  const blocking = statusMessage && statusTtl !== 'echo'
+  return idleTipsEnabled && !blocking
     ? pickIdleTip(tickIndex, provider)
     : undefined
 }
@@ -74,11 +85,13 @@ export function useIdleTip(
   React: typeof ReactTypes,
   deps: UseIdleTipDeps,
 ): string | undefined {
-  const { idleTipsEnabled, statusMessage, provider } = deps
+  const { idleTipsEnabled, statusMessage, statusTtl, provider } = deps
   const [idleTipIndex, setIdleTipIndex] = React.useState(0)
   React.useEffect(() => {
     if (!idleTipsEnabled) return
-    if (statusMessage) {
+    // #1449 — echo messages don't reset the cycle; they're transient
+    // and won't block the tip anyway (resolveIdleTip bypasses them).
+    if (statusMessage && statusTtl !== 'echo') {
       // Any explicit message resets the cycle; next idle stretch starts
       // from the grace window again.
       setIdleTipIndex(0)
@@ -99,6 +112,6 @@ export function useIdleTip(
       clearTimeout(grace)
       if (interval) clearInterval(interval)
     }
-  }, [idleTipsEnabled, statusMessage])
-  return resolveIdleTip(idleTipIndex, idleTipsEnabled, statusMessage, provider)
+  }, [idleTipsEnabled, statusMessage, statusTtl])
+  return resolveIdleTip(idleTipIndex, idleTipsEnabled, statusMessage, provider, statusTtl)
 }

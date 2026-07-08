@@ -668,12 +668,12 @@ export function getLogInkPaletteExecuteEvents(
     case 'moveToTop':
       return [
         action({ type: 'moveToTop' }),
-        action({ type: 'setStatus', value: 'jumped to first commit' }),
+        action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
       ]
     case 'moveToBottom':
       return [
         action({ type: 'moveToBottom' }),
-        action({ type: 'setStatus', value: 'jumped to last commit' }),
+        action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
       ]
     case 'nextMatch':
       return [action({ type: 'move', delta: 1 })]
@@ -2019,49 +2019,49 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'h') {
     return [
       action({ type: 'navigateHome' }),
-      action({ type: 'setStatus', value: 'jumped to history' }),
+      action({ type: 'setStatus', value: 'jumped to history', ttl: 'echo' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 's') {
     return [
       action({ type: 'replaceView', value: 'status' }),
-      action({ type: 'setStatus', value: 'jumped to status' }),
+      action({ type: 'setStatus', value: 'jumped to status', ttl: 'echo' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'd') {
     return [
       action({ type: 'replaceView', value: 'diff' }),
-      action({ type: 'setStatus', value: 'jumped to diff' }),
+      action({ type: 'setStatus', value: 'jumped to diff', ttl: 'echo' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'c') {
     return [
       action({ type: 'replaceView', value: 'compose' }),
-      action({ type: 'setStatus', value: 'jumped to compose' }),
+      action({ type: 'setStatus', value: 'jumped to compose', ttl: 'echo' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'b') {
     return [
       action({ type: 'replaceView', value: 'branches' }),
-      action({ type: 'setStatus', value: 'jumped to branches' }),
+      action({ type: 'setStatus', value: 'jumped to branches', ttl: 'echo' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 't') {
     return [
       action({ type: 'replaceView', value: 'tags' }),
-      action({ type: 'setStatus', value: 'jumped to tags' }),
+      action({ type: 'setStatus', value: 'jumped to tags', ttl: 'echo' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'z') {
     return [
       action({ type: 'replaceView', value: 'stash' }),
-      action({ type: 'setStatus', value: 'jumped to stash' }),
+      action({ type: 'setStatus', value: 'jumped to stash', ttl: 'echo' }),
     ]
   }
 
@@ -2080,7 +2080,7 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'w') {
     return [
       action({ type: 'replaceView', value: 'worktrees' }),
-      action({ type: 'setStatus', value: 'jumped to worktrees' }),
+      action({ type: 'setStatus', value: 'jumped to worktrees', ttl: 'echo' }),
     ]
   }
 
@@ -2092,7 +2092,7 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'p') {
     return [
       action({ type: 'replaceView', value: 'pull-request' }),
-      action({ type: 'setStatus', value: 'jumped to pull request' }),
+      action({ type: 'setStatus', value: 'jumped to pull request', ttl: 'echo' }),
     ]
   }
 
@@ -2103,7 +2103,7 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'P') {
     return [
       action({ type: 'replaceView', value: 'pull-request-triage' }),
-      action({ type: 'setStatus', value: 'jumped to PR triage' }),
+      action({ type: 'setStatus', value: 'jumped to PR triage', ttl: 'echo' }),
     ]
   }
 
@@ -2111,14 +2111,14 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'i') {
     return [
       action({ type: 'replaceView', value: 'issues' }),
-      action({ type: 'setStatus', value: 'jumped to issues' }),
+      action({ type: 'setStatus', value: 'jumped to issues', ttl: 'echo' }),
     ]
   }
 
   if (state.pendingKey === 'g' && inputValue === 'x') {
     return [
       action({ type: 'replaceView', value: 'conflicts' }),
-      action({ type: 'setStatus', value: 'jumped to conflicts' }),
+      action({ type: 'setStatus', value: 'jumped to conflicts', ttl: 'echo' }),
     ]
   }
 
@@ -2128,7 +2128,7 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'r') {
     return [
       action({ type: 'replaceView', value: 'reflog' }),
-      action({ type: 'setStatus', value: 'jumped to reflog' }),
+      action({ type: 'setStatus', value: 'jumped to reflog', ttl: 'echo' }),
     ]
   }
 
@@ -2139,7 +2139,7 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'B') {
     return [
       action({ type: 'replaceView', value: 'bisect' }),
-      action({ type: 'setStatus', value: 'jumped to bisect' }),
+      action({ type: 'setStatus', value: 'jumped to bisect', ttl: 'echo' }),
     ]
   }
 
@@ -2151,7 +2151,7 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'M') {
     return [
       action({ type: 'replaceView', value: 'submodules' }),
-      action({ type: 'setStatus', value: 'jumped to submodules' }),
+      action({ type: 'setStatus', value: 'jumped to submodules', ttl: 'echo' }),
     ]
   }
 
@@ -2162,7 +2162,7 @@ export function getLogInkInputEvents(
   if (state.pendingKey === 'g' && inputValue === 'n') {
     return [
       action({ type: 'replaceView', value: 'remotes' }),
-      action({ type: 'setStatus', value: 'jumped to remotes' }),
+      action({ type: 'setStatus', value: 'jumped to remotes', ttl: 'echo' }),
     ]
   }
 
@@ -2368,7 +2368,7 @@ export function getLogInkInputEvents(
         return context.blameLineCount
           ? [
             action({ type: 'moveBlame', delta: -context.blameLineCount, count: context.blameLineCount }),
-            action({ type: 'setStatus', value: 'jumped to first line' }),
+            action({ type: 'setStatus', value: 'jumped to first line', ttl: 'echo' }),
           ]
           : []
       }
@@ -2380,7 +2380,7 @@ export function getLogInkInputEvents(
               delta: -context.fileHistoryCommitCount,
               count: context.fileHistoryCommitCount,
             }),
-            action({ type: 'setStatus', value: 'jumped to first commit' }),
+            action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
           ]
           : []
       }
@@ -2395,7 +2395,7 @@ export function getLogInkInputEvents(
       }
       return [
         action({ type: 'moveToTop' }),
-        action({ type: 'setStatus', value: 'jumped to first commit' }),
+        action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
       ]
     }
 
@@ -2464,7 +2464,7 @@ export function getLogInkInputEvents(
         value: next === 'split'
           ? 'Switched to side-by-side diff'
           : 'Switched to unified diff',
-        kind: 'success',
+        ttl: 'echo',
       }),
     ]
   }
@@ -2494,7 +2494,7 @@ export function getLogInkInputEvents(
       return context.blameLineCount
         ? [
           action({ type: 'moveBlame', delta: context.blameLineCount, count: context.blameLineCount }),
-          action({ type: 'setStatus', value: 'jumped to last line' }),
+          action({ type: 'setStatus', value: 'jumped to last line', ttl: 'echo' }),
         ]
         : []
     }
@@ -2506,7 +2506,7 @@ export function getLogInkInputEvents(
             delta: context.fileHistoryCommitCount,
             count: context.fileHistoryCommitCount,
           }),
-          action({ type: 'setStatus', value: 'jumped to last commit' }),
+          action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
         ]
         : []
     }
@@ -2521,7 +2521,7 @@ export function getLogInkInputEvents(
     }
     return [
       action({ type: 'moveToBottom' }),
-      action({ type: 'setStatus', value: 'jumped to last commit' }),
+      action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
     ]
   }
 

@@ -530,6 +530,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const idleTip = useIdleTip(React, {
     idleTipsEnabled,
     statusMessage: state.statusMessage,
+    statusTtl: state.statusTtl,
     provider: context.provider?.repository.provider,
   })
 
