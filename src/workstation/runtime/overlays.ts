@@ -155,17 +155,15 @@ export function renderConfirmationPanel(
   const label = action?.label || mutationLabel || 'Workflow action'
   const warning = state.pendingMutationConfirmation === 'discard-draft'
     ? 'You have an unsaved commit draft. Press y to discard it and quit.'
+    : state.pendingMutationConfirmation === 'discard-rebase-plan'
+    ? 'You have an edited rebase plan. Press y to discard it and leave.'
     : state.pendingMutationConfirmation
     ? 'This discards local changes and cannot be undone by Coco.'
-    // Second-stage confirm raised when a safe delete hit an unmerged
-    // branch — name the reason so the force isn't a blind "y again".
-    : state.pendingConfirmationId === 'force-delete-branch'
-    ? 'Not fully merged. Force-delete (git branch -D) is irreversible.'
-    // Push was rejected non-fast-forward — name what the force actually
-    // does and its remaining safety net so the y isn't blind.
-    : state.pendingConfirmationId === 'force-push-current-branch' ||
-      state.pendingConfirmationId === 'force-push-selected-branch'
-    ? 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.'
+    // #1451 — prefer the registry's warning field over the per-id
+    // if-chain. This is the migration path: as warnings move onto the
+    // registry entries, the if-chain shrinks until it's gone.
+    : action?.warning
+    ? action.warning
     // Rebase-onto carries a per-invocation warning naming both branches
     // (built in inkInput from the cursored + current branch). Fall back
     // to a static line if the payload is somehow absent.

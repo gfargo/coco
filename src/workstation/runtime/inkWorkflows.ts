@@ -36,6 +36,14 @@ export type LogInkWorkflowAction = {
   kind: LogInkWorkflowActionKind
   requiresConfirmation: boolean
   estimatedTokens?: number
+  /**
+   * Warning copy shown in the confirmation panel when `requiresConfirmation`
+   * is true (#1451). When set, the renderer uses this instead of the generic
+   * "Destructive Git action requires confirmation" fallback or the per-id
+   * if-chain in overlays.ts. Supports a payload interpolation function for
+   * context-dependent copy (e.g. naming the branch being deleted).
+   */
+  warning?: string
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -160,6 +168,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'git push --force-with-lease — overwrite the remote branch after a history rewrite.',
       kind: 'destructive',
       requiresConfirmation: true,
+      warning: 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.',
     },
     {
       id: 'force-push-selected-branch',
@@ -168,6 +177,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'git push --force-with-lease for the cursored branch after a history rewrite.',
       kind: 'destructive',
       requiresConfirmation: true,
+      warning: 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.',
     },
     {
       // Divergence recovery pair — offered via choice prompt when
@@ -398,6 +408,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Force-delete the selected branch even if it is not fully merged (git branch -D).',
       kind: 'destructive',
       requiresConfirmation: true,
+      warning: 'Not fully merged. Force-delete (git branch -D) is irreversible.',
     },
     {
       // #0.71 — rebase the current branch onto the cursored branch/ref
