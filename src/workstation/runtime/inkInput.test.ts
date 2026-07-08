@@ -3700,7 +3700,7 @@ describe('log Ink input interactions', () => {
         { type: 'action', action: { type: 'toggleDiffViewMode' } },
         {
           type: 'action',
-          action: { type: 'setStatus', value: 'Switched to side-by-side diff', kind: 'success' },
+          action: { type: 'setStatus', value: 'Switched to side-by-side diff', ttl: 'echo' },
         },
       ])
     })
@@ -3716,7 +3716,7 @@ describe('log Ink input interactions', () => {
 
       expect(events).toContainEqual({
         type: 'action',
-        action: { type: 'setStatus', value: 'Switched to unified diff', kind: 'success' },
+        action: { type: 'setStatus', value: 'Switched to unified diff', ttl: 'echo' },
       })
     })
 

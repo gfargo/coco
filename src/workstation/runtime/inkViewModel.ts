@@ -655,6 +655,19 @@ export type LogInkState = {
    */
   statusKind?: 'info' | 'error' | 'success' | 'warning'
   /**
+   * Lifetime class for the current status message (#1449).
+   *   - 'echo'     : navigation confirmations / mode toggles. Cleared
+   *                   automatically on the next dispatched action.
+   *   - 'result'   : workflow success/error. Persists until the next
+   *                   action on that surface replaces it.
+   *   - 'advisory' : warnings. Sticky until the condition clears.
+   *
+   * When undefined, the message behaves like 'result' (legacy default).
+   * The idle-tip gate treats 'echo' as non-blocking: a stale "jumped to
+   * status" doesn't suppress the teaching channel.
+   */
+  statusTtl?: 'echo' | 'result' | 'advisory'
+  /**
    * Transient loading flag for the status line. When true, the footer
    * prefixes the message with the shared spinner frame so users see
    * motion during sub-second LLM calls (create-PR body generation,
@@ -1124,7 +1137,7 @@ export type LogInkAction =
   | { type: 'setPendingKey'; value?: string }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
-  | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' | 'warning'; loading?: boolean }
+  | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' | 'warning'; loading?: boolean; ttl?: 'echo' | 'result' | 'advisory' }
   | { type: 'setPendingPullRequestBodyDraft'; value: boolean }
   | { type: 'setWorkflowAction'; value?: string }
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
@@ -1998,6 +2011,16 @@ export function getLogInkRepoStackLabels(state: LogInkState): string[] {
 }
 
 export function applyLogInkAction(state: LogInkState, action: LogInkAction): LogInkState {
+  // #1449 — echo messages expire on the next keystroke. If the current
+  // status has ttl:'echo' and the incoming action is NOT itself a
+  // setStatus (which would just replace it anyway), clear it so the
+  // footer returns to idle and tips can render. This keeps the reducer
+  // pure — no timers, no side effects — while giving navigation echoes
+  // the "next-keystroke" lifetime the issue prescribes.
+  if (state.statusTtl === 'echo' && action.type !== 'setStatus') {
+    state = { ...state, statusMessage: undefined, statusKind: undefined, statusTtl: undefined, statusLoading: undefined }
+  }
+
   switch (action.type) {
     case 'appendRows':
       return appendRows(state, action.rows, action.mainOrderingCount)
@@ -2738,6 +2761,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         // 'error' doesn't bleed into the next info update. Explicit
         // 'info' also clears kind for the same reason.
         statusKind: !action.value || action.kind === 'info' ? undefined : action.kind,
+        // #1449 — lifetime class. Defaults to 'result' when omitted.
+        statusTtl: !action.value ? undefined : (action.ttl || 'result'),
         // Same clearing semantics for loading — every setStatus that
         // doesn't explicitly opt in (loading: true) clears the flag so
         // a stale spinner doesn't linger after the LLM call finishes.
