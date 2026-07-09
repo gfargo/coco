@@ -108,11 +108,11 @@ describe('log Ink input interactions', () => {
     })
 
     const events = applyInput(state, 'q')
-    expect(events.pendingMutationConfirmation).toBe('discard-draft')
+    expect(events.pendingConfirmationId).toBe('discard-draft')
 
     // n cancels and keeps the draft
     state = applyInput(events, 'n')
-    expect(state.pendingMutationConfirmation).toBeUndefined()
+    expect(state.pendingConfirmationId).toBeUndefined()
     expect(state.commitCompose.summary).toBe('feat: in-flight summary')
   })
 
@@ -128,7 +128,7 @@ describe('log Ink input interactions', () => {
       action: { type: 'append', value: 'feat: ready to ship' },
     })
     state = applyInput(state, 'q')
-    expect(state.pendingMutationConfirmation).toBe('discard-draft')
+    expect(state.pendingConfirmationId).toBe('discard-draft')
 
     const events = getLogInkInputEvents(state, 'y')
     expect(events.find((event) => event.type === 'exit')).toBeDefined()
@@ -527,7 +527,7 @@ describe('log Ink input interactions', () => {
     )).toEqual([
       {
         type: 'action',
-        action: { type: 'setPendingMutationConfirmation', value: 'revert-file' },
+        action: { type: 'setPendingConfirmation', value: 'revert-file' },
       },
     ])
 
@@ -539,18 +539,18 @@ describe('log Ink input interactions', () => {
     )).toEqual([
       {
         type: 'action',
-        action: { type: 'setPendingMutationConfirmation', value: 'revert-hunk' },
+        action: { type: 'setPendingConfirmation', value: 'revert-hunk' },
       },
     ])
   })
 
   it('confirms or cancels worktree revert actions explicitly', () => {
     const filePending = applyLogInkAction(createLogInkState(rows), {
-      type: 'setPendingMutationConfirmation',
+      type: 'setPendingConfirmation',
       value: 'revert-file',
     })
     const hunkPending = applyLogInkAction(createLogInkState(rows), {
-      type: 'setPendingMutationConfirmation',
+      type: 'setPendingConfirmation',
       value: 'revert-hunk',
     })
 
@@ -558,20 +558,20 @@ describe('log Ink input interactions', () => {
       { type: 'revertSelectedFile' },
       {
         type: 'action',
-        action: { type: 'setPendingMutationConfirmation', value: undefined },
+        action: { type: 'setPendingConfirmation', value: undefined },
       },
     ])
     expect(getLogInkInputEvents(hunkPending, 'y')).toEqual([
       { type: 'revertSelectedHunk' },
       {
         type: 'action',
-        action: { type: 'setPendingMutationConfirmation', value: undefined },
+        action: { type: 'setPendingConfirmation', value: undefined },
       },
     ])
     expect(getLogInkInputEvents(filePending, 'n')).toEqual([
       {
         type: 'action',
-        action: { type: 'setPendingMutationConfirmation', value: undefined },
+        action: { type: 'setPendingConfirmation', value: undefined },
       },
       { type: 'action', action: { type: 'setStatus', value: 'revert cancelled' } },
     ])
@@ -2230,10 +2230,10 @@ describe('log Ink input interactions', () => {
 
     it('z opens the revert-hunk confirmation only on the staging diff', () => {
       const staging = applyInput(diffState('worktree'), 'z', {}, dirtyWorktreeContext)
-      expect(staging.pendingMutationConfirmation).toBe('revert-hunk')
+      expect(staging.pendingConfirmationId).toBe('revert-hunk')
 
       const commit = applyInput(diffState('commit'), 'z', {}, dirtyWorktreeContext)
-      expect(commit.pendingMutationConfirmation).toBeUndefined()
+      expect(commit.pendingConfirmationId).toBeUndefined()
     })
 
     it('j/k on a commit diff scroll the visible preview, not the hidden worktree diff', () => {
@@ -2284,7 +2284,7 @@ describe('log Ink input interactions', () => {
     it('z with a selection asks to discard the selected lines', () => {
       let state = worktreeDiffState({ diffLineSelectAnchor: 5 })
       state = applyInput(state, 'z', {}, dirtyDiffContext)
-      expect(state.pendingMutationConfirmation).toBe('discard-lines')
+      expect(state.pendingConfirmationId).toBe('discard-lines')
 
       const events = getLogInkInputEvents(state, 'y', {}, dirtyDiffContext)
       expect(events).toContainEqual({ type: 'revertSelectedLines' })
@@ -2294,7 +2294,7 @@ describe('log Ink input interactions', () => {
       expect(getLogInkInputEvents(worktreeDiffState(), ' ', {}, dirtyDiffContext))
         .toEqual([{ type: 'toggleSelectedHunkStage' }])
       const state = applyInput(worktreeDiffState(), 'z', {}, dirtyDiffContext)
-      expect(state.pendingMutationConfirmation).toBe('revert-hunk')
+      expect(state.pendingConfirmationId).toBe('revert-hunk')
     })
   })
 
@@ -4450,7 +4450,7 @@ describe('log Ink input interactions', () => {
         const actionTypes = events
           .filter((event): event is Extract<typeof event, { type: 'action' }> => event.type === 'action')
           .map((event) => event.action.type)
-        expect(actionTypes).not.toContain('setPendingMutationConfirmation')
+        expect(actionTypes).not.toContain('setPendingConfirmation')
         expect(actionTypes).not.toContain('navigateOpenBlameForPath')
         expect(actionTypes).not.toContain('navigateOpenFileHistoryForPath')
       }

@@ -44,8 +44,6 @@ export type UseStatusAutoDismissDeps = {
   pendingConfirmationId: unknown
   /** `state.pendingChoice` — a multi-choice prompt is open. */
   pendingChoice: unknown
-  /** `state.pendingMutationConfirmation` — a revert/discard confirm is open. */
-  pendingMutationConfirmation: unknown
   /** `state.showCommandPalette` — the command palette is open. */
   showCommandPalette: unknown
   /** Reducer dispatch, used to clear the message via `setStatus(undefined)`. */
@@ -70,7 +68,6 @@ export function shouldAutoDismissStatus(deps: {
   inputPrompt: unknown
   pendingConfirmationId: unknown
   pendingChoice: unknown
-  pendingMutationConfirmation: unknown
   showCommandPalette: unknown
 }): boolean {
   if (!deps.statusMessage) return false
@@ -84,7 +81,6 @@ export function shouldAutoDismissStatus(deps: {
     deps.inputPrompt ||
     deps.pendingConfirmationId ||
     deps.pendingChoice ||
-    deps.pendingMutationConfirmation ||
     deps.showCommandPalette
   ) {
     return false
@@ -95,7 +91,6 @@ export function shouldAutoDismissStatus(deps: {
 /**
  * Status-message auto-dismiss hook. Issues the single timer `useEffect`,
  * preserving the exact dependency array (`[dispatch, inputPrompt,
- * pendingConfirmationId, pendingChoice, pendingMutationConfirmation,
  * showCommandPalette, statusMessage]`) of the original `app.ts` cluster,
  * so React's hook ordering and the timer's reset/cancel semantics are
  * unchanged.
@@ -111,7 +106,6 @@ export function useStatusAutoDismiss(
     inputPrompt,
     pendingConfirmationId,
     pendingChoice,
-    pendingMutationConfirmation,
     showCommandPalette,
     dispatch,
     mountedRef,
@@ -119,7 +113,7 @@ export function useStatusAutoDismiss(
   React.useEffect(() => {
     if (!statusMessage) return
     if (statusKind === 'error' || statusLoading) return
-    if (inputPrompt || pendingConfirmationId || pendingChoice || pendingMutationConfirmation || showCommandPalette) {
+    if (inputPrompt || pendingConfirmationId || pendingChoice || showCommandPalette) {
       return
     }
     // The `setTimeout` callback is a literal arrow function (not a
@@ -137,7 +131,6 @@ export function useStatusAutoDismiss(
     inputPrompt,
     pendingConfirmationId,
     pendingChoice,
-    pendingMutationConfirmation,
     showCommandPalette,
     statusMessage,
     statusKind,

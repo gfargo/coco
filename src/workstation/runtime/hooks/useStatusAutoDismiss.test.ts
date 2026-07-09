@@ -17,7 +17,6 @@ const noModals = {
   inputPrompt: undefined as unknown,
   pendingConfirmationId: undefined as unknown,
   pendingChoice: undefined as unknown,
-  pendingMutationConfirmation: undefined as unknown,
   showCommandPalette: undefined as unknown,
 }
 
@@ -50,7 +49,7 @@ describe('shouldAutoDismissStatus', () => {
 
   it('does not dismiss while a mutation confirmation is open', () => {
     expect(
-      shouldAutoDismissStatus({ ...noModals, pendingMutationConfirmation: 'revert-file' }),
+      shouldAutoDismissStatus({ ...noModals, pendingConfirmationId: 'revert-file' }),
     ).toBe(false)
   })
 

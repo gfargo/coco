@@ -414,7 +414,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     inputPrompt: state.inputPrompt,
     pendingConfirmationId: state.pendingConfirmationId,
     pendingChoice: state.pendingChoice,
-    pendingMutationConfirmation: state.pendingMutationConfirmation,
     showCommandPalette: state.showCommandPalette,
     dispatch,
     mountedRef,
@@ -1168,7 +1167,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         state.inputPrompt ||
         state.pendingConfirmationId ||
         state.pendingChoice ||
-        state.pendingMutationConfirmation ||
         state.pendingKey
       ? 'inspector'
       : undefined

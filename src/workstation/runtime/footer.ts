@@ -106,7 +106,6 @@ export function renderFooter(
       state.inputPrompt ||
       state.pendingConfirmationId ||
       state.pendingChoice ||
-      state.pendingMutationConfirmation ||
       state.pendingKey ||
       state.filterMode
   )

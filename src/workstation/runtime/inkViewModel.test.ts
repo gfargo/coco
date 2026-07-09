@@ -71,7 +71,7 @@ describe('log Ink view model', () => {
     expect(state.sidebarTab).toBe('branches')
     expect(state.showHelp).toBe(false)
     expect(state.showCommandPalette).toBe(false)
-    expect(state.pendingMutationConfirmation).toBeUndefined()
+    expect(state.pendingConfirmationId).toBeUndefined()
   })
 
   it('opens, moves, and closes the gitignore picker', () => {
@@ -656,14 +656,13 @@ describe('log Ink view model', () => {
     expect(state.pendingConfirmationId).toBeUndefined()
 
     state = applyLogInkAction(state, {
-      type: 'setPendingMutationConfirmation',
+      type: 'setPendingConfirmation',
       value: 'revert-file',
     })
-    expect(state.pendingMutationConfirmation).toBe('revert-file')
-    expect(state.pendingConfirmationId).toBeUndefined()
+    expect(state.pendingConfirmationId).toBe('revert-file')
 
-    state = applyLogInkAction(state, { type: 'setPendingMutationConfirmation', value: undefined })
-    expect(state.pendingMutationConfirmation).toBeUndefined()
+    state = applyLogInkAction(state, { type: 'setPendingConfirmation', value: undefined })
+    expect(state.pendingConfirmationId).toBeUndefined()
   })
 
   describe('AI conflict-resolution session (#1369)', () => {

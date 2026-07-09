@@ -143,26 +143,12 @@ export function renderConfirmationPanel(
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const action = getLogInkWorkflowActionById(state.pendingConfirmationId)
-  const mutationLabel = state.pendingMutationConfirmation === 'revert-hunk'
-    ? 'Revert selected hunk'
-    : state.pendingMutationConfirmation === 'discard-lines'
-      ? 'Discard the selected lines'
-    : state.pendingMutationConfirmation === 'revert-file'
-      ? 'Revert selected file'
-      : state.pendingMutationConfirmation === 'discard-draft'
-        ? 'Quit and discard the in-progress commit draft'
-        : undefined
-  const label = action?.label || mutationLabel || 'Workflow action'
-  const warning = state.pendingMutationConfirmation === 'discard-draft'
-    ? 'You have an unsaved commit draft. Press y to discard it and quit.'
-    : state.pendingMutationConfirmation === 'discard-rebase-plan'
-    ? 'You have an edited rebase plan. Press y to discard it and leave.'
-    : state.pendingMutationConfirmation
-    ? 'This discards local changes and cannot be undone by Coco.'
-    // #1451 — prefer the registry's warning field over the per-id
-    // if-chain. This is the migration path: as warnings move onto the
-    // registry entries, the if-chain shrinks until it's gone.
-    : action?.warning
+  const label = action?.label || 'Workflow action'
+  const warning =
+    // #1451 — prefer the registry's warning field over any fallback.
+    // The mutation confirmations (revert-file, revert-hunk, discard-lines,
+    // discard-draft, discard-rebase-plan) all carry their own warning.
+    action?.warning
     ? action.warning
     // Rebase-onto carries a per-invocation warning naming both branches
     // (built in inkInput from the cursored + current branch). Fall back
