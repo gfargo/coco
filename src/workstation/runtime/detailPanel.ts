@@ -192,7 +192,7 @@ export function renderDetailPanel(
     return renderChoicePanel(h, components, state.pendingChoice, width, theme, focused)
   }
 
-  if (state.pendingConfirmationId || state.pendingMutationConfirmation) {
+  if (state.pendingConfirmationId) {
     return renderConfirmationPanel(h, components, state, surface.context, width, theme, focused)
   }
 

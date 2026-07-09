@@ -784,7 +784,7 @@ export function getLogInkPaletteExecuteEvents(
     case 'refresh':
       return [{ type: 'refreshContext' }]
     case 'revertSelection':
-      return [action({ type: 'setPendingMutationConfirmation', value: 'revert-file' })]
+      return [action({ type: 'setPendingConfirmation', value: 'revert-file' })]
     case 'editCommit':
       return [
         ...(state.activeView !== 'compose'
@@ -872,7 +872,7 @@ export function getLogInkPaletteExecuteEvents(
       return []
     case 'quit':
       if (hasUnsavedComposeDraft(state)) {
-        return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
+        return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
       }
       return [{ type: 'exit' }]
     case 'clearSearch':
@@ -1148,8 +1148,8 @@ export function getLogInkInputEvents(
   context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
   if (key.ctrl && inputValue === 'c') {
-    if (hasUnsavedComposeDraft(state) && !state.pendingMutationConfirmation) {
-      return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
+    if (hasUnsavedComposeDraft(state) && !state.pendingConfirmationId) {
+      return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
     }
     return [{ type: 'exit' }]
   }
@@ -1290,6 +1290,41 @@ export function getLogInkInputEvents(
         ]
       }
 
+      // #1451 — mutation confirmations (formerly `pendingMutationConfirmation`).
+      // These resolve via direct dispatch rather than `runWorkflowAction`
+      // because they call synchronous runtime hooks, not async git ops.
+      if (workflowAction?.id === 'revert-file') {
+        return [
+          { type: 'revertSelectedFile' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+      if (workflowAction?.id === 'revert-hunk') {
+        return [
+          { type: 'revertSelectedHunk' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+      if (workflowAction?.id === 'discard-lines') {
+        return [
+          { type: 'revertSelectedLines' },
+          action({ type: 'setPendingConfirmation', value: undefined }),
+        ]
+      }
+      if (workflowAction?.id === 'discard-draft') {
+        return [
+          action({ type: 'setPendingConfirmation', value: undefined }),
+          { type: 'exit' },
+        ]
+      }
+      if (workflowAction?.id === 'discard-rebase-plan') {
+        return [
+          action({ type: 'setPendingConfirmation', value: undefined }),
+          action({ type: 'clearRebasePlan' }),
+          action({ type: 'popView' }),
+        ]
+      }
+
       // Destructive + provider workflow actions (delete-branch, delete-tag,
       // drop-stash, remove-worktree, abort-operation, create-pr, …) defer
       // to the runtime — it has the live context needed to identify the
@@ -1308,9 +1343,20 @@ export function getLogInkInputEvents(
     }
 
     if (inputValue === 'n' || key.escape) {
+      // #1451 — per-id cancel messages for the unified confirmation system.
+      const cancelMessage =
+        state.pendingConfirmationId === 'discard-draft'
+          ? 'kept draft — press q again to quit without saving'
+          : state.pendingConfirmationId === 'discard-rebase-plan'
+          ? 'kept rebase plan'
+          : state.pendingConfirmationId === 'revert-file' ||
+            state.pendingConfirmationId === 'revert-hunk' ||
+            state.pendingConfirmationId === 'discard-lines'
+          ? 'revert cancelled'
+          : 'workflow action cancelled'
       return [
         action({ type: 'setPendingConfirmation', value: undefined }),
-        action({ type: 'setStatus', value: 'workflow action cancelled' }),
+        action({ type: 'setStatus', value: cancelMessage }),
       ]
     }
 
@@ -1511,46 +1557,6 @@ export function getLogInkInputEvents(
 
     if (inputValue && !key.ctrl && !key.meta) {
       return [action({ type: 'appendFilter', value: inputValue })]
-    }
-
-    return []
-  }
-
-  if (state.pendingMutationConfirmation) {
-    if (inputValue === 'y') {
-      if (state.pendingMutationConfirmation === 'discard-draft') {
-        return [
-          action({ type: 'setPendingMutationConfirmation', value: undefined }),
-          { type: 'exit' },
-        ]
-      }
-      if (state.pendingMutationConfirmation === 'discard-rebase-plan') {
-        return [
-          action({ type: 'setPendingMutationConfirmation', value: undefined }),
-          action({ type: 'clearRebasePlan' }),
-          action({ type: 'popView' }),
-        ]
-      }
-      return [
-        state.pendingMutationConfirmation === 'revert-hunk'
-          ? { type: 'revertSelectedHunk' }
-          : state.pendingMutationConfirmation === 'discard-lines'
-          ? { type: 'revertSelectedLines' }
-          : { type: 'revertSelectedFile' },
-        action({ type: 'setPendingMutationConfirmation', value: undefined }),
-      ]
-    }
-
-    if (inputValue === 'n' || key.escape) {
-      const cancelMessage = state.pendingMutationConfirmation === 'discard-draft'
-        ? 'kept draft — press q again to quit without saving'
-        : state.pendingMutationConfirmation === 'discard-rebase-plan'
-        ? 'kept rebase plan'
-        : 'revert cancelled'
-      return [
-        action({ type: 'setPendingMutationConfirmation', value: undefined }),
-        action({ type: 'setStatus', value: cancelMessage }),
-      ]
     }
 
     return []
@@ -1972,7 +1978,7 @@ export function getLogInkInputEvents(
   // view (viewStack > 1) — otherwise there's nowhere to go and Esc
   // is a no-op anyway.
   if (key.escape && state.activeView === 'rebase' && state.rebasePlan && state.viewStack.length > 1) {
-    return [action({ type: 'setPendingMutationConfirmation', value: 'discard-rebase-plan' })]
+    return [action({ type: 'setPendingConfirmation', value: 'discard-rebase-plan' })]
   }
 
   if (key.escape && state.viewStack.length > 1) {
@@ -1991,7 +1997,7 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'q') {
     if (hasUnsavedComposeDraft(state)) {
-      return [action({ type: 'setPendingMutationConfirmation', value: 'discard-draft' })]
+      return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
     }
     return [{ type: 'exit' }]
   }
@@ -4258,7 +4264,7 @@ export function getLogInkInputEvents(
     isWorktreeDiffTarget(state) &&
     state.diffLineSelectAnchor !== undefined
   ) {
-    return [action({ type: 'setPendingMutationConfirmation', value: 'discard-lines' })]
+    return [action({ type: 'setPendingConfirmation', value: 'discard-lines' })]
   }
 
   if (inputValue === ' ' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
@@ -4287,11 +4293,11 @@ export function getLogInkInputEvents(
     context.worktreeFileCount &&
     !state.statusGroupHeaderFocused
   ) {
-    return [action({ type: 'setPendingMutationConfirmation', value: 'revert-file' })]
+    return [action({ type: 'setPendingConfirmation', value: 'revert-file' })]
   }
 
   if (inputValue === 'z' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
-    return [action({ type: 'setPendingMutationConfirmation', value: 'revert-hunk' })]
+    return [action({ type: 'setPendingConfirmation', value: 'revert-hunk' })]
   }
 
   if (

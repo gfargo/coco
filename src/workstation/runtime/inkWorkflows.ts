@@ -1174,6 +1174,56 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'normal',
       requiresConfirmation: false,
     },
+    // #1451 — mutation confirmations unified into the registry. These
+    // were previously a separate `pendingMutationConfirmation` system;
+    // they now flow through the same `pendingConfirmationId` state and
+    // renderer. The input handler resolves them via direct dispatch
+    // (not `runWorkflowAction`) since they call sync runtime hooks.
+    {
+      id: 'revert-file',
+      key: '',
+      label: 'Revert selected file',
+      description: 'Discard all unstaged changes in the selected file.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: 'This discards local changes and cannot be undone by Coco.',
+    },
+    {
+      id: 'revert-hunk',
+      key: '',
+      label: 'Revert selected hunk',
+      description: 'Discard the selected hunk from the working tree.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: 'This discards local changes and cannot be undone by Coco.',
+    },
+    {
+      id: 'discard-lines',
+      key: '',
+      label: 'Discard the selected lines',
+      description: 'Discard the visually-selected lines from the working tree.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: 'This discards local changes and cannot be undone by Coco.',
+    },
+    {
+      id: 'discard-draft',
+      key: '',
+      label: 'Quit and discard the in-progress commit draft',
+      description: 'Exit the workstation, discarding unsaved compose content.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: 'You have an unsaved commit draft. Press y to discard it and quit.',
+    },
+    {
+      id: 'discard-rebase-plan',
+      key: '',
+      label: 'Discard rebase plan',
+      description: 'Leave the rebase view, discarding the edited rebase todo.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: 'You have an edited rebase plan. Press y to discard it and leave.',
+    },
   ]
 }
 

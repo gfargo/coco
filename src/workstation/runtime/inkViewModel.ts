@@ -30,7 +30,6 @@ export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
 export type LogInkSidebarTab = 'status' | 'branches' | 'tags' | 'stashes' | 'worktrees'
 export type LogInkView = 'history' | 'status' | 'diff' | 'compose' | 'branches' | 'tags' | 'stash' | 'worktrees' | 'pull-request' | 'pull-request-triage' | 'issues' | 'conflicts' | 'reflog' | 'bisect' | 'changelog' | 'submodules' | 'remotes' | 'blame' | 'file-history' | 'rebase'
-export type LogInkMutationConfirmation = 'revert-file' | 'revert-hunk' | 'discard-lines' | 'discard-draft' | 'discard-rebase-plan'
 
 /**
  * Kinds of list item that can carry an inline pending-spinner while an
@@ -542,7 +541,6 @@ export type LogInkState = {
    * walking state.
    */
   pendingConfirmationPayload?: string
-  pendingMutationConfirmation?: LogInkMutationConfirmation
   /**
    * Set when a `checkout-branch` was rejected because the branch is
    * already checked out in another worktree (#1175). Carries the branch
@@ -1143,7 +1141,6 @@ export type LogInkAction =
   | { type: 'setPendingConfirmation'; value?: string; payload?: string }
   | { type: 'setWorktreeCheckoutConflict'; value?: { branch: string; worktreePath: string; dirty: boolean } }
   | { type: 'setPendingChoice'; value?: LogInkChoicePrompt }
-  | { type: 'setPendingMutationConfirmation'; value?: LogInkMutationConfirmation }
   | { type: 'setPendingItemAction'; value?: LogInkPendingItemAction }
   | { type: 'appendPaletteFilter'; value: string }
   | { type: 'backspacePaletteFilter' }
@@ -1498,7 +1495,6 @@ function withPushedRepoFrame(
     pendingKey: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
-    pendingMutationConfirmation: undefined,
     // #1429 — a choice prompt raised in the parent (or its worktree-
     // checkout-conflict sibling) references the PARENT repo's git call;
     // it can't be answered meaningfully after drilling into a submodule.
@@ -1600,7 +1596,6 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     pendingKey: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
-    pendingMutationConfirmation: undefined,
     // #1429 — mirror of the push-time clear above; a choice prompt from
     // the popped (child) frame is equally meaningless once back in the
     // parent's context.
@@ -1948,7 +1943,6 @@ export function createLogInkState(
     workflowActionId: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
-    pendingMutationConfirmation: undefined,
     pendingKey: undefined,
     focus: 'commits',
     // Default first-time tab is 'branches' — it's the most useful
@@ -2786,7 +2780,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         workflowActionId: action.value,
         pendingConfirmationId: undefined,
         pendingConfirmationPayload: undefined,
-        pendingMutationConfirmation: undefined,
         pendingKey: undefined,
       }
     case 'setPendingConfirmation':
@@ -2795,7 +2788,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingConfirmationId: action.value,
         pendingConfirmationPayload: action.value ? action.payload : undefined,
         workflowActionId: action.value ? undefined : state.workflowActionId,
-        pendingMutationConfirmation: action.value ? undefined : state.pendingMutationConfirmation,
         // Only one modal prompt may own the keyboard (#1342): raising a
         // confirmation dismisses any open choice prompt so a `y` meant
         // for the confirm can't be matched against choice option keys.
@@ -2830,15 +2822,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         helpScrollOffset: action.value ? 0 : state.helpScrollOffset,
         helpFilter: action.value ? '' : state.helpFilter,
         helpFilterMode: action.value ? false : state.helpFilterMode,
-        pendingKey: undefined,
-      }
-    case 'setPendingMutationConfirmation':
-      return {
-        ...state,
-        pendingMutationConfirmation: action.value,
-        pendingConfirmationId: action.value ? undefined : state.pendingConfirmationId,
-        pendingConfirmationPayload: action.value ? undefined : state.pendingConfirmationPayload,
-        workflowActionId: action.value ? undefined : state.workflowActionId,
         pendingKey: undefined,
       }
     case 'setPendingItemAction':
