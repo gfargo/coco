@@ -23,6 +23,7 @@
 
 import type { LogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
+import type { BranchRef } from '../../git/branchData'
 import { sortBranches, sortTags } from '../chrome/sorting'
 import { matchesPromotedFilter } from './promotedFilter'
 
@@ -64,13 +65,24 @@ export function getSelectedBranchId(
   state: LogInkState,
   context: LogInkContext,
 ): string | undefined {
+  return getSelectedBranch(state, context)?.shortName
+}
+
+/**
+ * Get the full BranchRef for the currently-selected branch.
+ * Returns the item from the sorted + filtered list at the selected index.
+ */
+export function getSelectedBranch(
+  state: LogInkState,
+  context: LogInkContext,
+): BranchRef | undefined {
   const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
   const visible = state.filter
     ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
     : all
   if (visible.length === 0) return undefined
   const index = Math.min(state.selectedBranchIndex, visible.length - 1)
-  return visible[index]?.shortName
+  return visible[index]
 }
 
 /**
