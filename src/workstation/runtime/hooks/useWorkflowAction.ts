@@ -51,6 +51,7 @@ import { forgeNouns } from '../../chrome/forgeNouns'
 import { sortBranches, sortTags } from '../../chrome/sorting'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
+import { getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedWorktreeId } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -255,52 +256,29 @@ export function resolvePendingItemAction(
   context: LogInkContext
 ): LogInkPendingItemAction | undefined {
   const { filter } = state
-  // Checking out a branch gets the same inline spinner on its row as a
-  // delete does — the action just runs `git checkout` instead of
-  // `git branch -d`. Resolved the same way as the delete branch case
-  // (and identically to the checkout-branch handler) so the spinner
-  // lands on exactly the row the user pressed enter on.
+
+  // #1452 — branch resolution uses the id-based selector. The selector
+  // encapsulates sort + filter + index→item, removing the duplicated
+  // logic that was previously inlined here for each branch workflow.
   if (id === 'checkout-branch') {
-    const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-    const visible = filter
-      ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], filter))
-      : all
-    const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
-    return branch ? { kind: 'branch', id: branch.shortName, action: 'checkout' } : undefined
+    const branchId = getSelectedBranchId(state, context)
+    return branchId ? { kind: 'branch', id: branchId, action: 'checkout' } : undefined
   }
   if (id === 'delete-branch' || id === 'force-delete-branch') {
-    const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-    const visible = filter
-      ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], filter))
-      : all
-    const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
-    return branch ? { kind: 'branch', id: branch.shortName, action: 'delete' } : undefined
+    const branchId = getSelectedBranchId(state, context)
+    return branchId ? { kind: 'branch', id: branchId, action: 'delete' } : undefined
   }
   if (id === 'delete-tag') {
-    const all = sortTags(context.tags?.tags || [], state.tagSort)
-    const visible = filter
-      ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], filter))
-      : all
-    const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
-    return tag ? { kind: 'tag', id: tag.name, action: 'delete' } : undefined
+    const tagId = getSelectedTagId(state, context)
+    return tagId ? { kind: 'tag', id: tagId, action: 'delete' } : undefined
   }
   if (id === 'drop-stash') {
-    const all = context.stashes?.stashes || []
-    const visible = filter
-      ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], filter))
-      : all
-    const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
-    return stash ? { kind: 'stash', id: stash.ref, action: 'delete' } : undefined
+    const stashId = getSelectedStashId(state, context)
+    return stashId ? { kind: 'stash', id: stashId, action: 'delete' } : undefined
   }
   if (id === 'remove-worktree') {
-    const all = context.worktreeList?.worktrees || []
-    const visible = filter
-      ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], filter))
-      : all
-    const wt = visible.length
-      ? visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
-      : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
-    return wt ? { kind: 'worktree', id: wt.path, action: 'delete' } : undefined
+    const worktreeId = getSelectedWorktreeId(state, context)
+    return worktreeId ? { kind: 'worktree', id: worktreeId, action: 'delete' } : undefined
   }
   // #1363 — `gh pr checkout <n>` gets the same inline row spinner as a
   // branch checkout. Resolution mirrors `buildFilteredLists`'s triage
