@@ -24,6 +24,9 @@
 import type { LogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
 import type { BranchRef } from '../../git/branchData'
+import type { GitTagRef } from '../../git/tagData'
+import type { StashEntry } from '../../git/stashData'
+import type { WorktreeEntry } from '../../git/worktreeData'
 import { sortBranches, sortTags } from '../chrome/sorting'
 import { matchesPromotedFilter } from './promotedFilter'
 
@@ -92,13 +95,23 @@ export function getSelectedTagId(
   state: LogInkState,
   context: LogInkContext,
 ): string | undefined {
+  return getSelectedTag(state, context)?.name
+}
+
+/**
+ * Get the full GitTagRef for the currently-selected tag.
+ */
+export function getSelectedTag(
+  state: LogInkState,
+  context: LogInkContext,
+): GitTagRef | undefined {
   const all = sortTags(context.tags?.tags || [], state.tagSort)
   const visible = state.filter
     ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
     : all
   if (visible.length === 0) return undefined
   const index = Math.min(state.selectedTagIndex, visible.length - 1)
-  return visible[index]?.name
+  return visible[index]
 }
 
 /**
@@ -108,13 +121,23 @@ export function getSelectedStashId(
   state: LogInkState,
   context: LogInkContext,
 ): string | undefined {
+  return getSelectedStash(state, context)?.ref
+}
+
+/**
+ * Get the full StashEntry for the currently-selected stash.
+ */
+export function getSelectedStash(
+  state: LogInkState,
+  context: LogInkContext,
+): StashEntry | undefined {
   const all = context.stashes?.stashes || []
   const visible = state.filter
     ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
     : all
   if (visible.length === 0) return undefined
   const index = Math.min(state.selectedStashIndex, visible.length - 1)
-  return visible[index]?.ref
+  return visible[index]
 }
 
 /**
@@ -124,11 +147,21 @@ export function getSelectedWorktreeId(
   state: LogInkState,
   context: LogInkContext,
 ): string | undefined {
+  return getSelectedWorktree(state, context)?.path
+}
+
+/**
+ * Get the full WorktreeEntry for the currently-selected worktree.
+ */
+export function getSelectedWorktree(
+  state: LogInkState,
+  context: LogInkContext,
+): WorktreeEntry | undefined {
   const all = context.worktreeList?.worktrees || []
   const visible = state.filter
     ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
     : all
   if (visible.length === 0) return undefined
   const index = Math.min(state.selectedWorktreeListIndex, visible.length - 1)
-  return visible[index]?.path
+  return visible[index]
 }

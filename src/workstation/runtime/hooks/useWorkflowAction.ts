@@ -48,10 +48,9 @@ import {
     updateLogInkContextStatus,
 } from '../../chrome/context'
 import { forgeNouns } from '../../chrome/forgeNouns'
-import { sortTags } from '../../chrome/sorting'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedTagId, getSelectedStashId, getSelectedWorktreeId } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedTagId, getSelectedTag, getSelectedStashId, getSelectedStash, getSelectedWorktreeId } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -574,29 +573,17 @@ export function useWorkflowAction(
         return rebaseOnto(git, branch.shortName)
       },
       'delete-tag': async () => {
-        const all = sortTags(context.tags?.tags || [], state.tagSort)
-        const visible = state.filter
-          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
-          : all
-        const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+        const tag = getSelectedTag(state, context)
         if (!tag) return { ok: false, message: 'No tag selected' }
         return deleteLocalTag(git, tag.name)
       },
       'push-tag': async () => {
-        const all = sortTags(context.tags?.tags || [], state.tagSort)
-        const visible = state.filter
-          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
-          : all
-        const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+        const tag = getSelectedTag(state, context)
         if (!tag) return { ok: false, message: 'No tag selected' }
         return pushTag(git, tag.name)
       },
       'drop-stash': async () => {
-        const all = context.stashes?.stashes || []
-        const visible = state.filter
-          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-          : all
-        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        const stash = getSelectedStash(state, context)
         if (!stash) return { ok: false, message: 'No stash selected' }
         // Remember the dropped commit so `u` can undo it.
         if (stash.hash) lastDroppedStashRef.current = { hash: stash.hash, message: stash.message }
@@ -610,47 +597,27 @@ export function useWorkflowAction(
         return result
       },
       'apply-stash': async () => {
-        const all = context.stashes?.stashes || []
-        const visible = state.filter
-          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-          : all
-        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        const stash = getSelectedStash(state, context)
         if (!stash) return { ok: false, message: 'No stash selected' }
         return applyStash(git, stash)
       },
       'apply-stash-index': async () => {
-        const all = context.stashes?.stashes || []
-        const visible = state.filter
-          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-          : all
-        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        const stash = getSelectedStash(state, context)
         if (!stash) return { ok: false, message: 'No stash selected' }
         return applyStashKeepIndex(git, stash)
       },
       'pop-stash': async () => {
-        const all = context.stashes?.stashes || []
-        const visible = state.filter
-          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-          : all
-        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        const stash = getSelectedStash(state, context)
         if (!stash) return { ok: false, message: 'No stash selected' }
         return popStash(git, stash)
       },
       'rename-stash': async () => {
-        const all = context.stashes?.stashes || []
-        const visible = state.filter
-          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-          : all
-        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        const stash = getSelectedStash(state, context)
         if (!stash) return { ok: false, message: 'No stash selected' }
         return renameStash(git, stash, payload ?? '')
       },
       'stash-branch': async () => {
-        const all = context.stashes?.stashes || []
-        const visible = state.filter
-          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-          : all
-        const stash = visible[Math.min(state.selectedStashIndex, visible.length - 1)]
+        const stash = getSelectedStash(state, context)
         if (!stash) return { ok: false, message: 'No stash selected' }
         return stashBranch(git, stash, payload ?? '')
       },
@@ -1265,11 +1232,7 @@ export function useWorkflowAction(
         return setUpstream(git, branch.shortName, upstream)
       },
       'delete-remote-tag': async () => {
-        const all = sortTags(context.tags?.tags || [], state.tagSort)
-        const visible = state.filter
-          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
-          : all
-        const tag = visible[Math.min(state.selectedTagIndex, visible.length - 1)]
+        const tag = getSelectedTag(state, context)
         if (!tag) return { ok: false, message: 'No tag selected' }
         return deleteRemoteTag(git, tag.name)
       },
