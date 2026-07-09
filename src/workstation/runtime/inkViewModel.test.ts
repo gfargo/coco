@@ -1409,6 +1409,21 @@ describe('log Ink view model', () => {
         expect(parseLogInkHistoryFetchPrefix('feat')).toBeUndefined()
         expect(parseLogInkHistoryFetchPrefix('fixpathfoo')).toBeUndefined()
       })
+
+      it('parses S:<token> into a pickaxe fetch arg', () => {
+        expect(parseLogInkHistoryFetchPrefix('S:useState')).toEqual({ pickaxe: 'useState' })
+        expect(parseLogInkHistoryFetchPrefix('S:my function name')).toEqual({ pickaxe: 'my function name' })
+      })
+
+      it('parses G:<regex> into a grep fetch arg', () => {
+        expect(parseLogInkHistoryFetchPrefix('G:TODO|FIXME')).toEqual({ grep: 'TODO|FIXME' })
+        expect(parseLogInkHistoryFetchPrefix('G:\\bclass\\b')).toEqual({ grep: '\\bclass\\b' })
+      })
+
+      it('returns undefined for S: and G: with no value', () => {
+        expect(parseLogInkHistoryFetchPrefix('S:')).toBeUndefined()
+        expect(parseLogInkHistoryFetchPrefix('G:   ')).toBeUndefined()
+      })
     })
 
     it('setHistoryFetchArgs / replaceRows / clear flow keeps state internally consistent', () => {

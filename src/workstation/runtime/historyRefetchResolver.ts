@@ -76,6 +76,8 @@ export function buildHistoryRefetchArgv(
     ...buildToggleGraphArgs(logArgv, fullGraph),
     ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
     ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
+    ...(fetchArgs?.pickaxe ? { pickaxe: fetchArgs.pickaxe } : {}),
+    ...(fetchArgs?.grep ? { grep: fetchArgs.grep } : {}),
   }
 }
 
@@ -87,6 +89,8 @@ export function buildHistoryRefetchArgv(
 function describeFetchArgs(fetchArgs: LogInkHistoryFetchArgs | undefined): string | undefined {
   if (fetchArgs?.author) return `author:${fetchArgs.author}`
   if (fetchArgs?.path) return `path:${fetchArgs.path}`
+  if (fetchArgs?.pickaxe) return `S:${fetchArgs.pickaxe}`
+  if (fetchArgs?.grep) return `G:${fetchArgs.grep}`
   return undefined
 }
 
