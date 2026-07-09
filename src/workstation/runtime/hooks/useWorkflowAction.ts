@@ -48,10 +48,10 @@ import {
     updateLogInkContextStatus,
 } from '../../chrome/context'
 import { forgeNouns } from '../../chrome/forgeNouns'
-import { sortBranches, sortTags } from '../../chrome/sorting'
+import { sortTags } from '../../chrome/sorting'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedWorktreeId } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedTagId, getSelectedStashId, getSelectedWorktreeId } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -537,30 +537,18 @@ export function useWorkflowAction(
         return createLightweightTag(git, name, 'HEAD')
       },
       'checkout-branch': async () => {
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         if (branch.current) return { ok: true, message: `Already on ${branch.shortName}` }
         return checkoutBranch(git, branch)
       },
       'delete-branch': async () => {
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return deleteBranch(git, branch)
       },
       'force-delete-branch': async () => {
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return deleteBranch(git, branch, true)
       },
@@ -578,11 +566,7 @@ export function useWorkflowAction(
         if (!current) {
           return { ok: false, message: 'Detached HEAD — checkout a branch before rebasing onto a ref.' }
         }
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         if (branch.shortName === current) {
           return { ok: false, message: 'Cannot rebase a branch onto itself.' }
@@ -1243,39 +1227,23 @@ export function useWorkflowAction(
       // / fetch-remotes variants above still handle the same keys
       // from any other context.
       'fetch-selected-branch': async () => {
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return fetchBranch(git, branch)
       },
       'pull-selected-branch': async () => {
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return pullBranch(git, branch, context.branches?.currentBranch)
       },
       'push-selected-branch': async () => {
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return pushBranch(git, branch)
       },
       'force-push-current-branch': async () => forcePushCurrentBranch(git),
       'force-push-selected-branch': async () => {
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return forcePushBranch(git, branch)
       },
@@ -1285,22 +1253,14 @@ export function useWorkflowAction(
       'rename-branch': async () => {
         const newName = payload?.trim()
         if (!newName) return { ok: false, message: 'New branch name required' }
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return renameBranch(git, branch.shortName, newName)
       },
       'set-upstream': async () => {
         const upstream = payload?.trim()
         if (!upstream) return { ok: false, message: 'Upstream ref required' }
-        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-        const visible = state.filter
-          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-          : all
-        const branch = visible[Math.min(state.selectedBranchIndex, visible.length - 1)]
+        const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return setUpstream(git, branch.shortName, upstream)
       },
