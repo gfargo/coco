@@ -11,10 +11,12 @@ export interface LogOptions extends BaseCommandOptions {
   branch?: string
   commit?: string
   format?: LogFormat
+  grep?: string
   limit?: number
   merges?: boolean
   noMerges?: boolean
   path?: string | string[]
+  pickaxe?: string
   since?: string
   until?: string
   view?: LogView

@@ -316,6 +316,14 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
     args.push(`--author=${argv.author}`)
   }
 
+  if (argv.pickaxe) {
+    args.push(`-S${argv.pickaxe}`)
+  }
+
+  if (argv.grep) {
+    args.push(`-G${argv.grep}`)
+  }
+
   if (argv.since) {
     args.push(`--since=${argv.since}`)
   }

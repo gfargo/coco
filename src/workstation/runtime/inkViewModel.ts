@@ -963,6 +963,10 @@ export type LogInkStatusFilterMask = {
 export type LogInkHistoryFetchArgs = {
   author?: string
   path?: string
+  /** `git log -S <token>` — find commits that add/remove the token. */
+  pickaxe?: string
+  /** `git log -G <regex>` — find commits whose patch matches the regex. */
+  grep?: string
 }
 
 export const DEFAULT_LOG_INK_STATUS_FILTER_MASK: LogInkStatusFilterMask = {
@@ -972,12 +976,12 @@ export const DEFAULT_LOG_INK_STATUS_FILTER_MASK: LogInkStatusFilterMask = {
 }
 
 /**
- * Detect a history server-side filter prefix (#776). Returns the parsed
- * `LogInkHistoryFetchArgs` for `path:<value>` and `author:<value>`
- * prefixes, or `undefined` for a plain (client-side) filter. The whole
- * remainder of the string (post-prefix) becomes the value — paths and
- * author names commonly contain spaces, and we don't try to parse
- * shell-like syntax.
+ * Detect a history server-side filter prefix (#776, #1361). Returns the
+ * parsed `LogInkHistoryFetchArgs` for `path:<value>`, `author:<value>`,
+ * `S:<token>` (pickaxe), and `G:<regex>` (grep-diff) prefixes, or
+ * `undefined` for a plain (client-side) filter. The whole remainder of
+ * the string (post-prefix) becomes the value — paths, author names,
+ * and search tokens commonly contain spaces.
  */
 export function parseLogInkHistoryFetchPrefix(filter: string): LogInkHistoryFetchArgs | undefined {
   const trimmed = filter.trim()
@@ -988,6 +992,14 @@ export function parseLogInkHistoryFetchPrefix(filter: string): LogInkHistoryFetc
   if (trimmed.startsWith('author:')) {
     const value = trimmed.slice('author:'.length).trim()
     return value ? { author: value } : undefined
+  }
+  if (trimmed.startsWith('S:')) {
+    const value = trimmed.slice('S:'.length).trim()
+    return value ? { pickaxe: value } : undefined
+  }
+  if (trimmed.startsWith('G:')) {
+    const value = trimmed.slice('G:'.length).trim()
+    return value ? { grep: value } : undefined
   }
   return undefined
 }

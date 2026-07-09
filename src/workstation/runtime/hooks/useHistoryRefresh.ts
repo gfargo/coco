@@ -68,6 +68,8 @@ export function useHistoryRefresh(
         : ({
             ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
             ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
+            ...(fetchArgs?.pickaxe ? { pickaxe: fetchArgs.pickaxe } : {}),
+            ...(fetchArgs?.grep ? { grep: fetchArgs.grep } : {}),
           } as LogArgv)
       // Stash commits as graph roots so post-operation refreshes keep the
       // same rich graph the boot loader assembled.

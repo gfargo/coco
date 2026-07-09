@@ -4,19 +4,19 @@ import { join } from 'path'
 import { simpleGit } from 'simple-git'
 import { Arguments } from 'yargs'
 import {
-  COMMIT_CONTEXT_DEFAULT_LIMIT,
-  FIELD_SEPARATOR,
-  LOG_DEFAULT_LIMIT,
-  LOG_INTERACTIVE_DEFAULT_LIMIT,
-  buildLogArgs,
-  buildToggleGraphArgs,
-  getCommitFilePreview,
-  getCommitRows,
-  getLogRows,
-  getLogRowsAnchoredOn,
-  getLogView,
-  parseCommitDetail,
-  parseLogOutput,
+    COMMIT_CONTEXT_DEFAULT_LIMIT,
+    FIELD_SEPARATOR,
+    LOG_DEFAULT_LIMIT,
+    LOG_INTERACTIVE_DEFAULT_LIMIT,
+    buildLogArgs,
+    buildToggleGraphArgs,
+    getCommitFilePreview,
+    getCommitRows,
+    getLogRows,
+    getLogRowsAnchoredOn,
+    getLogView,
+    parseCommitDetail,
+    parseLogOutput,
 } from './data'
 import { LogOptions } from './config'
 
@@ -232,6 +232,16 @@ describe('log data layer', () => {
     expect(buildLogArgs(argv())).toEqual(
       expect.arrayContaining([expect.stringContaining('%P')])
     )
+  })
+
+  it('passes -S<token> for pickaxe search', () => {
+    const args = buildLogArgs(argv({ pickaxe: 'useState' }))
+    expect(args).toContain('-SuseState')
+  })
+
+  it('passes -G<regex> for grep-diff search', () => {
+    const args = buildLogArgs(argv({ grep: 'TODO|FIXME' }))
+    expect(args).toContain('-GTODO|FIXME')
   })
 
   it('parses commit detail metadata and changed files', () => {
