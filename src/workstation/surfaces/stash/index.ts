@@ -21,7 +21,7 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
-import { isPendingItemAction } from '../../../workstation/runtime/inkViewModel'
+import { isMarkedItem, isPendingItemAction } from '../../../workstation/runtime/inkViewModel'
 
 const GAP = 2 // cells between columns
 
@@ -56,9 +56,16 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
   const startIndex = clampListWindowStart(selected, stashes.length, listRows)
   const visible = stashes.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
+  // #1361 — same marked-count / range chip the branches header shows.
+  const stashSelection = state.selection?.view === 'stash' ? state.selection : undefined
+  const markedLabel = stashSelection?.anchorId
+    ? ' | range: v..cursor'
+    : stashSelection && stashSelection.ids.size > 0
+      ? ` | ${stashSelection.ids.size} marked`
+      : ''
   const headerRight = loading
     ? 'Loading stashes…'
-    : `${stashes.length}/${allStashes.length} stashes${filterLabel}`
+    : `${stashes.length}/${allStashes.length} stashes${markedLabel}${filterLabel}`
   const emptyLabel = formatLogInkStashEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'stashes' })
   const now = getRenderNow()
@@ -125,6 +132,12 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
+        // #1361 — x-marked / v-anchored rows carry a mark glyph next to
+        // the cursor, same slot convention as the branches surface.
+        const isMarked = isMarkedItem(state.selection, 'stash', stash.ref)
+        const isRangeAnchor = state.selection?.view === 'stash' &&
+          state.selection.anchorId === stash.ref
+        const markGlyph = isMarked || isRangeAnchor ? (theme.ascii ? '*' : '●') : ' '
         const deleting = isPendingItemAction(state.pendingItemAction, 'stash', stash.ref)
         // The `stash@{N}` ref is an identifier, not a status icon, so a
         // delete-in-flight appends an accent spinner at the row's end
@@ -142,7 +155,7 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
           bold: isSelected,
           dimColor: !isSelected,
         },
-        `${cursor} `,
+        `${cursor}${markGlyph}`,
         cell(stash.ref, refCol),
         showAge ? h(Text, { dimColor: true }, `${' '.repeat(GAP)}${cell(ageOf(stash), ageCol, 'right')}`) : null,
         branchCol > 0 ? h(Text, { dimColor: true }, `${' '.repeat(GAP)}${cell(stash.branch || '', branchCol)}`) : null,

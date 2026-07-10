@@ -261,7 +261,9 @@ function renderActiveSidebarContent(
     return renderSelectableSidebarRows(
       h, Text, stashes, state.selectedStashIndex, focused, width, theme,
       (stash, index) => {
-        const base = `@{${index}} ${stash.message || '(no message)'}`
+        // #1361 — leading mark glyph, same convention as the branches tab.
+        const mark = isMarkedItem(state.selection, 'stash', stash.ref) ? (theme.ascii ? '*' : '●') : ' '
+        const base = `${mark}@{${index}} ${stash.message || '(no message)'}`
         // `@{N}` is the stash ref, not a status icon, so append the
         // spinner rather than replacing it.
         return isPendingItemAction(pending, 'stash', stash.ref) ? `${base} ${spin}` : base

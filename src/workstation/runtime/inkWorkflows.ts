@@ -466,9 +466,13 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       id: 'drop-stash',
       key: 'X',
       label: 'Drop stash',
-      description: 'Drop the selected stash after confirmation.',
+      description: 'Drop the selected or marked stashes after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      // #1361 — batch-capable: with x-marks or a v-range active on the
+      // stash view, one X drops them all (each named in the confirm
+      // panel; dropped in descending stash@{N} order under the hood).
+      targets: 'multi',
     },
     {
       // Palette-only create variants (empty `key`): no global hotkey to

@@ -1999,12 +1999,15 @@ export function getLogInkInputEvents(
   // first Esc drops the range anchor (the user is mid-range and wants
   // out of range mode, not out of their marks), the next clears the
   // marked set. Scoped to the surface that owns the selection (the
-  // promoted view OR its sidebar tab — marks can be toggled from both)
-  // so Esc on an unrelated view still pops normally; placed above the
-  // generic popView rung so clearing a selection never also navigates.
+  // promoted view OR its sidebar tab — marks can be toggled from both,
+  // and the sidebar tab id doesn't always match the view id, e.g.
+  // 'stash' the view vs 'stashes' the tab) so Esc on an unrelated view
+  // still pops normally; placed above the generic popView rung so
+  // clearing a selection never also navigates.
   const selectionOwnsFocus = state.selection && (
     state.selection.view === state.activeView ||
-    (state.selection.view === 'branches' && isBranchActionTarget(state))
+    (state.selection.view === 'branches' && isBranchActionTarget(state)) ||
+    (state.selection.view === 'stash' && isStashActionTarget(state))
   )
   if (key.escape && state.selection && selectionOwnsFocus) {
     if (state.selection.anchorId !== undefined) {
@@ -2773,14 +2776,16 @@ export function getLogInkInputEvents(
   // peek intercept made line-level staging unreachable on narrow
   // terminals (the narrow footer even replaced the "v select" hint
   // with "v peek", so the feature silently vanished with width).
-  // NOT on branch action targets either (#1361): `v` is the range-select
-  // anchor there — the same collision #1389 fixed for the diff.
+  // NOT on branch or stash action targets either (#1361): `v` is the
+  // range-select anchor there — the same collision #1389 fixed for the
+  // diff.
   if (
     inputValue === 'v' &&
     context.singlePane &&
     state.focus !== 'sidebar' &&
     !isWorktreeDiffTarget(state) &&
-    !isBranchActionTarget(state)
+    !isBranchActionTarget(state) &&
+    !isStashActionTarget(state)
   ) {
     return [action({ type: 'togglePeek' })]
   }
@@ -3709,6 +3714,40 @@ export function getLogInkInputEvents(
     return [
       action({ type: 'setRangeAnchor', view: 'branches', id }),
       action({ type: 'setStatus', value: `Range anchor: ${id} — j/k extends, D acts on the range` }),
+    ]
+  }
+
+  // #1361 — same x/v grammar on the stash view. `stash@{N}` refs shift
+  // when an earlier drop lands, but that's a git-layer concern
+  // (dropStashes drops in descending order) — the ids marked here stay
+  // whatever ref was under the cursor at mark time, which is exactly
+  // what the confirm panel will show.
+  if (inputValue === 'x' && isStashActionTarget(state) && context.stashCount) {
+    const id = context.stashSelectedRef
+    if (!id) {
+      return [action({ type: 'setStatus', value: 'No stash under cursor to mark', kind: 'warning' })]
+    }
+    return [
+      action({ type: 'toggleMark', view: 'stash', id }),
+      action({ type: 'moveStash', delta: 1, count: context.stashCount }),
+    ]
+  }
+
+  if (inputValue === 'v' && isStashActionTarget(state) && context.stashCount) {
+    const anchored = state.selection?.view === 'stash' && state.selection.anchorId !== undefined
+    if (anchored) {
+      return [
+        action({ type: 'setRangeAnchor', view: 'stash', id: undefined }),
+        action({ type: 'setStatus', value: 'Range anchor cleared', ttl: 'echo' }),
+      ]
+    }
+    const id = context.stashSelectedRef
+    if (!id) {
+      return [action({ type: 'setStatus', value: 'No stash under cursor to anchor', kind: 'warning' })]
+    }
+    return [
+      action({ type: 'setRangeAnchor', view: 'stash', id }),
+      action({ type: 'setStatus', value: `Range anchor: ${id} — j/k extends, X acts on the range` }),
     ]
   }
 

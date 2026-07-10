@@ -173,6 +173,24 @@ describe('confirmation target naming', () => {
     ))
     expect(text).toContain('6 branches: b1, b2, b3, b4 +2 more')
   })
+
+  it('pluralizes the target line for a marked batch of stashes (-es, not -ss)', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'drop-stash',
+      selection: { view: 'stash' as const, anchorId: undefined, ids: new Set(['stash@{0}', 'stash@{1}']) },
+    }
+    const context = {
+      stashes: {
+        stashes: [
+          { ref: 'stash@{0}', message: 'wip', hash: 'a', date: '2026-01-01' },
+          { ref: 'stash@{1}', message: 'wip2', hash: 'b', date: '2026-01-01' },
+        ],
+      },
+    } as never
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, context, 100, theme, false))
+    expect(text).toContain('2 stashes: stash@{0}, stash@{1}')
+  })
 })
 
 describe('rebase-onto-branch confirmation panel (#0.71)', () => {

@@ -176,6 +176,53 @@ export function dropStash(git: SimpleGit, stash: StashEntry): Promise<BranchActi
   )
 }
 
+/** Parse the `N` out of a `stash@{N}` ref; NaN for anything else. */
+function stashRefIndex(ref: string): number {
+  const match = ref.match(/^stash@\{(\d+)\}$/)
+  return match ? Number(match[1]) : NaN
+}
+
+/**
+ * Drop several stashes (#1361 batch delete). MUST drop in descending
+ * `stash@{N}` order: dropping `stash@{0}` renumbers every later entry
+ * down by one, so an ascending or unordered loop targets the wrong
+ * stash from the second drop onward. Continues past a per-stash
+ * failure (mirrors `deleteBranches`) and reports a summary; per-stash
+ * failure messages ride in `details`.
+ */
+export async function dropStashes(
+  git: SimpleGit,
+  stashes: StashEntry[]
+): Promise<BranchActionResult> {
+  if (stashes.length === 0) {
+    return { ok: false, message: 'No stashes selected.' }
+  }
+  if (stashes.length === 1) {
+    return dropStash(git, stashes[0])
+  }
+
+  const ordered = [...stashes].sort((a, b) => stashRefIndex(b.ref) - stashRefIndex(a.ref))
+  const dropped: string[] = []
+  const failures: string[] = []
+  for (const stash of ordered) {
+    const result = await dropStash(git, stash)
+    if (result.ok) {
+      dropped.push(stash.ref)
+    } else {
+      failures.push(`${stash.ref}: ${result.message}`)
+    }
+  }
+
+  if (failures.length === 0) {
+    return { ok: true, message: `Dropped ${dropped.length} stashes: ${dropped.join(', ')}` }
+  }
+  return {
+    ok: false,
+    message: `Dropped ${dropped.length} of ${stashes.length} stashes — ${failures.length} refused`,
+    details: failures,
+  }
+}
+
 /**
  * Materialize a single file's contents from a stash into the working
  * tree, leaving the rest of the stash untouched. Equivalent to
