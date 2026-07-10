@@ -144,26 +144,17 @@ export function renderConfirmationPanel(
   const { Box, Text } = components
   const action = getLogInkWorkflowActionById(state.pendingConfirmationId)
   const label = action?.label || 'Workflow action'
+  // #1451 — prefer the registry's warning field over any fallback. Most
+  // entries carry a static string; a few (rebase-onto-branch,
+  // checkout-created-branch) need payload-dependent copy and supply a
+  // function instead (#1452 nice-to-have — replaces the old per-id
+  // if-chain here).
+  const registryWarning = typeof action?.warning === 'function'
+    ? action.warning(state)
+    : action?.warning
   const warning =
-    // #1451 — prefer the registry's warning field over any fallback.
-    // The mutation confirmations (revert-file, revert-hunk, discard-lines,
-    // discard-draft, discard-rebase-plan) all carry their own warning.
-    action?.warning
-    ? action.warning
-    // Rebase-onto carries a per-invocation warning naming both branches
-    // (built in inkInput from the cursored + current branch). Fall back
-    // to a static line if the payload is somehow absent.
-    : state.pendingConfirmationId === 'rebase-onto-branch'
-    ? state.pendingConfirmationPayload
-      || 'Rebase rewrites the current branch\'s history. This cannot be undone by Coco.'
-    // Post-create-branch / create-branch-here checkout prompt (#1326):
-    // the payload IS the branch name — render it so the user sees what
-    // they're about to switch to. Fall back to a generic line if the
-    // payload is somehow absent.
-    : state.pendingConfirmationId === 'checkout-created-branch'
-    ? state.pendingConfirmationPayload
-      ? `Branch '${state.pendingConfirmationPayload}' created — switch to it now?`
-      : 'Branch created — switch to it now?'
+    registryWarning
+    ? registryWarning
     : action?.kind === 'ai'
     ? `AI action requires confirmation. Estimated ${action.estimatedTokens || '<unknown>'} tokens.`
     : 'Destructive Git action requires confirmation.'

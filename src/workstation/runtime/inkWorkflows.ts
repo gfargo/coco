@@ -7,6 +7,7 @@ import { StashOverview } from '../../git/stashData'
 import { WorktreeOverview } from '../../git/statusData'
 import { TagOverview } from '../../git/tagData'
 import { WorktreeOverview as WorktreeListOverview } from '../../git/worktreeData'
+import type { LogInkState } from './inkViewModel'
 
 export type LogInkWorkflowContext = {
   branches?: BranchOverview
@@ -39,11 +40,12 @@ export type LogInkWorkflowAction = {
   /**
    * Warning copy shown in the confirmation panel when `requiresConfirmation`
    * is true (#1451). When set, the renderer uses this instead of the generic
-   * "Destructive Git action requires confirmation" fallback or the per-id
-   * if-chain in overlays.ts. Supports a payload interpolation function for
-   * context-dependent copy (e.g. naming the branch being deleted).
+   * "Destructive Git action requires confirmation" fallback. A function form
+   * is called with the pending state so payload-dependent copy (e.g. naming
+   * the branch being deleted or checked out) can be computed without a
+   * per-id if-chain in overlays.ts.
    */
-  warning?: string
+  warning?: string | ((state: LogInkState) => string)
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -427,6 +429,12 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Rebase the current branch onto the cursored branch / ref (non-interactive) after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      // Per-invocation warning naming both branches, built in inkInput
+      // from the cursored + current branch and carried as the pending
+      // confirmation payload. Falls back to a static line if the payload
+      // is somehow absent.
+      warning: (state) => state.pendingConfirmationPayload
+        || 'Rebase rewrites the current branch\'s history. This cannot be undone by Coco.',
     },
     {
       id: 'delete-tag',
@@ -664,6 +672,12 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Switch to the branch you just created.',
       kind: 'normal',
       requiresConfirmation: false,
+      // The payload IS the branch name (#1326) — render it so the user
+      // sees what they're about to switch to. Falls back to a generic
+      // line if the payload is somehow absent.
+      warning: (state) => state.pendingConfirmationPayload
+        ? `Branch '${state.pendingConfirmationPayload}' created — switch to it now?`
+        : 'Branch created — switch to it now?',
     },
     {
       // Per-view-only: scoped to the history view in inkInput via the
