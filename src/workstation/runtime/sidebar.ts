@@ -26,7 +26,7 @@ import type {
     LogInkSidebarTab,
     LogInkState,
 } from '../../workstation/runtime/inkViewModel'
-import { getLogInkSidebarTabs, isPendingItemAction } from '../../workstation/runtime/inkViewModel'
+import { getLogInkSidebarTabs, isMarkedItem, isPendingItemAction } from '../../workstation/runtime/inkViewModel'
 import { buildFilteredLists, type FilteredLists } from './hooks/buildFilteredLists'
 import type { LogInkComponents, LogInkContext } from './types'
 import { focusBorderColor, panelTitle, sidebarTabLabel } from './utils'
@@ -213,7 +213,13 @@ function renderActiveSidebarContent(
           const glyph = isPendingItemAction(pending, 'branch', branch.shortName)
             ? spin
             : branchRowMarker(branch, { ascii: theme.ascii }).glyph
-          return `${glyph} ${branch.shortName}`
+          // #1361 — x-marked rows carry the mark glyph in the sidebar
+          // too, so a batch built from the sidebar tab reads the same
+          // as on the promoted view.
+          const mark = isMarkedItem(state.selection, 'branches', branch.shortName)
+            ? (theme.ascii ? '*' : '●')
+            : ' '
+          return `${mark}${glyph} ${branch.shortName}`
         },
         'tab-branches', visibleListCount,
         // Paint the checked-out branch green so "where am I?" reads at a

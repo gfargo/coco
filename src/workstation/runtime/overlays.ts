@@ -92,11 +92,20 @@ export function renderInputPromptPanel(
 }
 
 /**
- * Human line naming the item a pending confirmation will act on, or
- * undefined when the workflow has no resolvable single target. Shown in
- * the confirm overlay so the user never confirms blind — several
+ * Cap on how many batch target names the confirm panel spells out
+ * inline (#1361). Beyond it the line abbreviates to "+N more" so a
+ * 20-item batch can't overflow a 24-row terminal — the count is always
+ * exact even when the names are truncated.
+ */
+const CONFIRMATION_TARGET_NAME_CAP = 4
+
+/**
+ * Human line naming the item(s) a pending confirmation will act on, or
+ * undefined when the workflow has no resolvable target. Shown in the
+ * confirm overlay so the user never confirms blind — several
  * destructive keys (D / T / X / W) reach the confirm from views where
- * the target list isn't even on screen.
+ * the target list isn't even on screen, and a batch confirm (#1361)
+ * must name every marked item or the user confirms one and acts on N.
  *
  * Everything list-shaped (branch/tag/stash/worktree deletes and
  * checkouts) resolves through `resolvePendingItemAction` — the same
@@ -112,8 +121,16 @@ export function describeConfirmationTarget(
   const id = state.pendingConfirmationId
   if (!id) return undefined
   const item = resolvePendingItemAction(id, state, context)
-  if (item) {
-    return `${item.kind}: ${item.id}`
+  if (item && item.ids.length === 1) {
+    return `${item.kind}: ${item.ids[0]}`
+  }
+  if (item && item.ids.length > 1) {
+    const shown = item.ids.slice(0, CONFIRMATION_TARGET_NAME_CAP)
+    const overflow = item.ids.length - shown.length
+    const names = overflow > 0 ? `${shown.join(', ')} +${overflow} more` : shown.join(', ')
+    // branch/stash pluralize with -es; tag/worktree/pull-request with -s.
+    const plural = /(ch|sh)$/.test(item.kind) ? `${item.kind}es` : `${item.kind}s`
+    return `${item.ids.length} ${plural}: ${names}`
   }
   const commit = getSelectedCommitTarget(id, state)
   if (commit) {

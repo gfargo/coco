@@ -46,6 +46,16 @@ export type LogInkWorkflowAction = {
    * per-id if-chain in overlays.ts.
    */
   warning?: string | ((state: LogInkState) => string)
+  /**
+   * Target contract (#1361 multi-select). `'multi'` workflows resolve
+   * their targets through the batch selector (range → marked set →
+   * cursored single) and execute against every resolved item; the
+   * confirm panel pluralizes accordingly. Absent/`'single'` workflows
+   * always act on the one cursored item and ignore marks entirely —
+   * the plural contract is opt-in per workflow so a checkout can never
+   * accidentally become plural.
+   */
+  targets?: 'single' | 'multi'
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -395,9 +405,13 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       id: 'delete-branch',
       key: 'D',
       label: 'Delete branch',
-      description: 'Delete the selected branch after confirmation.',
+      description: 'Delete the selected or marked branches after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      // #1361 — first batch-capable workflow: with x-marks or a v-range
+      // active on the branches view, one D deletes them all (each named
+      // in the confirm panel).
+      targets: 'multi',
     },
     {
       // No key binding — this is raised by the runtime as a second
@@ -407,10 +421,14 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       id: 'force-delete-branch',
       key: '',
       label: 'Force-delete branch',
-      description: 'Force-delete the selected branch even if it is not fully merged (git branch -D).',
+      description: 'Force-delete the selected or marked branches even if not fully merged (git branch -D).',
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'Not fully merged. Force-delete (git branch -D) is irreversible.',
+      // #1361 — after a batch -d refusal the marks that remain
+      // resolvable are exactly the refused branches, so the escalated
+      // force-delete re-targets precisely them.
+      targets: 'multi',
     },
     {
       // #0.71 — rebase the current branch onto the cursored branch/ref

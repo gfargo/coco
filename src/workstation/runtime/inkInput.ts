@@ -1995,6 +1995,30 @@ export function getLogInkInputEvents(
     return [action({ type: 'togglePeek' })]
   }
 
+  // #1361 — multi-select Esc rungs, two-stage like the filter's Esc:
+  // first Esc drops the range anchor (the user is mid-range and wants
+  // out of range mode, not out of their marks), the next clears the
+  // marked set. Scoped to the surface that owns the selection (the
+  // promoted view OR its sidebar tab — marks can be toggled from both)
+  // so Esc on an unrelated view still pops normally; placed above the
+  // generic popView rung so clearing a selection never also navigates.
+  const selectionOwnsFocus = state.selection && (
+    state.selection.view === state.activeView ||
+    (state.selection.view === 'branches' && isBranchActionTarget(state))
+  )
+  if (key.escape && state.selection && selectionOwnsFocus) {
+    if (state.selection.anchorId !== undefined) {
+      return [
+        action({ type: 'setRangeAnchor', view: state.selection.view, id: undefined }),
+        action({ type: 'setStatus', value: 'Range anchor cleared', ttl: 'echo' }),
+      ]
+    }
+    return [
+      action({ type: 'clearSelection' }),
+      action({ type: 'setStatus', value: `Cleared ${state.selection.ids.size} marked`, ttl: 'echo' }),
+    ]
+  }
+
   // Compare-flow cancel via Esc (#779) when there's no view to pop.
   // History is always the nav-stack root (navigateHome resets the
   // stack instead of pushing "history" onto it), so a compareBase-armed
@@ -2749,11 +2773,14 @@ export function getLogInkInputEvents(
   // peek intercept made line-level staging unreachable on narrow
   // terminals (the narrow footer even replaced the "v select" hint
   // with "v peek", so the feature silently vanished with width).
+  // NOT on branch action targets either (#1361): `v` is the range-select
+  // anchor there — the same collision #1389 fixed for the diff.
   if (
     inputValue === 'v' &&
     context.singlePane &&
     state.focus !== 'sidebar' &&
-    !isWorktreeDiffTarget(state)
+    !isWorktreeDiffTarget(state) &&
+    !isBranchActionTarget(state)
   ) {
     return [action({ type: 'togglePeek' })]
   }
@@ -3642,6 +3669,46 @@ export function getLogInkInputEvents(
     return [
       action({ type: 'setCompareBase', value: ref }),
       action({ type: 'setStatus', value: `Compare base: ${ref.label} — press enter on another ref to diff` }),
+    ]
+  }
+
+  // #1361 multi-select — `x` toggles a mark on the cursored branch and
+  // auto-advances one row (space-space-space staging ergonomic, #1353),
+  // so marking a run of branches is `x x x`. Batch-capable workflows
+  // (D delete) then act on the marked set, each target named in the
+  // confirm panel. Esc clears (two-stage: range anchor first, marks
+  // second).
+  if (inputValue === 'x' && isBranchActionTarget(state) && context.branchCount) {
+    const id = context.branchSelectedShortName
+    if (!id) {
+      return [action({ type: 'setStatus', value: 'No branch under cursor to mark', kind: 'warning' })]
+    }
+    return [
+      action({ type: 'toggleMark', view: 'branches', id }),
+      action({ type: 'moveBranch', delta: 1, count: context.branchCount }),
+    ]
+  }
+
+  // #1361 — `v` anchors a range selection at the cursored branch; j/k
+  // then extends it (the live range is anchor..cursor) and a
+  // batch-capable workflow acts on the span. Same visual-select grammar
+  // as the staging diff's line-select (#1389). `v` again clears the
+  // anchor.
+  if (inputValue === 'v' && isBranchActionTarget(state) && context.branchCount) {
+    const anchored = state.selection?.view === 'branches' && state.selection.anchorId !== undefined
+    if (anchored) {
+      return [
+        action({ type: 'setRangeAnchor', view: 'branches', id: undefined }),
+        action({ type: 'setStatus', value: 'Range anchor cleared', ttl: 'echo' }),
+      ]
+    }
+    const id = context.branchSelectedShortName
+    if (!id) {
+      return [action({ type: 'setStatus', value: 'No branch under cursor to anchor', kind: 'warning' })]
+    }
+    return [
+      action({ type: 'setRangeAnchor', view: 'branches', id }),
+      action({ type: 'setStatus', value: `Range anchor: ${id} — j/k extends, D acts on the range` }),
     ]
   }
 

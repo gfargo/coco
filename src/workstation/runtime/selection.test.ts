@@ -5,9 +5,9 @@
  * legacy index-based state — proving the bridge is correct before
  * consumers start migrating to read through it.
  */
-import { createLogInkState } from './inkViewModel'
+import { applyLogInkAction, createLogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
-import { getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedWorktree, getSelectedCommitTarget } from './selection'
+import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedWorktree, getSelectedCommitTarget } from './selection'
 
 function makeBranch(shortName: string, date = '2026-01-01') {
   return {
@@ -220,6 +220,83 @@ describe('selection selectors (#1452)', () => {
     it('returns undefined when id is undefined', () => {
       const state = createLogInkState(rows)
       expect(getSelectedCommitTarget(undefined, state)).toBeUndefined()
+    })
+  })
+
+  // #1361 — batch target resolution: range → marks → cursored single.
+  // Sorted branch order in this fixture: feature, hotfix, main.
+  describe('getSelectedBranchBatch', () => {
+    it('falls back to the single cursored branch with no selection', () => {
+      const state = { ...createLogInkState([]), selectedBranchIndex: 1 }
+      expect(getSelectedBranchBatch(state, context).map((b) => b.shortName)).toEqual(['hotfix'])
+    })
+
+    it('resolves the marked set in list order regardless of marking order', () => {
+      let state = createLogInkState([])
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'main' })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feature' })
+      expect(getSelectedBranchBatch(state, context).map((b) => b.shortName)).toEqual(['feature', 'main'])
+    })
+
+    it('marked ids that no longer resolve drop out silently', () => {
+      let state = createLogInkState([])
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feature' })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'deleted-elsewhere' })
+      expect(getSelectedBranchBatch(state, context).map((b) => b.shortName)).toEqual(['feature'])
+    })
+
+    it('marks survive an active filter — every marked branch resolves, not just visible ones', () => {
+      let state = createLogInkState([])
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feature' })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'main' })
+      const filtered = { ...state, filter: 'feat' }
+      expect(getSelectedBranchBatch(filtered, context).map((b) => b.shortName)).toEqual(['feature', 'main'])
+    })
+
+    // #1361 — the reducer keeps marks and an anchor mutually exclusive
+    // (setRangeAnchor clears marks, toggleMark clears the anchor), so
+    // this exact combination isn't reachable through normal dispatch.
+    // Constructing the state directly still exercises the selector's
+    // own priority contract defensively — anything that ever hands it
+    // a selection with both set must not silently act on the marks.
+    it('an active range anchor wins over marks and resolves anchor..cursor positionally', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedBranchIndex: 1,
+        selection: { view: 'branches' as const, anchorId: 'feature', ids: new Set(['main']) },
+      }
+      // Anchor on 'feature' (index 0), cursor on index 1 ('hotfix').
+      expect(getSelectedBranchBatch(state, context).map((b) => b.shortName)).toEqual(['feature', 'hotfix'])
+    })
+
+    it('a backwards range (cursor above the anchor) resolves the same span', () => {
+      let state = createLogInkState([])
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: 'main' })
+      // Anchor on 'main' (index 2), cursor up at index 0 ('feature').
+      const ranged = { ...state, selectedBranchIndex: 0 }
+      expect(getSelectedBranchBatch(ranged, context).map((b) => b.shortName))
+        .toEqual(['feature', 'hotfix', 'main'])
+    })
+
+    it('skips the range rung when the anchor no longer resolves in the visible list', () => {
+      // Same defensive-construction note as above — directly building
+      // the state exercises the selector's fallback-to-marks rung.
+      const state = {
+        ...createLogInkState([]),
+        filter: 'hot',
+        selectedBranchIndex: 0,
+        selection: { view: 'branches' as const, anchorId: 'main', ids: new Set(['hotfix']) },
+      }
+      // Filter hides 'main' — the positional range is meaningless, so
+      // resolution falls through to the marked set.
+      expect(getSelectedBranchBatch(state, context).map((b) => b.shortName)).toEqual(['hotfix'])
+    })
+
+    it('ignores a selection owned by a different view', () => {
+      let state = createLogInkState([])
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'stash', id: 'stash@{0}' })
+      const cursored = { ...state, selectedBranchIndex: 0 }
+      expect(getSelectedBranchBatch(cursored, context).map((b) => b.shortName)).toEqual(['feature'])
     })
   })
 })

@@ -3,6 +3,7 @@ import {
   checkoutBranchByName,
   createBranch,
   deleteBranch,
+  deleteBranches,
   isBranchCheckedOutElsewhereError,
   isBranchNotFullyMergedError,
   isDirtyWorktreeCheckoutError,
@@ -219,6 +220,63 @@ describe('log branch actions', () => {
       const result = await deleteBranch(git as never, localBranch())
       expect(result.ok).toBe(false)
       expect(isBranchNotFullyMergedError(result.message)).toBe(true)
+    })
+  })
+
+  // #1361 — batch delete for multi-select.
+  describe('deleteBranches', () => {
+    it('deletes every branch and summarizes on full success', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await deleteBranches(git as never, [
+        localBranch({ shortName: 'feat/a' }),
+        localBranch({ shortName: 'feat/b' }),
+      ])
+      expect(result).toEqual({ ok: true, message: 'Deleted 2 branches: feat/a, feat/b' })
+      expect(git.raw).toHaveBeenNthCalledWith(1, ['branch', '-d', 'feat/a'])
+      expect(git.raw).toHaveBeenNthCalledWith(2, ['branch', '-d', 'feat/b'])
+    })
+
+    it('continues past a refusal and reports the raw per-branch failure in details', async () => {
+      const git = {
+        raw: jest.fn()
+          .mockRejectedValueOnce(new Error("error: the branch 'feat/a' is not fully merged."))
+          .mockResolvedValueOnce(''),
+      }
+      const result = await deleteBranches(git as never, [
+        localBranch({ shortName: 'feat/a' }),
+        localBranch({ shortName: 'feat/b' }),
+      ])
+      expect(result.ok).toBe(false)
+      expect(result.message).toBe('Deleted 1 of 2 branches — 1 refused')
+      // The raw git wording must survive into details so the caller's
+      // force-delete escalation detection keeps matching.
+      expect(isBranchNotFullyMergedError(result.details?.join('\n'))).toBe(true)
+      // Refusal did NOT stop the batch — the second delete still ran.
+      expect(git.raw).toHaveBeenCalledTimes(2)
+    })
+
+    it('a batch of one delegates to the single-branch behavior verbatim', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await deleteBranches(git as never, [localBranch()])
+      expect(result).toEqual({ ok: true, message: 'Deleted branch feature/test' })
+    })
+
+    it('refuses an empty batch without touching git', async () => {
+      const git = { raw: jest.fn() }
+      const result = await deleteBranches(git as never, [])
+      expect(result.ok).toBe(false)
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+
+    it('per-branch guards (current branch) feed the summary instead of aborting the batch', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await deleteBranches(git as never, [
+        localBranch({ shortName: 'main', current: true }),
+        localBranch({ shortName: 'feat/b' }),
+      ])
+      expect(result.ok).toBe(false)
+      expect(result.message).toBe('Deleted 1 of 2 branches — 1 refused')
+      expect(result.details).toEqual(['main: Cannot delete the current branch.'])
     })
   })
 

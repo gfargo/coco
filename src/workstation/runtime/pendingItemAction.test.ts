@@ -99,7 +99,7 @@ function ctxFor(
 
 describe('isPendingItemAction', () => {
   it('matches only on the same kind AND id', () => {
-    const pending: LogInkPendingItemAction = { kind: 'branch', id: 'feat/x', action: 'delete' }
+    const pending: LogInkPendingItemAction = { kind: 'branch', ids: ['feat/x'], action: 'delete' }
     expect(isPendingItemAction(pending, 'branch', 'feat/x')).toBe(true)
     expect(isPendingItemAction(pending, 'branch', 'main')).toBe(false) // id differs
     expect(isPendingItemAction(pending, 'tag', 'feat/x')).toBe(false) // kind differs
@@ -107,7 +107,7 @@ describe('isPendingItemAction', () => {
   })
 
   it('is action-agnostic — a checkout in flight spins the same as a delete', () => {
-    const checkout: LogInkPendingItemAction = { kind: 'branch', id: 'feat/x', action: 'checkout' }
+    const checkout: LogInkPendingItemAction = { kind: 'branch', ids: ['feat/x'], action: 'checkout' }
     expect(isPendingItemAction(checkout, 'branch', 'feat/x')).toBe(true)
   })
 })
@@ -116,8 +116,8 @@ describe('setPendingItemAction reducer', () => {
   it('sets and clears the pending target without touching anything else', () => {
     let state = createLogInkState([])
     expect(state.pendingItemAction).toBeUndefined()
-    state = applyLogInkAction(state, { type: 'setPendingItemAction', value: { kind: 'stash', id: 'stash@{0}', action: 'delete' } })
-    expect(state.pendingItemAction).toEqual({ kind: 'stash', id: 'stash@{0}', action: 'delete' })
+    state = applyLogInkAction(state, { type: 'setPendingItemAction', value: { kind: 'stash', ids: ['stash@{0}'], action: 'delete' } })
+    expect(state.pendingItemAction).toEqual({ kind: 'stash', ids: ['stash@{0}'], action: 'delete' })
     state = applyLogInkAction(state, { type: 'setPendingItemAction', value: undefined })
     expect(state.pendingItemAction).toBeUndefined()
   })
@@ -128,32 +128,32 @@ describe('inline pending spinner per surface', () => {
     const plain = flattenText(renderBranchesSurface(ctxFor('branches'), 0))
     expect(plain).not.toContain(SPIN)
 
-    const pending = flattenText(renderBranchesSurface(ctxFor('branches', { kind: 'branch', id: 'feat/x', action: 'delete' }), 0))
+    const pending = flattenText(renderBranchesSurface(ctxFor('branches', { kind: 'branch', ids: ['feat/x'], action: 'delete' }), 0))
     expect(pending).toContain(SPIN)
     expect(pending).toContain('feat/x') // row still shows its name
   })
 
   it('branches: a pending checkout spins the targeted row too', () => {
-    const pending = flattenText(renderBranchesSurface(ctxFor('branches', { kind: 'branch', id: 'feat/x', action: 'checkout' }), 0))
+    const pending = flattenText(renderBranchesSurface(ctxFor('branches', { kind: 'branch', ids: ['feat/x'], action: 'checkout' }), 0))
     expect(pending).toContain(SPIN)
     expect(pending).toContain('feat/x')
   })
 
   it('worktrees: swaps the targeted row marker for a spinner', () => {
-    const pending = flattenText(renderWorktreesSurface(ctxFor('worktrees', { kind: 'worktree', id: '/repo/wt', action: 'delete' }), 0))
+    const pending = flattenText(renderWorktreesSurface(ctxFor('worktrees', { kind: 'worktree', ids: ['/repo/wt'], action: 'delete' }), 0))
     expect(pending).toContain(SPIN)
     expect(flattenText(renderWorktreesSurface(ctxFor('worktrees'), 0))).not.toContain(SPIN)
   })
 
   it('tags: appends a spinner (no leading icon to swap)', () => {
-    const pending = flattenText(renderTagsSurface(ctxFor('tags', { kind: 'tag', id: 'v1.1.0', action: 'delete' }), 0))
+    const pending = flattenText(renderTagsSurface(ctxFor('tags', { kind: 'tag', ids: ['v1.1.0'], action: 'delete' }), 0))
     expect(pending).toContain(SPIN)
     expect(pending).toContain('v1.1.0')
     expect(flattenText(renderTagsSurface(ctxFor('tags'), 0))).not.toContain(SPIN)
   })
 
   it('stashes: appends a spinner', () => {
-    const pending = flattenText(renderStashSurface(ctxFor('stash', { kind: 'stash', id: 'stash@{1}', action: 'delete' }), 0))
+    const pending = flattenText(renderStashSurface(ctxFor('stash', { kind: 'stash', ids: ['stash@{1}'], action: 'delete' }), 0))
     expect(pending).toContain(SPIN)
     expect(flattenText(renderStashSurface(ctxFor('stash'), 0))).not.toContain(SPIN)
   })
@@ -162,14 +162,14 @@ describe('inline pending spinner per surface', () => {
 describe('inline pending spinner in the sidebar', () => {
   it('shows the spinner on the targeted branch row of the active tab', () => {
     const base = createLogInkState([])
-    const state = { ...base, sidebarTab: 'branches' as const, focus: 'sidebar' as const, pendingItemAction: { kind: 'branch' as const, id: 'feat/x', action: 'delete' as const } }
+    const state = { ...base, sidebarTab: 'branches' as const, focus: 'sidebar' as const, pendingItemAction: { kind: 'branch' as const, ids: ['feat/x'], action: 'delete' as const } }
     const tree = renderSidebar(createElement, components, state, context, createLogInkContextStatus('ready'), 40, 30, theme, 0)
     expect(flattenText(tree)).toContain(SPIN)
   })
 
   it('shows the spinner on a branch being checked out', () => {
     const base = createLogInkState([])
-    const state = { ...base, sidebarTab: 'branches' as const, focus: 'sidebar' as const, pendingItemAction: { kind: 'branch' as const, id: 'feat/x', action: 'checkout' as const } }
+    const state = { ...base, sidebarTab: 'branches' as const, focus: 'sidebar' as const, pendingItemAction: { kind: 'branch' as const, ids: ['feat/x'], action: 'checkout' as const } }
     const tree = renderSidebar(createElement, components, state, context, createLogInkContextStatus('ready'), 40, 30, theme, 0)
     expect(flattenText(tree)).toContain(SPIN)
   })
@@ -217,7 +217,7 @@ describe('inline pending spinner on the PR triage list (#1363)', () => {
   }
 
   it('swaps the cursor glyph for the spinner on the PR being checked out', () => {
-    const text = renderTriage({ kind: 'pull-request', id: '42', action: 'checkout' })
+    const text = renderTriage({ kind: 'pull-request', ids: ['42'], action: 'checkout' })
     expect(text).toMatch(new RegExp(`${SPIN}\\s+#42`))
     expect(text).not.toMatch(new RegExp(`${SPIN}\\s+#41`))
   })
