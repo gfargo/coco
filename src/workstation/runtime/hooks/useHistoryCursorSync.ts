@@ -48,11 +48,13 @@
  * effects between the two clusters.
  *
  * The sync effect and reset effect are reproduced **verbatim and
- * separate**, in original order; the target-resolution branches, the
- * resolver call, the dispatch payloads, the `lastSyncedHashRef` dedup,
- * the `attemptedContextHashesRef` bookkeeping, and both dependency arrays
- * are byte-for-byte the same as the original `app.ts` cluster. This is a
- * behavior-preserving move, not a rewrite.
+ * separate**, in original order; the resolver call, the dispatch payloads,
+ * the `lastSyncedHashRef` dedup, the `attemptedContextHashesRef`
+ * bookkeeping, and both dependency arrays are byte-for-byte the same as the
+ * original `app.ts` cluster. The branch/tag/stash target-resolution arms
+ * now read through the id-based selectors (`getSelectedBranch` /
+ * `getSelectedTag` / `getSelectedStash`, #1452) instead of inline
+ * sort+filter+index lookups — same resolved target, no behavior change.
  *
  * `React` is injected (per the runtime's `getLogInkRuntimeContext(React)`
  * convention) because the workstation never statically imports React.
@@ -60,13 +62,12 @@
 
 import type * as ReactTypes from 'react'
 import { hashesMatchAny } from '../../../git/hashes'
-import { sortBranches, sortTags } from '../../chrome/sorting'
-import { matchesPromotedFilter } from '../promotedFilter'
 import {
   buildLoadedHashSet,
   resolveCursorSyncDecision,
 } from '../cursorSyncResolver'
 import type { LogInkAction, LogInkState } from '../inkViewModel'
+import { getSelectedBranch, getSelectedStash, getSelectedTag } from '../selection'
 import type { LogInkContext } from '../types'
 
 /** Forward-reference signature for the bridged targeted-context loader. */
@@ -130,31 +131,19 @@ export function useHistoryCursorSync(
     let targetLabel: string | undefined
 
     if (onBranchTab) {
-      const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-      const visible = state.filter
-        ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-        : all
-      const branch = visible[Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1))]
+      const branch = getSelectedBranch(state, context)
       if (branch) {
         targetHash = branch.hash
         targetLabel = `branch ${branch.shortName}`
       }
     } else if (onTagTab) {
-      const all = sortTags(context.tags?.tags || [], state.tagSort)
-      const visible = state.filter
-        ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
-        : all
-      const tag = visible[Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1))]
+      const tag = getSelectedTag(state, context)
       if (tag) {
         targetHash = tag.hash
         targetLabel = `tag ${tag.name}`
       }
     } else if (onStashTab) {
-      const all = context.stashes?.stashes || []
-      const visible = state.filter
-        ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-        : all
-      const stash = visible[Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1))]
+      const stash = getSelectedStash(state, context)
       if (stash) {
         // Two-step fallback chain for stash cursor sync:
         //
