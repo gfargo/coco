@@ -221,6 +221,44 @@ export function getSelectedStash(
 }
 
 /**
+ * Resolve the stash targets for a batch-capable workflow (#1361). Same
+ * priority ladder as `getSelectedBranchBatch`: range → marks → cursored
+ * single. The caller (`dropStashes`) is responsible for the
+ * descending-`stash@{N}`-order drop discipline — this selector just
+ * resolves WHICH stashes, in list (chronological) order, matching how
+ * the confirm panel names them.
+ */
+export function getSelectedStashBatch(
+  state: LogInkState,
+  context: LogInkContext,
+): StashEntry[] {
+  const all = context.stashes?.stashes || []
+  const selection = state.selection?.view === 'stash' ? state.selection : undefined
+
+  if (selection?.anchorId) {
+    const visible = state.filter
+      ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+      : all
+    const anchorIndex = visible.findIndex((s) => s.ref === selection.anchorId)
+    if (anchorIndex >= 0 && visible.length > 0) {
+      const cursorIndex = Math.min(state.selectedStashIndex, visible.length - 1)
+      const [from, to] = anchorIndex <= cursorIndex
+        ? [anchorIndex, cursorIndex]
+        : [cursorIndex, anchorIndex]
+      return visible.slice(from, to + 1)
+    }
+  }
+
+  if (selection && selection.ids.size > 0) {
+    const marked = all.filter((s) => selection.ids.has(s.ref))
+    if (marked.length > 0) return marked
+  }
+
+  const single = getSelectedStash(state, context)
+  return single ? [single] : []
+}
+
+/**
  * Get the currently-selected worktree's path.
  */
 export function getSelectedWorktreeId(

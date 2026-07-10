@@ -1607,7 +1607,9 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.activeView === 'stash') {
     return {
-      contextual: ['↑/↓ stashes', 'enter diff', 'a/A apply', 'p pop', 'R rename', 'b branch', 'X drop · u undo'],
+      // #1361 — x/v mark covers both multi-select primitives, same as
+      // the branches view.
+      contextual: ['↑/↓ stashes', 'enter diff', 'a/A apply', 'p pop', 'R rename', 'b branch', 'x/v mark', 'X drop · u undo'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

@@ -3580,6 +3580,88 @@ describe('log Ink input interactions', () => {
       })
     })
 
+    // #1361 — same grammar extended to the stash view.
+    describe('multi-select x / v / Esc on stash (#1361)', () => {
+      function stashState() {
+        return { ...createLogInkState(rows), activeView: 'stash' as const }
+      }
+
+      it('x toggles a mark on the cursored stash and auto-advances', () => {
+        const events = getLogInkInputEvents(stashState(), 'x', {}, {
+          stashCount: 3, stashSelectedRef: 'stash@{0}',
+        })
+        expect(events).toEqual([
+          { type: 'action', action: { type: 'toggleMark', view: 'stash', id: 'stash@{0}' } },
+          { type: 'action', action: { type: 'moveStash', delta: 1, count: 3 } },
+        ])
+      })
+
+      it('x works from the sidebar stashes tab too', () => {
+        const events = getLogInkInputEvents(sidebarStashesState(), 'x', {}, {
+          stashCount: 3, stashSelectedRef: 'stash@{0}',
+        })
+        expect(events[0]).toEqual(
+          { type: 'action', action: { type: 'toggleMark', view: 'stash', id: 'stash@{0}' } },
+        )
+      })
+
+      it('v anchors a range at the cursored stash; v again clears it', () => {
+        const anchor = getLogInkInputEvents(stashState(), 'v', {}, {
+          stashCount: 3, stashSelectedRef: 'stash@{0}',
+        })
+        expect(anchor[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'stash', id: 'stash@{0}' } },
+        )
+
+        const anchored = {
+          ...stashState(),
+          selection: { view: 'stash' as const, anchorId: 'stash@{0}', ids: new Set<string>() },
+        }
+        const clear = getLogInkInputEvents(anchored, 'v', {}, {
+          stashCount: 3, stashSelectedRef: 'stash@{1}',
+        })
+        expect(clear[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'stash', id: undefined } },
+        )
+      })
+
+      it('v on the stash view anchors a range even on single-pane (peek loses the collision)', () => {
+        const events = getLogInkInputEvents(stashState(), 'v', {}, {
+          singlePane: true, stashCount: 3, stashSelectedRef: 'stash@{0}',
+        })
+        expect(events[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'stash', id: 'stash@{0}' } },
+        )
+      })
+
+      it('Esc is two-stage on stash marks too', () => {
+        const both = {
+          ...stashState(),
+          selection: { view: 'stash' as const, anchorId: 'stash@{0}', ids: new Set(['stash@{1}']) },
+        }
+        const first = getLogInkInputEvents(both, '', { escape: true })
+        expect(first[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'stash', id: undefined } },
+        )
+
+        const marksOnly = {
+          ...stashState(),
+          selection: { view: 'stash' as const, anchorId: undefined, ids: new Set(['stash@{1}']) },
+        }
+        const second = getLogInkInputEvents(marksOnly, '', { escape: true })
+        expect(second[0]).toEqual({ type: 'action', action: { type: 'clearSelection' } })
+      })
+
+      it('Esc owns focus from the sidebar stashes tab even when activeView differs', () => {
+        const state = {
+          ...sidebarStashesState(),
+          selection: { view: 'stash' as const, anchorId: undefined, ids: new Set(['stash@{1}']) },
+        }
+        const events = getLogInkInputEvents(state, '', { escape: true })
+        expect(events[0]).toEqual({ type: 'action', action: { type: 'clearSelection' } })
+      })
+    })
+
     it('↑/↓ on the status view with the center pane focused still moves the worktree file list', () => {
       const state = {
         ...createLogInkState(rows),
