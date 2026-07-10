@@ -50,7 +50,7 @@ import {
 import { forgeNouns } from '../../chrome/forgeNouns'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedTagId, getSelectedTag, getSelectedStashId, getSelectedStash, getSelectedWorktreeId } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedTagId, getSelectedTag, getSelectedStashId, getSelectedStash, getSelectedWorktreeId, getSelectedWorktree } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -1040,18 +1040,10 @@ export function useWorkflowAction(
       'apply-hunk-worktree': async () => runApplyHunk('worktree', payload),
       'apply-hunk-index': async () => runApplyHunk('index', payload),
       'remove-worktree': async () => {
-        const all = context.worktreeList?.worktrees || []
-        // Resolve the target from the visible (filtered) list so a
-        // hidden filtered-out worktree can never be the action target.
-        // Falls back to the cursor against the unfiltered list when the
-        // action is invoked from the palette without ever visiting the
-        // worktrees view.
-        const visible = state.filter
-          ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
-          : all
-        const cursorTarget = visible.length
-          ? visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
-          : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
+        // #1452 — resolves via the selector, which falls back to the
+        // cursor against the unfiltered list when the action is invoked
+        // from the palette with a filter active that hides every worktree.
+        const cursorTarget = getSelectedWorktree(state, context)
         if (!cursorTarget) return { ok: false, message: 'No worktree selected' }
         if (cursorTarget.current) {
           return {
@@ -1062,13 +1054,7 @@ export function useWorkflowAction(
         return removeWorktree(git, cursorTarget)
       },
       'remove-worktree-and-branch': async () => {
-        const all = context.worktreeList?.worktrees || []
-        const visible = state.filter
-          ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
-          : all
-        const cursorTarget = visible.length
-          ? visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
-          : all[Math.min(state.selectedWorktreeListIndex, Math.max(0, all.length - 1))]
+        const cursorTarget = getSelectedWorktree(state, context)
         if (!cursorTarget) return { ok: false, message: 'No worktree selected' }
         if (cursorTarget.current) {
           return {
