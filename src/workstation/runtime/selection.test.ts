@@ -7,7 +7,14 @@
  */
 import { applyLogInkAction, createLogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
-import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedCommitTarget } from './selection'
+import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedCommitTarget, getSelectedCommitRange } from './selection'
+
+function makeCommitRow(hash: string) {
+  return {
+    type: 'commit' as const, graph: '*', shortHash: hash, hash,
+    parents: [], date: '2026-05-01', author: 'Coco', refs: [], message: `commit ${hash}`,
+  }
+}
 
 function makeBranch(shortName: string, date = '2026-01-01') {
   return {
@@ -340,6 +347,57 @@ describe('selection selectors (#1452)', () => {
       state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'main' })
       const cursored = { ...state, selectedStashIndex: 0 }
       expect(getSelectedStashBatch(cursored, context).map((s) => s.ref)).toEqual(['stash@{0}'])
+    })
+  })
+
+  // #1361 — history is v-range only (no x-marks). Rows: c0 (newest) ..
+  // c4 (oldest), matching git log's own newest-first display order.
+  describe('getSelectedCommitRange', () => {
+    const rows = ['c0', 'c1', 'c2', 'c3', 'c4'].map(makeCommitRow)
+
+    it('returns undefined with no active range', () => {
+      const state = createLogInkState(rows)
+      expect(getSelectedCommitRange(state)).toBeUndefined()
+    })
+
+    it('resolves a forward range (anchor above cursor) in display order', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'c1' })
+      const ranged = { ...state, selectedIndex: 3 }
+      expect(getSelectedCommitRange(ranged)?.map((c) => c.hash)).toEqual(['c1', 'c2', 'c3'])
+    })
+
+    it('resolves a backward range (cursor above anchor) — same span, same display order', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'c3' })
+      const ranged = { ...state, selectedIndex: 1 }
+      expect(getSelectedCommitRange(ranged)?.map((c) => c.hash)).toEqual(['c1', 'c2', 'c3'])
+    })
+
+    it('a single-row range (anchor === cursor) resolves to one commit', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'c2' })
+      const ranged = { ...state, selectedIndex: 2 }
+      expect(getSelectedCommitRange(ranged)?.map((c) => c.hash)).toEqual(['c2'])
+    })
+
+    it('returns undefined when the anchor no longer resolves', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'gone' })
+      expect(getSelectedCommitRange(state)).toBeUndefined()
+    })
+
+    it('returns undefined while the cursor is on the synthetic new-commit row', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'c1' })
+      const pending = { ...state, selectedIndex: 3, pendingCommitFocused: true }
+      expect(getSelectedCommitRange(pending)).toBeUndefined()
+    })
+
+    it('ignores a selection owned by a different view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'main' })
+      expect(getSelectedCommitRange({ ...state, selectedIndex: 2 })).toBeUndefined()
     })
   })
 })

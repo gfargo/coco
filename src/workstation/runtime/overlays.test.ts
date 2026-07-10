@@ -138,6 +138,25 @@ describe('confirmation target naming', () => {
     expect(text).toContain('commit abc1234: fix: the thing')
   })
 
+  // #1361 — an active v-range describes the span (oldest..newest) instead
+  // of the single cursored commit, so the confirm panel never shows one
+  // commit while the range command acts on several.
+  it('names the range for a cherry-pick confirm with an active v-range', () => {
+    const rows = [
+      { type: 'commit' as const, graph: '*', shortHash: 'c0', hash: 'c0', parents: [], date: '2026-05-03', author: 'Coco', refs: [], message: 'newest' },
+      { type: 'commit' as const, graph: '*', shortHash: 'c1', hash: 'c1', parents: [], date: '2026-05-02', author: 'Coco', refs: [], message: 'middle' },
+      { type: 'commit' as const, graph: '*', shortHash: 'c2', hash: 'c2', parents: [], date: '2026-05-01', author: 'Coco', refs: [], message: 'oldest' },
+    ]
+    const state = {
+      ...createLogInkState(rows),
+      pendingConfirmationId: 'cherry-pick-commit',
+      selectedIndex: 2,
+      selection: { view: 'history' as const, anchorId: 'c0', ids: new Set<string>() },
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
+    expect(text).toContain('3 commits: c2..c0')
+  })
+
   // #1361 — a batch confirm must name every marked target (or an exact
   // count with the first few names), or the user confirms one item and
   // acts on N — the exact failure mode the #1452 audit warned about.

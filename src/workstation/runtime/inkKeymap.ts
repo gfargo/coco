@@ -1748,8 +1748,9 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     // the affirmative gate (typing the name is the confirmation).
     // Grouped into compact `c/R/Z/i mutate` and `B/gT new` chips so
     // the footer stays scannable; full descriptions live in `?` help
-    // and the palette.
-    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'y/Y yank', '/ search'],
+    // and the palette. `v range` (#1361) anchors a span for `c` to
+    // cherry-pick as one command instead of the single cursored commit.
+    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'v range', 'y/Y yank', '/ search'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }

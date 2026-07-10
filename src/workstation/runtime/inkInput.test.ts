@@ -3662,6 +3662,64 @@ describe('log Ink input interactions', () => {
       })
     })
 
+    // #1361 — history is v-range only (no x-marks): cherry-pick's range
+    // syntax already replays a span correctly in one command.
+    describe('multi-select v / Esc on history (#1361)', () => {
+      function historyState() {
+        return { ...createLogInkState(rows), activeView: 'history' as const, focus: 'commits' as const }
+      }
+
+      it('v anchors a range at the cursored commit; v again clears it', () => {
+        const anchor = getLogInkInputEvents(historyState(), 'v', {})
+        expect(anchor[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'history', id: 'abc123456789' } },
+        )
+
+        const anchored = {
+          ...historyState(),
+          selection: { view: 'history' as const, anchorId: 'abc123456789', ids: new Set<string>() },
+        }
+        const clear = getLogInkInputEvents(anchored, 'v', {})
+        expect(clear[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'history', id: undefined } },
+        )
+      })
+
+      it('v on history anchors a range even on single-pane (peek loses the collision)', () => {
+        const events = getLogInkInputEvents(historyState(), 'v', {}, { singlePane: true })
+        expect(events[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'history', id: 'abc123456789' } },
+        )
+      })
+
+      it('v is a no-op while the cursor is on the synthetic new-commit row', () => {
+        const state = { ...historyState(), pendingCommitFocused: true }
+        const events = getLogInkInputEvents(state, 'v', {})
+        expect(events).toEqual([])
+      })
+
+      it('Esc is two-stage on a history range too', () => {
+        const both = {
+          ...historyState(),
+          selection: { view: 'history' as const, anchorId: 'abc123456789', ids: new Set<string>() },
+        }
+        const first = getLogInkInputEvents(both, '', { escape: true })
+        expect(first[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'history', id: undefined } },
+        )
+      })
+
+      it('Esc on an unrelated view leaves the history range alone', () => {
+        const state = {
+          ...createLogInkState(rows),
+          activeView: 'branches' as const,
+          selection: { view: 'history' as const, anchorId: 'abc123456789', ids: new Set<string>() },
+        }
+        const events = getLogInkInputEvents(state, '', { escape: true })
+        expect(events).not.toContainEqual({ type: 'action', action: { type: 'setRangeAnchor', view: 'history', id: undefined } })
+      })
+    })
+
     it('↑/↓ on the status view with the center pane focused still moves the worktree file list', () => {
       const state = {
         ...createLogInkState(rows),
@@ -5874,9 +5932,16 @@ describe('triage filter cycling (#882 phase 6)', () => {
   // any explicit focus change or drill-in cancels the ticket.
   describe('peek (single-pane sidebar glance)', () => {
     const singlePane = { singlePane: true }
+    // #1361 — history now carves itself out of the peek intercept (`v`
+    // anchors a cherry-pick range there instead), so these fixtures use
+    // 'status' — any main-pane view not claimed by a range/mark grammar
+    // exercises the same peek behavior the default history state used to.
+    function peekBaseState(): LogInkState {
+      return { ...createLogInkState(rows), activeView: 'status' }
+    }
 
     it('v opens a sidebar peek from the main pane and stores the return focus', () => {
-      let state = createLogInkState(rows)
+      let state = peekBaseState()
       expect(state.focus).toBe('commits')
 
       state = applyInput(state, 'v', {}, singlePane)
@@ -5922,7 +5987,7 @@ describe('triage filter cycling (#882 phase 6)', () => {
     })
 
     it('v again snaps back to the original pane and clears the ticket', () => {
-      let state = createLogInkState(rows)
+      let state = peekBaseState()
       state = applyInput(state, 'v', {}, singlePane)
       state = applyInput(state, 'v', {}, singlePane)
       expect(state.focus).toBe('commits')
@@ -5930,7 +5995,7 @@ describe('triage filter cycling (#882 phase 6)', () => {
     })
 
     it('Esc closes a peek back to the original pane', () => {
-      let state = createLogInkState(rows)
+      let state = peekBaseState()
       state = applyInput(state, 'v', {}, singlePane)
       state = applyInput(state, '', { escape: true }, singlePane)
       expect(state.focus).toBe('commits')
@@ -5938,7 +6003,7 @@ describe('triage filter cycling (#882 phase 6)', () => {
     })
 
     it('keeps the peek open while browsing the sidebar (←/→ tab switch)', () => {
-      let state = createLogInkState(rows)
+      let state = peekBaseState()
       state = applyInput(state, 'v', {}, singlePane)
       expect(state.sidebarTab).toBe('branches')
 
@@ -5950,14 +6015,14 @@ describe('triage filter cycling (#882 phase 6)', () => {
     })
 
     it('Tab cancels the peek ticket (explicit focus change)', () => {
-      let state = createLogInkState(rows)
+      let state = peekBaseState()
       state = applyInput(state, 'v', {}, singlePane)
       state = applyInput(state, '', { tab: true }, singlePane)
       expect(state.peekReturnFocus).toBeUndefined()
     })
 
     it('v is a no-op in the three-pane layout (not single-pane)', () => {
-      let state = createLogInkState(rows)
+      let state = peekBaseState()
       state = applyInput(state, 'v', {}, { singlePane: false })
       expect(state.focus).toBe('commits')
       expect(state.peekReturnFocus).toBeUndefined()

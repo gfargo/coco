@@ -321,3 +321,32 @@ export function getSelectedCommitTarget(
   if (!id || !COMMIT_TARGET_CONFIRMATION_IDS.has(id)) return undefined
   return getSelectedInkCommit(state)
 }
+
+/**
+ * Resolve the active v-range on the history view (#1361) — commits are
+ * range-only in v1, no x-marks: a contiguous run is what "select
+ * several commits" naturally means, and `git cherry-pick`'s own range
+ * syntax replays them correctly in one command, so there's no
+ * per-item ordering trap to encode here the way stash drop had.
+ *
+ * Returns the span in DISPLAY order (index 0 = newest, matching
+ * `state.filteredCommits`), or undefined when there's no active range
+ * on history, the anchor no longer resolves (list reloaded out from
+ * under it), or the cursor is parked on the synthetic "new commit"
+ * row. Callers needing "oldest" / "newest" for the git command read
+ * `range[range.length - 1]` / `range[0]`.
+ */
+export function getSelectedCommitRange(
+  state: LogInkState,
+): GitLogCommitRow[] | undefined {
+  if (state.selection?.view !== 'history' || !state.selection.anchorId) return undefined
+  if (state.pendingCommitFocused) return undefined
+  const commits = state.filteredCommits
+  const anchorIndex = commits.findIndex((c) => c.hash === state.selection?.anchorId)
+  if (anchorIndex < 0 || commits.length === 0) return undefined
+  const cursorIndex = Math.min(state.selectedIndex, commits.length - 1)
+  const [from, to] = anchorIndex <= cursorIndex
+    ? [anchorIndex, cursorIndex]
+    : [cursorIndex, anchorIndex]
+  return commits.slice(from, to + 1)
+}

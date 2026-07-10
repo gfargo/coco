@@ -499,6 +499,20 @@ function isStashActionTarget(state: LogInkState): boolean {
 }
 
 /**
+ * True when `v` on the history view should anchor a cherry-pick range
+ * (#1361) rather than fall through to peek / any other `v` binding.
+ * History has no sidebar tab, so this is simpler than the promoted-view
+ * predicates above — just the one condition, shared with the actual
+ * range-anchor handler so the two can't drift.
+ */
+function isHistoryRangeTarget(state: LogInkState): boolean {
+  return state.activeView === 'history' &&
+    state.focus === 'commits' &&
+    state.filteredCommits.length > 0 &&
+    !state.pendingCommitFocused
+}
+
+/**
  * Reflog has no sidebar tab — only the dedicated promoted view (#781).
  * The condition stays as a single helper anyway so navigation handlers
  * can read it the same way they do for the other promoted views.
@@ -2776,16 +2790,17 @@ export function getLogInkInputEvents(
   // peek intercept made line-level staging unreachable on narrow
   // terminals (the narrow footer even replaced the "v select" hint
   // with "v peek", so the feature silently vanished with width).
-  // NOT on branch or stash action targets either (#1361): `v` is the
-  // range-select anchor there — the same collision #1389 fixed for the
-  // diff.
+  // NOT on branch, stash, or history range targets either (#1361): `v`
+  // is the range-select anchor there — the same collision #1389 fixed
+  // for the diff.
   if (
     inputValue === 'v' &&
     context.singlePane &&
     state.focus !== 'sidebar' &&
     !isWorktreeDiffTarget(state) &&
     !isBranchActionTarget(state) &&
-    !isStashActionTarget(state)
+    !isStashActionTarget(state) &&
+    !isHistoryRangeTarget(state)
   ) {
     return [action({ type: 'togglePeek' })]
   }
@@ -4141,9 +4156,34 @@ export function getLogInkInputEvents(
     }
   }
 
+  // #1361 — `v` anchors a range on the history view; j/k extends it
+  // (live span anchor..cursor) and `c` cherry-picks the range as one
+  // `oldest^..newest` command instead of a single commit. History is
+  // range-only (no x-marks) — a contiguous run is what "select several
+  // commits" naturally means, and the range syntax already replays
+  // them correctly without a per-item loop to get wrong.
+  if (inputValue === 'v' && isHistoryRangeTarget(state)) {
+    const anchored = state.selection?.view === 'history' && state.selection.anchorId !== undefined
+    if (anchored) {
+      return [
+        action({ type: 'setRangeAnchor', view: 'history', id: undefined }),
+        action({ type: 'setStatus', value: 'Range anchor cleared', ttl: 'echo' }),
+      ]
+    }
+    const id = state.filteredCommits[state.selectedIndex]?.hash
+    if (!id) {
+      return [action({ type: 'setStatus', value: 'No commit under cursor to anchor', kind: 'warning' })]
+    }
+    return [
+      action({ type: 'setRangeAnchor', view: 'history', id }),
+      action({ type: 'setStatus', value: 'Range anchor set — j/k extends, c cherry-picks the range' }),
+    ]
+  }
+
   // `c` on the history view cherry-picks the full selected commit on
-  // top of the current branch. Routed through the y-confirm flow since
-  // it can produce conflicts and is a real working-tree mutation.
+  // top of the current branch (or the active v-range as one command,
+  // #1361). Routed through the y-confirm flow since it can produce
+  // conflicts and is a real working-tree mutation.
   if (
     inputValue === 'c' &&
     state.activeView === 'history' &&
