@@ -116,7 +116,7 @@ import {
 } from '../../../git/statusActions'
 import { applyStatusFilterMask } from '../../../git/statusData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../../git/bisectActions'
-import { checkoutReflogEntry } from '../../../git/reflogActions'
+import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
 import { executeRebasePlan } from '../../../git/rebasePlanActions'
 import { initSubmodule, syncSubmodule, updateSubmodule } from '../../../git/submoduleActions'
 import { addRemote, pruneRemote, removeRemote, setRemoteUrl } from '../../../git/remoteActions'
@@ -247,6 +247,9 @@ export const HISTORY_MUTATING_WORKFLOW_IDS = new Set([
   // Stash & switch onto a PR (#1430) moves HEAD via `gh pr checkout`
   // the same way `triage-pr-checkout` does.
   'stash-and-checkout-pr',
+  // #1361 — global undo moves HEAD either way (checkout back to the
+  // previous branch, or reset --hard to the previous commit).
+  'global-undo',
 ])
 
 export function resolvePendingItemAction(
@@ -890,6 +893,16 @@ export function useWorkflowAction(
         ]
         if (!entry) return { ok: false, message: 'No reflog entry selected' }
         return checkoutReflogEntry(git, entry)
+      },
+      // #1361 — global undo. Re-derives the plan from the RAW reflog
+      // (not filteredReflogList — undo always targets the actual last
+      // operation) rather than trusting whatever was resolved when `z`
+      // was pressed, since the reflog can move between keystroke and
+      // y-confirm.
+      'global-undo': async () => {
+        const plan = planReflogUndo(context.reflog?.entries || [])
+        if (!plan) return { ok: false, message: 'No reflog entry to undo.' }
+        return performReflogUndo(git, plan)
       },
       // Follow-up checkout after a successful create-branch-here (#1326).
       // Reached only via the in-runner setPendingConfirmation dispatch

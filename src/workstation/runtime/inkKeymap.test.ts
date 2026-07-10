@@ -372,7 +372,7 @@ describe('log Ink keymap', () => {
     expect(helpText).toContain('\\ Toggle compact and full graph display.')
     expect(helpText).toContain('gg Jump to the first visible commit.')
     expect(helpText).toContain('G Jump to the last visible commit.')
-    expect(helpText).toContain('z Ask to revert the selected file or hunk.')
+    expect(helpText).toContain('z Ask to revert the selected file or hunk, or undo the last operation.')
     expect(helpText).toContain('e Edit the manual commit summary or body inline.')
     expect(helpText).toContain('E Open the current commit draft in $EDITOR (or $VISUAL) for full editing, write-back on save.')
     // On history view, `c` is cherry-pick (the `c commit` binding is

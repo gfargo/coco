@@ -41,6 +41,7 @@ import {
 } from '../inkInput'
 import { findStashFileForOffset } from '../../../git/stashData'
 import { getBisectCompletion } from '../../../git/bisectData'
+import { planReflogUndo } from '../../../git/reflogActions'
 import {
     resolveCommitDiffDrillInTarget,
     resolveSubmoduleViewDrillInTarget,
@@ -305,6 +306,10 @@ export function useInputHandler(
     const reflogSelectedHash = filteredReflogList[
       Math.min(state.selectedReflogIndex, Math.max(0, filteredReflogList.length - 1))
     ]?.hash
+    // #1361 global undo — reads the RAW reflog (not filteredReflogList),
+    // since undo always targets the actual last operation regardless of
+    // what's filtered/cursored on the reflog view.
+    const reflogUndoDescription = planReflogUndo(context.reflog?.entries || [])?.description
     const submoduleVisibleCount = filteredSubmoduleList.length
     const submoduleSelectedPath = filteredSubmoduleList[
       Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
@@ -376,6 +381,7 @@ export function useInputHandler(
       stashCount: stashVisibleCount,
       reflogCount: reflogVisibleCount,
       reflogSelectedHash,
+      reflogUndoDescription,
       submoduleCount: submoduleVisibleCount,
       submoduleSelectedPath,
       remoteCount: remoteVisibleCount,

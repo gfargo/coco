@@ -449,7 +449,9 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     id: 'revertSelection',
     keys: ['z'],
     label: 'revert',
-    description: 'Ask to revert the selected file or hunk.',
+    // #1361 — outside a revertable file/hunk target, `z` falls through
+    // to the global undo (reflog-powered inverse of the last operation).
+    description: 'Ask to revert the selected file or hunk, or undo the last operation.',
     contexts: ['commits'],
   },
   {

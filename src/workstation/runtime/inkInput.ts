@@ -128,6 +128,14 @@ export type LogInkInputContext = {
   reflogCount?: number
   /** Hash of the cursored reflog entry (#781). Used by Enter to drill into the diff. */
   reflogSelectedHash?: string
+  /**
+   * Human description of the reflog tip's inverse operation (#1361 global
+   * undo), or undefined when there's no reflog tip to undo yet. Set from
+   * the RAW reflog (not the filtered/cursored view list) — global undo
+   * always targets "the very last operation," regardless of what's
+   * filtered or cursored on the reflog view.
+   */
+  reflogUndoDescription?: string
   /** Number of registered submodules (#932). Drives j/k navigation on the submodules view. */
   submoduleCount?: number
   /** Repo-relative path of the cursored submodule (#932). Reserved for future per-entry actions. */
@@ -4298,6 +4306,20 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'z' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {
     return [action({ type: 'setPendingConfirmation', value: 'revert-hunk' })]
+  }
+
+  // #1361 — global undo (lazygit's `z` safety blanket), gated to fire only
+  // when none of the more specific `z` handlers above claimed it (discard
+  // lines / revert file / revert hunk are all more targeted "undo this
+  // one thing" actions on their own surfaces). `reflogUndoDescription` is
+  // only set when the runtime found a reflog tip to undo (#1361), so this
+  // is a no-op in an empty repo or before the reflog has loaded.
+  if (inputValue === 'z' && context.reflogUndoDescription) {
+    return [action({
+      type: 'setPendingConfirmation',
+      value: 'global-undo',
+      payload: context.reflogUndoDescription,
+    })]
   }
 
   if (
