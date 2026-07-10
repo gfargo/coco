@@ -19,16 +19,18 @@
  *      two callbacks are independent (no in-hook cross-reference). Its ~31-item
  *      dep array is reproduced byte-for-byte.
  *
- * Both handler bodies and their `useCallback` dependency arrays are reproduced
- * byte-for-byte from `app.ts`. Both callbacks are invoked ONLY from the input
- * handler's keystroke dispatch (`yankText` / `yankFromActiveView` events) — NOT
- * referenced in any `useEffect` / `useMemo` dependency array — so there is no
- * identity-stability hazard from the move.
+ * Both callbacks are invoked ONLY from the input handler's keystroke dispatch
+ * (`yankText` / `yankFromActiveView` events) — NOT referenced in any
+ * `useEffect` / `useMemo` dependency array — so there is no identity-stability
+ * hazard from the move.
  *
- * The module-level helpers `yankFromActiveView` calls (`sortBranches`,
- * `sortTags`, `matchesPromotedFilter`, `getBisectCompletion`,
- * `findStashFileForOffset`) and the `ClipboardRunner` type +
- * `defaultClipboardRunner` are imported directly here rather than threaded.
+ * The branch/tag/stash arms of `yankFromActiveView` resolve their target via
+ * the id-based selectors (`getSelectedBranch` / `getSelectedTag` /
+ * `getSelectedStash`, #1452) instead of inline sort+filter+index resolution.
+ * The remaining arms still use the module-level helpers
+ * (`matchesPromotedFilter`, `getBisectCompletion`, `findStashFileForOffset`)
+ * and the `ClipboardRunner` type + `defaultClipboardRunner`, imported
+ * directly here rather than threaded.
  *
  * `React` is injected (per the runtime's `getLogInkRuntimeContext(React)`
  * convention) because the workstation never statically imports React.
@@ -38,8 +40,8 @@ import type * as ReactTypes from 'react'
 import type { LogInkAction, LogInkState } from '../inkViewModel'
 import type { LogInkContext } from '../types'
 import { ClipboardRunner, defaultClipboardRunner } from '../../../git/historyActions'
-import { sortBranches, sortTags } from '../../chrome/sorting'
 import { matchesPromotedFilter } from '../promotedFilter'
+import { getSelectedBranch, getSelectedStash, getSelectedTag } from '../selection'
 import { getBisectCompletion } from '../../../git/bisectData'
 import { findStashFileForOffset, type StashDiffFile } from '../../../git/stashData'
 import type { WorktreeFile } from '../../../git/statusData'
@@ -162,31 +164,19 @@ export function useYankActions(
         label = short ? `short hash ${commit.shortHash}` : `commit ${commit.shortHash}`
       }
     } else if (view === 'branches') {
-      const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
-      const visible = state.filter
-        ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
-        : all
-      const branch = visible[Math.min(state.selectedBranchIndex, Math.max(0, visible.length - 1))]
+      const branch = getSelectedBranch(state, context)
       if (branch) {
         value = branch.shortName
         label = `branch ${branch.shortName}`
       }
     } else if (view === 'tags') {
-      const all = sortTags(context.tags?.tags || [], state.tagSort)
-      const visible = state.filter
-        ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
-        : all
-      const tag = visible[Math.min(state.selectedTagIndex, Math.max(0, visible.length - 1))]
+      const tag = getSelectedTag(state, context)
       if (tag) {
         value = tag.name
         label = `tag ${tag.name}`
       }
     } else if (view === 'stash') {
-      const all = context.stashes?.stashes || []
-      const visible = state.filter
-        ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
-        : all
-      const stash = visible[Math.min(state.selectedStashIndex, Math.max(0, visible.length - 1))]
+      const stash = getSelectedStash(state, context)
       if (stash) {
         value = stash.ref
         label = `stash ${stash.ref}`
