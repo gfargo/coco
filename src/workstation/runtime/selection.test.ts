@@ -7,7 +7,7 @@
  */
 import { applyLogInkAction, createLogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
-import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedWorktree, getSelectedCommitTarget } from './selection'
+import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedCommitTarget } from './selection'
 
 function makeBranch(shortName: string, date = '2026-01-01') {
   return {
@@ -297,6 +297,49 @@ describe('selection selectors (#1452)', () => {
       state = applyLogInkAction(state, { type: 'toggleMark', view: 'stash', id: 'stash@{0}' })
       const cursored = { ...state, selectedBranchIndex: 0 }
       expect(getSelectedBranchBatch(cursored, context).map((b) => b.shortName)).toEqual(['feature'])
+    })
+  })
+
+  // #1361 — same ladder as getSelectedBranchBatch; stashes have no sort
+  // mode so context order IS list order (stash@{0}, stash@{1}, stash@{2}).
+  describe('getSelectedStashBatch', () => {
+    it('falls back to the single cursored stash with no selection', () => {
+      const state = { ...createLogInkState([]), selectedStashIndex: 1 }
+      expect(getSelectedStashBatch(state, context).map((s) => s.ref)).toEqual(['stash@{1}'])
+    })
+
+    it('resolves the marked set in list order', () => {
+      let state = createLogInkState([])
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'stash', id: 'stash@{2}' })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'stash', id: 'stash@{0}' })
+      expect(getSelectedStashBatch(state, context).map((s) => s.ref)).toEqual(['stash@{0}', 'stash@{2}'])
+    })
+
+    it('marked ids that no longer resolve drop out silently', () => {
+      let state = createLogInkState([])
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'stash', id: 'stash@{1}' })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'stash', id: 'stash@{9}' })
+      expect(getSelectedStashBatch(state, context).map((s) => s.ref)).toEqual(['stash@{1}'])
+    })
+
+    // #1361 — the reducer keeps marks and an anchor mutually exclusive
+    // (setRangeAnchor clears marks), so this exact combination isn't
+    // reachable through normal dispatch; constructing the state
+    // directly still exercises the selector's own priority contract.
+    it('an active range anchor wins over marks and resolves anchor..cursor positionally', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedStashIndex: 1,
+        selection: { view: 'stash' as const, anchorId: 'stash@{0}', ids: new Set(['stash@{2}']) },
+      }
+      expect(getSelectedStashBatch(state, context).map((s) => s.ref)).toEqual(['stash@{0}', 'stash@{1}'])
+    })
+
+    it('ignores a selection owned by a different view', () => {
+      let state = createLogInkState([])
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'main' })
+      const cursored = { ...state, selectedStashIndex: 0 }
+      expect(getSelectedStashBatch(cursored, context).map((s) => s.ref)).toEqual(['stash@{0}'])
     })
   })
 })

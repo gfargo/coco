@@ -3,6 +3,7 @@ import {
   applyStashKeepIndex,
   createStash,
   dropStash,
+  dropStashes,
   popStash,
   renameStash,
   restoreStash,
@@ -18,6 +19,19 @@ const stash: StashEntry = {
   branch: 'main',
   message: 'save docs',
   files: ['src/a.ts'],
+}
+
+function stashAt(index: number, overrides: Partial<StashEntry> = {}): StashEntry {
+  return {
+    ref: `stash@{${index}}`,
+    hash: `hash${index}`,
+    baseHash: `base${index}`,
+    date: '2026-04-28',
+    branch: 'main',
+    message: `stash ${index}`,
+    files: [],
+    ...overrides,
+  }
 }
 
 describe('log stash actions', () => {
@@ -123,5 +137,55 @@ describe('log stash actions', () => {
     const git = { raw: jest.fn().mockResolvedValue('') }
     await expect(restoreStash(git as never, 'abc123', 'save docs')).resolves.toMatchObject({ ok: true })
     expect(git.raw).toHaveBeenCalledWith(['stash', 'store', '-m', 'save docs', 'abc123'])
+  })
+
+  // #1361 — batch drop for multi-select. The core correctness trap:
+  // dropping stash@{0} renumbers every later entry down by one, so an
+  // ascending or unordered loop would drop the wrong stash from the
+  // second call onward.
+  describe('dropStashes', () => {
+    it('drops in descending stash@{N} order regardless of input order', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      // Passed in ASCENDING order on purpose — the function must
+      // reorder before dropping.
+      await dropStashes(git as never, [stashAt(0), stashAt(1), stashAt(2)])
+      expect(git.raw).toHaveBeenNthCalledWith(1, ['stash', 'drop', 'stash@{2}'])
+      expect(git.raw).toHaveBeenNthCalledWith(2, ['stash', 'drop', 'stash@{1}'])
+      expect(git.raw).toHaveBeenNthCalledWith(3, ['stash', 'drop', 'stash@{0}'])
+    })
+
+    it('summarizes on full success', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await dropStashes(git as never, [stashAt(0), stashAt(2)])
+      expect(result).toEqual({ ok: true, message: 'Dropped 2 stashes: stash@{2}, stash@{0}' })
+    })
+
+    it('continues past a refusal and reports the raw per-stash failure in details', async () => {
+      const git = {
+        raw: jest.fn()
+          .mockResolvedValueOnce('') // stash@{2} succeeds
+          .mockRejectedValueOnce(new Error('fatal: could not drop stash')) // stash@{1} fails
+          .mockResolvedValueOnce(''), // stash@{0} succeeds
+      }
+      const result = await dropStashes(git as never, [stashAt(0), stashAt(1), stashAt(2)])
+      expect(result.ok).toBe(false)
+      expect(result.message).toBe('Dropped 2 of 3 stashes — 1 refused')
+      expect(result.details).toEqual(['stash@{1}: fatal: could not drop stash'])
+      // The refusal did NOT stop the batch — all three attempts ran.
+      expect(git.raw).toHaveBeenCalledTimes(3)
+    })
+
+    it('a batch of one delegates to the single-stash behavior verbatim', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await dropStashes(git as never, [stash])
+      expect(result).toEqual({ ok: true, message: 'Dropped stash@{0}' })
+    })
+
+    it('refuses an empty batch without touching git', async () => {
+      const git = { raw: jest.fn() }
+      const result = await dropStashes(git as never, [])
+      expect(result.ok).toBe(false)
+      expect(git.raw).not.toHaveBeenCalled()
+    })
   })
 })

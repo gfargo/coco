@@ -50,7 +50,7 @@ import {
 import { forgeNouns } from '../../chrome/forgeNouns'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStashId, getSelectedStash, getSelectedWorktreeId, getSelectedWorktree } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedWorktreeId, getSelectedWorktree } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -100,7 +100,7 @@ import {
     amendHeadCommit,
     rewordHeadCommit,
 } from '../../../git/historyActions'
-import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStash, popStash, renameStash, restoreStash, stashBranch } from '../../../git/stashActions'
+import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStashes, popStash, renameStash, restoreStash, stashBranch } from '../../../git/stashActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../../git/worktreeActions'
 import { rebaseOnto } from '../../../git/rebaseActions'
@@ -281,8 +281,11 @@ export function resolvePendingItemAction(
     return tagId ? { kind: 'tag', ids: [tagId], action: 'delete' } : undefined
   }
   if (id === 'drop-stash') {
-    const stashId = getSelectedStashId(state, context)
-    return stashId ? { kind: 'stash', ids: [stashId], action: 'delete' } : undefined
+    // #1361 — batch-capable (`targets: 'multi'`): range → marks → cursor.
+    const stashes = getSelectedStashBatch(state, context)
+    return stashes.length > 0
+      ? { kind: 'stash', ids: stashes.map((s) => s.ref), action: 'delete' }
+      : undefined
   }
   if (id === 'remove-worktree') {
     const worktreeId = getSelectedWorktreeId(state, context)
@@ -596,12 +599,23 @@ export function useWorkflowAction(
         if (!tag) return { ok: false, message: 'No tag selected' }
         return pushTag(git, tag.name)
       },
+      // #1361 — batch-capable (`targets: 'multi'`): resolves the range →
+      // marks → cursor ladder and drops every target, continuing past
+      // per-stash refusals with a summary. `undo-drop-stash` only ever
+      // remembers one stash, so a batch captures the MOST RECENT one in
+      // the set (lowest stash@{N}) — the single-drop case is unaffected
+      // (batch of one).
       'drop-stash': async () => {
-        const stash = getSelectedStash(state, context)
-        if (!stash) return { ok: false, message: 'No stash selected' }
-        // Remember the dropped commit so `u` can undo it.
-        if (stash.hash) lastDroppedStashRef.current = { hash: stash.hash, message: stash.message }
-        return dropStash(git, stash)
+        const stashes = getSelectedStashBatch(state, context)
+        if (stashes.length === 0) return { ok: false, message: 'No stash selected' }
+        const mostRecent = [...stashes].sort((a, b) => {
+          const parse = (ref: string) => Number(ref.match(/^stash@\{(\d+)\}$/)?.[1] ?? Infinity)
+          return parse(a.ref) - parse(b.ref)
+        })[0]
+        if (mostRecent.hash) {
+          lastDroppedStashRef.current = { hash: mostRecent.hash, message: mostRecent.message }
+        }
+        return dropStashes(git, stashes)
       },
       'undo-drop-stash': async () => {
         const dropped = lastDroppedStashRef.current
@@ -1596,6 +1610,17 @@ export function useWorkflowAction(
         dispatch({ type: 'clearSelection' })
       } else if (pendingItemAction && pendingItemAction.ids.length > 1) {
         dispatch({ type: 'setMarks', view: 'branches', ids: pendingItemAction.ids })
+      }
+    }
+    // #1361 — same batch selection lifecycle for drop-stash. No force
+    // escalation exists for stash drops (unlike delete-branch's -d/-D),
+    // so a partial failure just leaves the refused stashes marked for
+    // the user to inspect or retry.
+    if (id === 'drop-stash') {
+      if (result?.ok) {
+        dispatch({ type: 'clearSelection' })
+      } else if (pendingItemAction && pendingItemAction.ids.length > 1) {
+        dispatch({ type: 'setMarks', view: 'stash', ids: pendingItemAction.ids })
       }
     }
     // A safe `delete-branch` (`git branch -d`) refuses branches that
