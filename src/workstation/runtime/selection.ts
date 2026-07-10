@@ -182,6 +182,12 @@ export function getSelectedWorktreeId(
 
 /**
  * Get the full WorktreeEntry for the currently-selected worktree.
+ *
+ * Falls back to indexing the unfiltered list when the active filter hides
+ * every worktree — a worktree action reachable from the palette (rather
+ * than from the worktrees view itself) can fire with a stale filter still
+ * applied, and the cursor should still resolve to something rather than
+ * silently going target-less.
  */
 export function getSelectedWorktree(
   state: LogInkState,
@@ -191,7 +197,9 @@ export function getSelectedWorktree(
   const visible = state.filter
     ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
     : all
-  if (visible.length === 0) return undefined
-  const index = Math.min(state.selectedWorktreeListIndex, visible.length - 1)
-  return visible[index]
+  if (visible.length > 0) {
+    return visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
+  }
+  if (all.length === 0) return undefined
+  return all[Math.min(state.selectedWorktreeListIndex, all.length - 1)]
 }

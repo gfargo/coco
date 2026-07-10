@@ -7,7 +7,7 @@
  */
 import { createLogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
-import { getSelectedBranchId, getSelectedTagId, getSelectedStashId } from './selection'
+import { getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedWorktree } from './selection'
 
 function makeBranch(shortName: string, date = '2026-01-01') {
   return {
@@ -29,6 +29,10 @@ function makeTag(name: string) {
 
 function makeStash(index: number) {
   return { ref: `stash@{${index}}`, message: `stash ${index}`, hash: `s${index}`, date: '2026-01-01' }
+}
+
+function makeWorktree(path: string, branch?: string) {
+  return { path, branch, head: `h-${path}`, detached: !branch, bare: false, current: false, dirty: false }
 }
 
 describe('selection selectors (#1452)', () => {
@@ -159,6 +163,41 @@ describe('selection selectors (#1452)', () => {
       // 'echo'. An index-only lookup would silently return the wrong
       // branch here; the id-first selector still returns 'echo'.
       expect(getSelectedBranchId(state, after)).toBe('echo')
+    })
+  })
+
+  describe('getSelectedWorktree', () => {
+    const worktreeContext = {
+      worktreeList: {
+        worktrees: [
+          makeWorktree('/repo', 'main'),
+          makeWorktree('/repo-feature', 'feature'),
+        ],
+      },
+    } as unknown as LogInkContext
+
+    it('returns the worktree at the selected index', () => {
+      const state = { ...createLogInkState([]), selectedWorktreeListIndex: 1 }
+      expect(getSelectedWorktree(state, worktreeContext)?.path).toBe('/repo-feature')
+    })
+
+    // A worktree action reachable from the palette (rather than the
+    // worktrees view) can fire with a stale filter still applied — the
+    // cursor should still resolve against the unfiltered list rather
+    // than going target-less.
+    it('falls back to the unfiltered list when the filter hides every worktree', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedWorktreeListIndex: 1,
+        filter: 'does-not-match-anything',
+      }
+      expect(getSelectedWorktree(state, worktreeContext)?.path).toBe('/repo-feature')
+    })
+
+    it('returns undefined when there are no worktrees at all', () => {
+      const state = { ...createLogInkState([]), selectedWorktreeListIndex: 0 }
+      const emptyCtx = { worktreeList: { worktrees: [] } } as unknown as LogInkContext
+      expect(getSelectedWorktree(state, emptyCtx)).toBeUndefined()
     })
   })
 })
