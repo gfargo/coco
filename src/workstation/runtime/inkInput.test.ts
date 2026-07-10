@@ -544,6 +544,47 @@ describe('log Ink input interactions', () => {
     ])
   })
 
+  // #1361 — global undo (`z` outside the more specific worktree-diff /
+  // status contexts above) raises the global-undo confirmation carrying
+  // the runtime-resolved description as payload.
+  it('z raises global-undo with the resolved description when there is a reflog tip to undo', () => {
+    expect(getLogInkInputEvents(
+      createLogInkState(rows),
+      'z',
+      {},
+      { reflogUndoDescription: "Undo checkout: switch back to 'main' (currently on 'feature')." }
+    )).toEqual([
+      {
+        type: 'action',
+        action: {
+          type: 'setPendingConfirmation',
+          value: 'global-undo',
+          payload: "Undo checkout: switch back to 'main' (currently on 'feature').",
+        },
+      },
+    ])
+  })
+
+  it('z is a no-op when there is no reflog tip to undo', () => {
+    expect(getLogInkInputEvents(createLogInkState(rows), 'z', {}, {})).toEqual([])
+  })
+
+  it('the scoped worktree-diff/status z handlers take precedence over global undo', () => {
+    // Both a resolvable undo AND a worktree-diff target are present —
+    // the more specific in-view action must win.
+    expect(getLogInkInputEvents(
+      createLogInkState(rows, { activeView: 'status' }),
+      'z',
+      {},
+      { worktreeFileCount: 1, reflogUndoDescription: 'Undo commit: reset --hard to the previous HEAD.' }
+    )).toEqual([
+      {
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: 'revert-file' },
+      },
+    ])
+  })
+
   it('confirms or cancels worktree revert actions explicitly', () => {
     const filePending = applyLogInkAction(createLogInkState(rows), {
       type: 'setPendingConfirmation',

@@ -1,7 +1,7 @@
 import type ReactTypes from 'react'
 import type { GitLogRow } from '../../../commands/log/data'
 import { createLogInkState } from '../inkViewModel'
-import { checkoutReflogEntry } from '../../../git/reflogActions'
+import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
 import { checkoutBranch, checkoutBranchByName, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
 import { cherryPickCommit, autosquashRebase } from '../../../git/historyActions'
 import { createStash } from '../../../git/stashActions'
@@ -20,6 +20,8 @@ import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowActi
 
 jest.mock('../../../git/reflogActions', () => ({
   checkoutReflogEntry: jest.fn().mockResolvedValue({ ok: true, message: 'checked out' }),
+  planReflogUndo: jest.fn(),
+  performReflogUndo: jest.fn().mockResolvedValue({ ok: true, message: 'undone' }),
 }))
 
 jest.mock('../../../git/branchActions', () => {
@@ -62,6 +64,8 @@ jest.mock('../../../git/operationActions', () => {
 const checkoutReflogEntryMock = checkoutReflogEntry as jest.MockedFunction<
   typeof checkoutReflogEntry
 >
+const planReflogUndoMock = planReflogUndo as jest.MockedFunction<typeof planReflogUndo>
+const performReflogUndoMock = performReflogUndo as jest.MockedFunction<typeof performReflogUndo>
 
 /**
  * Minimal React stand-in with real `useRef` persistence across renders and
@@ -149,6 +153,42 @@ describe('runWorkflowAction reads the live render snapshot, not the mount-time c
     await first.runWorkflowAction('checkout-reflog-entry')
     expect(checkoutReflogEntryMock).toHaveBeenCalledTimes(1)
     expect(checkoutReflogEntryMock).toHaveBeenCalledWith(expect.anything(), entries[1])
+  })
+})
+
+describe('global-undo (#1361)', () => {
+  beforeEach(() => {
+    planReflogUndoMock.mockReset()
+    performReflogUndoMock.mockReset().mockResolvedValue({ ok: true, message: 'undone' })
+  })
+
+  it('re-derives the plan from the raw reflog and performs it', async () => {
+    const harness = createHookHarness()
+    const entries = [reflogEntry('aaaaaaaaaaaa')]
+    const plan = { description: 'x', commandPreview: 'git reset --hard HEAD@{1}', kind: 'reset' as const }
+    planReflogUndoMock.mockReturnValue(plan)
+
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      context: { reflog: { entries } } as UseWorkflowActionDeps['context'],
+    }))
+
+    await runWorkflowAction('global-undo')
+    expect(planReflogUndoMock).toHaveBeenCalledWith(entries)
+    expect(performReflogUndoMock).toHaveBeenCalledWith(expect.anything(), plan)
+  })
+
+  it('fails cleanly when there is no reflog entry to undo', async () => {
+    const harness = createHookHarness()
+    planReflogUndoMock.mockReturnValue(undefined)
+
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      context: { reflog: { entries: [] } } as unknown as UseWorkflowActionDeps['context'],
+    }))
+
+    await runWorkflowAction('global-undo')
+    expect(performReflogUndoMock).not.toHaveBeenCalled()
   })
 })
 

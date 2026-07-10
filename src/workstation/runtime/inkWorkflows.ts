@@ -731,6 +731,21 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
     },
     {
+      // #1361 — global undo (lazygit's `z` safety blanket). Dispatched
+      // ONLY by the dedicated `z` handler in inkInput.ts, gated on
+      // `context.reflogUndoDescription` being set — empty `key` keeps
+      // this out of the generic end-of-dispatch key fallback, which has
+      // no such gate and would fire with no description payload.
+      id: 'global-undo',
+      key: '',
+      label: 'Undo last operation',
+      description: 'Inspect the reflog tip and undo the last git operation (checkout switches back; everything else resets --hard to the previous HEAD).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: (state) => state.pendingConfirmationPayload
+        || 'Undo the last git operation using the reflog.',
+    },
+    {
       // #0.71 — submodule maintenance actions. All three are scoped
       // per-view in inkInput (active only when activeView ===
       // 'submodules') so their single-letter keys (i / u / s) stay free

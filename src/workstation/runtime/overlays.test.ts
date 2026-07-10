@@ -186,6 +186,29 @@ describe('checkout-created-branch confirmation panel (#1326)', () => {
   })
 })
 
+describe('global-undo confirmation panel (#1361)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  it('renders the runtime-resolved undo description from payload', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'global-undo',
+      pendingConfirmationPayload: "Undo checkout: switch back to 'main' (currently on 'feature').",
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
+    expect(text).toContain('Undo last operation')
+    expect(text).toContain("Undo checkout: switch back to 'main' (currently on 'feature').")
+    expect(text).not.toContain('Destructive Git action requires confirmation')
+  })
+
+  it('falls back to a generic message when the payload is absent', () => {
+    const state = { ...createLogInkState([]), pendingConfirmationId: 'global-undo' }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
+    expect(text).toContain('Undo the last git operation using the reflog.')
+    expect(text).not.toContain('Destructive Git action requires confirmation')
+  })
+})
+
 describe('split-plan overlay — unclaimed group (#1180)', () => {
   const components: LogInkComponents = { Box, Text }
 
