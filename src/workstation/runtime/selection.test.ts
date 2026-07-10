@@ -7,7 +7,7 @@
  */
 import { createLogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
-import { getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedWorktree } from './selection'
+import { getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedWorktree, getSelectedCommitTarget } from './selection'
 
 function makeBranch(shortName: string, date = '2026-01-01') {
   return {
@@ -198,6 +198,28 @@ describe('selection selectors (#1452)', () => {
       const state = { ...createLogInkState([]), selectedWorktreeListIndex: 0 }
       const emptyCtx = { worktreeList: { worktrees: [] } } as unknown as LogInkContext
       expect(getSelectedWorktree(state, emptyCtx)).toBeUndefined()
+    })
+  })
+
+  describe('getSelectedCommitTarget', () => {
+    const rows = [{
+      type: 'commit' as const, graph: '*', shortHash: 'abc1234', hash: 'abc1234'.padEnd(12, '0'),
+      parents: [], date: '2026-05-01', author: 'Coco', refs: [], message: 'fix: the thing',
+    }]
+
+    it('returns the cursored commit for a commit-target confirmation id', () => {
+      const state = createLogInkState(rows)
+      expect(getSelectedCommitTarget('cherry-pick-commit', state)?.shortHash).toBe('abc1234')
+    })
+
+    it('returns undefined for a non-commit-target confirmation id', () => {
+      const state = createLogInkState(rows)
+      expect(getSelectedCommitTarget('delete-branch', state)).toBeUndefined()
+    })
+
+    it('returns undefined when id is undefined', () => {
+      const state = createLogInkState(rows)
+      expect(getSelectedCommitTarget(undefined, state)).toBeUndefined()
     })
   })
 })
