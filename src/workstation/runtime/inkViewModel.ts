@@ -2959,9 +2959,15 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     case 'toggleMark': {
       // #1361 — flip the id's membership in the marked set. A selection
       // belongs to one view: marking in a different view starts fresh
-      // (stale cross-view marks were the audit's core hazard). An empty
-      // result with no anchor collapses back to undefined so "is
-      // anything selected" stays a simple existence check.
+      // (stale cross-view marks were the audit's core hazard). Marks
+      // and a range anchor are mutually exclusive within a view too —
+      // the batch selector already prioritizes an active range over
+      // marks (see getSelectedBranchBatch/getSelectedStashBatch), so
+      // leaving a stale anchor around while marks accumulate would
+      // paint mark glyphs on rows a batch action wouldn't actually
+      // touch. Toggling a mark always drops any anchor. An empty
+      // result collapses back to undefined so "is anything selected"
+      // stays a simple existence check.
       const sameView = state.selection?.view === action.view
       const ids = new Set(sameView ? state.selection?.ids : [])
       if (ids.has(action.id)) {
@@ -2969,26 +2975,29 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       } else {
         ids.add(action.id)
       }
-      const anchorId = sameView ? state.selection?.anchorId : undefined
       return {
         ...state,
-        selection: ids.size === 0 && !anchorId
+        selection: ids.size === 0
           ? undefined
-          : { view: action.view, anchorId, ids },
+          : { view: action.view, anchorId: undefined, ids },
         pendingKey: undefined,
       }
     }
-    case 'setRangeAnchor': {
-      const sameView = state.selection?.view === action.view
-      const ids: ReadonlySet<string> = sameView ? (state.selection?.ids ?? new Set()) : new Set()
+    case 'setRangeAnchor':
+      // #1361 — mirror of toggleMark's mutual-exclusivity rule:
+      // starting a new range anchor drops any marks in the same (or a
+      // different) view, for the same reason — a stale mark can't
+      // coexist with an active range without misleading the row
+      // rendering. Clearing the anchor (id undefined) always leaves
+      // nothing behind: marks are already gone by the time an anchor
+      // could exist, so there's nothing left to collapse around.
       return {
         ...state,
-        selection: action.id === undefined && ids.size === 0
+        selection: action.id === undefined
           ? undefined
-          : { view: action.view, anchorId: action.id, ids },
+          : { view: action.view, anchorId: action.id, ids: new Set() },
         pendingKey: undefined,
       }
-    }
     case 'setMarks':
       return {
         ...state,

@@ -1643,15 +1643,31 @@ describe('log Ink view model', () => {
       expect(state.selection).toEqual({ view: 'stash', anchorId: undefined, ids: new Set(['stash@{0}']) })
     })
 
-    it('setRangeAnchor sets, then clears without touching marks in the same view', () => {
+    // #1361 — marks and a range anchor are mutually exclusive within a
+    // view: the batch selector already prioritizes an active range over
+    // marks, so letting both coexist would paint mark glyphs on rows a
+    // batch action wouldn't actually touch (found in review — the
+    // selector-priority behavior was tested, the state invariant wasn't).
+    it('setRangeAnchor drops any existing marks in the same view', () => {
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
       state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: 'feat/b' })
-      expect(state.selection?.anchorId).toBe('feat/b')
-      expect(state.selection?.ids).toEqual(new Set(['feat/a']))
+      expect(state.selection).toEqual({ view: 'branches', anchorId: 'feat/b', ids: new Set() })
+    })
+
+    it('toggleMark drops any existing range anchor in the same view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/b' })
+      expect(state.selection).toEqual({ view: 'branches', anchorId: undefined, ids: new Set(['feat/b']) })
+    })
+
+    it('clearing the anchor after it superseded marks leaves the selection empty', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: 'feat/b' })
       state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: undefined })
-      expect(state.selection?.anchorId).toBeUndefined()
-      expect(state.selection?.ids).toEqual(new Set(['feat/a']))
+      expect(state.selection).toBeUndefined()
     })
 
     it('clearing the anchor with no marks collapses the selection to undefined', () => {
