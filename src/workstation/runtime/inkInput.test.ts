@@ -3449,6 +3449,54 @@ describe('log Ink input interactions', () => {
       expect(up).toEqual([{ type: 'action', action: { type: 'moveBranch', delta: -1, count: 5 } }])
     })
 
+    // #1452 dual-write — when the caller threads the sorted+filtered id
+    // list through context, moveBranch/moveTag/moveStash carry the
+    // post-move target's id so the reducer can mirror it into
+    // selectedBranchId/selectedTagId/selectedStashId.
+    it('moveBranch/moveTag/moveStash carry the post-move id when the context provides the id list', () => {
+      const branchIds = ['a', 'b', 'c', 'd', 'e']
+      const state = {
+        ...createLogInkState(rows),
+        activeView: 'branches' as const,
+        selectedBranchIndex: 1,
+        selectedTagIndex: 1,
+        selectedStashIndex: 1,
+      }
+
+      const branchDown = getLogInkInputEvents(state, '', { downArrow: true }, { branchCount: 5, branchIds })
+      expect(branchDown).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: 1, count: 5, id: 'c' } },
+      ])
+
+      const branchUp = getLogInkInputEvents(state, '', { upArrow: true }, { branchCount: 5, branchIds })
+      expect(branchUp).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: -1, count: 5, id: 'a' } },
+      ])
+
+      const tagIds = ['t1', 't2', 't3']
+      const tagState = { ...state, activeView: 'tags' as const }
+      const tagDown = getLogInkInputEvents(tagState, '', { downArrow: true }, { tagCount: 3, tagIds })
+      expect(tagDown).toEqual([
+        { type: 'action', action: { type: 'moveTag', delta: 1, count: 3, id: 't3' } },
+      ])
+
+      const stashIds = ['stash@{0}', 'stash@{1}', 'stash@{2}']
+      const stashState = { ...state, activeView: 'stash' as const }
+      const stashDown = getLogInkInputEvents(stashState, '', { downArrow: true }, { stashCount: 3, stashIds })
+      expect(stashDown).toEqual([
+        { type: 'action', action: { type: 'moveStash', delta: 1, count: 3, id: 'stash@{2}' } },
+      ])
+    })
+
+    it('clamps the resolved id to the last item at the end of the list', () => {
+      const branchIds = ['a', 'b', 'c']
+      const state = { ...createLogInkState(rows), activeView: 'branches' as const, selectedBranchIndex: 2 }
+      const down = getLogInkInputEvents(state, '', { downArrow: true }, { branchCount: 3, branchIds })
+      expect(down).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: 1, count: 3, id: 'c' } },
+      ])
+    })
+
     it('↑/↓ on the status view with the center pane focused still moves the worktree file list', () => {
       const state = {
         ...createLogInkState(rows),

@@ -370,6 +370,16 @@ export type LogInkState = {
   selectedBranchIndex: number
   selectedTagIndex: number
   selectedStashIndex: number
+  /**
+   * Id-based cursor mirrors of the three indices above (#1452 dual-write
+   * phase). Written alongside the index by `moveBranch`/`moveTag`/
+   * `moveStash` when the dispatch site could resolve the target's id;
+   * not yet read by any consumer — `selected*Index` remains the source
+   * of truth until the migration flips it.
+   */
+  selectedBranchId?: string
+  selectedTagId?: string
+  selectedStashId?: string
   selectedWorktreeListIndex: number
   selectedConflictFileIndex: number
   /**
@@ -1088,7 +1098,12 @@ export type LogInkAction =
   | { type: 'selectCommitByHash'; hash: string }
   | { type: 'moveDetailFile'; delta: number; fileCount: number }
   | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
-  | { type: 'moveBranch'; delta: number; count: number }
+  // `id` (#1452 dual-write) is the target's id at the post-move index,
+  // resolved by the dispatch site (which has the filtered list in
+  // scope) since the reducer has no access to `LogInkContext`. Written
+  // to `selected*Id` alongside the index; undefined when the dispatch
+  // site couldn't resolve it (e.g. a test harness omitting the id list).
+  | { type: 'moveBranch'; delta: number; count: number; id?: string }
   | { type: 'resetBranchSelection' }
   | { type: 'setSidebarHeaderFocused'; value: boolean }
   | { type: 'setStatusGroupHeaderFocused'; value: boolean }
@@ -1099,8 +1114,8 @@ export type LogInkAction =
   | { type: 'resetInspectorActionIndex' }
   | { type: 'setBootLoading'; value: boolean }
   | { type: 'setRemoteOp'; value: RemoteOpState | undefined }
-  | { type: 'moveTag'; delta: number; count: number }
-  | { type: 'moveStash'; delta: number; count: number }
+  | { type: 'moveTag'; delta: number; count: number; id?: string }
+  | { type: 'moveStash'; delta: number; count: number; id?: string }
   | { type: 'moveReflog'; delta: number; count: number }
   | { type: 'moveSubmodule'; delta: number; count: number }
   | { type: 'moveRemote'; delta: number; count: number }
@@ -1525,6 +1540,12 @@ function withPushedRepoFrame(
     selectedBranchIndex: 0,
     selectedTagIndex: 0,
     selectedStashIndex: 0,
+    // #1452 — a fresh repo frame has no meaningful id-cursor; the parent's
+    // was captured above (index-only, see the parentReturn TODO note) and
+    // this frame's own index resets to 0 alongside it.
+    selectedBranchId: undefined,
+    selectedTagId: undefined,
+    selectedStashId: undefined,
     selectedWorktreeListIndex: 0,
     selectedConflictFileIndex: 0,
     selectedReflogIndex: 0,
@@ -1597,6 +1618,12 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     selectedBranchIndex: ret.selectedBranchIndex ?? 0,
     selectedTagIndex: ret.selectedTagIndex ?? 0,
     selectedStashIndex: ret.selectedStashIndex ?? 0,
+    // #1452 — parentReturn only captures the index (not the id mirror);
+    // clearing here makes the selectors trust the just-restored index,
+    // which is exactly what was in effect before the push.
+    selectedBranchId: undefined,
+    selectedTagId: undefined,
+    selectedStashId: undefined,
     selectedWorktreeListIndex: ret.selectedWorktreeListIndex ?? 0,
     selectedConflictFileIndex: ret.selectedConflictFileIndex ?? 0,
     selectedReflogIndex: ret.selectedReflogIndex ?? 0,
@@ -1735,6 +1762,13 @@ function withFilter(
     selectedBranchIndex: branchIndex,
     selectedTagIndex: tagIndex,
     selectedStashIndex: stashIndex,
+    // #1452 — the rectified index above already follows the previously-
+    // selected item by key (or snaps to 0 when it dropped out); clearing
+    // the id mirror here just makes the selectors trust that freshly
+    // rectified index instead of a now-possibly-stale id.
+    selectedBranchId: undefined,
+    selectedTagId: undefined,
+    selectedStashId: undefined,
     selectedReflogIndex: reflogIndex,
     diffPreviewOffset: 0,
     pendingKey: undefined,
@@ -1911,6 +1945,9 @@ export function createLogInkState(
     selectedBranchIndex: 0,
     selectedTagIndex: 0,
     selectedStashIndex: 0,
+    selectedBranchId: undefined,
+    selectedTagId: undefined,
+    selectedStashId: undefined,
     selectedWorktreeListIndex: 0,
     selectedConflictFileIndex: 0,
     selectedReflogIndex: 0,
@@ -2160,6 +2197,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedBranchIndex: clampIndex(state.selectedBranchIndex + action.delta, action.count),
+        selectedBranchId: action.id,
         pendingKey: undefined,
       }
     case 'resetBranchSelection':
@@ -2170,6 +2208,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedBranchIndex: 0,
+        // #1452 — clear the id mirror so the selector trusts the reset
+        // index (the just-checked-out branch is now pinned at top) rather
+        // than resolving back to whatever branch was selected before.
+        selectedBranchId: undefined,
         pendingKey: undefined,
       }
     case 'setSidebarHeaderFocused':
@@ -2250,12 +2292,14 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedTagIndex: clampIndex(state.selectedTagIndex + action.delta, action.count),
+        selectedTagId: action.id,
         pendingKey: undefined,
       }
     case 'moveStash':
       return {
         ...state,
         selectedStashIndex: clampIndex(state.selectedStashIndex + action.delta, action.count),
+        selectedStashId: action.id,
         pendingKey: undefined,
       }
     case 'moveReflog':
@@ -2338,8 +2382,11 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         branchSort: cycleBranchSort(state.branchSort),
         // Snap to the top of the (newly ordered) list so the user always
-        // sees what's now most relevant under the new mode.
+        // sees what's now most relevant under the new mode. #1452: clear
+        // the id mirror too, else the selector would keep resolving to
+        // the pre-resort branch instead of the new top-of-list item.
         selectedBranchIndex: 0,
+        selectedBranchId: undefined,
         pendingKey: undefined,
       }
     case 'cycleTagSort':
@@ -2347,6 +2394,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         tagSort: cycleTagSort(state.tagSort),
         selectedTagIndex: 0,
+        selectedTagId: undefined,
         pendingKey: undefined,
       }
     case 'openInputPrompt':
@@ -2636,6 +2684,9 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         diffSource: 'stash',
         stashDiffRef: action.ref,
         selectedStashIndex: Math.max(0, action.stashIndex ?? state.selectedStashIndex),
+        // #1452 — action.ref IS the target stash's id, so it can be set
+        // precisely here rather than just cleared.
+        selectedStashId: action.ref,
         // Reset the diff scroll offset so the stash patch always opens
         // at the top, mirroring `navigateOpenDiffForCommit`. Without
         // this, opening a stash inherits whatever offset the previous

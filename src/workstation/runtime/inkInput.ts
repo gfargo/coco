@@ -112,6 +112,13 @@ export type LogInkInputContext = {
    */
   branchSelectedShortName?: string
   /**
+   * Sorted + filtered branch shortNames, same order as the rendered
+   * list (#1452 dual-write). Lets moveBranch resolve the post-move
+   * target's id without duplicating sort/filter here — the caller
+   * (`useInputHandler`) already has the filtered list in scope.
+   */
+  branchIds?: string[]
+  /**
    * Name of the currently checked-out branch (#0.71). Used by the
    * branches-view `r` (rebase-onto) handler to build the confirmation
    * warning and to short-circuit a self-rebase / detached-HEAD before
@@ -124,7 +131,11 @@ export type LogInkInputContext = {
    * `branchSelectedShortName` but scoped to the tags view.
    */
   tagSelectedName?: string
+  /** Sorted + filtered tag names, same role as `branchIds` (#1452). */
+  tagIds?: string[]
   stashCount?: number
+  /** Filtered stash refs, same role as `branchIds` (#1452). Stashes have no sort mode to apply. */
+  stashIds?: string[]
   reflogCount?: number
   /** Hash of the cursored reflog entry (#781). Used by Enter to drill into the diff. */
   reflogSelectedHash?: string
@@ -319,6 +330,25 @@ function action(actionValue: LogInkAction): LogInkInputEvent {
     type: 'action',
     action: actionValue,
   }
+}
+
+/**
+ * Resolve the id at the post-move index for a `moveBranch`/`moveTag`/
+ * `moveStash` dispatch (#1452 dual-write). `ids` is the sorted +
+ * filtered id list in render order; undefined when the caller hasn't
+ * threaded it through `LogInkInputContext` yet (e.g. a test harness
+ * exercising only `count`), in which case the move still dispatches —
+ * it just carries no `id` payload.
+ */
+function resolveMoveTargetId(
+  ids: string[] | undefined,
+  currentIndex: number,
+  delta: number,
+  count: number,
+): string | undefined {
+  if (!ids || count === 0) return undefined
+  const newIndex = Math.max(0, Math.min(currentIndex + delta, count - 1))
+  return ids[newIndex]
 }
 
 /**
@@ -2876,15 +2906,30 @@ export function getLogInkInputEvents(
     }
 
     if (isBranchActionTarget(state) && context.branchCount) {
-      return [action({ type: 'moveBranch', delta: -1, count: context.branchCount })]
+      return [action({
+        type: 'moveBranch',
+        delta: -1,
+        count: context.branchCount,
+        id: resolveMoveTargetId(context.branchIds, state.selectedBranchIndex, -1, context.branchCount),
+      })]
     }
 
     if (isTagActionTarget(state) && context.tagCount) {
-      return [action({ type: 'moveTag', delta: -1, count: context.tagCount })]
+      return [action({
+        type: 'moveTag',
+        delta: -1,
+        count: context.tagCount,
+        id: resolveMoveTargetId(context.tagIds, state.selectedTagIndex, -1, context.tagCount),
+      })]
     }
 
     if (isStashActionTarget(state) && context.stashCount) {
-      return [action({ type: 'moveStash', delta: -1, count: context.stashCount })]
+      return [action({
+        type: 'moveStash',
+        delta: -1,
+        count: context.stashCount,
+        id: resolveMoveTargetId(context.stashIds, state.selectedStashIndex, -1, context.stashCount),
+      })]
     }
 
     if (isReflogActionTarget(state) && context.reflogCount) {
@@ -3012,15 +3057,30 @@ export function getLogInkInputEvents(
     }
 
     if (isBranchActionTarget(state) && context.branchCount) {
-      return [action({ type: 'moveBranch', delta: 1, count: context.branchCount })]
+      return [action({
+        type: 'moveBranch',
+        delta: 1,
+        count: context.branchCount,
+        id: resolveMoveTargetId(context.branchIds, state.selectedBranchIndex, 1, context.branchCount),
+      })]
     }
 
     if (isTagActionTarget(state) && context.tagCount) {
-      return [action({ type: 'moveTag', delta: 1, count: context.tagCount })]
+      return [action({
+        type: 'moveTag',
+        delta: 1,
+        count: context.tagCount,
+        id: resolveMoveTargetId(context.tagIds, state.selectedTagIndex, 1, context.tagCount),
+      })]
     }
 
     if (isStashActionTarget(state) && context.stashCount) {
-      return [action({ type: 'moveStash', delta: 1, count: context.stashCount })]
+      return [action({
+        type: 'moveStash',
+        delta: 1,
+        count: context.stashCount,
+        id: resolveMoveTargetId(context.stashIds, state.selectedStashIndex, 1, context.stashCount),
+      })]
     }
 
     if (isReflogActionTarget(state) && context.reflogCount) {

@@ -1539,6 +1539,90 @@ describe('log Ink view model', () => {
     })
   })
 
+  // #1452 dual-write — moveBranch/moveTag/moveStash write the resolved
+  // id alongside the index. The reducer has no access to LogInkContext,
+  // so it trusts whatever id the dispatch site resolved; it does not
+  // (and cannot) verify the id matches the index itself.
+  describe('moveBranch / moveTag / moveStash id dual-write (#1452)', () => {
+    it('writes selectedBranchId alongside the index when the dispatch site resolved one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 5, id: 'feature' })
+      expect(state.selectedBranchIndex).toBe(1)
+      expect(state.selectedBranchId).toBe('feature')
+    })
+
+    it('leaves selectedBranchId undefined when the dispatch site could not resolve one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 5 })
+      expect(state.selectedBranchId).toBeUndefined()
+    })
+
+    it('writes selectedTagId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveTag', delta: 2, count: 5, id: 'v2.0' })
+      expect(state.selectedTagIndex).toBe(2)
+      expect(state.selectedTagId).toBe('v2.0')
+    })
+
+    it('writes selectedStashId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveStash', delta: 1, count: 5, id: 'stash@{1}' })
+      expect(state.selectedStashIndex).toBe(1)
+      expect(state.selectedStashId).toBe('stash@{1}')
+    })
+  })
+
+  // #1452 flip — every OTHER action that resets or rectifies
+  // selectedBranchIndex/selectedTagIndex/selectedStashIndex must also
+  // clear (or precisely set) the id mirror, so the id-preferring
+  // selectors in selection.ts never resolve to a stale item that
+  // disagrees with a freshly reset/rectified index.
+  describe('id mirror stays consistent across non-move index resets (#1452)', () => {
+    it('resetBranchSelection clears selectedBranchId', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature' })
+      expect(state.selectedBranchId).toBe('feature')
+      state = applyLogInkAction(state, { type: 'resetBranchSelection' })
+      expect(state.selectedBranchIndex).toBe(0)
+      expect(state.selectedBranchId).toBeUndefined()
+    })
+
+    it('cycleBranchSort clears selectedBranchId', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature' })
+      state = applyLogInkAction(state, { type: 'cycleBranchSort' })
+      expect(state.selectedBranchIndex).toBe(0)
+      expect(state.selectedBranchId).toBeUndefined()
+    })
+
+    it('cycleTagSort clears selectedTagId', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveTag', delta: 3, count: 10, id: 'v2.0' })
+      state = applyLogInkAction(state, { type: 'cycleTagSort' })
+      expect(state.selectedTagIndex).toBe(0)
+      expect(state.selectedTagId).toBeUndefined()
+    })
+
+    it('navigateOpenDiffForStash sets selectedStashId precisely from action.ref', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveStash', delta: 3, count: 10, id: 'stash@{3}' })
+      state = applyLogInkAction(state, { type: 'navigateOpenDiffForStash', ref: 'stash@{7}', stashIndex: 2 })
+      expect(state.selectedStashIndex).toBe(2)
+      expect(state.selectedStashId).toBe('stash@{7}')
+    })
+
+    it('a filter change clears all three id mirrors', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 10, id: 'feature' })
+      state = applyLogInkAction(state, { type: 'moveTag', delta: 1, count: 10, id: 'v2.0' })
+      state = applyLogInkAction(state, { type: 'moveStash', delta: 1, count: 10, id: 'stash@{1}' })
+      state = applyLogInkAction(state, { type: 'appendFilter', value: 'x' })
+      expect(state.selectedBranchId).toBeUndefined()
+      expect(state.selectedTagId).toBeUndefined()
+      expect(state.selectedStashId).toBeUndefined()
+    })
+  })
+
   // Sidebar header focus (#806 follow-up) — escapes the items list
   // upward onto the active tab's header. Reducer-level coverage
   // here; input dispatch coverage lives in inkInput.test.ts.
@@ -2192,6 +2276,28 @@ describe('log Ink view model', () => {
       expect(popped.branchSort).toBe(parentBranchSort)
       // Submodule's state is gone; only the root frame remains.
       expect(popped.repoStack).toHaveLength(1)
+    })
+
+    // #1452 — parentReturn only captures the index, not the id mirror
+    // (adding it is deferred; nothing reads these fields outside the
+    // selectors yet, so a cleared mirror right after push/pop is
+    // harmless — the selectors fall back to the restored index, which
+    // is exactly correct). Push and pop must each clear the mirror
+    // rather than leaking the other frame's id across the boundary.
+    it('pushRepoFrame and popRepoFrame clear the id mirrors', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 10, id: 'feature' })
+      expect(state.selectedBranchId).toBe('feature')
+
+      const pushed = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
+      expect(pushed.selectedBranchId).toBeUndefined()
+
+      const insideSubmodule = applyLogInkAction(pushed, {
+        type: 'moveBranch', delta: 1, count: 10, id: 'submodule-branch',
+      })
+      const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
+      expect(popped.selectedBranchId).toBeUndefined()
+      expect(popped.selectedBranchIndex).toBe(state.selectedBranchIndex)
     })
 
     // Regression: popping a frame entered FROM a commit diff used to
