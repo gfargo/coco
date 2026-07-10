@@ -370,6 +370,16 @@ export type LogInkState = {
   selectedBranchIndex: number
   selectedTagIndex: number
   selectedStashIndex: number
+  /**
+   * Id-based cursor mirrors of the three indices above (#1452 dual-write
+   * phase). Written alongside the index by `moveBranch`/`moveTag`/
+   * `moveStash` when the dispatch site could resolve the target's id;
+   * not yet read by any consumer — `selected*Index` remains the source
+   * of truth until the migration flips it.
+   */
+  selectedBranchId?: string
+  selectedTagId?: string
+  selectedStashId?: string
   selectedWorktreeListIndex: number
   selectedConflictFileIndex: number
   /**
@@ -1088,7 +1098,12 @@ export type LogInkAction =
   | { type: 'selectCommitByHash'; hash: string }
   | { type: 'moveDetailFile'; delta: number; fileCount: number }
   | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
-  | { type: 'moveBranch'; delta: number; count: number }
+  // `id` (#1452 dual-write) is the target's id at the post-move index,
+  // resolved by the dispatch site (which has the filtered list in
+  // scope) since the reducer has no access to `LogInkContext`. Written
+  // to `selected*Id` alongside the index; undefined when the dispatch
+  // site couldn't resolve it (e.g. a test harness omitting the id list).
+  | { type: 'moveBranch'; delta: number; count: number; id?: string }
   | { type: 'resetBranchSelection' }
   | { type: 'setSidebarHeaderFocused'; value: boolean }
   | { type: 'setStatusGroupHeaderFocused'; value: boolean }
@@ -1099,8 +1114,8 @@ export type LogInkAction =
   | { type: 'resetInspectorActionIndex' }
   | { type: 'setBootLoading'; value: boolean }
   | { type: 'setRemoteOp'; value: RemoteOpState | undefined }
-  | { type: 'moveTag'; delta: number; count: number }
-  | { type: 'moveStash'; delta: number; count: number }
+  | { type: 'moveTag'; delta: number; count: number; id?: string }
+  | { type: 'moveStash'; delta: number; count: number; id?: string }
   | { type: 'moveReflog'; delta: number; count: number }
   | { type: 'moveSubmodule'; delta: number; count: number }
   | { type: 'moveRemote'; delta: number; count: number }
@@ -1911,6 +1926,9 @@ export function createLogInkState(
     selectedBranchIndex: 0,
     selectedTagIndex: 0,
     selectedStashIndex: 0,
+    selectedBranchId: undefined,
+    selectedTagId: undefined,
+    selectedStashId: undefined,
     selectedWorktreeListIndex: 0,
     selectedConflictFileIndex: 0,
     selectedReflogIndex: 0,
@@ -2160,6 +2178,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedBranchIndex: clampIndex(state.selectedBranchIndex + action.delta, action.count),
+        selectedBranchId: action.id,
         pendingKey: undefined,
       }
     case 'resetBranchSelection':
@@ -2250,12 +2269,14 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedTagIndex: clampIndex(state.selectedTagIndex + action.delta, action.count),
+        selectedTagId: action.id,
         pendingKey: undefined,
       }
     case 'moveStash':
       return {
         ...state,
         selectedStashIndex: clampIndex(state.selectedStashIndex + action.delta, action.count),
+        selectedStashId: action.id,
         pendingKey: undefined,
       }
     case 'moveReflog':

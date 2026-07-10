@@ -293,14 +293,19 @@ export function useInputHandler(
     const branchSelectedShortName = filteredBranchList[
       Math.min(state.selectedBranchIndex, Math.max(0, filteredBranchList.length - 1))
     ]?.shortName
+    // #1452 dual-write — id list in render order so moveBranch can
+    // resolve the post-move target's id without re-sorting/re-filtering.
+    const branchIds = filteredBranchList.map((b) => b.shortName)
     const tagVisibleCount = filteredTagList.length
     const tagSelectedName = filteredTagList[
       Math.min(state.selectedTagIndex, Math.max(0, filteredTagList.length - 1))
     ]?.name
+    const tagIds = filteredTagList.map((t) => t.name)
     const stashVisibleCount = filteredStashList.length
     const stashSelectedRef = filteredStashList[
       Math.min(state.selectedStashIndex, Math.max(0, filteredStashList.length - 1))
     ]?.ref
+    const stashIds = filteredStashList.map((s) => s.ref)
     const reflogVisibleCount = filteredReflogList.length
     const reflogSelectedHash = filteredReflogList[
       Math.min(state.selectedReflogIndex, Math.max(0, filteredReflogList.length - 1))
@@ -367,13 +372,16 @@ export function useInputHandler(
       commitDiffHunkOffsets,
       branchCount: branchVisibleCount,
       branchSelectedShortName,
+      branchIds,
       // Current branch for the `r` rebase-onto guard + warning (#0.71).
       // Undefined on a detached HEAD, which the handler treats as "no
       // branch to rebase".
       currentBranch: context.branches?.currentBranch,
       tagCount: tagVisibleCount,
       tagSelectedName,
+      tagIds,
       stashCount: stashVisibleCount,
+      stashIds,
       reflogCount: reflogVisibleCount,
       reflogSelectedHash,
       submoduleCount: submoduleVisibleCount,

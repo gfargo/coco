@@ -1539,6 +1539,39 @@ describe('log Ink view model', () => {
     })
   })
 
+  // #1452 dual-write — moveBranch/moveTag/moveStash write the resolved
+  // id alongside the index. The reducer has no access to LogInkContext,
+  // so it trusts whatever id the dispatch site resolved; it does not
+  // (and cannot) verify the id matches the index itself.
+  describe('moveBranch / moveTag / moveStash id dual-write (#1452)', () => {
+    it('writes selectedBranchId alongside the index when the dispatch site resolved one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 5, id: 'feature' })
+      expect(state.selectedBranchIndex).toBe(1)
+      expect(state.selectedBranchId).toBe('feature')
+    })
+
+    it('leaves selectedBranchId undefined when the dispatch site could not resolve one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 5 })
+      expect(state.selectedBranchId).toBeUndefined()
+    })
+
+    it('writes selectedTagId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveTag', delta: 2, count: 5, id: 'v2.0' })
+      expect(state.selectedTagIndex).toBe(2)
+      expect(state.selectedTagId).toBe('v2.0')
+    })
+
+    it('writes selectedStashId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveStash', delta: 1, count: 5, id: 'stash@{1}' })
+      expect(state.selectedStashIndex).toBe(1)
+      expect(state.selectedStashId).toBe('stash@{1}')
+    })
+  })
+
   // Sidebar header focus (#806 follow-up) — escapes the items list
   // upward onto the active tab's header. Reducer-level coverage
   // here; input dispatch coverage lives in inkInput.test.ts.
