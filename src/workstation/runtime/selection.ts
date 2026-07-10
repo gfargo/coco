@@ -28,7 +28,8 @@
  *      rendering / cursor-position reads across the codebase).
  */
 
-import type { LogInkState } from './inkViewModel'
+import type { GitLogCommitRow } from '../../commands/log/data'
+import { getSelectedInkCommit, type LogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
 import type { BranchRef } from '../../git/branchData'
 import type { GitTagRef } from '../../git/tagData'
@@ -202,4 +203,34 @@ export function getSelectedWorktree(
   }
   if (all.length === 0) return undefined
   return all[Math.min(state.selectedWorktreeListIndex, all.length - 1)]
+}
+
+/**
+ * Confirmable workflow ids whose target is the cursored HISTORY commit,
+ * not a promoted-view list item. Everything list-shaped (branch/tag/
+ * stash/worktree deletes and checkouts) resolves through the selectors
+ * above; this is the commit-target counterpart, used by
+ * `describeConfirmationTarget` (overlays.ts) to name the confirm
+ * target so the user never confirms blind.
+ */
+const COMMIT_TARGET_CONFIRMATION_IDS = new Set([
+  'cherry-pick-commit',
+  'revert-commit',
+  'interactive-rebase',
+  'reset-to-commit',
+  'fixup-into-commit',
+  'autosquash-rebase',
+])
+
+/**
+ * Get the cursored commit when `id` is one of the commit-target
+ * confirmation workflows, or undefined otherwise (either `id` isn't a
+ * commit-target workflow, or no commit is under the cursor).
+ */
+export function getSelectedCommitTarget(
+  id: string | undefined,
+  state: LogInkState,
+): GitLogCommitRow | undefined {
+  if (!id || !COMMIT_TARGET_CONFIRMATION_IDS.has(id)) return undefined
+  return getSelectedInkCommit(state)
 }

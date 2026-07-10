@@ -32,8 +32,9 @@ import {
     getLogInkViewKeyBindings,
 } from '../../workstation/runtime/inkKeymap'
 import type { LogInkChoicePrompt, LogInkState } from '../../workstation/runtime/inkViewModel'
-import { filterThemePresets, getSelectedInkCommit } from '../../workstation/runtime/inkViewModel'
+import { filterThemePresets } from '../../workstation/runtime/inkViewModel'
 import { getLogInkWorkflowActionById } from '../../workstation/runtime/inkWorkflows'
+import { getSelectedCommitTarget } from '../../workstation/runtime/selection'
 import { resolvePendingItemAction } from './hooks/useWorkflowAction'
 import type { LogInkContext } from './types'
 import type { LogInkComponents } from './types'
@@ -91,27 +92,18 @@ export function renderInputPromptPanel(
 }
 
 /**
- * Confirmable workflow ids whose target is the cursored HISTORY commit.
- * Everything list-shaped (branch/tag/stash/worktree deletes and
- * checkouts) resolves through `resolvePendingItemAction` — the same
- * sorted+filtered resolver the runner and row spinners use, so the name
- * shown is exactly the item that will be acted on.
- */
-const COMMIT_TARGET_CONFIRMATION_IDS = new Set([
-  'cherry-pick-commit',
-  'revert-commit',
-  'interactive-rebase',
-  'reset-to-commit',
-  'fixup-into-commit',
-  'autosquash-rebase',
-])
-
-/**
  * Human line naming the item a pending confirmation will act on, or
  * undefined when the workflow has no resolvable single target. Shown in
  * the confirm overlay so the user never confirms blind — several
  * destructive keys (D / T / X / W) reach the confirm from views where
  * the target list isn't even on screen.
+ *
+ * Everything list-shaped (branch/tag/stash/worktree deletes and
+ * checkouts) resolves through `resolvePendingItemAction` — the same
+ * sorted+filtered resolver the runner and row spinners use. The
+ * commit-target workflows (cherry-pick, revert, rebase, etc.) resolve
+ * through `getSelectedCommitTarget` (#1452), the commit counterpart of
+ * the id-based selection selectors.
  */
 export function describeConfirmationTarget(
   state: LogInkState,
@@ -123,11 +115,9 @@ export function describeConfirmationTarget(
   if (item) {
     return `${item.kind}: ${item.id}`
   }
-  if (COMMIT_TARGET_CONFIRMATION_IDS.has(id)) {
-    const commit = getSelectedInkCommit(state)
-    if (commit) {
-      return `commit ${commit.shortHash}: ${commit.message}`
-    }
+  const commit = getSelectedCommitTarget(id, state)
+  if (commit) {
+    return `commit ${commit.shortHash}: ${commit.message}`
   }
   return undefined
 }
