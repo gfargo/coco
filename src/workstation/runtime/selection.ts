@@ -110,6 +110,55 @@ export function getSelectedBranch(
 }
 
 /**
+ * Resolve the branch targets for a batch-capable (`targets: 'multi'`)
+ * workflow (#1361). Deterministic priority ladder:
+ *
+ *   1. Range active (v-anchor set on the branches view) → the contiguous
+ *      anchor..cursor span, resolved POSITIONALLY against the visible
+ *      (sorted + filtered) list — a range is what the user sees between
+ *      two rows on screen.
+ *   2. Marked set non-empty → the x-toggled ids, resolved against the
+ *      FULL sorted list in list order. Marks are explicit per-item
+ *      choices, so an active filter must not silently drop targets —
+ *      the confirm panel names every resolved target either way.
+ *   3. Neither → the single cursored branch (existing behavior).
+ *
+ * Marked ids that no longer resolve (branch deleted by another process,
+ * or by an earlier item of the same batch) drop out silently. If the
+ * range anchor itself no longer resolves in the visible list, the range
+ * rung is skipped rather than guessing at a span.
+ */
+export function getSelectedBranchBatch(
+  state: LogInkState,
+  context: LogInkContext,
+): BranchRef[] {
+  const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+  const selection = state.selection?.view === 'branches' ? state.selection : undefined
+
+  if (selection?.anchorId) {
+    const visible = state.filter
+      ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+      : all
+    const anchorIndex = visible.findIndex((b) => b.shortName === selection.anchorId)
+    if (anchorIndex >= 0 && visible.length > 0) {
+      const cursorIndex = Math.min(state.selectedBranchIndex, visible.length - 1)
+      const [from, to] = anchorIndex <= cursorIndex
+        ? [anchorIndex, cursorIndex]
+        : [cursorIndex, anchorIndex]
+      return visible.slice(from, to + 1)
+    }
+  }
+
+  if (selection && selection.ids.size > 0) {
+    const marked = all.filter((b) => selection.ids.has(b.shortName))
+    if (marked.length > 0) return marked
+  }
+
+  const single = getSelectedBranch(state, context)
+  return single ? [single] : []
+}
+
+/**
  * Get the currently-selected tag's name.
  */
 export function getSelectedTagId(

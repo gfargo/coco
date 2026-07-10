@@ -163,6 +163,48 @@ export function deleteBranch(
 }
 
 /**
+ * Delete several branches sequentially (#1361 batch delete). Continues
+ * past per-branch refusals — `-d`'s not-fully-merged guard, the
+ * current-branch guard, worktree-checkout refusals — and reports a
+ * summary. Per-branch failure messages ride in `details` verbatim, so
+ * the caller's not-fully-merged detection (for the force-delete
+ * escalation) keeps matching git's raw wording.
+ */
+export async function deleteBranches(
+  git: SimpleGit,
+  branches: BranchRef[],
+  force = false
+): Promise<BranchActionResult> {
+  if (branches.length === 0) {
+    return { ok: false, message: 'No branches selected.' }
+  }
+  if (branches.length === 1) {
+    return deleteBranch(git, branches[0], force)
+  }
+
+  const deleted: string[] = []
+  const failures: string[] = []
+  for (const branch of branches) {
+    const result = await deleteBranch(git, branch, force)
+    if (result.ok) {
+      deleted.push(branch.shortName)
+    } else {
+      failures.push(`${branch.shortName}: ${result.message}`)
+    }
+  }
+
+  if (failures.length === 0) {
+    const verb = force ? 'Force-deleted' : 'Deleted'
+    return { ok: true, message: `${verb} ${deleted.length} branches: ${deleted.join(', ')}` }
+  }
+  return {
+    ok: false,
+    message: `Deleted ${deleted.length} of ${branches.length} branches — ${failures.length} refused`,
+    details: failures,
+  }
+}
+
+/**
  * True when a failed `git branch -d` was rejected specifically because the
  * branch isn't fully merged (the one case worth offering a force-delete
  * for). Matches git's wording across versions ("not fully merged").

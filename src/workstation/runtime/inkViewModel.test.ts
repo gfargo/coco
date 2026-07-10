@@ -1623,6 +1623,78 @@ describe('log Ink view model', () => {
     })
   })
 
+  // #1361 — multi-select marks + range anchor.
+  describe('multi-select selection (#1361)', () => {
+    it('toggleMark adds then removes an id, collapsing to undefined when empty', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
+      expect(state.selection).toEqual({ view: 'branches', anchorId: undefined, ids: new Set(['feat/a']) })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/b' })
+      expect(state.selection?.ids).toEqual(new Set(['feat/a', 'feat/b']))
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/b' })
+      expect(state.selection).toBeUndefined()
+    })
+
+    it('marking in a different view resets the previous view\'s selection', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'stash', id: 'stash@{0}' })
+      expect(state.selection).toEqual({ view: 'stash', anchorId: undefined, ids: new Set(['stash@{0}']) })
+    })
+
+    it('setRangeAnchor sets, then clears without touching marks in the same view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: 'feat/b' })
+      expect(state.selection?.anchorId).toBe('feat/b')
+      expect(state.selection?.ids).toEqual(new Set(['feat/a']))
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: undefined })
+      expect(state.selection?.anchorId).toBeUndefined()
+      expect(state.selection?.ids).toEqual(new Set(['feat/a']))
+    })
+
+    it('clearing the anchor with no marks collapses the selection to undefined', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: undefined })
+      expect(state.selection).toBeUndefined()
+    })
+
+    it('setMarks replaces the selection wholesale and drops any anchor', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'setMarks', view: 'branches', ids: ['feat/b', 'feat/c'] })
+      expect(state.selection).toEqual({ view: 'branches', anchorId: undefined, ids: new Set(['feat/b', 'feat/c']) })
+      state = applyLogInkAction(state, { type: 'setMarks', view: 'branches', ids: [] })
+      expect(state.selection).toBeUndefined()
+    })
+
+    it('clearSelection drops everything', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'clearSelection' })
+      expect(state.selection).toBeUndefined()
+    })
+
+    it('marks survive filter changes (ids are stable across re-filtering)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
+      state = applyLogInkAction(state, { type: 'appendFilter', value: 'x' })
+      expect(state.selection?.ids).toEqual(new Set(['feat/a']))
+    })
+
+    it('marks are cleared at the repo-frame boundary, both push and pop', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'feat/a' })
+      const pushed = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
+      expect(pushed.selection).toBeUndefined()
+      const markedInside = applyLogInkAction(pushed, { type: 'toggleMark', view: 'branches', id: 'sub-branch' })
+      const popped = applyLogInkAction(markedInside, { type: 'popRepoFrame' })
+      expect(popped.selection).toBeUndefined()
+    })
+  })
+
   // Sidebar header focus (#806 follow-up) — escapes the items list
   // upward onto the active tab's header. Reducer-level coverage
   // here; input dispatch coverage lives in inkInput.test.ts.

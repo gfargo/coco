@@ -31,7 +31,7 @@ import {
 } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
-import { isPendingItemAction } from '../../../workstation/runtime/inkViewModel'
+import { isMarkedItem, isPendingItemAction } from '../../../workstation/runtime/inkViewModel'
 
 export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
   const { h, components, state, context, contextStatus, bodyRows, width, theme } = ctx
@@ -57,10 +57,20 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
   const visible = localBranches.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? `filter: ${state.filter}` : undefined
   const sortLabel = formatSortIndicator(state.branchSort, { ascii: theme.ascii })
+  // #1361 — surface the marked count (or an active range anchor) in the
+  // header so the batch scope is visible even when marked rows have
+  // scrolled out of the window.
+  const branchSelection = state.selection?.view === 'branches' ? state.selection : undefined
+  const markedLabel = branchSelection?.anchorId
+    ? 'range: v..cursor'
+    : branchSelection && branchSelection.ids.size > 0
+      ? `${branchSelection.ids.size} marked`
+      : undefined
   const headerRight = loading
     ? 'Loading branches…'
     : [
       `${localBranches.length}/${sortedAll.length} local`,
+      markedLabel,
       filterLabel,
       sortLabel,
     ].filter(Boolean).join(' · ')
@@ -83,6 +93,15 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
+        // #1361 — x-marked rows carry a mark glyph in the pad slot
+        // between the cursor and the sync-state marker, so the marked
+        // set reads at a glance before a batch D. The v-range renders
+        // no per-row glyph (it's the live span between anchor and
+        // cursor); the anchor row alone is glyphed as a waypoint.
+        const isMarked = isMarkedItem(state.selection, 'branches', branch.shortName)
+        const isRangeAnchor = state.selection?.view === 'branches' &&
+          state.selection.anchorId === branch.shortName
+        const markGlyph = isMarked || isRangeAnchor ? (theme.ascii ? '*' : '●') : ' '
         const marker = branchRowMarker(branch, { ascii: theme.ascii })
         // While this branch's delete is in flight, its sync-state marker
         // is replaced by an inline spinner (accent-coloured) so the row
@@ -100,7 +119,7 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
         const namePadded = truncateCells(branch.shortName, nameColWidth).padEnd(nameColWidth)
         const timestampPadded = lastTouched.padEnd(8)
         const lineDim = !isSelected && !branch.current
-        const cursorAndPad = `${cursor} `
+        const cursorAndPad = `${cursor}${markGlyph}`
         const trailingName = ` ${namePadded} `
         const trailingDivergence = divergence ? ` ${divergence}` : ''
         // Truncate the assembled line to the actual panel width so a

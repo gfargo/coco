@@ -137,6 +137,42 @@ describe('confirmation target naming', () => {
     const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
     expect(text).toContain('commit abc1234: fix: the thing')
   })
+
+  // #1361 — a batch confirm must name every marked target (or an exact
+  // count with the first few names), or the user confirms one item and
+  // acts on N — the exact failure mode the #1452 audit warned about.
+  function branchContext(names: string[]) {
+    return {
+      branches: {
+        localBranches: names.map((shortName) => ({ shortName, current: false, ahead: 0, behind: 0 })),
+      },
+    } as never
+  }
+
+  it('pluralizes the target line for a marked batch, naming each branch', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'delete-branch',
+      selection: { view: 'branches' as const, anchorId: undefined, ids: new Set(['feat/a', 'feat/b', 'feat/c']) },
+    }
+    const text = flattenText(renderConfirmationPanel(
+      createElement, components, state, branchContext(['feat/a', 'feat/b', 'feat/c', 'main']), 100, theme, false,
+    ))
+    expect(text).toContain('3 branches: feat/a, feat/b, feat/c')
+  })
+
+  it('caps the inline names and reports the exact overflow count', () => {
+    const names = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6']
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'delete-branch',
+      selection: { view: 'branches' as const, anchorId: undefined, ids: new Set(names) },
+    }
+    const text = flattenText(renderConfirmationPanel(
+      createElement, components, state, branchContext([...names, 'main']), 120, theme, false,
+    ))
+    expect(text).toContain('6 branches: b1, b2, b3, b4 +2 more')
+  })
 })
 
 describe('rebase-onto-branch confirmation panel (#0.71)', () => {

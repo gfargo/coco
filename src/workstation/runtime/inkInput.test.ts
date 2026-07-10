@@ -3497,6 +3497,89 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    // #1361 — multi-select grammar on the branches view.
+    describe('multi-select x / v / Esc (#1361)', () => {
+      function branchesState() {
+        return { ...createLogInkState(rows), activeView: 'branches' as const }
+      }
+
+      it('x toggles a mark on the cursored branch and auto-advances', () => {
+        const events = getLogInkInputEvents(branchesState(), 'x', {}, {
+          branchCount: 3, branchSelectedShortName: 'feat/a',
+        })
+        expect(events).toEqual([
+          { type: 'action', action: { type: 'toggleMark', view: 'branches', id: 'feat/a' } },
+          { type: 'action', action: { type: 'moveBranch', delta: 1, count: 3 } },
+        ])
+      })
+
+      it('x works from the sidebar branches tab too', () => {
+        const events = getLogInkInputEvents(sidebarBranchesState(), 'x', {}, {
+          branchCount: 3, branchSelectedShortName: 'feat/a',
+        })
+        expect(events[0]).toEqual(
+          { type: 'action', action: { type: 'toggleMark', view: 'branches', id: 'feat/a' } },
+        )
+      })
+
+      it('v anchors a range at the cursored branch; v again clears it', () => {
+        const anchor = getLogInkInputEvents(branchesState(), 'v', {}, {
+          branchCount: 3, branchSelectedShortName: 'feat/a',
+        })
+        expect(anchor[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'branches', id: 'feat/a' } },
+        )
+
+        const anchored = {
+          ...branchesState(),
+          selection: { view: 'branches' as const, anchorId: 'feat/a', ids: new Set<string>() },
+        }
+        const clear = getLogInkInputEvents(anchored, 'v', {}, {
+          branchCount: 3, branchSelectedShortName: 'feat/b',
+        })
+        expect(clear[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'branches', id: undefined } },
+        )
+      })
+
+      it('v on the branches view anchors a range even on single-pane (peek loses the collision)', () => {
+        const events = getLogInkInputEvents(branchesState(), 'v', {}, {
+          singlePane: true, branchCount: 3, branchSelectedShortName: 'feat/a',
+        })
+        expect(events[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'branches', id: 'feat/a' } },
+        )
+      })
+
+      it('Esc is two-stage: anchor first, marks second, then falls through to normal handling', () => {
+        const both = {
+          ...branchesState(),
+          selection: { view: 'branches' as const, anchorId: 'feat/a', ids: new Set(['feat/b']) },
+        }
+        const first = getLogInkInputEvents(both, '', { escape: true })
+        expect(first[0]).toEqual(
+          { type: 'action', action: { type: 'setRangeAnchor', view: 'branches', id: undefined } },
+        )
+
+        const marksOnly = {
+          ...branchesState(),
+          selection: { view: 'branches' as const, anchorId: undefined, ids: new Set(['feat/b']) },
+        }
+        const second = getLogInkInputEvents(marksOnly, '', { escape: true })
+        expect(second[0]).toEqual({ type: 'action', action: { type: 'clearSelection' } })
+      })
+
+      it('Esc on an unrelated view leaves another view\'s marks alone', () => {
+        const state = {
+          ...createLogInkState(rows),
+          activeView: 'history' as const,
+          selection: { view: 'branches' as const, anchorId: undefined, ids: new Set(['feat/b']) },
+        }
+        const events = getLogInkInputEvents(state, '', { escape: true })
+        expect(events).not.toContainEqual({ type: 'action', action: { type: 'clearSelection' } })
+      })
+    })
+
     it('↑/↓ on the status view with the center pane focused still moves the worktree file list', () => {
       const state = {
         ...createLogInkState(rows),

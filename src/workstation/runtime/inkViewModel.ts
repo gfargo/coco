@@ -47,14 +47,32 @@ export type LogInkListItemKind = 'branch' | 'tag' | 'stash' | 'worktree' | 'pull
 export type LogInkPendingActionKind = 'delete' | 'checkout'
 
 /**
- * One in-flight action against a specific list-item row. Keyed by
- * `kind` + a stable id so it can't accidentally match a same-named row
- * in a different list rendering at the same time.
+ * One in-flight action against one or more list-item rows. Keyed by
+ * `kind` + stable ids so it can't accidentally match a same-named row
+ * in a different list rendering at the same time. Single-target
+ * workflows carry exactly one id; batch workflows (#1361 multi-select)
+ * carry the full target set so every affected row spins at once.
  */
 export type LogInkPendingItemAction = {
   kind: LogInkListItemKind
-  id: string
+  ids: string[]
   action: LogInkPendingActionKind
+}
+
+/**
+ * The canonical multi-select state (#1361, built on the #1452 id-based
+ * model). A selection belongs to ONE view at a time — marking in a
+ * different view resets it. `ids` is the x-toggled marked set;
+ * `anchorId` is the v-range anchor (the live range is anchor..cursor,
+ * resolved positionally against the visible list at action time).
+ * Ids (branch shortName / tag name / stash ref / commit hash) are
+ * stable across refresh, re-sort, and filter changes, so a mark can
+ * never silently re-aim the way an index would.
+ */
+export type LogInkMarkedSelection = {
+  view: LogInkView
+  anchorId?: string
+  ids: ReadonlySet<string>
 }
 
 /**
@@ -118,7 +136,20 @@ export function isPendingItemAction(
   kind: LogInkListItemKind,
   id: string
 ): boolean {
-  return pending?.kind === kind && pending.id === id
+  return pending?.kind === kind && pending.ids.includes(id)
+}
+
+/**
+ * True when `selection` (a `state.selection`) marks this exact row.
+ * Same field-not-state convention as `isPendingItemAction` above so
+ * renderers can call it without a forward reference.
+ */
+export function isMarkedItem(
+  selection: LogInkMarkedSelection | undefined,
+  view: LogInkView,
+  id: string
+): boolean {
+  return selection?.view === view && selection.ids.has(id)
 }
 
 /**
@@ -583,6 +614,14 @@ export type LogInkState = {
    * a different list rendering at the same time.
    */
   pendingItemAction?: LogInkPendingItemAction
+  /**
+   * Multi-select marks + range anchor (#1361). Undefined when nothing
+   * is marked. View-scoped: marking in a different view resets it.
+   * Survives navigation, filter, sort, and refresh (ids are stable);
+   * cleared by Esc (two-stage: anchor first, then marks), by a
+   * successful batch action, and at the repo-frame boundary.
+   */
+  selection?: LogInkMarkedSelection
   focus: LogInkFocus
   /**
    * Set while the user is "peeking" the sidebar (#1135 v2) — a momentary
@@ -1169,6 +1208,22 @@ export type LogInkAction =
   | { type: 'setWorktreeCheckoutConflict'; value?: { branch: string; worktreePath: string; dirty: boolean } }
   | { type: 'setPendingChoice'; value?: LogInkChoicePrompt }
   | { type: 'setPendingItemAction'; value?: LogInkPendingItemAction }
+  // #1361 multi-select. `toggleMark` flips the id's membership in the
+  // marked set (resetting the set first if it belonged to another view);
+  // `setRangeAnchor` sets/clears the v-range anchor the same way;
+  // `clearSelection` drops everything. The id is resolved at the
+  // dispatch site (the input layer has the cursored item's id in
+  // context) — the reducer has no access to LogInkContext.
+  | { type: 'toggleMark'; view: LogInkView; id: string }
+  | { type: 'setRangeAnchor'; view: LogInkView; id?: string }
+  // Replace the selection wholesale with explicit ids (anchor cleared).
+  // Used by the workflow runner to FREEZE a positional v-range into
+  // explicit marks the moment a batch action executes — after a partial
+  // failure the surviving marks are exactly the refused items, so a
+  // force-delete escalation re-targets precisely them instead of
+  // re-resolving a now-meaningless range against the shrunken list.
+  | { type: 'setMarks'; view: LogInkView; ids: string[] }
+  | { type: 'clearSelection' }
   | { type: 'appendPaletteFilter'; value: string }
   | { type: 'backspacePaletteFilter' }
   | { type: 'clearPaletteFilter' }
@@ -1533,6 +1588,12 @@ function withPushedRepoFrame(
     // cursors would be arbitrary positions in the submodule's lists.
     // All captured in parentReturn above and restored on pop.
     compareBase: undefined,
+    // #1361 — marks reference the PARENT repo's items; a submodule's
+    // branch that happens to share a name must not inherit them. Not
+    // captured in parentReturn (deliberately conservative — re-marking
+    // after a drill-in round-trip is cheap; a stale cross-repo mark on
+    // a destructive batch is not).
+    selection: undefined,
     blamePath: undefined,
     fileHistoryPath: undefined,
     changelogCache: {},
@@ -1640,6 +1701,9 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     // parent's context.
     pendingChoice: undefined,
     worktreeCheckoutConflict: undefined,
+    // #1361 — mirror of the push-time clear: the child frame's marks
+    // reference the child repo's items, not the parent's.
+    selection: undefined,
   }
 }
 
@@ -2892,6 +2956,48 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       // touches nothing else so the list keeps rendering normally
       // underneath the one spinner'd row.
       return { ...state, pendingItemAction: action.value }
+    case 'toggleMark': {
+      // #1361 — flip the id's membership in the marked set. A selection
+      // belongs to one view: marking in a different view starts fresh
+      // (stale cross-view marks were the audit's core hazard). An empty
+      // result with no anchor collapses back to undefined so "is
+      // anything selected" stays a simple existence check.
+      const sameView = state.selection?.view === action.view
+      const ids = new Set(sameView ? state.selection?.ids : [])
+      if (ids.has(action.id)) {
+        ids.delete(action.id)
+      } else {
+        ids.add(action.id)
+      }
+      const anchorId = sameView ? state.selection?.anchorId : undefined
+      return {
+        ...state,
+        selection: ids.size === 0 && !anchorId
+          ? undefined
+          : { view: action.view, anchorId, ids },
+        pendingKey: undefined,
+      }
+    }
+    case 'setRangeAnchor': {
+      const sameView = state.selection?.view === action.view
+      const ids: ReadonlySet<string> = sameView ? (state.selection?.ids ?? new Set()) : new Set()
+      return {
+        ...state,
+        selection: action.id === undefined && ids.size === 0
+          ? undefined
+          : { view: action.view, anchorId: action.id, ids },
+        pendingKey: undefined,
+      }
+    }
+    case 'setMarks':
+      return {
+        ...state,
+        selection: action.ids.length === 0
+          ? undefined
+          : { view: action.view, anchorId: undefined, ids: new Set(action.ids) },
+      }
+    case 'clearSelection':
+      return { ...state, selection: undefined }
     case 'toggleFilterMode':
       return {
         ...state,

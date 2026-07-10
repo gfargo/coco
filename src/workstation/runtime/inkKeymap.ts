@@ -1585,7 +1585,9 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
       }
     }
     return {
-      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'D delete', 'r rebase', 'm compare', 's sort', 'y yank'],
+      // `x/v mark` covers both multi-select primitives (#1361): x
+      // toggles a mark, v anchors a range; D then deletes the batch.
+      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'x/v mark', 'D delete', 'r rebase', 'm compare', 's sort', 'y yank'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }

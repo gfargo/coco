@@ -50,7 +50,7 @@ import {
 import { forgeNouns } from '../../chrome/forgeNouns'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedTagId, getSelectedTag, getSelectedStashId, getSelectedStash, getSelectedWorktreeId, getSelectedWorktree } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStashId, getSelectedStash, getSelectedWorktreeId, getSelectedWorktree } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -62,7 +62,7 @@ import {
     checkoutBranch,
     checkoutBranchByName,
     createBranch,
-    deleteBranch,
+    deleteBranches,
     isBranchCheckedOutElsewhereError,
     isBranchNotFullyMergedError,
     isDirtyWorktreeCheckoutError,
@@ -264,23 +264,29 @@ export function resolvePendingItemAction(
   // logic that was previously inlined here for each branch workflow.
   if (id === 'checkout-branch') {
     const branchId = getSelectedBranchId(state, context)
-    return branchId ? { kind: 'branch', id: branchId, action: 'checkout' } : undefined
+    return branchId ? { kind: 'branch', ids: [branchId], action: 'checkout' } : undefined
   }
   if (id === 'delete-branch' || id === 'force-delete-branch') {
-    const branchId = getSelectedBranchId(state, context)
-    return branchId ? { kind: 'branch', id: branchId, action: 'delete' } : undefined
+    // #1361 — the delete workflows are batch-capable (`targets: 'multi'`
+    // in the registry): resolve through the range → marks → cursor
+    // ladder so the confirm target line and the row spinners cover
+    // every branch the handler will act on.
+    const branches = getSelectedBranchBatch(state, context)
+    return branches.length > 0
+      ? { kind: 'branch', ids: branches.map((b) => b.shortName), action: 'delete' }
+      : undefined
   }
   if (id === 'delete-tag') {
     const tagId = getSelectedTagId(state, context)
-    return tagId ? { kind: 'tag', id: tagId, action: 'delete' } : undefined
+    return tagId ? { kind: 'tag', ids: [tagId], action: 'delete' } : undefined
   }
   if (id === 'drop-stash') {
     const stashId = getSelectedStashId(state, context)
-    return stashId ? { kind: 'stash', id: stashId, action: 'delete' } : undefined
+    return stashId ? { kind: 'stash', ids: [stashId], action: 'delete' } : undefined
   }
   if (id === 'remove-worktree') {
     const worktreeId = getSelectedWorktreeId(state, context)
-    return worktreeId ? { kind: 'worktree', id: worktreeId, action: 'delete' } : undefined
+    return worktreeId ? { kind: 'worktree', ids: [worktreeId], action: 'delete' } : undefined
   }
   // #1363 — `gh pr checkout <n>` gets the same inline row spinner as a
   // branch checkout. Resolution mirrors `buildFilteredLists`'s triage
@@ -305,7 +311,7 @@ export function resolvePendingItemAction(
         )
       : all
     const pr = visible[Math.min(state.selectedPullRequestTriageIndex, Math.max(0, visible.length - 1))]
-    return pr ? { kind: 'pull-request', id: String(pr.number), action: 'checkout' } : undefined
+    return pr ? { kind: 'pull-request', ids: [String(pr.number)], action: 'checkout' } : undefined
   }
   return undefined
 }
@@ -544,15 +550,20 @@ export function useWorkflowAction(
         if (branch.current) return { ok: true, message: `Already on ${branch.shortName}` }
         return checkoutBranch(git, branch)
       },
+      // #1361 — batch-capable (`targets: 'multi'`): resolves the range →
+      // marks → cursor ladder and deletes every target, continuing past
+      // per-branch refusals with a summary. The single-cursor case
+      // degrades to exactly the old behavior (batch of one delegates to
+      // deleteBranch).
       'delete-branch': async () => {
-        const branch = getSelectedBranch(state, context)
-        if (!branch) return { ok: false, message: 'No branch selected' }
-        return deleteBranch(git, branch)
+        const branches = getSelectedBranchBatch(state, context)
+        if (branches.length === 0) return { ok: false, message: 'No branch selected' }
+        return deleteBranches(git, branches)
       },
       'force-delete-branch': async () => {
-        const branch = getSelectedBranch(state, context)
-        if (!branch) return { ok: false, message: 'No branch selected' }
-        return deleteBranch(git, branch, true)
+        const branches = getSelectedBranchBatch(state, context)
+        if (branches.length === 0) return { ok: false, message: 'No branch selected' }
+        return deleteBranches(git, branches, true)
       },
       // #0.71 — rebase the current branch onto the cursored branch / ref.
       // Re-resolve BOTH branches off live context (the input-layer guards
@@ -1572,12 +1583,30 @@ export function useWorkflowAction(
       value: `${result?.message || 'Workflow action complete'}${historyRewriteHint}`,
       kind: result ? (result.ok ? 'success' : 'error') : undefined,
     })
+    // #1361 — batch delete selection lifecycle. A successful delete
+    // consumed the selection; clear it so leftover marks can't re-aim a
+    // later D. On failure, FREEZE the attempted target set into explicit
+    // marks (replacing any positional v-range): the deleted branches
+    // won't resolve after the refresh below, so the surviving marks are
+    // exactly the refused ones — which makes the force-delete escalation
+    // re-target precisely them instead of re-resolving a range against
+    // the shrunken list.
+    if (id === 'delete-branch' || id === 'force-delete-branch') {
+      if (result?.ok) {
+        dispatch({ type: 'clearSelection' })
+      } else if (pendingItemAction && pendingItemAction.ids.length > 1) {
+        dispatch({ type: 'setMarks', view: 'branches', ids: pendingItemAction.ids })
+      }
+    }
     // A safe `delete-branch` (`git branch -d`) refuses branches that
     // aren't fully merged. Rather than dead-end on git's raw error, raise
     // a second y-confirm offering the force-delete (`git branch -D`). The
     // cursor hasn't moved (the delete failed), so the force handler
-    // re-resolves the same branch.
-    if (id === 'delete-branch' && !result?.ok && isBranchNotFullyMergedError(result?.message)) {
+    // re-resolves the same branch. Batch refusals carry each branch's
+    // raw git message in `details`, so the not-fully-merged detection
+    // scans those too.
+    const deleteFailureText = [result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')
+    if (id === 'delete-branch' && !result?.ok && isBranchNotFullyMergedError(deleteFailureText)) {
       dispatch({ type: 'setPendingConfirmation', value: 'force-delete-branch' })
     }
     // After a successful create-branch-here, offer to switch onto the
@@ -1657,7 +1686,7 @@ export function useWorkflowAction(
       isBranchCheckedOutElsewhereError(result?.message)
     ) {
       const worktreePath = parseCheckedOutWorktreePath(result?.message)
-      const branchName = pendingItemAction?.id
+      const branchName = pendingItemAction?.ids[0]
       dispatch({
         type: 'setStatus',
         value: worktreePath
@@ -1690,7 +1719,7 @@ export function useWorkflowAction(
     }
     if (id === 'checkout-branch' && !result?.ok && isBranchCheckedOutElsewhereError(result?.message)) {
       const worktreePath = parseCheckedOutWorktreePath(result?.message)
-      const branchName = pendingItemAction?.id
+      const branchName = pendingItemAction?.ids[0]
       if (worktreePath && branchName && frameChanged) {
         // #1429 — the frame changed mid-await; dropping silently here (no
         // fallback dispatch) matches the other recovery-prompt guards below.
@@ -1743,7 +1772,7 @@ export function useWorkflowAction(
       !frameChanged
     ) {
       if (id === 'triage-pr-checkout') {
-        const prNumber = payload?.trim() || pendingItemAction?.id
+        const prNumber = payload?.trim() || pendingItemAction?.ids[0]
         if (prNumber) {
           dispatch({
             type: 'setPendingChoice',
@@ -1758,7 +1787,7 @@ export function useWorkflowAction(
           })
         }
       } else {
-        const branchName = id === 'checkout-created-branch' ? payload?.trim() : pendingItemAction?.id
+        const branchName = id === 'checkout-created-branch' ? payload?.trim() : pendingItemAction?.ids[0]
         if (branchName) {
           dispatch({
             type: 'setPendingChoice',
