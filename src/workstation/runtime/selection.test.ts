@@ -87,4 +87,38 @@ describe('selection selectors (#1452)', () => {
       expect(getSelectedStashId(state, context)).toBe('stash@{1}')
     })
   })
+
+  // #1452 flip — the id mirror wins over the index when both are set and
+  // the id still resolves, so the cursor follows the same logical item
+  // across a context refresh that reorders the sorted+filtered list
+  // (rendering, which still reads the raw index, is untouched by this —
+  // only action-target resolution through these selectors changes).
+  describe('id-first resolution (#1452 flip)', () => {
+    it('prefers selectedBranchId over selectedBranchIndex when both are set', () => {
+      // Sorted: feature, hotfix, main — index 0 is 'feature', but the id
+      // mirror points at 'main'.
+      const state = { ...createLogInkState([]), selectedBranchIndex: 0, selectedBranchId: 'main' }
+      expect(getSelectedBranchId(state, context)).toBe('main')
+    })
+
+    it('falls back to the index when selectedBranchId is undefined', () => {
+      const state = { ...createLogInkState([]), selectedBranchIndex: 0, selectedBranchId: undefined }
+      expect(getSelectedBranchId(state, context)).toBe('feature')
+    })
+
+    it('falls back to the index when selectedBranchId no longer resolves (deleted / filtered out)', () => {
+      const state = { ...createLogInkState([]), selectedBranchIndex: 1, selectedBranchId: 'gone' }
+      expect(getSelectedBranchId(state, context)).toBe('hotfix')
+    })
+
+    it('prefers selectedTagId over selectedTagIndex when both are set', () => {
+      const state = { ...createLogInkState([]), selectedTagIndex: 0, selectedTagId: 'v3.0' }
+      expect(getSelectedTagId(state, context)).toBe('v3.0')
+    })
+
+    it('prefers selectedStashId over selectedStashIndex when both are set', () => {
+      const state = { ...createLogInkState([]), selectedStashIndex: 0, selectedStashId: 'stash@{2}' }
+      expect(getSelectedStashId(state, context)).toBe('stash@{2}')
+    })
+  })
 })
