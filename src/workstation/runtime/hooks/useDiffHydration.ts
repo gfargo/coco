@@ -35,6 +35,13 @@
  * behavior-preserving move, not a rewrite; they are deliberately NOT unified
  * despite their similar shape.
  *
+ * Exception: the commit file-preview loader (#5) is no longer verbatim.
+ * #OSS-595 added a 120ms debounce and a bounded `(hash, path, oldPath)`-keyed
+ * cache to it, mirroring the debounce+cache added to the sibling
+ * `useCommitDetailHydration` (#1533) — see that loader's own doc comment for
+ * the rationale. The other four loaders (stash, compare, worktree hunks,
+ * worktree file diff) remain verbatim lifts.
+ *
  * CRITICAL — hook ordering. The five effects are NOT contiguous in `app.ts`:
  * they are scattered across ~3200 lines (the stash, compare, and worktree
  * loaders sit ~1082–1692; the commit file-preview loader sits ~4259),
@@ -521,8 +528,12 @@ export type UseCommitFilePreviewHydrationDeps = {
 }
 
 /**
- * Load the per-file diff preview for the cursored commit's selected file.
- * Lifted verbatim from `app.ts`.
+ * Load the per-file diff preview for the cursored commit's selected file,
+ * with debouncing and a bounded `(hash, path, oldPath)`-keyed cache (#OSS-595).
+ * Rapid j/k cursor moves reset a 120ms timer so the subprocess never fires;
+ * previously-fetched previews render instantly from cache without a loading
+ * flash. Mirrors the debounce+cache pattern added to the sibling
+ * `useCommitDetailHydration` (#1533).
  */
 export function useCommitFilePreviewHydration(
   React: typeof ReactTypes,
@@ -536,32 +547,57 @@ export function useCommitFilePreviewHydration(
     setFilePreviewLoading,
   } = deps
 
+  // Bounded cache keyed by (hash, path, oldPath). Evicts oldest when full.
+  const cacheRef = React.useRef(new Map<string, GitCommitFilePreview>())
+  const CACHE_MAX = 100
+
   React.useEffect(() => {
     let active = true
 
-    async function loadPreview(): Promise<void> {
-      if (!selected || !selectedDetailFile) {
-        setFilePreview(undefined)
-        // Reset the loading flag too (see the commit-detail loader): if the
-        // selection / file clears mid-fetch, the `active` guard suppresses the
-        // in-flight reset, leaving the preview stuck on "Loading…".
-        setFilePreviewLoading(false)
-        return
-      }
-
-      setFilePreviewLoading(true)
-      const nextPreview = await safe(getCommitFilePreview(git, selected.hash, selectedDetailFile))
-
-      if (active) {
-        setFilePreview(nextPreview)
-        setFilePreviewLoading(false)
-      }
+    if (!selected || !selectedDetailFile) {
+      setFilePreview(undefined)
+      // Reset the loading flag too (see the commit-detail loader): if the
+      // selection / file clears mid-fetch, the `active` guard suppresses the
+      // in-flight reset, leaving the preview stuck on "Loading…".
+      setFilePreviewLoading(false)
+      return
     }
 
-    void loadPreview()
+    const key = `${selected.hash}\0${selectedDetailFile.path}\0${selectedDetailFile.oldPath ?? ''}`
+
+    // Cache hit — render instantly, no loading flash.
+    const cached = cacheRef.current.get(key)
+    if (cached) {
+      setFilePreview(cached)
+      setFilePreviewLoading(false)
+      return
+    }
+
+    // Debounce: wait 120ms before spawning the subprocess.
+    // Rapid j/k resets the timer so we never fetch mid-scroll.
+    setFilePreviewLoading(true)
+    const timer = setTimeout(async () => {
+      const nextPreview = await safe(getCommitFilePreview(git, selected.hash, selectedDetailFile))
+
+      if (active && nextPreview) {
+        // Store in cache with FIFO eviction.
+        const cache = cacheRef.current
+        if (cache.size >= CACHE_MAX) {
+          const oldest = cache.keys().next().value
+          if (oldest !== undefined) cache.delete(oldest)
+        }
+        cache.set(key, nextPreview)
+        setFilePreview(nextPreview)
+        setFilePreviewLoading(false)
+      } else if (active) {
+        setFilePreview(undefined)
+        setFilePreviewLoading(false)
+      }
+    }, 120)
 
     return () => {
       active = false
+      clearTimeout(timer)
     }
   }, [git, selected?.hash, selectedDetailFile?.path, selectedDetailFile?.oldPath])
 }
