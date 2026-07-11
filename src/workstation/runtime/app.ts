@@ -274,6 +274,12 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // capture) so the STABLE loader callbacks always see the live depth.
   const repoFrameDepthRef = React.useRef(state.repoStack.length - 1)
   repoFrameDepthRef.current = state.repoStack.length - 1
+  // #1361 follow-up — monotonic counter bumped by useHistoryRefetch
+  // every time it fires a filter/graph/frame refetch. useDeferredBootLoad
+  // captures it at dispatch and re-checks at resolve so its one-shot
+  // background fetch can't clobber a filter the user submitted while it
+  // was still in flight. See isStaleBootLoadResolve in loadMoreResolver.ts.
+  const historyRefetchGenerationRef = React.useRef(0)
 
   // P4.3 — idle tip rotation. Extracted into `useIdleTip` (0.72 app.ts
   // decomposition). The hook issues the `useState` tick counter then the
@@ -395,6 +401,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     mountedRef,
     repoFrameDepthRef,
     setHasMoreCommits,
+    historyRefetchGenerationRef,
   })
 
   // Auto-dismiss status messages after a short window so transient
@@ -431,6 +438,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setHasMoreCommits,
     fullGraph: state.fullGraph,
     historyFetchArgs: state.historyFetchArgs,
+    historyRefetchGenerationRef,
   })
 
   // Context refresh callbacks (#1418 app.ts decomposition). Owns
@@ -1023,6 +1031,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     historyFetchArgs: state.historyFetchArgs,
     mountedRef,
     setHasMoreCommits,
+    historyRefetchGenerationRef,
   })
 
   const commitDiffHunkOffsets = React.useMemo(() => (

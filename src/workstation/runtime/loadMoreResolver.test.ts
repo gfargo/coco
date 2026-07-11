@@ -1,10 +1,12 @@
 import { LOG_INTERACTIVE_DEFAULT_LIMIT } from '../../commands/log/data'
 import {
   isCursorNearBottom,
+  isStaleBootLoadResolve,
   isStaleFrameResolve,
   isStaleLoadMoreCompletion,
   pageImpliesMore,
   shouldLoadMore,
+  type BootLoadResolveSnapshot,
   type LoadMoreCompletionSnapshot,
   type LoadMoreGuardSnapshot,
 } from './loadMoreResolver'
@@ -102,6 +104,43 @@ describe('isStaleFrameResolve', () => {
   it('drops after unmount regardless of depth', () => {
     expect(
       isStaleFrameResolve({ mounted: false, issuedAtDepth: 0, currentDepth: 0 }),
+    ).toBe(true)
+  })
+})
+
+// Regression for #1361's boot-load-vs-filter race: useDeferredBootLoad's
+// one-shot background fetch used to unconditionally clobber a server-side
+// history filter (author:/path:/S:/G:) submitted while it was still in
+// flight, since it had no way to know a fresher useHistoryRefetch had
+// already painted the correctly filtered rows.
+describe('isStaleBootLoadResolve', () => {
+  const baseBootSnap = (): BootLoadResolveSnapshot => ({
+    mounted: true,
+    issuedAtDepth: 0,
+    currentDepth: 0,
+    issuedRefetchGeneration: 0,
+    currentRefetchGeneration: 0,
+  })
+
+  it('accepts a resolve when nothing changed since dispatch', () => {
+    expect(isStaleBootLoadResolve(baseBootSnap())).toBe(false)
+  })
+
+  it('drops when a refetch generation has advanced since dispatch (a filter/graph refetch started)', () => {
+    expect(
+      isStaleBootLoadResolve({ ...baseBootSnap(), currentRefetchGeneration: 1 }),
+    ).toBe(true)
+  })
+
+  it('still drops on a repo-frame change even with no refetch (existing #1384 guard preserved)', () => {
+    expect(
+      isStaleBootLoadResolve({ ...baseBootSnap(), currentDepth: 1 }),
+    ).toBe(true)
+  })
+
+  it('drops after unmount regardless of everything else', () => {
+    expect(
+      isStaleBootLoadResolve({ ...baseBootSnap(), mounted: false }),
     ).toBe(true)
   })
 })
