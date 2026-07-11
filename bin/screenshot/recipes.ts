@@ -194,6 +194,22 @@ export const RECIPES: ScreenshotRecipe[] = [
       { kind: 'sleep', ms: 1200 },
     ],
   },
+  {
+    // Visual counterpart of the PTY e2e "stash flow" journey
+    // (e2e/stashFlow.e2e.test.ts) — the e2e test asserts on the diff
+    // text, this recipe is the corresponding still.
+    name: 'ui-stash-diff',
+    description: 'Stash diff drill-in — enter on a stash opens its unified diff',
+    scenario: 'stashed-changes',
+    command: 'ui',
+    actions: [
+      { kind: 'sleep', ms: 3500 },
+      { kind: 'type', text: 'gz' },
+      { kind: 'sleep', ms: 1200 },
+      { kind: 'key', key: 'Enter' },
+      { kind: 'sleep', ms: 900 },
+    ],
+  },
 
   // ─────────────────────────────────────────────────────────────────
   // `coco ui` — additional views and scenarios
@@ -1514,6 +1530,25 @@ export const RECIPES: ScreenshotRecipe[] = [
     ],
   },
   {
+    // Visual counterpart of the PTY e2e "help overlay" journey
+    // (e2e/helpOverlay.e2e.test.ts) — the e2e test asserts on the
+    // binding table narrowing as you type, this recipe is the still.
+    name: 'ui-help-overlay-filter',
+    description: 'Help panel (?) with an active type-to-filter query narrowing the binding table',
+    scenario: 'feature-pr-ready',
+    command: 'ui',
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 3500 },
+      { kind: 'type', text: '?' },
+      { kind: 'sleep', ms: 500 },
+      { kind: 'type', text: '/' },
+      { kind: 'sleep', ms: 300 },
+      { kind: 'type', text: 'stash' },
+      { kind: 'sleep', ms: 500 },
+    ],
+  },
+  {
     name: 'ui-compare-refs',
     description: 'Compare two refs — mark a branch with m, Enter on another to diff base..head (#779)',
     scenario: 'branch-sync-showcase',
@@ -1864,6 +1899,33 @@ export const RECIPES: ScreenshotRecipe[] = [
       // work the instant it boots, then settle on it as the closing frame.
       { kind: 'key', key: 'Enter' },
       { kind: 'sleep', ms: 2400 },
+    ],
+  },
+
+  {
+    // Motion counterpart of the PTY e2e "boot and navigate core views"
+    // journey (e2e/bootAndNavigate.e2e.test.ts, #1424) — same g-chord
+    // walk (gs → gb → gz → gh), traced live instead of asserted on
+    // screen text. Proves the harness's determinism knobs (frozen
+    // clock, throwaway HOME) hold up for a full record-and-encode pass,
+    // not just a fast headless capture.
+    name: 'demo-boot-and-navigate',
+    description:
+      'Boot and tour the core views: history → status (gs) → branches (gb) → stash (gz) → home (gh)',
+    scenario: 'feature-pr-ready',
+    command: 'ui --view history --no-all',
+    emitGif: true,
+    dimensions: { cols: 150, rows: 38 },
+    actions: [
+      { kind: 'sleep', ms: 1800 },
+      { kind: 'type', text: 'gs' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'gz' },
+      { kind: 'sleep', ms: 1400 },
+      { kind: 'type', text: 'gh' },
+      { kind: 'sleep', ms: 1600 },
     ],
   },
 

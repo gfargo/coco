@@ -255,6 +255,89 @@ jobs:
       - name: Run PTY e2e journeys
         run: npm run test:e2e
 
+  # Visual-regression stills (#1424, second half): captures the VHS
+  # recipes that are the visual counterpart of the PTY e2e journeys
+  # (bin/screenshot/recipes.ts — ui-help-overlay-filter, ui-stash-diff,
+  # ui-search-filter, ui-history-pr-ready) and uploads them as a build
+  # artifact for PR review. Deliberately artifact-only for now, not a
+  # pass/fail pixel diff against committed baselines — that needs a
+  # tolerance-tuned diff tool and a baseline-image storage decision
+  # (repo bloat vs. LFS vs. external store) this slice doesn't make.
+  # Promote to a real diff gate once the recipe set stabilizes.
+  visual-regression:
+    name: Visual regression stills (VHS)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Download built dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+
+      - name: Install VHS + system deps (ttyd, ffmpeg)
+        # charmbracelet/vhs-action's bundled ffmpeg installer failed here
+        # ("Failed to install ffmpeg", no further detail — upstream
+        # installer issue, not a config problem on our end). Install each
+        # piece ourselves instead: ffmpeg via apt (reliable on
+        # ubuntu-latest), ttyd + vhs as static binaries straight from
+        # their GitHub releases, so the install is fully in our control.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+          sudo curl -fsSL -o /usr/local/bin/ttyd \
+            https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64
+          sudo chmod +x /usr/local/bin/ttyd
+
+          vhs_url=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+            https://api.github.com/repos/charmbracelet/vhs/releases/latest \
+            | jq -r '.assets[] | select(.name | endswith("_Linux_x86_64.tar.gz")) | .browser_download_url')
+          curl -fsSL -o /tmp/vhs.tar.gz "$vhs_url"
+          mkdir -p /tmp/vhs-install
+          tar -xzf /tmp/vhs.tar.gz -C /tmp/vhs-install --strip-components=1
+          sudo mv /tmp/vhs-install/vhs /usr/local/bin/vhs
+          sudo chmod +x /usr/local/bin/vhs
+
+          vhs --version
+          ttyd --version
+          ffmpeg -version | head -1
+
+      - name: Configure git identity
+        # @gfargo/git-scenarios spins up fixture repos and commits to them.
+        run: |
+          git config --global user.name "Coco CI"
+          git config --global user.email "ci@example.com"
+
+      - name: Capture e2e-journey stills
+        run: |
+          npm run screenshot -- --recipe ui-history-pr-ready
+          npm run screenshot -- --recipe ui-help-overlay-filter
+          npm run screenshot -- --recipe ui-search-filter
+          npm run screenshot -- --recipe ui-stash-diff
+
+      - name: Upload stills artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-stills
+          path: .screenshots/*.png
+          retention-days: 14
+
   # Integration tests exercise the real CLI / data paths end-to-end via
   # the dedicated `test:integration` script (previously unused in CI).
   # The non-live suite always runs; the live GitLab suite is gated on
