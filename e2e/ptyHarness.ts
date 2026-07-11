@@ -102,6 +102,9 @@ export interface WaitOptions {
 // testTimeout (120s in jest.e2e.config.ts) still bounds the worst case.
 const DEFAULT_WAIT: Required<WaitOptions> = { timeoutMs: 45_000, intervalMs: 50 }
 
+/** See the comment on {@link TuiSession.waitForReady}. */
+const STDIN_LISTENER_GRACE_MS = 750
+
 /**
  * One live TUI process in a PTY plus the emulated screen it draws on.
  * Construct via {@link launchTui}; always `close()` in `finally`/afterEach.
@@ -282,7 +285,18 @@ export class TuiSession {
       `TUI ready (anchor ${anchor}, no loading chip)`,
       options
     )
-    return this.waitForIdle(400, options)
+    const screen = await this.waitForIdle(400, options)
+    // Ink's `useInput` raw-mode stdin listener attaches during a
+    // post-commit effect a tick or two after the first paint — the
+    // paint alone (gated on above) doesn't guarantee the process is
+    // actually listening yet. Root-caused from #1564's second CI
+    // failure: under a loaded runner the screen was byte-for-byte
+    // unchanged 45s after a keypress, meaning it never reached the
+    // dispatcher at all, not just rendered slowly. Idle-settling on
+    // repaint activity doesn't catch this gap since there's nothing
+    // left to repaint. Pad with a fixed delay instead.
+    await delay(STDIN_LISTENER_GRACE_MS)
+    return screen
   }
 
   /**
