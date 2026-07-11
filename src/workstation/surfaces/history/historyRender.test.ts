@@ -22,7 +22,7 @@ import { createLogInkContextStatus } from '../../chrome/context'
 import { createLogInkTheme } from '../../chrome/theme'
 import type { GitLogRow } from '../../../commands/log/data'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
-import { renderHistoryPanel } from './index'
+import { formatHistoryFetchArgs, renderHistoryPanel } from './index'
 
 // Synthetic stubs for Ink's <Text> / <Box> — collect every prop the
 // renderer passes (color, dimColor, bold, children, …) and render
@@ -224,5 +224,28 @@ describe('renderHistoryPanel', () => {
     expect(
       render(makeState(), { density: 'tight', width: 60 })
     ).toMatchSnapshot()
+  })
+})
+
+describe('formatHistoryFetchArgs', () => {
+  // Regression for #1361: pickaxe (S:) and grep-diff (G:) filters used
+  // to fall through to the 'none' fallback here, so the filter banner
+  // told users no server-side filter was active while one actually was.
+  it('renders the pickaxe filter as -S<token>', () => {
+    expect(formatHistoryFetchArgs({ pickaxe: 'useState' })).toBe('-SuseState')
+  })
+
+  it('renders the grep-diff filter as -G<regex>', () => {
+    expect(formatHistoryFetchArgs({ grep: '^export' })).toBe('-G^export')
+  })
+
+  it('renders every active filter kind together', () => {
+    expect(
+      formatHistoryFetchArgs({ author: 'alice', path: 'src/', pickaxe: 'useState', grep: '^export' })
+    ).toBe('--author=alice -- src/ -SuseState -G^export')
+  })
+
+  it('falls back to "none" when no filter is active', () => {
+    expect(formatHistoryFetchArgs({})).toBe('none')
   })
 })

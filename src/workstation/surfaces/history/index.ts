@@ -179,10 +179,16 @@ export function renderBranchTipChip(
   }
 }
 
-function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
+export function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
   const parts: string[] = []
   if (args.author) parts.push(`--author=${args.author}`)
   if (args.path) parts.push(`-- ${args.path}`)
+  // #1361 — pickaxe (S:) and grep-diff (G:) were missing here, so an
+  // active server-side filter of either kind fell through to the
+  // 'none' fallback below, misleading the user into thinking no
+  // filter was applied.
+  if (args.pickaxe) parts.push(`-S${args.pickaxe}`)
+  if (args.grep) parts.push(`-G${args.grep}`)
   return parts.join(' ') || 'none'
 }
 

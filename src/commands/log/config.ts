@@ -59,6 +59,13 @@ export const options = {
     choices: ['table', 'json'],
     default: 'table',
   },
+  grep: {
+    // `LogOptions.grep`/`buildLogArgs` (data.ts) already supported this
+    // — it just wasn't reachable from the CLI, only from the TUI's `/G:`
+    // filter prefix (#1361). Documented for parity with --author/--path.
+    description: 'Filter commits by diff content matching a regex (git log -G)',
+    type: 'string',
+  },
   limit: {
     description: 'Maximum number of commits to show (defaults to 30, or 300 in interactive mode)',
     type: 'number',
@@ -77,6 +84,12 @@ export const options = {
   path: {
     description: 'Filter commits by changed path',
     type: 'array',
+  },
+  pickaxe: {
+    // Same story as --grep above — supported at the data layer, only
+    // reachable via the TUI's `/S:` filter prefix until now (#1361).
+    description: 'Filter commits that changed the occurrence count of a string (git log -S, pickaxe)',
+    type: 'string',
   },
   since: {
     description: 'Show commits more recent than a date',

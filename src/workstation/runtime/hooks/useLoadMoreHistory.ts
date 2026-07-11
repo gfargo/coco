@@ -83,6 +83,7 @@ import {
   getLogRowsAnchoredOn,
 } from '../../../commands/log/data'
 import { getStashCommitHashes } from '../../../git/stashData'
+import { applyHistoryFetchArgsOverlay } from '../historyRefetchResolver'
 import type { LogInkAction, LogInkState } from '../inkViewModel'
 import { isStaleFrameResolve, isStaleLoadMoreCompletion } from '../loadMoreResolver'
 import type { LoadCommitContextFn } from './useHistoryCursorSync'
@@ -298,12 +299,13 @@ export function useLoadMoreHistory(
       value: options.statusMessage || 'loading older commits',
       loading: true,
     })
-    const fetchArgs = snap.historyFetchArgs
-    const mergedArgv: LogArgv = {
-      ...snap.logArgv,
-      ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
-      ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
-    }
+    // #1361 — this used to hand-roll its own author/path merge here and
+    // silently missed pickaxe/grep when they were added to the sibling
+    // refetch path (historyRefetchResolver.ts). Sharing the overlay
+    // helper means a future filter prefix can't drift out of sync
+    // between "submit a new filter" and "load more under the active
+    // filter" again.
+    const mergedArgv: LogArgv = applyHistoryFetchArgsOverlay(snap.logArgv, snap.historyFetchArgs)
     // Load-more paths a fresh page from git AFTER what's already
     // loaded; pass the stash hashes again so the additional rows
     // stay graph-consistent with the boot fetch (a window that
