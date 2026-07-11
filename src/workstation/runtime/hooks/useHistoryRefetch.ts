@@ -72,6 +72,14 @@ export type UseHistoryRefetchDeps = {
    */
   mountedRef: ReactTypes.MutableRefObject<boolean>
   setHasMoreCommits: (value: boolean) => void
+  /**
+   * Monotonic counter bumped every time this effect actually fires a
+   * fetch (#1361 follow-up — see `isStaleBootLoadResolve`). Read by
+   * `useDeferredBootLoad` so its own one-shot background fetch can tell
+   * whether a real filter/graph refetch has started since it was
+   * dispatched, and drop its resolve instead of clobbering the result.
+   */
+  historyRefetchGenerationRef: ReactTypes.MutableRefObject<number>
 }
 
 export function useHistoryRefetch(
@@ -86,6 +94,7 @@ export function useHistoryRefetch(
     historyFetchArgs,
     mountedRef,
     setHasMoreCommits,
+    historyRefetchGenerationRef,
   } = deps
 
   const historyRefetchInitialized = React.useRef(false)
@@ -110,6 +119,11 @@ export function useHistoryRefetch(
 
     const requestId = historyRefetchRequestRef.current + 1
     historyRefetchRequestRef.current = requestId
+    // #1361 follow-up — bump BEFORE the async fetch starts so an
+    // in-flight refetch already outranks a slower-resolving boot load
+    // regardless of which promise settles first (see
+    // isStaleBootLoadResolve in loadMoreResolver.ts).
+    historyRefetchGenerationRef.current += 1
     const plan = resolveHistoryRefetch({
       logArgv,
       fullGraph,

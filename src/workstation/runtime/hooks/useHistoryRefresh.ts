@@ -23,7 +23,7 @@ import type { LogInkAction, LogInkState } from '../inkViewModel'
 import { LOG_INTERACTIVE_DEFAULT_LIMIT, getLogRows } from '../../../commands/log/data'
 import { getStashCommitHashes } from '../../../git/stashData'
 import { buildHistoryRefetchArgv } from '../historyRefetchResolver'
-import { isStaleFrameResolve } from '../loadMoreResolver'
+import { isStaleBootLoadResolve } from '../loadMoreResolver'
 import { computeHasMoreCommits } from './useLoadMoreHistory'
 
 export type UseHistoryRefreshDeps = {
@@ -35,6 +35,14 @@ export type UseHistoryRefreshDeps = {
   setHasMoreCommits: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
   fullGraph: boolean
   historyFetchArgs: LogInkState['historyFetchArgs']
+  /**
+   * Same #1361-follow-up staleness guard as `useDeferredBootLoad` — if
+   * the user changes the filter/graph mode WHILE this post-mutation
+   * refresh is in flight, `useHistoryRefetch` may already have painted
+   * the newer result by the time this one resolves. See
+   * `isStaleBootLoadResolve`.
+   */
+  historyRefetchGenerationRef: ReactTypes.MutableRefObject<number>
 }
 
 export type UseHistoryRefreshResult = {
@@ -45,7 +53,7 @@ export function useHistoryRefresh(
   React: typeof ReactTypes,
   deps: UseHistoryRefreshDeps,
 ): UseHistoryRefreshResult {
-  const { git, logArgv, dispatch, mountedRef, repoFrameDepthRef, setHasMoreCommits, fullGraph, historyFetchArgs } = deps
+  const { git, logArgv, dispatch, mountedRef, repoFrameDepthRef, setHasMoreCommits, fullGraph, historyFetchArgs, historyRefetchGenerationRef } = deps
 
   /**
    * Re-fetch the head of the commit log and replace `state.rows`.
@@ -60,6 +68,11 @@ export function useHistoryRefresh(
     try {
       // #1384 — capture the repo-frame depth BEFORE the awaits.
       const issuedAtDepth = repoFrameDepthRef.current
+      // #1361 follow-up — same for the refetch generation, and this
+      // refresh itself counts as a fresher generation so a still-
+      // in-flight boot load (or an even-earlier refresh) yields to it.
+      historyRefetchGenerationRef.current += 1
+      const issuedRefetchGeneration = historyRefetchGenerationRef.current
       // Same single-source argv derivation as the merged history refetch
       // effect (#1385) — graph mode AND server-side filter.
       const fetchArgs = historyFetchArgs
@@ -78,18 +91,20 @@ export function useHistoryRefresh(
         limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
         extraRefs: stashHashes,
       })
-      const staleFrame = isStaleFrameResolve({
+      const stale = isStaleBootLoadResolve({
         mounted: mountedRef.current,
         issuedAtDepth,
         currentDepth: repoFrameDepthRef.current,
+        issuedRefetchGeneration,
+        currentRefetchGeneration: historyRefetchGenerationRef.current,
       })
-      if (!staleFrame && fresh) {
+      if (!stale && fresh) {
         dispatch({ type: 'replaceRows', rows: fresh })
         // Re-arm pagination from the fresh window (#1337).
         setHasMoreCommits(computeHasMoreCommits(logArgv, fresh))
       }
     } catch { /* ignore — stale rows beat blank rows */ }
-  }, [dispatch, git, logArgv, setHasMoreCommits, historyFetchArgs, fullGraph])
+  }, [dispatch, git, logArgv, setHasMoreCommits, historyFetchArgs, fullGraph, historyRefetchGenerationRef])
 
   return { refreshHistoryRows }
 }

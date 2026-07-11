@@ -114,6 +114,44 @@ export function isStaleFrameResolve(snap: FrameScopedResolveSnapshot): boolean {
 }
 
 /**
+ * The completion-time snapshot the deferred boot loader checks —
+ * the frame-scoped decision above plus a monotonic history-refetch
+ * generation.
+ */
+export type BootLoadResolveSnapshot = FrameScopedResolveSnapshot & {
+  /** History-refetch generation live when the boot load was dispatched. */
+  issuedRefetchGeneration: number
+  /** Live history-refetch generation at resolve time. */
+  currentRefetchGeneration: number
+}
+
+/**
+ * Stale-completion decision for `useDeferredBootLoad`'s one-shot
+ * background fetch.
+ *
+ * The boot loader fires once on mount and unconditionally
+ * `replaceRows`-es with the full unfiltered log when it resolves. If
+ * the user submits a server-side history filter (`author:`/`path:`/
+ * `S:`/`G:`) or toggles the graph mode WHILE that fetch is still in
+ * flight, `useHistoryRefetch`'s own effect fires and dispatches its
+ * OWN — correctly filtered — `replaceRows`. A boot load that resolves
+ * afterward would silently clobber it back to the unfiltered view:
+ * no error, no status line, nothing telling the user their filter was
+ * just discarded.
+ *
+ * `historyRefetchGenerationRef` is bumped the instant `useHistoryRefetch`
+ * fires (when the fetch STARTS, not when it resolves), so an in-flight
+ * refetch already wins over a slower-resolving boot load regardless of
+ * which one's promise settles first. The boot loader captures the
+ * generation at dispatch time and drops its resolve if a refetch has
+ * started since — same shape as the frame-depth guard above, just
+ * keyed on filter/graph freshness instead of repo-frame identity.
+ */
+export function isStaleBootLoadResolve(snap: BootLoadResolveSnapshot): boolean {
+  return isStaleFrameResolve(snap) || snap.currentRefetchGeneration !== snap.issuedRefetchGeneration
+}
+
+/**
  * The completion-time snapshot `loadMoreCommits` checks — the
  * frame-scoped decision above plus the pre-existing monotonic
  * request-id family (`loadMoreRequestRef`).
