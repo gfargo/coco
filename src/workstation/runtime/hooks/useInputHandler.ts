@@ -334,6 +334,9 @@ export function useInputHandler(
     const pullRequestTriageSelectedUrl = pullRequestTriageSelected?.url
     const pullRequestTriageSelectedNumber = pullRequestTriageSelected?.number
     const worktreeVisibleCount = filteredWorktreeList.length
+    // #1452 dual-write — same role as branchIds: id list in render order
+    // so moveWorktreeListEntry can resolve the post-move target's id.
+    const worktreeListIds = filteredWorktreeList.map((w) => w.path)
 
     // When the diff view is showing a stash or PR patch, swap the
     // previewLineCount to that patch's length so the existing
@@ -428,6 +431,7 @@ export function useInputHandler(
       stashDiffSelectedPath,
       prDiffFileOffsets: prDiffFileOffsets.length ? prDiffFileOffsets : undefined,
       worktreeListCount: worktreeVisibleCount,
+      worktreeListIds,
       worktreeSelectedPath: visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path,
       statusGroups: visibleWorktreeGroups.map((group) => ({
         state: group.state as 'staged' | 'unstaged' | 'untracked',

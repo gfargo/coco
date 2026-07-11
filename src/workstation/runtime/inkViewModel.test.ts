@@ -1570,6 +1570,19 @@ describe('log Ink view model', () => {
       expect(state.selectedStashIndex).toBe(1)
       expect(state.selectedStashId).toBe('stash@{1}')
     })
+
+    it('writes selectedWorktreeListId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 5, id: '/repo-feature' })
+      expect(state.selectedWorktreeListIndex).toBe(1)
+      expect(state.selectedWorktreeListId).toBe('/repo-feature')
+    })
+
+    it('leaves selectedWorktreeListId undefined when the dispatch site could not resolve one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 5 })
+      expect(state.selectedWorktreeListId).toBeUndefined()
+    })
   })
 
   // #1452 flip — every OTHER action that resets or rectifies
@@ -2386,6 +2399,23 @@ describe('log Ink view model', () => {
       const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
       expect(popped.selectedBranchId).toBeUndefined()
       expect(popped.selectedBranchIndex).toBe(state.selectedBranchIndex)
+    })
+
+    // Same discipline for the worktree id mirror (#1452 worktree flip).
+    it('pushRepoFrame and popRepoFrame clear selectedWorktreeListId too', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 10, id: '/repo-feature' })
+      expect(state.selectedWorktreeListId).toBe('/repo-feature')
+
+      const pushed = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
+      expect(pushed.selectedWorktreeListId).toBeUndefined()
+
+      const insideSubmodule = applyLogInkAction(pushed, {
+        type: 'moveWorktreeListEntry', delta: 1, count: 10, id: '/submodule-worktree',
+      })
+      const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
+      expect(popped.selectedWorktreeListId).toBeUndefined()
+      expect(popped.selectedWorktreeListIndex).toBe(state.selectedWorktreeListIndex)
     })
 
     // Regression: popping a frame entered FROM a commit diff used to

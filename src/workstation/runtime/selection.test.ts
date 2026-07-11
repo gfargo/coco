@@ -206,6 +206,69 @@ describe('selection selectors (#1452)', () => {
       const emptyCtx = { worktreeList: { worktrees: [] } } as unknown as LogInkContext
       expect(getSelectedWorktree(state, emptyCtx)).toBeUndefined()
     })
+
+    // #1452 flip — same id-first, index-fallback resolution as branch/tag/
+    // stash, so a context refresh that reorders the worktree list can't
+    // silently resolve to the wrong logical worktree.
+    it('prefers selectedWorktreeListId over selectedWorktreeListIndex when both are set', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedWorktreeListIndex: 0,
+        selectedWorktreeListId: '/repo-feature',
+      }
+      expect(getSelectedWorktree(state, worktreeContext)?.path).toBe('/repo-feature')
+    })
+
+    it('falls back to the index when selectedWorktreeListId is undefined', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedWorktreeListIndex: 0,
+        selectedWorktreeListId: undefined,
+      }
+      expect(getSelectedWorktree(state, worktreeContext)?.path).toBe('/repo')
+    })
+
+    it('falls back to the index when selectedWorktreeListId no longer resolves', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedWorktreeListIndex: 1,
+        selectedWorktreeListId: '/gone',
+      }
+      expect(getSelectedWorktree(state, worktreeContext)?.path).toBe('/repo-feature')
+    })
+
+    it('keeps resolving to the same worktree after a context refresh reorders the list', () => {
+      const before = {
+        worktreeList: { worktrees: [makeWorktree('/repo', 'main'), makeWorktree('/repo-b', 'b')] },
+      } as unknown as LogInkContext
+      const state = {
+        ...createLogInkState([]),
+        selectedWorktreeListIndex: 1,
+        selectedWorktreeListId: '/repo-b',
+      }
+      expect(getSelectedWorktree(state, before)?.path).toBe('/repo-b')
+
+      // A new worktree sorts ahead of '/repo-b', shifting it from index 1
+      // to index 2. No reducer action fired — state is unchanged.
+      const after = {
+        worktreeList: {
+          worktrees: [makeWorktree('/repo-a', 'a'), makeWorktree('/repo', 'main'), makeWorktree('/repo-b', 'b')],
+        },
+      } as unknown as LogInkContext
+      // Index 1 is now '/repo' — an index-only lookup would resolve
+      // there; the id-first selector still returns '/repo-b'.
+      expect(getSelectedWorktree(state, after)?.path).toBe('/repo-b')
+    })
+
+    it('id-first resolution also applies to the unfiltered fallback path', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedWorktreeListIndex: 0,
+        selectedWorktreeListId: '/repo-feature',
+        filter: 'does-not-match-anything',
+      }
+      expect(getSelectedWorktree(state, worktreeContext)?.path).toBe('/repo-feature')
+    })
   })
 
   describe('getSelectedCommitTarget', () => {
