@@ -288,9 +288,35 @@ jobs:
           name: dist
 
       - name: Install VHS + system deps (ttyd, ffmpeg)
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: ''
+        # charmbracelet/vhs-action's bundled ffmpeg installer failed here
+        # ("Failed to install ffmpeg", no further detail — upstream
+        # installer issue, not a config problem on our end). Install each
+        # piece ourselves instead: ffmpeg via apt (reliable on
+        # ubuntu-latest), ttyd + vhs as static binaries straight from
+        # their GitHub releases, so the install is fully in our control.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+          sudo curl -fsSL -o /usr/local/bin/ttyd \
+            https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64
+          sudo chmod +x /usr/local/bin/ttyd
+
+          vhs_url=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+            https://api.github.com/repos/charmbracelet/vhs/releases/latest \
+            | jq -r '.assets[] | select(.name | endswith("_Linux_x86_64.tar.gz")) | .browser_download_url')
+          curl -fsSL -o /tmp/vhs.tar.gz "$vhs_url"
+          mkdir -p /tmp/vhs-install
+          tar -xzf /tmp/vhs.tar.gz -C /tmp/vhs-install --strip-components=1
+          sudo mv /tmp/vhs-install/vhs /usr/local/bin/vhs
+          sudo chmod +x /usr/local/bin/vhs
+
+          vhs --version
+          ttyd --version
+          ffmpeg -version | head -1
 
       - name: Configure git identity
         # @gfargo/git-scenarios spins up fixture repos and commits to them.
