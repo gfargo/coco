@@ -255,6 +255,63 @@ jobs:
       - name: Run PTY e2e journeys
         run: npm run test:e2e
 
+  # Visual-regression stills (#1424, second half): captures the VHS
+  # recipes that are the visual counterpart of the PTY e2e journeys
+  # (bin/screenshot/recipes.ts — ui-help-overlay-filter, ui-stash-diff,
+  # ui-search-filter, ui-history-pr-ready) and uploads them as a build
+  # artifact for PR review. Deliberately artifact-only for now, not a
+  # pass/fail pixel diff against committed baselines — that needs a
+  # tolerance-tuned diff tool and a baseline-image storage decision
+  # (repo bloat vs. LFS vs. external store) this slice doesn't make.
+  # Promote to a real diff gate once the recipe set stabilizes.
+  visual-regression:
+    name: Visual regression stills (VHS)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Download built dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+
+      - name: Install VHS + system deps (ttyd, ffmpeg)
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: ''
+
+      - name: Configure git identity
+        # @gfargo/git-scenarios spins up fixture repos and commits to them.
+        run: |
+          git config --global user.name "Coco CI"
+          git config --global user.email "ci@example.com"
+
+      - name: Capture e2e-journey stills
+        run: |
+          npm run screenshot -- --recipe ui-history-pr-ready
+          npm run screenshot -- --recipe ui-help-overlay-filter
+          npm run screenshot -- --recipe ui-search-filter
+          npm run screenshot -- --recipe ui-stash-diff
+
+      - name: Upload stills artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-stills
+          path: .screenshots/*.png
+          retention-days: 14
+
   # Integration tests exercise the real CLI / data paths end-to-end via
   # the dedicated `test:integration` script (previously unused in CI).
   # The non-live suite always runs; the live GitLab suite is gated on
