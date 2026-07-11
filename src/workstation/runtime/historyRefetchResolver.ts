@@ -61,6 +61,29 @@ export type HistoryRefetchPlan = {
 }
 
 /**
+ * Overlay a server-side history filter (`author:`/`path:`/`S:`/`G:`,
+ * #776 + #1361) onto a base argv. Factored out so every call site that
+ * needs "the current filter, applied on top of some base argv" shares
+ * one place to add a new prefix — `useLoadMoreHistory.ts`'s pagination
+ * path used to hand-roll its own copy of just the author/path lines and
+ * silently missed pickaxe/grep when #1361 added them here (#1361
+ * follow-up), which meant an active `S:`/`G:` filter got dropped the
+ * moment the user scrolled to load older commits.
+ */
+export function applyHistoryFetchArgsOverlay(
+  base: LogArgv,
+  fetchArgs: LogInkHistoryFetchArgs | undefined,
+): LogArgv {
+  return {
+    ...base,
+    ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
+    ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
+    ...(fetchArgs?.pickaxe ? { pickaxe: fetchArgs.pickaxe } : {}),
+    ...(fetchArgs?.grep ? { grep: fetchArgs.grep } : {}),
+  }
+}
+
+/**
  * Derive the single merged argv for a history refetch: graph mode
  * first (`buildToggleGraphArgs` maps `fullGraph` onto `view`), then
  * the server-side filter overlay. Both the filter submit and the
@@ -72,13 +95,7 @@ export function buildHistoryRefetchArgv(
   fullGraph: boolean,
   fetchArgs: LogInkHistoryFetchArgs | undefined,
 ): LogArgv {
-  return {
-    ...buildToggleGraphArgs(logArgv, fullGraph),
-    ...(fetchArgs?.author ? { author: fetchArgs.author } : {}),
-    ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
-    ...(fetchArgs?.pickaxe ? { pickaxe: fetchArgs.pickaxe } : {}),
-    ...(fetchArgs?.grep ? { grep: fetchArgs.grep } : {}),
-  }
+  return applyHistoryFetchArgsOverlay(buildToggleGraphArgs(logArgv, fullGraph), fetchArgs)
 }
 
 /**

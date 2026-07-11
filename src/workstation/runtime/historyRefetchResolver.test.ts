@@ -1,5 +1,6 @@
 import type { LogArgv } from '../../commands/log/config'
 import {
+  applyHistoryFetchArgsOverlay,
   buildHistoryRefetchArgv,
   resolveHistoryRefetch,
 } from './historyRefetchResolver'
@@ -40,6 +41,46 @@ describe('buildHistoryRefetchArgv', () => {
 
     expect(merged.path).toBe('docs/')
     expect(merged.author).toBe('bob')
+  })
+
+  it('applies the pickaxe (#1361 S:) filter', () => {
+    const merged = buildHistoryRefetchArgv(argv(), false, { pickaxe: 'useState' })
+
+    expect(merged.pickaxe).toBe('useState')
+  })
+
+  it('applies the grep-diff (#1361 G:) filter', () => {
+    const merged = buildHistoryRefetchArgv(argv(), false, { grep: '^export' })
+
+    expect(merged.grep).toBe('^export')
+  })
+})
+
+describe('applyHistoryFetchArgsOverlay', () => {
+  // Regression for #1361: useLoadMoreHistory.ts used to hand-roll its
+  // own copy of just the author/path overlay and silently dropped
+  // pickaxe/grep. This is the shared helper both call sites now use —
+  // covering it here covers every consumer.
+  it('overlays every filter kind (author/path/pickaxe/grep) onto the base argv', () => {
+    const merged = applyHistoryFetchArgsOverlay(argv({ view: 'compact' }), {
+      author: 'alice',
+      path: 'src/',
+      pickaxe: 'useState',
+      grep: '^export',
+    })
+
+    expect(merged).toMatchObject({
+      view: 'compact',
+      author: 'alice',
+      path: 'src/',
+      pickaxe: 'useState',
+      grep: '^export',
+    })
+  })
+
+  it('returns the base argv unchanged when no fetch args are active', () => {
+    const base = argv({ path: 'docs/' })
+    expect(applyHistoryFetchArgsOverlay(base, undefined)).toEqual(base)
   })
 })
 

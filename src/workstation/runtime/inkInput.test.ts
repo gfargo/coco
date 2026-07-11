@@ -3269,6 +3269,26 @@ describe('log Ink input interactions', () => {
       expect(state.historyFetchArgs).toEqual({ author: 'alice' })
     })
 
+    it('Enter on S:<value> sets the pickaxe arg (#1361)', () => {
+      let state = createLogInkState(rows, { activeView: 'history' })
+      state = applyInput(state, '/')
+      'S:useState'.split('').forEach((c) => {
+        state = applyInput(state, c)
+      })
+      state = applyInput(state, '', { return: true })
+      expect(state.historyFetchArgs).toEqual({ pickaxe: 'useState' })
+    })
+
+    it('Enter on G:<value> sets the grep-diff arg (#1361)', () => {
+      let state = createLogInkState(rows, { activeView: 'history' })
+      state = applyInput(state, '/')
+      'G:^export'.split('').forEach((c) => {
+        state = applyInput(state, c)
+      })
+      state = applyInput(state, '', { return: true })
+      expect(state.historyFetchArgs).toEqual({ grep: '^export' })
+    })
+
     it('Enter on a non-prefix filter still just exits filter mode (no fetch args)', () => {
       let state = createLogInkState(rows)
       state = applyInput(state, '/')
