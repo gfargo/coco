@@ -95,6 +95,15 @@ describe('log Ink workflows', () => {
     expect(getLogInkWorkflowActionById('checkout-file-from-commit')?.key).toBe('')
   })
 
+  // Regression for #1452: cherry-pick-commit resolves its target via
+  // getSelectedCommitRange (the range half of the #1452 batch selector)
+  // but the registry declaration originally omitted `targets: 'multi'`,
+  // making it the one batch-capable workflow that didn't self-document
+  // via the contract the other two (delete-branch, drop-stash) use.
+  it('declares cherry-pick-commit as targets: multi, matching its range-selector resolution', () => {
+    expect(getLogInkWorkflowActionById('cherry-pick-commit')?.targets).toBe('multi')
+  })
+
   it('registers force-delete-branch as a keyless, confirmation-gated escalation', () => {
     // Raised by the runtime as a second confirm when `git branch -d`
     // rejects an unmerged branch; keyless so no keystroke fires it.

@@ -759,11 +759,11 @@ export function useWorkflowAction(
         if (!ref) return { ok: false, message: 'No stash ref active' }
         return checkoutFileFromStash(git, ref, path)
       },
-      // #1361 — history is v-range only (no x-marks): an active range
-      // cherry-picks as one `oldest^..newest` command instead of the
-      // single-commit path. `range` is in display order (newest
-      // first), so the git-layer args are index-reversed from what's
-      // on screen.
+      // #1361 — batch-capable (`targets: 'multi'`): history is v-range
+      // only (no x-marks), so an active range cherry-picks as one
+      // `oldest^..newest` command instead of the single-commit path.
+      // `range` is in display order (newest first), so the git-layer
+      // args are index-reversed from what's on screen.
       'cherry-pick-commit': async () => {
         const range = getSelectedCommitRange(state)
         if (range && range.length > 1) {
