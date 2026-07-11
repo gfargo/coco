@@ -50,7 +50,7 @@ import {
 import { forgeNouns } from '../../chrome/forgeNouns'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedWorktreeId, getSelectedWorktree } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, getSelectedWorktreeId, getSelectedWorktree } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -88,6 +88,7 @@ import {
     ResetMode,
     checkoutFileFromCommit,
     cherryPickCommit,
+    cherryPickRange,
     createBranchFromCommit,
     createTagAtCommit,
     defaultOpenUrlRunner,
@@ -758,7 +759,22 @@ export function useWorkflowAction(
         if (!ref) return { ok: false, message: 'No stash ref active' }
         return checkoutFileFromStash(git, ref, path)
       },
+      // #1361 — history is v-range only (no x-marks): an active range
+      // cherry-picks as one `oldest^..newest` command instead of the
+      // single-commit path. `range` is in display order (newest
+      // first), so the git-layer args are index-reversed from what's
+      // on screen.
       'cherry-pick-commit': async () => {
+        const range = getSelectedCommitRange(state)
+        if (range && range.length > 1) {
+          const newest = range[0]
+          const oldest = range[range.length - 1]
+          return cherryPickRange(
+            git,
+            { hash: oldest.hash, shortHash: oldest.shortHash, message: oldest.message },
+            { hash: newest.hash, shortHash: newest.shortHash, message: newest.message },
+          )
+        }
         const commit = getSelectedInkCommit(state)
         if (!commit) return { ok: false, message: 'No commit selected' }
         return cherryPickCommit(git, {
@@ -1622,6 +1638,16 @@ export function useWorkflowAction(
       } else if (pendingItemAction && pendingItemAction.ids.length > 1) {
         dispatch({ type: 'setMarks', view: 'stash', ids: pendingItemAction.ids })
       }
+    }
+    // #1361 — a successful range cherry-pick consumed the selection;
+    // clear it so a stale range can't re-aim the next `c`. On failure
+    // (a conflict) the repo is now mid-cherry-pick and the existing
+    // conflict-recovery prompt takes over — leave the range alone so
+    // an abort-and-retry doesn't lose it. There's no plural
+    // pendingItemAction for commits to freeze a partial attempt into
+    // (cherry-pick's git command is one op, not a per-item loop).
+    if (id === 'cherry-pick-commit' && result?.ok) {
+      dispatch({ type: 'clearSelection' })
     }
     // A safe `delete-branch` (`git branch -d`) refuses branches that
     // aren't fully merged. Rather than dead-end on git's raw error, raise

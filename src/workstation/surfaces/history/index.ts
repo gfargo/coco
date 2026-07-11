@@ -691,6 +691,15 @@ export function renderHistoryPanel(
     : `${state.commits.length} commits`
   // Show graph mode only when compact (the exception state worth noting)
   const graphMode = state.fullGraph ? undefined : 'compact'
+  // #1361 — surface an active cherry-pick range anchor in the header,
+  // same chip convention as the branches/stash surfaces. Deliberately
+  // NOT a per-row highlight in the graph (row rendering here is
+  // considerably more involved — graph lines, stacked mode, date
+  // bucketing — and the status-line feedback on `v` + the confirm
+  // panel's target line already tell the user what's spanned).
+  const rangeLabel = state.selection?.view === 'history' && state.selection.anchorId
+    ? 'range: v..cursor'
+    : undefined
 
   const pendingRowSelected = showPendingRow && Boolean(state.pendingCommitFocused) && focused
   // Real-commit selection is suppressed while the cursor is on the pending
@@ -711,7 +720,7 @@ export function renderHistoryPanel(
   },
   h(Box, { justifyContent: 'space-between' },
     h(Text, { bold: true }, panelTitle('Commits', focused)),
-    h(Text, { dimColor: true }, [title, graphMode, loadState].filter(Boolean).join(' · '))
+    h(Text, { dimColor: true }, [title, rangeLabel, graphMode, loadState].filter(Boolean).join(' · '))
   ),
   // Upstream-ahead banner. Surfaces "the remote has work you don't"
   // for the current branch — distinct from the chip work in 0.52.0

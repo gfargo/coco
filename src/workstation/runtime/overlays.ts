@@ -34,7 +34,7 @@ import {
 import type { LogInkChoicePrompt, LogInkState } from '../../workstation/runtime/inkViewModel'
 import { filterThemePresets } from '../../workstation/runtime/inkViewModel'
 import { getLogInkWorkflowActionById } from '../../workstation/runtime/inkWorkflows'
-import { getSelectedCommitTarget } from '../../workstation/runtime/selection'
+import { getSelectedCommitTarget, getSelectedCommitRange } from '../../workstation/runtime/selection'
 import { resolvePendingItemAction } from './hooks/useWorkflowAction'
 import type { LogInkContext } from './types'
 import type { LogInkComponents } from './types'
@@ -131,6 +131,18 @@ export function describeConfirmationTarget(
     // branch/stash pluralize with -es; tag/worktree/pull-request with -s.
     const plural = /(ch|sh)$/.test(item.kind) ? `${item.kind}es` : `${item.kind}s`
     return `${item.ids.length} ${plural}: ${names}`
+  }
+  // #1361 — cherry-pick is the one commit-target workflow that's
+  // range-capable; describe the span (oldest..newest, chronological
+  // order — the reverse of display order) before falling back to
+  // the single cursored commit.
+  if (id === 'cherry-pick-commit') {
+    const range = getSelectedCommitRange(state)
+    if (range && range.length > 1) {
+      const newest = range[0]
+      const oldest = range[range.length - 1]
+      return `${range.length} commits: ${oldest.shortHash}..${newest.shortHash}`
+    }
   }
   const commit = getSelectedCommitTarget(id, state)
   if (commit) {

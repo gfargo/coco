@@ -5,6 +5,7 @@ import {
   amendHeadCommit,
   checkoutOrDeleteFromRef,
   cherryPickCommit,
+  cherryPickRange,
   compareCommits,
   copyCommitHash,
   copyCommitMessage,
@@ -255,6 +256,57 @@ describe('log history actions', () => {
 
     expect(git.raw).toHaveBeenNthCalledWith(1, ['cherry-pick', commit.hash])
     expect(git.raw).toHaveBeenNthCalledWith(2, ['revert', '--no-edit', commit.hash])
+  })
+
+  // #1361 — history is v-range only for multi-select; cherry-pick's own
+  // range syntax replays the span in one command, unlike stash drop
+  // there's no per-item ordering to get wrong here.
+  describe('cherryPickRange', () => {
+    const oldest = { hash: 'oldest1234567890', shortHash: 'oldest12', message: 'feat: oldest' }
+    const newest = { hash: 'newest1234567890', shortHash: 'newest12', message: 'feat: newest' }
+
+    it('constructs the oldest^..newest range command', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      await expect(cherryPickRange(git as never, oldest, newest)).resolves.toEqual({
+        ok: true,
+        message: 'Cherry-picked oldest12..newest12',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['cherry-pick', 'oldest1234567890^..newest1234567890'])
+    })
+
+    it('delegates to the single-commit path when the range collapses to one commit', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      await expect(cherryPickRange(git as never, commit, commit)).resolves.toEqual({
+        ok: true,
+        message: 'Cherry-picked abcdef1',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['cherry-pick', commit.hash])
+    })
+
+    it('blocks while another git operation is in progress, same guard as the single commit', async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'coco-history-range-'))
+      const mergeHead = join(tempDir, 'MERGE_HEAD')
+      writeFileSync(mergeHead, oldest.hash)
+      const git = {
+        revparse: jest.fn().mockResolvedValue(mergeHead),
+        raw: jest.fn(),
+      }
+      try {
+        await expect(cherryPickRange(git as never, oldest, newest)).resolves.toEqual({
+          ok: false,
+          message: 'Finish or abort the in-progress merge before editing history.',
+        })
+        expect(git.raw).not.toHaveBeenCalled()
+      } finally {
+        rmSync(tempDir, { force: true, recursive: true })
+      }
+    })
   })
 
   it('constructs reset and rebase commands with recovery guidance', async () => {

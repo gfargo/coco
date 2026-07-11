@@ -353,6 +353,39 @@ export function cherryPickCommit(
 }
 
 /**
+ * Cherry-pick a contiguous range (#1361 multi-select — history is
+ * v-range only, no marks: a range is what "select a run of commits"
+ * naturally means, and `git cherry-pick`'s own range syntax already
+ * replays them in the right order in one command, so there's no
+ * per-item loop to get wrong the way stash drop order was.
+ *
+ * `oldest^..newest` — `oldest` is chronologically first (deepest in
+ * history) in the selected span, `newest` is chronologically last
+ * (closest to HEAD); the caller is responsible for that ordering
+ * (list display order is newest-first, so this is index-reversed from
+ * what's on screen). A conflict stops the sequence exactly like a
+ * single cherry-pick conflict — the existing conflict-recovery /
+ * continue-operation surfaces handle cherry-pick-in-progress state
+ * already, nothing range-specific needed there.
+ */
+export function cherryPickRange(
+  git: SimpleGit,
+  oldest: HistoryCommitRef,
+  newest: HistoryCommitRef
+): Promise<BranchActionResult> {
+  if (oldest.hash === newest.hash) {
+    return cherryPickCommit(git, newest)
+  }
+
+  return guardNoInProgressOperation(git).then((blocked) => (
+    blocked || runAction(
+      () => git.raw(['cherry-pick', `${oldest.hash}^..${newest.hash}`]),
+      `Cherry-picked ${oldest.shortHash}..${newest.shortHash}`
+    )
+  ))
+}
+
+/**
  * Materialize a single file's contents from a historical commit into the
  * working tree, leaving every other path untouched. Equivalent to
  * `git checkout <sha> -- <path>` for additions/modifications. When the

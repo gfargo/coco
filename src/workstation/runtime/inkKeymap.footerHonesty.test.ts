@@ -785,12 +785,17 @@ function pendingKeyGFixture(): Fixture {
 }
 
 function peekingFixture(): Fixture {
-  const events = getLogInkInputEvents(createLogInkState(rows), 'v', {}, { singlePane: true })
-  const state = applyActionsFromEvents(createLogInkState(rows), events)
+  // #1361 — history now carves itself out of the peek intercept (`v`
+  // anchors a cherry-pick range there instead), so this fixture uses
+  // 'status' to trigger peek instead — any main-pane view NOT claimed
+  // by a range/mark grammar exercises the same peek behavior.
+  const base = { ...createLogInkState(rows), activeView: 'status' as const }
+  const events = getLogInkInputEvents(base, 'v', {}, { singlePane: true })
+  const state = applyActionsFromEvents(base, events)
   return {
     state,
     options: {
-      activeView: 'history', focus: 'sidebar', filterMode: false, showHelp: false,
+      activeView: 'status', focus: 'sidebar', filterMode: false, showHelp: false,
       peeking: true, singlePane: true, sidebarTab: 'branches', sidebarItemCount: 0,
     },
     context: { singlePane: true },

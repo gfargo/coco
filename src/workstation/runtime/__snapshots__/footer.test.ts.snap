@@ -14,7 +14,7 @@ exports[`renderFooter structural snapshot — default no-status footer 1`] = `
       color="gray"
       dimColor={true}
     >
-      ↑/↓ move   enter diff   c/R/Z/i mutate   f fixup   B/gT new   m compare   y/Y yank   / search
+      ↑/↓ move   enter diff   c/R/Z/i mutate   f fixup   B/gT new   m compare   v range   y/Y yank   / search
     </Text>
     <Text
       color="gray"
@@ -44,7 +44,7 @@ exports[`renderFooter structural snapshot — error keeps hints visible on row 1
       color="gray"
       dimColor={true}
     >
-      ↑/↓ move   enter diff   c/R/Z/i mutate   f fixup   B/gT new   m compare   y/Y yank   / search
+      ↑/↓ move   enter diff   c/R/Z/i mutate   f fixup   B/gT new   m compare   v range   y/Y yank   / search
     </Text>
     <Text
       color="gray"
@@ -77,7 +77,7 @@ exports[`renderFooter structural snapshot — loading status on row 2 1`] = `
       color="gray"
       dimColor={true}
     >
-      ↑/↓ move   enter diff   c/R/Z/i mutate   f fixup   B/gT new   m compare   y/Y yank   / search
+      ↑/↓ move   enter diff   c/R/Z/i mutate   f fixup   B/gT new   m compare   v range   y/Y yank   / search
     </Text>
     <Text
       color="gray"

@@ -24,7 +24,7 @@ describe('log Ink keymap', () => {
       // `c/R/Z/i mutate` is the compact chip for cherry-pick / revert /
       // reset / interactive-rebase — full descriptions in ? help and
       // the palette. `B/gT new` covers create-branch-here / create-tag-here.
-      contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'y/Y yank', '/ search'],
+      contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'v range', 'y/Y yank', '/ search'],
       global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
     })
 
