@@ -216,6 +216,45 @@ jobs:
       - name: Run packaged CLI smoke
         run: npm run test:cli
 
+  # PTY end-to-end journeys (#1424): boots the built workstation TUI in
+  # a real pseudo-terminal against scripted fixture repos, sends
+  # keystrokes, and asserts on the rendered screen text. Depends on
+  # `build` because the harness drives dist/index.js (fast startup
+  # inside the PTY), same as the smoke job.
+  e2e:
+    name: PTY e2e journeys
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Download built dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+
+      - name: Configure git identity
+        # Fixture repos are created by @gfargo/git-scenarios inside the
+        # jest process, which uses the runner's real HOME. (The TUI
+        # itself runs under a throwaway HOME the harness provisions.)
+        run: |
+          git config --global user.name "Coco CI"
+          git config --global user.email "ci@example.com"
+
+      - name: Run PTY e2e journeys
+        run: npm run test:e2e
+
   # Integration tests exercise the real CLI / data paths end-to-end via
   # the dedicated `test:integration` script (previously unused in CI).
   # The non-live suite always runs; the live GitLab suite is gated on
