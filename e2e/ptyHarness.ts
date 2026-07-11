@@ -94,7 +94,13 @@ export interface WaitOptions {
   intervalMs?: number
 }
 
-const DEFAULT_WAIT: Required<WaitOptions> = { timeoutMs: 30_000, intervalMs: 50 }
+// 30s was too tight under real CI contention: main-broken-alert (#1564)
+// caught a run where searchFilter.e2e.test.ts timed out twice waiting on
+// keystroke round-trips on a noisy shared runner (83s total vs. 22s on
+// the PR's own quieter run) — the TUI was still alive and responsive,
+// just slow to paint. 45s gives real headroom while jest's per-file
+// testTimeout (120s in jest.e2e.config.ts) still bounds the worst case.
+const DEFAULT_WAIT: Required<WaitOptions> = { timeoutMs: 45_000, intervalMs: 50 }
 
 /**
  * One live TUI process in a PTY plus the emulated screen it draws on.
