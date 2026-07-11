@@ -3517,6 +3517,30 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    // #1452 worktree flip — same dual-write as branch/tag/stash above.
+    it('moveWorktreeListEntry carries the post-move id when the context provides worktreeListIds', () => {
+      const worktreeListIds = ['/repo', '/repo-a', '/repo-b']
+      const state = {
+        ...createLogInkState(rows),
+        activeView: 'worktrees' as const,
+        selectedWorktreeListIndex: 1,
+      }
+
+      const down = getLogInkInputEvents(state, '', { downArrow: true }, {
+        worktreeListCount: 3, worktreeListIds,
+      })
+      expect(down).toEqual([
+        { type: 'action', action: { type: 'moveWorktreeListEntry', delta: 1, count: 3, id: '/repo-b' } },
+      ])
+
+      const up = getLogInkInputEvents(state, '', { upArrow: true }, {
+        worktreeListCount: 3, worktreeListIds,
+      })
+      expect(up).toEqual([
+        { type: 'action', action: { type: 'moveWorktreeListEntry', delta: -1, count: 3, id: '/repo' } },
+      ])
+    })
+
     // #1361 — multi-select grammar on the branches view.
     describe('multi-select x / v / Esc (#1361)', () => {
       function branchesState() {

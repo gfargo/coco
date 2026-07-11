@@ -402,21 +402,36 @@ export type LogInkState = {
   selectedTagIndex: number
   selectedStashIndex: number
   /**
-   * Id-based cursor mirrors of the three indices above (#1452 dual-write
-   * phase). Written alongside the index by `moveBranch`/`moveTag`/
-   * `moveStash` when the dispatch site could resolve the target's id;
-   * not yet read by any consumer — `selected*Index` remains the source
-   * of truth until the migration flips it.
+   * Id-based cursor mirrors of the three indices above (#1452). Written
+   * alongside the index by `moveBranch`/`moveTag`/`moveStash` when the
+   * dispatch site could resolve the target's id; the selectors in
+   * `selection.ts` (`getSelectedBranch`/`getSelectedTag`/`getSelectedStash`)
+   * prefer the id when it's set and still resolves in the current
+   * sorted + filtered list, falling back to the index otherwise.
    */
   selectedBranchId?: string
   selectedTagId?: string
   selectedStashId?: string
   selectedWorktreeListIndex: number
+  /**
+   * Id mirror of the index above (#1452), same dual-write discipline —
+   * written by `moveWorktreeListEntry`, preferred by `getSelectedWorktree`
+   * (`selection.ts`) when it still resolves in the current filtered list.
+   */
+  selectedWorktreeListId?: string
   selectedConflictFileIndex: number
   /**
    * Cursor for the promoted reflog view (#781). Lives on the root state
    * for the same reason as the other selected* indices: navigating away
    * and back should keep the user's place in the list.
+   *
+   * #1452 — intentionally NOT getting an id mirror. A reflog selector
+   * (`HEAD@{N}`) IS the position, not a separate stable identity: every
+   * new operation prepends and shifts every later selector, so there's
+   * no content-stable key to resolve "the same entry" against after a
+   * refresh the way a branch shortName or commit hash lets us. `withFilter`
+   * already treats this view as snap-to-0-on-filter-change rather than
+   * rectify, for the same reason.
    */
   selectedReflogIndex: number
   /**
@@ -439,6 +454,10 @@ export type LogInkState = {
    * large files stay responsive. Reset to 0 each time a fresh path is
    * opened (`navigateOpenBlameForPath`) so blame always opens at the
    * top of the file.
+   *
+   * #1452 — intentionally NOT getting an id mirror, same reasoning as
+   * `selectedReflogIndex`: a blame line's identity IS its line number
+   * in the file, there's no separate stable key to resolve against.
    */
   selectedBlameIndex: number
   /**
@@ -1163,7 +1182,7 @@ export type LogInkAction =
   | { type: 'movePullRequestTriage'; delta: number; count: number }
   | { type: 'cycleIssueFilter' }
   | { type: 'cyclePullRequestTriageFilter' }
-  | { type: 'moveWorktreeListEntry'; delta: number; count: number }
+  | { type: 'moveWorktreeListEntry'; delta: number; count: number; id?: string }
   | { type: 'moveConflictFile'; delta: number; count: number }
   | { type: 'moveToBottom' }
   | { type: 'moveToTop' }
@@ -1608,6 +1627,7 @@ function withPushedRepoFrame(
     selectedTagId: undefined,
     selectedStashId: undefined,
     selectedWorktreeListIndex: 0,
+    selectedWorktreeListId: undefined,
     selectedConflictFileIndex: 0,
     selectedReflogIndex: 0,
     selectedRemoteIndex: 0,
@@ -1686,6 +1706,8 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     selectedTagId: undefined,
     selectedStashId: undefined,
     selectedWorktreeListIndex: ret.selectedWorktreeListIndex ?? 0,
+    // parentReturn doesn't capture the id mirror either — same reasoning.
+    selectedWorktreeListId: undefined,
     selectedConflictFileIndex: ret.selectedConflictFileIndex ?? 0,
     selectedReflogIndex: ret.selectedReflogIndex ?? 0,
     selectedRemoteIndex: ret.selectedRemoteIndex ?? 0,
@@ -2433,6 +2455,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedWorktreeListIndex: clampIndex(state.selectedWorktreeListIndex + action.delta, action.count),
+        selectedWorktreeListId: action.id,
         pendingKey: undefined,
       }
     case 'moveConflictFile':

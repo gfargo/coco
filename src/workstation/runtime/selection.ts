@@ -2,9 +2,14 @@
  * Id-based selection model (#1452).
  *
  * This module introduces the target selection architecture that will replace
- * the 16 scalar `selected*Index` fields in `LogInkState`. The migration is
- * incremental and per view; branches / tags / stashes have completed all
- * three phases below, the rest are still index-only.
+ * the scalar `selected*Index` fields in `LogInkState`. The migration is
+ * incremental and per view; branches / tags / stashes / worktrees have
+ * completed phases 1-2 below. `reflog` and `blame` are intentionally
+ * staying index-only (see the doc comments on `selectedReflogIndex` /
+ * `selectedBlameIndex` in `inkViewModel.ts` — their cursor position IS
+ * the identity, there's no separate stable id to key on). The remaining
+ * views (submodules, remotes, issues, PR triage, file-history, and the
+ * history/diff/status-file cursors) are tracked for a future pass.
  *
  * Design:
  *   - A selection is a set of ids (not indexes) scoped to a view
@@ -271,6 +276,13 @@ export function getSelectedWorktreeId(
 /**
  * Get the full WorktreeEntry for the currently-selected worktree.
  *
+ * #1452 flip — `selectedWorktreeListId` is preferred when set and still
+ * resolves in the current visible list, same id-first/index-fallback
+ * resolution as `getSelectedBranch`/`getSelectedTag`/`getSelectedStash`.
+ * This is what keeps the cursor on the same logical worktree across a
+ * background context refresh that reorders the list, instead of
+ * silently landing on whatever now sits at the old numeric index.
+ *
  * Falls back to indexing the unfiltered list when the active filter hides
  * every worktree — a worktree action reachable from the palette (rather
  * than from the worktrees view itself) can fire with a stale filter still
@@ -286,9 +298,17 @@ export function getSelectedWorktree(
     ? all.filter((w) => matchesPromotedFilter([w.path, w.branch || ''], state.filter))
     : all
   if (visible.length > 0) {
+    if (state.selectedWorktreeListId) {
+      const byId = visible.find((w) => w.path === state.selectedWorktreeListId)
+      if (byId) return byId
+    }
     return visible[Math.min(state.selectedWorktreeListIndex, visible.length - 1)]
   }
   if (all.length === 0) return undefined
+  if (state.selectedWorktreeListId) {
+    const byId = all.find((w) => w.path === state.selectedWorktreeListId)
+    if (byId) return byId
+  }
   return all[Math.min(state.selectedWorktreeListIndex, all.length - 1)]
 }
 

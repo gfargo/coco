@@ -190,6 +190,8 @@ export type LogInkInputContext = {
    */
   pullRequestTriageSelectedNumber?: number
   worktreeListCount?: number
+  /** Sorted + filtered worktree paths, same role as `branchIds` (#1452). */
+  worktreeListIds?: string[]
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
   /**
@@ -3012,7 +3014,12 @@ export function getLogInkInputEvents(
     }
 
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {
-      return [action({ type: 'moveWorktreeListEntry', delta: -1, count: context.worktreeListCount })]
+      return [action({
+        type: 'moveWorktreeListEntry',
+        delta: -1,
+        count: context.worktreeListCount,
+        id: resolveMoveTargetId(context.worktreeListIds, state.selectedWorktreeListIndex, -1, context.worktreeListCount),
+      })]
     }
 
     if (state.activeView === 'conflicts' && context.conflictFileCount) {
@@ -3163,7 +3170,12 @@ export function getLogInkInputEvents(
     }
 
     if (isWorktreeActionTarget(state) && context.worktreeListCount) {
-      return [action({ type: 'moveWorktreeListEntry', delta: 1, count: context.worktreeListCount })]
+      return [action({
+        type: 'moveWorktreeListEntry',
+        delta: 1,
+        count: context.worktreeListCount,
+        id: resolveMoveTargetId(context.worktreeListIds, state.selectedWorktreeListIndex, 1, context.worktreeListCount),
+      })]
     }
 
     if (state.activeView === 'conflicts' && context.conflictFileCount) {
