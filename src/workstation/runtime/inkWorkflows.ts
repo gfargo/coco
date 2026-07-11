@@ -167,6 +167,12 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Apply the selected commit on top of the current branch (after confirmation).',
       kind: 'destructive',
       requiresConfirmation: true,
+      // #1361 / #1452 — history is v-range only (no x-marks), so this
+      // resolves through the range half of the batch selector
+      // (getSelectedCommitRange) rather than marks; still a `'multi'`
+      // consumer of the shared #1452 selection model, not a single-item
+      // workflow with range bolted on the side.
+      targets: 'multi',
     },
     {
       // #1356 — force-push recovery. Never bound to a key: raised as a
