@@ -4,9 +4,10 @@ import {
     defaultGhRunner,
     describeGhStatus,
     getGhStatus,
-    getGitHubRepository, type GhRunner,
+    type GhRunner,
     type GitHubRepository
 } from './githubCli'
+import { getGitHubRepositoryForGit } from './providerData'
 
 export type IssueState = 'open' | 'closed' | 'all'
 
@@ -129,7 +130,11 @@ export async function getIssueList(
   filter: IssueListFilter = {},
   runner: GhRunner = defaultGhRunner
 ): Promise<IssueListOverview> {
-  const repository = await getGitHubRepository(git)
+  // Host-aware resolution (#1609) — a GitHub Enterprise remote is
+  // rejected by the github.com-only parser `getGitHubRepository` uses,
+  // even though the provider layer classifies it as GitHub and probes
+  // auth against the right host elsewhere.
+  const repository = await getGitHubRepositoryForGit(git)
 
   if (!repository) {
     return {
@@ -140,7 +145,7 @@ export async function getIssueList(
     }
   }
 
-  const ghStatus = await getGhStatus(runner)
+  const ghStatus = await getGhStatus(runner, repository.host)
   if (ghStatus.kind !== 'ok') {
     return {
       available: true,

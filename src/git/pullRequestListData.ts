@@ -4,9 +4,10 @@ import {
     defaultGhRunner,
     describeGhStatus,
     getGhStatus,
-    getGitHubRepository, type GhRunner,
+    type GhRunner,
     type GitHubRepository
 } from './githubCli'
+import { getGitHubRepositoryForGit } from './providerData'
 
 export type PullRequestState = 'open' | 'closed' | 'merged' | 'all'
 
@@ -155,7 +156,9 @@ export async function getPullRequestList(
   filter: PullRequestListFilter = {},
   runner: GhRunner = defaultGhRunner
 ): Promise<PullRequestListOverview> {
-  const repository = await getGitHubRepository(git)
+  // Host-aware resolution (#1609) — see issuesListData.ts's getIssueList
+  // for the same fix and rationale.
+  const repository = await getGitHubRepositoryForGit(git)
 
   if (!repository) {
     return {
@@ -166,7 +169,7 @@ export async function getPullRequestList(
     }
   }
 
-  const ghStatus = await getGhStatus(runner)
+  const ghStatus = await getGhStatus(runner, repository.host)
   if (ghStatus.kind !== 'ok') {
     return {
       available: true,

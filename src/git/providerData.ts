@@ -1,11 +1,12 @@
 import { SimpleGit } from 'simple-git'
 import { BranchRef } from './branchData'
-import { GhRunner, defaultGhRunner } from './pullRequestData'
 import {
   describeGhStatus,
   getGhStatus,
   parseGitHubRemoteUrl as parseGitHubRemoteUrlBase,
   parseRemoteUrl,
+  type GhRunner,
+  defaultGhRunner,
 } from './githubCli'
 import {
   defaultGlabRunner,
@@ -161,6 +162,31 @@ export async function getProviderRepositoryForGit(
   return url ? getProviderRepository(remote.name, url) : undefined
 }
 
+export type GitHubRepositoryWithHost = {
+  owner: string
+  name: string
+  /** Lowercased remote host — `github.com` or a GitHub Enterprise host. */
+  host: string
+}
+
+/**
+ * Host-aware replacement for `githubCli.ts`'s `getGitHubRepository`
+ * (github.com-only by design — see that function's docblock). Uses the
+ * same provider detection `getProviderOverview` relies on (the
+ * `*github*` hostname heuristic plus `forgeHosts` overrides), so a
+ * GitHub Enterprise remote resolves here the same way it already does
+ * for auth probing, instead of being rejected outright (#1609).
+ */
+export async function getGitHubRepositoryForGit(
+  git: SimpleGit
+): Promise<GitHubRepositoryWithHost | undefined> {
+  const repository = await getProviderRepositoryForGit(git)
+  if (!repository || repository.provider !== 'github' || !repository.owner || !repository.name || !repository.host) {
+    return undefined
+  }
+  return { owner: repository.owner, name: repository.name, host: repository.host }
+}
+
 export function buildProviderUrl(
   repository: ProviderRepository,
   target: ProviderUrlTarget
@@ -224,10 +250,20 @@ async function getDefaultBranch(
   }
 
   try {
+    // A bare `owner/name` slug resolves against gh's default host
+    // (github.com) regardless of which host the remote actually lives
+    // on — silently querying the wrong server (or an unrelated
+    // github.com repo of the same name) for a GitHub Enterprise remote
+    // (#1609). The full URL form carries the host explicitly.
+    const target =
+      repository.host && repository.host !== 'github.com' && repository.webUrl
+        ? repository.webUrl
+        : `${repository.owner}/${repository.name}`
+
     const output = await runner([
       'repo',
       'view',
-      `${repository.owner}/${repository.name}`,
+      target,
       '--json',
       'defaultBranchRef',
     ])

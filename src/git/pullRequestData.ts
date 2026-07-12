@@ -1,12 +1,13 @@
 import { SimpleGit } from 'simple-git'
 import {
   defaultGhRunner,
-  getGitHubRepository,
-  isGhAuthenticated,
+  describeGhStatus,
+  getGhStatus,
   parseGitHubRemoteUrl as parseGitHubRemoteUrlShared,
   type GhRunner,
   type GitHubRepository,
 } from './githubCli'
+import { getGitHubRepositoryForGit } from './providerData'
 
 // Re-export for backwards compatibility — callers that imported from
 // pullRequestData before the shared module existed keep working.
@@ -149,8 +150,10 @@ export async function getPullRequestOverview(
   git: SimpleGit,
   runner: GhRunner = defaultGhRunner
 ): Promise<PullRequestOverview> {
+  // Host-aware resolution (#1609) — see issuesListData.ts's getIssueList
+  // for the same fix and rationale.
   const [repository, currentBranchOutput] = await Promise.all([
-    getGitHubRepository(git),
+    getGitHubRepositoryForGit(git),
     git.raw(['branch', '--show-current']),
   ])
   const currentBranch = currentBranchOutput.trim() || undefined
@@ -164,13 +167,14 @@ export async function getPullRequestOverview(
     }
   }
 
-  if (!(await isGhAuthenticated(runner))) {
+  const ghStatus = await getGhStatus(runner, repository.host)
+  if (ghStatus.kind !== 'ok') {
     return {
       available: true,
       authenticated: false,
       repository,
       currentBranch,
-      message: 'GitHub CLI is missing or not authenticated.',
+      message: describeGhStatus(ghStatus),
     }
   }
 
