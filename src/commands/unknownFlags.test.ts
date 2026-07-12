@@ -337,3 +337,38 @@ describe('review --severity rejects non-numeric or out-of-range values', () => {
     expect(failMessage).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// `recap --tag <value>` rejects the discarded value (#1613)
+//
+// `--tag` is a boolean alias for `--last-tag` on recap (unlike changelog,
+// where it's a string naming a specific tag). Passing a value used to fall
+// through to argv._ as a stray positional and silently recap since the
+// *latest* tag instead of the named one. The builder's `.check()` now
+// rejects this up front.
+// ---------------------------------------------------------------------------
+
+describe('recap --tag rejects a discarded value (#1613)', () => {
+  it('rejects --tag <name> instead of silently dropping the name', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, ['--tag', 'v1.0.0'])
+    expect(failMessage).toMatch(/--tag on recap takes no value/)
+    expect(failMessage).toMatch(/v1\.0\.0/)
+  })
+
+  it('rejects --last-tag <name> the same way', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, ['--last-tag', 'v1.0.0'])
+    expect(failMessage).toMatch(/--tag on recap takes no value/)
+  })
+
+  it('still accepts a bare --tag with no value', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, ['--tag'])
+    expect(failMessage).toBeNull()
+  })
+
+  it('a stray positional with no --tag/--last-tag is unaffected by this guard', () => {
+    // Not this issue's scope — recap has no positionals at all, so this
+    // stays whatever behavior strictOptions() already gives it (allowed).
+    const { failMessage } = parseWithStrict(recapBuilder, ['some-stray-arg'])
+    expect(failMessage).toBeNull()
+  })
+})
