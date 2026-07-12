@@ -1,7 +1,7 @@
 /**
  * Bisect workflow surface (#784). Shows the current candidate commit
  * (HEAD), a parsed view of recent decisions from `git bisect log`, and
- * the four action keys (g good, b bad, s skip, x reset).
+ * the four action keys (y good, b bad, s skip, x reset).
  *
  * When bisect is inactive, the surface renders an empty-state hint
  * pointing the user at the CLI to start one. The view stays
@@ -64,7 +64,7 @@ export function renderBisectSurface(
       { key: 'start-3', text: '  From your shell:' },
       { key: 'start-4', text: '    git bisect start <bad-ref> <good-ref>', opts: { accent: true } },
       { key: 'start-5', text: '  Either way, single-keystroke controls take over once active:' },
-      { key: 'start-6', text: '    g  mark good      s  skip (e.g. doesn\'t build)', opts: { accent: true } },
+      { key: 'start-6', text: '    y  mark good      s  skip (e.g. doesn\'t build)', opts: { accent: true } },
       { key: 'start-7', text: '    b  mark bad       x  reset / cancel', opts: { accent: true } },
       { key: 'spacer-3', text: '' },
       { key: 'tip-h', text: 'Tip', opts: { bold: true } },
@@ -184,7 +184,7 @@ export function renderBisectSurface(
 
     if (decisions.length === 0) {
       lines.push(h(Text, { key: 'bisect-no-decisions', dimColor: true },
-        truncateCells('No decisions logged yet — press g (good) or b (bad) to record one.', width - 4)))
+        truncateCells('No decisions logged yet — press y (good) or b (bad) to record one.', width - 4)))
     } else {
       lines.push(h(Text, { key: 'bisect-decisions-header', bold: true },
         truncateCells(`Decisions (${decisions.length}):`, width - 4)))
@@ -204,7 +204,7 @@ export function renderBisectSurface(
 
     lines.push(h(Text, { key: 'bisect-action-spacer' }, ''))
     lines.push(h(Text, { key: 'bisect-action-hint', dimColor: true },
-      truncateCells('Actions: g good · b bad · s skip · R run · x reset', width - 4)))
+      truncateCells('Actions: y good · b bad · s skip · R run · x reset', width - 4)))
   }
 
   return h(Box, {
