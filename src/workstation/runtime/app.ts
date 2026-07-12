@@ -457,6 +457,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const { refreshContext, refreshWorktreeContext } = useContextRefresh(React, {
     git,
     runtimesLength: runtimes.length,
+    worktree: context.worktree,
     dispatch,
     setContext,
     setContextStatus,

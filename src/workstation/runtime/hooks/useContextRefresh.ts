@@ -107,6 +107,12 @@ export function loadLogInkContextEntries(git: SimpleGit): Array<{
 export type UseContextRefreshDeps = {
   git: SimpleGit
   runtimesLength: number
+  /**
+   * The active frame's current worktree overview (#1617). Read — never
+   * written — so a failed refresh can hand callers back the overview
+   * still in context instead of `undefined`.
+   */
+  worktree: LogInkContext['worktree']
   dispatch: (action: { type: 'setStatus'; value: string }) => void
   setContext: (updater: (current: LogInkContext) => LogInkContext, depth: number) => void
   setContextStatus: (
@@ -141,6 +147,7 @@ export function useContextRefresh(
   const {
     git,
     runtimesLength,
+    worktree: currentWorktree,
     dispatch,
     setContext,
     setContextStatus,
@@ -198,6 +205,21 @@ export function useContextRefresh(
       return worktree
     }
 
+    if (worktree === undefined) {
+      // #1617 — a transient git failure (e.g. index.lock contention
+      // during an external operation) must not blank a previously-good
+      // overview. Stale beats blank (mirrors the policy
+      // `useHistoryRefresh.ts` documents for rows): skip the write
+      // entirely — the worktree, blame cache, and file-history cache all
+      // stay put — and hand the caller back the overview still in
+      // context instead of `undefined`.
+      setContextStatus(
+        (current) => updateLogInkContextStatus(current, 'worktree', 'ready'),
+        issuedAtDepth,
+      )
+      return currentWorktree
+    }
+
     setContext(
       (current) => ({
         ...current,
@@ -219,7 +241,7 @@ export function useContextRefresh(
     // the cursored file's own status happens to change.
     setWorktreeDiffRefreshToken((token) => token + 1)
     return worktree
-  }, [git, runtimesLength, setContext, setContextStatus, setWorktreeDiffRefreshToken])
+  }, [git, runtimesLength, currentWorktree, setContext, setContextStatus, setWorktreeDiffRefreshToken])
 
   return { refreshContext, refreshWorktreeContext }
 }
