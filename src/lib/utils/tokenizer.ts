@@ -1,8 +1,23 @@
-import { encoding_for_model, TiktokenModel } from 'tiktoken'
+import { encoding_for_model, get_encoding, TiktokenModel } from 'tiktoken'
 import { findProviderDefinition } from '../langchain/providers/registry'
 
 export type BPE_Tokenizer = Awaited<ReturnType<typeof getTikToken>>
 export type TokenCounter = Awaited<ReturnType<typeof getTokenCounter>>
+
+/**
+ * `encoding_for_model` throws for any id outside tiktoken's compiled-in
+ * model map — which includes Azure custom deployment names, OpenAI-compatible
+ * baseURL models (OpenRouter/vLLM/LM Studio), and OpenAI model ids newer than
+ * the pinned tiktoken release. Token counting only drives budget math, so an
+ * approximate encoding is strictly better than crashing the whole command
+ * (#1592). Newest-looking OpenAI ids (gpt-5.x, gpt-4o, oN reasoning models)
+ * use o200k_base to match; everything else falls back to cl100k_base, the
+ * encoding shared by gpt-4/gpt-3.5 and the closest general-purpose default.
+ */
+function fallbackEncodingForModel(modelName: string) {
+  const looksLikeNewestOpenAiModel = /^(gpt-5|gpt-4o|o[1-9])/.test(modelName)
+  return get_encoding(looksLikeNewestOpenAiModel ? 'o200k_base' : 'cl100k_base')
+}
 
 /**
  * Retrieves a TikToken for the specified model.
@@ -11,7 +26,11 @@ export type TokenCounter = Awaited<ReturnType<typeof getTokenCounter>>
  * @returns A Promise that resolves to the TikToken.
  */
 export const getTikToken = async (modelName: TiktokenModel) => {
-  return await encoding_for_model(modelName)
+  try {
+    return encoding_for_model(modelName)
+  } catch {
+    return fallbackEncodingForModel(modelName)
+  }
 }
 /**
  * Retrieves the token counter for a given model name.

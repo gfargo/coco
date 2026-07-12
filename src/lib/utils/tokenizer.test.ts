@@ -1,11 +1,21 @@
-import { getTokenCounter, getTokenCounterForProvider } from './tokenizer'
+import { getTikToken, getTokenCounter, getTokenCounterForProvider } from './tokenizer'
 
 // Real tiktoken encoding is deterministic but not test-friendly to assert
 // on directly; stub it with a simple length-based encoder so the tests
 // exercise only the provider/correction-factor routing in tokenizer.ts.
+// `encoding_for_model` mimics the real library by throwing for any model id
+// outside a small known set, so the fallback path in tokenizer.ts is
+// actually exercised (#1592) rather than masked by an always-succeeding mock.
+const KNOWN_MODELS = new Set(['gpt-4o', 'gpt-4'])
 jest.mock('tiktoken', () => ({
-  encoding_for_model: jest.fn(() => ({
-    encode: (text: string) => Array.from({ length: text.length }),
+  encoding_for_model: jest.fn((modelName: string) => {
+    if (!KNOWN_MODELS.has(modelName)) {
+      throw new Error(`Unknown model: ${modelName}`)
+    }
+    return { encode: (text: string) => Array.from({ length: text.length }) }
+  }),
+  get_encoding: jest.fn((encoding: string) => ({
+    encode: (text: string) => Array.from({ length: text.length + (encoding === 'o200k_base' ? 100 : 200) }),
   })),
 }))
 
@@ -87,5 +97,34 @@ describe('getTokenCounterForProvider', () => {
     const base = await getTokenCounter('gpt-4o')
     const counter = await getTokenCounterForProvider('unknown-provider', 'some-model')
     expect(counter(SAMPLE)).toBe(base(SAMPLE))
+  })
+
+  describe('unknown model ids for tiktoken-native providers (#1592)', () => {
+    it('does not throw for an OpenAI-compatible baseURL model id', async () => {
+      await expect(
+        getTokenCounterForProvider('openai', 'meta-llama/llama-3-70b-instruct')
+      ).resolves.toEqual(expect.any(Function))
+    })
+
+    it('does not throw for an Azure custom deployment name', async () => {
+      await expect(getTokenCounterForProvider('azure', 'my-gpt4-deploy')).resolves.toEqual(
+        expect.any(Function)
+      )
+    })
+
+    it('still produces a working counter after falling back', async () => {
+      const counter = await getTokenCounterForProvider('openai', 'meta-llama/llama-3-70b-instruct')
+      expect(counter(SAMPLE)).toBeGreaterThan(0)
+    })
+
+    it('falls back to o200k_base for a newer-looking OpenAI id (gpt-5.x)', async () => {
+      const tokenizer = await getTikToken('gpt-5.4-mini' as never)
+      expect(tokenizer.encode(SAMPLE).length).toBe(SAMPLE.length + 100)
+    })
+
+    it('falls back to cl100k_base for a non-OpenAI-shaped id', async () => {
+      const tokenizer = await getTikToken('meta-llama/llama-3-70b-instruct' as never)
+      expect(tokenizer.encode(SAMPLE).length).toBe(SAMPLE.length + 200)
+    })
   })
 })
