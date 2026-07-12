@@ -116,25 +116,18 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const USE_CONVENTIONAL_COMMITS = config.conventionalCommits || argv.conventional
 
   async function factory() {
-    if (config.noDiff) {
-      const status = await git.status()
-      return status.files.map((file) => ({
-        filePath: file.path,
-        status: (file.index === 'A' || file.index === '?'
-          ? 'added'
-          : 'modified') as FileChange['status'],
-        summary: file.path, // Simplified summary for noDiff
-      }))
-    } else {
-      const changes = await getChanges({
-        git,
-        options: {
-          ignoredFiles: config.ignoredFiles || undefined,
-          ignoredExtensions: config.ignoredExtensions || undefined,
-        },
-      })
-      return changes.staged
-    }
+    // noDiff and the regular path both need exactly the staged set — reusing
+    // getChanges() here (instead of mapping raw `git status` entries) keeps
+    // unstaged/untracked files out of the "Staged files" summary and
+    // restores ignoredFiles/ignoredExtensions filtering for free (#1595).
+    const changes = await getChanges({
+      git,
+      options: {
+        ignoredFiles: config.ignoredFiles || undefined,
+        ignoredExtensions: config.ignoredExtensions || undefined,
+      },
+    })
+    return changes.staged
   }
 
   async function parser(changes: FileChange[]) {

@@ -228,7 +228,7 @@ describe('commit command', () => {
     expect(mockGetChanges).toHaveBeenCalled()
   })
 
-  it('should not call getChanges when noDiff is true', async () => {
+  it('still calls getChanges when noDiff is true, to scope the summary to staged files only (#1595)', async () => {
     argv.noDiff = true
     // Update the config mock to have noDiff: true
     mockLoadConfig.mockReturnValue({
@@ -248,7 +248,47 @@ describe('commit command', () => {
     } as unknown as Config)
 
     await handler(argv, logger)
-    expect(mockGetChanges).not.toHaveBeenCalled()
+    expect(mockGetChanges).toHaveBeenCalled()
+  })
+
+  it('--noDiff summary lists only staged files, not unstaged/untracked ones (#1595)', async () => {
+    argv.noDiff = true
+    mockLoadConfig.mockReturnValue({
+      service: {
+        authentication: { type: 'apiKey' },
+        provider: 'openai',
+        model: 'gpt-4o',
+      },
+      hideCocoBanner: false,
+      noDiff: true,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      includeBranchName: true,
+      conventionalCommits: false,
+      openInEditor: false,
+      mode: 'stdout',
+    } as unknown as Config)
+
+    mockGetChanges.mockResolvedValue({
+      staged: [{ filePath: 'staged.txt', status: 'modified', summary: 'staged.txt summary' }],
+      unstaged: [{ filePath: 'unstaged.txt', status: 'modified', summary: 'unstaged.txt summary' }],
+      untracked: [{ filePath: 'untracked.txt', status: 'added', summary: 'untracked.txt summary' }],
+    })
+
+    await handler(argv, logger)
+
+    // mockGenerateAndReviewLoop's fake calls `agent` before `parser` with a
+    // hardcoded context string, so the real noDiff summary never reaches
+    // executeChainWithSchema's variables through that path — invoke the
+    // real factory/parser the handler constructed directly instead.
+    const { factory, parser } = mockGenerateAndReviewLoop.mock.calls[0][0]
+    const changes = await factory()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const summary = await parser(changes, '', {} as any)
+
+    expect(summary).toContain('staged.txt')
+    expect(summary).not.toContain('unstaged.txt')
+    expect(summary).not.toContain('untracked.txt')
   })
 
   it('should NOT call fileChangeParser when noDiff is true', async () => {
