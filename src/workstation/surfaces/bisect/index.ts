@@ -50,14 +50,28 @@ export function renderBisectSurface(
     // Bisect is a rarely-used feature even for experienced users —
     // shipping it with terse copy assumes muscle memory the median
     // user doesn't have.
-    const empty: Array<{ key: string; text: string; opts?: { bold?: boolean; dim?: boolean; accent?: boolean } }> = [
+    //
+    // Height-aware (#1585): the full explainer is ~21 rows (with the
+    // title bar + borders), too tall for the 80x24 minimum terminal
+    // (bodyRows as low as 19). Degrade by omission — same approach as
+    // the inspector's #1366 at-rest condensing — dropping whole
+    // sections in priority order rather than mid-section truncation,
+    // which would read as cut-off rather than intentionally condensed.
+    // "How to start" (the actionable part) and the header always
+    // survive; "Tip" drops first, then "How it works" if still tight.
+    type EmptyRow = { key: string; text: string; opts?: { bold?: boolean; dim?: boolean; accent?: boolean } }
+    const header: EmptyRow[] = [
       { key: 'title', text: 'Bisect — find the commit that introduced a bug.', opts: { bold: true } },
       { key: 'spacer-1', text: '' },
+    ]
+    const howItWorks: EmptyRow[] = [
       { key: 'how-h', text: 'How it works', opts: { bold: true } },
       { key: 'how-1', text: '  Binary search through history. You mark commits as "good" (bug' },
       { key: 'how-2', text: '  not present) or "bad" (bug present); git narrows the range until' },
       { key: 'how-3', text: '  it identifies the first bad commit.' },
       { key: 'spacer-2', text: '' },
+    ]
+    const howToStart: EmptyRow[] = [
       { key: 'start-h', text: 'How to start', opts: { bold: true } },
       { key: 'start-1', text: '  In coco (recommended):' },
       { key: 'start-2', text: '    s  pick bad + good commits visually from history', opts: { accent: true } },
@@ -66,12 +80,24 @@ export function renderBisectSurface(
       { key: 'start-5', text: '  Either way, single-keystroke controls take over once active:' },
       { key: 'start-6', text: '    y  mark good      s  skip (e.g. doesn\'t build)', opts: { accent: true } },
       { key: 'start-7', text: '    b  mark bad       x  reset / cancel', opts: { accent: true } },
+    ]
+    const tip: EmptyRow[] = [
       { key: 'spacer-3', text: '' },
       { key: 'tip-h', text: 'Tip', opts: { bold: true } },
       { key: 'tip-1', text: '  Pick a recent release tag as your "good" anchor if you don\'t' },
       { key: 'tip-2', text: '  remember when the bug appeared. Tags are visible from the tags' },
       { key: 'tip-3', text: '  view (g t).' },
     ]
+    // Budget: bodyRows minus the title bar row (1) and the panel's own
+    // top/bottom border (2), which aren't part of `lines` but still
+    // cost rows against the terminal-supplied bodyRows.
+    const budget = Math.max(0, bodyRows - 3)
+    const mandatory = [...header, ...howToStart]
+    const empty = mandatory.length + howItWorks.length + tip.length <= budget
+      ? [...header, ...howItWorks, ...howToStart, ...tip]
+      : mandatory.length + howItWorks.length <= budget
+        ? [...header, ...howItWorks, ...howToStart]
+        : mandatory
     for (const row of empty) {
       lines.push(h(Text, {
         key: `bisect-empty-${row.key}`,

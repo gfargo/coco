@@ -14,6 +14,7 @@ import {
 import type { BisectStatus } from '../../../git/bisectData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderBisectSurface } from './index'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -31,7 +32,7 @@ function makeState(overrides: Partial<LogInkState> = {}): LogInkState {
 
 function render(
   state: LogInkState,
-  options: { bisect?: BisectStatus; loading?: boolean } = {}
+  options: { bisect?: BisectStatus; loading?: boolean; bodyRows?: number } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = options.bisect ? { bisect: options.bisect } : {}
@@ -45,7 +46,7 @@ function render(
       state,
       context,
       contextStatus,
-      bodyRows: 30,
+      bodyRows: options.bodyRows ?? 30,
       width: 120,
       theme,
     },
@@ -102,6 +103,40 @@ describe('renderBisectSurface', () => {
     expect(inactiveText).toMatch(/y\s+mark good/)
     expect(activeText).toMatch(/y good/)
     expect(activeText).toMatch(/press y/)
+  })
+
+  describe('empty-state height budget (#1585)', () => {
+    // The panel's own title bar (1) + top/bottom border (2) aren't part
+    // of the flattened content lines renderToLines counts, but they
+    // still cost rows against bodyRows.
+    const CHROME_ROWS = 3
+
+    it('fits the 80x24 minimum-terminal budget (bodyRows: 19) by dropping the Tip section', () => {
+      const tree = render(makeState(), { bisect: { active: false, currentSha: '', log: [] }, bodyRows: 19 })
+      const lines = renderToLines(tree, Text, Box)
+      expect(lines.length + CHROME_ROWS).toBeLessThanOrEqual(19)
+      const text = lines.join('\n')
+      expect(text).toContain('How to start')
+      expect(text).not.toContain('Tip')
+    })
+
+    it('drops both Tip and How it works at an even tighter budget', () => {
+      const tree = render(makeState(), { bisect: { active: false, currentSha: '', log: [] }, bodyRows: 14 })
+      const lines = renderToLines(tree, Text, Box)
+      expect(lines.length + CHROME_ROWS).toBeLessThanOrEqual(14)
+      const text = lines.join('\n')
+      expect(text).toContain('How to start')
+      expect(text).not.toContain('Tip')
+      expect(text).not.toContain('How it works')
+    })
+
+    it('shows the full explainer (including Tip) on a tall terminal', () => {
+      const tree = render(makeState(), { bisect: { active: false, currentSha: '', log: [] }, bodyRows: 30 })
+      const text = renderToLines(tree, Text, Box).join('\n')
+      expect(text).toContain('How it works')
+      expect(text).toContain('How to start')
+      expect(text).toContain('Tip')
+    })
   })
 })
 
