@@ -194,6 +194,17 @@ describe('review command', () => {
     await expect(handler(argv, logger)).resolves.toBeUndefined()
   })
 
+  it('treats a NaN severity as no-threshold instead of crashing or silently comparing (#1599 defense-in-depth)', async () => {
+    // The builder's .check() rejects NaN before the handler ever runs in
+    // production; this locks in the handler's own Number.isFinite guard
+    // as a backstop for anything that bypasses the builder (e.g. a direct
+    // programmatic call).
+    argv.json = true
+    argv.severity = NaN
+
+    await expect(handler(argv, logger)).resolves.toBeUndefined()
+  })
+
   it('reviews only staged changes with --staged', async () => {
     argv.staged = true
     argv.json = true

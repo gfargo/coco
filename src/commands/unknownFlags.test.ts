@@ -294,3 +294,44 @@ describe('pr [action] rejects unknown actions', () => {
     expect(handlerCalled).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// `review --severity` validation (#1599)
+//
+// yargs coerces an unparseable --severity value to NaN, and
+// `typeof NaN === 'number'` — so a typo used to silently disable the CI
+// gate instead of failing loudly. The builder's `.check()` now rejects
+// non-integer / out-of-range values up front.
+// ---------------------------------------------------------------------------
+
+describe('review --severity rejects non-numeric or out-of-range values', () => {
+  it('rejects a non-numeric value (yargs coerces it to NaN)', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', 'high'])
+    expect(failMessage).toMatch(/--severity must be an integer between 1 and 10/)
+  })
+
+  it('rejects a value above the 1-10 range', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', '11'])
+    expect(failMessage).toMatch(/--severity must be an integer between 1 and 10/)
+  })
+
+  it('rejects a value below the 1-10 range', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', '0'])
+    expect(failMessage).toMatch(/--severity must be an integer between 1 and 10/)
+  })
+
+  it('rejects a non-integer value', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', '7.5'])
+    expect(failMessage).toMatch(/--severity must be an integer between 1 and 10/)
+  })
+
+  it('parses a valid in-range integer cleanly', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', '7'])
+    expect(failMessage).toBeNull()
+  })
+
+  it('parses cleanly when --severity is omitted', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, [])
+    expect(failMessage).toBeNull()
+  })
+})
