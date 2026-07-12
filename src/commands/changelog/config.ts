@@ -32,7 +32,7 @@ export const options = {
   range: {
     type: 'string',
     alias: 'r',
-    description: 'Commit range e.g `HEAD~2:HEAD^1` or `abc1234:def5678` (commit hashes)',
+    description: 'Commit range e.g `HEAD~2:HEAD^1`, `abc1234:def5678`, or git\'s native `HEAD~2..HEAD^1` syntax',
   },
   branch: {
     type: 'string',

@@ -5,6 +5,7 @@ import { ChangelogOptions } from './config'
 import { Config } from '../../commands/types'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
+import { getCommitLogRangeDetails } from '../../lib/simple-git/getCommitLogRangeDetails'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
@@ -54,6 +55,9 @@ const mockGetCommitLogCurrentBranch = getCommitLogCurrentBranch as jest.MockedFu
   typeof getCommitLogCurrentBranch
 >
 const mockGetCurrentBranchName = getCurrentBranchName as jest.MockedFunction<typeof getCurrentBranchName>
+const mockGetCommitLogRangeDetails = getCommitLogRangeDetails as jest.MockedFunction<
+  typeof getCommitLogRangeDetails
+>
 const mockExecuteChain = executeChain as jest.MockedFunction<typeof executeChain>
 const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
 const mockGetApiKeyForModel = getApiKeyForModel as jest.MockedFunction<typeof getApiKeyForModel>
@@ -196,5 +200,84 @@ describe('changelog command', () => {
     }
 
     expect(writes.map((w) => w.trim())).toContain('null')
+  })
+
+  describe('--range (#1590)', () => {
+    beforeEach(() => {
+      mockGetCommitLogRangeDetails.mockResolvedValue([
+        {
+          hash: 'def5678',
+          author_name: 'Test Author',
+          message: 'feat: ranged commit',
+          body: 'body text',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      ])
+    })
+
+    it('accepts git\'s native `<from>..<to>` syntax (no colon) instead of silently falling through to current-branch mode', async () => {
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        range: 'HEAD~5..HEAD',
+      } as unknown as Config)
+
+      await handler(argv, logger)
+
+      expect(mockGetCommitLogRangeDetails).toHaveBeenCalledWith(
+        'HEAD~5', 'HEAD', expect.objectContaining({ noMerges: true })
+      )
+      expect(mockGetCommitLogCurrentBranch).not.toHaveBeenCalled()
+    })
+
+    it('rejects a range with no recognizable separator instead of silently ignoring it', async () => {
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        range: 'not-a-valid-range',
+      } as unknown as Config)
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+      expect(mockGetCommitLogRangeDetails).not.toHaveBeenCalled()
+    })
+
+    it('rejects --range combined with --branch instead of silently ignoring --branch', async () => {
+      argv.branch = 'develop'
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        range: 'abc123:def456',
+      } as unknown as Config)
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('--range'),
+        expect.anything()
+      )
+    })
   })
 })
