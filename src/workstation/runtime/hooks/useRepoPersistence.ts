@@ -31,7 +31,13 @@
  * same order as the original (restore effect, then sidebar-save effect,
  * then diff-save effect) — the `cancelled`-flag logic, the `revparse`
  * calls, the dispatch payloads, and the dependency arrays are byte-for-byte
- * the same. This is a behavior-preserving move, not a rewrite.
+ * the same. This is a behavior-preserving move, not a rewrite, EXCEPT for
+ * the `restoredGitRef` gate added to the two save effects in
+ * `useViewModePersistence` (#1598) — the three effects' independent
+ * `revparse` calls have no ordering guarantee, so a save's continuation
+ * could resolve before the restore's read and silently overwrite a
+ * cached preference with the mount-time default. The gate gives the
+ * saves a hard "not yet" until this `git`'s restore has completed.
  *
  * `React` is injected (per the runtime's `getLogInkRuntimeContext(React)`
  * convention) because the workstation never statically imports React.
@@ -121,6 +127,16 @@ export function useViewModePersistence(
   deps: UseViewModePersistenceDeps,
 ): void {
   const { git, dispatch, repoRootRef, userSidebarTab, diffViewMode } = deps
+  // #1598 — the two save effects below fire on mount (and on every git
+  // swap) alongside this restore effect, each behind its own independent
+  // `revparse`. With no ordering guarantee between the three, a save's
+  // continuation could resolve first and write the mount-time default
+  // over a cached preference before the restore ever read it — silently
+  // losing the preference. Gate the saves on THIS git's restore having
+  // actually completed: they no-op until `restoredGitRef.current` marks
+  // the current `git`, closing the race for both plain mount and the
+  // repo-frame drill-in/out git-swap case.
+  const restoredGitRef = React.useRef<SimpleGit | null>(null)
   React.useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -141,6 +157,10 @@ export function useViewModePersistence(
         }
       } catch {
         // Not in a worktree, or revparse failed; nothing to restore.
+      } finally {
+        if (!cancelled) {
+          restoredGitRef.current = git
+        }
       }
     })()
     return () => { cancelled = true }
@@ -160,6 +180,11 @@ export function useViewModePersistence(
   // cancellation flag prevents a stale resolution from racing a
   // newer one in flight.
   React.useEffect(() => {
+    // #1598 — skip until this git's restore has completed (see above).
+    // The mount-time run always hits this, since `restoredGitRef` starts
+    // `null`; a genuine user tab change fires this effect again after
+    // restore has already stamped the ref, so it isn't blocked.
+    if (restoredGitRef.current !== git) return
     let cancelled = false
     void (async () => {
       try {
@@ -175,6 +200,8 @@ export function useViewModePersistence(
   }, [userSidebarTab, git])
 
   React.useEffect(() => {
+    // #1598 — same restore gate as the sidebar-tab save above.
+    if (restoredGitRef.current !== git) return
     let cancelled = false
     void (async () => {
       try {
