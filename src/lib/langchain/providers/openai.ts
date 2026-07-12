@@ -6,6 +6,7 @@ import type { CreateLlmArgs, ProviderDefinition } from './types'
 function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
   const openaiConfig: Partial<ConstructorParameters<typeof ChatOpenAI>[0]> = {
     apiKey,
+    maxConcurrency: config.service.maxConcurrent,
     model,
     // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
     // respected instead of being coerced to the 0.2 default.
