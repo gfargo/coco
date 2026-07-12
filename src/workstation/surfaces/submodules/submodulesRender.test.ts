@@ -12,6 +12,7 @@ import {
 import type { SubmoduleEntry, SubmoduleOverview } from '../../../git/submoduleData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderSubmodulesSurface } from './index'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -39,7 +40,7 @@ function makeEntry(overrides: Partial<SubmoduleEntry> = {}): SubmoduleEntry {
 
 function render(
   state: LogInkState,
-  options: { submodules?: SubmoduleOverview; loading?: boolean } = {}
+  options: { submodules?: SubmoduleOverview; loading?: boolean; bodyRows?: number } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = options.submodules ? { submodules: options.submodules } : {}
@@ -52,7 +53,7 @@ function render(
     state,
     context,
     contextStatus,
-    bodyRows: 30,
+    bodyRows: options.bodyRows ?? 30,
     width: 120,
     theme,
   })
@@ -98,5 +99,61 @@ describe('renderSubmodulesSurface', () => {
     expect(
       render(makeState(), { submodules: { hasSubmodules: true, entries: [makeEntry()] } })
     ).toMatchSnapshot()
+  })
+
+  // Regression (#1615): submodules windowed its rows with
+  // clampListWindowStart but rendered no scroll indicators, unlike every
+  // other windowed promoted surface (branches, tags, stash, ...).
+  describe('scroll indicators (#1615)', () => {
+    const manySubmodules: SubmoduleOverview = {
+      hasSubmodules: true,
+      entries: Array.from({ length: 30 }, (_, i) =>
+        makeEntry({ name: `vendor/lib-${i}`, path: `vendor/lib-${i}` })),
+    }
+
+    it('shows only "more below" when cursored at the top', () => {
+      const tree = render(makeState({ selectedSubmoduleIndex: 0 }), {
+        submodules: manySubmodules,
+        bodyRows: 12,
+      })
+      const text = renderToLines(tree, Text, Box).join('\n')
+      expect(text).not.toContain('more above')
+      expect(text).toContain('more below')
+    })
+
+    it('shows only "more above" when cursored at the bottom', () => {
+      const tree = render(makeState({ selectedSubmoduleIndex: manySubmodules.entries.length - 1 }), {
+        submodules: manySubmodules,
+        bodyRows: 12,
+      })
+      const text = renderToLines(tree, Text, Box).join('\n')
+      expect(text).toContain('more above')
+      expect(text).not.toContain('more below')
+    })
+
+    it('shows both indicators mid-list and keeps the total rendered rows within bodyRows', () => {
+      const bodyRows = 12
+      const tree = render(makeState({ selectedSubmoduleIndex: 15 }), {
+        submodules: manySubmodules,
+        bodyRows,
+      })
+      const lines = renderToLines(tree, Text, Box)
+      const text = lines.join('\n')
+      expect(text).toContain('more above')
+      expect(text).toContain('more below')
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+    })
+
+    it('keeps the total rendered row count within bodyRows with the filter affordance active too', () => {
+      const bodyRows = 12
+      const tree = render(
+        makeState({ selectedSubmoduleIndex: 15, filterMode: true, filter: 'vendor' }),
+        { submodules: manySubmodules, bodyRows }
+      )
+      const lines = renderToLines(tree, Text, Box)
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+    })
   })
 })
