@@ -64,9 +64,10 @@ function render(
     loading?: boolean
     provider?: LogInkContext['provider']
     width?: number
+    theme?: ReturnType<typeof createLogInkTheme>
   } = {}
 ): ReactElement {
-  const theme = createLogInkTheme({})
+  const theme = options.theme ?? createLogInkTheme({})
   const context: LogInkContext = {
     ...(options.pullRequestList ? { pullRequestList: options.pullRequestList } : {}),
     ...(options.provider ? { provider: options.provider } : {}),
@@ -227,5 +228,47 @@ describe('renderPullRequestTriageSurface', () => {
         pullRequestList: { available: true, authenticated: true, pullRequests: [makePr()] },
       })
     ).toMatchSnapshot()
+  })
+
+  describe('merge-state glyph is shape-distinct under NO_COLOR/ascii (#1606)', () => {
+    function rowFor(pr: PullRequestListItem, ascii: boolean): string {
+      const theme = createLogInkTheme({ noColor: true, ascii })
+      const tree = render(makeState(), {
+        theme,
+        pullRequestList: { available: true, authenticated: true, pullRequests: [pr] },
+      })
+      const children = (tree.props as { children: unknown[] }).children
+      const rows = children
+        .flat()
+        .map(treeText)
+        .filter((line) => line.includes(`#${pr.number}`))
+      expect(rows).toHaveLength(1)
+      return rows[0]
+    }
+
+    it('gives CLEAN, DIRTY, and BLOCKED distinct glyphs (unicode)', () => {
+      const clean = rowFor(makePr({ number: 1, mergeStateStatus: 'CLEAN' }), false)
+      const dirty = rowFor(makePr({ number: 2, mergeStateStatus: 'DIRTY' }), false)
+      const blocked = rowFor(makePr({ number: 3, mergeStateStatus: 'BLOCKED' }), false)
+
+      expect(clean).toContain('●')
+      expect(dirty).toContain('✗')
+      expect(blocked).toContain('■')
+    })
+
+    it('falls back to ASCII glyphs (no mojibake) when theme.ascii is set', () => {
+      const clean = rowFor(makePr({ number: 1, mergeStateStatus: 'CLEAN' }), true)
+      const dirty = rowFor(makePr({ number: 2, mergeStateStatus: 'DIRTY' }), true)
+      const blocked = rowFor(makePr({ number: 3, mergeStateStatus: 'BLOCKED' }), true)
+      const behind = rowFor(makePr({ number: 4, mergeStateStatus: 'BEHIND' }), true)
+
+      expect(clean).toContain('o')
+      expect(dirty).toContain('x')
+      expect(blocked).toContain('#')
+      expect(behind).toContain('v')
+      for (const row of [clean, dirty, blocked, behind]) {
+        expect(row).not.toMatch(/[●✗■↓◐·✓]/)
+      }
+    })
   })
 })

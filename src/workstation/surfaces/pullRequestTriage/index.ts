@@ -45,12 +45,12 @@ function stateColor(theme: LogInkTheme, state: string, isDraft: boolean): string
   }
 }
 
-function reviewGlyph(decision: string | undefined): string {
+function reviewGlyph(decision: string | undefined, options: { ascii?: boolean } = {}): string {
   switch (decision) {
     case 'APPROVED':
-      return '✓'
+      return options.ascii ? '+' : '✓'
     case 'CHANGES_REQUESTED':
-      return '✗'
+      return options.ascii ? 'x' : '✗'
     case 'REVIEW_REQUIRED':
       return '?'
     default:
@@ -58,13 +58,20 @@ function reviewGlyph(decision: string | undefined): string {
   }
 }
 
-function mergeableGlyph(mergeStateStatus: string | undefined, mergeable: string | undefined): string {
-  if (mergeStateStatus === 'CLEAN') return '●'
-  if (mergeStateStatus === 'BLOCKED') return '●'
-  if (mergeStateStatus === 'DIRTY' || mergeable === 'CONFLICTING') return '●'
-  if (mergeStateStatus === 'BEHIND') return '●'
-  if (mergeStateStatus === 'UNSTABLE') return '●'
-  return '·'
+// Shape carries the meaning, color reinforces it (#1606) — under
+// NO_COLOR / theme.noColor every state must still read distinctly.
+// Matches `branchRowMarker`'s `{ ascii }` convention in iconography.ts.
+function mergeableGlyph(
+  mergeStateStatus: string | undefined,
+  mergeable: string | undefined,
+  options: { ascii?: boolean } = {}
+): string {
+  if (mergeStateStatus === 'CLEAN') return options.ascii ? 'o' : '●'
+  if (mergeStateStatus === 'DIRTY' || mergeable === 'CONFLICTING') return options.ascii ? 'x' : '✗'
+  if (mergeStateStatus === 'BLOCKED') return options.ascii ? '#' : '■'
+  if (mergeStateStatus === 'BEHIND') return options.ascii ? 'v' : '↓'
+  if (mergeStateStatus === 'UNSTABLE') return options.ascii ? '~' : '◐'
+  return options.ascii ? '.' : '·'
 }
 
 function mergeableColor(theme: LogInkTheme, mergeStateStatus: string | undefined, mergeable: string | undefined): string | undefined {
@@ -210,8 +217,8 @@ export function renderPullRequestTriageSurface(
         const numStr = `#${pr.number}`.padEnd(numberColWidth)
         const stateLabel = pr.isDraft ? 'draft' : pr.state.toLowerCase()
         const stateStr = stateLabel.padEnd(6)
-        const mergeStr = mergeableGlyph(pr.mergeStateStatus, pr.mergeable)
-        const reviewStr = reviewGlyph(pr.reviewDecision)
+        const mergeStr = mergeableGlyph(pr.mergeStateStatus, pr.mergeable, { ascii: theme.ascii })
+        const reviewStr = reviewGlyph(pr.reviewDecision, { ascii: theme.ascii })
         // Truncate before padding: padEnd never shortens, so an author
         // longer than the capped column would silently widen the row.
         const authorStr = truncateCells(pr.author || '', authorColWidth).padEnd(authorColWidth)
