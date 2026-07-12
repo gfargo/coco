@@ -34,7 +34,13 @@ export function renderReflogSurface(ctx: SurfaceRenderContext): ReactTypes.React
     ))
     : allEntries
   const selected = Math.max(0, Math.min(state.selectedReflogIndex, Math.max(0, entries.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
+  // Row budget (#1392, #1615): the base reserve (borders + title + one
+  // spare) must also count the conditional rows, or the panel grows past
+  // its box mid-scroll — the filter affordance while filtering, and BOTH
+  // scroll indicators once the list overflows the window (the single
+  // spare absorbed only one of them). Mirrors the branches surface.
+  const baseRows = Math.max(4, bodyRows - 4 - (state.filterMode ? 1 : 0))
+  const listRows = entries.length > baseRows ? Math.max(4, baseRows - 1) : baseRows
   const startIndex = clampListWindowStart(selected, entries.length, listRows)
   const visible = entries.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
@@ -84,6 +90,11 @@ export function renderReflogSurface(ctx: SurfaceRenderContext): ReactTypes.React
         }, lineText)
       })
 
+  // Scroll indicators (#1615) — same "N more above/below" pattern as
+  // branches/tags so the user knows the list continues past the window.
+  const reflogHasMoreAbove = startIndex > 0 && entries.length > 0
+  const reflogHasMoreBelow = startIndex + listRows < entries.length
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -97,5 +108,11 @@ export function renderReflogSurface(ctx: SurfaceRenderContext): ReactTypes.React
     h(Text, { dimColor: true }, headerRight)
   ),
   ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
+  ...(reflogHasMoreAbove
+    ? [h(Text, { key: 'reflog-more-above', dimColor: true }, `  ↑ ${startIndex} more above`)]
+    : []),
+  ...lines,
+  ...(reflogHasMoreBelow
+    ? [h(Text, { key: 'reflog-more-below', dimColor: true }, `  ↓ ${entries.length - (startIndex + listRows)} more below`)]
+    : []))
 }

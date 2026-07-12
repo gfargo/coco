@@ -12,6 +12,7 @@ import {
 import type { ReflogOverview, ReflogViewEntry } from '../../../git/reflogData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderReflogSurface } from './index'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -39,7 +40,7 @@ function makeEntry(overrides: Partial<ReflogViewEntry> = {}): ReflogViewEntry {
 
 function render(
   state: LogInkState,
-  options: { reflog?: ReflogOverview; loading?: boolean } = {}
+  options: { reflog?: ReflogOverview; loading?: boolean; bodyRows?: number } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = options.reflog ? { reflog: options.reflog } : {}
@@ -52,7 +53,7 @@ function render(
     state,
     context,
     contextStatus,
-    bodyRows: 30,
+    bodyRows: options.bodyRows ?? 30,
     width: 120,
     theme,
   })
@@ -95,5 +96,55 @@ describe('renderReflogSurface', () => {
 
   it('structural snapshot — populated', () => {
     expect(render(makeState(), { reflog: { entries: [makeEntry()] } })).toMatchSnapshot()
+  })
+
+  // Regression (#1615): reflog windowed its rows with clampListWindowStart
+  // but rendered no scroll indicators, unlike every other windowed promoted
+  // surface (branches, tags, stash, ...) — and reflogs routinely have
+  // hundreds of entries, so this reads as "this is the whole reflog."
+  describe('scroll indicators (#1615)', () => {
+    const manyEntries: ReflogOverview = {
+      entries: Array.from({ length: 30 }, (_, i) =>
+        makeEntry({ selector: `HEAD@{${i}}`, subject: `commit: change ${i}` })),
+    }
+
+    it('shows only "more below" when cursored at the top', () => {
+      const tree = render(makeState({ selectedReflogIndex: 0 }), { reflog: manyEntries, bodyRows: 12 })
+      const text = renderToLines(tree, Text, Box).join('\n')
+      expect(text).not.toContain('more above')
+      expect(text).toContain('more below')
+    })
+
+    it('shows only "more above" when cursored at the bottom', () => {
+      const tree = render(makeState({ selectedReflogIndex: manyEntries.entries.length - 1 }), {
+        reflog: manyEntries,
+        bodyRows: 12,
+      })
+      const text = renderToLines(tree, Text, Box).join('\n')
+      expect(text).toContain('more above')
+      expect(text).not.toContain('more below')
+    })
+
+    it('shows both indicators mid-list and keeps the total rendered rows within bodyRows', () => {
+      const bodyRows = 12
+      const tree = render(makeState({ selectedReflogIndex: 15 }), { reflog: manyEntries, bodyRows })
+      const lines = renderToLines(tree, Text, Box)
+      const text = lines.join('\n')
+      expect(text).toContain('more above')
+      expect(text).toContain('more below')
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+    })
+
+    it('keeps the total rendered row count within bodyRows with the filter affordance active too', () => {
+      const bodyRows = 12
+      const tree = render(
+        makeState({ selectedReflogIndex: 15, filterMode: true, filter: 'commit' }),
+        { reflog: manyEntries, bodyRows }
+      )
+      const lines = renderToLines(tree, Text, Box)
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+    })
   })
 })
