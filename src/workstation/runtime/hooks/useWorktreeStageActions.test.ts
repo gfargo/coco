@@ -15,7 +15,6 @@
  * directly) drives the hook without a renderer; the git action layer is
  * mocked so each handler resolves without touching a real repo.
  */
-import type * as ReactTypes from 'react'
 import {
   useWorktreeStageActions,
   type UseWorktreeStageActionsDeps,
