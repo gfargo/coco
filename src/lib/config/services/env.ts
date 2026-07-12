@@ -1,8 +1,6 @@
 import { LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
-import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { removeUndefined } from '../../utils/removeUndefined'
-import { updateFileSection } from '../../utils/updateFileSection'
-import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT, CONFIG_KEYS } from '../constants'
+import { CONFIG_KEYS } from '../constants'
 import { Config } from '../types'
 
 type ValuesTypes = Config[keyof Config]
@@ -286,52 +284,3 @@ function toEnvVarName(key: string): string {
   return `COCO_${key.replace(/([A-Z])/g, '_$1').toLocaleUpperCase()}`
 }
 
-const flattenObject = (obj: object, prefix = '') => {
-  let flattened: Record<string, string> = {}
-
-  for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-      const propName = prefix ? `${prefix}_${key}` : key
-      const value = obj[key as keyof typeof obj]
-
-      // Skip undefined or null values
-      if (value === undefined || value === null) {
-        continue;
-      }
-
-      if (typeof value === 'object' && !Array.isArray(value)) {
-        // Handle nested objects, but specifically handle 'fields' as JSON string
-        if (key === 'fields') {
-          flattened[propName.toUpperCase()] = JSON.stringify(value)
-        } else {
-          flattened = { ...flattened, ...flattenObject(value, propName) }
-        }
-      } else {
-        // For primitive types (string, number, boolean, symbol, bigint) and arrays
-        flattened[propName.toUpperCase()] = String(value)
-      }
-    }
-  }
-
-  return flattened
-}
-
-export const appendToEnvFile = async (filePath: string, config: Partial<Config>) => {
-  const getNewContent = async () => {
-    const flattenedConfig = flattenObject(config)
-    return Object.entries(flattenedConfig)
-      .map(([key, value]) => {
-        const envVarName = toEnvVarName(key)
-        return `${envVarName}=${value}`
-      })
-      .join('\n')
-  }
-
-  await updateFileSection({
-    filePath,
-    startComment: COCO_CONFIG_START_COMMENT,
-    endComment: COCO_CONFIG_END_COMMENT,
-    getNewContent,
-    confirmMessage: CONFIG_ALREADY_EXISTS,
-  })
-}
