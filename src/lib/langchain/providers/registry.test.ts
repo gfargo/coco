@@ -173,4 +173,63 @@ describe('getLlm via registry', () => {
     )
     expect((overridden as { numPredict?: number }).numPredict).toBe(8192)
   })
+
+  // Regression (#1631): `createOllamaLlm` never forwarded `temperature`, so
+  // both the 0.4 service default and any user-configured value were ignored
+  // — generation ran at the Ollama daemon's own default instead.
+  it('defaults temperature to 0.4 and respects an explicit value, including 0', () => {
+    const llm = getLlm(
+      'ollama',
+      'llama3' as LLMModel,
+      makeConfig({
+        provider: 'ollama',
+        model: 'llama3',
+        endpoint: 'http://localhost:11434',
+        authentication: { type: 'None' },
+      })
+    )
+    expect((llm as { temperature?: number }).temperature).toBe(0.4)
+
+    const deterministic = getLlm(
+      'ollama',
+      'llama3' as LLMModel,
+      makeConfig({
+        provider: 'ollama',
+        model: 'llama3',
+        endpoint: 'http://localhost:11434',
+        authentication: { type: 'None' },
+        temperature: 0,
+      })
+    )
+    expect((deterministic as { temperature?: number }).temperature).toBe(0)
+
+    const hot = getLlm(
+      'ollama',
+      'llama3' as LLMModel,
+      makeConfig({
+        provider: 'ollama',
+        model: 'llama3',
+        endpoint: 'http://localhost:11434',
+        authentication: { type: 'None' },
+        temperature: 0.9,
+      })
+    )
+    expect((hot as { temperature?: number }).temperature).toBe(0.9)
+  })
+
+  it('lets service.fields override the Ollama temperature', () => {
+    const llm = getLlm(
+      'ollama',
+      'llama3' as LLMModel,
+      makeConfig({
+        provider: 'ollama',
+        model: 'llama3',
+        endpoint: 'http://localhost:11434',
+        authentication: { type: 'None' },
+        temperature: 0.3,
+        fields: { temperature: 0.71 },
+      })
+    )
+    expect((llm as { temperature?: number }).temperature).toBe(0.71)
+  })
 })

@@ -19,6 +19,11 @@ function createOllamaLlm({ model, config }: CreateLlmArgs): BaseChatModel {
     baseUrl: resolveOllamaEndpoint(config),
     maxConcurrency: config.service.maxConcurrent,
     model,
+    // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
+    // respected instead of being coerced to the default (#1631). Matches the
+    // `DEFAULT_OLLAMA_LLM_SERVICE.temperature` default, not the 0.2 the other
+    // providers use — Ollama's own default service config already ships 0.4.
+    temperature: config.service.temperature ?? 0.4,
     numPredict: DEFAULT_MAX_OUTPUT_TOKENS,
   }
 
