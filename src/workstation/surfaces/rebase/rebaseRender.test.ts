@@ -19,7 +19,10 @@ const Box = ((props: StubProps) =>
 
 const components: LogInkComponents = { Box, Text }
 
-function render(state: LogInkState): ReactElement {
+function render(
+  state: LogInkState,
+  options: { theme?: ReturnType<typeof createLogInkTheme> } = {}
+): ReactElement {
   return renderRebaseSurface({
     h: createElement,
     components,
@@ -28,7 +31,7 @@ function render(state: LogInkState): ReactElement {
     contextStatus: createLogInkContextStatus('ready'),
     bodyRows: 20,
     width: 100,
-    theme: createLogInkTheme({}),
+    theme: options.theme ?? createLogInkTheme({}),
   })
 }
 
@@ -44,6 +47,20 @@ function flatten(node: unknown, out: string[] = []): string[] {
   }
   const props = (node as { props?: { children?: unknown } }).props
   if (props) flatten(props.children, out)
+  return out
+}
+
+/** Collects every `color` prop set anywhere in the tree (undefined entries omitted). */
+function collectColors(node: unknown, out: string[] = []): string[] {
+  if (node == null) return out
+  if (Array.isArray(node)) {
+    node.forEach((child) => collectColors(child, out))
+    return out
+  }
+  const props = (node as { props?: { children?: unknown; color?: unknown } }).props
+  if (!props) return out
+  if (typeof props.color === 'string') out.push(props.color)
+  collectColors(props.children, out)
   return out
 }
 
@@ -73,5 +90,21 @@ describe('renderRebaseSurface', () => {
     expect(text).toContain('❯ fixup  bbbbbbb wip: fix')
     expect(text).toContain('drop   ccccccc debug junk')
     expect(text).toContain('reword ddddddd feat: new title (reworded)')
+  })
+
+  it('emits no color props under NO_COLOR, including for the selected row (#1611)', () => {
+    // `createLogInkTheme({ noColor: true })` already zeroes `theme.colors`
+    // to `{}`, so this passes even pre-fix under today's theme
+    // construction — it's the explicit `theme.noColor` guards in
+    // `actionColor` (and the selected-row color) that make the surface
+    // match the convention every sibling surface follows (stateColor /
+    // flagColor), rather than relying on that implementation detail.
+    const state: LogInkState = {
+      ...createLogInkState([]),
+      activeView: 'rebase',
+      rebasePlan: { rows: planRows, selectedIndex: 1 },
+    }
+    const tree = render(state, { theme: createLogInkTheme({ noColor: true }) })
+    expect(collectColors(tree)).toEqual([])
   })
 })

@@ -29,6 +29,7 @@ function baseDeps(overrides: Partial<UseContextRefreshDeps> = {}): UseContextRef
   return {
     git: {} as never,
     runtimesLength: 1,
+    worktree: undefined,
     dispatch: jest.fn(),
     setContext: jest.fn(),
     setContextStatus: jest.fn(),
@@ -76,6 +77,52 @@ describe('useContextRefresh — refreshWorktreeContext bumps worktreeDiffRefresh
     resolveFirst({ files: [] })
     await first
 
+    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useContextRefresh — refreshWorktreeContext stale-beats-blank on failure (#1617)', () => {
+  beforeEach(() => {
+    getWorktreeOverviewMock.mockReset()
+  })
+
+  it('keeps the previous overview, skips the cache-dropping write, and still returns it', async () => {
+    getWorktreeOverviewMock.mockRejectedValue(new Error('index.lock contention'))
+    const staleOverview = { files: [{ path: 'a.ts' }] } as never
+    const deps = baseDeps({ worktree: staleOverview })
+    const { refreshWorktreeContext } = useContextRefresh(fakeReact(), deps)
+
+    const result = await refreshWorktreeContext()
+
+    expect(result).toBe(staleOverview)
+    expect(deps.setContext).not.toHaveBeenCalled()
+    expect(deps.setWorktreeDiffRefreshToken).not.toHaveBeenCalled()
+  })
+
+  it('still restores the status key to ready so the UI does not get stuck loading', async () => {
+    getWorktreeOverviewMock.mockRejectedValue(new Error('index.lock contention'))
+    const deps = baseDeps({ worktree: { files: [] } as never })
+    const { refreshWorktreeContext } = useContextRefresh(fakeReact(), deps)
+
+    await refreshWorktreeContext()
+
+    expect(deps.setContextStatus).toHaveBeenCalledWith(expect.any(Function), 0)
+    const statusUpdater = (deps.setContextStatus as jest.Mock).mock.calls.find(
+      (call) => call[1] === 0,
+    )?.[0]
+    expect(statusUpdater).toBeDefined()
+  })
+
+  it('writes normally and returns the fresh overview when the fetch succeeds', async () => {
+    const fresh = { files: [{ path: 'b.ts' }] } as never
+    getWorktreeOverviewMock.mockResolvedValue(fresh)
+    const deps = baseDeps({ worktree: { files: [] } as never })
+    const { refreshWorktreeContext } = useContextRefresh(fakeReact(), deps)
+
+    const result = await refreshWorktreeContext()
+
+    expect(result).toBe(fresh)
+    expect(deps.setContext).toHaveBeenCalled()
     expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
   })
 })

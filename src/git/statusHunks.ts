@@ -88,6 +88,17 @@ async function applyPatch(
       reject(new Error(`Failed to apply hunk patch: ${stderr.trim()}`))
     })
 
+    // #1639 — if `git apply` exits before (or while) the write is in
+    // flight, the write hits a closed pipe and Node emits EPIPE as an
+    // `error` event on the stdin stream itself — a writable stream's
+    // errors are NOT routed to the child's own `error` handler above.
+    // With no listener here, that surfaces as an uncaught exception and
+    // can take down the whole process instead of the compact
+    // "Failed to apply hunk patch" rejection the `close` handler already
+    // reports (stderr from a dead `git apply` is the more useful message
+    // anyway, so this listener only needs to swallow the EPIPE).
+    child.stdin.on('error', () => { /* handled by the close listener above */ })
+
     child.stdin.write(patch)
     child.stdin.end()
   })

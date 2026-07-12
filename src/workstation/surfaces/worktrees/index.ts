@@ -13,7 +13,7 @@ import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
 import { inlineSpinnerGlyph } from '../../chrome/spinner'
 import { formatLogInkLoading, formatLogInkWorktreesEmpty } from '../../chrome/surfaceStates'
-import { truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import {
   matchesPromotedFilter,
   renderPromotedFilterAffordance,
@@ -56,7 +56,7 @@ export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: 
     ? 28
     : Math.min(40, Math.max(8, ...visible.map((entry) => {
       const label = entry.branch ? entry.branch : entry.head || '<detached>'
-      return label.length
+      return cellWidth(label)
     })))
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'worktrees-loading', dimColor: true }, formatLogInkLoading({ resource: 'worktrees' }))]
@@ -71,7 +71,7 @@ export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: 
           : entry.current ? '*' : ' '
         const branchLabel = entry.branch ? entry.branch : entry.head || '<detached>'
         const stateLabel = entry.dirty ? 'dirty' : 'clean'
-        const branchPadded = truncateCells(branchLabel, branchColWidth).padEnd(branchColWidth)
+        const branchPadded = padCells(truncateCells(branchLabel, branchColWidth), branchColWidth)
         return h(Text, {
           key: `worktree-${index}`,
           bold: isSelected,

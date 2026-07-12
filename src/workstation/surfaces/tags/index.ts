@@ -18,7 +18,7 @@ import {
     formatLogInkLoading,
     formatLogInkTagsEmpty,
 } from '../../chrome/surfaceStates'
-import { truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import {
     matchesPromotedFilter,
     renderPromotedFilterAffordance,
@@ -37,7 +37,13 @@ export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: numbe
     ? sortedAll.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
     : sortedAll
   const selected = Math.max(0, Math.min(state.selectedTagIndex, Math.max(0, tags.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
+  // Row budget (#1392): the base reserve (borders + title + one spare)
+  // must also count the conditional rows, or the panel grows past its
+  // box mid-scroll — the filter affordance while filtering, and BOTH
+  // scroll indicators once the list overflows the window (the single
+  // spare absorbed only one of them). Mirrors the branches surface.
+  const baseRows = Math.max(4, bodyRows - 4 - (state.filterMode ? 1 : 0))
+  const listRows = tags.length > baseRows ? Math.max(4, baseRows - 1) : baseRows
   const startIndex = clampListWindowStart(selected, tags.length, listRows)
   const visible = tags.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
@@ -53,7 +59,7 @@ export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: numbe
   // promoted views.
   const tagNameColWidth = visible.length === 0
     ? 20
-    : Math.min(40, Math.max(8, ...visible.map((tag) => tag.name.length)))
+    : Math.min(40, Math.max(8, ...visible.map((tag) => cellWidth(tag.name))))
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'tags-loading', dimColor: true }, loadingLabel)]
     : tags.length === 0
@@ -67,7 +73,7 @@ export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: numbe
         // formatHyperlink wraps just the tag name, leaving width math
         // intact.
         const url = buildRefUrl(context.provider?.repository, tag.name)
-        const namePadded = truncateCells(tag.name, tagNameColWidth).padEnd(tagNameColWidth)
+        const namePadded = padCells(truncateCells(tag.name, tagNameColWidth), tagNameColWidth)
         // Tags have no leading status icon, so a delete-in-flight appends
         // an accent spinner at the row's end. Reserve its 2 cells from the
         // truncation budget so it never pushes the row past the panel.

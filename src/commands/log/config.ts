@@ -114,9 +114,13 @@ export const options = {
     type: 'string',
   },
   view: {
+    // No yargs `default` here (#1622): an explicit `--view` must be able
+    // to win over `--all`'s full-view implication in `getLogView`, which
+    // requires distinguishing "not passed" (undefined) from "passed the
+    // same value as the default". The `compact` fallback still applies —
+    // see `getLogView`.
     description: 'History view preset',
     choices: ['compact', 'graph', 'full'],
-    default: 'compact',
   },
 } as Record<string, Options>
 

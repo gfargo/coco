@@ -124,6 +124,15 @@ export function useHistoryRefetch(
     // regardless of which promise settles first (see
     // isStaleBootLoadResolve in loadMoreResolver.ts).
     historyRefetchGenerationRef.current += 1
+    // #1612 — capture OUR OWN generation too. The guard below used to
+    // check only historyRefetchRequestRef (this hook's own sibling
+    // fetches), never the shared generation counter — so a slower
+    // refetch that resolved after a fresher post-mutation
+    // refreshHistoryRows (which also bumps this same counter) would
+    // still pass its own request-id check and overwrite the newer rows
+    // with pre-mutation data. Same one-way hazard the boot loader
+    // already guards against via isStaleBootLoadResolve.
+    const issuedRefetchGeneration = historyRefetchGenerationRef.current
     const plan = resolveHistoryRefetch({
       logArgv,
       fullGraph,
@@ -144,7 +153,11 @@ export function useHistoryRefetch(
         limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
         extraRefs: stashHashes,
       }))
-      if (!mountedRef.current || historyRefetchRequestRef.current !== requestId) {
+      if (
+        !mountedRef.current ||
+        historyRefetchRequestRef.current !== requestId ||
+        historyRefetchGenerationRef.current !== issuedRefetchGeneration
+      ) {
         return
       }
       if (!nextRows) {

@@ -19,6 +19,7 @@ import {
   useWorktreeStageActions,
   type UseWorktreeStageActionsDeps,
 } from './useWorktreeStageActions'
+import { revertFile } from '../../../git/statusActions'
 import type { WorktreeFile } from '../../../git/statusData'
 import type { WorktreeHunkOverview } from '../../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../../git/worktreeDiffData'
@@ -28,6 +29,8 @@ jest.mock('../../../git/statusActions', () => ({
   unstageFile: jest.fn().mockResolvedValue({ ok: true, message: 'unstaged file' }),
   revertFile: jest.fn().mockResolvedValue({ ok: true, message: 'reverted file' }),
 }))
+
+const revertFileMock = revertFile as jest.MockedFunction<typeof revertFile>
 jest.mock('../../../git/statusHunks', () => ({
   ...jest.requireActual('../../../git/statusHunks'),
   stageHunk: jest.fn().mockResolvedValue(undefined),
@@ -151,5 +154,40 @@ describe('useWorktreeStageActions — refresh + diff/hunks clear on every mutati
     expect(deps.refreshWorktreeContext).toHaveBeenCalledTimes(1)
     expect(deps.setWorktreeDiff).toHaveBeenCalledWith(undefined)
     expect(deps.setWorktreeHunks).toHaveBeenCalledWith(undefined)
+  })
+})
+
+describe('revertSelectedFile — status kind reflects outcome (#1602)', () => {
+  afterEach(() => {
+    revertFileMock.mockReset()
+    revertFileMock.mockResolvedValue({ ok: true, message: 'reverted file' })
+  })
+
+  it('dispatches no kind (default/success styling) on a successful revert', async () => {
+    revertFileMock.mockResolvedValueOnce({ ok: true, message: 'Reverted src/app.ts' })
+    const deps = baseDeps()
+    const { revertSelectedFile } = useWorktreeStageActions(fakeReact(), deps)
+
+    await revertSelectedFile()
+
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: 'setStatus',
+      value: 'Reverted src/app.ts',
+      kind: undefined,
+    })
+  })
+
+  it('dispatches kind: "error" on a failed revert instead of the neutral auto-dismissing info style', async () => {
+    revertFileMock.mockResolvedValueOnce({ ok: false, message: 'error: permission denied' })
+    const deps = baseDeps()
+    const { revertSelectedFile } = useWorktreeStageActions(fakeReact(), deps)
+
+    await revertSelectedFile()
+
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: 'setStatus',
+      value: 'error: permission denied',
+      kind: 'error',
+    })
   })
 })

@@ -1,4 +1,4 @@
-import { cellWidth, expandTabs, truncateCells, truncatePathCells, wrapCells } from './text'
+import { cellWidth, expandTabs, padCells, truncateCells, truncatePathCells, wrapCells } from './text'
 
 describe('log Ink text helpers', () => {
   describe('expandTabs (#1393)', () => {
@@ -46,6 +46,29 @@ describe('log Ink text helpers', () => {
   it('defaults to the unicode ellipsis, matching truncatePathCells (#1366)', () => {
     expect(truncateCells('hello world', 8)).toBe('hello w…')
     expect(cellWidth(truncateCells('hello world', 8))).toBe(8)
+  })
+
+  // #1624 — String.padEnd counts UTF-16 code units, so a wide-glyph name
+  // padded to a cellWidth-derived column overshoots by one fill char per
+  // wide character. padCells pads by cell budget instead.
+  describe('padCells (#1624)', () => {
+    it('pads an ASCII string identically to String.padEnd', () => {
+      expect(padCells('main', 8)).toBe('main'.padEnd(8))
+    })
+
+    it('pads a wide-glyph name so its cell width matches an ASCII name in the same column', () => {
+      const wide = padCells('変更', 8)
+      const ascii = padCells('main', 8)
+      expect(cellWidth(wide)).toBe(cellWidth(ascii))
+      expect(cellWidth(wide)).toBe(8)
+      // Naive .padEnd would instead produce 2 (wide chars, 4 cells) + 6
+      // (fill chars) = 10 cells — 2 cells too wide for the column.
+      expect(wide).not.toBe('変更'.padEnd(8))
+    })
+
+    it('returns the value unchanged when it already meets or exceeds the width', () => {
+      expect(padCells('feat/日本語対応', 4)).toBe('feat/日本語対応')
+    })
   })
 
   it('falls back to the ASCII ellipsis under { ascii: true }', () => {

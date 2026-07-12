@@ -80,6 +80,12 @@ export type UseCommitSplitActionsDeps = {
   refreshHistoryRows: () => Promise<unknown>
   /** Re-fetch the worktree context after the split applies. */
   refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<unknown>
+  /**
+   * Mount sentinel (#1627) — guards the `clearRecentCommits` timer's
+   * dispatch so it never fires into a torn-down tree, mirroring
+   * `useStatusAutoDismiss`'s sibling timer.
+   */
+  mountedRef: ReactTypes.MutableRefObject<boolean>
 }
 
 export type UseCommitSplitActionsResult = {
@@ -100,7 +106,16 @@ export function useCommitSplitActions(
     refreshContext,
     refreshHistoryRows,
     refreshWorktreeContext,
+    mountedRef,
   } = deps
+
+  // #1627 — the just-landed marker's auto-clear timer. A bare unscoped
+  // `setTimeout` let a rapid second apply's markers get wiped early by
+  // the FIRST apply's timer (still counting down from its own +5s), and
+  // dispatched unconditionally even after unmount. Stored so each new
+  // apply cancels its predecessor's still-pending timer before
+  // scheduling its own.
+  const recentCommitsTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // AbortController for the in-flight plan generation (#1338 pattern —
   // same shape as the changelog / commit-draft cancels). Esc used to be
@@ -386,9 +401,21 @@ export function useCommitSplitActions(
     if (commitHashes.length > 0) {
       // Audit finding #9: timestamp captured at dispatch time.
       dispatch({ type: 'markRecentCommits', hashes: commitHashes, markedAt: Date.now() })
+      // #1627 — cancel a still-pending predecessor timer before
+      // scheduling this apply's own, so a rapid second split's markers
+      // survive their full +5s instead of getting cut short by the
+      // first apply's earlier-firing timeout.
+      if (recentCommitsTimerRef.current !== null) {
+        clearTimeout(recentCommitsTimerRef.current)
+      }
       // DevSkim: ignore DS172411 — function literal, fixed delay,
       // no caller-supplied data flowing through.
-      setTimeout(() => dispatch({ type: 'clearRecentCommits' }), 5000)
+      recentCommitsTimerRef.current = setTimeout(() => {
+        recentCommitsTimerRef.current = null
+        if (mountedRef.current) {
+          dispatch({ type: 'clearRecentCommits' })
+        }
+      }, 5000)
     }
 
     // If the workflow reported success but zero commits actually

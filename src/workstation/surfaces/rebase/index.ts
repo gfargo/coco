@@ -21,6 +21,7 @@ import { focusBorderColor, panelTitle } from '../../runtime/utils'
 const ACTION_ORDER: RebaseTodoAction[] = ['pick', 'squash', 'fixup', 'drop', 'reword', 'edit']
 
 function actionColor(action: RebaseTodoAction, theme: LogInkTheme): string | undefined {
+  if (theme.noColor) return undefined
   switch (action) {
     case 'pick':
       return undefined
@@ -83,7 +84,7 @@ export function renderRebaseSurface(ctx: SurfaceRenderContext): ReactTypes.React
       children.push(
         h(Text, {
           key: `rebase-row-${row.sha}`,
-          color: isSelected ? theme.colors.accent : actionColor(row.action, theme),
+          color: isSelected ? (theme.noColor ? undefined : theme.colors.accent) : actionColor(row.action, theme),
           bold: isSelected,
           dimColor: !isSelected && row.action === 'drop',
         }, truncateCells(line, Math.max(10, width - 4)))

@@ -186,10 +186,20 @@ export function useStashDiffHydration(
       // `active` false so the in-flight branch never resets it — without this
       // the flag stays stuck `true`.
       setStashDiffLoading(false)
+      // #1621 — also clear the stale lines: leaving the previous stash's
+      // patch in place while the source deactivates would let it feed
+      // file-jump offsets / yank paths for a view that's no longer showing
+      // it.
+      setStashDiffLines(undefined)
       return
     }
     let active = true
     setStashDiffLoading(true)
+    // #1621 — clear the previous stash's lines before fetching the newly
+    // cursored one, so a slow `git stash show -p` can't leave the wrong
+    // patch on screen (and feeding `[`/`]` file-jump + yank) under the new
+    // stash's header.
+    setStashDiffLines(undefined)
     void (async () => {
       const lines = await safe(getStashDiff(git, stashDiffRef!))
       if (active) {

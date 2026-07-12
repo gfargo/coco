@@ -82,7 +82,7 @@ export function renderChangelogSurface(ctx: SurfaceRenderContext): ReactTypes.Re
   } else if (view.status === 'error') {
     headerRight = 'error'
     lines = [
-      h(Text, { key: 'changelog-error', color: 'red' },
+      h(Text, { key: 'changelog-error', color: theme.noColor ? undefined : theme.colors.danger },
         `Changelog generation failed.`),
       h(Text, { key: 'changelog-error-msg', dimColor: true },
         view.error || 'No additional detail.'),

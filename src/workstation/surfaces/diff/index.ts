@@ -431,13 +431,15 @@ export function renderDiffSurface(
       state.diffPreviewOffset + visibleRows
     )
     const hunkCount = commitDiffHunkOffsets?.length || 0
+    // #1628 — shares `hunkIndexAtOffset` with the worktree branch below
+    // instead of a reversed findIndex: with offset before the first hunk,
+    // findIndex returned -1 (clamped to reversed-index 0), so the label
+    // computed `hunkCount - 0` and showed "Hunk N/N" instead of "Hunk 1/N".
     const currentHunkIndex = hunkCount > 0
-      ? Math.max(0, [...(commitDiffHunkOffsets || [])]
-          .reverse()
-          .findIndex((offset) => offset <= state.diffPreviewOffset))
+      ? hunkIndexAtOffset(state.diffPreviewOffset, commitDiffHunkOffsets || [])
       : 0
     const currentHunkLabel = hunkCount > 0
-      ? `Hunk ${Math.min(hunkCount - currentHunkIndex, hunkCount)}/${hunkCount}`
+      ? `Hunk ${currentHunkIndex + 1}/${hunkCount}`
       : 'No hunks for this file.'
 
     const baseHeaderLines: string[] = filePreviewLoading

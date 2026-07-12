@@ -3,6 +3,7 @@ import { loadConfig } from '../config/utils/loadConfig'
 import { Logger } from './logger'
 import { CommandHandler } from '../types'
 import { LangChainAuthenticationError, LangChainNetworkError } from '../langchain/errors'
+import { handleLangChainError } from '../langchain/errorHandler'
 
 jest.mock('../config/utils/loadConfig')
 
@@ -50,6 +51,31 @@ describe('commandExecutor — global --quiet wiring', () => {
     expect(stderrSpy).toHaveBeenCalled()
     // The auth error must not leak to stdout
     expect(logSpy).not.toHaveBeenCalled()
+    expect(process.exitCode).toBe(1)
+  })
+
+  // Regression (#1637): a real provider 401 (invalid/revoked key) used to
+  // surface as a generic execution error — the curated authentication
+  // troubleshooting block only ever fired for a locally-missing key. This
+  // exercises the full pipeline: a raw provider-shaped error classified by
+  // handleLangChainError, then rendered by commandExecutor's formatter.
+  it('renders the authentication formatter for a raw provider 401, not the generic one', async () => {
+    const handler: CommandHandler<never> = async () => {
+      handleLangChainError(
+        { status: 401, message: 'Incorrect API key provided' },
+        'executeChain: Chain execution failed',
+        { provider: 'openai', endpoint: 'https://api.openai.com' }
+      )
+    }
+    await commandExecutor(handler)({ quiet: true } as never)
+
+    const written = stderrSpy.mock.calls.map((call) => String(call[0])).join('')
+    expect(written).toContain('Authentication failed')
+    expect(written).toContain('OPENAI_API_KEY')
+    // The generic formatter prints the raw error message unconditionally;
+    // the auth formatter only does under --verbose (off here) — its
+    // absence confirms the curated path rendered, not the generic one.
+    expect(written).not.toContain('Incorrect API key provided')
     expect(process.exitCode).toBe(1)
   })
 

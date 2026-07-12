@@ -1,4 +1,4 @@
-import { encoding_for_model, get_encoding, TiktokenModel } from 'tiktoken'
+import { encoding_for_model, get_encoding, Tiktoken, TiktokenModel } from 'tiktoken'
 import { findProviderDefinition } from '../langchain/providers/registry'
 
 export type BPE_Tokenizer = Awaited<ReturnType<typeof getTikToken>>
@@ -30,17 +30,37 @@ function fallbackEncodingForModel(modelName: string) {
 }
 
 /**
+ * Process-lifetime cache of tiktoken encoders, keyed by the `modelName`
+ * passed in. tiktoken's WASM-backed `Tiktoken` handles are never
+ * garbage-collected — each `encoding_for_model` call permanently grows the
+ * WASM heap until `.free()` is called (#1641). Every call site re-resolves
+ * the counter per invocation rather than holding one for a command's
+ * lifetime, so without this cache a long-lived workstation session that
+ * repeatedly runs commit/review/recap flows would leak one encoder per
+ * instantiation. Bounded to the handful of distinct model names actually
+ * used in a process, so it never needs eviction or `.free()`.
+ */
+const tikTokenCache = new Map<string, Tiktoken>()
+
+/**
  * Retrieves a TikToken for the specified model.
  *
  * @param {TiktokenModel} modelName - The name of the TiktokenModel.
  * @returns A Promise that resolves to the TikToken.
  */
 export const getTikToken = async (modelName: TiktokenModel) => {
+  const cached = tikTokenCache.get(modelName)
+  if (cached) return cached
+
+  let tokenizer: Tiktoken
   try {
-    return encoding_for_model(modelName)
+    tokenizer = encoding_for_model(modelName)
   } catch {
-    return fallbackEncodingForModel(modelName)
+    tokenizer = fallbackEncodingForModel(modelName)
   }
+
+  tikTokenCache.set(modelName, tokenizer)
+  return tokenizer
 }
 /**
  * Retrieves the token counter for a given model name.

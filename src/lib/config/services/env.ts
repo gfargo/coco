@@ -103,7 +103,13 @@ export function loadEnvConfig<ConfigType = Config>(
       handleServiceEnvVar(envConfig.service as LLMService, key, envValue, effectiveProvider)
       foundAny = true
     } else {
-      if (key === 'service' || !envValue) {
+      // #1635 — `!envValue` dropped legitimate falsy overrides (boolean
+      // `false`, and would drop a numeric `0` for any future numeric
+      // top-level key), so `COCO_VERBOSE=false` could never turn OFF a
+      // `true` set by a lower config layer. `envValue === undefined` is
+      // already filtered above; only an explicitly empty string is
+      // "not really set" here.
+      if (key === 'service' || envValue === '') {
         return
       }
 

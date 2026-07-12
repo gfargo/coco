@@ -36,6 +36,35 @@ describe('loadEnvConfig', () => {
     delete process.env.COCO_VERBOSE
   })
 
+  // Regression (#1635): `!envValue` dropped legitimate falsy overrides, so
+  // an env var explicitly set to `false` could never turn OFF a boolean a
+  // lower config layer (git config / project config) had set to `true` —
+  // env is supposed to outrank both per loadConfig's documented precedence.
+  it('lets COCO_VERBOSE=false override a true set by a lower config layer', () => {
+    process.env.COCO_VERBOSE = 'false'
+    const config = loadEnvConfig({ ...defaultConfig, verbose: true })
+    expect(config.verbose).toBe(false)
+    delete process.env.COCO_VERBOSE
+  })
+
+  it('reports the env layer as active when only a falsy override was found', () => {
+    process.env.COCO_VERBOSE = 'false'
+    const { config, active } = loadEnvConfig(
+      { ...defaultConfig, verbose: true },
+      { returnSource: true }
+    )
+    expect(config.verbose).toBe(false)
+    expect(active).toBe(true)
+    delete process.env.COCO_VERBOSE
+  })
+
+  it('still treats an explicitly empty env var as not set', () => {
+    process.env.COCO_VERBOSE = ''
+    const config = loadEnvConfig({ ...defaultConfig, verbose: true })
+    expect(config.verbose).toBe(true)
+    delete process.env.COCO_VERBOSE
+  })
+
   it('should load environment variables with ignoredFiles', () => {
     process.env.COCO_IGNORED_FILES = 'package-lock.json,node_modules'
     const config = loadEnvConfig(defaultConfig)

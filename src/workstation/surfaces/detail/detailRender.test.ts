@@ -92,6 +92,24 @@ describe('detail surface — shared-signature preview panels', () => {
     )
   })
 
+  // Regression (#1632): the Summary field wrapped to an unbounded number
+  // of visual lines — unlike Body just below it, which already caps at
+  // 12 wrapped lines — so a long pasted subject could push this panel's
+  // height well past its column budget.
+  it('caps a long wrapped Summary the same generous-but-bounded way Body already is', () => {
+    const base = createLogInkState([])
+    const longSummary = Array.from({ length: 8 }, (_, i) => `word${i + 1}`).join(' ')
+    const state = makeState({
+      commitCompose: { ...base.commitCompose, summary: longSummary, editing: false, field: 'summary' },
+    })
+    const tree = renderCommitPanel(
+      createElement, components, state, {}, createLogInkContextStatus('ready'), 30, theme, false
+    )
+    const lines = renderToLines(tree, Text, Box)
+    const summaryLines = lines.filter((line) => /word\d/.test(line))
+    expect(summaryLines.length).toBeLessThanOrEqual(3)
+  })
+
   it('renders a loading branch preview', () => {
     const loading = updateLogInkContextStatus(
       createLogInkContextStatus('idle'),
@@ -190,6 +208,45 @@ describe('renderHistoryInspector', () => {
       expect(text).toContain('Changed files:')
       expect(text).toContain('index.ts')
       expect(text).toContain('Actions:')
+    })
+  })
+
+  describe('single-cursor invariant across tabs (#1601)', () => {
+    // Tall-stacked mode (tabbed: false) renders the file list AND the
+    // actions section simultaneously — the only shape where two
+    // sections could both look cursor-active at once.
+    function renderTallStacked(inspectorTab: 'inspector' | 'actions'): ReactElement {
+      return renderHistoryInspector(
+        createElement,
+        components,
+        makeState({ inspectorTab, inspectorActionIndex: 0, selectedFileIndex: 0 }),
+        {},
+        createLogInkContextStatus('ready'),
+        HISTORY_DETAIL,
+        false,
+        undefined,
+        false,
+        50,
+        false,
+        theme,
+        true
+      )
+    }
+
+    it('actions tab active: the file list shows no cursor, the actions section does', () => {
+      const lines = renderToLines(renderTallStacked('actions'), Text, Box)
+      const fileLine = lines.find((l) => l.includes('index.ts'))
+      expect(fileLine).toBeDefined()
+      expect(fileLine!.trimStart().startsWith('>')).toBe(false)
+      expect(lines.join('\n')).toContain('[Actions]')
+    })
+
+    it('inspector tab active: the file list shows the cursor, the actions section does not', () => {
+      const lines = renderToLines(renderTallStacked('inspector'), Text, Box)
+      const fileLine = lines.find((l) => l.includes('index.ts'))
+      expect(fileLine).toBeDefined()
+      expect(fileLine!.trimStart().startsWith('>')).toBe(true)
+      expect(lines.join('\n')).not.toContain('[Actions]')
     })
   })
 })

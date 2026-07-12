@@ -266,7 +266,11 @@ function renderCommitFileList(
   return visible.map((file, offset) => {
     const index = startIndex + offset
     const isSelected = index === clamped
-    const cursor = isSelected ? '>' : ' '
+    // #1601 — honor `focused`: when another section owns the cursor
+    // (e.g. the Actions tab), blank this list's cursor slot and drop
+    // the bold instead of always rendering it, so only one section
+    // ever shows an active-looking cursor at a time.
+    const cursor = isSelected && focused ? '>' : ' '
     const stats = formatChangedFileStats(file)
     const renamed = file.oldPath ? ` (was ${file.oldPath})` : ''
     const statusCode = file.status.padEnd(3)
@@ -290,7 +294,7 @@ function renderCommitFileList(
       key: `commit-file-${index}`,
       color: statusCodeColor(file.status, theme),
 
-      bold: isSelected,
+      bold: isSelected && focused,
     }, label)
   })
 }
@@ -934,7 +938,13 @@ export function renderCommitPanel(
   const summaryLabel = `${summaryMarker} Summary: `
   const summaryColor = hasSummary && !theme.noColor ? theme.colors.accent : undefined
   const summaryValueWidth = Math.max(4, width - 4 - cellWidth(summaryLabel))
+  // #1632 — capped the same generous-but-bounded way Body is just below
+  // (`.slice(0, 12)`): an unbounded wrap let a long pasted subject (or
+  // over-long AI draft) push this panel's height past its column budget.
+  // 3 lines is plenty for a subject (a summary that long is already well
+  // past any conventional-commit length convention).
   const summaryWrapped = wrapCells(`${compose.summary || '<empty>'}${summaryCursor}`, summaryValueWidth)
+    .slice(0, 3)
   const trailerLines = [
     ...(compose.message ? ['', compose.message] : []),
     ...(compose.details || []).map((line) => `  ${line}`),

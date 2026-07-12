@@ -67,12 +67,55 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
       : 'No worktree info yet'
   const summaryCursor = compose.editing && compose.field === 'summary' ? '_' : ''
   const bodyCursor = compose.editing && compose.field === 'body' ? '_' : ''
-  const bodyRowsAvailable = Math.max(4, bodyRows - 10)
   // Wrap each source line of the body to the panel width so long messages
   // line-wrap inside the compose surface instead of getting trimmed by an
   // outer truncate(line, 140). The 2-space indent eats 2 cells; chrome
   // (border + paddingX) eats 4 — same budget as renderCommitPanel.
   const bodyTextWidth = Math.max(8, width - 6)
+  // Summary now renders on its own indented line under the label (like the
+  // body), so it wraps at the full content width instead of the cramped
+  // "Summary  " (9) + chrome budget it had when label and value shared a row.
+  //
+  // #1632 — capped and windowed the same way as Body below: an
+  // unbounded wrap let a long pasted subject (or over-long AI draft)
+  // grow the panel past bodyRows, pushing the state line and footer
+  // off-screen. 3 lines is plenty for a subject (the counter already
+  // flags anything past 72 chars); one of those rows is spent on the
+  // overflow marker once capped, same "pin to the tail while editing"
+  // behavior as Body.
+  const summaryMaxVisibleLines = 3
+  const allSummaryLines = compose.summary
+    ? compose.summary.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth))
+    : ['<empty>']
+  const summaryEditingActive = compose.editing && compose.field === 'summary'
+  let summaryVisualLines = allSummaryLines
+  let summaryOverflowMarker: { text: string; above: boolean } | undefined
+  if (allSummaryLines.length > summaryMaxVisibleLines) {
+    const visibleCount = Math.max(1, summaryMaxVisibleLines - 1)
+    const hidden = allSummaryLines.length - visibleCount
+    const plural = hidden === 1 ? '' : 's'
+    if (summaryEditingActive) {
+      summaryVisualLines = allSummaryLines.slice(-visibleCount)
+      summaryOverflowMarker = {
+        text: `${theme.ascii ? '^' : '↑'} ${hidden} earlier line${plural}`,
+        above: true,
+      }
+    } else {
+      summaryVisualLines = allSummaryLines.slice(0, visibleCount)
+      summaryOverflowMarker = {
+        text: `${theme.ascii ? 'v' : '↓'} ${hidden} more line${plural}`,
+        above: false,
+      }
+    }
+  }
+  // The Body budget below assumes a ~1-line summary (see its own
+  // comment); deduct however many EXTRA rows the summary section
+  // actually renders (wrapped lines beyond the first, plus the
+  // overflow marker row when capped) so the combined sections always
+  // fit bodyRows.
+  const summaryRenderedRowCount = summaryVisualLines.length + (summaryOverflowMarker ? 1 : 0)
+  const summaryExtraRows = Math.max(0, summaryRenderedRowCount - 1)
+  const bodyRowsAvailable = Math.max(4, bodyRows - 10 - summaryExtraRows)
   const allBodyLines = compose.body
     ? compose.body.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth))
     : ['<empty>']
@@ -104,12 +147,6 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
       }
     }
   }
-  // Summary now renders on its own indented line under the label (like the
-  // body), so it wraps at the full content width instead of the cramped
-  // "Summary  " (9) + chrome budget it had when label and value shared a row.
-  const summaryVisualLines = compose.summary
-    ? compose.summary.split('\n').flatMap((line) => wrapCells(line, bodyTextWidth))
-    : ['<empty>']
   // Subject length drives a subtle counter on the Summary label: dim under
   // 50, warning past the conventional 50-char soft limit, danger past 72.
   // Counted in code points so multibyte subjects aren't over-counted.
@@ -205,7 +242,13 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
   ),
   h(Text, undefined, ''),
   renderSectionHeader('Summary', 'summary', summaryLength > 0 ? summaryLength : undefined),
+  ...(summaryOverflowMarker?.above
+    ? [h(Text, { key: 'compose-summary-overflow-above', dimColor: true }, `  ${summaryOverflowMarker.text}`)]
+    : []),
   ...renderSectionContent(summaryVisualLines, 'summary', summaryCursor),
+  ...(summaryOverflowMarker && !summaryOverflowMarker.above
+    ? [h(Text, { key: 'compose-summary-overflow-below', dimColor: true }, `  ${summaryOverflowMarker.text}`)]
+    : []),
   h(Text, undefined, ''),
   renderSectionHeader('Body', 'body'),
   ...(bodyOverflowMarker?.above

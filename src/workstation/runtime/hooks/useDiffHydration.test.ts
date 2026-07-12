@@ -12,16 +12,21 @@ import {
   useWorktreeHunksState,
 } from './useDiffHydration'
 import { getCommitFilePreview, GitCommitFilePreview } from '../../../commands/log/data'
+import { getStashDiff } from '../../../git/stashData'
 import type { WorktreeFile } from '../../../git/statusData'
 import type * as ReactTypes from 'react'
 
 jest.mock('../../../commands/log/data', () => ({
   getCommitFilePreview: jest.fn(),
 }))
+jest.mock('../../../git/stashData', () => ({
+  getStashDiff: jest.fn(),
+}))
 
 const getCommitFilePreviewMock = getCommitFilePreview as jest.MockedFunction<
   typeof getCommitFilePreview
 >
+const getStashDiffMock = getStashDiff as jest.MockedFunction<typeof getStashDiff>
 
 type EffectFn = () => void | (() => void)
 
@@ -238,6 +243,103 @@ describe('loader bail clears its loading flag', () => {
     runEffect()
     expect(setFilePreview).toHaveBeenCalledWith(undefined)
     expect(setFilePreviewLoading).toHaveBeenCalledWith(false)
+  })
+})
+
+/**
+ * Regression for #1621: switching between stashes used to leave the
+ * previous stash's patch on screen — the guard-fail bail and the re-fire
+ * path only ever reset `stashDiffLoading`, never `stashDiffLines`. Uses a
+ * multi-render harness (unlike `effectReact()` above, which only supports a
+ * single registration) so a second `useStashDiffHydration` call with a new
+ * `stashDiffRef` can be exercised against the same mocks, mirroring a real
+ * cursor-move re-render.
+ */
+describe('useStashDiffHydration clears stale lines (#1621)', () => {
+  const flush = async (): Promise<void> => {
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+  }
+
+  function multiEffectReact(): { React: typeof import('react'); effects: EffectFn[] } {
+    const effects: EffectFn[] = []
+    const React = {
+      useEffect: (fn: EffectFn) => {
+        effects.push(fn)
+      },
+    } as unknown as typeof import('react')
+    return { React, effects }
+  }
+
+  beforeEach(() => {
+    getStashDiffMock.mockReset()
+  })
+
+  it('clears the previous stash lines immediately when a new stash is cursored, before the fetch resolves', async () => {
+    getStashDiffMock.mockResolvedValueOnce(['+stash A diff'])
+    let resolveB: ((lines: string[]) => void) | undefined
+    getStashDiffMock.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveB = resolve })
+    )
+
+    const setStashDiffLines = jest.fn()
+    const setStashDiffLoading = jest.fn()
+    const { React, effects } = multiEffectReact()
+
+    // Render 1: stash A cursored — fetch resolves.
+    useStashDiffHydration(React, {
+      git: {} as never,
+      activeView: 'diff',
+      diffSource: 'stash',
+      stashDiffRef: 'stash@{0}',
+      setStashDiffLines,
+      setStashDiffLoading,
+    })
+    const cleanupA = effects[0]()
+    await flush()
+    expect(setStashDiffLines).toHaveBeenLastCalledWith(['+stash A diff'])
+
+    // React tears down effect A (cleanup) before running effect B, exactly
+    // as it would on a real ref change.
+    cleanupA?.()
+
+    // Render 2: stash B cursored — fetch is still in flight.
+    useStashDiffHydration(React, {
+      git: {} as never,
+      activeView: 'diff',
+      diffSource: 'stash',
+      stashDiffRef: 'stash@{1}',
+      setStashDiffLines,
+      setStashDiffLoading,
+    })
+    effects[1]()
+
+    // Stash A's lines must be cleared right away, not left on screen
+    // until B's slower fetch resolves.
+    expect(setStashDiffLines).toHaveBeenLastCalledWith(undefined)
+    expect(setStashDiffLoading).toHaveBeenLastCalledWith(true)
+
+    resolveB?.(['+stash B diff'])
+    await flush()
+    expect(setStashDiffLines).toHaveBeenLastCalledWith(['+stash B diff'])
+  })
+
+  it('clears the lines on the guard-fail bail (view changes away from the stash diff)', () => {
+    const setStashDiffLines = jest.fn()
+    const setStashDiffLoading = jest.fn()
+    const { React, effects } = multiEffectReact()
+
+    useStashDiffHydration(React, {
+      git: {} as never,
+      activeView: 'history', // not 'diff' → guard fails
+      diffSource: 'stash',
+      stashDiffRef: 'stash@{0}',
+      setStashDiffLines,
+      setStashDiffLoading,
+    })
+    effects[0]()
+
+    expect(setStashDiffLines).toHaveBeenCalledWith(undefined)
+    expect(setStashDiffLoading).toHaveBeenCalledWith(false)
   })
 })
 

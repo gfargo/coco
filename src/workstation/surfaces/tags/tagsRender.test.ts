@@ -13,6 +13,8 @@ import {
 import type { GitTagRef, TagOverview } from '../../../git/tagData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderTagsSurface } from './index'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
+import { cellWidth } from '../../chrome/text'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -34,7 +36,7 @@ function makeTag(overrides: Partial<GitTagRef> = {}): GitTagRef {
 
 function render(
   state: LogInkState,
-  options: { tags?: TagOverview; loading?: boolean } = {}
+  options: { tags?: TagOverview; loading?: boolean; bodyRows?: number } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = options.tags ? { tags: options.tags } : {}
@@ -47,7 +49,7 @@ function render(
     state,
     context,
     contextStatus,
-    bodyRows: 30,
+    bodyRows: options.bodyRows ?? 30,
     width: 120,
     theme,
   })
@@ -85,5 +87,58 @@ describe('renderTagsSurface', () => {
 
   it('structural snapshot — populated', () => {
     expect(render(makeState(), { tags: { tags: [makeTag()] } })).toMatchSnapshot()
+  })
+
+  describe('row budget with both scroll indicators (#1581, mirrors #1392)', () => {
+    // 30 tags at bodyRows: 12 (listRows would be 8 with no reduction) —
+    // cursored mid-list so BOTH "more above" and "more below" render at
+    // once. Before the fix, listRows only reserved a single spare row
+    // for the indicator pair, so the panel grew past its box.
+    const manyTags: TagOverview = {
+      tags: Array.from({ length: 30 }, (_, i) => makeTag({ name: `v${i}.0.0`, subject: `release ${i}` })),
+    }
+    // The panel's own top/bottom border isn't part of the flattened
+    // content lines renderToLines counts, but it still costs 2 rows
+    // against bodyRows (mirrors renderBudget.test.ts's BORDER_ROWS).
+    const BORDER_ROWS = 2
+
+    it('keeps the total rendered row count within bodyRows, no filter', () => {
+      const tree = render(makeState({ selectedTagIndex: 15 }), { tags: manyTags, bodyRows: 12 })
+      const lines = renderToLines(tree, Text, Box)
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(12)
+    })
+
+    it('keeps the total rendered row count within bodyRows, filter mode active', () => {
+      const tree = render(makeState({ selectedTagIndex: 15, filterMode: true }), {
+        tags: manyTags,
+        bodyRows: 12,
+      })
+      const lines = renderToLines(tree, Text, Box)
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(12)
+    })
+  })
+
+  // Regression (#1624): the name-column width was computed from
+  // `tag.name.length` (UTF-16 code units) and padded with `.padEnd`
+  // (code units again), so a wide-glyph tag name mis-measured and shifted
+  // the subject column relative to an ASCII-named row.
+  describe('wide-glyph tag names align the subject column (#1624)', () => {
+    function subjectColumnOffset(tree: ReactElement, subject: string): number {
+      const lines = renderToLines(tree, Text, Box)
+      const line = lines.find((entry) => entry.endsWith(` ${subject}`))
+      if (!line) throw new Error(`no rendered line ended with " ${subject}"`)
+      return cellWidth(line.slice(0, line.length - (subject.length + 1)))
+    }
+
+    it('a CJK tag name lands the subject at the same cell offset as an ASCII name', () => {
+      const asciiTree = render(makeState(), {
+        tags: { tags: [makeTag({ name: 'ab', subject: 'X' })] },
+      })
+      const wideTree = render(makeState(), {
+        tags: { tags: [makeTag({ name: '日本', subject: 'X' })] },
+      })
+
+      expect(subjectColumnOffset(asciiTree, 'X')).toBe(subjectColumnOffset(wideTree, 'X'))
+    })
   })
 })

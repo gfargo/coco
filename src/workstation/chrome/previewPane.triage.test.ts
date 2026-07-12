@@ -281,4 +281,29 @@ describe('hydrated triage preview sections (inspector hydration follow-up)', () 
     expect(lines.some((l) => l.includes('earlier comment'))).toBe(true)
     expect(lines.some((l) => l.includes('@reviewer-0'))).toBe(false)
   })
+
+  it('reviews section truncates to the most recent 5 + summarizes the rest (#1589)', () => {
+    const detail = {
+      number: 1,
+      body: '',
+      comments: [],
+      statusCheckRollup: [],
+      reviews: Array.from({ length: 20 }, (_, i) => ({
+        author: `reviewer-${i}`,
+        state: 'APPROVED',
+        body: `review ${i}`,
+        submittedAt: '',
+      })),
+    }
+    const lines = formatPullRequestTriagePreview(pr, detail).map(stripLine)
+
+    expect(lines.some((l) => l.startsWith('Reviews (20)'))).toBe(true)
+    // Last 5 visible.
+    for (let i = 15; i < 20; i++) {
+      expect(lines.some((l) => l.includes(`@reviewer-${i}`))).toBe(true)
+    }
+    // Older ones summarized, not individually rendered.
+    expect(lines.some((l) => l.includes('15 earlier review'))).toBe(true)
+    expect(lines.some((l) => l.includes('@reviewer-0 '))).toBe(false)
+  })
 })

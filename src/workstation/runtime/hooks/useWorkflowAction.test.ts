@@ -4,7 +4,7 @@ import { createLogInkState } from '../inkViewModel'
 import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
 import { checkoutBranch, checkoutBranchByName, deleteBranches, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
 import { cherryPickCommit, autosquashRebase } from '../../../git/historyActions'
-import { createStash, dropStashes } from '../../../git/stashActions'
+import { createStash, dropStashes, restoreStash } from '../../../git/stashActions'
 import { continueOperation } from '../../../git/operationActions'
 import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowAction'
 
@@ -52,6 +52,7 @@ jest.mock('../../../git/stashActions', () => {
     ...actual,
     createStash: jest.fn(),
     dropStashes: jest.fn(),
+    restoreStash: jest.fn(),
   }
 })
 
@@ -1017,5 +1018,73 @@ describe('frame-scoped force-push/force-delete escalations and batch freezes (#1
     await run
 
     expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setMarks' }))
+  })
+})
+
+const restoreStashMock = restoreStash as jest.MockedFunction<typeof restoreStash>
+
+const stashEntry = {
+  ref: 'stash@{0}',
+  hash: 'abc1234',
+  baseHash: 'def5678',
+  date: '2026-05-18',
+  branch: 'main',
+  message: 'WIP on main: abc1234 feat',
+  files: ['src/app.ts'],
+}
+
+describe('undo-drop-stash frame guard (#1607)', () => {
+  beforeEach(() => {
+    dropStashesMock.mockReset()
+    restoreStashMock.mockReset()
+    dropStashesMock.mockResolvedValue({ ok: true, message: 'Dropped stash@{0}' })
+    restoreStashMock.mockResolvedValue({ ok: true, message: 'Restored stash' })
+  })
+
+  it('refuses undo-drop-stash when the repo frame changed since the drop, instead of restoring the parent hash against the child git', async () => {
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { stashes: { stashes: [stashEntry] } } as never,
+      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    await runWorkflowAction('drop-stash')
+    expect(dropStashesMock).toHaveBeenCalledTimes(1)
+
+    // Simulate drilling into a submodule — a deeper runtimes stack —
+    // after the drop, before undo-drop-stash runs.
+    harness.beginRender()
+    const { runWorkflowAction: runInChildFrame } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { stashes: { stashes: [] } } as never,
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    await runInChildFrame('undo-drop-stash')
+
+    expect(restoreStashMock).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Nothing to undo — no stash dropped this session',
+    }))
+  })
+
+  it('still restores normally when undo-drop-stash runs in the same repo frame', async () => {
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { stashes: { stashes: [stashEntry] } } as never,
+      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    await runWorkflowAction('drop-stash')
+    await runWorkflowAction('undo-drop-stash')
+
+    expect(restoreStashMock).toHaveBeenCalledWith(expect.anything(), stashEntry.hash, stashEntry.message)
   })
 })

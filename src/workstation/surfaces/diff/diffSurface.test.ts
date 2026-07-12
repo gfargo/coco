@@ -251,3 +251,74 @@ describe('PR diff surface (#1363)', () => {
     expect(text).not.toContain('diff --git a/src/a.ts')
   })
 })
+
+describe('commit diff — current-hunk header (#1628)', () => {
+  // Header lines (`--- a/…`, `+++ b/…`) precede the first `@@` at line 5,
+  // so `commitDiffHunkOffsets[0] > 0` — the exact shape that used to
+  // trigger the reversed-findIndex bug.
+  const previewLines = [
+    'diff --git a/src/a.ts b/src/a.ts',
+    'index abc..def 100644',
+    '--- a/src/a.ts',
+    '+++ b/src/a.ts',
+    '@@ -1 +1 @@',
+    '-old',
+    '+new',
+    '@@ -10 +10 @@',
+    '-ten',
+    '+eleven',
+  ]
+  const hunkOffsets = [4, 7]
+
+  function buildCommitDiff(diffPreviewOffset: number): unknown {
+    const base = createLogInkState([])
+    const ctx = {
+      h: createElement,
+      components,
+      state: {
+        ...base,
+        activeView: 'diff',
+        diffSource: 'commit',
+        focus: 'commits',
+        diffPreviewOffset,
+      },
+      context: {} as unknown as LogInkContext,
+      contextStatus: createLogInkContextStatus('ready'),
+      bodyRows: 30,
+      width: 100,
+      theme,
+    } as unknown as SurfaceRenderContext
+
+    const diff = {
+      worktreeDiff: undefined,
+      worktreeDiffLoading: false,
+      worktreeHunks: undefined,
+      worktreeHunksLoading: false,
+      filePreview: { path: 'src/a.ts', stats: {}, hunks: previewLines },
+      filePreviewLoading: false,
+      commitDiffHunkOffsets: hunkOffsets,
+      selectedDetailFile: { status: 'M', path: 'src/a.ts' },
+      stashDiffLines: undefined,
+      stashDiffLoading: false,
+      compareDiffLines: undefined,
+      compareDiffLoading: false,
+      prDiffLines: undefined,
+      prDiffLoading: false,
+      prDiffError: undefined,
+      syntaxSpans: undefined,
+    } as unknown as DiffSurfaceData
+
+    return renderDiffSurface(ctx, diff)
+  }
+
+  it('shows Hunk 1/N when scrolled to the top, above the first hunk offset', () => {
+    const text = flattenText(buildCommitDiff(0))
+    expect(text).toContain('Hunk 1/2')
+    expect(text).not.toContain('Hunk 2/2')
+  })
+
+  it('advances to Hunk 2/N once the offset reaches the second hunk', () => {
+    const text = flattenText(buildCommitDiff(7))
+    expect(text).toContain('Hunk 2/2')
+  })
+})

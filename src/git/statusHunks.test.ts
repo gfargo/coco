@@ -55,16 +55,20 @@ function createGit(diffOutput = diff) {
 function mockSpawnSuccess() {
   const child = new EventEmitter() as EventEmitter & {
     stderr: EventEmitter
-    stdin: {
+    stdin: EventEmitter & {
       write: jest.Mock
       end: jest.Mock
     }
   }
   child.stderr = new EventEmitter()
-  child.stdin = {
-    write: jest.fn(),
-    end: jest.fn(),
-  }
+  // A real EventEmitter (not a plain object) so tests can simulate stdin
+  // emitting its own `error` event (EPIPE) independently of the child's
+  // own `error`/`close` events — matching real Node child_process
+  // semantics (#1639).
+  const stdin = new EventEmitter() as EventEmitter & { write: jest.Mock; end: jest.Mock }
+  stdin.write = jest.fn()
+  stdin.end = jest.fn()
+  child.stdin = stdin
 
   mockedSpawn.mockReturnValue(child as never)
 
@@ -266,5 +270,39 @@ describe('line-level staging (#1358)', () => {
     const staged = statusHunkTestInternals.parseHunks('src/file.ts', 'staged', multiChangeDiff)[0]
     await expect(stageHunkLines({} as never, staged, { start: 1, end: 2 })).rejects.toThrow('unstaged')
     await expect(revertHunkLines({} as never, staged, { start: 1, end: 2 })).rejects.toThrow('unstaged')
+  })
+
+  // Regression (#1639): `child.stdin.write(patch)` had no `error` listener,
+  // so if `git apply` exits before/while the write is in flight, the
+  // resulting EPIPE surfaces as an unhandled `error` event on the stdin
+  // stream — a writable stream's errors are NOT routed to the child's own
+  // `error` handler. With no listener, Node's EventEmitter throws
+  // synchronously on an unheard `error` event (replicated here since
+  // `child.stdin` is a real EventEmitter in this mock), taking down the
+  // whole process instead of surfacing the compact rejection the `close`
+  // handler already reports.
+  describe('applyPatch resilience to a stdin EPIPE (#1639)', () => {
+    it('does not throw when the child stdin emits an error event, and still rejects via the close handler', async () => {
+      const git = createGit()
+      const child = mockSpawnSuccess()
+      const promise = statusHunkTestInternals.applyPatch(git as never, 'patch text', ['apply', '--cached', '-'])
+
+      // `applyPatch` awaits `git.revparse` before spawning, so the child
+      // (and its stdin `error` listener) isn't attached until after a
+      // microtask tick — wait for that to settle before emitting, same as
+      // the `close` emits elsewhere in this file.
+      await new Promise((resolve) => setImmediate(resolve))
+
+      // git apply died before consuming stdin — the write hits a closed
+      // pipe and Node surfaces it as an `error` event on the stream.
+      expect(() => {
+        child.stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
+      }).not.toThrow()
+
+      child.stderr.emit('data', 'error: patch does not apply')
+      child.emit('close', 1)
+
+      await expect(promise).rejects.toThrow('Failed to apply hunk patch: error: patch does not apply')
+    })
   })
 })

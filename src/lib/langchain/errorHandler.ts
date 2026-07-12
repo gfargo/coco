@@ -1,4 +1,10 @@
-import { LangChainError, LangChainExecutionError, LangChainNetworkError } from './errors'
+import {
+  LangChainAuthenticationError,
+  LangChainError,
+  LangChainExecutionError,
+  LangChainNetworkError,
+  LangChainRateLimitError,
+} from './errors'
 
 // Re-export retry utilities from general utils
 export {
@@ -88,6 +94,69 @@ export function isRetryableError(error: unknown): boolean {
 }
 
 /**
+ * Best-effort error message extraction. Real provider SDK errors are
+ * `Error` instances, but the plain-object shape (`{ status, message }`)
+ * some SDKs / tests use isn't — falling back to `String(error)` for those
+ * would print `[object Object]` instead of the actual message.
+ */
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string') {
+    return (error as { message: string }).message
+  }
+  return String(error)
+}
+
+/** Best-effort extraction of an HTTP status code across provider SDK error shapes. */
+function extractHttpStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const err = error as { status?: number; statusCode?: number; response?: { status?: number } }
+  if (typeof err.status === 'number') return err.status
+  if (typeof err.statusCode === 'number') return err.statusCode
+  if (typeof err.response?.status === 'number') return err.response.status
+  return undefined
+}
+
+/**
+ * #1637 — an actual HTTP auth rejection from the provider (invalid/revoked
+ * key: 401/403, or a provider-specific "invalid_api_key" code) used to fall
+ * through to the generic execution-error wrap below, so the curated
+ * authentication troubleshooting block never rendered. Only
+ * `getDefaultServiceApiKey`'s locally-missing-key check (before any
+ * request) produced `LangChainAuthenticationError`.
+ */
+function isAuthError(error: unknown): boolean {
+  const status = extractHttpStatus(error)
+  if (status === 401 || status === 403) return true
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: string; error?: { code?: string; type?: string } }
+  const code = err.code || err.error?.code
+  const type = err.error?.type
+  return code === 'invalid_api_key' || code === 'authentication_error' || type === 'authentication_error'
+}
+
+/** Substrings that specifically signal a rate limit (narrower than {@link TRANSIENT_ERROR_PATTERNS}). */
+const RATE_LIMIT_MESSAGE_PATTERNS = ['rate limit', 'rate-limit', 'ratelimit', 'too many requests']
+
+/**
+ * #1637 — a 429 that survived the summarize chain's retry/backoff (or any
+ * other provider call that doesn't retry) used to surface as a raw
+ * provider message via the generic execution-error wrap, with no
+ * rate-limit-specific guidance.
+ */
+function isRateLimitError(error: unknown): boolean {
+  if (extractHttpStatus(error) === 429) return true
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: string | number; message?: string }
+  if (err.code === 429 || err.code === 'rate_limit_exceeded') return true
+  if (typeof err.message === 'string') {
+    const message = err.message.toLowerCase()
+    return RATE_LIMIT_MESSAGE_PATTERNS.some((pattern) => message.includes(pattern))
+  }
+  return false
+}
+
+/**
  * Wraps errors with additional context and converts them to LangChain errors
  */
 export function handleLangChainError(
@@ -112,6 +181,36 @@ export function handleLangChainError(
         ...additionalContext
       }
     )
+  }
+
+  // #1637 — an actual provider auth rejection (invalid/revoked key) so the
+  // curated authentication troubleshooting block renders instead of a
+  // generic execution error.
+  if (isAuthError(error)) {
+    const endpoint = additionalContext?.endpoint as string | undefined
+    const provider = additionalContext?.provider as string | undefined
+    const message = extractErrorMessage(error)
+
+    throw new LangChainAuthenticationError(message, provider, endpoint, {
+      originalError: error instanceof Error ? error.name : typeof error,
+      originalMessage: message,
+      context,
+      ...additionalContext
+    })
+  }
+
+  // #1637 — a 429 that survived (or bypassed) retry/backoff, so a
+  // rate-limit-specific remedy renders instead of a raw provider message.
+  if (isRateLimitError(error)) {
+    const provider = additionalContext?.provider as string | undefined
+    const message = extractErrorMessage(error)
+
+    throw new LangChainRateLimitError(message, provider, {
+      originalError: error instanceof Error ? error.name : typeof error,
+      originalMessage: message,
+      context,
+      ...additionalContext
+    })
   }
 
   // If it's already a LangChain error, re-throw with additional context

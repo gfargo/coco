@@ -68,13 +68,31 @@ describe('log data layer', () => {
     expect(args).toContain('--skip=300')
   })
 
-  it('uses full topology when all refs are requested', () => {
-    const args = buildLogArgs(argv({ all: true, view: 'compact' }))
+  it('uses full topology when all refs are requested with no explicit --view', () => {
+    const args = buildLogArgs(argv({ all: true }))
 
-    expect(getLogView(argv({ all: true, view: 'compact' }))).toBe('full')
+    expect(getLogView(argv({ all: true }))).toBe('full')
     expect(args).toContain('--all')
     expect(args).not.toContain('--first-parent')
     expect(args).not.toContain('--no-merges')
+  })
+
+  // Regression (#1622): --all used to win unconditionally, silently
+  // discarding an explicit --view compact. An explicit --view must now
+  // take precedence — --all still walks every ref (buildLogArgs checks
+  // argv.all independently of the resolved view), but the compact
+  // first-parent/no-merges presentation is honored instead of full.
+  it('honors an explicit --view compact over --all (#1622)', () => {
+    const args = buildLogArgs(argv({ all: true, view: 'compact' }))
+
+    expect(getLogView(argv({ all: true, view: 'compact' }))).toBe('compact')
+    expect(args).toContain('--all')
+    expect(args).toContain('--first-parent')
+    expect(args).toContain('--no-merges')
+  })
+
+  it('an explicit --view graph also wins over --all', () => {
+    expect(getLogView(argv({ all: true, view: 'graph' }))).toBe('graph')
   })
 
   it('allows merge commits in compact view when requested', () => {

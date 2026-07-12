@@ -457,6 +457,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const { refreshContext, refreshWorktreeContext } = useContextRefresh(React, {
     git,
     runtimesLength: runtimes.length,
+    worktree: context.worktree,
     dispatch,
     setContext,
     setContextStatus,
@@ -948,6 +949,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     refreshContext,
     refreshHistoryRows,
     refreshWorktreeContext,
+    mountedRef,
   })
 
   // Lifted verbatim into `useWorkflowAction` (0.72 app.ts decomposition,
