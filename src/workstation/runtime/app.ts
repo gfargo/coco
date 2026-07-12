@@ -873,9 +873,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     stashDiffLines,
     stashDiffParsedFiles,
     visibleWorktreeFilesGrouped,
-    filteredRemoteList,
-    filteredIssueList,
-    filteredPullRequestTriageList,
   })
 
   // Lifted verbatim into `useChangelogActions` (0.72 app.ts decomposition,
@@ -964,11 +961,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setContextStatus,
     forge,
     forgeProvider,
-    filteredRemoteList,
     filteredReflogList,
-    filteredSubmoduleList,
-    filteredIssueList,
-    filteredPullRequestTriageList,
   })
 
   // Lifted verbatim into `useCommitFilePreviewHydration` (0.72 app.ts
