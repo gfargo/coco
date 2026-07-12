@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { Arguments } from 'yargs'
 import { loadSummarizationChain } from '@langchain/classic/chains'
 import { handler as changelogHandler } from './changelog/handler'
@@ -1034,10 +1035,18 @@ describe('command integration with temp git repos', () => {
       } as Arguments<ChangelogOptions>, createLogger())
 
       expect(cwdAtLoadConfig.length).toBeGreaterThan(0)
+      // realpathSync, not raw string equality: macOS resolves tmpdir's
+      // /var symlink to /private/var when process.cwd() reads it back,
+      // even though targetRepo.path (from mkdtemp) is the unresolved form.
+      const expectedCwd = realpathSync(targetRepo.path)
       for (const cwd of cwdAtLoadConfig) {
-        expect(cwd).toBe(targetRepo.path)
+        expect(realpathSync(cwd)).toBe(expectedCwd)
       }
     } finally {
+      // The handler chdir'd into targetRepo.path (#1626) and never chdirs
+      // back — restore to the outer `repo` before removing targetRepo, or
+      // rmdir on the current working directory fails with EBUSY on Windows.
+      process.chdir(repo.path)
       await targetRepo.cleanup()
     }
   })
