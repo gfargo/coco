@@ -109,11 +109,7 @@ function createDeps(over: Partial<UseWorkflowActionDeps>): UseWorkflowActionDeps
     setContextStatus: jest.fn(),
     forge: {} as UseWorkflowActionDeps['forge'],
     forgeProvider: undefined,
-    filteredRemoteList: [],
     filteredReflogList: [],
-    filteredSubmoduleList: [],
-    filteredIssueList: [],
-    filteredPullRequestTriageList: [],
     ...over,
   }
 }
@@ -693,7 +689,6 @@ describe('dirty-checkout recovery — sibling paths (#1430)', () => {
       dispatch,
       forge,
       context: { pullRequestList: { pullRequests: [pullRequestItem(7)] } } as never,
-      filteredPullRequestTriageList: [pullRequestItem(7)],
     }))
 
     await runWorkflowAction('triage-pr-checkout')

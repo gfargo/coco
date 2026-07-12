@@ -180,6 +180,8 @@ export type LogInkInputContext = {
   issueCount?: number
   /** URL of the cursored issue (#882 phase 3). Used by `O` to open in the browser. */
   issueSelectedUrl?: string
+  /** Filtered issue numbers (stringified) in render order, same role as `branchIds` (#1452). */
+  issueListIds?: string[]
   /** Number of PRs in the triage list view (#882 phase 3). Drives j/k navigation. */
   pullRequestTriageCount?: number
   /** URL of the cursored PR in the triage list view (#882 phase 3). */
@@ -189,9 +191,15 @@ export type LogInkInputContext = {
    * the Enter → PR diff drill-in and the `C` checkout workflow.
    */
   pullRequestTriageSelectedNumber?: number
+  /** Filtered PR numbers (stringified) in render order, same role as `branchIds` (#1452). */
+  pullRequestTriageListIds?: string[]
   worktreeListCount?: number
   /** Sorted + filtered worktree paths, same role as `branchIds` (#1452). */
   worktreeListIds?: string[]
+  /** Filtered submodule paths in render order, same role as `branchIds` (#1452). */
+  submoduleListIds?: string[]
+  /** Filtered remote names in render order, same role as `branchIds` (#1452). */
+  remoteListIds?: string[]
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
   /**
@@ -2986,7 +2994,12 @@ export function getLogInkInputEvents(
     }
 
     if (isRemotesActionTarget(state) && context.remoteCount) {
-      return [action({ type: 'moveRemote', delta: -1, count: context.remoteCount })]
+      return [action({
+        type: 'moveRemote',
+        delta: -1,
+        count: context.remoteCount,
+        id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, -1, context.remoteCount),
+      })]
     }
 
     if (state.activeView === 'blame' && context.blameLineCount) {
@@ -2998,11 +3011,21 @@ export function getLogInkInputEvents(
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
-      return [action({ type: 'moveSubmodule', delta: -1, count: context.submoduleCount })]
+      return [action({
+        type: 'moveSubmodule',
+        delta: -1,
+        count: context.submoduleCount,
+        id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, -1, context.submoduleCount),
+      })]
     }
 
     if (isIssueActionTarget(state) && context.issueCount) {
-      return [action({ type: 'moveIssue', delta: -1, count: context.issueCount })]
+      return [action({
+        type: 'moveIssue',
+        delta: -1,
+        count: context.issueCount,
+        id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, -1, context.issueCount),
+      })]
     }
 
     if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
@@ -3010,6 +3033,12 @@ export function getLogInkInputEvents(
         type: 'movePullRequestTriage',
         delta: -1,
         count: context.pullRequestTriageCount,
+        id: resolveMoveTargetId(
+          context.pullRequestTriageListIds,
+          state.selectedPullRequestTriageIndex,
+          -1,
+          context.pullRequestTriageCount,
+        ),
       })]
     }
 
@@ -3142,7 +3171,12 @@ export function getLogInkInputEvents(
     }
 
     if (isRemotesActionTarget(state) && context.remoteCount) {
-      return [action({ type: 'moveRemote', delta: 1, count: context.remoteCount })]
+      return [action({
+        type: 'moveRemote',
+        delta: 1,
+        count: context.remoteCount,
+        id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, 1, context.remoteCount),
+      })]
     }
 
     if (state.activeView === 'blame' && context.blameLineCount) {
@@ -3154,11 +3188,21 @@ export function getLogInkInputEvents(
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
-      return [action({ type: 'moveSubmodule', delta: 1, count: context.submoduleCount })]
+      return [action({
+        type: 'moveSubmodule',
+        delta: 1,
+        count: context.submoduleCount,
+        id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, 1, context.submoduleCount),
+      })]
     }
 
     if (isIssueActionTarget(state) && context.issueCount) {
-      return [action({ type: 'moveIssue', delta: 1, count: context.issueCount })]
+      return [action({
+        type: 'moveIssue',
+        delta: 1,
+        count: context.issueCount,
+        id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, 1, context.issueCount),
+      })]
     }
 
     if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
@@ -3166,6 +3210,12 @@ export function getLogInkInputEvents(
         type: 'movePullRequestTriage',
         delta: 1,
         count: context.pullRequestTriageCount,
+        id: resolveMoveTargetId(
+          context.pullRequestTriageListIds,
+          state.selectedPullRequestTriageIndex,
+          1,
+          context.pullRequestTriageCount,
+        ),
       })]
     }
 

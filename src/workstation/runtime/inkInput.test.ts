@@ -3541,6 +3541,53 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    // #1452 issue/PR-triage flip — same dual-write as branch/tag/stash/worktree above.
+    it('moveIssue carries the post-move id when the context provides issueListIds', () => {
+      const issueListIds = ['1', '7', '12']
+      const state = {
+        ...createLogInkState(rows),
+        activeView: 'issues' as const,
+        selectedIssueIndex: 1,
+      }
+
+      const down = getLogInkInputEvents(state, '', { downArrow: true }, {
+        issueCount: 3, issueListIds,
+      })
+      expect(down).toEqual([
+        { type: 'action', action: { type: 'moveIssue', delta: 1, count: 3, id: '12' } },
+      ])
+
+      const up = getLogInkInputEvents(state, '', { upArrow: true }, {
+        issueCount: 3, issueListIds,
+      })
+      expect(up).toEqual([
+        { type: 'action', action: { type: 'moveIssue', delta: -1, count: 3, id: '1' } },
+      ])
+    })
+
+    it('movePullRequestTriage carries the post-move id when the context provides pullRequestTriageListIds', () => {
+      const pullRequestTriageListIds = ['3', '9', '21']
+      const state = {
+        ...createLogInkState(rows),
+        activeView: 'pull-request-triage' as const,
+        selectedPullRequestTriageIndex: 1,
+      }
+
+      const down = getLogInkInputEvents(state, '', { downArrow: true }, {
+        pullRequestTriageCount: 3, pullRequestTriageListIds,
+      })
+      expect(down).toEqual([
+        { type: 'action', action: { type: 'movePullRequestTriage', delta: 1, count: 3, id: '21' } },
+      ])
+
+      const up = getLogInkInputEvents(state, '', { upArrow: true }, {
+        pullRequestTriageCount: 3, pullRequestTriageListIds,
+      })
+      expect(up).toEqual([
+        { type: 'action', action: { type: 'movePullRequestTriage', delta: -1, count: 3, id: '3' } },
+      ])
+    })
+
     // #1361 — multi-select grammar on the branches view.
     describe('multi-select x / v / Esc (#1361)', () => {
       function branchesState() {

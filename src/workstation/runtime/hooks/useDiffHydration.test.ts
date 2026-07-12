@@ -11,12 +11,26 @@ import {
   useWorktreeHunksHydration,
   useWorktreeHunksState,
 } from './useDiffHydration'
+import { getCommitFilePreview, GitCommitFilePreview } from '../../../commands/log/data'
 import type { WorktreeFile } from '../../../git/statusData'
 import type * as ReactTypes from 'react'
 
+jest.mock('../../../commands/log/data', () => ({
+  getCommitFilePreview: jest.fn(),
+}))
+
+const getCommitFilePreviewMock = getCommitFilePreview as jest.MockedFunction<
+  typeof getCommitFilePreview
+>
+
 type EffectFn = () => void | (() => void)
 
-/** Fake React that records the single `useEffect` so the test can run it. */
+/**
+ * Fake React that records the single `useEffect` so the test can run it. Also
+ * supports `useRef` (needed by `useCommitFilePreviewHydration`'s cache) —
+ * each call returns a fresh ref, which is fine for the single-invocation
+ * "loader bail" tests below that never re-render the hook.
+ */
 function effectReact(): {
   React: typeof import('react')
   runEffect: () => void | (() => void)
@@ -26,6 +40,7 @@ function effectReact(): {
     useEffect: (fn: EffectFn) => {
       effects.push(fn)
     },
+    useRef: (init: unknown) => ({ current: init }),
   } as unknown as typeof import('react')
   return { React, runEffect: () => effects[0]() }
 }
@@ -282,5 +297,208 @@ describe('worktreeDiffRefreshToken is part of the reload signal (#1579)', () => 
     expect(first.getDeps()).toContain(0)
     expect(second.getDeps()).toContain(1)
     expect(first.getDeps()).not.toEqual(second.getDeps())
+  })
+})
+
+/**
+ * Debounce + cache behavior for the commit file-preview loader (#OSS-595),
+ * mirroring the sibling `useCommitDetailHydration` tests. Unlike the harness
+ * above, `useRef` here must persist a single ref *across* separate calls to
+ * the hook — simulating React re-invoking the hook body on a re-render while
+ * keeping the same ref identity — so a cache populated on one "render" is
+ * visible on the next.
+ */
+describe('useCommitFilePreviewHydration debounce + cache', () => {
+  const git = {} as Parameters<typeof useCommitFilePreviewHydration>[1]['git']
+
+  /** Flush pending microtasks so the effect's awaited fetch settles. */
+  const flush = async (): Promise<void> => {
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+  }
+
+  /** Advance fake timers + flush microtasks (for debounced effects). */
+  const advanceAndFlush = async (ms: number): Promise<void> => {
+    jest.advanceTimersByTime(ms)
+    await flush()
+  }
+
+  /**
+   * Records every `useEffect` call (one per hook invocation, simulating
+   * successive renders) and hands back the *latest* one — and returns a
+   * single persistent `useRef` across invocations, matching React's real
+   * behavior of preserving ref identity across a component's renders.
+   */
+  function makeReact(): {
+    React: typeof import('react')
+    runLatestEffect: () => void | (() => void)
+  } {
+    const effects: EffectFn[] = []
+    let ref: { current: unknown } | undefined
+    const React = {
+      useEffect: (fn: EffectFn) => {
+        effects.push(fn)
+      },
+      useRef: (init: unknown) => {
+        if (!ref) ref = { current: init }
+        return ref
+      },
+    } as unknown as typeof import('react')
+    return {
+      React,
+      runLatestEffect: () => effects[effects.length - 1](),
+    }
+  }
+
+  beforeEach(() => {
+    getCommitFilePreviewMock.mockReset()
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('debounces 120ms, then fetches the cursored file and stores the preview', async () => {
+    const preview = { hunks: [] } as unknown as GitCommitFilePreview
+    getCommitFilePreviewMock.mockResolvedValue(preview)
+    const setFilePreview = jest.fn()
+    const setFilePreviewLoading = jest.fn()
+    const { React, runLatestEffect } = makeReact()
+
+    const selected = { hash: 'abc123' } as never
+    const file = { path: 'src/app.ts' } as never
+
+    useCommitFilePreviewHydration(React, {
+      git,
+      selected,
+      selectedDetailFile: file,
+      setFilePreview,
+      setFilePreviewLoading,
+    })
+    runLatestEffect()
+
+    // Loading flips true synchronously (before debounce fires).
+    expect(setFilePreviewLoading).toHaveBeenCalledWith(true)
+    // But fetch hasn't fired yet (debounce hasn't elapsed).
+    expect(getCommitFilePreviewMock).not.toHaveBeenCalled()
+
+    await advanceAndFlush(150)
+
+    expect(getCommitFilePreviewMock).toHaveBeenCalledWith(git, 'abc123', file)
+    expect(setFilePreview).toHaveBeenCalledWith(preview)
+    expect(setFilePreviewLoading).toHaveBeenLastCalledWith(false)
+  })
+
+  it('rapid re-selection resets the debounce timer to a single fetch', async () => {
+    const preview = { hunks: [] } as unknown as GitCommitFilePreview
+    getCommitFilePreviewMock.mockResolvedValue(preview)
+    const setFilePreview = jest.fn()
+    const setFilePreviewLoading = jest.fn()
+    const { React, runLatestEffect } = makeReact()
+
+    const selected = { hash: 'abc123' } as never
+    const fileA = { path: 'a.ts' } as never
+    const fileB = { path: 'b.ts' } as never
+
+    // First selection (fileA) starts a debounce timer.
+    useCommitFilePreviewHydration(React, {
+      git,
+      selected,
+      selectedDetailFile: fileA,
+      setFilePreview,
+      setFilePreviewLoading,
+    })
+    const cleanupA = runLatestEffect() as () => void
+
+    // Rapid re-selection (fileB) before the 120ms window elapses: cleanup
+    // cancels fileA's timer, and only fileB's fetch should ever fire.
+    jest.advanceTimersByTime(50)
+    cleanupA()
+    useCommitFilePreviewHydration(React, {
+      git,
+      selected,
+      selectedDetailFile: fileB,
+      setFilePreview,
+      setFilePreviewLoading,
+    })
+    runLatestEffect()
+
+    await advanceAndFlush(150)
+
+    expect(getCommitFilePreviewMock).toHaveBeenCalledTimes(1)
+    expect(getCommitFilePreviewMock).toHaveBeenCalledWith(git, 'abc123', fileB)
+  })
+
+  it('cancels the debounced fetch when the effect is cleaned up before it fires', async () => {
+    getCommitFilePreviewMock.mockResolvedValue({ hunks: [] } as unknown as GitCommitFilePreview)
+    const setFilePreview = jest.fn()
+    const setFilePreviewLoading = jest.fn()
+    const { React, runLatestEffect } = makeReact()
+
+    const selected = { hash: 'def456' } as never
+    const file = { path: 'src/app.ts' } as never
+
+    useCommitFilePreviewHydration(React, {
+      git,
+      selected,
+      selectedDetailFile: file,
+      setFilePreview,
+      setFilePreviewLoading,
+    })
+    const cleanup = runLatestEffect() as () => void
+
+    // Cleanup fires before the debounce elapses (simulating rapid j/k).
+    cleanup()
+    await advanceAndFlush(150)
+
+    // active === false + timer cleared, so the fetch never fires.
+    expect(getCommitFilePreviewMock).not.toHaveBeenCalled()
+    // Only the initial setFilePreviewLoading(true) landed.
+    expect(setFilePreview).not.toHaveBeenCalled()
+    expect(setFilePreviewLoading).toHaveBeenCalledTimes(1)
+    expect(setFilePreviewLoading).toHaveBeenCalledWith(true)
+  })
+
+  it('cache hit skips the fetch and never toggles loading true', async () => {
+    const preview = { hunks: [] } as unknown as GitCommitFilePreview
+    getCommitFilePreviewMock.mockResolvedValue(preview)
+    const setFilePreview = jest.fn()
+    const setFilePreviewLoading = jest.fn()
+    const { React, runLatestEffect } = makeReact()
+
+    const selected = { hash: 'abc123' } as never
+    const file = { path: 'src/app.ts' } as never
+
+    // First pass: a full fetch, which populates the cache.
+    useCommitFilePreviewHydration(React, {
+      git,
+      selected,
+      selectedDetailFile: file,
+      setFilePreview,
+      setFilePreviewLoading,
+    })
+    runLatestEffect()
+    await advanceAndFlush(150)
+
+    expect(getCommitFilePreviewMock).toHaveBeenCalledTimes(1)
+    setFilePreview.mockClear()
+    setFilePreviewLoading.mockClear()
+
+    // Second pass — same (hash, path): re-invoking the hook simulates a
+    // re-render (e.g. cursor moved off and back). The shared `useRef` cache
+    // serves the preview instantly, with no fetch and no loading flip.
+    useCommitFilePreviewHydration(React, {
+      git,
+      selected,
+      selectedDetailFile: file,
+      setFilePreview,
+      setFilePreviewLoading,
+    })
+    runLatestEffect()
+
+    expect(getCommitFilePreviewMock).toHaveBeenCalledTimes(1)
+    expect(setFilePreview).toHaveBeenCalledWith(preview)
+    expect(setFilePreviewLoading).toHaveBeenCalledWith(false)
+    expect(setFilePreviewLoading).not.toHaveBeenCalledWith(true)
   })
 })
