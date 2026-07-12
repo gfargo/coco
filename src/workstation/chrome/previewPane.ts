@@ -184,15 +184,20 @@ function commentsSection(
 }
 
 function reviewsSection(
-  reviews: ReadonlyArray<{ author?: string; state: string; body: string }>
+  reviews: ReadonlyArray<{ author?: string; state: string; body: string }>,
+  maxShown: number
 ): PreviewLine[] {
   if (reviews.length === 0) return []
+  const recent = reviews.slice(-maxShown)
   const out: PreviewLine[] = [heading(`Reviews (${reviews.length})`)]
-  for (const review of reviews) {
+  for (const review of recent) {
     const who = review.author || 'anonymous'
     const stateLabel = (review.state || 'commented').toLowerCase().replace(/_/g, ' ')
     const inlineBody = review.body ? ` — ${shortenLine(review.body, 60)}` : ''
     out.push(line(`@${who} (${stateLabel})${inlineBody}`))
+  }
+  if (reviews.length > recent.length) {
+    out.push(dim(`… ${reviews.length - recent.length} earlier review(s)`))
   }
   return out
 }
@@ -348,7 +353,7 @@ export function formatPullRequestTriagePreview(
       out.push(blank())
       out.push(...checks)
     }
-    const reviews = reviewsSection(detail.reviews)
+    const reviews = reviewsSection(detail.reviews, 5)
     if (reviews.length > 0) {
       out.push(blank())
       out.push(...reviews)
