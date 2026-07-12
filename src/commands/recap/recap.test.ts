@@ -114,8 +114,12 @@ describe('recap command', () => {
     })
     mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
     mockGetTokenCounterForProvider.mockResolvedValue((text: string) => text.length)
+    // Non-empty by default so the 'current' timeframe reaches the LLM path
+    // (matching every other test's expectation below) instead of hitting
+    // the clean-repo short-circuit added for #1608 — tests that want the
+    // empty-repo behavior override this explicitly.
     mockGetChanges.mockResolvedValue({
-      staged: [],
+      staged: [{ filePath: 'src/example.ts', status: 'modified', summary: 'example change' }],
       unstaged: [],
       untracked: [],
     })
@@ -317,6 +321,41 @@ describe('recap command', () => {
     expect(logger.verbose).toHaveBeenCalledWith(
       expect.stringContaining('Rendered prompt exceeded token budget'),
       { color: 'yellow' }
+    )
+  })
+
+  it('exits cleanly (code 0, no LLM call) when the current worktree is clean (#1608)', async () => {
+    mockGetChanges.mockResolvedValue({
+      staged: [],
+      unstaged: [],
+      untracked: [],
+    })
+
+    await expect(handler(argv, logger)).rejects.toMatchObject({
+      name: 'CommandExitError',
+      code: 0,
+    })
+
+    expect(mockExecuteChain).not.toHaveBeenCalled()
+    expect(logger.log).toHaveBeenCalledWith(
+      'No repo changes detected. 👀',
+      { color: 'blue' }
+    )
+  })
+
+  it('exits cleanly (code 0, friendly message, not a generic Error) when a timeframe window has no changes (#1586)', async () => {
+    argv.yesterday = true
+    mockGetChangesByTimestamp.mockResolvedValue([])
+
+    await expect(handler(argv, logger)).rejects.toMatchObject({
+      name: 'CommandExitError',
+      code: 0,
+    })
+
+    expect(mockExecuteChain).not.toHaveBeenCalled()
+    expect(logger.log).toHaveBeenCalledWith(
+      'No repo changes detected. 👀',
+      { color: 'blue' }
     )
   })
 })

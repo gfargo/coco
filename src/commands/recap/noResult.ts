@@ -8,5 +8,4 @@ type NoResultInput = {
 
 export async function noResult({ logger }: NoResultInput): Promise<void> {
   logger.log('No repo changes detected. 👀', { color: 'blue' })
-  throw new Error('NO_CHANGES_DETECTED')
 }
