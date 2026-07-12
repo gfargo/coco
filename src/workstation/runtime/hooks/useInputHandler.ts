@@ -432,7 +432,9 @@ export function useInputHandler(
       prDiffFileOffsets: prDiffFileOffsets.length ? prDiffFileOffsets : undefined,
       worktreeListCount: worktreeVisibleCount,
       worktreeListIds,
-      worktreeSelectedPath: visibleWorktreeFilesGrouped[state.selectedWorktreeFileIndex]?.path,
+      worktreeSelectedPath: visibleWorktreeFilesGrouped[
+        Math.min(state.selectedWorktreeFileIndex, Math.max(0, visibleWorktreeFilesGrouped.length - 1))
+      ]?.path,
       statusGroups: visibleWorktreeGroups.map((group) => ({
         state: group.state as 'staged' | 'unstaged' | 'untracked',
         count: group.files.length,

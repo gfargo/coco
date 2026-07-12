@@ -91,7 +91,10 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
   // to wrap, shifting the windowed list and pushing the panel past
   // bodyRows (the body Box has no overflow clipping).
   const rowBudget = Math.max(20, width - 4)
-  const selectedIndex = state.selectedWorktreeFileIndex
+  const selectedIndex = Math.min(
+    state.selectedWorktreeFileIndex,
+    Math.max(0, visibleFiles.length - 1)
+  )
   const headerFocused = state.statusGroupHeaderFocused
   // Resolve the cursor's row index in the flat (header-and-file) row
   // list. Used to window the visible slice around the cursor.

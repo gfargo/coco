@@ -83,8 +83,17 @@ describe('buildStatusSurfaceData', () => {
       expect(result.selectedWorktreeFile?.path).toBe('b.txt')
     })
 
-    it('yields undefined for an out-of-range index', () => {
-      const result = buildStatusSurfaceData(files, ALL_VISIBLE, 99, undefined)
+    it('clamps an out-of-range index to the last visible file (#1588)', () => {
+      // A refresh (revert / external stage) can shrink the visible list
+      // out from under a stale selectedWorktreeFileIndex. Flattened order
+      // is [a, d, b, c] (4 files) — index 9 must clamp to c.txt, not
+      // resolve to undefined and strand the cursor / file actions.
+      const result = buildStatusSurfaceData(files, ALL_VISIBLE, 9, undefined)
+      expect(result.selectedWorktreeFile?.path).toBe('c.txt')
+    })
+
+    it('clamps to index 0 when the visible list is empty', () => {
+      const result = buildStatusSurfaceData([], ALL_VISIBLE, 9, undefined)
       expect(result.selectedWorktreeFile).toBeUndefined()
     })
 
