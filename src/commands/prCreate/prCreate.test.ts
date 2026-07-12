@@ -149,4 +149,20 @@ describe('pr create command', () => {
     await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
     expect(mockCreatePr).not.toHaveBeenCalled()
   })
+
+  it('renders the curated no-commits message, never the generic exit sentinel text (#1604)', async () => {
+    mockBodyWorkflow.mockResolvedValue({
+      ok: false,
+      message: 'No changelog output produced — branch may have no commits ahead of base.',
+    })
+    await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('no commits ahead of base'),
+      expect.anything()
+    )
+    expect(logger.error).not.toHaveBeenCalledWith(
+      expect.stringContaining('Command exited with code'),
+      expect.anything()
+    )
+  })
 })

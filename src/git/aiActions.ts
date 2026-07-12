@@ -5,6 +5,7 @@ import { runCommitWorkflow } from './commitWorkflowActions'
 import { HistoryCommitRef } from './historyActions'
 import { TagRangeSummary } from './tagData'
 import { LangChainCancelledError } from '../lib/langchain/errors'
+import { isCommandExitError } from '../lib/utils/commandExit'
 import { Logger } from '../lib/utils/logger'
 
 export type LogAiAction =
@@ -223,6 +224,17 @@ export async function runPullRequestBodyWorkflow(
     const result = await generateChangelogResult(argv, new Logger({ silent: true }))
     text = result.text.trim()
   } catch (error) {
+    // changelog's `noResult` clean-exit sentinel (CommandExitError code 0,
+    // e.g. no commits ahead of base) logs its friendly message through a
+    // silenced Logger and throws with the generic default text ("Command
+    // exited with code 0") — relaying that verbatim renders as a
+    // confusing red error instead of an explanation (#1604).
+    if (isCommandExitError(error) && error.code === 0) {
+      return {
+        ok: false,
+        message: 'No changelog output produced — branch may have no commits ahead of base.',
+      }
+    }
     return {
       ok: false,
       message: (error as Error).message,
