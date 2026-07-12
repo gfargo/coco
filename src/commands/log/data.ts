@@ -142,12 +142,16 @@ function cleanRefs(refs: string): string[] {
 }
 
 export function getLogView(argv: LogArgv): LogView {
-  if (argv.all) {
-    return 'full'
-  }
-
+  // #1622 — an explicit `--view` must win over `--all`'s full-view
+  // implication. This relies on `view` having no yargs `default` (see
+  // config.ts): `argv.view` is only ever set when the user actually
+  // passed `--view`.
   if (argv.view) {
     return argv.view
+  }
+
+  if (argv.all) {
+    return 'full'
   }
 
   return 'compact'
