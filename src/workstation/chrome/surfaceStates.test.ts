@@ -9,6 +9,7 @@ import {
     formatLogInkStashEmpty,
     formatLogInkStatusEmpty,
     formatLogInkTagsEmpty,
+    formatLogInkWorktreesEmpty,
 } from './surfaceStates'
 
 describe('log Ink surface states', () => {
@@ -64,6 +65,26 @@ describe('log Ink surface states', () => {
       const message = formatLogInkStashEmpty({ filter: 'wip' })
       expect(message).toContain("'wip'")
       expect(message).toContain('ctrl+u')
+    })
+  })
+
+  // Regression (#1620): the worktrees surface hardcoded 'No linked
+  // worktrees.' regardless of an active filter, so filtering to zero
+  // matches contradicted the header's "0/N worktrees | filter: …" line.
+  describe('formatLogInkWorktreesEmpty', () => {
+    it('returns a tailored hint when no filter is active', () => {
+      const message = formatLogInkWorktreesEmpty({ filter: '' })
+      expect(message).toBe('No linked worktrees.')
+    })
+
+    it('flags the active filter and tells users how to clear it', () => {
+      const message = formatLogInkWorktreesEmpty({ filter: 'feature/foo' })
+      expect(message).toContain("'feature/foo'")
+      expect(message).toContain('ctrl+u')
+    })
+
+    it('treats whitespace-only filter as no filter', () => {
+      expect(formatLogInkWorktreesEmpty({ filter: '   ' })).toBe('No linked worktrees.')
     })
   })
 

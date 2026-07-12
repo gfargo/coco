@@ -34,7 +34,13 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
     )
     : all
   const selected = Math.max(0, Math.min(state.selectedRemoteIndex, Math.max(0, filtered.length - 1)))
-  const listRows = Math.max(4, bodyRows - 4)
+  // Row budget (#1392, #1615): the base reserve (borders + title + one
+  // spare) must also count the conditional rows, or the panel grows past
+  // its box mid-scroll — the filter affordance while filtering, and BOTH
+  // scroll indicators once the list overflows the window (the single
+  // spare absorbed only one of them). Mirrors the branches surface.
+  const baseRows = Math.max(4, bodyRows - 4 - (state.filterMode ? 1 : 0))
+  const listRows = filtered.length > baseRows ? Math.max(4, baseRows - 1) : baseRows
   const startIndex = clampListWindowStart(selected, filtered.length, listRows)
   const visible = filtered.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
@@ -78,6 +84,11 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
         }, lineText)
       })
 
+  // Scroll indicators (#1615) — same "N more above/below" pattern as
+  // branches/tags so the user knows the list continues past the window.
+  const remotesHasMoreAbove = startIndex > 0 && filtered.length > 0
+  const remotesHasMoreBelow = startIndex + listRows < filtered.length
+
   return h(Box, {
     borderColor: focusBorderColor(theme, focused),
     borderStyle: theme.borderStyle,
@@ -91,7 +102,13 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
     h(Text, { dimColor: true }, headerRight),
   ),
   ...renderPromotedFilterAffordance(h, Text, state, theme),
-  ...lines)
+  ...(remotesHasMoreAbove
+    ? [h(Text, { key: 'remotes-more-above', dimColor: true }, `  ↑ ${startIndex} more above`)]
+    : []),
+  ...lines,
+  ...(remotesHasMoreBelow
+    ? [h(Text, { key: 'remotes-more-below', dimColor: true }, `  ↓ ${filtered.length - (startIndex + listRows)} more below`)]
+    : []))
 }
 
 export type { RemoteEntry }

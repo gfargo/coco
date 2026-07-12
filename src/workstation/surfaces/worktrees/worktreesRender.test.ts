@@ -48,7 +48,7 @@ function makeOverview(worktrees: WorktreeEntry[]): WorktreeOverview {
 
 function render(
   state: LogInkState,
-  options: { worktreeList?: WorktreeOverview; loading?: boolean } = {}
+  options: { worktreeList?: WorktreeOverview; loading?: boolean; bodyRows?: number } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = options.worktreeList
@@ -63,7 +63,7 @@ function render(
     state,
     context,
     contextStatus,
-    bodyRows: 30,
+    bodyRows: options.bodyRows ?? 30,
     width: 120,
     theme,
   })
@@ -131,6 +131,93 @@ describe('renderWorktreesSurface', () => {
       })
 
       expect(pathColumnOffset(asciiTree, '/x')).toBe(pathColumnOffset(wideTree, '/x'))
+    })
+  })
+
+  // Regression (#1620): an active filter matching zero worktrees used to
+  // render the same "No linked worktrees." copy as a genuinely empty repo,
+  // contradicting the header's "0/N worktrees | filter: …" line.
+  describe('filtered-to-zero empty state (#1620)', () => {
+    function flatten(node: unknown, out: string[] = []): string[] {
+      if (node == null) return out
+      if (typeof node === 'string') { out.push(node); return out }
+      if (Array.isArray(node)) { node.forEach((n) => flatten(n, out)); return out }
+      const props = (node as { props?: { children?: unknown } }).props
+      if (props) flatten(props.children, out)
+      return out
+    }
+
+    it('shows filter-aware copy, not the genuinely-empty message, when the filter matches nothing', () => {
+      const tree = render(makeState({ filter: 'no-such-worktree' }), {
+        worktreeList: makeOverview([makeEntry()]),
+      })
+      const text = flatten(tree).join('\n')
+      expect(text).toContain("No worktrees match filter 'no-such-worktree'")
+      expect(text).not.toContain('No linked worktrees.')
+    })
+
+    it('still shows the genuinely-empty message with no filter active', () => {
+      const tree = render(makeState(), { worktreeList: makeOverview([]) })
+      const text = flatten(tree).join('\n')
+      expect(text).toContain('No linked worktrees.')
+    })
+  })
+
+  // Regression (#1615): worktrees windowed its rows with clampListWindowStart
+  // but rendered no scroll indicators, unlike every other windowed promoted
+  // surface (branches, tags, stash, ...) — a long worktree list read as "this
+  // is everything" with no signal that entries scrolled off either edge.
+  describe('scroll indicators (#1615)', () => {
+    const manyWorktrees = Array.from({ length: 30 }, (_, i) =>
+      makeEntry({ path: `/repo-wt-${i}`, branch: `feature/${i}`, current: i === 0 }))
+
+    it('shows only "more below" when cursored at the top', () => {
+      const tree = render(makeState({ selectedWorktreeListIndex: 0 }), {
+        worktreeList: makeOverview(manyWorktrees),
+        bodyRows: 12,
+      })
+      const lines = renderToLines(tree, Text, Box)
+      const text = lines.join('\n')
+      expect(text).not.toContain('more above')
+      expect(text).toContain('more below')
+    })
+
+    it('shows only "more above" when cursored at the bottom', () => {
+      const tree = render(makeState({ selectedWorktreeListIndex: manyWorktrees.length - 1 }), {
+        worktreeList: makeOverview(manyWorktrees),
+        bodyRows: 12,
+      })
+      const lines = renderToLines(tree, Text, Box)
+      const text = lines.join('\n')
+      expect(text).toContain('more above')
+      expect(text).not.toContain('more below')
+    })
+
+    it('shows both indicators mid-list and keeps the total rendered rows within bodyRows', () => {
+      const bodyRows = 12
+      const tree = render(makeState({ selectedWorktreeListIndex: 15 }), {
+        worktreeList: makeOverview(manyWorktrees),
+        bodyRows,
+      })
+      const lines = renderToLines(tree, Text, Box)
+      const text = lines.join('\n')
+      expect(text).toContain('more above')
+      expect(text).toContain('more below')
+      // The panel's own border isn't part of the flattened content lines
+      // renderToLines counts, but it still costs 2 rows against bodyRows.
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+    })
+
+    it('keeps the total rendered row count within bodyRows with the filter affordance active too', () => {
+      const bodyRows = 12
+      const tree = render(
+        makeState({ selectedWorktreeListIndex: 15, filterMode: true, filter: 'feature' }),
+        { worktreeList: makeOverview(manyWorktrees), bodyRows }
+      )
+      const lines = renderToLines(tree, Text, Box)
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
     })
   })
 })

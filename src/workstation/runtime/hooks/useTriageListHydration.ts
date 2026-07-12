@@ -29,12 +29,30 @@ import { issueFilterForPreset, pullRequestFilterForPreset } from '../../../git/t
 import { updateLogInkContextStatus } from '../../chrome/context'
 import type { SetContextFn, SetContextStatusFn } from './useRepoStackRuntimes'
 
-/** Best-effort promise unwrap — same helper pattern as other hooks. */
-async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
-  try {
-    return await promise
-  } catch {
-    return undefined
+/**
+ * #1633 — `getIssueList` / `getPullRequestList` already catch every
+ * gh-CLI-level failure internally and return an `{ available,
+ * authenticated, message }` overview the triage surfaces already know how
+ * to render as an actionable error line (see `issuesTriage/index.ts` /
+ * `pullRequestTriage/index.ts`'s `overview.message && !overview.issues`
+ * branch). But a failure ABOVE that layer — repository resolution
+ * throwing on an unexpected git error, for instance — still rejects the
+ * whole promise. The old blanket `safe()` swallowed that into bare
+ * `undefined`, which reads through the render layer as "still loading"
+ * forever — indistinguishable from a real empty queue. Falling back to
+ * the same `{ available: true, authenticated: true, message }` shape
+ * lets any unexpected rejection surface through the existing error UI
+ * instead.
+ */
+function triageListFailure(error: unknown, fallbackMessage: string): {
+  available: true
+  authenticated: true
+  message: string
+} {
+  return {
+    available: true,
+    authenticated: true,
+    message: error instanceof Error ? error.message : fallbackMessage,
   }
 }
 
@@ -83,20 +101,22 @@ export function useIssueTriageHydration(
       issuedAtDepth,
     )
     const filter = issueFilterForPreset(selectedIssueFilter)
-    void safe(forge.getIssueList(git, filter)).then((value) => {
-      if (!active) return
-      setContext(
-        (current) => ({
-          ...current,
-          issueList: value,
-        }),
-        issuedAtDepth,
-      )
-      setContextStatus(
-        (current) => updateLogInkContextStatus(current, 'issueList', 'ready'),
-        issuedAtDepth,
-      )
-    })
+    void forge.getIssueList(git, filter)
+      .catch((error) => triageListFailure(error, 'Failed to load issues.'))
+      .then((value) => {
+        if (!active) return
+        setContext(
+          (current) => ({
+            ...current,
+            issueList: value,
+          }),
+          issuedAtDepth,
+        )
+        setContextStatus(
+          (current) => updateLogInkContextStatus(current, 'issueList', 'ready'),
+          issuedAtDepth,
+        )
+      })
     return () => {
       active = false
     }
@@ -173,20 +193,22 @@ export function usePullRequestTriageHydration(
       issuedAtDepth,
     )
     const filter = pullRequestFilterForPreset(selectedPullRequestFilter)
-    void safe(forge.getPullRequestList(git, filter)).then((value) => {
-      if (!active) return
-      setContext(
-        (current) => ({
-          ...current,
-          pullRequestList: value,
-        }),
-        issuedAtDepth,
-      )
-      setContextStatus(
-        (current) => updateLogInkContextStatus(current, 'pullRequestList', 'ready'),
-        issuedAtDepth,
-      )
-    })
+    void forge.getPullRequestList(git, filter)
+      .catch((error) => triageListFailure(error, 'Failed to load pull requests.'))
+      .then((value) => {
+        if (!active) return
+        setContext(
+          (current) => ({
+            ...current,
+            pullRequestList: value,
+          }),
+          issuedAtDepth,
+        )
+        setContextStatus(
+          (current) => updateLogInkContextStatus(current, 'pullRequestList', 'ready'),
+          issuedAtDepth,
+        )
+      })
     return () => {
       active = false
     }

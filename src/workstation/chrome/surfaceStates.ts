@@ -125,6 +125,17 @@ export function formatLogInkRemotesEmpty({ filter }: LogInkRemotesEmptyArgs): st
   return 'No remotes configured. Press a to add one.'
 }
 
+export type LogInkWorktreesEmptyArgs = {
+  filter: string
+}
+
+export function formatLogInkWorktreesEmpty({ filter }: LogInkWorktreesEmptyArgs): string {
+  if (filter.trim()) {
+    return `No worktrees match filter '${filter}'. Press ctrl+u to clear.`
+  }
+  return 'No linked worktrees.'
+}
+
 export type LogInkBlameEmptyArgs = {
   /** Repo-relative path being blamed, for a path-aware message. */
   path?: string

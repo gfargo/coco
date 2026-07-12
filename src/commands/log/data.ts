@@ -328,6 +328,11 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
     args.push(`-G${argv.grep}`)
   }
 
+  // #1618 — message search, distinct from --grep's diff-content search.
+  if (argv.message) {
+    args.push(`--grep=${argv.message}`)
+  }
+
   if (argv.since) {
     args.push(`--since=${argv.since}`)
   }

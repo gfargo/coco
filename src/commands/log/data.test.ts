@@ -262,6 +262,22 @@ describe('log data layer', () => {
     expect(args).toContain('-GTODO|FIXME')
   })
 
+  // Regression (#1618): --grep runs git's diff-content search (-G), not
+  // commit-message search — the behavior every git user's --grep muscle
+  // memory expects. --message is the actual message-search flag, mapping
+  // to git's own --grep=.
+  it('passes --grep=<regex> for --message (commit-message search)', () => {
+    const args = buildLogArgs(argv({ message: 'fix login' }))
+    expect(args).toContain('--grep=fix login')
+    expect(args).not.toContain('-Gfix login')
+  })
+
+  it('--message and --grep compose independently (message search vs. diff-content search)', () => {
+    const args = buildLogArgs(argv({ message: 'fix login', grep: 'TODO' }))
+    expect(args).toContain('--grep=fix login')
+    expect(args).toContain('-GTODO')
+  })
+
   it('parses commit detail metadata and changed files', () => {
     const detail = parseCommitDetail(
       [

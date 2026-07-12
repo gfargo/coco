@@ -12,6 +12,7 @@ import {
 import type { RemoteEntry, RemoteOverview } from '../../../git/remoteData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderRemotesSurface } from './index'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -38,7 +39,7 @@ function makeEntry(overrides: Partial<RemoteEntry> = {}): RemoteEntry {
 
 function render(
   state: LogInkState,
-  options: { remotes?: RemoteOverview; loading?: boolean } = {}
+  options: { remotes?: RemoteOverview; loading?: boolean; bodyRows?: number } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = options.remotes ? { remotes: options.remotes } : {}
@@ -51,7 +52,7 @@ function render(
     state,
     context,
     contextStatus,
-    bodyRows: 30,
+    bodyRows: options.bodyRows ?? 30,
     width: 120,
     theme,
   })
@@ -111,5 +112,55 @@ describe('renderRemotesSurface', () => {
         },
       })
     ).toMatchSnapshot()
+  })
+
+  // Regression (#1615): remotes windowed its rows with clampListWindowStart
+  // but rendered no scroll indicators, unlike every other windowed promoted
+  // surface (branches, tags, stash, ...).
+  describe('scroll indicators (#1615)', () => {
+    const manyRemotes: RemoteOverview = {
+      hasRemotes: true,
+      entries: Array.from({ length: 30 }, (_, i) =>
+        makeEntry({ name: `remote-${i}`, fetchUrl: `https://example.com/${i}.git`, pushUrl: `https://example.com/${i}.git` })),
+    }
+
+    it('shows only "more below" when cursored at the top', () => {
+      const tree = render(makeState({ selectedRemoteIndex: 0 }), { remotes: manyRemotes, bodyRows: 12 })
+      const text = renderToLines(tree, Text, Box).join('\n')
+      expect(text).not.toContain('more above')
+      expect(text).toContain('more below')
+    })
+
+    it('shows only "more above" when cursored at the bottom', () => {
+      const tree = render(makeState({ selectedRemoteIndex: manyRemotes.entries.length - 1 }), {
+        remotes: manyRemotes,
+        bodyRows: 12,
+      })
+      const text = renderToLines(tree, Text, Box).join('\n')
+      expect(text).toContain('more above')
+      expect(text).not.toContain('more below')
+    })
+
+    it('shows both indicators mid-list and keeps the total rendered rows within bodyRows', () => {
+      const bodyRows = 12
+      const tree = render(makeState({ selectedRemoteIndex: 15 }), { remotes: manyRemotes, bodyRows })
+      const lines = renderToLines(tree, Text, Box)
+      const text = lines.join('\n')
+      expect(text).toContain('more above')
+      expect(text).toContain('more below')
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+    })
+
+    it('keeps the total rendered row count within bodyRows with the filter affordance active too', () => {
+      const bodyRows = 12
+      const tree = render(
+        makeState({ selectedRemoteIndex: 15, filterMode: true, filter: 'remote' }),
+        { remotes: manyRemotes, bodyRows }
+      )
+      const lines = renderToLines(tree, Text, Box)
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+    })
   })
 })
