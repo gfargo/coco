@@ -192,6 +192,45 @@ describe('renderHistoryInspector', () => {
       expect(text).toContain('Actions:')
     })
   })
+
+  describe('single-cursor invariant across tabs (#1601)', () => {
+    // Tall-stacked mode (tabbed: false) renders the file list AND the
+    // actions section simultaneously — the only shape where two
+    // sections could both look cursor-active at once.
+    function renderTallStacked(inspectorTab: 'inspector' | 'actions'): ReactElement {
+      return renderHistoryInspector(
+        createElement,
+        components,
+        makeState({ inspectorTab, inspectorActionIndex: 0, selectedFileIndex: 0 }),
+        {},
+        createLogInkContextStatus('ready'),
+        HISTORY_DETAIL,
+        false,
+        undefined,
+        false,
+        50,
+        false,
+        theme,
+        true
+      )
+    }
+
+    it('actions tab active: the file list shows no cursor, the actions section does', () => {
+      const lines = renderToLines(renderTallStacked('actions'), Text, Box)
+      const fileLine = lines.find((l) => l.includes('index.ts'))
+      expect(fileLine).toBeDefined()
+      expect(fileLine!.trimStart().startsWith('>')).toBe(false)
+      expect(lines.join('\n')).toContain('[Actions]')
+    })
+
+    it('inspector tab active: the file list shows the cursor, the actions section does not', () => {
+      const lines = renderToLines(renderTallStacked('inspector'), Text, Box)
+      const fileLine = lines.find((l) => l.includes('index.ts'))
+      expect(fileLine).toBeDefined()
+      expect(fileLine!.trimStart().startsWith('>')).toBe(true)
+      expect(lines.join('\n')).not.toContain('[Actions]')
+    })
+  })
 })
 
 describe('renderCommitDiffDetail', () => {

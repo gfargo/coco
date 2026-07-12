@@ -266,7 +266,11 @@ function renderCommitFileList(
   return visible.map((file, offset) => {
     const index = startIndex + offset
     const isSelected = index === clamped
-    const cursor = isSelected ? '>' : ' '
+    // #1601 — honor `focused`: when another section owns the cursor
+    // (e.g. the Actions tab), blank this list's cursor slot and drop
+    // the bold instead of always rendering it, so only one section
+    // ever shows an active-looking cursor at a time.
+    const cursor = isSelected && focused ? '>' : ' '
     const stats = formatChangedFileStats(file)
     const renamed = file.oldPath ? ` (was ${file.oldPath})` : ''
     const statusCode = file.status.padEnd(3)
@@ -290,7 +294,7 @@ function renderCommitFileList(
       key: `commit-file-${index}`,
       color: statusCodeColor(file.status, theme),
 
-      bold: isSelected,
+      bold: isSelected && focused,
     }, label)
   })
 }
