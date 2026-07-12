@@ -28,28 +28,50 @@ function fileState(indexStatus: string, worktreeStatus: string): WorktreeFileSta
   return 'unstaged'
 }
 
+/**
+ * Parses `git status --porcelain -z` output (NUL-separated, no C-quoting).
+ * Porcelain v1's default text format C-quotes "unusual" paths (non-ASCII
+ * under `core.quotePath=true`, embedded quotes/tabs) — the literal quotes
+ * and octal escapes then round-tripped into `git add`/`restore`/`diff`
+ * pathspecs, which fail to match (#1597). `-z` disables quoting entirely
+ * and reports rename/copy origin paths as a separate trailing field
+ * instead of a ` -> ` separator in the same line, removing that
+ * ambiguity too (a path containing a literal ` -> ` broke the v1 split).
+ *
+ * Record shape: each entry is one NUL-terminated `XY <path>` token;
+ * rename/copy entries (X or Y is `R`/`C`) are followed by one additional
+ * NUL-terminated token holding the origin path, which is consumed here
+ * but not surfaced — same as the old parser, which only kept the
+ * destination path from a v1 `old -> new` line.
+ */
 export function parsePorcelainStatus(output: string): WorktreeFile[] {
-  return output
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-    .map((line) => {
-      const indexStatus = line[0] || ' '
-      const worktreeStatus = line[1] || ' '
-      const rawPath = line.slice(3)
-      const renamePath = rawPath.includes(' -> ') ? rawPath.split(' -> ').at(-1) as string : rawPath
+  const tokens = output.split('\0').filter((token) => token.length > 0)
+  const files: WorktreeFile[] = []
 
-      return {
-        path: renamePath,
-        indexStatus,
-        worktreeStatus,
-        state: fileState(indexStatus, worktreeStatus),
-      }
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]
+    const indexStatus = token[0] || ' '
+    const worktreeStatus = token[1] || ' '
+    const path = token.slice(3)
+
+    files.push({
+      path,
+      indexStatus,
+      worktreeStatus,
+      state: fileState(indexStatus, worktreeStatus),
     })
+
+    if (indexStatus === 'R' || indexStatus === 'C' || worktreeStatus === 'R' || worktreeStatus === 'C') {
+      // Skip the trailing origin-path token for this rename/copy entry.
+      i += 1
+    }
+  }
+
+  return files
 }
 
 export async function getWorktreeOverview(git: SimpleGit): Promise<WorktreeOverview> {
-  const files = parsePorcelainStatus(await git.raw(['status', '--porcelain']))
+  const files = parsePorcelainStatus(await git.raw(['status', '--porcelain', '-z']))
 
   return {
     files,

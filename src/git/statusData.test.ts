@@ -9,13 +9,17 @@ import {
 } from './statusData'
 
 describe('log status data', () => {
-  it('parses staged, unstaged, untracked, and rename status rows', () => {
+  it('parses staged, unstaged, untracked, and rename status rows (-z, NUL-separated)', () => {
+    // `-z` reports a rename/copy entry as the destination path token
+    // followed by a separate origin-path token (#1597) — no ` -> `
+    // in-line separator.
     expect(parsePorcelainStatus([
       'M  staged.ts',
       ' M unstaged.ts',
       '?? new.ts',
-      'R  old.ts -> renamed.ts',
-    ].join('\n'))).toEqual([
+      'R  renamed.ts',
+      'old.ts',
+    ].join('\0') + '\0')).toEqual([
       {
         path: 'staged.ts',
         indexStatus: 'M',
@@ -40,6 +44,46 @@ describe('log status data', () => {
         worktreeStatus: ' ',
         state: 'staged',
       },
+    ])
+  })
+
+  it('parses non-ASCII, quote-containing, and tab-containing filenames without corruption (#1597)', () => {
+    // -z never C-quotes paths — porcelain v1's default text format would
+    // have wrapped these in literal quotes with octal escapes
+    // (`"\303\244.txt"`), which then failed to match as a git pathspec.
+    expect(parsePorcelainStatus([
+      '?? ä.txt',
+      '?? 日本語.txt',
+      '?? file with "quotes".txt',
+      '?? file\twith\ttabs.txt',
+    ].join('\0') + '\0')).toEqual([
+      { path: 'ä.txt', indexStatus: '?', worktreeStatus: '?', state: 'untracked' },
+      { path: '日本語.txt', indexStatus: '?', worktreeStatus: '?', state: 'untracked' },
+      { path: 'file with "quotes".txt', indexStatus: '?', worktreeStatus: '?', state: 'untracked' },
+      { path: 'file\twith\ttabs.txt', indexStatus: '?', worktreeStatus: '?', state: 'untracked' },
+    ])
+  })
+
+  it('does not misparse a renamed path containing a literal " -> "', () => {
+    // The v1 text-format parser split on ' -> ' in-line, so a filename
+    // that happens to contain that exact substring would misparse. -z's
+    // separate-token rename encoding has no such ambiguity.
+    expect(parsePorcelainStatus([
+      'R  a -> b.ts',
+      'old name.ts',
+    ].join('\0') + '\0')).toEqual([
+      { path: 'a -> b.ts', indexStatus: 'R', worktreeStatus: ' ', state: 'staged' },
+    ])
+  })
+
+  it('parses a copy entry the same way as a rename (origin token consumed, not surfaced)', () => {
+    expect(parsePorcelainStatus([
+      'C  copied.ts',
+      'source.ts',
+      '?? trailing.ts',
+    ].join('\0') + '\0')).toEqual([
+      { path: 'copied.ts', indexStatus: 'C', worktreeStatus: ' ', state: 'staged' },
+      { path: 'trailing.ts', indexStatus: '?', worktreeStatus: '?', state: 'untracked' },
     ])
   })
 
