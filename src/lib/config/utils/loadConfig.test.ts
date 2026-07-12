@@ -4,6 +4,7 @@ import { DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../constants'
 import { loadConfig } from './loadConfig'
 import * as fs from 'fs'
 import * as os from 'os'
+import * as path from 'path'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
 
 jest.mock('fs')
@@ -22,7 +23,11 @@ const mockFs = fs as jest.Mocked<typeof fs>
 const mockOs = os as jest.Mocked<typeof os>
 const mockResolveGitRepoRoot = resolveGitRepoRoot as jest.MockedFunction<typeof resolveGitRepoRoot>
 const FAKE_REPO_ROOT = '/fake/repo/root'
-const PROJECT_CONFIG_PATH = `${FAKE_REPO_ROOT}/.coco.config.json`
+// project.ts joins this with path.join, which is platform-native (`\` on
+// Windows) — build it the same way here, or the comparisons below
+// silently mismatch (and existsSync's mock returns false for everything)
+// on Windows CI.
+const PROJECT_CONFIG_PATH = path.join(FAKE_REPO_ROOT, '.coco.config.json')
 
 describe('loadConfig', () => {
   beforeEach(() => {

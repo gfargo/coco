@@ -1,4 +1,5 @@
 import * as fs from 'fs'
+import * as path from 'path'
 import { loadProjectJsonConfig, resetConfigLoadWarnings } from './project'
 import { Config } from '../types'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
@@ -23,6 +24,12 @@ jest.mock('../../utils/resolveGitRepoRoot')
 const mockFs = fs as jest.Mocked<typeof fs>
 const mockResolveGitRepoRoot = resolveGitRepoRoot as jest.MockedFunction<typeof resolveGitRepoRoot>
 
+// project.ts joins this with path.join, which is platform-native (`\` on
+// Windows) — comparisons below must go through the same real `path.join`
+// rather than hardcoding a POSIX-style literal, or they silently mismatch
+// (and existsSync's mock returns false for everything) on Windows CI.
+const FAKE_REPO_ROOT = '/fake/repo/root'
+
 const openAIAliasConfig: Config = {
   service: getDefaultServiceConfigFromAlias('openai'),
   defaultBranch: 'main',
@@ -41,7 +48,7 @@ const ollamaAliasConfig: Config = {
 
 describe('loadProjectConfig', () => {
   beforeEach(() => {
-    mockResolveGitRepoRoot.mockReturnValue('/fake/repo/root')
+    mockResolveGitRepoRoot.mockReturnValue(FAKE_REPO_ROOT)
   })
 
   afterEach(() => {
@@ -67,7 +74,8 @@ describe('loadProjectConfig', () => {
     // whole project config. resolveGitRepoRoot is mocked to a fixed path
     // here specifically so this test does not depend on which directory
     // the test runner's own cwd happens to be.
-    mockFs.existsSync.mockImplementation((candidate) => candidate === '/fake/repo/root/.coco.json')
+    const cocoJsonPath = path.join(FAKE_REPO_ROOT, '.coco.json')
+    mockFs.existsSync.mockImplementation((candidate) => candidate === cocoJsonPath)
     mockFs.readFileSync.mockReturnValue(
       JSON.stringify({ service: getDefaultServiceConfigFromAlias('openai', 'gpt-3.5-turbo') })
     )
@@ -77,14 +85,13 @@ describe('loadProjectConfig', () => {
     })
 
     expect(mockResolveGitRepoRoot).toHaveBeenCalled()
-    expect(resolvedPath).toBe('/fake/repo/root/.coco.json')
+    expect(resolvedPath).toBe(cocoJsonPath)
     expect(config.service.provider).toBe('openai')
   })
 
   it('falls back to .coco.config.json at the repo root when .coco.json is absent', () => {
-    mockFs.existsSync.mockImplementation(
-      (candidate) => candidate === '/fake/repo/root/.coco.config.json'
-    )
+    const cocoConfigJsonPath = path.join(FAKE_REPO_ROOT, '.coco.config.json')
+    mockFs.existsSync.mockImplementation((candidate) => candidate === cocoConfigJsonPath)
     mockFs.readFileSync.mockReturnValue(
       JSON.stringify({ service: getDefaultServiceConfigFromAlias('openai', 'gpt-3.5-turbo') })
     )
@@ -93,7 +100,7 @@ describe('loadProjectConfig', () => {
       returnSource: true,
     })
 
-    expect(resolvedPath).toBe('/fake/repo/root/.coco.config.json')
+    expect(resolvedPath).toBe(cocoConfigJsonPath)
   })
 
   it('does not crash on a malformed JSON config — warns and falls back', () => {
