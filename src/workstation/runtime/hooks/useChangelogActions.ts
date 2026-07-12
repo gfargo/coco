@@ -229,6 +229,27 @@ export function useChangelogActions(
         value: 'Changelog ready — y yank · E $EDITOR · c PR · r regen · < back.',
         kind: 'success',
       })
+    } catch (error) {
+      // #1593: defensive recovery for an unexpected throw escaping the
+      // workflow. The workflow catches its own errors today, so this
+      // catch is latent — but without it, an escaped throw would become
+      // an unhandled rejection and strand the view in its loading
+      // state forever (no error, no retry). Ownership-gated (#1386)
+      // like the happy path — a superseding regenerate owns the view.
+      if (changelogAbortRef.current === controller) {
+        const message = error instanceof Error ? error.message : String(error)
+        dispatch({
+          type: 'setChangelogError',
+          branch: head,
+          baseLabel,
+          error: `Changelog generation failed unexpectedly: ${message}`,
+        })
+        dispatch({
+          type: 'setStatus',
+          value: `Changelog generation failed unexpectedly: ${message}`,
+          kind: 'error',
+        })
+      }
     } finally {
       // Clear the ref only if it still points at OUR controller — a
       // rapid regenerate could have already replaced it, in which case

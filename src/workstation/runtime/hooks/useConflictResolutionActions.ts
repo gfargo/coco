@@ -136,6 +136,26 @@ export function useConflictResolutionActions(
         value: `${result.message} — y accept · e edit · n reject · Y accept all · esc dismiss`,
         kind: 'success',
       })
+    } catch (error) {
+      // #1593: defensive recovery for an unexpected throw escaping the
+      // workflow. The workflow catches its own errors today, so this
+      // catch is latent — but without it, an escaped throw would become
+      // an unhandled rejection and strand the overlay in its loading
+      // state forever. Guarded like the happy path — an unmounted tree
+      // or a superseding invocation owns no dispatch here.
+      if (mountedRef.current && abortRef.current === controller) {
+        const message = error instanceof Error ? error.message : String(error)
+        dispatch({
+          type: 'setConflictResolutionError',
+          path: file.path,
+          error: `Conflict resolution failed unexpectedly: ${message}`,
+        })
+        dispatch({
+          type: 'setStatus',
+          value: `Conflict resolution failed unexpectedly: ${message}`,
+          kind: 'error',
+        })
+      }
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null

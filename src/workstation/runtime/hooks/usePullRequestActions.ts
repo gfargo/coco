@@ -200,6 +200,22 @@ export function usePullRequestActions(
         initial,
         multiline: true,
       })
+    } catch (error) {
+      // #1593: defensive recovery for an unexpected throw escaping the
+      // workflow. The workflow catches its own errors today, so this
+      // catch is latent — but without it, an escaped throw would become
+      // an unhandled rejection and strand the pending flag (the
+      // `finally` below still clears it, but the rejection itself would
+      // still escape uncaught). Ownership-gated (#1386) like the happy
+      // path — a superseding invocation owns the handle.
+      if (pullRequestBodyCancelRef.current === cancelHandle) {
+        const message = error instanceof Error ? error.message : String(error)
+        dispatch({
+          type: 'setStatus',
+          value: `${nouns.abbrev} draft failed unexpectedly: ${message}`,
+          kind: 'error',
+        })
+      }
     } finally {
       // Belt-and-suspenders: the `try` block clears the flag on the
       // success path (audit finding #11). This duplicate clear handles
