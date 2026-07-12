@@ -949,6 +949,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     refreshContext,
     refreshHistoryRows,
     refreshWorktreeContext,
+    mountedRef,
   })
 
   // Lifted verbatim into `useWorkflowAction` (0.72 app.ts decomposition,

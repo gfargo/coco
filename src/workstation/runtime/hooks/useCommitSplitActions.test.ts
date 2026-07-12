@@ -44,6 +44,7 @@ function baseDeps(overrides: Partial<UseCommitSplitActionsDeps> = {}): UseCommit
     refreshContext: jest.fn().mockResolvedValue(undefined),
     refreshHistoryRows: jest.fn().mockResolvedValue(undefined),
     refreshWorktreeContext: jest.fn().mockResolvedValue(undefined),
+    mountedRef: { current: true } as never,
     ...overrides,
   }
 }
@@ -91,5 +92,71 @@ describe('useCommitSplitActions — defensive catches for unexpected workflow th
     expect(dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'setStatus', kind: 'error' })
     )
+  })
+})
+
+/**
+ * Regression coverage for #1627: the `clearRecentCommits` auto-clear timer
+ * had no stored handle, so a rapid second apply's markers got wiped early
+ * by the FIRST apply's still-counting-down timer, and the dispatch fired
+ * unconditionally even after unmount.
+ */
+describe('useCommitSplitActions — recentCommits timer ownership (#1627)', () => {
+  const splitPlan = {
+    status: 'ready' as const,
+    plan: { groups: [{ title: 'g1', files: ['a.txt'], hunks: [] }] },
+    planContext: {} as never,
+    fallback: undefined,
+  }
+
+  beforeEach(() => {
+    runCommitSplitPlanWorkflowMock.mockReset()
+    runCommitSplitApplyWorkflowMock.mockReset()
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('a second apply within the first apply timer window keeps its markers for the full 5s', async () => {
+    runCommitSplitApplyWorkflowMock
+      .mockResolvedValueOnce({ ok: true, message: 'applied', commitHashes: ['first1234'] })
+      .mockResolvedValueOnce({ ok: true, message: 'applied', commitHashes: ['second5678'] })
+    const dispatch = jest.fn()
+    const deps = baseDeps({ dispatch, splitPlan: splitPlan as never })
+    const { applyCommitSplit } = useCommitSplitActions(fakeReact(), deps)
+
+    await applyCommitSplit()
+    jest.advanceTimersByTime(2000)
+    await applyCommitSplit()
+
+    // 3s after the SECOND apply is 5s after the FIRST — the first apply's
+    // timer must have been cancelled, so its markers survive this point.
+    jest.advanceTimersByTime(3000)
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'clearRecentCommits' }))
+
+    // 5s after the second apply — its own timer fires now.
+    jest.advanceTimersByTime(2000)
+    const clearCalls = dispatch.mock.calls.filter((call) => call[0]?.type === 'clearRecentCommits')
+    expect(clearCalls).toHaveLength(1)
+  })
+
+  it('does not dispatch clearRecentCommits after unmount', async () => {
+    runCommitSplitApplyWorkflowMock.mockResolvedValueOnce({
+      ok: true,
+      message: 'applied',
+      commitHashes: ['abc1234'],
+    })
+    const dispatch = jest.fn()
+    const mountedRef = { current: true }
+    const deps = baseDeps({ dispatch, splitPlan: splitPlan as never, mountedRef: mountedRef as never })
+    const { applyCommitSplit } = useCommitSplitActions(fakeReact(), deps)
+
+    await applyCommitSplit()
+    mountedRef.current = false
+    jest.advanceTimersByTime(5000)
+
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'clearRecentCommits' }))
   })
 })
