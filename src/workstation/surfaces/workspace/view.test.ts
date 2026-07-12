@@ -22,7 +22,8 @@ import { createLogInkTheme } from '../../chrome/theme'
 
 import { completePath } from './pathCompletion'
 import { applyWorkspaceAction, createWorkspaceState, type WorkspaceState } from './state'
-import { renderWorkspaceApp, type RenderWorkspaceAppDeps } from './view'
+import { renderWorkspaceApp, workspaceHelpMaxOffset, type RenderWorkspaceAppDeps } from './view'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
 
 type StubProps = Record<string, unknown>
 
@@ -292,6 +293,28 @@ describe('renderWorkspaceApp', () => {
     const state = applyWorkspaceAction(baseState(), { type: 'toggle-help' })
     const tree = render(state)
     expect(tree).toMatchSnapshot()
+  })
+
+  it('scrolling the help overlay to the bottom reaches the final row and clears "more below" (#1594)', () => {
+    const rows = 30
+    const maxOffset = workspaceHelpMaxOffset(rows)
+    // Sanity: this terminal height must actually overflow the overlay,
+    // or the ceiling degenerates to 0 and the assertions below are moot.
+    expect(maxOffset).toBeGreaterThan(0)
+
+    let state = applyWorkspaceAction(baseState(), { type: 'toggle-help' })
+    state = applyWorkspaceAction(state, { type: 'scroll-help', delta: 999, maxOffset })
+    expect(state.helpScrollOffset).toBe(maxOffset)
+
+    const tree = render(state, { rows })
+    const text = renderToLines(tree, Text, Box).join('\n')
+
+    expect(text).not.toContain('more below')
+    expect(text).toContain('more above')
+    // The last row of the keymap (buildWorkspaceHelpSections' final
+    // "Repos" entry) must be reachable, not permanently hidden behind
+    // a below-indicator that never clears.
+    expect(text).toContain('Remove the cursored repo from the known-repos store')
   })
 
   it('snapshots the confirm-delete prompt for a known repo', () => {

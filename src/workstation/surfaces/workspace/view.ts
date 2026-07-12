@@ -585,17 +585,61 @@ function workspaceHelpBodyRowCount(): number {
 }
 
 /**
+ * Rows left for content once the "above" indicator (if any) has taken
+ * its row — shared by `resolveWorkspaceHelpScrollWindow` and
+ * `workspaceHelpMaxOffset` (#1594) so the two can't drift apart: the
+ * true bottom of the scroll (`offset > 0`, nothing left below) always
+ * shows the "above" indicator and never the "below" one, so exactly
+ * one row — not two — is reserved there.
+ */
+function workspaceHelpRowsAfterAboveIndicator(visibleRows: number): number {
+  return Math.max(0, visibleRows - 1)
+}
+
+/**
+ * Resolves the scroll window for the help overlay's "more above" /
+ * "more below" pagination (#1594). Two-pass, to avoid a circular
+ * "does an indicator show" <-> "how many rows are visible" dependency:
+ * only reserve a row for `hasMoreBelow` after confirming the remaining
+ * content doesn't already fit in the window left over once `hasMoreAbove`
+ * (if any) has taken its row. Reserving for both unconditionally — the
+ * previous behavior — shrinks the window by 2 at the true bottom (where
+ * `hasMoreAbove` is true because `offset > 0`), permanently hiding the
+ * last `windowSize`-worth of rows and leaving `hasMoreBelow` stuck true.
+ */
+function resolveWorkspaceHelpScrollWindow(
+  visibleRows: number,
+  offset: number,
+  contentLength: number
+): { windowSize: number; hasMoreAbove: boolean; hasMoreBelow: boolean } {
+  const hasMoreAbove = offset > 0
+  const afterAbove = hasMoreAbove ? workspaceHelpRowsAfterAboveIndicator(visibleRows) : visibleRows
+  const remaining = contentLength - offset
+  if (remaining <= afterAbove) {
+    return { windowSize: afterAbove, hasMoreAbove, hasMoreBelow: false }
+  }
+  return { windowSize: Math.max(0, afterAbove - 1), hasMoreAbove, hasMoreBelow: true }
+}
+
+/**
  * Ceiling for `helpScrollOffset` at the given terminal height. The
  * reducer clamps against this (passed with the scroll action) so the
  * offset can't grow past the end invisibly — holding `j` at the bottom
  * used to keep incrementing state, and `k` then spent N presses
  * unwinding the excess before the view moved.
+ *
+ * At the true bottom only the "above" indicator shows (#1594) — the
+ * ceiling reserves a single row for it via
+ * `workspaceHelpRowsAfterAboveIndicator`, not two, so the last body
+ * rows stay reachable.
  */
 export function workspaceHelpMaxOffset(rows: number): number {
   const HEADER_ROWS = 3
   const overlayChromeRows = 4
   const visibleRows = Math.max(4, rows - HEADER_ROWS - FOOTER_HEIGHT - overlayChromeRows)
-  return Math.max(0, workspaceHelpBodyRowCount() - visibleRows)
+  const bodyRowCount = workspaceHelpBodyRowCount()
+  if (bodyRowCount <= visibleRows) return 0
+  return Math.max(0, bodyRowCount - workspaceHelpRowsAfterAboveIndicator(visibleRows))
 }
 
 function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement | null {
@@ -663,8 +707,10 @@ function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElemen
   )
   // Ceiling-clamp the offset here (the reducer only floors at 0) so
   // scrolling past the end sticks at the last row instead of revealing
-  // blank space.
-  const maxOffset = Math.max(0, body.length - visibleRows)
+  // blank space. Calls the exported `workspaceHelpMaxOffset` directly
+  // (#1594) rather than re-deriving the same formula inline, so the
+  // reducer's clamp and this render-time clamp can't drift apart.
+  const maxOffset = workspaceHelpMaxOffset(deps.rows)
   const offset = Math.min(deps.state.helpScrollOffset, maxOffset)
 
   const children: ReactTypes.ReactNode[] = []
@@ -698,10 +744,12 @@ function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElemen
 
   // "more above" / "more below" hints each consume a window row so they
   // don't push body content off-screen. Mirrors the `coco ui` overlay.
-  let windowSize = visibleRows
-  const hasMoreAbove = offset > 0
+  // #1594 — resolved via the shared two-pass helper (see its doc
+  // comment) so the true bottom doesn't reserve a row for BOTH
+  // indicators (which permanently hid the last two body rows).
+  const { windowSize, hasMoreAbove, hasMoreBelow } =
+    resolveWorkspaceHelpScrollWindow(visibleRows, offset, body.length)
   if (hasMoreAbove) {
-    windowSize -= 1
     children.push(
       React.createElement(
         Text,
@@ -709,10 +757,6 @@ function renderHelpOverlay(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElemen
         ' ↑ more above (j/k or ↑/↓ to scroll)'
       )
     )
-  }
-  const hasMoreBelow = offset + windowSize < body.length
-  if (hasMoreBelow) {
-    windowSize -= 1
   }
 
   children.push(...body.slice(offset, offset + windowSize))
