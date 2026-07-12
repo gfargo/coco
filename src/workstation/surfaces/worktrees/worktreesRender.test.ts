@@ -12,6 +12,8 @@ import {
 import type { WorktreeEntry, WorktreeOverview } from '../../../git/worktreeData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderWorktreesSurface } from './index'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
+import { cellWidth } from '../../chrome/text'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -105,5 +107,30 @@ describe('renderWorktreesSurface', () => {
     expect(
       render(makeState(), { worktreeList: makeOverview([makeEntry()]) })
     ).toMatchSnapshot()
+  })
+
+  // Regression (#1624): the branch-column width was computed from
+  // `label.length` (UTF-16 code units) and padded with `.padEnd` (code
+  // units again), so a wide-glyph branch name mis-measured and shifted
+  // the path column relative to an ASCII-named row.
+  describe('wide-glyph branch names align the path column (#1624)', () => {
+    function pathColumnOffset(tree: ReactElement, path: string): number {
+      const lines = renderToLines(tree, Text, Box)
+      const marker = ` ${path}`
+      const line = lines.find((entry) => entry.endsWith(marker))
+      if (!line) throw new Error(`no rendered line ended with "${marker}"`)
+      return cellWidth(line.slice(0, line.length - marker.length))
+    }
+
+    it('a CJK branch name lands the path column at the same cell offset as an ASCII name', () => {
+      const asciiTree = render(makeState(), {
+        worktreeList: makeOverview([makeEntry({ branch: 'ab', path: '/x' })]),
+      })
+      const wideTree = render(makeState(), {
+        worktreeList: makeOverview([makeEntry({ branch: '日本', path: '/x' })]),
+      })
+
+      expect(pathColumnOffset(asciiTree, '/x')).toBe(pathColumnOffset(wideTree, '/x'))
+    })
   })
 })

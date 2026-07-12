@@ -14,6 +14,7 @@ import type { GitTagRef, TagOverview } from '../../../git/tagData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderTagsSurface } from './index'
 import { renderToLines } from '../../runtime/testSupport/renderToLines'
+import { cellWidth } from '../../chrome/text'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -114,6 +115,30 @@ describe('renderTagsSurface', () => {
       })
       const lines = renderToLines(tree, Text, Box)
       expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(12)
+    })
+  })
+
+  // Regression (#1624): the name-column width was computed from
+  // `tag.name.length` (UTF-16 code units) and padded with `.padEnd`
+  // (code units again), so a wide-glyph tag name mis-measured and shifted
+  // the subject column relative to an ASCII-named row.
+  describe('wide-glyph tag names align the subject column (#1624)', () => {
+    function subjectColumnOffset(tree: ReactElement, subject: string): number {
+      const lines = renderToLines(tree, Text, Box)
+      const line = lines.find((entry) => entry.endsWith(` ${subject}`))
+      if (!line) throw new Error(`no rendered line ended with " ${subject}"`)
+      return cellWidth(line.slice(0, line.length - (subject.length + 1)))
+    }
+
+    it('a CJK tag name lands the subject at the same cell offset as an ASCII name', () => {
+      const asciiTree = render(makeState(), {
+        tags: { tags: [makeTag({ name: 'ab', subject: 'X' })] },
+      })
+      const wideTree = render(makeState(), {
+        tags: { tags: [makeTag({ name: '日本', subject: 'X' })] },
+      })
+
+      expect(subjectColumnOffset(asciiTree, 'X')).toBe(subjectColumnOffset(wideTree, 'X'))
     })
   })
 })

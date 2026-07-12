@@ -15,6 +15,8 @@ import {
 import type { BranchOverview, BranchRef } from '../../../git/branchData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderBranchesSurface } from './index'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
+import { cellWidth } from '../../chrome/text'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -124,5 +126,34 @@ describe('renderBranchesSurface', () => {
         }),
       })
     ).toMatchSnapshot()
+  })
+
+  // Regression (#1624): the name-column width was computed from
+  // `branch.shortName.length` (UTF-16 code units) and padded with
+  // `.padEnd` (code units again), so a wide-glyph branch name mis-measured
+  // and shifted the divergence column relative to an ASCII-named row.
+  describe('wide-glyph branch names align the divergence column (#1624)', () => {
+    function divergenceColumnOffset(tree: ReactElement): number {
+      const lines = renderToLines(tree, Text, Box)
+      const marker = ' no upstream'
+      const line = lines.find((entry) => entry.endsWith(marker))
+      if (!line) throw new Error(`no rendered line ended with "${marker}"`)
+      return cellWidth(line.slice(0, line.length - marker.length))
+    }
+
+    it('a CJK branch name lands the divergence column at the same cell offset as an ASCII name', () => {
+      const asciiTree = render(makeState(), {
+        branches: makeBranches({
+          localBranches: [makeRef({ shortName: 'ab', name: 'ab', date: '2024-01-01' })],
+        }),
+      })
+      const wideTree = render(makeState(), {
+        branches: makeBranches({
+          localBranches: [makeRef({ shortName: '日本', name: '日本', date: '2024-01-01' })],
+        }),
+      })
+
+      expect(divergenceColumnOffset(asciiTree)).toBe(divergenceColumnOffset(wideTree))
+    })
   })
 })

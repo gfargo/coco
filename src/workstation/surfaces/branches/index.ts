@@ -24,7 +24,7 @@ import {
     formatLogInkBranchesEmpty,
     formatLogInkLoading,
 } from '../../chrome/surfaceStates'
-import { truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import {
     matchesPromotedFilter,
     renderPromotedFilterAffordance,
@@ -84,7 +84,7 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
   // the timestamp stays where the user expects it).
   const nameColWidth = visible.length === 0
     ? 28
-    : Math.min(40, Math.max(8, ...visible.map((branch) => branch.shortName.length)))
+    : Math.min(40, Math.max(8, ...visible.map((branch) => cellWidth(branch.shortName))))
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'branches-loading', dimColor: true }, loadingLabel)]
     : localBranches.length === 0
@@ -116,7 +116,7 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
         // Split the row into spans so the timestamp stays dim even on the
         // currently-selected (bold) row, and the sync-state marker keeps
         // its own colour even when the surrounding row text is dimmed.
-        const namePadded = truncateCells(branch.shortName, nameColWidth).padEnd(nameColWidth)
+        const namePadded = padCells(truncateCells(branch.shortName, nameColWidth), nameColWidth)
         const timestampPadded = lastTouched.padEnd(8)
         const lineDim = !isSelected && !branch.current
         const cursorAndPad = `${cursor}${markGlyph}`

@@ -131,6 +131,19 @@ export function wrapCells(value: string, width: number): string[] {
   return lines.length > 0 ? lines : [value]
 }
 
+/**
+ * Right-pad `value` to `width` cells with `fillChar` (#1624). `String.padEnd`
+ * counts UTF-16 code units, so padding a wide-glyph name (CJK, emoji) to a
+ * column width computed via `cellWidth` overshoots by one fill character per
+ * wide character — the same misalignment `cellWidth` itself exists to avoid
+ * for truncation. Column-padding call sites should use this instead of
+ * `.padEnd(width)` whenever `width` came from `cellWidth`.
+ */
+export function padCells(value: string, width: number, fillChar = ' '): string {
+  const deficit = width - cellWidth(value)
+  return deficit > 0 ? value + fillChar.repeat(deficit) : value
+}
+
 export function truncateCells(
   value: string,
   width: number,
