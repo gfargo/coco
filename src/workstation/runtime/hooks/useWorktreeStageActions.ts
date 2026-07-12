@@ -255,7 +255,7 @@ export function useWorktreeStageActions(
     dispatch({ type: 'setStatus', value: 'reverting selected file' })
     const result = await revertFile(git, selectedWorktreeFile)
 
-    dispatch({ type: 'setStatus', value: result.message })
+    dispatch({ type: 'setStatus', value: result.message, kind: result.ok ? undefined : 'error' })
     await refreshWorktreeContext()
     setWorktreeDiff(undefined)
     setWorktreeHunks(undefined)
