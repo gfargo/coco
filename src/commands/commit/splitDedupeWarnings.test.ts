@@ -144,26 +144,56 @@ describe('prepareCommitSplitPlan / handleCommitSplit — dedupe warnings (#1462)
     expect(warningIndex).toBeLessThan(planIndex)
   })
 
-  it('default preview path logs the dedupe warning before the plan body', async () => {
+  it('default preview path (interactive) shows the dedupe warning before the plan body on stdout, then prompts (#1577)', async () => {
     mockedConfirmPrompt.mockResolvedValue(false)
     const logger = new Logger({})
-    const logSpy = jest.spyOn(logger, 'log')
+    const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
+    try {
+      const output = await handleCommitSplit({
+        argv: baseArgv,
+        config: baseConfig,
+        git: {} as never,
+        logger,
+        tokenizer: {} as never,
+        llm: {} as never,
+        interactive: true,
+      })
+
+      expect(output).toContain('Split cancelled')
+      expect(mockedConfirmPrompt).toHaveBeenCalledTimes(1)
+
+      // Interactive default path writes the plan preview directly to
+      // stdout (bypassing the logger, which may be muted independently of
+      // interactivity — #1577) before the confirm prompt runs.
+      const written = stdoutSpy.mock.calls.map((call) => String(call[0])).join('')
+      const warningIndex = written.indexOf('docs/page.tsx: kept in')
+      const planIndex = written.indexOf('## 1. feat: docs')
+      expect(warningIndex).toBeGreaterThan(-1)
+      expect(planIndex).toBeGreaterThan(-1)
+      expect(warningIndex).toBeLessThan(planIndex)
+    } finally {
+      stdoutSpy.mockRestore()
+    }
+  })
+
+  it('default preview path (non-interactive) returns the dedupe warning before the plan body without prompting (#1577)', async () => {
     const output = await handleCommitSplit({
       argv: baseArgv,
       config: baseConfig,
       git: {} as never,
-      logger,
+      logger: new Logger({}),
       tokenizer: {} as never,
       llm: {} as never,
+      // interactive omitted — matches the default `mode: 'stdout'` CLI run.
     })
 
-    expect(output).toContain('Split cancelled')
-    const loggedLines = logSpy.mock.calls.map((call) => call[0])
-    const warningLineIndex = loggedLines.findIndex((line) => line.includes('docs/page.tsx: kept in'))
-    const planLineIndex = loggedLines.findIndex((line) => line.includes('## 1. feat: docs'))
-    expect(warningLineIndex).toBeGreaterThan(-1)
-    expect(planLineIndex).toBeGreaterThan(-1)
-    expect(warningLineIndex).toBeLessThan(planLineIndex)
+    expect(mockedConfirmPrompt).not.toHaveBeenCalled()
+    expect(output).toContain('Re-run with --split --apply to commit this plan.')
+    const warningIndex = output.indexOf('docs/page.tsx: kept in')
+    const planIndex = output.indexOf('## 1. feat: docs')
+    expect(warningIndex).toBeGreaterThan(-1)
+    expect(planIndex).toBeGreaterThan(-1)
+    expect(warningIndex).toBeLessThan(planIndex)
   })
 })
