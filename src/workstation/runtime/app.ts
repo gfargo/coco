@@ -217,6 +217,15 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // `useDiffHydration`'s header.
   const {worktreeDiff, setWorktreeDiff, worktreeDiffLoading, setWorktreeDiffLoading} = useWorktreeDiffState(React)
   const {worktreeHunks, setWorktreeHunks, worktreeHunksLoading, setWorktreeHunksLoading} = useWorktreeHunksState(React)
+  // #1579 — bumped by the hunk/line-level staging callbacks
+  // (`useWorktreeStageActions`) after a mutation that may leave the
+  // file's own `indexStatus`/`worktreeStatus` unchanged (e.g. reverting
+  // one of several unstaged hunks, or staging the 2nd+ hunk of an
+  // already-`MM` file). The two hydration effects below key on those
+  // scalar status fields, so without this signal a same-status hunk
+  // mutation clears the cached diff/hunks and nothing reloads them —
+  // same fix shape as `prDiffRefreshToken` above.
+  const [worktreeDiffRefreshToken, setWorktreeDiffRefreshToken] = React.useState(0)
   // Syntax-highlight spans for the diff currently in view (#1117
   // follow-up). Owned by `useDiffSyntaxState` (app.ts decomposition item 2 /
   // #1237); the `useState` stays in this exact slot while the effect that
@@ -584,6 +593,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     activeView: state.activeView,
     diffSource: state.diffSource,
     selectedWorktreeFile,
+    worktreeDiffRefreshToken,
     setWorktreeHunks,
     setWorktreeHunksLoading,
   })
@@ -742,6 +752,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     activeView: state.activeView,
     diffSource: state.diffSource,
     selectedWorktreeFile,
+    worktreeDiffRefreshToken,
     setWorktreeDiff,
     setWorktreeDiffLoading,
   })
@@ -798,6 +809,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     statusFilterMask: state.statusFilterMask,
     setWorktreeDiff,
     setWorktreeHunks,
+    setWorktreeDiffRefreshToken,
   })
 
   // Lifted verbatim into `useCommitComposeActions` (0.72 app.ts

@@ -6,10 +6,13 @@ import {
   useCompareDiffState,
   useStashDiffHydration,
   useStashDiffState,
+  useWorktreeDiffHydration,
   useWorktreeDiffState,
+  useWorktreeHunksHydration,
   useWorktreeHunksState,
 } from './useDiffHydration'
 import type { WorktreeFile } from '../../../git/statusData'
+import type * as ReactTypes from 'react'
 
 type EffectFn = () => void | (() => void)
 
@@ -25,6 +28,25 @@ function effectReact(): {
     },
   } as unknown as typeof import('react')
   return { React, runEffect: () => effects[0]() }
+}
+
+/**
+ * Fake React that records the `useEffect` dependency array instead of
+ * running the effect — used to assert a dep is present (and that it makes
+ * two otherwise-identical calls produce different arrays) without needing
+ * to mock the loader's data-layer calls.
+ */
+function depsCapturingReact(): {
+  React: typeof import('react')
+  getDeps: () => ReactTypes.DependencyList | undefined
+} {
+  let capturedDeps: ReactTypes.DependencyList | undefined
+  const React = {
+    useEffect: (_fn: EffectFn, deps?: ReactTypes.DependencyList) => {
+      capturedDeps = deps
+    },
+  } as unknown as typeof import('react')
+  return { React, getDeps: () => capturedDeps }
 }
 
 /**
@@ -201,5 +223,64 @@ describe('loader bail clears its loading flag', () => {
     runEffect()
     expect(setFilePreview).toHaveBeenCalledWith(undefined)
     expect(setFilePreviewLoading).toHaveBeenCalledWith(false)
+  })
+})
+
+/**
+ * Regression for #1579: a hunk-level stage/revert can leave the cursored
+ * worktree file's own `indexStatus`/`worktreeStatus` unchanged (reverting one
+ * of several unstaged hunks; staging the 2nd+ hunk of an already-`MM` file).
+ * Those scalar fields were the loaders' only other reload signal, so the
+ * `setWorktreeDiff(undefined)` / `setWorktreeHunks(undefined)` clears in
+ * `useWorktreeStageActions` never rehydrated and the staging diff pane went
+ * permanently blank. `worktreeDiffRefreshToken` closes that gap — these
+ * tests assert it is actually wired into both loaders' dependency arrays
+ * (a same-status mutation is otherwise invisible to React's dep comparison).
+ */
+describe('worktreeDiffRefreshToken is part of the reload signal (#1579)', () => {
+  const git = {} as never
+  const selectedWorktreeFile = file('src/app.ts')
+
+  it('useWorktreeHunksHydration: deps array carries the token and changes when only the token changes', () => {
+    const baseDeps = {
+      git,
+      activeView: 'diff' as const,
+      diffSource: 'worktree' as const,
+      selectedWorktreeFile,
+      setWorktreeHunks: jest.fn(),
+      setWorktreeHunksLoading: jest.fn(),
+    }
+
+    const first = depsCapturingReact()
+    useWorktreeHunksHydration(first.React, { ...baseDeps, worktreeDiffRefreshToken: 0 })
+    const second = depsCapturingReact()
+    useWorktreeHunksHydration(second.React, { ...baseDeps, worktreeDiffRefreshToken: 1 })
+
+    expect(first.getDeps()).toContain(0)
+    expect(second.getDeps()).toContain(1)
+    // Same file, view, and source on both calls — only the token differs.
+    // If the token were dropped from the dep array, these would be equal
+    // and React would never re-run the effect after a same-status mutation.
+    expect(first.getDeps()).not.toEqual(second.getDeps())
+  })
+
+  it('useWorktreeDiffHydration: deps array carries the token and changes when only the token changes', () => {
+    const baseDeps = {
+      git,
+      activeView: 'diff' as const,
+      diffSource: 'worktree' as const,
+      selectedWorktreeFile,
+      setWorktreeDiff: jest.fn(),
+      setWorktreeDiffLoading: jest.fn(),
+    }
+
+    const first = depsCapturingReact()
+    useWorktreeDiffHydration(first.React, { ...baseDeps, worktreeDiffRefreshToken: 0 })
+    const second = depsCapturingReact()
+    useWorktreeDiffHydration(second.React, { ...baseDeps, worktreeDiffRefreshToken: 1 })
+
+    expect(first.getDeps()).toContain(0)
+    expect(second.getDeps()).toContain(1)
+    expect(first.getDeps()).not.toEqual(second.getDeps())
   })
 })
