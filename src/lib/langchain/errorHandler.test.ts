@@ -1,5 +1,10 @@
 import { isNetworkError, isRetryableError, handleLangChainError } from './errorHandler'
-import { LangChainNetworkError, LangChainExecutionError } from './errors'
+import {
+  LangChainNetworkError,
+  LangChainExecutionError,
+  LangChainAuthenticationError,
+  LangChainRateLimitError,
+} from './errors'
 
 describe('isNetworkError', () => {
   it('should detect "fetch failed" errors', () => {
@@ -138,6 +143,96 @@ describe('handleLangChainError', () => {
       expect(e).toBeInstanceOf(LangChainExecutionError)
       expect((e as Error).message).toBe('executeChain: Chain failed: Parse error')
     }
+  })
+
+  // Regression (#1637): a real provider auth rejection (invalid/revoked
+  // key) used to fall through to the generic LangChainExecutionError wrap,
+  // so the curated authentication troubleshooting block never rendered —
+  // only a locally-missing key (before any request) produced this class.
+  describe('provider auth rejections (#1637)', () => {
+    it('throws LangChainAuthenticationError for a 401 status', () => {
+      const error = { status: 401, message: 'Incorrect API key provided' }
+
+      expect(() => {
+        handleLangChainError(error, 'executeChain: Chain execution failed', {
+          provider: 'openai',
+          endpoint: 'https://api.openai.com',
+        })
+      }).toThrow(LangChainAuthenticationError)
+    })
+
+    it('throws LangChainAuthenticationError for a 403 status', () => {
+      const error = { status: 403, message: 'Forbidden' }
+
+      expect(() => {
+        handleLangChainError(error, 'test context')
+      }).toThrow(LangChainAuthenticationError)
+    })
+
+    it('throws LangChainAuthenticationError for a provider invalid_api_key code', () => {
+      const error = { code: 'invalid_api_key', message: 'Invalid API key' }
+
+      expect(() => {
+        handleLangChainError(error, 'test context')
+      }).toThrow(LangChainAuthenticationError)
+    })
+
+    it('carries provider and endpoint through to the thrown error', () => {
+      const error = { status: 401, message: 'Incorrect API key provided' }
+
+      try {
+        handleLangChainError(error, 'test context', {
+          provider: 'openai',
+          endpoint: 'https://api.openai.com',
+        })
+      } catch (e) {
+        expect(e).toBeInstanceOf(LangChainAuthenticationError)
+        const authError = e as LangChainAuthenticationError
+        expect(authError.provider).toBe('openai')
+        expect(authError.endpoint).toBe('https://api.openai.com')
+        expect(authError.message).toBe('Incorrect API key provided')
+      }
+    })
+
+    it('does not misclassify an unrelated 400 as an auth error', () => {
+      const error = { status: 400, message: 'Bad request' }
+
+      expect(() => {
+        handleLangChainError(error, 'test context')
+      }).toThrow(LangChainExecutionError)
+    })
+  })
+
+  // Regression (#1637): a 429 that survived the summarize chain's
+  // retry/backoff used to surface as a raw provider message via the
+  // generic execution-error wrap, with no rate-limit-specific guidance.
+  describe('rate-limit responses (#1637)', () => {
+    it('throws LangChainRateLimitError for a 429 status', () => {
+      const error = { status: 429, message: 'Rate limit reached' }
+
+      expect(() => {
+        handleLangChainError(error, 'test context', { provider: 'openai' })
+      }).toThrow(LangChainRateLimitError)
+    })
+
+    it('throws LangChainRateLimitError for a rate_limit_exceeded code', () => {
+      const error = { code: 'rate_limit_exceeded', message: 'Too many requests' }
+
+      expect(() => {
+        handleLangChainError(error, 'test context')
+      }).toThrow(LangChainRateLimitError)
+    })
+
+    it('carries the provider through to the thrown error', () => {
+      const error = { status: 429, message: 'Rate limit reached' }
+
+      try {
+        handleLangChainError(error, 'test context', { provider: 'anthropic' })
+      } catch (e) {
+        expect(e).toBeInstanceOf(LangChainRateLimitError)
+        expect((e as LangChainRateLimitError).provider).toBe('anthropic')
+      }
+    })
   })
 })
 

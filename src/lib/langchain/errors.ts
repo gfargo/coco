@@ -74,6 +74,23 @@ export class LangChainAuthenticationError extends LangChainError {
 }
 
 /**
+ * Rate-limit error (HTTP 429 / provider "too many requests") after retries
+ * are exhausted. Distinct from `LangChainNetworkError` — that formatter's
+ * remedy ("check your connection", "is the service running?") is wrong
+ * advice for a rate limit, whose actual fix is lowering
+ * `service.maxConcurrent` or waiting.
+ */
+export class LangChainRateLimitError extends LangChainError {
+  constructor(
+    message: string,
+    public readonly provider?: string,
+    context?: Record<string, unknown>
+  ) {
+    super(message, { ...context, provider })
+  }
+}
+
+/**
  * Timeout and retry-related errors
  */
 export class LangChainTimeoutError extends LangChainError {

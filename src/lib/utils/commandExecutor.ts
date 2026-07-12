@@ -5,7 +5,7 @@ import { Logger } from './logger'
 import { CommandHandler } from '../types'
 import { BaseArgvOptions } from '../../commands/types'
 import { Config } from '../config/types'
-import { LangChainNetworkError, LangChainAuthenticationError } from '../langchain/errors'
+import { LangChainNetworkError, LangChainAuthenticationError, LangChainRateLimitError } from '../langchain/errors'
 import { isCommandExitError } from './commandExit'
 import { decideUsageConsent, isConsentInteractive, USAGE_ENABLED_NOTICE } from './usageConsent'
 import { persistUsagePreference } from '../config/services/xdg'
@@ -96,6 +96,25 @@ function formatAuthenticationError(error: LangChainAuthenticationError, logger: 
 
   logger.error('  • Run `coco init` to (re)configure your provider + key', { color: 'white' })
   logger.error('  • Run `coco doctor` to inspect the active config sources', { color: 'white' })
+
+  logger.verbose(`\nOriginal error: ${error.message}`, { color: 'gray' })
+}
+
+/**
+ * Formats a rate-limit error (#1637) with remedy-specific guidance —
+ * distinct from `formatNetworkError`, whose "check your connection" advice
+ * is wrong for a 429 that survived the summarize chain's retry/backoff.
+ */
+function formatRateLimitError(error: LangChainRateLimitError, logger: Logger): void {
+  const provider = error.provider || 'LLM service'
+
+  logger.error('\nFailed to execute command', { color: 'yellow' })
+  logger.error(`\nError: Rate limited by ${provider}`, { color: 'red' })
+
+  logger.error('\nTroubleshooting:', { color: 'cyan' })
+  logger.error('  • Lower `service.maxConcurrent` in your config to send fewer requests at once', { color: 'white' })
+  logger.error('  • Wait a bit and retry — many providers reset rate-limit windows quickly', { color: 'white' })
+  logger.error('  • Check your provider dashboard for your current rate/usage limits', { color: 'white' })
 
   logger.verbose(`\nOriginal error: ${error.message}`, { color: 'gray' })
 }
@@ -238,6 +257,8 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
         formatNetworkError(error, logger)
       } else if (error instanceof LangChainAuthenticationError) {
         formatAuthenticationError(error, logger)
+      } else if (error instanceof LangChainRateLimitError) {
+        formatRateLimitError(error, logger)
       } else if (missingOllamaModel) {
         formatModelNotFoundError(missingOllamaModel, logger)
       } else {
