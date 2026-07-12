@@ -65,6 +65,21 @@ export const options = {
   },
 } as Record<string, Options>
 
-export const builder = (yargs: Argv) => { 
-  return yargs.options(options).usage(getCommandUsageHeader(command))
+export const builder = (yargs: Argv) => {
+  return yargs
+    .options(options)
+    .check((argv) => {
+      // yargs coerces an unparseable --severity value to NaN, and
+      // `typeof NaN === 'number'` — so a typo silently disabled the CI
+      // gate instead of failing loudly (#1599). Reject up front instead.
+      const severity = (argv as { severity?: number }).severity
+      if (
+        severity !== undefined &&
+        !(Number.isInteger(severity) && severity >= 1 && severity <= 10)
+      ) {
+        throw new Error('--severity must be an integer between 1 and 10')
+      }
+      return true
+    })
+    .usage(getCommandUsageHeader(command))
 }

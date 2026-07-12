@@ -303,7 +303,9 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
 
   // `--severity <n>`: CI gate. After surfacing the review, exit non-zero
   // if any finding is at or above the threshold so pipelines can block on it.
-  const severityThreshold = typeof argv.severity === 'number' ? argv.severity : undefined
+  // Defense-in-depth alongside the builder's `.check()` validation:
+  // Number.isFinite(NaN) is false, unlike `typeof NaN === 'number'` (#1599).
+  const severityThreshold = Number.isFinite(argv.severity) ? argv.severity : undefined
   const exceedsThreshold =
     severityThreshold !== undefined && findings.some((f) => f.severity >= severityThreshold)
 

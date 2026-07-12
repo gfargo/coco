@@ -18,9 +18,9 @@ async function parseDefaultFileDiff(
   git: SimpleGit
 ): Promise<string> {
   if (commit === '--staged') {
-    return await git.diff(['--staged', nodeFile.filePath])
+    return await git.diff(['--staged', '--', nodeFile.filePath])
   } else if (commit === '--unstaged') {
-    return await git.diff([nodeFile.filePath])
+    return await git.diff(['--', nodeFile.filePath])
   } else if (commit === '--untracked') {
     // For untracked files, read the file content directly from the filesystem
     try {
@@ -33,7 +33,11 @@ async function parseDefaultFileDiff(
 
   // For branch comparisons, handle files that may not exist in the base branch
   try {
-    return await git.diff([commit, nodeFile.filePath])
+    // `--` disambiguates the pathspec from a revision (#1603) — without
+    // it, a file literally named like a ref (`main`, `HEAD`, a tag) is
+    // resolved as a revision instead of a path, silently diffing the
+    // wrong thing.
+    return await git.diff([commit, '--', nodeFile.filePath])
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     

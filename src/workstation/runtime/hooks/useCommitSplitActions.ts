@@ -149,6 +149,26 @@ export function useCommitSplitActions(
     let result: Awaited<ReturnType<typeof runCommitSplitPlanWorkflow>>
     try {
       result = await runCommitSplitPlanWorkflow({ git, signal: controller.signal })
+    } catch (error) {
+      // #1593: defensive recovery for an unexpected throw escaping the
+      // workflow. The workflow catches its own errors today, so this
+      // catch is latent — but without it, an escaped throw would become
+      // an unhandled rejection and strand the overlay in its loading
+      // state forever. Ownership-gated (#1386) like the happy path — a
+      // superseding re-roll owns the overlay.
+      if (planAbortRef.current === controller) {
+        const message = error instanceof Error ? error.message : String(error)
+        dispatch({
+          type: 'setSplitPlanError',
+          error: `Split plan generation failed unexpectedly: ${message}`,
+        })
+        dispatch({
+          type: 'setStatus',
+          value: `Split plan generation failed unexpectedly: ${message}`,
+          kind: 'error',
+        })
+      }
+      return
     } finally {
       if (planAbortRef.current === controller) {
         planAbortRef.current = null
@@ -246,12 +266,27 @@ export function useCommitSplitActions(
     dispatch({ type: 'setSplitPlanApplying' })
     dispatch({ type: 'setStatus', value: 'Applying split plan…', loading: true })
 
-    const result = await runCommitSplitApplyWorkflow({
-      plan: splitPlan.plan,
-      planContext: splitPlan.planContext,
-      git,
-      fallback: splitPlan.fallback,
-    })
+    let result: Awaited<ReturnType<typeof runCommitSplitApplyWorkflow>>
+    try {
+      result = await runCommitSplitApplyWorkflow({
+        plan: splitPlan.plan,
+        planContext: splitPlan.planContext,
+        git,
+        fallback: splitPlan.fallback,
+      })
+    } catch (error) {
+      // #1593: defensive recovery — an unexpected throw from the apply
+      // workflow would otherwise escape as an unhandled rejection and
+      // strand the overlay in its 'applying' loading state forever.
+      const message = error instanceof Error ? error.message : String(error)
+      dispatch({ type: 'setSplitPlanError', error: `Split apply failed unexpectedly: ${message}` })
+      dispatch({
+        type: 'setStatus',
+        value: `Split apply failed unexpectedly: ${message}${dumpPath ? ` · diagnostic log: ${dumpPath}` : ''}`,
+        kind: 'error',
+      })
+      return
+    }
 
     dump.push(`workflow returned: ok=${result.ok} message="${result.message}" commitHashes=[${(result.commitHashes || []).join(', ')}]`)
 

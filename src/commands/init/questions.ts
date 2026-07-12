@@ -370,10 +370,6 @@ export const questions = {
           name: '.coco.config.json (legacy)',
           value: '.coco.config.json',
         },
-        {
-          name: '.env',
-          value: '.env',
-        },
       ],
     }),
 

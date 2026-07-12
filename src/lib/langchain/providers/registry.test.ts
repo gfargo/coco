@@ -54,6 +54,15 @@ describe('getLlm via registry', () => {
     expect(getLlmMetadata(llm).provider).toBe('openai')
   })
 
+  it('threads service.maxConcurrent into the OpenAI client (#1629)', () => {
+    const llm = getLlm(
+      'openai',
+      'gpt-5.4-mini' as LLMModel,
+      makeConfig({ provider: 'openai', model: 'gpt-5.4-mini', maxConcurrent: 3 })
+    )
+    expect((llm as unknown as { caller: { maxConcurrency: number } }).caller.maxConcurrency).toBe(3)
+  })
+
   it('builds an Anthropic model and records provider metadata', () => {
     const llm = getLlm(
       'anthropic',

@@ -15,6 +15,7 @@ import { executeChain } from '../lib/langchain/utils/executeChain'
 import { executeChainWithSchema } from '../lib/langchain/utils/executeChainWithSchema'
 import { getLlm } from '../lib/langchain/utils/getLlm'
 import { getTokenCounterForProvider } from '../lib/utils/tokenizer'
+import { confirmPrompt } from '../lib/ui/inquirerPrompts'
 import { Logger } from '../lib/utils/logger'
 import { Config } from '../commands/types'
 import {
@@ -62,6 +63,13 @@ jest.mock('../lib/ui/TaskList', () => ({
 jest.mock('../lib/utils/hasCommitlintConfig', () => ({
   hasCommitlintConfig: jest.fn().mockResolvedValue(false),
 }))
+jest.mock('../lib/ui/inquirerPrompts', () => {
+  const actual = jest.requireActual('../lib/ui/inquirerPrompts')
+  return {
+    ...actual,
+    confirmPrompt: jest.fn(),
+  }
+})
 
 const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
 const mockExecuteChain = executeChain as jest.MockedFunction<typeof executeChain>
@@ -75,6 +83,7 @@ const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.Mocked
 const mockLoadSummarizationChain = loadSummarizationChain as jest.MockedFunction<
   typeof loadSummarizationChain
 >
+const mockConfirmPrompt = confirmPrompt as jest.MockedFunction<typeof confirmPrompt>
 
 jest.setTimeout(180000)
 
@@ -356,6 +365,117 @@ describe('command integration with temp git repos', () => {
     expect(stdout).toContain('docs: update readme')
     expect(stdout).toContain('test: add feature fixture')
     expect(status.staged).toEqual(expect.arrayContaining(['README.md', 'src/feature.ts']))
+  })
+
+  it('shows the split plan on stdout and never prompts when --split runs non-interactively without --plan/--apply (#1577)', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+    mockExecuteChainWithSchema.mockResolvedValueOnce({
+      groups: [
+        {
+          title: 'docs: update readme',
+          body: 'Document the temp repo.',
+          rationale: 'README-only documentation change.',
+          files: ['README.md'],
+        },
+        {
+          title: 'test: add feature fixture',
+          body: 'Add a feature fixture file.',
+          rationale: 'Fixture code belongs in its own commit.',
+          files: ['src/feature.ts'],
+        },
+      ],
+    })
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.git.add(['README.md', 'src/feature.ts'])
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit', 'split'],
+      interactive: false,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      split: true,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    // The default (no --plan, no --apply) split path must degrade to a
+    // plan preview — not a blocking confirm prompt the caller can't see —
+    // whenever there's no interactive session (#1577).
+    expect(mockConfirmPrompt).not.toHaveBeenCalled()
+    expect(stdout).toContain('docs: update readme')
+    expect(stdout).toContain('test: add feature fixture')
+    expect(stdout).toContain('Re-run with --split --apply to commit this plan.')
+
+    // Nothing should have been committed — this is a preview, same as --plan.
+    const status = await repo.git.status()
+    expect(status.staged).toEqual(expect.arrayContaining(['README.md', 'src/feature.ts']))
+  })
+
+  it('shows the split plan on stdout before prompting when --split runs interactively without --plan/--apply (#1577)', async () => {
+    mockLoadConfig.mockReturnValue(createConfig({
+      mode: 'stdout',
+    }))
+    mockExecuteChainWithSchema.mockResolvedValueOnce({
+      groups: [
+        {
+          title: 'docs: update readme',
+          body: 'Document the temp repo.',
+          rationale: 'README-only documentation change.',
+          files: ['README.md'],
+        },
+        {
+          title: 'test: add feature fixture',
+          body: 'Add a feature fixture file.',
+          rationale: 'Fixture code belongs in its own commit.',
+          files: ['src/feature.ts'],
+        },
+      ],
+    })
+    mockConfirmPrompt.mockResolvedValueOnce(false)
+
+    await repo.writeFile('.gitkeep', '\n')
+    await repo.commitAll('chore: initial commit')
+    await repo.writeFile('README.md', '# Temp repo\n')
+    await repo.writeFile('src/feature.ts', 'export const feature = true\n')
+    await repo.git.add(['README.md', 'src/feature.ts'])
+
+    await commitHandler({
+      $0: 'coco',
+      _: ['commit', 'split'],
+      interactive: true,
+      openInEditor: false,
+      ignoredFiles: [],
+      ignoredExtensions: [],
+      withPreviousCommits: 0,
+      conventional: false,
+      includeBranchName: false,
+      noDiff: false,
+      noVerify: true,
+      split: true,
+      verbose: false,
+      version: false,
+      help: false,
+    } as Arguments<CommitOptions>, createLogger())
+
+    // The plan must reach real stdout (not just the muted logger double)
+    // before the confirm prompt is invoked.
+    expect(stdout).toContain('docs: update readme')
+    expect(stdout).toContain('test: add feature fixture')
+    expect(mockConfirmPrompt).toHaveBeenCalledTimes(1)
   })
 
   it('applies a file-level commit split plan using real git commits', async () => {

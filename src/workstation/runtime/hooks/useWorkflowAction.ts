@@ -1545,7 +1545,7 @@ export function useWorkflowAction(
     if (id === 'delete-branch' || id === 'force-delete-branch') {
       if (result?.ok) {
         dispatch({ type: 'clearSelection' })
-      } else if (pendingItemAction && pendingItemAction.ids.length > 1) {
+      } else if (pendingItemAction && pendingItemAction.ids.length > 1 && !frameChanged) {
         dispatch({ type: 'setMarks', view: 'branches', ids: pendingItemAction.ids })
       }
     }
@@ -1556,7 +1556,7 @@ export function useWorkflowAction(
     if (id === 'drop-stash') {
       if (result?.ok) {
         dispatch({ type: 'clearSelection' })
-      } else if (pendingItemAction && pendingItemAction.ids.length > 1) {
+      } else if (pendingItemAction && pendingItemAction.ids.length > 1 && !frameChanged) {
         dispatch({ type: 'setMarks', view: 'stash', ids: pendingItemAction.ids })
       }
     }
@@ -1578,7 +1578,7 @@ export function useWorkflowAction(
     // raw git message in `details`, so the not-fully-merged detection
     // scans those too.
     const deleteFailureText = [result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')
-    if (id === 'delete-branch' && !result?.ok && isBranchNotFullyMergedError(deleteFailureText)) {
+    if (id === 'delete-branch' && !result?.ok && isBranchNotFullyMergedError(deleteFailureText) && !frameChanged) {
       dispatch({ type: 'setPendingConfirmation', value: 'force-delete-branch' })
     }
     // After a successful create-branch-here, offer to switch onto the
@@ -1617,7 +1617,8 @@ export function useWorkflowAction(
     if (
       (id === 'push-current-branch' || id === 'push-selected-branch') &&
       !result?.ok &&
-      isNonFastForwardPushError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n'))
+      isNonFastForwardPushError([result?.message, ...((result as { details?: string[] } | undefined)?.details || [])].join('\n')) &&
+      !frameChanged
     ) {
       dispatch({
         type: 'setPendingConfirmation',

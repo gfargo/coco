@@ -114,6 +114,19 @@ export type UseContextRefreshDeps = {
     depth: number,
   ) => void
   setPrDiffRefreshToken: ReactTypes.Dispatch<ReactTypes.SetStateAction<number>>
+  /**
+   * Bumped whenever `refreshWorktreeContext` actually writes a fresh
+   * worktree overview into context (PR #1646 review, following #1579).
+   * Centralized here — mirroring `setPrDiffRefreshToken`'s bump inside
+   * `refreshContext` above — instead of at each individual stage/revert
+   * call site, so every current and future `refreshWorktreeContext`
+   * caller gets the reload signal automatically: a worktree mutation can
+   * leave the cursored file's own `indexStatus`/`worktreeStatus`
+   * unchanged (reverting one of several unstaged hunks; staging the
+   * 2nd+ hunk of an already-`MM` file), and those scalar fields are
+   * `useDiffHydration`'s only other reload signal.
+   */
+  setWorktreeDiffRefreshToken: ReactTypes.Dispatch<ReactTypes.SetStateAction<number>>
 }
 
 export type UseContextRefreshResult = {
@@ -125,7 +138,15 @@ export function useContextRefresh(
   React: typeof ReactTypes,
   deps: UseContextRefreshDeps,
 ): UseContextRefreshResult {
-  const { git, runtimesLength, dispatch, setContext, setContextStatus, setPrDiffRefreshToken } = deps
+  const {
+    git,
+    runtimesLength,
+    dispatch,
+    setContext,
+    setContextStatus,
+    setPrDiffRefreshToken,
+    setWorktreeDiffRefreshToken,
+  } = deps
 
   // #1385 — per-frame monotonic request ids for sequencing overlapping
   // refreshes on the same frame. Each call claims the next id before
@@ -193,8 +214,12 @@ export function useContextRefresh(
       (current) => updateLogInkContextStatus(current, 'worktree', 'ready'),
       issuedAtDepth,
     )
+    // #1579 / PR #1646 review — force worktree-diff/hunks hydration to
+    // re-evaluate on every actual worktree refresh, not just ones where
+    // the cursored file's own status happens to change.
+    setWorktreeDiffRefreshToken((token) => token + 1)
     return worktree
-  }, [git, runtimesLength, setContext, setContextStatus])
+  }, [git, runtimesLength, setContext, setContextStatus, setWorktreeDiffRefreshToken])
 
   return { refreshContext, refreshWorktreeContext }
 }

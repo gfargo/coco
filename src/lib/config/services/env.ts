@@ -1,11 +1,56 @@
 import { LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
-import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
 import { removeUndefined } from '../../utils/removeUndefined'
-import { updateFileSection } from '../../utils/updateFileSection'
-import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT, CONFIG_KEYS } from '../constants'
+import { CONFIG_KEYS } from '../constants'
 import { Config } from '../types'
 
 type ValuesTypes = Config[keyof Config]
+
+/**
+ * Provider-scoped API-key env vars, mapped to the provider whose
+ * `service.authentication` they populate. Single source of truth for both
+ * "is this key service-scoped" (`envKeys` / the service-var check below)
+ * and "which provider does it belong to" (`handleServiceEnvVar`'s
+ * routing) — previously these lived in sync-by-hand across the `envKeys`
+ * array, a boolean OR-chain, and the `handleServiceEnvVar` switch, so
+ * adding a key to the array but missing it in the OR-chain silently fell
+ * through to the wrong branch (PR #1646 review).
+ *
+ * Insertion order matters: `OPEN_AI_KEY` is a deprecated alias for
+ * `OPENAI_API_KEY` (#1584) — both are read via `Object.keys` below in
+ * declaration order, and a later key's assignment overwrites an earlier
+ * one's when both env vars are set, so `OPENAI_API_KEY` must stay
+ * declared after `OPEN_AI_KEY` for it to win.
+ */
+const PROVIDER_API_KEY_ENV_VARS: Record<string, LLMProvider> = {
+  OPEN_AI_KEY: 'openai',
+  OPENAI_API_KEY: 'openai',
+  ANTHROPIC_API_KEY: 'anthropic',
+  GEMINI_API_KEY: 'gemini',
+  GOOGLE_API_KEY: 'gemini',
+  MISTRAL_API_KEY: 'mistral',
+  AZURE_OPENAI_API_KEY: 'azure',
+}
+
+/**
+ * Non-provider-scoped service-level env vars — still service-scoped
+ * (routed to `handleServiceEnvVar`, folded under `envConfig.service`), but
+ * not tied to a single provider's auth the way the keys above are.
+ */
+const SERVICE_SCALAR_ENV_KEYS = new Set([
+  'COCO_SERVICE_PROVIDER',
+  'COCO_SERVICE_MODEL',
+  'COCO_SERVICE_BASE_URL',
+  'COCO_SERVICE_ENDPOINT',
+  'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
+  'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES',
+  'COCO_SERVICE_FIELDS',
+  'COCO_SERVICE_DYNAMIC_MODELS',
+  'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE',
+])
+
+function isServiceEnvKey(key: string): boolean {
+  return SERVICE_SCALAR_ENV_KEYS.has(key) || key in PROVIDER_API_KEY_ENV_VARS
+}
 
 /**
  * Load environment variables
@@ -31,20 +76,8 @@ export function loadEnvConfig<ConfigType = Config>(
 
   const envKeys = [
     ...CONFIG_KEYS,
-    'COCO_SERVICE_PROVIDER',
-    'COCO_SERVICE_MODEL',
-    'OPEN_AI_KEY',
-    'GEMINI_API_KEY',
-    'GOOGLE_API_KEY',
-    'MISTRAL_API_KEY',
-    'AZURE_OPENAI_API_KEY',
-    'COCO_SERVICE_BASE_URL',
-    'COCO_SERVICE_ENDPOINT',
-    'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
-    'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES',
-    'COCO_SERVICE_FIELDS',
-    'COCO_SERVICE_DYNAMIC_MODELS',
-    'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE',
+    ...SERVICE_SCALAR_ENV_KEYS,
+    ...Object.keys(PROVIDER_API_KEY_ENV_VARS),
   ]
 
   envKeys.forEach((key) => {
@@ -55,22 +88,7 @@ export function loadEnvConfig<ConfigType = Config>(
       return
     }
 
-    if (
-      key === 'COCO_SERVICE_PROVIDER' ||
-      key === 'COCO_SERVICE_MODEL' ||
-      key === 'OPEN_AI_KEY' ||
-      key === 'GEMINI_API_KEY' ||
-      key === 'GOOGLE_API_KEY' ||
-      key === 'MISTRAL_API_KEY' ||
-      key === 'AZURE_OPENAI_API_KEY' ||
-      key === 'COCO_SERVICE_BASE_URL' ||
-      key === 'COCO_SERVICE_ENDPOINT' ||
-      key === 'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT' ||
-      key === 'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES' ||
-      key === 'COCO_SERVICE_FIELDS' ||
-      key === 'COCO_SERVICE_DYNAMIC_MODELS' ||
-      key === 'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE'
-    ) {
+    if (isServiceEnvKey(key as string)) {
       // NOTE: We want to ensure that the service object is always defined
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
@@ -121,53 +139,29 @@ function handleServiceEnvVar(
   value: any,
   effectiveProvider?: LLMProvider
 ) {
+  // Provider-scoped API-key env vars (OPEN_AI_KEY/OPENAI_API_KEY/
+  // ANTHROPIC_API_KEY/…) all do the same thing — set `authentication` iff
+  // the key's provider matches the effective one — so route them off the
+  // single `PROVIDER_API_KEY_ENV_VARS` lookup instead of one `case` per
+  // provider (#1584 / PR #1646 review).
+  if (key in PROVIDER_API_KEY_ENV_VARS) {
+    if (effectiveProvider === PROVIDER_API_KEY_ENV_VARS[key]) {
+      service.authentication = {
+        type: 'APIKey',
+        credentials: {
+          apiKey: value,
+        },
+      }
+    }
+    return
+  }
+
   switch (key) {
     case 'COCO_SERVICE_PROVIDER':
       service.provider = value
       break
     case 'COCO_SERVICE_MODEL':
       service.model = value
-      break
-    case 'OPEN_AI_KEY':
-      if (effectiveProvider === 'openai') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
-      break
-    case 'GEMINI_API_KEY':
-    case 'GOOGLE_API_KEY':
-      if (effectiveProvider === 'gemini') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
-      break
-    case 'MISTRAL_API_KEY':
-      if (effectiveProvider === 'mistral') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
-      break
-    case 'AZURE_OPENAI_API_KEY':
-      if (effectiveProvider === 'azure') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
       break
     case 'COCO_SERVICE_BASE_URL':
       if (effectiveProvider === 'openai') {
@@ -267,52 +261,3 @@ function toEnvVarName(key: string): string {
   return `COCO_${key.replace(/([A-Z])/g, '_$1').toLocaleUpperCase()}`
 }
 
-const flattenObject = (obj: object, prefix = '') => {
-  let flattened: Record<string, string> = {}
-
-  for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-      const propName = prefix ? `${prefix}_${key}` : key
-      const value = obj[key as keyof typeof obj]
-
-      // Skip undefined or null values
-      if (value === undefined || value === null) {
-        continue;
-      }
-
-      if (typeof value === 'object' && !Array.isArray(value)) {
-        // Handle nested objects, but specifically handle 'fields' as JSON string
-        if (key === 'fields') {
-          flattened[propName.toUpperCase()] = JSON.stringify(value)
-        } else {
-          flattened = { ...flattened, ...flattenObject(value, propName) }
-        }
-      } else {
-        // For primitive types (string, number, boolean, symbol, bigint) and arrays
-        flattened[propName.toUpperCase()] = String(value)
-      }
-    }
-  }
-
-  return flattened
-}
-
-export const appendToEnvFile = async (filePath: string, config: Partial<Config>) => {
-  const getNewContent = async () => {
-    const flattenedConfig = flattenObject(config)
-    return Object.entries(flattenedConfig)
-      .map(([key, value]) => {
-        const envVarName = toEnvVarName(key)
-        return `${envVarName}=${value}`
-      })
-      .join('\n')
-  }
-
-  await updateFileSection({
-    filePath,
-    startComment: COCO_CONFIG_START_COMMENT,
-    endComment: COCO_CONFIG_END_COMMENT,
-    getNewContent,
-    confirmMessage: CONFIG_ALREADY_EXISTS,
-  })
-}

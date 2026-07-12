@@ -18,7 +18,7 @@ import { builder as doctorBuilder } from './doctor/config'
 import { builder as initBuilder } from './init/config'
 import { builder as issuesBuilder } from './issues/config'
 import { builder as logBuilder } from './log/config'
-import { builder as prCreateBuilder } from './prCreate/config'
+import { builder as prCreateBuilder, command as prCreateCommand } from './prCreate/config'
 import { builder as prsBuilder } from './prs/config'
 import { builder as recapBuilder } from './recap/config'
 import { builder as reviewBuilder } from './review/config'
@@ -97,7 +97,11 @@ describe('strict mode rejects unknown flags on each command', () => {
     ['init', initBuilder],
     ['issues', issuesBuilder],
     ['log', logBuilder],
-    ['pr create', prCreateBuilder],
+    // `pr` is intentionally excluded here — its builder now requires the
+    // `.command()` registration context to resolve `argv.action` (#1580),
+    // so the bare-builder `parseWithStrict` harness can't exercise it
+    // meaningfully. See "pr <action> rejects unknown actions" below, which
+    // registers the real command string and covers its unknown-flag case.
     ['prs', prsBuilder],
     ['recap', recapBuilder],
     ['review', reviewBuilder],
@@ -202,6 +206,134 @@ describe('declared flags are accepted (no false positives)', () => {
 
   it('doctor accepts --cost', () => {
     const { failMessage } = parseWithStrict(doctorBuilder, ['--cost'])
+    expect(failMessage).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// `pr <action>` positional validation (#1580)
+//
+// yargs only enforces a positional's `choices` when the command is
+// registered via `y.command(commandString, ...)` — `parseWithStrict` above
+// invokes each builder directly on a bare instance, which does not exercise
+// this path. These tests register `pr <action>` the same way src/index.ts
+// does, so an invalid action is rejected (and the handler never runs)
+// instead of silently falling through to PR creation.
+// ---------------------------------------------------------------------------
+
+describe('pr <action> rejects unknown actions', () => {
+  function parsePrCommand(args: string[]): { failMessage: string | null; handlerCalled: boolean } {
+    let failMessage: string | null = null
+    let handlerCalled = false
+
+    const y = yargs()
+    y.option('repo', { type: 'string', alias: 'cwd', global: true })
+    y.option('verbose', { type: 'boolean', alias: 'v', global: true })
+    y.option('quiet', { type: 'boolean', alias: 'q', global: true })
+    y.option('json', { type: 'boolean', global: true })
+
+    y.command(
+      prCreateCommand,
+      'Generate a pull request title and body from the branch diff and open it via gh.',
+      prCreateBuilder,
+      () => {
+        handlerCalled = true
+      }
+    )
+
+    // yargs' real default fail() behavior (used in production — src/index.ts
+    // sets no custom .fail()) prints the error and exits before the command
+    // handler runs. A .fail() callback that merely records the message and
+    // returns (without throwing/exiting) does NOT stop yargs from still
+    // invoking the handler — so this callback throws to faithfully
+    // reproduce the production short-circuit under `exitProcess(false)`.
+    try {
+      y.strictOptions()
+        .fail((msg) => {
+          failMessage = msg
+          throw new Error(msg || 'fail')
+        })
+        .exitProcess(false)
+        .parse(args)
+    } catch {
+      // Expected for the rejection cases; failMessage already captured.
+    }
+
+    return { failMessage, handlerCalled }
+  }
+
+  it('rejects `pr close` with an Invalid values error and never invokes the handler', () => {
+    const { failMessage, handlerCalled } = parsePrCommand(['pr', 'close'])
+    expect(failMessage).toMatch(/invalid values/i)
+    expect(failMessage).toMatch(/create/i)
+    expect(handlerCalled).toBe(false)
+  })
+
+  it('rejects `pr list` the same way', () => {
+    const { failMessage, handlerCalled } = parsePrCommand(['pr', 'list'])
+    expect(failMessage).toMatch(/invalid values/i)
+    expect(handlerCalled).toBe(false)
+  })
+
+  it('rejects bare `pr` with yargs\' native missing-positional error', () => {
+    // Required positional (`pr <action>`, matching `cache <subcommand>`'s
+    // pattern) — yargs' own arity error, not a custom "valid actions:
+    // create" message. Same tradeoff `cache <subcommand>` already makes.
+    const { failMessage, handlerCalled } = parsePrCommand(['pr'])
+    expect(failMessage).toMatch(/not enough non-option arguments/i)
+    expect(handlerCalled).toBe(false)
+  })
+
+  it('parses `pr create` cleanly and invokes the handler', () => {
+    const { failMessage, handlerCalled } = parsePrCommand(['pr', 'create'])
+    expect(failMessage).toBeNull()
+    expect(handlerCalled).toBe(true)
+  })
+
+  it('rejects an unknown flag on `pr create`', () => {
+    const { failMessage, handlerCalled } = parsePrCommand(['pr', 'create', '--completelymadeupflag'])
+    expect(failMessage).toMatch(/unknown argument/i)
+    expect(handlerCalled).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// `review --severity` validation (#1599)
+//
+// yargs coerces an unparseable --severity value to NaN, and
+// `typeof NaN === 'number'` — so a typo used to silently disable the CI
+// gate instead of failing loudly. The builder's `.check()` now rejects
+// non-integer / out-of-range values up front.
+// ---------------------------------------------------------------------------
+
+describe('review --severity rejects non-numeric or out-of-range values', () => {
+  it('rejects a non-numeric value (yargs coerces it to NaN)', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', 'high'])
+    expect(failMessage).toMatch(/--severity must be an integer between 1 and 10/)
+  })
+
+  it('rejects a value above the 1-10 range', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', '11'])
+    expect(failMessage).toMatch(/--severity must be an integer between 1 and 10/)
+  })
+
+  it('rejects a value below the 1-10 range', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', '0'])
+    expect(failMessage).toMatch(/--severity must be an integer between 1 and 10/)
+  })
+
+  it('rejects a non-integer value', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', '7.5'])
+    expect(failMessage).toMatch(/--severity must be an integer between 1 and 10/)
+  })
+
+  it('parses a valid in-range integer cleanly', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, ['--severity', '7'])
+    expect(failMessage).toBeNull()
+  })
+
+  it('parses cleanly when --severity is omitted', () => {
+    const { failMessage } = parseWithStrict(reviewBuilder, [])
     expect(failMessage).toBeNull()
   })
 })

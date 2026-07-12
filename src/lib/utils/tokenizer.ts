@@ -1,8 +1,33 @@
-import { encoding_for_model, TiktokenModel } from 'tiktoken'
+import { encoding_for_model, get_encoding, TiktokenModel } from 'tiktoken'
 import { findProviderDefinition } from '../langchain/providers/registry'
 
 export type BPE_Tokenizer = Awaited<ReturnType<typeof getTikToken>>
 export type TokenCounter = Awaited<ReturnType<typeof getTokenCounter>>
+
+/**
+ * `encoding_for_model` throws for any id outside tiktoken's compiled-in
+ * model map — which includes Azure custom deployment names, OpenAI-compatible
+ * baseURL models (OpenRouter/vLLM/LM Studio), and OpenAI model ids newer than
+ * the pinned tiktoken release. Token counting only drives budget math, so an
+ * approximate encoding is strictly better than crashing the whole command
+ * (#1592).
+ *
+ * A name-based regex can't actually identify the two motivating cases here:
+ * Azure custom deployment names are arbitrary user-chosen aliases with no
+ * relation to the backing model string, and OpenAI ids newer than the pinned
+ * tiktoken release (gpt-4.1, gpt-4.5, …) aren't enumerable in advance either
+ * (PR #1646 review). So instead of trying to positively match "newest"
+ * ids, default to `o200k_base` — the more common recent encoding — and only
+ * fall back further to `cl100k_base` for ids that look like pre-o200k
+ * OpenAI models (gpt-3.5 and the legacy completion models), where using the
+ * newer encoding would be a worse approximation than the older one.
+ */
+function fallbackEncodingForModel(modelName: string) {
+  const looksLikeOlderOpenAiModel = /^(gpt-3\.5|text-davinci|text-curie|text-babbage|text-ada|davinci|curie|babbage|ada)/.test(
+    modelName
+  )
+  return get_encoding(looksLikeOlderOpenAiModel ? 'cl100k_base' : 'o200k_base')
+}
 
 /**
  * Retrieves a TikToken for the specified model.
@@ -11,7 +36,11 @@ export type TokenCounter = Awaited<ReturnType<typeof getTokenCounter>>
  * @returns A Promise that resolves to the TikToken.
  */
 export const getTikToken = async (modelName: TiktokenModel) => {
-  return await encoding_for_model(modelName)
+  try {
+    return encoding_for_model(modelName)
+  } catch {
+    return fallbackEncodingForModel(modelName)
+  }
 }
 /**
  * Retrieves the token counter for a given model name.

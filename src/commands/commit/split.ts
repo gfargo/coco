@@ -965,8 +965,10 @@ export async function handleCommitSplit({
       interactive: Boolean(interactive),
     })
 
-  // --plan: print the plan and exit (opt-out from the default apply prompt).
-  if (argv.plan) {
+  // Shared by --plan and the non-interactive default path below: the
+  // fallback note, dedupe warnings, and formatted plan, with no trailing
+  // apply-hint (callers append their own where one is warranted).
+  const formatPlanPreview = (): string => {
     const lines: string[] = []
     if (fallback) {
       lines.push(
@@ -980,6 +982,11 @@ export async function handleCommitSplit({
     }
     lines.push(formatCommitSplitPlan(plan))
     return lines.join('\n')
+  }
+
+  // --plan: print the plan and exit (opt-out from the default apply prompt).
+  if (argv.plan) {
+    return formatPlanPreview()
   }
 
   // --apply: skip the confirmation prompt and apply directly.
@@ -1003,18 +1010,26 @@ export async function handleCommitSplit({
     return applied.message
   }
 
-  // Default: show the plan, then prompt the user to apply.
-  if (fallback) {
-    logger.log(
-      `Note: showing the single-commit fallback plan (${fallback.reason}).\n` +
-      'Re-run with a stronger model or use --strict-split to surface the planner error.\n'
-    )
+  // Default, non-interactive: there is no interactive session to safely
+  // block a confirm prompt on (default `mode: 'stdout'`, or CI). Behave
+  // like --plan instead of prompting — a confirm the user never saw
+  // (status output is muted in this mode) would hang forever on an open,
+  // silent stdin, or reject with ExitPromptError on a closed one (#1577).
+  if (!interactive) {
+    return [
+      formatPlanPreview(),
+      '',
+      'Re-run with --split --apply to commit this plan.',
+    ].join('\n')
   }
-  if (dedupeWarnings?.length) {
-    logger.log(`${formatDedupeWarnings(dedupeWarnings)}\n`)
-  }
-  logger.log(formatCommitSplitPlan(plan))
-  logger.log('') // blank line before the prompt
+
+  // Default, interactive: show the plan, then prompt the user to apply.
+  // Written directly to stdout rather than through `logger.log` so the
+  // plan is always visible before the prompt below, even if `--quiet` is
+  // combined with `--interactive` (logger.quiet only gates `--split`'s own
+  // "not interactive" branch above it — a global `--quiet` flag can still
+  // leave the logger muted here) (#1577).
+  process.stdout.write(formatPlanPreview() + '\n\n')
 
   const shouldApply = await confirmPrompt({
     message: `Apply these ${plan.groups.filter((g) => !g.unclaimed).length} commits?`,

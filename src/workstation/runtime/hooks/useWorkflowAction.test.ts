@@ -2,9 +2,9 @@ import type ReactTypes from 'react'
 import type { GitLogRow } from '../../../commands/log/data'
 import { createLogInkState } from '../inkViewModel'
 import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
-import { checkoutBranch, checkoutBranchByName, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
+import { checkoutBranch, checkoutBranchByName, deleteBranches, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
 import { cherryPickCommit, autosquashRebase } from '../../../git/historyActions'
-import { createStash } from '../../../git/stashActions'
+import { createStash, dropStashes } from '../../../git/stashActions'
 import { continueOperation } from '../../../git/operationActions'
 import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowAction'
 
@@ -33,6 +33,7 @@ jest.mock('../../../git/branchActions', () => {
     pullCurrentBranchRebase: jest.fn(),
     checkoutBranch: jest.fn(),
     checkoutBranchByName: jest.fn(),
+    deleteBranches: jest.fn(),
   }
 })
 
@@ -50,6 +51,7 @@ jest.mock('../../../git/stashActions', () => {
   return {
     ...actual,
     createStash: jest.fn(),
+    dropStashes: jest.fn(),
   }
 })
 
@@ -908,5 +910,112 @@ describe('frame-scoped recovery prompts (#1429)', () => {
       value: 'error: could not apply abc1234... feat: add thing',
       kind: 'error',
     }))
+  })
+})
+
+const deleteBranchesMock = deleteBranches as jest.MockedFunction<typeof deleteBranches>
+const dropStashesMock = dropStashes as jest.MockedFunction<typeof dropStashes>
+
+describe('frame-scoped force-push/force-delete escalations and batch freezes (#1582)', () => {
+  beforeEach(() => {
+    pushBranchMock.mockReset()
+    deleteBranchesMock.mockReset()
+    dropStashesMock.mockReset()
+  })
+
+  it('drops the force-push-with-lease confirm if the repo frame changed while the push was in flight', async () => {
+    let resolvePush: (value: { ok: boolean; message: string; details?: string[] }) => void = () => undefined
+    pushBranchMock.mockImplementation(
+      () => new Promise((resolve) => { resolvePush = resolve })
+    )
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [localBranch], currentBranch: 'main' } } as never,
+      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    const run = runWorkflowAction('push-selected-branch')
+    harness.beginRender()
+    useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [localBranch], currentBranch: 'main' } } as never,
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    resolvePush({
+      ok: false,
+      message: "error: failed to push some refs to 'origin'",
+      details: ['! [rejected] main -> main (non-fast-forward)'],
+    })
+    await run
+
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingConfirmation' }))
+  })
+
+  it('drops the force-delete-branch confirm if the repo frame changed while the delete was in flight', async () => {
+    let resolveDelete: (value: { ok: boolean; message: string }) => void = () => undefined
+    deleteBranchesMock.mockImplementation(
+      () => new Promise((resolve) => { resolveDelete = resolve })
+    )
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [localBranch], currentBranch: 'other' } } as never,
+      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    const run = runWorkflowAction('delete-branch')
+    harness.beginRender()
+    useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [localBranch], currentBranch: 'other' } } as never,
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    resolveDelete({ ok: false, message: "error: The branch 'main' is not fully merged." })
+    await run
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'setPendingConfirmation', value: 'force-delete-branch' })
+    )
+  })
+
+  it('does not freeze a failed batch delete into marks if the repo frame changed mid-flight', async () => {
+    let resolveDelete: (value: { ok: boolean; message: string }) => void = () => undefined
+    deleteBranchesMock.mockImplementation(
+      () => new Promise((resolve) => { resolveDelete = resolve })
+    )
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    const batchState = {
+      ...createLogInkState([]),
+      selection: { view: 'branches', ids: new Set(['main', 'feature/other']) },
+    } as never
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: batchState,
+      context: { branches: { localBranches: [localBranch, otherBranch], currentBranch: 'other' } } as never,
+      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    const run = runWorkflowAction('delete-branch')
+    harness.beginRender()
+    useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: batchState,
+      context: { branches: { localBranches: [localBranch, otherBranch], currentBranch: 'other' } } as never,
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    resolveDelete({ ok: false, message: 'error: some branches could not be deleted' })
+    await run
+
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setMarks' }))
   })
 })

@@ -84,6 +84,7 @@ describe('log pull request data', () => {
       repository: {
         owner: 'gfargo',
         name: 'coco',
+        host: 'github.com',
       },
       currentBranch: 'feature/pr',
       currentPullRequest: {

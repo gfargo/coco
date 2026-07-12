@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process'
 import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import { resolveGitRepoRoot } from '../../../utils/resolveGitRepoRoot'
 
 /**
  * Per-repo disk cache of LLM-summarized diffs (#845, PR 5). On a
@@ -83,32 +83,7 @@ let cachedRepoRoot: { cwd: string; root: string } | undefined
 export function resolveDiffSummaryCacheRepoPath(cwd: string = process.cwd()): string {
   if (cachedRepoRoot?.cwd === cwd) return cachedRepoRoot.root
 
-  let root = cwd
-  try {
-    const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-    if (toplevel) {
-      // git always prints forward-slash paths, even on Windows, so
-      // normalize through realpathSync.native to get a native-separator,
-      // fully canonical form. Windows resolves a child process's cwd to
-      // its long-name form internally (even if a short 8.3 name like
-      // `RUNNER~1` was passed in), so git's output is already long-form;
-      // realpathSync.native (unlike plain realpathSync) also expands any
-      // remaining short-name segments, keeping this in sync with however
-      // the caller's cwd was spelled.
-      try {
-        root = fs.realpathSync.native(toplevel)
-      } catch {
-        root = toplevel
-      }
-    }
-  } catch {
-    // Not a git repo, or git unavailable — fall back to cwd.
-  }
-
+  const root = resolveGitRepoRoot(cwd)
   cachedRepoRoot = { cwd, root }
   return root
 }

@@ -63,7 +63,10 @@ export function buildStatusSurfaceData(
   const visibleWorktreeFiles = applyStatusFilterMask(worktreeFiles || [], statusFilterMask)
   const visibleWorktreeGroups = groupWorktreeFiles(visibleWorktreeFiles)
   const visibleWorktreeFilesGrouped = flattenWorktreeGroups(visibleWorktreeGroups)
-  const selectedWorktreeFile = visibleWorktreeFilesGrouped[selectedWorktreeFileIndex]
+  const selectedWorktreeFile =
+    visibleWorktreeFilesGrouped[
+      Math.min(selectedWorktreeFileIndex, Math.max(0, visibleWorktreeFilesGrouped.length - 1))
+    ]
   const stashDiffParsedFiles = stashDiffLines ? parseStashDiffFiles(stashDiffLines) : []
 
   return {
@@ -112,7 +115,10 @@ export function useStatusSurfaceData(
     [visibleWorktreeGroups]
   )
   const selectedWorktreeFile = React.useMemo(
-    () => visibleWorktreeFilesGrouped[selectedWorktreeFileIndex],
+    () =>
+      visibleWorktreeFilesGrouped[
+        Math.min(selectedWorktreeFileIndex, Math.max(0, visibleWorktreeFilesGrouped.length - 1))
+      ],
     [visibleWorktreeFilesGrouped, selectedWorktreeFileIndex]
   )
   const stashDiffParsedFiles = React.useMemo(

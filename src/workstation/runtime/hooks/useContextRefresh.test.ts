@@ -1,0 +1,81 @@
+/**
+ * Coverage for `refreshWorktreeContext`'s `worktreeDiffRefreshToken` bump
+ * (PR #1646 review, following #1579). The bump used to live at each
+ * individual hunk/line-level stage/revert call site in
+ * `useWorktreeStageActions.ts`; it's now centralized here — mirroring how
+ * `refreshContext` already bumps `setPrDiffRefreshToken` — so every
+ * `refreshWorktreeContext` caller, current and future, gets the reload
+ * signal automatically instead of each call site having to remember it.
+ */
+import { useContextRefresh, type UseContextRefreshDeps } from './useContextRefresh'
+import { getWorktreeOverview } from '../../../git/statusData'
+
+jest.mock('../../../git/statusData', () => ({
+  ...jest.requireActual('../../../git/statusData'),
+  getWorktreeOverview: jest.fn(),
+}))
+
+const getWorktreeOverviewMock = getWorktreeOverview as jest.MockedFunction<typeof getWorktreeOverview>
+
+/** Fake React: `useCallback` returns the callback itself; `useRef` is a plain box. */
+function fakeReact(): typeof import('react') {
+  return {
+    useCallback: (fn: unknown) => fn,
+    useRef: (initial: unknown) => ({ current: initial }),
+  } as unknown as typeof import('react')
+}
+
+function baseDeps(overrides: Partial<UseContextRefreshDeps> = {}): UseContextRefreshDeps {
+  return {
+    git: {} as never,
+    runtimesLength: 1,
+    dispatch: jest.fn(),
+    setContext: jest.fn(),
+    setContextStatus: jest.fn(),
+    setPrDiffRefreshToken: jest.fn(),
+    setWorktreeDiffRefreshToken: jest.fn(),
+    ...overrides,
+  }
+}
+
+describe('useContextRefresh — refreshWorktreeContext bumps worktreeDiffRefreshToken centrally (#1579)', () => {
+  beforeEach(() => {
+    getWorktreeOverviewMock.mockReset()
+    getWorktreeOverviewMock.mockResolvedValue({ files: [] } as never)
+  })
+
+  it('bumps the token after writing a fresh worktree overview into context', async () => {
+    const deps = baseDeps()
+    const { refreshWorktreeContext } = useContextRefresh(fakeReact(), deps)
+
+    await refreshWorktreeContext()
+
+    expect(deps.setContext).toHaveBeenCalled()
+    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
+    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledWith(expect.any(Function))
+    // The updater must increment, not just re-set — a same-status
+    // worktree mutation with no other changed dep relies on this to
+    // actually differ (#1579).
+    expect((deps.setWorktreeDiffRefreshToken as jest.Mock).mock.calls[0][0](0)).toBe(1)
+  })
+
+  it('does not bump the token when a newer refresh superseded this one', async () => {
+    // Two overlapping calls on the same frame: the second claims the
+    // request-id slot before the first's `getWorktreeOverview` resolves,
+    // so the first's write (and token bump) must be dropped (#1385).
+    let resolveFirst: (value: unknown) => void = () => undefined
+    getWorktreeOverviewMock
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }) as never)
+      .mockResolvedValueOnce({ files: [] } as never)
+
+    const deps = baseDeps()
+    const { refreshWorktreeContext } = useContextRefresh(fakeReact(), deps)
+
+    const first = refreshWorktreeContext()
+    await refreshWorktreeContext()
+    resolveFirst({ files: [] })
+    await first
+
+    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
+  })
+})

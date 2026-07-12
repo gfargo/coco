@@ -328,6 +328,17 @@ export type UseWorktreeHunksHydrationDeps = {
   diffSource: LogInkDiffSource | undefined
   /** The cursored worktree file (from `useStatusSurfaceData`). */
   selectedWorktreeFile: WorktreeFile | undefined
+  /**
+   * Bumped by the hunk/line-level staging callbacks (`useWorktreeStageActions`)
+   * after a mutation that may leave `selectedWorktreeFile`'s own
+   * `indexStatus`/`worktreeStatus` unchanged (#1579) — e.g. reverting one of
+   * several unstaged hunks, or staging the 2nd+ hunk of an already-`MM` file.
+   * Those scalar fields are this effect's only other reload signal, so
+   * without this token a same-status hunk mutation clears the cached hunks
+   * and nothing reloads them. Same shape as `usePullRequestDiffHydration`'s
+   * `refreshToken` (OSS-452).
+   */
+  worktreeDiffRefreshToken: number
   /** Writer for the parsed worktree hunks. */
   setWorktreeHunks: ReactTypes.Dispatch<
     ReactTypes.SetStateAction<WorktreeHunkOverview | undefined>
@@ -349,6 +360,7 @@ export function useWorktreeHunksHydration(
     activeView,
     diffSource,
     selectedWorktreeFile,
+    worktreeDiffRefreshToken,
     setWorktreeHunks,
     setWorktreeHunksLoading,
   } = deps
@@ -384,6 +396,7 @@ export function useWorktreeHunksHydration(
     selectedWorktreeFile?.worktreeStatus,
     activeView,
     diffSource,
+    worktreeDiffRefreshToken,
   ])
 }
 
@@ -424,6 +437,13 @@ export type UseWorktreeDiffHydrationDeps = {
   diffSource: LogInkDiffSource | undefined
   /** The cursored worktree file (from `useStatusSurfaceData`). */
   selectedWorktreeFile: WorktreeFile | undefined
+  /**
+   * Bumped by the hunk/line-level staging callbacks (`useWorktreeStageActions`)
+   * after a mutation that may leave `selectedWorktreeFile`'s own
+   * `indexStatus`/`worktreeStatus` unchanged (#1579) — see
+   * {@link UseWorktreeHunksHydrationDeps.worktreeDiffRefreshToken}.
+   */
+  worktreeDiffRefreshToken: number
   /** Writer for the loaded worktree file diff. */
   setWorktreeDiff: ReactTypes.Dispatch<
     ReactTypes.SetStateAction<WorktreeFileDiff | undefined>
@@ -445,6 +465,7 @@ export function useWorktreeDiffHydration(
     activeView,
     diffSource,
     selectedWorktreeFile,
+    worktreeDiffRefreshToken,
     setWorktreeDiff,
     setWorktreeDiffLoading,
   } = deps
@@ -480,6 +501,7 @@ export function useWorktreeDiffHydration(
     selectedWorktreeFile?.worktreeStatus,
     activeView,
     diffSource,
+    worktreeDiffRefreshToken,
   ])
 }
 

@@ -34,7 +34,7 @@ describe('issuesListData', () => {
     const runner = jest.fn().mockRejectedValueOnce(enoentError)
     const overview = await getIssueList(githubRemoteGit(), {}, runner)
     expect(overview.authenticated).toBe(false)
-    expect(overview.repository).toEqual({ owner: 'gfargo', name: 'coco' })
+    expect(overview.repository).toEqual({ owner: 'gfargo', name: 'coco', host: 'github.com' })
     // Match either the ENOENT-specific copy or the generic
     // unauthenticated message — both are valid for "gh isn't usable".
     expect(overview.message).toMatch(/not installed|not authenticated/)
@@ -158,5 +158,35 @@ describe('issuesListData', () => {
     const overview = await getIssueList(githubRemoteGit(), {}, runner)
     expect(overview.issues).toBeUndefined()
     expect(overview.message).toContain('rate limited')
+  })
+
+  describe('GitHub Enterprise remotes (#1609)', () => {
+    const gheRemoteGit = () =>
+      ({
+        getRemotes: jest.fn().mockResolvedValue([
+          { name: 'origin', refs: { fetch: 'git@github.acme.com:acme/api.git', push: '' } },
+        ]),
+        raw: jest.fn().mockResolvedValue('main\n'),
+      } as never)
+
+    it('is accepted as a GitHub remote instead of "No GitHub remote detected" (heuristic host match)', async () => {
+      const runner = jest.fn().mockResolvedValueOnce('').mockResolvedValueOnce('[]')
+
+      const overview = await getIssueList(gheRemoteGit(), {}, runner)
+
+      expect(overview.available).toBe(true)
+      expect(overview.message).not.toBe('No GitHub remote detected.')
+      expect(overview.repository).toEqual({ owner: 'acme', name: 'api', host: 'github.acme.com' })
+    })
+
+    it('probes gh auth status against the GHE host, not github.com', async () => {
+      const runner = jest.fn().mockResolvedValueOnce('').mockResolvedValueOnce('[]')
+
+      await getIssueList(gheRemoteGit(), {}, runner)
+
+      expect(runner).toHaveBeenCalledWith(
+        expect.arrayContaining(['auth', 'status', '--hostname', 'github.acme.com'])
+      )
+    })
   })
 })

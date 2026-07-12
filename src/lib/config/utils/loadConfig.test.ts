@@ -3,18 +3,40 @@ import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../constants'
 import { loadConfig } from './loadConfig'
 import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
 
 jest.mock('fs')
 jest.mock('os')
-jest.mock('path')
+// Real implementation: the project-config loader joins the resolved repo
+// root with the candidate filename via path.join (#1616) — nothing in
+// this file asserts on a mocked path.join, so keeping the real behavior
+// lets that join actually produce a path instead of `undefined`.
+jest.mock('path', () => jest.requireActual('path'))
 jest.mock('ini')
+// Stubbed to a fixed fake root so these tests stay deterministic instead
+// of resolving against whatever checkout happens to run them.
+jest.mock('../../utils/resolveGitRepoRoot')
 
 const mockFs = fs as jest.Mocked<typeof fs>
+const mockOs = os as jest.Mocked<typeof os>
+const mockResolveGitRepoRoot = resolveGitRepoRoot as jest.MockedFunction<typeof resolveGitRepoRoot>
+const FAKE_REPO_ROOT = '/fake/repo/root'
+// project.ts joins this with path.join, which is platform-native (`\` on
+// Windows) — build it the same way here, or the comparisons below
+// silently mismatch (and existsSync's mock returns false for everything)
+// on Windows CI.
+const PROJECT_CONFIG_PATH = path.join(FAKE_REPO_ROOT, '.coco.config.json')
 
 describe('loadConfig', () => {
   beforeEach(() => {
     mockFs.existsSync.mockClear()
     mockFs.readFileSync.mockClear()
+    mockResolveGitRepoRoot.mockReturnValue(FAKE_REPO_ROOT)
+    // Real path.join (above) needs a real string from os.homedir(), which
+    // is otherwise auto-mocked to return undefined.
+    mockOs.homedir.mockReturnValue('/fake/home')
   })
 
   afterEach(() => {
@@ -24,7 +46,7 @@ describe('loadConfig', () => {
   it('should correctly combine all config sources', () => {
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
       return filepath
-        ? ['.gitignore', '.ignore', 'config.json', '.gitconfig', '.coco.config.json'].includes(
+        ? ['.gitignore', '.ignore', 'config.json', '.gitconfig', PROJECT_CONFIG_PATH].includes(
             filepath.toString()
           )
         : false
@@ -40,7 +62,7 @@ describe('loadConfig', () => {
           return JSON.stringify({ openAIApiKey: 'xdgConfigKey' })
         case '.gitconfig':
           return 'coco\nopenAIApiKey=gitConfigKey\ntokenLimit=250\n'
-        case '.coco.config.json':
+        case PROJECT_CONFIG_PATH:
           return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama') })
         default:
           return ''
@@ -73,11 +95,11 @@ describe('loadConfig', () => {
     // defaults regardless of what the user provides.
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
       return filepath
-        ? ['.coco.config.json'].includes(filepath.toString())
+        ? [PROJECT_CONFIG_PATH].includes(filepath.toString())
         : false
     })
     mockFs.readFileSync.mockImplementation((filepath) => {
-      if (filepath.toString() === '.coco.config.json') {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
         return JSON.stringify({
           ignoredExtensions: ['.snap'],
           ignoredFiles: ['mySecret.json'],
@@ -108,10 +130,10 @@ describe('loadConfig', () => {
     // `default:` entries are removed, yargs omits the key from argv when
     // the flag isn't passed — argv here mirrors that post-fix shape.
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
-      return filepath ? ['.coco.config.json'].includes(filepath.toString()) : false
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
     })
     mockFs.readFileSync.mockImplementation((filepath) => {
-      if (filepath.toString() === '.coco.config.json') {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
         return JSON.stringify({ verbose: true, includeBranchName: false })
       }
       return ''
@@ -125,10 +147,10 @@ describe('loadConfig', () => {
 
   it('still lets an explicitly-passed argv flag override config for verbose/includeBranchName (#1437)', () => {
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
-      return filepath ? ['.coco.config.json'].includes(filepath.toString()) : false
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
     })
     mockFs.readFileSync.mockImplementation((filepath) => {
-      if (filepath.toString() === '.coco.config.json') {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
         return JSON.stringify({ verbose: true, includeBranchName: false })
       }
       return ''

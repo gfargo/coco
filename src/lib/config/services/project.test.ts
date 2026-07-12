@@ -1,17 +1,34 @@
 import * as fs from 'fs'
+import * as path from 'path'
 import { loadProjectJsonConfig, resetConfigLoadWarnings } from './project'
 import { Config } from '../types'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
+import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
 
 jest.mock('fs')
 jest.mock('os')
-jest.mock('path')
+// Real implementation: project.ts joins the resolved repo root with the
+// candidate filename via path.join (#1616) — nothing in this file asserts
+// on a mocked path.join, so keeping the real behavior lets that join
+// actually produce a path instead of `undefined`.
+jest.mock('path', () => jest.requireActual('path'))
 jest.mock('ini')
 jest.mock('yargs', () => ({
   argv: {},
 }))
+// Stubbed to a fixed fake root (#1616) so these tests stay fast and
+// deterministic instead of shelling out to a real `git rev-parse
+// --show-toplevel` against whatever checkout happens to run them.
+jest.mock('../../utils/resolveGitRepoRoot')
 
 const mockFs = fs as jest.Mocked<typeof fs>
+const mockResolveGitRepoRoot = resolveGitRepoRoot as jest.MockedFunction<typeof resolveGitRepoRoot>
+
+// project.ts joins this with path.join, which is platform-native (`\` on
+// Windows) — comparisons below must go through the same real `path.join`
+// rather than hardcoding a POSIX-style literal, or they silently mismatch
+// (and existsSync's mock returns false for everything) on Windows CI.
+const FAKE_REPO_ROOT = '/fake/repo/root'
 
 const openAIAliasConfig: Config = {
   service: getDefaultServiceConfigFromAlias('openai'),
@@ -30,6 +47,10 @@ const ollamaAliasConfig: Config = {
 }
 
 describe('loadProjectConfig', () => {
+  beforeEach(() => {
+    mockResolveGitRepoRoot.mockReturnValue(FAKE_REPO_ROOT)
+  })
+
   afterEach(() => {
     jest.resetAllMocks()
     // The warn-once guard is process-scoped; reset it so each test
@@ -44,6 +65,42 @@ describe('loadProjectConfig', () => {
     )
     const config = loadProjectJsonConfig(openAIAliasConfig)
     expect(config.service.provider).toBe('openai')
+  })
+
+  it('resolves .coco.json against the repo root, not a bare cwd-relative filename (#1616)', () => {
+    // `coco init` writes `.coco.json` at the repo root; running a command
+    // from a subdirectory used to test the bare relative filename (which
+    // resolves against process.cwd(), not the root) and silently drop the
+    // whole project config. resolveGitRepoRoot is mocked to a fixed path
+    // here specifically so this test does not depend on which directory
+    // the test runner's own cwd happens to be.
+    const cocoJsonPath = path.join(FAKE_REPO_ROOT, '.coco.json')
+    mockFs.existsSync.mockImplementation((candidate) => candidate === cocoJsonPath)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({ service: getDefaultServiceConfigFromAlias('openai', 'gpt-3.5-turbo') })
+    )
+
+    const { config, path: resolvedPath } = loadProjectJsonConfig(openAIAliasConfig, {
+      returnSource: true,
+    })
+
+    expect(mockResolveGitRepoRoot).toHaveBeenCalled()
+    expect(resolvedPath).toBe(cocoJsonPath)
+    expect(config.service.provider).toBe('openai')
+  })
+
+  it('falls back to .coco.config.json at the repo root when .coco.json is absent', () => {
+    const cocoConfigJsonPath = path.join(FAKE_REPO_ROOT, '.coco.config.json')
+    mockFs.existsSync.mockImplementation((candidate) => candidate === cocoConfigJsonPath)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({ service: getDefaultServiceConfigFromAlias('openai', 'gpt-3.5-turbo') })
+    )
+
+    const { path: resolvedPath } = loadProjectJsonConfig(openAIAliasConfig, {
+      returnSource: true,
+    })
+
+    expect(resolvedPath).toBe(cocoConfigJsonPath)
   })
 
   it('does not crash on a malformed JSON config — warns and falls back', () => {

@@ -1,4 +1,3 @@
-import { appendToEnvFile } from '../../lib/config/services/env'
 import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToProjectJsonConfig } from '../../lib/config/services/project'
 import { persistUsagePreference } from '../../lib/config/services/xdg'
@@ -242,8 +241,6 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
 
     if (configFilePath.endsWith('.gitconfig')) {
       await appendToGitConfig(configFilePath, config)
-    } else if (configFilePath.endsWith('.env')) {
-      await appendToEnvFile(configFilePath, config)
     } else if (
       // Both JSON project-config formats route to the same writer. The
       // recommended `.coco.json` was previously missing here, so selecting it

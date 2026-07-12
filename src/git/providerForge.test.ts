@@ -22,6 +22,83 @@ describe('detectProvider + forgeHosts overrides (#0.70)', () => {
   })
 })
 
+/**
+ * #1609 — GitHub Enterprise remotes must be probed/queried against their
+ * own host, not github.com. getProviderOverview already probed auth
+ * correctly (the fix scope was getDefaultBranch's `gh repo view` call,
+ * plus the PR/issue list surfaces covered in issuesListData.test.ts /
+ * pullRequestListData.test.ts).
+ */
+describe('getDefaultBranch — GitHub Enterprise host qualification (#1609)', () => {
+  afterEach(() => setForgeHostOverrides(undefined))
+
+  function gheGit(): SimpleGit {
+    return {
+      getRemotes: async () => [
+        { name: 'origin', refs: { fetch: 'git@vanity-host.internal:acme/api.git' } },
+      ],
+      raw: async (args: string[]) => {
+        if (args[0] === 'branch') return 'main\n'
+        if (args[0] === 'symbolic-ref') throw new Error('not a symbolic ref')
+        if (args[0] === 'rev-parse') throw new Error('no local branch')
+        throw new Error(`unexpected git.raw call: ${args.join(' ')}`)
+      },
+    } as unknown as SimpleGit
+  }
+
+  it('queries `gh repo view` with the full host-qualified URL, not a bare owner/name slug', async () => {
+    setForgeHostOverrides({ 'vanity-host.internal': 'github' })
+    const repoViewArgs: string[][] = []
+
+    const gh = async (args: string[]): Promise<string> => {
+      if (args[0] === 'auth') return ''
+      if (args[0] === 'repo') {
+        repoViewArgs.push(args)
+        return JSON.stringify({ defaultBranchRef: { name: 'trunk' } })
+      }
+      throw new Error(`unexpected gh call: ${args.join(' ')}`)
+    }
+
+    const overview = await getProviderOverview(gheGit(), gh)
+
+    expect(overview.repository.provider).toBe('github')
+    expect(overview.repository.defaultBranch).toBe('trunk')
+    expect(repoViewArgs).toHaveLength(1)
+    // A bare 'acme/api' slug would resolve against gh's default host
+    // (github.com) instead of vanity-host.internal — the full URL form
+    // carries the host explicitly.
+    expect(repoViewArgs[0]).toContain('https://vanity-host.internal/acme/api')
+    expect(repoViewArgs[0]).not.toContain('acme/api')
+  })
+
+  it('still uses the bare owner/name slug for github.com (no behavior change for the common case)', async () => {
+    const repoViewArgs: string[][] = []
+    const git: SimpleGit = {
+      getRemotes: async () => [{ name: 'origin', refs: { fetch: 'git@github.com:acme/api.git' } }],
+      raw: async (args: string[]) => {
+        if (args[0] === 'branch') return 'main\n'
+        if (args[0] === 'symbolic-ref') throw new Error('not a symbolic ref')
+        if (args[0] === 'rev-parse') throw new Error('no local branch')
+        throw new Error(`unexpected git.raw call: ${args.join(' ')}`)
+      },
+    } as unknown as SimpleGit
+
+    const gh = async (args: string[]): Promise<string> => {
+      if (args[0] === 'auth') return ''
+      if (args[0] === 'repo') {
+        repoViewArgs.push(args)
+        return JSON.stringify({ defaultBranchRef: { name: 'main' } })
+      }
+      throw new Error(`unexpected gh call: ${args.join(' ')}`)
+    }
+
+    await getProviderOverview(git, gh)
+
+    expect(repoViewArgs[0]).toContain('acme/api')
+    expect(repoViewArgs[0]).not.toContain('https://')
+  })
+})
+
 function gitlabGit(currentBranch = 'feature/x'): SimpleGit {
   return {
     getRemotes: async () => [{ name: 'origin', refs: { fetch: 'git@gitlab.com:group/proj.git' } }],

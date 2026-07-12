@@ -85,6 +85,14 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
           }`
         )
 
+        // A clean worktree must reach `noResult` instead of the LLM — the
+        // section strings below are always non-empty (template-prefixed),
+        // so returning them here even when every section is empty would
+        // fabricate a recap from boilerplate (#1608).
+        if (staged.length === 0 && (unstaged?.length || 0) === 0 && (untracked?.length || 0) === 0) {
+          return []
+        }
+
         const unstagedChanges = await fileChangeParser({
           changes: unstaged || [],
           commit: '--unstaged',
@@ -288,9 +296,11 @@ ${errorMessage}
     },
     noResult: async () => {
       await noResult({ git, logger })
-      if (process.env.NODE_ENV !== 'test') {
-        commandExit(0)
-      }
+      // emitJson writes to stdout directly, so the silenced logger
+      // (non-interactive mode, or global --quiet) doesn't suppress the
+      // payload — mirrors changelog's noResult (#1586).
+      if (argv.json) emitJson(null)
+      commandExit(0)
     },
   })
 

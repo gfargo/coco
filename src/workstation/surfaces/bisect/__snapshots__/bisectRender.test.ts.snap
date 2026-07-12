@@ -32,13 +32,13 @@ exports[`renderBisectSurface structural snapshot — active 1`] = `
   <Text
     dimColor={true}
   >
-    No decisions logged yet — press g (good) or b (bad) to record one.
+    No decisions logged yet — press y (good) or b (bad) to record one.
   </Text>
   <Text />
   <Text
     dimColor={true}
   >
-    Actions: g good · b bad · s skip · R run · x reset
+    Actions: y good · b bad · s skip · R run · x reset
   </Text>
 </Box>
 `;
@@ -114,7 +114,7 @@ exports[`renderBisectSurface structural snapshot — inactive 1`] = `
   <Text
     color="cyan"
   >
-        g  mark good      s  skip (e.g. doesn't build)
+        y  mark good      s  skip (e.g. doesn't build)
   </Text>
   <Text
     color="cyan"

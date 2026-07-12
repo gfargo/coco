@@ -66,32 +66,43 @@ export async function getInProgressOperationType(git: SimpleGit): Promise<GitOpe
   return 'none'
 }
 
+/**
+ * Parses `git status --porcelain -z` output the same way
+ * `statusData.ts`'s `parsePorcelainStatus` does — see that function's
+ * docblock for why `-z` (NUL-separated, no C-quoting) is required
+ * instead of the default text format (#1597). A conflicted file with a
+ * non-ASCII or quote-containing name previously round-tripped its
+ * literal quotes/escapes into downstream conflict-resolution git calls.
+ */
 export function parseConflictedFiles(statusOutput: string): ConflictFile[] {
-  return statusOutput
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-    .map((line) => {
-      const indexStatus = line[0] || ' '
-      const worktreeStatus = line[1] || ' '
-      const rawPath = line.slice(3)
-      const path = rawPath.includes(' -> ') ? rawPath.split(' -> ').at(-1) as string : rawPath
+  const tokens = statusOutput.split('\0').filter((token) => token.length > 0)
+  const files: ConflictFile[] = []
 
-      return {
-        path,
-        indexStatus,
-        worktreeStatus,
-      }
-    })
-    .filter((file) => (
-      UNMERGED_STATUSES.has(`${file.indexStatus}${file.worktreeStatus}`) ||
-      file.indexStatus === 'U' ||
-      file.worktreeStatus === 'U'
-    ))
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]
+    const indexStatus = token[0] || ' '
+    const worktreeStatus = token[1] || ' '
+    const path = token.slice(3)
+
+    if (
+      UNMERGED_STATUSES.has(`${indexStatus}${worktreeStatus}`) ||
+      indexStatus === 'U' ||
+      worktreeStatus === 'U'
+    ) {
+      files.push({ path, indexStatus, worktreeStatus })
+    }
+
+    if (indexStatus === 'R' || indexStatus === 'C' || worktreeStatus === 'R' || worktreeStatus === 'C') {
+      // Skip the trailing origin-path token for this rename/copy entry.
+      i += 1
+    }
+  }
+
+  return files
 }
 
 export async function getConflictedFiles(git: SimpleGit): Promise<ConflictFile[]> {
-  return parseConflictedFiles(await git.raw(['status', '--porcelain']))
+  return parseConflictedFiles(await git.raw(['status', '--porcelain', '-z']))
 }
 
 export function parseConflictMarkers(path: string, content: string): ConflictMarker[] {

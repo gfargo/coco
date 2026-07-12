@@ -2,7 +2,6 @@ import { handler } from './handler'
 import { questions } from './questions'
 import { InitOptions } from './config'
 import { Config } from '../types'
-import { appendToEnvFile } from '../../lib/config/services/env'
 import { appendToGitConfig } from '../../lib/config/services/git'
 import { appendToProjectJsonConfig } from '../../lib/config/services/project'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
@@ -19,7 +18,6 @@ import { OllamaNotReadyError } from '../../lib/langchain/utils/ollamaStatus'
 jest.mock('../../lib/ui/inquirerPrompts', () => ({
   confirmPrompt: jest.fn(),
 }))
-jest.mock('../../lib/config/services/env')
 jest.mock('../../lib/config/services/git')
 jest.mock('../../lib/config/services/project')
 jest.mock('../../lib/config/utils/loadConfig')
@@ -31,7 +29,6 @@ jest.mock('../../lib/utils/getProjectConfigFilePath')
 jest.mock('../../lib/utils/installPackage')
 
 const mockConfirm = confirmPrompt as jest.MockedFunction<typeof confirmPrompt>
-const mockAppendToEnvFile = appendToEnvFile as jest.MockedFunction<typeof appendToEnvFile>
 const mockAppendToGitConfig = appendToGitConfig as jest.MockedFunction<typeof appendToGitConfig>
 const mockAppendToProjectJsonConfig = appendToProjectJsonConfig as jest.MockedFunction<
   typeof appendToProjectJsonConfig
@@ -113,7 +110,6 @@ describe('init command', () => {
     mockConfirm.mockResolvedValue(true)
     mockCheckAndHandlePackageInstallation.mockResolvedValue(undefined)
     mockAppendToGitConfig.mockResolvedValue(undefined)
-    mockAppendToEnvFile.mockResolvedValue(undefined)
     mockInstallNpmPackage.mockResolvedValue(true)
     mockGetPathToUsersGitConfig.mockReturnValue('/home/coco/.gitconfig')
     mockGetProjectConfigFilePath.mockResolvedValue('/repo/.coco.config.json')
@@ -248,13 +244,18 @@ describe('init command', () => {
     })
   })
 
-  it('writes env config when selected for a project config', async () => {
-    jest.spyOn(questions, 'selectProjectConfigFileType').mockResolvedValue('.env')
+  it('fails loud instead of silently no-op-ing for an unrecognized config file path (#1623)', async () => {
+    // `.env` was removed as a storage option — the writer produced a file
+    // coco could never read back (wrong variable name prefix, and nothing
+    // loaded .env into process.env in the first place). This pins the
+    // handler's existing "fail loud rather than silent no-op" fallback for
+    // any config path without a writer branch, guarding against the same
+    // silent-dead-config class of bug recurring for a future file type.
     mockGetProjectConfigFilePath.mockResolvedValue('/repo/.env')
 
-    await handler(createArgv({ scope: 'project' }), logger)
-
-    expect(mockAppendToEnvFile).toHaveBeenCalledWith('/repo/.env', expect.any(Object))
+    await expect(handler(createArgv({ scope: 'project' }), logger)).rejects.toThrow(
+      /no config writer for/
+    )
   })
 
   it('writes global git config and installs commitlint packages when requested', async () => {

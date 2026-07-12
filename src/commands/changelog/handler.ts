@@ -101,6 +101,7 @@ export async function generateChangelogResult(
     argv.branch ? '--branch' : null,
     argv.tag ? '--tag' : null,
     config.sinceLastTag ? '--since-last-tag' : null,
+    config.range ? '--range' : null,
   ].filter(Boolean)
 
   if (exclusiveOptions.length > 1) {
@@ -148,10 +149,14 @@ export async function generateChangelogResult(
       // For now, this path will have limited details.
       const commitMessages = await getChangesSinceLastTag({ git, logger })
       commits = commitMessages.map(msg => ({ message: msg })) as CommitDetails[]
-    } else if (config.range && config.range.includes(':')) {
-      const [from, to] = config.range.split(':')
+    } else if (config.range) {
+      // Accept both coco's `<from>:<to>` and git's native `<from>..<to>` /
+      // `<from>...<to>` range syntax — a bare `--range HEAD~5..HEAD` used
+      // to fail this guard silently and fall through to current-branch
+      // mode with no warning (#1590).
+      const [from, to] = config.range.split(/:|\.{2,3}/)
       if (!from || !to) {
-        logger.error(`Invalid range provided. Expected format is <from>:<to>`, { color: 'red' })
+        logger.error(`Invalid range provided. Expected format is <from>:<to> (or <from>..<to>)`, { color: 'red' })
         commandExit(1)
       }
       commits = await getCommitLogRangeDetails(from, to, { git, noMerges: true })

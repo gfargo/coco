@@ -13,8 +13,9 @@ import { BaseArgvOptions } from '../types'
  * handler never touches.
  *
  * Why chdir up-front:
- *   Many config / discovery paths (loadConfig's findUp for
- *   `.coco.config.json`, commitlint config detection, etc.) read
+ *   Many config / discovery paths (loadConfig's project-config lookup,
+ *   which resolves `.coco.json` against the git repo root rather than
+ *   cwd — #1616 — commitlint config detection, etc.) read
  *   `process.cwd()` directly. If we don't chdir, those would
  *   resolve against the original cwd — leading to "coco is
  *   reading config from somewhere else" surprises.

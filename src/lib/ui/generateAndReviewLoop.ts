@@ -80,7 +80,11 @@ export async function generateAndReviewLoop<T, R>({
           mode: 'fail',
           color: 'red',
         })
-        commandExit(0)
+        // stopSpinner is muted in quiet/non-interactive mode, so the
+        // failure would otherwise be invisible to CI; error() always
+        // reaches stderr regardless of quiet (#1583).
+        logger.error('Agent failed to return content.')
+        commandExit(1, 'agent returned no content')
       }
     } catch (error) {
       // Handle special regeneration request from validation

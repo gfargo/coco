@@ -1,5 +1,6 @@
 import { generateChangelogResult } from '../commands/changelog/handler'
 import { runCommitWorkflow } from './commitWorkflowActions'
+import { CommandExitError } from '../lib/utils/commandExit'
 import {
   aiActionTestInternals,
   estimateLogAiActionImpact,
@@ -235,6 +236,29 @@ describe('log AI actions', () => {
       // hand.
       expect(result.title).toBeUndefined()
       expect(result.body).toBeUndefined()
+    })
+
+    it('renders a human message instead of the generic sentinel text for a clean CommandExitError(0) (#1604)', async () => {
+      // changelog's noResult path throws this sentinel (default message
+      // "Command exited with code 0") when the branch has no commits ahead
+      // of base — relaying it verbatim used to render as a confusing red
+      // error instead of an explanation.
+      mockedGenerateChangelogResult.mockRejectedValue(new CommandExitError(0))
+
+      const result = await runPullRequestBodyWorkflow({ baseBranch: 'main' })
+
+      expect(result.ok).toBe(false)
+      expect(result.message).not.toContain('Command exited with code')
+      expect(result.message).toContain('no commits ahead of base')
+    })
+
+    it('still propagates the real error message for a non-zero-code CommandExitError', async () => {
+      mockedGenerateChangelogResult.mockRejectedValue(new CommandExitError(1, 'a genuine failure'))
+
+      const result = await runPullRequestBodyWorkflow({ baseBranch: 'main' })
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toBe('a genuine failure')
     })
 
     it('does not monkey-patch process.stdout.write during generation', async () => {

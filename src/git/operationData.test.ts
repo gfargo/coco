@@ -11,13 +11,13 @@ import {
 } from './operationData'
 
 describe('log operation data', () => {
-  it('detects conflicted files from porcelain status', () => {
+  it('detects conflicted files from porcelain status (-z, NUL-separated)', () => {
     expect(parseConflictedFiles([
       'UU src/conflict.ts',
       'AA src/add-both.ts',
       ' M src/normal.ts',
       '?? src/new.ts',
-    ].join('\n'))).toEqual([
+    ].join('\0') + '\0')).toEqual([
       {
         path: 'src/conflict.ts',
         indexStatus: 'U',
@@ -27,6 +27,21 @@ describe('log operation data', () => {
         path: 'src/add-both.ts',
         indexStatus: 'A',
         worktreeStatus: 'A',
+      },
+    ])
+  })
+
+  it('detects a conflicted non-ASCII filename without corruption (#1597)', () => {
+    // -z never C-quotes paths — porcelain v1's default text format would
+    // have wrapped this in literal quotes with octal escapes, which then
+    // failed to match as a git pathspec in downstream conflict resolution.
+    expect(parseConflictedFiles([
+      'UU src/ä-conflict.ts',
+    ].join('\0') + '\0')).toEqual([
+      {
+        path: 'src/ä-conflict.ts',
+        indexStatus: 'U',
+        worktreeStatus: 'U',
       },
     ])
   })
@@ -160,7 +175,9 @@ describe('log operation data', () => {
     const git = {
       raw: jest.fn().mockImplementation(async (args: string[]) => {
         if (args[0] === 'status') {
-          return 'UU conflict.ts\n'
+          // -z (NUL-terminated) output, matching the real `git status
+          // --porcelain -z` invocation getConflictedFiles now makes (#1597).
+          return 'UU conflict.ts\0'
         }
 
         throw new Error('missing config')

@@ -87,4 +87,30 @@ describe('renderBisectSurface', () => {
       render(makeState(), { bisect: { active: true, currentSha: 'abc1234', log: [] } })
     ).toMatchSnapshot()
   })
+
+  it('references the actual mark-good binding (y), not the chord-prefix key (g)', () => {
+    const inactiveText = flattenText(
+      render(makeState(), { bisect: { active: false, currentSha: '', log: [] } })
+    )
+    const activeText = flattenText(
+      render(makeState(), { bisect: { active: true, currentSha: 'abc1234', log: [] } })
+    )
+    for (const text of [inactiveText, activeText]) {
+      expect(text).not.toMatch(/\bg\s+(mark )?good\b/)
+      expect(text).not.toMatch(/press g\b/)
+    }
+    expect(inactiveText).toMatch(/y\s+mark good/)
+    expect(activeText).toMatch(/y good/)
+    expect(activeText).toMatch(/press y/)
+  })
 })
+
+function flattenText(node: ReactElement | string | number | null | undefined): string {
+  if (node === null || node === undefined) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  const children = (node as ReactElement<{ children?: unknown }>).props?.children
+  if (Array.isArray(children)) {
+    return children.map((child) => flattenText(child as ReactElement)).join(' ')
+  }
+  return flattenText(children as ReactElement)
+}
