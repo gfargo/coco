@@ -12,6 +12,7 @@ export interface LogOptions extends BaseCommandOptions {
   commit?: string
   format?: LogFormat
   grep?: string
+  message?: string
   limit?: number
   merges?: boolean
   noMerges?: boolean
@@ -63,7 +64,20 @@ export const options = {
     // `LogOptions.grep`/`buildLogArgs` (data.ts) already supported this
     // — it just wasn't reachable from the CLI, only from the TUI's `/G:`
     // filter prefix (#1361). Documented for parity with --author/--path.
-    description: 'Filter commits by diff content matching a regex (git log -G)',
+    //
+    // NOTE (#1618): despite the name, this searches DIFF CONTENT (git log
+    // -G), not commit messages — twenty years of git convention expects
+    // --grep to search messages. Kept as-is for backward compatibility;
+    // use --message for message search.
+    description: 'Filter commits by diff content matching a regex (git log -G) — NOT commit messages, see --message',
+    type: 'string',
+  },
+  message: {
+    // #1618 — the message-search flag `--grep`'s name implied but never
+    // provided. Maps to git's own `--grep=`, so it composes with git's
+    // usual conventions (regex, case sensitivity, etc.) rather than
+    // reinventing message matching.
+    description: 'Filter commits by commit message matching a regex (git log --grep)',
     type: 'string',
   },
   limit: {
