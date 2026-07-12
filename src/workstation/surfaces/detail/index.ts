@@ -938,7 +938,13 @@ export function renderCommitPanel(
   const summaryLabel = `${summaryMarker} Summary: `
   const summaryColor = hasSummary && !theme.noColor ? theme.colors.accent : undefined
   const summaryValueWidth = Math.max(4, width - 4 - cellWidth(summaryLabel))
+  // #1632 — capped the same generous-but-bounded way Body is just below
+  // (`.slice(0, 12)`): an unbounded wrap let a long pasted subject (or
+  // over-long AI draft) push this panel's height past its column budget.
+  // 3 lines is plenty for a subject (a summary that long is already well
+  // past any conventional-commit length convention).
   const summaryWrapped = wrapCells(`${compose.summary || '<empty>'}${summaryCursor}`, summaryValueWidth)
+    .slice(0, 3)
   const trailerLines = [
     ...(compose.message ? ['', compose.message] : []),
     ...(compose.details || []).map((line) => `  ${line}`),

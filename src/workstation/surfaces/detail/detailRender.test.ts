@@ -92,6 +92,24 @@ describe('detail surface — shared-signature preview panels', () => {
     )
   })
 
+  // Regression (#1632): the Summary field wrapped to an unbounded number
+  // of visual lines — unlike Body just below it, which already caps at
+  // 12 wrapped lines — so a long pasted subject could push this panel's
+  // height well past its column budget.
+  it('caps a long wrapped Summary the same generous-but-bounded way Body already is', () => {
+    const base = createLogInkState([])
+    const longSummary = Array.from({ length: 8 }, (_, i) => `word${i + 1}`).join(' ')
+    const state = makeState({
+      commitCompose: { ...base.commitCompose, summary: longSummary, editing: false, field: 'summary' },
+    })
+    const tree = renderCommitPanel(
+      createElement, components, state, {}, createLogInkContextStatus('ready'), 30, theme, false
+    )
+    const lines = renderToLines(tree, Text, Box)
+    const summaryLines = lines.filter((line) => /word\d/.test(line))
+    expect(summaryLines.length).toBeLessThanOrEqual(3)
+  })
+
   it('renders a loading branch preview', () => {
     const loading = updateLogInkContextStatus(
       createLogInkContextStatus('idle'),
