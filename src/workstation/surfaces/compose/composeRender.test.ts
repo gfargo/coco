@@ -12,6 +12,7 @@ import {
 import type { WorktreeFile, WorktreeOverview } from '../../../git/statusData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderComposeSurface } from './index'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
 
 type StubProps = Record<string, unknown>
 const Text = ((props: StubProps) =>
@@ -22,6 +23,14 @@ const Box = ((props: StubProps) =>
 ) as unknown as React.ComponentType<StubProps>
 
 const components: LogInkComponents = { Box, Text }
+
+function treeText(node: unknown): string {
+  if (node == null || node === false) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(treeText).join('\n')
+  const el = node as { props?: { children?: unknown } }
+  return el.props ? treeText(el.props.children) : ''
+}
 
 function makeState(overrides: Partial<LogInkState> = {}): LogInkState {
   return { ...createLogInkState([]), ...overrides }
@@ -88,14 +97,6 @@ describe('renderComposeSurface', () => {
     const longBody = Array.from({ length: 30 }, (_, i) =>
       `L${String(i + 1).padStart(2, '0')}`).join('\n')
 
-    function treeText(node: unknown): string {
-      if (node == null || node === false) return ''
-      if (typeof node === 'string' || typeof node === 'number') return String(node)
-      if (Array.isArray(node)) return node.map(treeText).join('\n')
-      const el = node as { props?: { children?: unknown } }
-      return el.props ? treeText(el.props.children) : ''
-    }
-
     it('pins the window to the tail while editing the body', () => {
       const base = createLogInkState([])
       const state = makeState({
@@ -120,6 +121,78 @@ describe('renderComposeSurface', () => {
       expect(text).toContain('L01')
       expect(text).not.toContain('L30')
       expect(text).toContain('↓ 11 more lines')
+    })
+  })
+
+  describe('summary overflow scrolling (#1632)', () => {
+    // 6 explicit lines forces a cap regardless of panel width (each line
+    // is short enough to never auto-wrap) — cap is 3, so 2 stay visible
+    // plus the overflow-marker row, hiding 4.
+    const longSummary = Array.from({ length: 6 }, (_, i) => `S${i + 1}`).join('\n')
+
+    it('caps the summary and keeps the head slice with a more-lines marker when not editing', () => {
+      const base = createLogInkState([])
+      const state = makeState({
+        activeView: 'compose',
+        commitCompose: { ...base.commitCompose, summary: longSummary, editing: false, field: 'summary' },
+      })
+      const text = treeText(render(state, { worktree: makeWorktree([]) }))
+      expect(text).toContain('S1')
+      expect(text).not.toContain('S6')
+      expect(text).toContain('↓ 4 more lines')
+    })
+
+    it('pins the window to the tail while editing the summary', () => {
+      const base = createLogInkState([])
+      const state = makeState({
+        activeView: 'compose',
+        commitCompose: { ...base.commitCompose, summary: longSummary, editing: true, field: 'summary' },
+      })
+      const text = treeText(render(state, { worktree: makeWorktree([]) }))
+      expect(text).toContain('S6')
+      expect(text).not.toContain('S1')
+      expect(text).toContain('↑ 4 earlier lines')
+    })
+
+    it('keeps the combined Summary + Body sections within bodyRows even with both maxed out', () => {
+      const base = createLogInkState([])
+      const longBody = Array.from({ length: 30 }, (_, i) =>
+        `L${String(i + 1).padStart(2, '0')}`).join('\n')
+      const bodyRows = 30
+      const state = makeState({
+        activeView: 'compose',
+        commitCompose: {
+          ...base.commitCompose,
+          summary: longSummary,
+          body: longBody,
+          editing: false,
+          field: 'body',
+        },
+      })
+      const theme = createLogInkTheme({})
+      const tree = renderComposeSurface({
+        h: createElement,
+        components,
+        state,
+        // A staged file (vs. the empty-worktree fixture used elsewhere in
+        // this file) so the "nothing staged yet" hint doesn't add its own
+        // row — isolates this assertion to the Summary/Body budget math
+        // this issue is about.
+        context: {
+          worktree: makeWorktree([
+            { path: 'a.ts', indexStatus: 'M', worktreeStatus: ' ', state: 'staged' } as WorktreeFile,
+          ]),
+        },
+        contextStatus: createLogInkContextStatus('ready'),
+        bodyRows,
+        width: 120,
+        theme,
+      })
+      const lines = renderToLines(tree, Text, Box)
+      // The panel's own border isn't part of the flattened content lines
+      // renderToLines counts, but it still costs 2 rows against bodyRows.
+      const BORDER_ROWS = 2
+      expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
     })
   })
 
