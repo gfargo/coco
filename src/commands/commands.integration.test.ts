@@ -997,6 +997,51 @@ describe('command integration with temp git repos', () => {
     expect(mockExecuteChain).not.toHaveBeenCalled()
   })
 
+  // Regression (#1626): the CLI wrapper used to call loadConfig(argv) to
+  // decide the banner/interactive-mode before generateChangelogResult
+  // performed the --repo chdir, so that first load resolved project
+  // config against the launcher directory (`repo`, from beforeEach)
+  // instead of the --repo target. Every loadConfig call — including the
+  // wrapper's own — must now see the target repo as cwd.
+  it('reads config from the --repo target, not the launcher directory (#1626)', async () => {
+    const targetRepo = await createTempGitRepo()
+    try {
+      await featureBranchOneCommitScenario.setup(targetRepo)
+
+      const cwdAtLoadConfig: string[] = []
+      mockLoadConfig.mockImplementation((argv) => {
+        cwdAtLoadConfig.push(process.cwd())
+        return createConfig({
+          ...(argv as Record<string, unknown>),
+          mode: 'stdout',
+        })
+      })
+
+      await changelogHandler({
+        $0: 'coco',
+        _: ['changelog'],
+        repo: targetRepo.path,
+        branch: 'main',
+        range: '',
+        tag: '',
+        sinceLastTag: false,
+        withDiff: false,
+        onlyDiff: false,
+        interactive: false,
+        verbose: false,
+        version: false,
+        help: false,
+      } as Arguments<ChangelogOptions>, createLogger())
+
+      expect(cwdAtLoadConfig.length).toBeGreaterThan(0)
+      for (const cwd of cwdAtLoadConfig) {
+        expect(cwd).toBe(targetRepo.path)
+      }
+    } finally {
+      await targetRepo.cleanup()
+    }
+  })
+
   it('reviews real working tree changes from a temp git repo', async () => {
     mockLoadConfig.mockReturnValue(createConfig({
       mode: 'stdout',

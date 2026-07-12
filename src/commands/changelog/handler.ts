@@ -17,7 +17,7 @@ import { getCommitLogRangeDetails, CommitDetails } from '../../lib/simple-git/ge
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getChangesByCommit } from '../../lib/simple-git/getChangesByCommit'
 import { CommandHandler, FileChange } from '../../lib/types'
-import { applyRepoFlag } from '../utils/applyRepoFlag'
+import { applyRepoCwd, applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { handleResult } from '../../lib/ui/handleResult'
@@ -372,6 +372,11 @@ export async function generateChangelogResult(
  * core function above.
  */
 export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
+  // #1626 — chdir to the --repo target BEFORE loadConfig, so the
+  // banner/mode decision below reads the target repo's config instead of
+  // the launcher directory's. generateChangelogResult's own applyRepoFlag
+  // call re-resolves the same (already-current) directory, a no-op.
+  applyRepoCwd(argv)
   const config = loadConfig<ChangelogOptions, ChangelogArgv>(argv)
   const INTERACTIVE = argv.json ? false : isInteractive(config)
 
