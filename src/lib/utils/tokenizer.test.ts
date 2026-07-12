@@ -1,3 +1,4 @@
+import { encoding_for_model } from 'tiktoken'
 import { getTikToken, getTokenCounter, getTokenCounterForProvider } from './tokenizer'
 
 // Real tiktoken encoding is deterministic but not test-friendly to assert
@@ -145,6 +146,40 @@ describe('getTokenCounterForProvider', () => {
     it('still falls back to cl100k_base for a legacy pre-o200k OpenAI id (gpt-3.5)', async () => {
       const tokenizer = await getTikToken('gpt-3.5-turbo' as never)
       expect(tokenizer.encode(SAMPLE).length).toBe(SAMPLE.length + 200)
+    })
+  })
+
+  // Regression (#1641): every getTikToken call constructed a fresh
+  // WASM-backed encoder and never freed it — an unbounded leak across the
+  // life of a long-running workstation session. Encoders are now memoized
+  // per model name; 'gpt-4' is unused elsewhere in this file so the call
+  // count below isn't polluted by other tests sharing the module-level cache.
+  describe('encoder memoization (#1641)', () => {
+    const encodingForModelMock = encoding_for_model as jest.MockedFunction<typeof encoding_for_model>
+
+    it('only instantiates the underlying encoder once across repeated getTikToken calls for the same model', async () => {
+      const callsBefore = encodingForModelMock.mock.calls.filter((call) => call[0] === 'gpt-4').length
+
+      await getTikToken('gpt-4' as never)
+      await getTikToken('gpt-4' as never)
+      await getTikToken('gpt-4' as never)
+
+      const callsAfter = encodingForModelMock.mock.calls.filter((call) => call[0] === 'gpt-4').length
+      expect(callsAfter - callsBefore).toBe(1)
+    })
+
+    it('reuses the cached encoder across getTokenCounterForProvider calls for a non-tiktoken-native provider', async () => {
+      const callsBefore = encodingForModelMock.mock.calls.filter((call) => call[0] === 'gpt-4o').length
+
+      await getTokenCounterForProvider('anthropic', 'claude-3-5-sonnet-latest')
+      await getTokenCounterForProvider('anthropic', 'claude-3-5-sonnet-latest')
+      await getTokenCounterForProvider('gemini', 'gemini-2.5-flash')
+
+      // All three route to the shared 'gpt-4o' baseline encoder — at most
+      // one more instantiation than whatever ran before this test (the
+      // very first 'gpt-4o' call anywhere in this file), never one per call.
+      const callsAfter = encodingForModelMock.mock.calls.filter((call) => call[0] === 'gpt-4o').length
+      expect(callsAfter - callsBefore).toBeLessThanOrEqual(1)
     })
   })
 })
