@@ -34,6 +34,8 @@ export function loadEnvConfig<ConfigType = Config>(
     'COCO_SERVICE_PROVIDER',
     'COCO_SERVICE_MODEL',
     'OPEN_AI_KEY',
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY',
     'GEMINI_API_KEY',
     'GOOGLE_API_KEY',
     'MISTRAL_API_KEY',
@@ -59,6 +61,8 @@ export function loadEnvConfig<ConfigType = Config>(
       key === 'COCO_SERVICE_PROVIDER' ||
       key === 'COCO_SERVICE_MODEL' ||
       key === 'OPEN_AI_KEY' ||
+      key === 'OPENAI_API_KEY' ||
+      key === 'ANTHROPIC_API_KEY' ||
       key === 'GEMINI_API_KEY' ||
       key === 'GOOGLE_API_KEY' ||
       key === 'MISTRAL_API_KEY' ||
@@ -129,7 +133,22 @@ function handleServiceEnvVar(
       service.model = value
       break
     case 'OPEN_AI_KEY':
+    case 'OPENAI_API_KEY':
+      // OPEN_AI_KEY is a deprecated alias kept for backward compatibility.
+      // Both are handled here (in envKeys order) so OPENAI_API_KEY — the
+      // standard name every UX surface tells users to set — wins when both
+      // are present (#1584).
       if (effectiveProvider === 'openai') {
+        service.authentication = {
+          type: 'APIKey',
+          credentials: {
+            apiKey: value,
+          },
+        }
+      }
+      break
+    case 'ANTHROPIC_API_KEY':
+      if (effectiveProvider === 'anthropic') {
         service.authentication = {
           type: 'APIKey',
           credentials: {

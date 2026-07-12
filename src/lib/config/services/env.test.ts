@@ -99,8 +99,13 @@ describe('loadEnvConfig', () => {
     // Regression for the toEnvVarName mangling bug: these env-var-form names
     // (OPEN_AI_KEY, GEMINI_API_KEY, ...) must be read verbatim, not rewritten
     // to COCO__O_P_E_N__A_I__K_E_Y. Each key only applies to its provider.
-    const cases: Array<{ provider: 'openai' | 'gemini' | 'mistral' | 'azure'; envVar: string }> = [
+    const cases: Array<{
+      provider: 'openai' | 'anthropic' | 'gemini' | 'mistral' | 'azure'
+      envVar: string
+    }> = [
       { provider: 'openai', envVar: 'OPEN_AI_KEY' },
+      { provider: 'openai', envVar: 'OPENAI_API_KEY' },
+      { provider: 'anthropic', envVar: 'ANTHROPIC_API_KEY' },
       { provider: 'gemini', envVar: 'GEMINI_API_KEY' },
       { provider: 'gemini', envVar: 'GOOGLE_API_KEY' },
       { provider: 'mistral', envVar: 'MISTRAL_API_KEY' },
@@ -137,6 +142,39 @@ describe('loadEnvConfig', () => {
         }
       } finally {
         delete process.env.GEMINI_API_KEY
+      }
+    })
+
+    it('ignores ANTHROPIC_API_KEY when the configured provider is not anthropic (#1584)', () => {
+      process.env.ANTHROPIC_API_KEY = 'anthropic-key'
+      try {
+        const config = loadEnvConfig({
+          ...defaultConfig,
+          service: getDefaultServiceConfigFromAlias('openai'),
+        })
+        if (config.service.authentication.type === 'APIKey') {
+          expect(config.service.authentication.credentials?.apiKey).not.toBe('anthropic-key')
+        }
+      } finally {
+        delete process.env.ANTHROPIC_API_KEY
+      }
+    })
+
+    it('prefers OPENAI_API_KEY over the deprecated OPEN_AI_KEY alias when both are set (#1584)', () => {
+      process.env.OPEN_AI_KEY = 'legacy-key'
+      process.env.OPENAI_API_KEY = 'standard-key'
+      try {
+        const config = loadEnvConfig({
+          ...defaultConfig,
+          service: getDefaultServiceConfigFromAlias('openai'),
+        })
+        expect(config.service.authentication.type).toBe('APIKey')
+        if (config.service.authentication.type === 'APIKey') {
+          expect(config.service.authentication.credentials?.apiKey).toBe('standard-key')
+        }
+      } finally {
+        delete process.env.OPEN_AI_KEY
+        delete process.env.OPENAI_API_KEY
       }
     })
   })
