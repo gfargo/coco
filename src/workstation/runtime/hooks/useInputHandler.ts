@@ -319,10 +319,14 @@ export function useInputHandler(
     const submoduleSelectedPath = filteredSubmoduleList[
       Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
     ]?.path
+    // #1452 dual-write — same role as worktreeListIds: id list in render
+    // order so moveSubmodule/moveRemote can resolve the post-move id.
+    const submoduleListIds = filteredSubmoduleList.map((s) => s.path)
     const remoteVisibleCount = filteredRemoteList.length
     const remoteSelectedName = filteredRemoteList[
       Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
     ]?.name
+    const remoteListIds = filteredRemoteList.map((r) => r.name)
     const issueVisibleCount = filteredIssueList.length
     const issueSelectedUrl = filteredIssueList[
       Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
@@ -395,8 +399,10 @@ export function useInputHandler(
       reflogUndoDescription,
       submoduleCount: submoduleVisibleCount,
       submoduleSelectedPath,
+      submoduleListIds,
       remoteCount: remoteVisibleCount,
       remoteSelectedName,
+      remoteListIds,
       // Drive j/k on the blame view off the cached line count for the
       // active path (#0.71); 0 while hydrating or on a failed blame, so
       // the nav handlers no-op until lines exist.

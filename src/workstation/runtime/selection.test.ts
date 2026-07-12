@@ -7,7 +7,7 @@
  */
 import { applyLogInkAction, createLogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
-import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedCommitTarget, getSelectedCommitRange } from './selection'
+import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedSubmodule, getSelectedRemote, getSelectedCommitTarget, getSelectedCommitRange } from './selection'
 
 function makeCommitRow(hash: string) {
   return {
@@ -40,6 +40,14 @@ function makeStash(index: number) {
 
 function makeWorktree(path: string, branch?: string) {
   return { path, branch, head: `h-${path}`, detached: !branch, bare: false, current: false, dirty: false }
+}
+
+function makeSubmodule(path: string, name = path) {
+  return { name, path, pinnedSha: `sha-${path}`, flag: 'clean' as const, trackingBranch: undefined, url: undefined }
+}
+
+function makeRemote(name: string) {
+  return { name, fetchUrl: `git@example.com:${name}.git`, pushUrl: `git@example.com:${name}.git` }
 }
 
 describe('selection selectors (#1452)', () => {
@@ -268,6 +276,116 @@ describe('selection selectors (#1452)', () => {
         filter: 'does-not-match-anything',
       }
       expect(getSelectedWorktree(state, worktreeContext)?.path).toBe('/repo-feature')
+    })
+  })
+
+  describe('getSelectedSubmodule', () => {
+    const submoduleContext = {
+      submodules: {
+        entries: [makeSubmodule('/vendor/a'), makeSubmodule('/vendor/b')],
+      },
+    } as unknown as LogInkContext
+
+    it('returns the submodule at the selected index', () => {
+      const state = { ...createLogInkState([]), selectedSubmoduleIndex: 1 }
+      expect(getSelectedSubmodule(state, submoduleContext)?.path).toBe('/vendor/b')
+    })
+
+    it('falls back to the unfiltered list when the filter hides every submodule', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedSubmoduleIndex: 1,
+        filter: 'does-not-match-anything',
+      }
+      expect(getSelectedSubmodule(state, submoduleContext)?.path).toBe('/vendor/b')
+    })
+
+    it('returns undefined when there are no submodules at all', () => {
+      const state = { ...createLogInkState([]), selectedSubmoduleIndex: 0 }
+      const emptyCtx = { submodules: { entries: [] } } as unknown as LogInkContext
+      expect(getSelectedSubmodule(state, emptyCtx)).toBeUndefined()
+    })
+
+    it('prefers selectedSubmoduleId over selectedSubmoduleIndex when both are set', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedSubmoduleIndex: 0,
+        selectedSubmoduleId: '/vendor/b',
+      }
+      expect(getSelectedSubmodule(state, submoduleContext)?.path).toBe('/vendor/b')
+    })
+
+    it('falls back to the index when selectedSubmoduleId is undefined', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedSubmoduleIndex: 0,
+        selectedSubmoduleId: undefined,
+      }
+      expect(getSelectedSubmodule(state, submoduleContext)?.path).toBe('/vendor/a')
+    })
+
+    it('falls back to the index when selectedSubmoduleId no longer resolves', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedSubmoduleIndex: 1,
+        selectedSubmoduleId: '/gone',
+      }
+      expect(getSelectedSubmodule(state, submoduleContext)?.path).toBe('/vendor/b')
+    })
+  })
+
+  describe('getSelectedRemote', () => {
+    const remoteContext = {
+      remotes: {
+        entries: [makeRemote('origin'), makeRemote('upstream')],
+      },
+    } as unknown as LogInkContext
+
+    it('returns the remote at the selected index', () => {
+      const state = { ...createLogInkState([]), selectedRemoteIndex: 1 }
+      expect(getSelectedRemote(state, remoteContext)?.name).toBe('upstream')
+    })
+
+    it('falls back to the unfiltered list when the filter hides every remote', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedRemoteIndex: 1,
+        filter: 'does-not-match-anything',
+      }
+      expect(getSelectedRemote(state, remoteContext)?.name).toBe('upstream')
+    })
+
+    it('returns undefined when there are no remotes at all', () => {
+      const state = { ...createLogInkState([]), selectedRemoteIndex: 0 }
+      const emptyCtx = { remotes: { entries: [] } } as unknown as LogInkContext
+      expect(getSelectedRemote(state, emptyCtx)).toBeUndefined()
+    })
+
+    it('prefers selectedRemoteId over selectedRemoteIndex when both are set', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedRemoteIndex: 0,
+        selectedRemoteId: 'upstream',
+      }
+      expect(getSelectedRemote(state, remoteContext)?.name).toBe('upstream')
+    })
+
+    it('falls back to the index when selectedRemoteId is undefined', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedRemoteIndex: 0,
+        selectedRemoteId: undefined,
+      }
+      expect(getSelectedRemote(state, remoteContext)?.name).toBe('origin')
+    })
+
+    it('falls back to the index when selectedRemoteId no longer resolves', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedRemoteIndex: 1,
+        selectedRemoteId: 'gone',
+      }
+      expect(getSelectedRemote(state, remoteContext)?.name).toBe('upstream')
     })
   })
 

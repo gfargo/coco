@@ -24,13 +24,13 @@
  * `useEffect` / `useMemo` dependency array — so there is no identity-stability
  * hazard from the move.
  *
- * The branch/tag/stash arms of `yankFromActiveView` resolve their target via
- * the id-based selectors (`getSelectedBranch` / `getSelectedTag` /
- * `getSelectedStash`, #1452) instead of inline sort+filter+index resolution.
+ * The branch/tag/stash/submodule/remote arms of `yankFromActiveView` resolve
+ * their target via the id-based selectors (`getSelectedBranch` /
+ * `getSelectedTag` / `getSelectedStash` / `getSelectedSubmodule` /
+ * `getSelectedRemote`, #1452) instead of inline sort+filter+index resolution.
  * The remaining arms still use the module-level helpers
- * (`matchesPromotedFilter`, `getBisectCompletion`, `findStashFileForOffset`)
- * and the `ClipboardRunner` type + `defaultClipboardRunner`, imported
- * directly here rather than threaded.
+ * (`getBisectCompletion`, `findStashFileForOffset`) and the `ClipboardRunner`
+ * type + `defaultClipboardRunner`, imported directly here rather than threaded.
  *
  * `React` is injected (per the runtime's `getLogInkRuntimeContext(React)`
  * convention) because the workstation never statically imports React.
@@ -40,8 +40,7 @@ import type * as ReactTypes from 'react'
 import type { LogInkAction, LogInkState } from '../inkViewModel'
 import type { LogInkContext } from '../types'
 import { ClipboardRunner, defaultClipboardRunner } from '../../../git/historyActions'
-import { matchesPromotedFilter } from '../promotedFilter'
-import { getSelectedBranch, getSelectedStash, getSelectedTag } from '../selection'
+import { getSelectedBranch, getSelectedStash, getSelectedTag, getSelectedSubmodule, getSelectedRemote } from '../selection'
 import { getBisectCompletion } from '../../../git/bisectData'
 import { findStashFileForOffset, type StashDiffFile } from '../../../git/stashData'
 import type { WorktreeFile } from '../../../git/statusData'
@@ -50,7 +49,6 @@ import type { GitLogCommitRow, GitCommitDetail } from '../../../commands/log/dat
 // Element types are derived from `LogInkContext` indexed access so they track
 // the real overview shapes without re-importing each one (mirrors the
 // convention in `buildFilteredLists`).
-type RemoteListItem = NonNullable<LogInkContext['remotes']>['entries'][number]
 type IssueListItem = NonNullable<NonNullable<LogInkContext['issueList']>['issues']>[number]
 type PullRequestListItem =
   NonNullable<NonNullable<LogInkContext['pullRequestList']>['pullRequests']>[number]
@@ -75,8 +73,6 @@ export type UseYankActionsDeps = {
   stashDiffParsedFiles: StashDiffFile[]
   /** Mask-filtered worktree file list (status / worktree-diff yank target). */
   visibleWorktreeFilesGrouped: WorktreeFile[]
-  /** Filtered remote list (remotes-view yank target). */
-  filteredRemoteList: RemoteListItem[]
   /** Filtered issue list (issues-view yank target). */
   filteredIssueList: IssueListItem[]
   /** Filtered PR-triage list (pull-request-triage-view yank target). */
@@ -102,7 +98,6 @@ export function useYankActions(
     stashDiffLines,
     stashDiffParsedFiles,
     visibleWorktreeFilesGrouped,
-    filteredRemoteList,
     filteredIssueList,
     filteredPullRequestTriageList,
   } = deps
@@ -196,14 +191,9 @@ export function useYankActions(
       // pinned commit's short sha. Either is what the user most
       // likely wants — path for `git submodule update <path>`, sha
       // for cross-referencing in logs or other repos.
-      const entries = context.submodules?.entries || []
-      const filtered = state.filter
-        ? entries.filter((entry) => matchesPromotedFilter(
-          [entry.name, entry.path, entry.trackingBranch || '', entry.url || ''],
-          state.filter,
-        ))
-        : entries
-      const entry = filtered[Math.min(state.selectedSubmoduleIndex, Math.max(0, filtered.length - 1))]
+      // #1452 flip — resolved via the id-first/index-fallback selector,
+      // same as branch/tag/stash.
+      const entry = getSelectedSubmodule(state, context)
       if (entry) {
         if (short) {
           if (entry.pinnedSha) {
@@ -220,9 +210,8 @@ export function useYankActions(
       // cursored remote's fetch URL (the value the user most often
       // needs for a clone / config command). Short form (`Y`) is a
       // no-op — there's no compact alternate worth a second key.
-      const entry = filteredRemoteList[
-        Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
-      ]
+      // #1452 flip — resolved via the id-first/index-fallback selector.
+      const entry = getSelectedRemote(state, context)
       if (entry && entry.fetchUrl) {
         value = entry.fetchUrl
         label = `remote ${entry.name} URL`
@@ -314,13 +303,13 @@ export function useYankActions(
     clipboardRunner,
     context.bisect,
     context.branches,
+    context.remotes,
     context.stashes,
     context.submodules,
     context.tags,
     dispatch,
     filteredIssueList,
     filteredPullRequestTriageList,
-    filteredRemoteList,
     selected,
     selectedDetailFile,
     stashDiffLines,

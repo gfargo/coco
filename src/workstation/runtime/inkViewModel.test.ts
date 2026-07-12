@@ -1583,6 +1583,32 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 5 })
       expect(state.selectedWorktreeListId).toBeUndefined()
     })
+
+    it('writes selectedSubmoduleId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveSubmodule', delta: 1, count: 5, id: '/vendor/b' })
+      expect(state.selectedSubmoduleIndex).toBe(1)
+      expect(state.selectedSubmoduleId).toBe('/vendor/b')
+    })
+
+    it('leaves selectedSubmoduleId undefined when the dispatch site could not resolve one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveSubmodule', delta: 1, count: 5 })
+      expect(state.selectedSubmoduleId).toBeUndefined()
+    })
+
+    it('writes selectedRemoteId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 5, id: 'upstream' })
+      expect(state.selectedRemoteIndex).toBe(1)
+      expect(state.selectedRemoteId).toBe('upstream')
+    })
+
+    it('leaves selectedRemoteId undefined when the dispatch site could not resolve one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 5 })
+      expect(state.selectedRemoteId).toBeUndefined()
+    })
   })
 
   // #1452 flip — every OTHER action that resets or rectifies
@@ -2416,6 +2442,29 @@ describe('log Ink view model', () => {
       const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
       expect(popped.selectedWorktreeListId).toBeUndefined()
       expect(popped.selectedWorktreeListIndex).toBe(state.selectedWorktreeListIndex)
+    })
+
+    // Same discipline for the submodule / remote id mirrors (#1452
+    // submodule/remote flip).
+    it('pushRepoFrame and popRepoFrame clear selectedSubmoduleId and selectedRemoteId too', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveSubmodule', delta: 1, count: 10, id: '/vendor/b' })
+      state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 10, id: 'upstream' })
+      expect(state.selectedSubmoduleId).toBe('/vendor/b')
+      expect(state.selectedRemoteId).toBe('upstream')
+
+      const pushed = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
+      expect(pushed.selectedSubmoduleId).toBeUndefined()
+      expect(pushed.selectedRemoteId).toBeUndefined()
+
+      const insideSubmodule = applyLogInkAction(pushed, {
+        type: 'moveSubmodule', delta: 1, count: 10, id: '/submodule-vendor',
+      })
+      const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
+      expect(popped.selectedSubmoduleId).toBeUndefined()
+      expect(popped.selectedRemoteId).toBeUndefined()
+      expect(popped.selectedSubmoduleIndex).toBe(state.selectedSubmoduleIndex)
+      expect(popped.selectedRemoteIndex).toBe(state.selectedRemoteIndex)
     })
 
     // Regression: popping a frame entered FROM a commit diff used to

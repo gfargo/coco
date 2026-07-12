@@ -3,12 +3,12 @@
  *
  * This module introduces the target selection architecture that will replace
  * the scalar `selected*Index` fields in `LogInkState`. The migration is
- * incremental and per view; branches / tags / stashes / worktrees have
- * completed phases 1-2 below. `reflog` and `blame` are intentionally
- * staying index-only (see the doc comments on `selectedReflogIndex` /
- * `selectedBlameIndex` in `inkViewModel.ts` — their cursor position IS
- * the identity, there's no separate stable id to key on). The remaining
- * views (submodules, remotes, issues, PR triage, file-history, and the
+ * incremental and per view; branches / tags / stashes / worktrees / submodules
+ * / remotes have completed phases 1-2 below. `reflog` and `blame` are
+ * intentionally staying index-only (see the doc comments on
+ * `selectedReflogIndex` / `selectedBlameIndex` in `inkViewModel.ts` — their
+ * cursor position IS the identity, there's no separate stable id to key on).
+ * The remaining views (issues, PR triage, file-history, and the
  * history/diff/status-file cursors) are tracked for a future pass.
  *
  * Design:
@@ -40,6 +40,8 @@ import type { BranchRef } from '../../git/branchData'
 import type { GitTagRef } from '../../git/tagData'
 import type { StashEntry } from '../../git/stashData'
 import type { WorktreeEntry } from '../../git/worktreeData'
+import type { SubmoduleEntry } from '../../git/submoduleData'
+import type { RemoteEntry } from '../../git/remoteData'
 import { sortBranches, sortTags } from '../chrome/sorting'
 import { matchesPromotedFilter } from './promotedFilter'
 
@@ -310,6 +312,90 @@ export function getSelectedWorktree(
     if (byId) return byId
   }
   return all[Math.min(state.selectedWorktreeListIndex, all.length - 1)]
+}
+
+/**
+ * Get the currently-selected submodule's path.
+ */
+export function getSelectedSubmoduleId(
+  state: LogInkState,
+  context: LogInkContext,
+): string | undefined {
+  return getSelectedSubmodule(state, context)?.path
+}
+
+/**
+ * Get the full SubmoduleEntry for the currently-selected submodule.
+ *
+ * #1452 flip — same id-first/index-fallback resolution as
+ * `getSelectedWorktree`, including the unfiltered-list fallback tier for
+ * a submodule action fired from the palette while a stale filter hides
+ * every row.
+ */
+export function getSelectedSubmodule(
+  state: LogInkState,
+  context: LogInkContext,
+): SubmoduleEntry | undefined {
+  const all = context.submodules?.entries || []
+  const visible = state.filter
+    ? all.filter((s) =>
+      matchesPromotedFilter([s.name, s.path, s.trackingBranch || '', s.url || ''], state.filter)
+    )
+    : all
+  if (visible.length > 0) {
+    if (state.selectedSubmoduleId) {
+      const byId = visible.find((s) => s.path === state.selectedSubmoduleId)
+      if (byId) return byId
+    }
+    return visible[Math.min(state.selectedSubmoduleIndex, visible.length - 1)]
+  }
+  if (all.length === 0) return undefined
+  if (state.selectedSubmoduleId) {
+    const byId = all.find((s) => s.path === state.selectedSubmoduleId)
+    if (byId) return byId
+  }
+  return all[Math.min(state.selectedSubmoduleIndex, all.length - 1)]
+}
+
+/**
+ * Get the currently-selected remote's name.
+ */
+export function getSelectedRemoteId(
+  state: LogInkState,
+  context: LogInkContext,
+): string | undefined {
+  return getSelectedRemote(state, context)?.name
+}
+
+/**
+ * Get the full RemoteEntry for the currently-selected remote.
+ *
+ * #1452 flip — same id-first/index-fallback resolution as
+ * `getSelectedWorktree`, including the unfiltered-list fallback tier for
+ * a remote action fired from the palette while a stale filter hides
+ * every row.
+ */
+export function getSelectedRemote(
+  state: LogInkState,
+  context: LogInkContext,
+): RemoteEntry | undefined {
+  const all = context.remotes?.entries || []
+  const visible = state.filter
+    ? all.filter((r) => matchesPromotedFilter([r.name, r.fetchUrl, r.pushUrl], state.filter))
+    : all
+  if (visible.length > 0) {
+    if (state.selectedRemoteId) {
+      const byId = visible.find((r) => r.name === state.selectedRemoteId)
+      if (byId) return byId
+    }
+    return visible[Math.min(state.selectedRemoteIndex, visible.length - 1)]
+  }
+  if (all.length === 0) return undefined
+  if (state.selectedRemoteId) {
+    const byId = all.find((r) => r.name === state.selectedRemoteId)
+    if (byId) return byId
+  }
+  return all[Math.min(state.selectedRemoteIndex, all.length - 1)]
 }
 
 /**

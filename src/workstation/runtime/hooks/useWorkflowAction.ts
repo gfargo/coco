@@ -50,7 +50,7 @@ import {
 import { forgeNouns } from '../../chrome/forgeNouns'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, getSelectedWorktreeId, getSelectedWorktree } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, getSelectedWorktreeId, getSelectedWorktree, getSelectedSubmodule, getSelectedRemote } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -128,9 +128,7 @@ import type { LogInkContext } from '../types'
 // Element types are derived from `LogInkContext` indexed access so they track
 // the real overview shapes without re-importing each one (mirrors the
 // convention in `buildFilteredLists` / `useYankActions`).
-type RemoteListItem = NonNullable<LogInkContext['remotes']>['entries'][number]
 type ReflogListItem = NonNullable<LogInkContext['reflog']>['entries'][number]
-type SubmoduleListItem = NonNullable<LogInkContext['submodules']>['entries'][number]
 type IssueListItem = NonNullable<NonNullable<LogInkContext['issueList']>['issues']>[number]
 type PullRequestListItem =
   NonNullable<NonNullable<LogInkContext['pullRequestList']>['pullRequests']>[number]
@@ -361,12 +359,8 @@ export type UseWorkflowActionDeps = {
   forge: ReturnType<typeof getForgeActions>
   /** The active provider id (drives `forgeNouns` copy). */
   forgeProvider: GitProviderType | undefined
-  /** Filtered remote list (remote-op target resolution). */
-  filteredRemoteList: RemoteListItem[]
   /** Filtered reflog list (reflog-view target resolution). */
   filteredReflogList: ReflogListItem[]
-  /** Filtered submodule list (submodule-view target resolution). */
-  filteredSubmoduleList: SubmoduleListItem[]
   /** Filtered issue list (issue-triage target resolution). */
   filteredIssueList: IssueListItem[]
   /** Filtered PR-triage list (PR-triage target resolution). */
@@ -436,9 +430,7 @@ export function useWorkflowAction(
       setContextStatus,
       forge,
       forgeProvider,
-      filteredRemoteList,
       filteredReflogList,
-      filteredSubmoduleList,
       filteredIssueList,
       filteredPullRequestTriageList,
     } = depsRef.current
@@ -998,23 +990,17 @@ export function useWorkflowAction(
       // post-handler refreshContext reloads the submodule overview so the
       // row's status flag updates after the action lands.
       'submodule-init': async () => {
-        const entry = filteredSubmoduleList[
-          Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
-        ]
+        const entry = getSelectedSubmodule(state, context)
         if (!entry) return { ok: false, message: 'No submodule selected' }
         return initSubmodule(git, entry)
       },
       'submodule-update': async () => {
-        const entry = filteredSubmoduleList[
-          Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
-        ]
+        const entry = getSelectedSubmodule(state, context)
         if (!entry) return { ok: false, message: 'No submodule selected' }
         return updateSubmodule(git, entry, { init: true })
       },
       'submodule-sync': async () => {
-        const entry = filteredSubmoduleList[
-          Math.min(state.selectedSubmoduleIndex, Math.max(0, filteredSubmoduleList.length - 1))
-        ]
+        const entry = getSelectedSubmodule(state, context)
         if (!entry) return { ok: false, message: 'No submodule selected' }
         return syncSubmodule(git, entry)
       },
@@ -1035,24 +1021,18 @@ export function useWorkflowAction(
         return addRemote(git, name, url)
       },
       'remote-set-url': async () => {
-        const entry = filteredRemoteList[
-          Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
-        ]
+        const entry = getSelectedRemote(state, context)
         if (!entry) return { ok: false, message: 'No remote selected' }
         const url = (payload || '').trim()
         return setRemoteUrl(git, entry.name, url)
       },
       'remote-remove': async () => {
-        const entry = filteredRemoteList[
-          Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
-        ]
+        const entry = getSelectedRemote(state, context)
         if (!entry) return { ok: false, message: 'No remote selected' }
         return removeRemote(git, entry.name)
       },
       'remote-prune': async () => {
-        const entry = filteredRemoteList[
-          Math.min(state.selectedRemoteIndex, Math.max(0, filteredRemoteList.length - 1))
-        ]
+        const entry = getSelectedRemote(state, context)
         if (!entry) return { ok: false, message: 'No remote selected' }
         return pruneRemote(git, entry.name)
       },

@@ -192,6 +192,10 @@ export type LogInkInputContext = {
   worktreeListCount?: number
   /** Sorted + filtered worktree paths, same role as `branchIds` (#1452). */
   worktreeListIds?: string[]
+  /** Filtered submodule paths in render order, same role as `branchIds` (#1452). */
+  submoduleListIds?: string[]
+  /** Filtered remote names in render order, same role as `branchIds` (#1452). */
+  remoteListIds?: string[]
   /** Ref of the stash currently under the cursor (e.g. `stash@{0}`). */
   stashSelectedRef?: string
   /**
@@ -2986,7 +2990,12 @@ export function getLogInkInputEvents(
     }
 
     if (isRemotesActionTarget(state) && context.remoteCount) {
-      return [action({ type: 'moveRemote', delta: -1, count: context.remoteCount })]
+      return [action({
+        type: 'moveRemote',
+        delta: -1,
+        count: context.remoteCount,
+        id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, -1, context.remoteCount),
+      })]
     }
 
     if (state.activeView === 'blame' && context.blameLineCount) {
@@ -2998,7 +3007,12 @@ export function getLogInkInputEvents(
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
-      return [action({ type: 'moveSubmodule', delta: -1, count: context.submoduleCount })]
+      return [action({
+        type: 'moveSubmodule',
+        delta: -1,
+        count: context.submoduleCount,
+        id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, -1, context.submoduleCount),
+      })]
     }
 
     if (isIssueActionTarget(state) && context.issueCount) {
@@ -3142,7 +3156,12 @@ export function getLogInkInputEvents(
     }
 
     if (isRemotesActionTarget(state) && context.remoteCount) {
-      return [action({ type: 'moveRemote', delta: 1, count: context.remoteCount })]
+      return [action({
+        type: 'moveRemote',
+        delta: 1,
+        count: context.remoteCount,
+        id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, 1, context.remoteCount),
+      })]
     }
 
     if (state.activeView === 'blame' && context.blameLineCount) {
@@ -3154,7 +3173,12 @@ export function getLogInkInputEvents(
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
-      return [action({ type: 'moveSubmodule', delta: 1, count: context.submoduleCount })]
+      return [action({
+        type: 'moveSubmodule',
+        delta: 1,
+        count: context.submoduleCount,
+        id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, 1, context.submoduleCount),
+      })]
     }
 
     if (isIssueActionTarget(state) && context.issueCount) {
