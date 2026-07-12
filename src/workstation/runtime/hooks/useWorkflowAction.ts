@@ -360,12 +360,19 @@ export function useWorkflowAction(
   const depsRef = React.useRef(deps)
   depsRef.current = deps
 
-  // Last dropped stash {hash, message}, captured before `drop-stash` runs
-  // so `undo-drop-stash` can re-store it. The dropped commit survives in
-  // the object DB until gc, so the hash is enough to bring it back. Owned
+  // Last dropped stash {hash, message, depth}, captured before `drop-stash`
+  // runs so `undo-drop-stash` can re-store it. The dropped commit survives
+  // in the object DB until gc, so the hash is enough to bring it back. Owned
   // exclusively by `runWorkflowAction` (the `drop-stash` / `undo-drop-stash`
   // flows) — declared inside the hook at its original relative slot.
-  const lastDroppedStashRef = React.useRef<{ hash: string; message: string } | null>(null)
+  //
+  // `depth` (#1607) is the repo-frame depth `drop-stash` captured the hash
+  // at. This ref lives outside the reducer, so it missed the reducer's
+  // push/pop sweep that clears every other piece of cross-repo state —
+  // without the depth tag, drilling into a submodule after a parent-repo
+  // drop and running undo-drop-stash would run `restoreStash` with the
+  // PARENT's hash against the CHILD's git.
+  const lastDroppedStashRef = React.useRef<{ hash: string; message: string; depth: number } | null>(null)
 
   // Last fixup target {hash, shortHash, message}, captured when
   // `fixup-into-commit` succeeds so the follow-up `autosquash-rebase`
@@ -577,13 +584,19 @@ export function useWorkflowAction(
           return parse(a.ref) - parse(b.ref)
         })[0]
         if (mostRecent.hash) {
-          lastDroppedStashRef.current = { hash: mostRecent.hash, message: mostRecent.message }
+          lastDroppedStashRef.current = { hash: mostRecent.hash, message: mostRecent.message, depth: issuedAtDepth }
         }
         return dropStashes(git, stashes)
       },
       'undo-drop-stash': async () => {
         const dropped = lastDroppedStashRef.current
-        if (!dropped) return { ok: false, message: 'Nothing to undo — no stash dropped this session' }
+        // #1607 — a drop captured at a different repo-frame depth belongs
+        // to a different repo's git; refuse rather than retry its hash
+        // against this frame's git (wrong-repo restore, or a confusing
+        // raw git failure).
+        if (!dropped || dropped.depth !== issuedAtDepth) {
+          return { ok: false, message: 'Nothing to undo — no stash dropped this session' }
+        }
         const result = await restoreStash(git, dropped.hash, dropped.message)
         if (result.ok) lastDroppedStashRef.current = null
         return result
