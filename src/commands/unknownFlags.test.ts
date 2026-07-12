@@ -100,7 +100,7 @@ describe('strict mode rejects unknown flags on each command', () => {
     // `pr` is intentionally excluded here — its builder now requires the
     // `.command()` registration context to resolve `argv.action` (#1580),
     // so the bare-builder `parseWithStrict` harness can't exercise it
-    // meaningfully. See "pr [action] rejects unknown actions" below, which
+    // meaningfully. See "pr <action> rejects unknown actions" below, which
     // registers the real command string and covers its unknown-flag case.
     ['prs', prsBuilder],
     ['recap', recapBuilder],
@@ -221,7 +221,7 @@ describe('declared flags are accepted (no false positives)', () => {
 // instead of silently falling through to PR creation.
 // ---------------------------------------------------------------------------
 
-describe('pr [action] rejects unknown actions', () => {
+describe('pr <action> rejects unknown actions', () => {
   function parsePrCommand(args: string[]): { failMessage: string | null; handlerCalled: boolean } {
     let failMessage: string | null = null
     let handlerCalled = false
@@ -275,10 +275,12 @@ describe('pr [action] rejects unknown actions', () => {
     expect(handlerCalled).toBe(false)
   })
 
-  it('rejects bare `pr` with a message naming the valid action', () => {
+  it('rejects bare `pr` with yargs\' native missing-positional error', () => {
+    // Required positional (`pr <action>`, matching `cache <subcommand>`'s
+    // pattern) — yargs' own arity error, not a custom "valid actions:
+    // create" message. Same tradeoff `cache <subcommand>` already makes.
     const { failMessage, handlerCalled } = parsePrCommand(['pr'])
-    expect(failMessage).not.toBeNull()
-    expect(failMessage).toMatch(/create/i)
+    expect(failMessage).toMatch(/not enough non-option arguments/i)
     expect(handlerCalled).toBe(false)
   })
 

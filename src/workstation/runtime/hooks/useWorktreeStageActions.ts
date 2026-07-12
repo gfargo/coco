@@ -113,17 +113,6 @@ export type UseWorktreeStageActionsDeps = {
   setWorktreeHunks: ReactTypes.Dispatch<
     ReactTypes.SetStateAction<WorktreeHunkOverview | undefined>
   >
-  /**
-   * Bumped by the hunk/line-level handlers below after
-   * `refreshWorktreeContext()`, alongside the `setWorktreeDiff(undefined)` /
-   * `setWorktreeHunks(undefined)` clears (#1579). A hunk-level mutation can
-   * leave the cursored file's own `indexStatus`/`worktreeStatus` unchanged
-   * (reverting one of several unstaged hunks; staging the 2nd+ hunk of an
-   * already-`MM` file) — those scalar fields are `useDiffHydration`'s only
-   * other reload signal, so without this token the cleared diff/hunks never
-   * reload and the staging diff pane goes permanently blank.
-   */
-  setWorktreeDiffRefreshToken: ReactTypes.Dispatch<ReactTypes.SetStateAction<number>>
 }
 
 export type UseWorktreeStageActionsResult = {
@@ -154,7 +143,6 @@ export function useWorktreeStageActions(
     statusFilterMask,
     setWorktreeDiff,
     setWorktreeHunks,
-    setWorktreeDiffRefreshToken,
   } = deps
 
   const toggleSelectedFileStage = React.useCallback(async () => {
@@ -249,10 +237,6 @@ export function useWorktreeStageActions(
       await refreshWorktreeContext()
       setWorktreeDiff(undefined)
       setWorktreeHunks(undefined)
-      // #1579 — the file's own status can be unchanged by this hunk toggle
-      // (e.g. staging the 2nd+ hunk of an already-`MM` file), so the clears
-      // above need an explicit signal to actually reload.
-      setWorktreeDiffRefreshToken((token) => token + 1)
     } catch (error) {
       dispatch({
         type: 'setStatus',
@@ -294,9 +278,6 @@ export function useWorktreeStageActions(
       await refreshWorktreeContext()
       setWorktreeDiff(undefined)
       setWorktreeHunks(undefined)
-      // #1579 — reverting one of several unstaged hunks leaves the file's
-      // own status unchanged, so the clears above need an explicit signal.
-      setWorktreeDiffRefreshToken((token) => token + 1)
     } catch (error) {
       dispatch({
         type: 'setStatus',
@@ -349,9 +330,6 @@ export function useWorktreeStageActions(
       await refreshWorktreeContext({ silent: true })
       setWorktreeDiff(undefined)
       setWorktreeHunks(undefined)
-      // #1579 — a partial-hunk line stage can leave the file's own status
-      // unchanged, so the clears above need an explicit signal.
-      setWorktreeDiffRefreshToken((token) => token + 1)
     } catch (error) {
       dispatch({
         type: 'setStatus',
@@ -359,7 +337,7 @@ export function useWorktreeStageActions(
         kind: 'error',
       })
     }
-  }, [dispatch, git, refreshWorktreeContext, resolveLineSelection, setWorktreeDiff, setWorktreeHunks, setWorktreeDiffRefreshToken])
+  }, [dispatch, git, refreshWorktreeContext, resolveLineSelection, setWorktreeDiff, setWorktreeHunks])
 
   const revertSelectedLines = React.useCallback(async () => {
     const selection = resolveLineSelection()
@@ -378,9 +356,6 @@ export function useWorktreeStageActions(
       await refreshWorktreeContext()
       setWorktreeDiff(undefined)
       setWorktreeHunks(undefined)
-      // #1579 — a partial-hunk line revert can leave the file's own status
-      // unchanged, so the clears above need an explicit signal.
-      setWorktreeDiffRefreshToken((token) => token + 1)
     } catch (error) {
       dispatch({
         type: 'setStatus',
@@ -388,7 +363,7 @@ export function useWorktreeStageActions(
         kind: 'error',
       })
     }
-  }, [dispatch, git, refreshWorktreeContext, resolveLineSelection, setWorktreeDiff, setWorktreeHunks, setWorktreeDiffRefreshToken])
+  }, [dispatch, git, refreshWorktreeContext, resolveLineSelection, setWorktreeDiff, setWorktreeHunks])
 
   return {
     toggleSelectedFileStage,

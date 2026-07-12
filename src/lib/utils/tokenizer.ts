@@ -10,13 +10,23 @@ export type TokenCounter = Awaited<ReturnType<typeof getTokenCounter>>
  * baseURL models (OpenRouter/vLLM/LM Studio), and OpenAI model ids newer than
  * the pinned tiktoken release. Token counting only drives budget math, so an
  * approximate encoding is strictly better than crashing the whole command
- * (#1592). Newest-looking OpenAI ids (gpt-5.x, gpt-4o, oN reasoning models)
- * use o200k_base to match; everything else falls back to cl100k_base, the
- * encoding shared by gpt-4/gpt-3.5 and the closest general-purpose default.
+ * (#1592).
+ *
+ * A name-based regex can't actually identify the two motivating cases here:
+ * Azure custom deployment names are arbitrary user-chosen aliases with no
+ * relation to the backing model string, and OpenAI ids newer than the pinned
+ * tiktoken release (gpt-4.1, gpt-4.5, …) aren't enumerable in advance either
+ * (PR #1646 review). So instead of trying to positively match "newest"
+ * ids, default to `o200k_base` — the more common recent encoding — and only
+ * fall back further to `cl100k_base` for ids that look like pre-o200k
+ * OpenAI models (gpt-3.5 and the legacy completion models), where using the
+ * newer encoding would be a worse approximation than the older one.
  */
 function fallbackEncodingForModel(modelName: string) {
-  const looksLikeNewestOpenAiModel = /^(gpt-5|gpt-4o|o[1-9])/.test(modelName)
-  return get_encoding(looksLikeNewestOpenAiModel ? 'o200k_base' : 'cl100k_base')
+  const looksLikeOlderOpenAiModel = /^(gpt-3\.5|text-davinci|text-curie|text-babbage|text-ada|davinci|curie|babbage|ada)/.test(
+    modelName
+  )
+  return get_encoding(looksLikeOlderOpenAiModel ? 'cl100k_base' : 'o200k_base')
 }
 
 /**

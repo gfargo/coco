@@ -6,6 +6,53 @@ import { Config } from '../types'
 type ValuesTypes = Config[keyof Config]
 
 /**
+ * Provider-scoped API-key env vars, mapped to the provider whose
+ * `service.authentication` they populate. Single source of truth for both
+ * "is this key service-scoped" (`envKeys` / the service-var check below)
+ * and "which provider does it belong to" (`handleServiceEnvVar`'s
+ * routing) — previously these lived in sync-by-hand across the `envKeys`
+ * array, a boolean OR-chain, and the `handleServiceEnvVar` switch, so
+ * adding a key to the array but missing it in the OR-chain silently fell
+ * through to the wrong branch (PR #1646 review).
+ *
+ * Insertion order matters: `OPEN_AI_KEY` is a deprecated alias for
+ * `OPENAI_API_KEY` (#1584) — both are read via `Object.keys` below in
+ * declaration order, and a later key's assignment overwrites an earlier
+ * one's when both env vars are set, so `OPENAI_API_KEY` must stay
+ * declared after `OPEN_AI_KEY` for it to win.
+ */
+const PROVIDER_API_KEY_ENV_VARS: Record<string, LLMProvider> = {
+  OPEN_AI_KEY: 'openai',
+  OPENAI_API_KEY: 'openai',
+  ANTHROPIC_API_KEY: 'anthropic',
+  GEMINI_API_KEY: 'gemini',
+  GOOGLE_API_KEY: 'gemini',
+  MISTRAL_API_KEY: 'mistral',
+  AZURE_OPENAI_API_KEY: 'azure',
+}
+
+/**
+ * Non-provider-scoped service-level env vars — still service-scoped
+ * (routed to `handleServiceEnvVar`, folded under `envConfig.service`), but
+ * not tied to a single provider's auth the way the keys above are.
+ */
+const SERVICE_SCALAR_ENV_KEYS = new Set([
+  'COCO_SERVICE_PROVIDER',
+  'COCO_SERVICE_MODEL',
+  'COCO_SERVICE_BASE_URL',
+  'COCO_SERVICE_ENDPOINT',
+  'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
+  'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES',
+  'COCO_SERVICE_FIELDS',
+  'COCO_SERVICE_DYNAMIC_MODELS',
+  'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE',
+])
+
+function isServiceEnvKey(key: string): boolean {
+  return SERVICE_SCALAR_ENV_KEYS.has(key) || key in PROVIDER_API_KEY_ENV_VARS
+}
+
+/**
  * Load environment variables
  *
  * @param {Config} config
@@ -29,22 +76,8 @@ export function loadEnvConfig<ConfigType = Config>(
 
   const envKeys = [
     ...CONFIG_KEYS,
-    'COCO_SERVICE_PROVIDER',
-    'COCO_SERVICE_MODEL',
-    'OPEN_AI_KEY',
-    'OPENAI_API_KEY',
-    'ANTHROPIC_API_KEY',
-    'GEMINI_API_KEY',
-    'GOOGLE_API_KEY',
-    'MISTRAL_API_KEY',
-    'AZURE_OPENAI_API_KEY',
-    'COCO_SERVICE_BASE_URL',
-    'COCO_SERVICE_ENDPOINT',
-    'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT',
-    'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES',
-    'COCO_SERVICE_FIELDS',
-    'COCO_SERVICE_DYNAMIC_MODELS',
-    'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE',
+    ...SERVICE_SCALAR_ENV_KEYS,
+    ...Object.keys(PROVIDER_API_KEY_ENV_VARS),
   ]
 
   envKeys.forEach((key) => {
@@ -55,24 +88,7 @@ export function loadEnvConfig<ConfigType = Config>(
       return
     }
 
-    if (
-      key === 'COCO_SERVICE_PROVIDER' ||
-      key === 'COCO_SERVICE_MODEL' ||
-      key === 'OPEN_AI_KEY' ||
-      key === 'OPENAI_API_KEY' ||
-      key === 'ANTHROPIC_API_KEY' ||
-      key === 'GEMINI_API_KEY' ||
-      key === 'GOOGLE_API_KEY' ||
-      key === 'MISTRAL_API_KEY' ||
-      key === 'AZURE_OPENAI_API_KEY' ||
-      key === 'COCO_SERVICE_BASE_URL' ||
-      key === 'COCO_SERVICE_ENDPOINT' ||
-      key === 'COCO_SERVICE_REQUEST_OPTIONS_TIMEOUT' ||
-      key === 'COCO_SERVICE_REQUEST_OPTIONS_MAX_RETRIES' ||
-      key === 'COCO_SERVICE_FIELDS' ||
-      key === 'COCO_SERVICE_DYNAMIC_MODELS' ||
-      key === 'COCO_SERVICE_DYNAMIC_MODEL_PREFERENCE'
-    ) {
+    if (isServiceEnvKey(key as string)) {
       // NOTE: We want to ensure that the service object is always defined
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
@@ -123,68 +139,29 @@ function handleServiceEnvVar(
   value: any,
   effectiveProvider?: LLMProvider
 ) {
+  // Provider-scoped API-key env vars (OPEN_AI_KEY/OPENAI_API_KEY/
+  // ANTHROPIC_API_KEY/…) all do the same thing — set `authentication` iff
+  // the key's provider matches the effective one — so route them off the
+  // single `PROVIDER_API_KEY_ENV_VARS` lookup instead of one `case` per
+  // provider (#1584 / PR #1646 review).
+  if (key in PROVIDER_API_KEY_ENV_VARS) {
+    if (effectiveProvider === PROVIDER_API_KEY_ENV_VARS[key]) {
+      service.authentication = {
+        type: 'APIKey',
+        credentials: {
+          apiKey: value,
+        },
+      }
+    }
+    return
+  }
+
   switch (key) {
     case 'COCO_SERVICE_PROVIDER':
       service.provider = value
       break
     case 'COCO_SERVICE_MODEL':
       service.model = value
-      break
-    case 'OPEN_AI_KEY':
-    case 'OPENAI_API_KEY':
-      // OPEN_AI_KEY is a deprecated alias kept for backward compatibility.
-      // Both are handled here (in envKeys order) so OPENAI_API_KEY — the
-      // standard name every UX surface tells users to set — wins when both
-      // are present (#1584).
-      if (effectiveProvider === 'openai') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
-      break
-    case 'ANTHROPIC_API_KEY':
-      if (effectiveProvider === 'anthropic') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
-      break
-    case 'GEMINI_API_KEY':
-    case 'GOOGLE_API_KEY':
-      if (effectiveProvider === 'gemini') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
-      break
-    case 'MISTRAL_API_KEY':
-      if (effectiveProvider === 'mistral') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
-      break
-    case 'AZURE_OPENAI_API_KEY':
-      if (effectiveProvider === 'azure') {
-        service.authentication = {
-          type: 'APIKey',
-          credentials: {
-            apiKey: value,
-          },
-        }
-      }
       break
     case 'COCO_SERVICE_BASE_URL':
       if (effectiveProvider === 'openai') {

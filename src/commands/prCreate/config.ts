@@ -3,8 +3,8 @@ import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
 export interface PrCreateOptions extends BaseCommandOptions {
-  /** Positional pr action. Only `'create'` is valid; enforced via `.check()` in the builder. */
-  action?: 'create'
+  /** Positional pr action. Only `'create'` is valid, enforced via yargs' native `choices`. */
+  action: 'create'
   base?: string
   draft?: boolean
   title?: string
@@ -17,16 +17,17 @@ export interface PrCreateOptions extends BaseCommandOptions {
 export type PrCreateArgv = Arguments<PrCreateOptions>
 
 /**
- * Only `create` is a valid `pr` action today. The command string declares an
- * optional positional (`[action]`, validated below via `.check()`) with an
- * explicit `choices` list on top of it — rather than the bare literal
- * `'pr create'`, which yargs parses as `pr` plus an unconstrained *required*
- * positional named `create` that matches ANY value (#1580). `coco pr
- * close`/`list`/`view` now fail with an "Invalid values" error instead of
- * silently creating a pull request, and bare `coco pr` names the valid
- * action instead of yargs' generic arity error.
+ * Only `create` is a valid `pr` action today. The command string declares a
+ * required positional (`<action>`) constrained by an explicit `choices`
+ * list — mirroring `cache <subcommand>` (`cache/config.ts`) — rather than
+ * the bare literal `'pr create'`, which yargs parses as `pr` plus an
+ * unconstrained positional named `create` that matches ANY value (#1580).
+ * `coco pr close`/`list`/`view` fail with yargs' native "Invalid values"
+ * error instead of silently creating a pull request, and bare `coco pr`
+ * fails with yargs' native "Not enough non-option arguments" error — no
+ * hand-rolled `.check()` needed for either case.
  */
-export const command = 'pr [action]'
+export const command = 'pr <action>'
 
 /**
  * Command line options via yargs
@@ -76,12 +77,6 @@ export const builder = (yargs: Argv) => {
       describe: 'Pull request action to run',
       type: 'string',
       choices: ['create'] as const,
-    })
-    .check((argv) => {
-      if (!argv.action) {
-        throw new Error('Missing required pr action. Valid actions: create')
-      }
-      return true
     })
     .options(options)
     .usage(getCommandUsageHeader(command))

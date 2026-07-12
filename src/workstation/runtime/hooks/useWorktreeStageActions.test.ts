@@ -1,12 +1,15 @@
 /**
- * Regression coverage for #1579: the hunk/line-level staging handlers must
- * bump `setWorktreeDiffRefreshToken` alongside their existing
- * `setWorktreeDiff(undefined)` / `setWorktreeHunks(undefined)` clears. A
- * hunk-level mutation can leave the cursored file's own
- * `indexStatus`/`worktreeStatus` unchanged (reverting one of several
- * unstaged hunks; staging the 2nd+ hunk of an already-`MM` file) — those
- * scalar fields are `useDiffHydration`'s only other reload signal, so
- * without the token bump the cleared diff/hunks never reload.
+ * Coverage for the four hunk/line-level staging handlers plus the
+ * whole-file toggle. Each must refresh the worktree context and clear the
+ * cached diff/hunks so the staging pane re-hydrates (#1579) — the actual
+ * `worktreeDiffRefreshToken` bump that forces re-hydration even when a
+ * file's own `indexStatus`/`worktreeStatus` is left unchanged (reverting
+ * one of several unstaged hunks; staging the 2nd+ hunk of an already-`MM`
+ * file) now lives centrally inside `refreshWorktreeContext` itself
+ * (`useContextRefresh.ts`, covered by `useContextRefresh.test.ts`) rather
+ * than at each individual call site here (PR #1646 review) — so every
+ * `refreshWorktreeContext` caller, current and future, gets it
+ * automatically instead of each handler having to remember to bump it.
  *
  * A minimal fake-React harness (`useCallback` returns the callback
  * directly) drives the hook without a renderer; the git action layer is
@@ -91,63 +94,63 @@ function baseDeps(
     statusFilterMask: 'all' as never,
     setWorktreeDiff: jest.fn(),
     setWorktreeHunks: jest.fn(),
-    setWorktreeDiffRefreshToken: jest.fn(),
     ...overrides,
   }
 }
 
-describe('useWorktreeStageActions — worktreeDiffRefreshToken bump (#1579)', () => {
-  it('toggleSelectedHunkStage bumps the refresh token alongside the diff/hunks clear', async () => {
+describe('useWorktreeStageActions — refresh + diff/hunks clear on every mutation (#1579)', () => {
+  it('toggleSelectedHunkStage refreshes the worktree context and clears the cached diff/hunks', async () => {
     const deps = baseDeps()
     const { toggleSelectedHunkStage } = useWorktreeStageActions(fakeReact(), deps)
 
     await toggleSelectedHunkStage()
 
+    expect(deps.refreshWorktreeContext).toHaveBeenCalledTimes(1)
     expect(deps.setWorktreeDiff).toHaveBeenCalledWith(undefined)
     expect(deps.setWorktreeHunks).toHaveBeenCalledWith(undefined)
-    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
-    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledWith(expect.any(Function))
-    // The updater must increment, not just re-set — a same-status hunk
-    // mutation with no other changed dep relies on this to actually differ.
-    expect((deps.setWorktreeDiffRefreshToken as jest.Mock).mock.calls[0][0](0)).toBe(1)
   })
 
-  it('revertSelectedHunk bumps the refresh token alongside the diff/hunks clear', async () => {
+  it('revertSelectedHunk refreshes the worktree context and clears the cached diff/hunks', async () => {
     const deps = baseDeps()
     const { revertSelectedHunk } = useWorktreeStageActions(fakeReact(), deps)
 
     await revertSelectedHunk()
 
-    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
-    expect((deps.setWorktreeDiffRefreshToken as jest.Mock).mock.calls[0][0](5)).toBe(6)
+    expect(deps.refreshWorktreeContext).toHaveBeenCalledTimes(1)
+    expect(deps.setWorktreeDiff).toHaveBeenCalledWith(undefined)
+    expect(deps.setWorktreeHunks).toHaveBeenCalledWith(undefined)
   })
 
-  it('stageSelectedLines bumps the refresh token alongside the diff/hunks clear', async () => {
+  it('stageSelectedLines refreshes the worktree context and clears the cached diff/hunks', async () => {
     const deps = baseDeps({ diffLineSelectAnchor: 1, worktreeDiffOffset: 2 })
     const { stageSelectedLines } = useWorktreeStageActions(fakeReact(), deps)
 
     await stageSelectedLines()
 
-    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
+    expect(deps.refreshWorktreeContext).toHaveBeenCalledTimes(1)
+    expect(deps.setWorktreeDiff).toHaveBeenCalledWith(undefined)
+    expect(deps.setWorktreeHunks).toHaveBeenCalledWith(undefined)
   })
 
-  it('revertSelectedLines bumps the refresh token alongside the diff/hunks clear', async () => {
+  it('revertSelectedLines refreshes the worktree context and clears the cached diff/hunks', async () => {
     const deps = baseDeps({ diffLineSelectAnchor: 1, worktreeDiffOffset: 2 })
     const { revertSelectedLines } = useWorktreeStageActions(fakeReact(), deps)
 
     await revertSelectedLines()
 
-    expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
+    expect(deps.refreshWorktreeContext).toHaveBeenCalledTimes(1)
+    expect(deps.setWorktreeDiff).toHaveBeenCalledWith(undefined)
+    expect(deps.setWorktreeHunks).toHaveBeenCalledWith(undefined)
   })
 
-  it('toggleSelectedFileStage does not need to bump the token (status always changes on file-level ops)', async () => {
+  it('toggleSelectedFileStage also refreshes the worktree context and clears the cached diff/hunks', async () => {
     const deps = baseDeps()
     const { toggleSelectedFileStage } = useWorktreeStageActions(fakeReact(), deps)
 
     await toggleSelectedFileStage()
 
+    expect(deps.refreshWorktreeContext).toHaveBeenCalledTimes(1)
     expect(deps.setWorktreeDiff).toHaveBeenCalledWith(undefined)
     expect(deps.setWorktreeHunks).toHaveBeenCalledWith(undefined)
-    expect(deps.setWorktreeDiffRefreshToken).not.toHaveBeenCalled()
   })
 })

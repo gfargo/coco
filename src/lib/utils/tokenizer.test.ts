@@ -122,8 +122,28 @@ describe('getTokenCounterForProvider', () => {
       expect(tokenizer.encode(SAMPLE).length).toBe(SAMPLE.length + 100)
     })
 
-    it('falls back to cl100k_base for a non-OpenAI-shaped id', async () => {
+    // PR #1646 review: a name-based regex can't positively identify every
+    // "newest" OpenAI id in advance, nor an Azure custom deployment alias
+    // (which has no relation to its backing model string) at all — so the
+    // unmatched default is o200k_base, the more common recent encoding,
+    // rather than a narrow allowlist that both cases would fall through.
+    it('falls back to o200k_base for an OpenAI id newer than the pinned tiktoken release (gpt-4.1)', async () => {
+      const tokenizer = await getTikToken('gpt-4.1' as never)
+      expect(tokenizer.encode(SAMPLE).length).toBe(SAMPLE.length + 100)
+    })
+
+    it('falls back to o200k_base for an Azure custom deployment alias', async () => {
+      const tokenizer = await getTikToken('my-gpt4-deploy' as never)
+      expect(tokenizer.encode(SAMPLE).length).toBe(SAMPLE.length + 100)
+    })
+
+    it('falls back to o200k_base for a non-OpenAI-shaped id (no worse an approximation than cl100k_base)', async () => {
       const tokenizer = await getTikToken('meta-llama/llama-3-70b-instruct' as never)
+      expect(tokenizer.encode(SAMPLE).length).toBe(SAMPLE.length + 100)
+    })
+
+    it('still falls back to cl100k_base for a legacy pre-o200k OpenAI id (gpt-3.5)', async () => {
+      const tokenizer = await getTikToken('gpt-3.5-turbo' as never)
       expect(tokenizer.encode(SAMPLE).length).toBe(SAMPLE.length + 200)
     })
   })

@@ -461,6 +461,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setContext,
     setContextStatus,
     setPrDiffRefreshToken,
+    setWorktreeDiffRefreshToken,
   })
 
   // Live refresh: watch .git metadata + the working tree root and reload
@@ -809,7 +810,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     statusFilterMask: state.statusFilterMask,
     setWorktreeDiff,
     setWorktreeHunks,
-    setWorktreeDiffRefreshToken,
   })
 
   // Lifted verbatim into `useCommitComposeActions` (0.72 app.ts
