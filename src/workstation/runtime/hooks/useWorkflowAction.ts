@@ -50,7 +50,7 @@ import {
 import { forgeNouns } from '../../chrome/forgeNouns'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, getSelectedWorktreeId, getSelectedWorktree, getSelectedSubmodule, getSelectedRemote } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, getSelectedWorktreeId, getSelectedWorktree, getSelectedSubmodule, getSelectedRemote, getSelectedIssue, getSelectedPullRequestTriage, getSelectedPullRequestTriageId } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -121,7 +121,6 @@ import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../..
 import { executeRebasePlan } from '../../../git/rebasePlanActions'
 import { initSubmodule, syncSubmodule, updateSubmodule } from '../../../git/submoduleActions'
 import { addRemote, pruneRemote, removeRemote, setRemoteUrl } from '../../../git/remoteActions'
-import { matchesPromotedFilter } from '../promotedFilter'
 import type { RepoStackRuntimes } from '../repoStackRuntime'
 import type { LogInkContext } from '../types'
 
@@ -129,9 +128,6 @@ import type { LogInkContext } from '../types'
 // the real overview shapes without re-importing each one (mirrors the
 // convention in `buildFilteredLists` / `useYankActions`).
 type ReflogListItem = NonNullable<LogInkContext['reflog']>['entries'][number]
-type IssueListItem = NonNullable<NonNullable<LogInkContext['issueList']>['issues']>[number]
-type PullRequestListItem =
-  NonNullable<NonNullable<LogInkContext['pullRequestList']>['pullRequests']>[number]
 
 // Workflow action ids that hit the network (fetch / pull / push) →
 // the loader copy shown over the history surface while they run. Any
@@ -256,8 +252,6 @@ export function resolvePendingItemAction(
   state: LogInkState,
   context: LogInkContext
 ): LogInkPendingItemAction | undefined {
-  const { filter } = state
-
   // #1452 — branch resolution uses the id-based selector. The selector
   // encapsulates sort + filter + index→item, removing the duplicated
   // logic that was previously inlined here for each branch workflow.
@@ -291,29 +285,12 @@ export function resolvePendingItemAction(
     return worktreeId ? { kind: 'worktree', ids: [worktreeId], action: 'delete' } : undefined
   }
   // #1363 — `gh pr checkout <n>` gets the same inline row spinner as a
-  // branch checkout. Resolution mirrors `buildFilteredLists`'s triage
-  // filter fields so the spinner lands on exactly the row the handler
-  // will act on.
+  // branch checkout.
+  // #1452 — resolution now goes through the id-based selector, same as
+  // the branch/tag/stash/worktree cases above.
   if (id === 'triage-pr-checkout') {
-    const all = context.pullRequestList?.pullRequests || []
-    const visible = filter
-      ? all.filter((pr) =>
-          matchesPromotedFilter(
-            [
-              `#${pr.number}`,
-              pr.title,
-              pr.author || '',
-              pr.headRefName,
-              pr.baseRefName,
-              ...(pr.labels || []),
-              ...(pr.assignees || []),
-            ],
-            filter
-          )
-        )
-      : all
-    const pr = visible[Math.min(state.selectedPullRequestTriageIndex, Math.max(0, visible.length - 1))]
-    return pr ? { kind: 'pull-request', ids: [String(pr.number)], action: 'checkout' } : undefined
+    const prId = getSelectedPullRequestTriageId(state, context)
+    return prId ? { kind: 'pull-request', ids: [prId], action: 'checkout' } : undefined
   }
   return undefined
 }
@@ -361,10 +338,6 @@ export type UseWorkflowActionDeps = {
   forgeProvider: GitProviderType | undefined
   /** Filtered reflog list (reflog-view target resolution). */
   filteredReflogList: ReflogListItem[]
-  /** Filtered issue list (issue-triage target resolution). */
-  filteredIssueList: IssueListItem[]
-  /** Filtered PR-triage list (PR-triage target resolution). */
-  filteredPullRequestTriageList: PullRequestListItem[]
 }
 
 export type UseWorkflowActionResult = {
@@ -431,8 +404,6 @@ export function useWorkflowAction(
       forge,
       forgeProvider,
       filteredReflogList,
-      filteredIssueList,
-      filteredPullRequestTriageList,
     } = depsRef.current
     // #1384 — capture the repo-frame depth at keystroke time, BEFORE any
     // handler awaits. The invalidation helpers below run after the git /
@@ -1324,9 +1295,7 @@ export function useWorkflowAction(
       // suite). Open / yank don't mutate so they skip the
       // invalidation step entirely.
       'triage-issue-open': async () => {
-        const issue = filteredIssueList[
-          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-        ]
+        const issue = getSelectedIssue(state, context)
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         try {
           await defaultOpenUrlRunner(issue.url)
@@ -1338,9 +1307,7 @@ export function useWorkflowAction(
       'triage-issue-comment': async () => {
         const body = payload?.trim()
         if (!body) return { ok: false, message: 'Comment body required' }
-        const issue = filteredIssueList[
-          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-        ]
+        const issue = getSelectedIssue(state, context)
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await forge.commentIssue(issue.number, body)
         if (result.ok) invalidateIssueListCaches(issue.number)
@@ -1349,9 +1316,7 @@ export function useWorkflowAction(
       'triage-issue-label': async () => {
         const label = payload?.trim()
         if (!label) return { ok: false, message: 'Label name required' }
-        const issue = filteredIssueList[
-          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-        ]
+        const issue = getSelectedIssue(state, context)
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await forge.addIssueLabel(issue.number, label)
         if (result.ok) invalidateIssueListCaches(issue.number)
@@ -1360,18 +1325,14 @@ export function useWorkflowAction(
       'triage-issue-assign': async () => {
         const assignee = payload?.trim()
         if (!assignee) return { ok: false, message: 'Assignee login required' }
-        const issue = filteredIssueList[
-          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-        ]
+        const issue = getSelectedIssue(state, context)
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await forge.addIssueAssignee(issue.number, assignee)
         if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
       'triage-pr-open': async () => {
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         try {
           await defaultOpenUrlRunner(pr.url)
@@ -1383,9 +1344,7 @@ export function useWorkflowAction(
       'triage-pr-comment': async () => {
         const body = payload?.trim()
         if (!body) return { ok: false, message: 'Comment body required' }
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await forge.commentPullRequestByNumber(pr.number, body)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
@@ -1394,9 +1353,7 @@ export function useWorkflowAction(
       'triage-pr-label': async () => {
         const label = payload?.trim()
         if (!label) return { ok: false, message: 'Label name required' }
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await forge.addPullRequestLabel(pr.number, label)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
@@ -1405,9 +1362,7 @@ export function useWorkflowAction(
       'triage-pr-assign': async () => {
         const assignee = payload?.trim()
         if (!assignee) return { ok: false, message: 'Assignee login required' }
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await forge.addPullRequestAssignee(pr.number, assignee)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
@@ -1420,18 +1375,14 @@ export function useWorkflowAction(
       // the confirmation overlay is up so there's no stale-target
       // window. Cache invalidation matches the phase-4 pattern.
       'triage-issue-close': async () => {
-        const issue = filteredIssueList[
-          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-        ]
+        const issue = getSelectedIssue(state, context)
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await forge.closeIssue(issue.number)
         if (result.ok) invalidateIssueListCaches(issue.number)
         return result
       },
       'triage-issue-reopen': async () => {
-        const issue = filteredIssueList[
-          Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-        ]
+        const issue = getSelectedIssue(state, context)
         if (!issue) return { ok: false, message: 'No issue under cursor' }
         const result = await forge.reopenIssue(issue.number)
         if (result.ok) invalidateIssueListCaches(issue.number)
@@ -1445,27 +1396,21 @@ export function useWorkflowAction(
             message: `Unknown merge strategy: ${strategy}. Use merge, squash, or rebase.`,
           }
         }
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await forge.mergePullRequestByNumber(pr.number, strategy)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       'triage-pr-close': async () => {
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await forge.closePullRequestByNumber(pr.number)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
         return result
       },
       'triage-pr-approve': async () => {
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await forge.approvePullRequestByNumber(pr.number)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
@@ -1474,9 +1419,7 @@ export function useWorkflowAction(
       'triage-pr-request-changes': async () => {
         const body = payload?.trim()
         if (!body) return { ok: false, message: 'Review body required for change-request' }
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         const result = await forge.requestChangesPullRequestByNumber(pr.number, body)
         if (result.ok) invalidatePullRequestListCaches(pr.number)
@@ -1497,9 +1440,7 @@ export function useWorkflowAction(
         if (payload && Number.isInteger(payloadNumber) && payloadNumber > 0) {
           return forge.checkoutPullRequestByNumber(payloadNumber)
         }
-        const pr = filteredPullRequestTriageList[
-          Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-        ]
+        const pr = getSelectedPullRequestTriage(state, context)
         if (!pr) return { ok: false, message: 'No pull request under cursor' }
         return forge.checkoutPullRequestByNumber(pr.number)
       },

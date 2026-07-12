@@ -24,11 +24,12 @@
  * `useEffect` / `useMemo` dependency array — so there is no identity-stability
  * hazard from the move.
  *
- * The branch/tag/stash/submodule/remote arms of `yankFromActiveView` resolve
- * their target via the id-based selectors (`getSelectedBranch` /
- * `getSelectedTag` / `getSelectedStash` / `getSelectedSubmodule` /
- * `getSelectedRemote`, #1452) instead of inline sort+filter+index resolution.
- * The remaining arms still use the module-level helpers
+ * The branch/tag/stash/submodule/remote/issue/PR-triage arms of
+ * `yankFromActiveView` resolve their target via the id-based selectors
+ * (`getSelectedBranch` / `getSelectedTag` / `getSelectedStash` /
+ * `getSelectedSubmodule` / `getSelectedRemote` / `getSelectedIssue` /
+ * `getSelectedPullRequestTriage`, #1452) instead of inline sort+filter+index
+ * resolution. The remaining arms still use the module-level helpers
  * (`getBisectCompletion`, `findStashFileForOffset`) and the `ClipboardRunner`
  * type + `defaultClipboardRunner`, imported directly here rather than threaded.
  *
@@ -40,18 +41,23 @@ import type * as ReactTypes from 'react'
 import type { LogInkAction, LogInkState } from '../inkViewModel'
 import type { LogInkContext } from '../types'
 import { ClipboardRunner, defaultClipboardRunner } from '../../../git/historyActions'
-import { getSelectedBranch, getSelectedStash, getSelectedTag, getSelectedSubmodule, getSelectedRemote } from '../selection'
+import {
+  getSelectedBranch,
+  getSelectedStash,
+  getSelectedTag,
+  getSelectedSubmodule,
+  getSelectedRemote,
+  getSelectedIssue,
+  getSelectedPullRequestTriage,
+} from '../selection'
 import { getBisectCompletion } from '../../../git/bisectData'
 import { findStashFileForOffset, type StashDiffFile } from '../../../git/stashData'
 import type { WorktreeFile } from '../../../git/statusData'
 import type { GitLogCommitRow, GitCommitDetail } from '../../../commands/log/data'
 
-// Element types are derived from `LogInkContext` indexed access so they track
-// the real overview shapes without re-importing each one (mirrors the
-// convention in `buildFilteredLists`).
-type IssueListItem = NonNullable<NonNullable<LogInkContext['issueList']>['issues']>[number]
-type PullRequestListItem =
-  NonNullable<NonNullable<LogInkContext['pullRequestList']>['pullRequests']>[number]
+// Element type is derived from `LogInkContext` indexed access so it tracks
+// the real overview shape without re-importing it (mirrors the convention
+// in `buildFilteredLists`).
 type DetailFile = GitCommitDetail['files'][number]
 
 export type UseYankActionsDeps = {
@@ -73,10 +79,6 @@ export type UseYankActionsDeps = {
   stashDiffParsedFiles: StashDiffFile[]
   /** Mask-filtered worktree file list (status / worktree-diff yank target). */
   visibleWorktreeFilesGrouped: WorktreeFile[]
-  /** Filtered issue list (issues-view yank target). */
-  filteredIssueList: IssueListItem[]
-  /** Filtered PR-triage list (pull-request-triage-view yank target). */
-  filteredPullRequestTriageList: PullRequestListItem[]
 }
 
 export type UseYankActionsResult = {
@@ -98,8 +100,6 @@ export function useYankActions(
     stashDiffLines,
     stashDiffParsedFiles,
     visibleWorktreeFilesGrouped,
-    filteredIssueList,
-    filteredPullRequestTriageList,
   } = deps
 
   // Copy an arbitrary string to the system clipboard. Distinct from
@@ -221,9 +221,8 @@ export function useYankActions(
       // can paste it into Slack / a PR description / etc. without
       // dropping back to the browser. Short form (`Y`) is a no-op
       // here — there's no compact identifier worth a second key.
-      const issue = filteredIssueList[
-        Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
-      ]
+      // #1452 flip — resolved via the id-first/index-fallback selector.
+      const issue = getSelectedIssue(state, context)
       if (issue) {
         value = issue.url
         label = `issue #${issue.number} URL`
@@ -234,9 +233,8 @@ export function useYankActions(
       // view falls through to the generic "Nothing to yank" path
       // below since the action panel already exposes O for browser
       // open.
-      const pr = filteredPullRequestTriageList[
-        Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
-      ]
+      // #1452 flip — resolved via the id-first/index-fallback selector.
+      const pr = getSelectedPullRequestTriage(state, context)
       if (pr) {
         value = pr.url
         label = `pull request #${pr.number} URL`
@@ -303,13 +301,13 @@ export function useYankActions(
     clipboardRunner,
     context.bisect,
     context.branches,
+    context.issueList,
+    context.pullRequestList,
     context.remotes,
     context.stashes,
     context.submodules,
     context.tags,
     dispatch,
-    filteredIssueList,
-    filteredPullRequestTriageList,
     selected,
     selectedDetailFile,
     stashDiffLines,

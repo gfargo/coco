@@ -1609,6 +1609,32 @@ describe('log Ink view model', () => {
       state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 5 })
       expect(state.selectedRemoteId).toBeUndefined()
     })
+
+    it('writes selectedIssueId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 5, id: '7' })
+      expect(state.selectedIssueIndex).toBe(1)
+      expect(state.selectedIssueId).toBe('7')
+    })
+
+    it('leaves selectedIssueId undefined when the dispatch site could not resolve one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 5 })
+      expect(state.selectedIssueId).toBeUndefined()
+    })
+
+    it('writes selectedPullRequestTriageId alongside the index', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 5, id: '9' })
+      expect(state.selectedPullRequestTriageIndex).toBe(1)
+      expect(state.selectedPullRequestTriageId).toBe('9')
+    })
+
+    it('leaves selectedPullRequestTriageId undefined when the dispatch site could not resolve one', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 5 })
+      expect(state.selectedPullRequestTriageId).toBeUndefined()
+    })
   })
 
   // #1452 flip — every OTHER action that resets or rectifies
@@ -2467,6 +2493,27 @@ describe('log Ink view model', () => {
       expect(popped.selectedRemoteIndex).toBe(state.selectedRemoteIndex)
     })
 
+    it('pushRepoFrame and popRepoFrame clear selectedIssueId and selectedPullRequestTriageId too', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 10, id: '7' })
+      state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 10, id: '9' })
+      expect(state.selectedIssueId).toBe('7')
+      expect(state.selectedPullRequestTriageId).toBe('9')
+
+      const pushed = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
+      expect(pushed.selectedIssueId).toBeUndefined()
+      expect(pushed.selectedPullRequestTriageId).toBeUndefined()
+
+      const insideSubmodule = applyLogInkAction(pushed, {
+        type: 'moveIssue', delta: 1, count: 10, id: '42',
+      })
+      const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
+      expect(popped.selectedIssueId).toBeUndefined()
+      expect(popped.selectedPullRequestTriageId).toBeUndefined()
+      expect(popped.selectedIssueIndex).toBe(state.selectedIssueIndex)
+      expect(popped.selectedPullRequestTriageIndex).toBe(state.selectedPullRequestTriageIndex)
+    })
+
     // Regression: popping a frame entered FROM a commit diff used to
     // restore `viewStack: ['diff']` (one element — Esc and `<` both dead)
     // with `diffSource` cleared by navigation inside the submodule, so
@@ -2746,6 +2793,15 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
     expect(state.selectedIssueIndex).toBe(0)
   })
 
+  it('cycleIssueFilter clears selectedIssueId alongside the index (#1452)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 5, id: '7' })
+    expect(state.selectedIssueId).toBe('7')
+
+    state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
+    expect(state.selectedIssueId).toBeUndefined()
+  })
+
   it('cyclePullRequestTriageFilter advances and wraps independently', () => {
     let state = createLogInkState(rows)
 
@@ -2754,6 +2810,15 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
 
     // Cycling PRs leaves the issue preset alone.
     expect(state.selectedIssueFilter).toBe('open')
+  })
+
+  it('cyclePullRequestTriageFilter clears selectedPullRequestTriageId alongside the index (#1452)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 5, id: '9' })
+    expect(state.selectedPullRequestTriageId).toBe('9')
+
+    state = applyLogInkAction(state, { type: 'cyclePullRequestTriageFilter' })
+    expect(state.selectedPullRequestTriageId).toBeUndefined()
   })
 
   it('cycle actions clear any pending chord prefix', () => {
@@ -2988,6 +3053,8 @@ describe('PR-triage diff drill-in (#1363)', () => {
     expect(state.diffSource).toBe('pr')
     expect(state.prDiffNumber).toBe(962)
     expect(state.selectedPullRequestTriageIndex).toBe(3)
+    // #1452 — action.number IS the target PR's id, set precisely here.
+    expect(state.selectedPullRequestTriageId).toBe('962')
   })
 
   it('resets the scroll offsets and line-select anchor so the patch opens at the top', () => {

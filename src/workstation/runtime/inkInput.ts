@@ -180,6 +180,8 @@ export type LogInkInputContext = {
   issueCount?: number
   /** URL of the cursored issue (#882 phase 3). Used by `O` to open in the browser. */
   issueSelectedUrl?: string
+  /** Filtered issue numbers (stringified) in render order, same role as `branchIds` (#1452). */
+  issueListIds?: string[]
   /** Number of PRs in the triage list view (#882 phase 3). Drives j/k navigation. */
   pullRequestTriageCount?: number
   /** URL of the cursored PR in the triage list view (#882 phase 3). */
@@ -189,6 +191,8 @@ export type LogInkInputContext = {
    * the Enter → PR diff drill-in and the `C` checkout workflow.
    */
   pullRequestTriageSelectedNumber?: number
+  /** Filtered PR numbers (stringified) in render order, same role as `branchIds` (#1452). */
+  pullRequestTriageListIds?: string[]
   worktreeListCount?: number
   /** Sorted + filtered worktree paths, same role as `branchIds` (#1452). */
   worktreeListIds?: string[]
@@ -3016,7 +3020,12 @@ export function getLogInkInputEvents(
     }
 
     if (isIssueActionTarget(state) && context.issueCount) {
-      return [action({ type: 'moveIssue', delta: -1, count: context.issueCount })]
+      return [action({
+        type: 'moveIssue',
+        delta: -1,
+        count: context.issueCount,
+        id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, -1, context.issueCount),
+      })]
     }
 
     if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
@@ -3024,6 +3033,12 @@ export function getLogInkInputEvents(
         type: 'movePullRequestTriage',
         delta: -1,
         count: context.pullRequestTriageCount,
+        id: resolveMoveTargetId(
+          context.pullRequestTriageListIds,
+          state.selectedPullRequestTriageIndex,
+          -1,
+          context.pullRequestTriageCount,
+        ),
       })]
     }
 
@@ -3182,7 +3197,12 @@ export function getLogInkInputEvents(
     }
 
     if (isIssueActionTarget(state) && context.issueCount) {
-      return [action({ type: 'moveIssue', delta: 1, count: context.issueCount })]
+      return [action({
+        type: 'moveIssue',
+        delta: 1,
+        count: context.issueCount,
+        id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, 1, context.issueCount),
+      })]
     }
 
     if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
@@ -3190,6 +3210,12 @@ export function getLogInkInputEvents(
         type: 'movePullRequestTriage',
         delta: 1,
         count: context.pullRequestTriageCount,
+        id: resolveMoveTargetId(
+          context.pullRequestTriageListIds,
+          state.selectedPullRequestTriageIndex,
+          1,
+          context.pullRequestTriageCount,
+        ),
       })]
     }
 

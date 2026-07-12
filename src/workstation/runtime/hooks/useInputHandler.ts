@@ -331,12 +331,18 @@ export function useInputHandler(
     const issueSelectedUrl = filteredIssueList[
       Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
     ]?.url
+    // #1452 dual-write — same role as submoduleListIds/remoteListIds: id
+    // list in render order so moveIssue can resolve the post-move id.
+    const issueListIds = filteredIssueList.map((i) => String(i.number))
     const pullRequestTriageVisibleCount = filteredPullRequestTriageList.length
     const pullRequestTriageSelected = filteredPullRequestTriageList[
       Math.min(state.selectedPullRequestTriageIndex, Math.max(0, filteredPullRequestTriageList.length - 1))
     ]
     const pullRequestTriageSelectedUrl = pullRequestTriageSelected?.url
     const pullRequestTriageSelectedNumber = pullRequestTriageSelected?.number
+    // #1452 dual-write — same role as issueListIds; movePullRequestTriage
+    // resolves the post-move id from this.
+    const pullRequestTriageListIds = filteredPullRequestTriageList.map((p) => String(p.number))
     const worktreeVisibleCount = filteredWorktreeList.length
     // #1452 dual-write — same role as branchIds: id list in render order
     // so moveWorktreeListEntry can resolve the post-move target's id.
@@ -429,9 +435,11 @@ export function useInputHandler(
       })(),
       issueCount: issueVisibleCount,
       issueSelectedUrl,
+      issueListIds,
       pullRequestTriageCount: pullRequestTriageVisibleCount,
       pullRequestTriageSelectedUrl,
       pullRequestTriageSelectedNumber,
+      pullRequestTriageListIds,
       stashSelectedRef,
       stashDiffFileOffsets: stashDiffFileOffsets.length ? stashDiffFileOffsets : undefined,
       stashDiffSelectedPath,

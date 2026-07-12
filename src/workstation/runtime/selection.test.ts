@@ -7,7 +7,7 @@
  */
 import { applyLogInkAction, createLogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
-import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedSubmodule, getSelectedRemote, getSelectedCommitTarget, getSelectedCommitRange } from './selection'
+import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedSubmodule, getSelectedRemote, getSelectedIssue, getSelectedPullRequestTriage, getSelectedCommitTarget, getSelectedCommitRange } from './selection'
 
 function makeCommitRow(hash: string) {
   return {
@@ -48,6 +48,33 @@ function makeSubmodule(path: string, name = path) {
 
 function makeRemote(name: string) {
   return { name, fetchUrl: `git@example.com:${name}.git`, pushUrl: `git@example.com:${name}.git` }
+}
+
+function makeIssue(number: number) {
+  return {
+    number,
+    title: `issue ${number}`,
+    url: `https://github.com/example/repo/issues/${number}`,
+    state: 'OPEN',
+    author: 'coco',
+    assignees: [],
+    labels: [],
+  }
+}
+
+function makePR(number: number) {
+  return {
+    number,
+    title: `pr ${number}`,
+    url: `https://github.com/example/repo/pull/${number}`,
+    state: 'OPEN',
+    isDraft: false,
+    headRefName: `feature/${number}`,
+    baseRefName: 'main',
+    author: 'coco',
+    assignees: [],
+    labels: [],
+  }
 }
 
 describe('selection selectors (#1452)', () => {
@@ -386,6 +413,116 @@ describe('selection selectors (#1452)', () => {
         selectedRemoteId: 'gone',
       }
       expect(getSelectedRemote(state, remoteContext)?.name).toBe('upstream')
+    })
+  })
+
+  describe('getSelectedIssue', () => {
+    const issueContext = {
+      issueList: {
+        issues: [makeIssue(1), makeIssue(7)],
+      },
+    } as unknown as LogInkContext
+
+    it('returns the issue at the selected index', () => {
+      const state = { ...createLogInkState([]), selectedIssueIndex: 1 }
+      expect(getSelectedIssue(state, issueContext)?.number).toBe(7)
+    })
+
+    it('falls back to the unfiltered list when the filter hides every issue', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedIssueIndex: 1,
+        filter: 'does-not-match-anything',
+      }
+      expect(getSelectedIssue(state, issueContext)?.number).toBe(7)
+    })
+
+    it('returns undefined when there are no issues at all', () => {
+      const state = { ...createLogInkState([]), selectedIssueIndex: 0 }
+      const emptyCtx = { issueList: { issues: [] } } as unknown as LogInkContext
+      expect(getSelectedIssue(state, emptyCtx)).toBeUndefined()
+    })
+
+    it('prefers selectedIssueId over selectedIssueIndex when both are set', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedIssueIndex: 0,
+        selectedIssueId: '7',
+      }
+      expect(getSelectedIssue(state, issueContext)?.number).toBe(7)
+    })
+
+    it('falls back to the index when selectedIssueId is undefined', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedIssueIndex: 0,
+        selectedIssueId: undefined,
+      }
+      expect(getSelectedIssue(state, issueContext)?.number).toBe(1)
+    })
+
+    it('falls back to the index when selectedIssueId no longer resolves', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedIssueIndex: 1,
+        selectedIssueId: '999',
+      }
+      expect(getSelectedIssue(state, issueContext)?.number).toBe(7)
+    })
+  })
+
+  describe('getSelectedPullRequestTriage', () => {
+    const prContext = {
+      pullRequestList: {
+        pullRequests: [makePR(3), makePR(9)],
+      },
+    } as unknown as LogInkContext
+
+    it('returns the PR at the selected index', () => {
+      const state = { ...createLogInkState([]), selectedPullRequestTriageIndex: 1 }
+      expect(getSelectedPullRequestTriage(state, prContext)?.number).toBe(9)
+    })
+
+    it('falls back to the unfiltered list when the filter hides every PR', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedPullRequestTriageIndex: 1,
+        filter: 'does-not-match-anything',
+      }
+      expect(getSelectedPullRequestTriage(state, prContext)?.number).toBe(9)
+    })
+
+    it('returns undefined when there are no PRs at all', () => {
+      const state = { ...createLogInkState([]), selectedPullRequestTriageIndex: 0 }
+      const emptyCtx = { pullRequestList: { pullRequests: [] } } as unknown as LogInkContext
+      expect(getSelectedPullRequestTriage(state, emptyCtx)).toBeUndefined()
+    })
+
+    it('prefers selectedPullRequestTriageId over selectedPullRequestTriageIndex when both are set', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedPullRequestTriageIndex: 0,
+        selectedPullRequestTriageId: '9',
+      }
+      expect(getSelectedPullRequestTriage(state, prContext)?.number).toBe(9)
+    })
+
+    it('falls back to the index when selectedPullRequestTriageId is undefined', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedPullRequestTriageIndex: 0,
+        selectedPullRequestTriageId: undefined,
+      }
+      expect(getSelectedPullRequestTriage(state, prContext)?.number).toBe(3)
+    })
+
+    it('falls back to the index when selectedPullRequestTriageId no longer resolves', () => {
+      const state = {
+        ...createLogInkState([]),
+        selectedPullRequestTriageIndex: 1,
+        selectedPullRequestTriageId: '999',
+      }
+      expect(getSelectedPullRequestTriage(state, prContext)?.number).toBe(9)
     })
   })
 

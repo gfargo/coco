@@ -504,11 +504,27 @@ export type LogInkState = {
    */
   selectedIssueIndex: number
   /**
+   * Id mirror of the index above (#1452), same dual-write discipline as
+   * `selectedSubmoduleId`/`selectedRemoteId` — the id is the stringified
+   * issue number, written by `moveIssue`, preferred by `getSelectedIssue`
+   * (`selection.ts`) when it still resolves in the current filtered list.
+   */
+  selectedIssueId?: string
+  /**
    * Cursor for the pull-request triage view (#882). Distinct from
    * the existing single-PR action panel (`pull-request`); this index
    * drives the multi-PR list view (`pull-request-triage`).
    */
   selectedPullRequestTriageIndex: number
+  /**
+   * Id mirror of the index above (#1452), same dual-write discipline as
+   * `selectedSubmoduleId`/`selectedRemoteId` — the id is the stringified
+   * PR number, written by `movePullRequestTriage` and
+   * `navigateOpenDiffForPullRequest`, preferred by
+   * `getSelectedPullRequestTriage` (`selection.ts`) when it still
+   * resolves in the current filtered list.
+   */
+  selectedPullRequestTriageId?: string
   /**
    * Canned filter presets for the triage views (#882 phase 6).
    * `f` on each view cycles through the matching preset list (see
@@ -1192,8 +1208,8 @@ export type LogInkAction =
   | { type: 'moveSubmodule'; delta: number; count: number; id?: string }
   | { type: 'moveRemote'; delta: number; count: number; id?: string }
   | { type: 'moveBlame'; delta: number; count: number }
-  | { type: 'moveIssue'; delta: number; count: number }
-  | { type: 'movePullRequestTriage'; delta: number; count: number }
+  | { type: 'moveIssue'; delta: number; count: number; id?: string }
+  | { type: 'movePullRequestTriage'; delta: number; count: number; id?: string }
   | { type: 'cycleIssueFilter' }
   | { type: 'cyclePullRequestTriageFilter' }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number; id?: string }
@@ -1650,7 +1666,9 @@ function withPushedRepoFrame(
     selectedBlameIndex: 0,
     selectedFileHistoryIndex: 0,
     selectedIssueIndex: 0,
+    selectedIssueId: undefined,
     selectedPullRequestTriageIndex: 0,
+    selectedPullRequestTriageId: undefined,
   }
 }
 
@@ -1735,7 +1753,11 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     selectedBlameIndex: ret.selectedBlameIndex ?? 0,
     selectedFileHistoryIndex: ret.selectedFileHistoryIndex ?? 0,
     selectedIssueIndex: ret.selectedIssueIndex ?? 0,
+    // parentReturn doesn't capture the id mirror either — same reasoning.
+    selectedIssueId: undefined,
     selectedPullRequestTriageIndex: ret.selectedPullRequestTriageIndex ?? 0,
+    // parentReturn doesn't capture the id mirror either — same reasoning.
+    selectedPullRequestTriageId: undefined,
     pendingKey: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
@@ -2445,6 +2467,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedIssueIndex: clampIndex(state.selectedIssueIndex + action.delta, action.count),
+        selectedIssueId: action.id,
         pendingKey: undefined,
       }
     case 'movePullRequestTriage':
@@ -2454,6 +2477,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           state.selectedPullRequestTriageIndex + action.delta,
           action.count
         ),
+        selectedPullRequestTriageId: action.id,
         pendingKey: undefined,
       }
     case 'cycleIssueFilter':
@@ -2465,6 +2489,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         selectedIssueFilter: cycleIssueFilterPreset(state.selectedIssueFilter),
         selectedIssueIndex: 0,
+        selectedIssueId: undefined,
         pendingKey: undefined,
       }
     case 'cyclePullRequestTriageFilter':
@@ -2472,6 +2497,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         selectedPullRequestFilter: cyclePullRequestFilterPreset(state.selectedPullRequestFilter),
         selectedPullRequestTriageIndex: 0,
+        selectedPullRequestTriageId: undefined,
         pendingKey: undefined,
       }
     case 'moveWorktreeListEntry':
@@ -2815,6 +2841,9 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
           0,
           action.pullRequestIndex ?? state.selectedPullRequestTriageIndex
         ),
+        // #1452 — action.number IS the target PR's id, so it can be set
+        // precisely here rather than just cleared.
+        selectedPullRequestTriageId: String(action.number),
         // Reset the diff scroll offset so the PR patch always opens at
         // the top — same reasoning as the stash branch above.
         diffPreviewOffset: 0,
