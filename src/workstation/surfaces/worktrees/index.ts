@@ -12,7 +12,7 @@ import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
 import { inlineSpinnerGlyph } from '../../chrome/spinner'
-import { formatLogInkLoading } from '../../chrome/surfaceStates'
+import { formatLogInkLoading, formatLogInkWorktreesEmpty } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import {
   matchesPromotedFilter,
@@ -55,7 +55,7 @@ export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: 
   const lines: ReactTypes.ReactNode[] = loading
     ? [h(Text, { key: 'worktrees-loading', dimColor: true }, formatLogInkLoading({ resource: 'worktrees' }))]
     : worktrees.length === 0
-      ? [h(Text, { key: 'worktrees-empty', dimColor: true }, 'No linked worktrees.')]
+      ? [h(Text, { key: 'worktrees-empty', dimColor: true }, formatLogInkWorktreesEmpty({ filter: state.filter }))]
       : visible.map((entry, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected

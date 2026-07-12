@@ -106,4 +106,33 @@ describe('renderWorktreesSurface', () => {
       render(makeState(), { worktreeList: makeOverview([makeEntry()]) })
     ).toMatchSnapshot()
   })
+
+  // Regression (#1620): an active filter matching zero worktrees used to
+  // render the same "No linked worktrees." copy as a genuinely empty repo,
+  // contradicting the header's "0/N worktrees | filter: …" line.
+  describe('filtered-to-zero empty state (#1620)', () => {
+    function flatten(node: unknown, out: string[] = []): string[] {
+      if (node == null) return out
+      if (typeof node === 'string') { out.push(node); return out }
+      if (Array.isArray(node)) { node.forEach((n) => flatten(n, out)); return out }
+      const props = (node as { props?: { children?: unknown } }).props
+      if (props) flatten(props.children, out)
+      return out
+    }
+
+    it('shows filter-aware copy, not the genuinely-empty message, when the filter matches nothing', () => {
+      const tree = render(makeState({ filter: 'no-such-worktree' }), {
+        worktreeList: makeOverview([makeEntry()]),
+      })
+      const text = flatten(tree).join('\n')
+      expect(text).toContain("No worktrees match filter 'no-such-worktree'")
+      expect(text).not.toContain('No linked worktrees.')
+    })
+
+    it('still shows the genuinely-empty message with no filter active', () => {
+      const tree = render(makeState(), { worktreeList: makeOverview([]) })
+      const text = flatten(tree).join('\n')
+      expect(text).toContain('No linked worktrees.')
+    })
+  })
 })
