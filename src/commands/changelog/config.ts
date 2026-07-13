@@ -12,6 +12,8 @@ export interface ChangelogOptions extends BaseCommandOptions {
   additional?: string
   author?: boolean
   json?: boolean
+  write?: boolean
+  file?: string
 }
 
 export type ChangelogArgv = Arguments<ChangelogOptions>
@@ -73,6 +75,16 @@ export const options = {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
+  },
+  write: {
+    type: 'boolean',
+    description: 'Write the generated changelog into --file in place, instead of only printing it.',
+    default: false,
+  },
+  file: {
+    type: 'string',
+    description: 'CHANGELOG file to update with --write.',
+    default: 'CHANGELOG.md',
   },
   // `--json` is a global flag (see src/index.ts).
 } as Record<string, Options>
