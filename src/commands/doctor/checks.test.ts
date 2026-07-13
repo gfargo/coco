@@ -1,6 +1,12 @@
 import { Config } from '../../lib/config/types'
 import { getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
-import { checkEndpointSupport, checkOllamaLiveness, checkProviderValidity, Diagnostic } from './checks'
+import {
+    checkAuthentication,
+    checkEndpointSupport,
+    checkOllamaLiveness,
+    checkProviderValidity,
+    Diagnostic,
+} from './checks'
 
 jest.mock('../../lib/langchain/utils/ollamaStatus', () => ({
   DEFAULT_OLLAMA_ENDPOINT: 'http://localhost:11434',
@@ -92,6 +98,54 @@ describe('checkProviderValidity', () => {
     const diagnostics: Diagnostic[] = []
     checkProviderValidity(configWithProvider('aws'), diagnostics)
     expect(diagnostics[0].message).toContain('"bedrock"')
+  })
+})
+
+describe('checkAuthentication', () => {
+  it('errors when a real provider (openai, no baseURL) has no authentication configured', () => {
+    const config = {
+      service: { provider: 'openai', model: 'gpt-4o', authentication: { type: 'None' } },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('error')
+    expect(diagnostics[0].message).toContain('requires authentication')
+  })
+
+  // #1610 — an OpenAI-compatible endpoint (baseURL set) is commonly
+  // self-hosted/local and may have no auth at all (LM Studio, vLLM); that
+  // shouldn't read as a broken config the way a keyless real OpenAI does.
+  it('only warns when an OpenAI-compatible endpoint (baseURL set) has no authentication configured', () => {
+    const config = {
+      service: {
+        provider: 'openai',
+        model: 'local-model',
+        baseURL: 'http://localhost:1234/v1',
+        authentication: { type: 'None' },
+      },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].message).toContain('http://localhost:1234/v1')
+  })
+
+  it('produces no diagnostic when a real provider has an API key', () => {
+    const config = {
+      service: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        authentication: { type: 'APIKey', credentials: { apiKey: 'sk-real-key' } },
+      },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toEqual([])
   })
 })
 

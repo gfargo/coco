@@ -11,7 +11,7 @@ import { installNpmPackage } from '../../lib/utils/installPackage'
 
 import { ConfigWithServiceObject } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
-import { LLMModel, LLMProvider, OllamaLLMService } from '../../lib/langchain/types'
+import { LLMModel, LLMProvider, OllamaLLMService, OpenAILLMService } from '../../lib/langchain/types'
 import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
 import { OllamaNotReadyError } from '../../lib/langchain/utils/ollamaStatus'
 import { CommandHandler } from '../../lib/types'
@@ -21,7 +21,8 @@ import { getProjectConfigFilePath } from '../../lib/utils/getProjectConfigFilePa
 import { runDiagnostics } from '../doctor/checks'
 import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { InitArgv, InitOptions } from './config'
-import { questions } from './questions'
+import { questions, OPENAI_COMPATIBLE_SENTINEL } from './questions'
+import { OpenAiCompatiblePreset } from './openAiCompatiblePresets'
 
 export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // Honor the global --repo flag so `coco init --repo <X> --scope project`
@@ -54,10 +55,22 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // hard-exiting and discarding the answers above.
   let llmProvider: LLMProvider
   let llmModel: LLMModel
+  // Set when the user picks "OpenAI-compatible endpoint" (#1610) — the
+  // underlying provider is still 'openai', but the model is free text and
+  // the service gets a custom baseURL + a preset-specific API key hint.
+  let compatiblePreset: OpenAiCompatiblePreset | undefined
   for (;;) {
-    llmProvider = await questions.selectLLMProvider()
+    const picked = await questions.selectLLMProvider()
     try {
-      llmModel = await questions.selectLLMModel(llmProvider)
+      if (picked === OPENAI_COMPATIBLE_SENTINEL) {
+        compatiblePreset = await questions.selectOpenAiCompatiblePreset()
+        llmProvider = 'openai'
+        llmModel = await questions.inputOpenAiCompatibleModel()
+      } else {
+        compatiblePreset = undefined
+        llmProvider = picked
+        llmModel = await questions.selectLLMModel(llmProvider)
+      }
       break
     } catch (err) {
       if (err instanceof OllamaNotReadyError) {
@@ -69,6 +82,13 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   }
 
   const service = getDefaultServiceConfigFromAlias(llmProvider, llmModel)
+
+  // compatiblePreset is only ever set alongside llmProvider === 'openai'
+  // (see the selection loop above), so `service` is always an
+  // OpenAILLMService here.
+  if (compatiblePreset?.baseURL) {
+    (service as OpenAILLMService).baseURL = compatiblePreset.baseURL
+  }
 
   const config: ConfigWithServiceObject = {
     defaultBranch: 'main',
@@ -94,7 +114,9 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   }
 
   let apiKey = '' as string
-  const inputPrompt = inputPromptByProvider[llmProvider]
+  const inputPrompt = compatiblePreset
+    ? { label: compatiblePreset.label, envVar: compatiblePreset.apiKeyEnvVar }
+    : inputPromptByProvider[llmProvider]
   if (inputPrompt) {
     if (isProjectScope) {
       const envVarName: string = inputPrompt.envVar
@@ -105,7 +127,12 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
         )
       )
     } else {
-      apiKey = await questions.inputApiKey(inputPrompt.label, inputPrompt.envVar)
+      // Local/self-hosted compat endpoints (LM Studio, vLLM, custom)
+      // typically don't enforce a real key — let it through blank instead
+      // of forcing a placeholder value.
+      apiKey = compatiblePreset && !compatiblePreset.requiresApiKey
+        ? await questions.inputOptionalApiKey(inputPrompt.label, inputPrompt.envVar)
+        : await questions.inputApiKey(inputPrompt.label, inputPrompt.envVar)
 
       if (config.service.authentication.type === 'APIKey') {
         config.service.authentication.credentials.apiKey = '•••••••••••••••'
@@ -214,9 +241,18 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   let approvalMessage = 'does this look good?'
 
   if (config.service.authentication.type === 'APIKey') {
-    // add to config after logging, so that the API key is not logged
-    config.service.authentication.credentials.apiKey = apiKey
-    approvalMessage = 'looking good? (API key hidden for security)'
+    if (!apiKey && compatiblePreset && !compatiblePreset.requiresApiKey) {
+      // Compat endpoint with no key entered (LM Studio / vLLM / custom,
+      // typically no auth) — 'APIKey' with an empty string would make
+      // every command think a key is missing and fail with a "set your
+      // API key" prompt. Drop to 'None' so unauthenticated local
+      // endpoints work out of the box.
+      config.service.authentication = { type: 'None', credentials: undefined }
+    } else {
+      // add to config after logging, so that the API key is not logged
+      config.service.authentication.credentials.apiKey = apiKey
+      approvalMessage = apiKey ? 'looking good? (API key hidden for security)' : approvalMessage
+    }
   }
 
   const isApproved = await confirmPrompt({

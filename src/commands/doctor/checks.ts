@@ -103,7 +103,7 @@ export function checkProviderValidity(config: Config, diagnostics: Diagnostic[])
   }
 }
 
-function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
+export function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
   if (!config.service) return
 
   const { provider, authentication } = config.service
@@ -161,9 +161,16 @@ function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
   }
 
   if (!authentication || authentication.type === 'None') {
+    // A custom baseURL on the openai provider means an OpenAI-compatible
+    // endpoint (OpenRouter, Groq, LM Studio, vLLM, custom — #1610), not the
+    // real OpenAI API. Self-hosted/local ones commonly run without auth, so
+    // this is a warning rather than a hard error for that case.
+    const isCompatEndpoint = provider === 'openai' && Boolean((config.service as { baseURL?: string }).baseURL)
     diagnostics.push({
-      severity: 'error',
-      message: `Provider "${provider}" requires authentication but none is configured.`,
+      severity: isCompatEndpoint ? 'warn' : 'error',
+      message: isCompatEndpoint
+        ? `No authentication configured for the OpenAI-compatible endpoint at "${(config.service as { baseURL?: string }).baseURL}". This is fine for a self-hosted/no-auth endpoint (LM Studio, vLLM, ...) — otherwise set an API key.`
+        : `Provider "${provider}" requires authentication but none is configured.`,
       fix: `Set service.authentication to { "type": "APIKey", "credentials": { "apiKey": "..." } } or use the OPENAI_API_KEY / ANTHROPIC_API_KEY / AZURE_OPENAI_API_KEY / GEMINI_API_KEY / MISTRAL_API_KEY environment variable.`,
     })
     return
