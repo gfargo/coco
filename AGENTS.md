@@ -39,8 +39,9 @@ design → tasks).
   in `src/git/forgeActions.ts` and implement for every provider (or return an explicit
   "unsupported on <forge>" result). Never branch on provider inside a surface.
 - **Themes have one source of truth:** `THEME_PRESET_COLORS` in
-  `src/workstation/chrome/theme.ts`. Adding a theme = one entry there (+ a synced
-  screenshot). The CLI choices, screenshot carousel, and `.www` are all derived.
+  `src/workstation/chrome/themePresets.ts` (re-exported from `theme.ts` for existing
+  import sites). Adding a theme = one entry there (+ a synced screenshot). The CLI
+  choices, screenshot carousel, and `.www` are all derived.
 - **Regenerate the schema after config type changes:** run `npm run build` and commit
   the updated `schema.json` — CI fails on drift.
 - **Tests are co-located** as `*.test.ts` (integration: `*.integration.test.ts`).
