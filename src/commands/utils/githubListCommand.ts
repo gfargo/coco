@@ -2,10 +2,8 @@ import chalk from 'chalk'
 import { SimpleGit } from 'simple-git'
 import { CommandHandler } from '../../lib/types'
 import { commandExit } from '../../lib/utils/commandExit'
-import {
-  getProviderRepositoryForGit,
-  type GitProviderType,
-} from '../../git/providerData'
+import { getProviderRepositoryForGit } from '../../git/providerData'
+import { getForgeActions, type ForgeActions } from '../../git/forgeActions'
 import {
   CachedList,
   readCachedList,
@@ -65,8 +63,12 @@ export type GitHubListCommandSpec<
   /** Short label for the auth hint, e.g. 'issue triage' | 'PR triage'. */
   triageLabel: string
   buildFilter: (argv: Argv) => Filter
-  /** Fetch the list, dispatching on the detected forge (github | gitlab). */
-  fetch: (git: SimpleGit, filter: Filter, provider: GitProviderType | undefined) => Promise<Overview>
+  /**
+   * Fetch the list via the forge adapter — the per-command spec only maps
+   * argv -> filter and calls the matching adapter method; provider dispatch
+   * (github | gitlab | bitbucket) lives entirely in `getForgeActions` (#1634).
+   */
+  fetch: (git: SimpleGit, filter: Filter, forge: ForgeActions) => Promise<Overview>
   extractItems: (overview: Overview) => Item[] | undefined
   toCachePayload: (items: Item[]) => Cached
   /** Render the list body. `nounLower` is the forge-aware singular noun. */
@@ -111,9 +113,16 @@ export function createGitHubListHandler<
     // Repository metadata is needed for the header in both paths (cache hit
     // and fresh fetch). The cache hit path skips the fetch entirely, so probe
     // it directly here — cheap, just a single `git remote` parse. The detected
-    // provider also routes the fetch to the right forge CLI.
+    // provider also builds the forge adapter that routes the fetch.
     const repository = await getProviderRepositoryForGit(git)
     const provider = repository?.provider
+    const forgePath =
+      repository?.owner && repository?.name ? `${repository.owner}/${repository.name}` : undefined
+    const forge = getForgeActions(provider, {
+      gitlabPath: forgePath,
+      gitlabHost: repository?.host,
+      bitbucketPath: forgePath,
+    })
 
     if (cacheEnabled && !argv.refresh) {
       const cached = readCachedList<Cached>(spec.kind, repoPath, filter)
@@ -125,7 +134,7 @@ export function createGitHubListHandler<
     }
 
     if (!items) {
-      const overview = await spec.fetch(git, filter, provider)
+      const overview = await spec.fetch(git, filter, forge)
 
       if (!overview.available) {
         logger.error(overview.message || 'No supported remote (GitHub or GitLab) detected.', { color: 'red' })

@@ -8,6 +8,9 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getProviderOverview } from '../../git/providerData'
 import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import { createPullRequest, openPullRequest } from '../../git/pullRequestActions'
+import { createMergeRequest, openMergeRequest } from '../../git/mergeRequestActions'
+import { createBitbucketPullRequest, openBitbucketPullRequest } from '../../git/bitbucketPullRequestActions'
+import { defaultGlabRunner } from '../../git/glabCli'
 import { Logger } from '../../lib/utils/logger'
 
 jest.mock('../utils/applyRepoFlag')
@@ -15,6 +18,8 @@ jest.mock('../../lib/config/utils/loadConfig')
 jest.mock('../../git/providerData')
 jest.mock('../../git/aiActions')
 jest.mock('../../git/pullRequestActions')
+jest.mock('../../git/mergeRequestActions')
+jest.mock('../../git/bitbucketPullRequestActions')
 
 const mockApplyRepoFlag = applyRepoFlag as jest.MockedFunction<typeof applyRepoFlag>
 const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
@@ -22,6 +27,10 @@ const mockOverview = getProviderOverview as jest.MockedFunction<typeof getProvid
 const mockBodyWorkflow = runPullRequestBodyWorkflow as jest.MockedFunction<typeof runPullRequestBodyWorkflow>
 const mockCreatePr = createPullRequest as jest.MockedFunction<typeof createPullRequest>
 const mockOpenPr = openPullRequest as jest.MockedFunction<typeof openPullRequest>
+const mockCreateMr = createMergeRequest as jest.MockedFunction<typeof createMergeRequest>
+const mockOpenMr = openMergeRequest as jest.MockedFunction<typeof openMergeRequest>
+const mockCreateBitbucketPr = createBitbucketPullRequest as jest.MockedFunction<typeof createBitbucketPullRequest>
+const mockOpenBitbucketPr = openBitbucketPullRequest as jest.MockedFunction<typeof openBitbucketPullRequest>
 
 function okOverview(over: Record<string, unknown> = {}) {
   return {
@@ -58,6 +67,10 @@ describe('pr create command', () => {
     })
     mockCreatePr.mockResolvedValue({ ok: true, message: 'Created pull request: https://gh/pr/1', url: 'https://gh/pr/1' })
     mockOpenPr.mockResolvedValue({ ok: true, message: 'opened' })
+    mockCreateMr.mockResolvedValue({ ok: true, message: 'Created merge request: https://gl/mr/1', url: 'https://gl/mr/1' })
+    mockOpenMr.mockResolvedValue({ ok: true, message: 'opened' })
+    mockCreateBitbucketPr.mockResolvedValue({ ok: true, message: 'Created pull request: https://bb/pr/1', url: 'https://bb/pr/1' })
+    mockOpenBitbucketPr.mockReturnValue({ ok: true, message: 'opened' })
   })
 
   afterEach(() => jest.clearAllMocks())
@@ -122,6 +135,38 @@ describe('pr create command', () => {
     argv.web = true
     await handler(argv, logger)
     expect(mockOpenPr).toHaveBeenCalledWith('https://gh/pr/1')
+  })
+
+  // Adapter-dispatch coverage (#1634): the handler routes create/open
+  // through getForgeActions instead of hand-branching on provider, so
+  // these prove gitlab/bitbucket still reach their own implementations.
+  it('routes creation and --web open to the gitlab implementation', async () => {
+    mockOverview.mockResolvedValue(
+      okOverview({ repository: { provider: 'gitlab', remote: 'origin', defaultBranch: 'main', host: 'gitlab.acme.com', owner: 'g', name: 'p' } })
+    )
+    argv.web = true
+    await handler(argv, logger)
+    expect(mockCreateMr).toHaveBeenCalledWith(
+      expect.objectContaining({ base: 'main', head: 'feature/x', title: 'feat: add x' }),
+      defaultGlabRunner,
+      'gitlab.acme.com'
+    )
+    expect(mockOpenMr).toHaveBeenCalledWith('https://gl/mr/1', defaultGlabRunner, 'gitlab.acme.com')
+    expect(mockCreatePr).not.toHaveBeenCalled()
+  })
+
+  it('routes creation and --web open to the bitbucket implementation', async () => {
+    mockOverview.mockResolvedValue(
+      okOverview({ repository: { provider: 'bitbucket', remote: 'origin', defaultBranch: 'main', owner: 'b', name: 'p' } })
+    )
+    argv.web = true
+    await handler(argv, logger)
+    expect(mockCreateBitbucketPr).toHaveBeenCalledWith(
+      'b/p',
+      expect.objectContaining({ base: 'main', head: 'feature/x', title: 'feat: add x' })
+    )
+    expect(mockOpenBitbucketPr).toHaveBeenCalledWith('https://bb/pr/1')
+    expect(mockCreatePr).not.toHaveBeenCalled()
   })
 
   it('exits non-zero when gh is not authenticated', async () => {

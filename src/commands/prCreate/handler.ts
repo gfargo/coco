@@ -4,9 +4,7 @@ import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getProviderOverview } from '../../git/providerData'
 import { runPullRequestBodyWorkflow } from '../../git/aiActions'
-import { createPullRequest, openPullRequest } from '../../git/pullRequestActions'
-import { createMergeRequest, openMergeRequest } from '../../git/mergeRequestActions'
-import { createBitbucketPullRequest, openBitbucketPullRequest } from '../../git/bitbucketPullRequestActions'
+import { getForgeActions } from '../../git/forgeActions'
 import { forgeNouns } from '../../workstation/chrome/forgeNouns'
 import { commandExit } from '../../lib/utils/commandExit'
 import { emitJson } from '../../lib/ui/emitJson'
@@ -157,15 +155,13 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
     overview.repository.owner && overview.repository.name
       ? `${overview.repository.owner}/${overview.repository.name}`
       : undefined
+  const forge = getForgeActions(provider, {
+    gitlabPath: repoPath,
+    gitlabHost: overview.repository.host,
+    bitbucketPath: repoPath,
+  })
 
-  let result
-  if (provider === 'gitlab') {
-    result = await createMergeRequest(input)
-  } else if (provider === 'bitbucket' && repoPath) {
-    result = await createBitbucketPullRequest(repoPath, input)
-  } else {
-    result = await createPullRequest(input)
-  }
+  const result = await forge.createPullRequest(input)
 
   if (!result.ok) {
     logger.error(result.message, { color: 'red' })
@@ -177,12 +173,6 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   logger.log(result.message, { color: 'green' })
 
   if (argv.web && result.url) {
-    if (provider === 'gitlab') {
-      await openMergeRequest(result.url)
-    } else if (provider === 'bitbucket') {
-      openBitbucketPullRequest(result.url)
-    } else {
-      await openPullRequest(result.url)
-    }
+    await forge.openPullRequest(result.url)
   }
 }
