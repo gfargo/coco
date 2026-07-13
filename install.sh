@@ -95,6 +95,9 @@ if have coco; then
   printf '  %s   %s\n' "coco init" "${DIM}# pick a provider, set preferences${RESET}"
   printf '  %s        %s\n' "coco" "${DIM}# opens the workstation in a git repo${RESET}"
   printf '  %s %s\n' "coco commit -i" "${DIM}# AI commit message from staged changes${RESET}"
+  printf '\nShell completions:\n'
+  printf '  %s   %s\n' "coco completion >> ~/.bashrc" "${DIM}# or ~/.zshrc${RESET}"
+  printf '  %s\n' "coco completion fish > ~/.config/fish/completions/coco.fish"
   printf '\nDocs: %s\n' "https://coco.griffen.codes/docs"
 else
   warn "Installed, but 'coco' is not on your PATH yet."

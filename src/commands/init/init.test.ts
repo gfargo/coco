@@ -1,5 +1,5 @@
 import { handler } from './handler'
-import { questions } from './questions'
+import { questions, OPENAI_COMPATIBLE_SENTINEL } from './questions'
 import { InitOptions } from './config'
 import { Config } from '../types'
 import { appendToGitConfig } from '../../lib/config/services/git'
@@ -194,6 +194,75 @@ describe('init command', () => {
         }),
       })
     )
+  })
+
+  describe('OpenAI-compatible endpoint presets (#1610)', () => {
+    beforeEach(() => {
+      mockLoadConfig.mockReturnValue({
+        scope: 'global',
+        dryRun: false,
+      } as unknown as Config)
+      mockApiKeyService('openai')
+    })
+
+    it('resolves the sentinel to provider=openai with the preset baseURL, and requires an API key for a hosted preset (OpenRouter)', async () => {
+      jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue(OPENAI_COMPATIBLE_SENTINEL)
+      jest.spyOn(questions, 'selectOpenAiCompatiblePreset').mockResolvedValue({
+        id: 'openrouter',
+        label: 'OpenRouter',
+        baseURL: 'https://openrouter.ai/api/v1',
+        apiKeyEnvVar: 'OPENROUTER_API_KEY',
+        requiresApiKey: true,
+      })
+      jest.spyOn(questions, 'inputOpenAiCompatibleModel').mockResolvedValue('meta-llama/llama-3.3-70b-instruct')
+      jest.spyOn(questions, 'inputApiKey').mockResolvedValue('or-secret-key')
+
+      await handler(createArgv({ scope: 'global' }), logger)
+
+      expect(questions.selectLLMModel).not.toHaveBeenCalled()
+      expect(questions.inputApiKey).toHaveBeenCalledWith('OpenRouter', 'OPENROUTER_API_KEY')
+      expect(mockAppendToGitConfig).toHaveBeenCalledWith(
+        '/home/coco/.gitconfig',
+        expect.objectContaining({
+          service: expect.objectContaining({
+            provider: 'openai',
+            baseURL: 'https://openrouter.ai/api/v1',
+            authentication: expect.objectContaining({
+              type: 'APIKey',
+              credentials: expect.objectContaining({ apiKey: 'or-secret-key' }),
+            }),
+          }),
+        })
+      )
+    })
+
+    it('drops to no-auth when a self-hosted preset (LM Studio) gets no API key', async () => {
+      jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue(OPENAI_COMPATIBLE_SENTINEL)
+      jest.spyOn(questions, 'selectOpenAiCompatiblePreset').mockResolvedValue({
+        id: 'lmstudio',
+        label: 'LM Studio',
+        baseURL: 'http://localhost:1234/v1',
+        apiKeyEnvVar: 'LMSTUDIO_API_KEY',
+        requiresApiKey: false,
+      })
+      jest.spyOn(questions, 'inputOpenAiCompatibleModel').mockResolvedValue('local-model')
+      jest.spyOn(questions, 'inputOptionalApiKey').mockResolvedValue('')
+
+      await handler(createArgv({ scope: 'global' }), logger)
+
+      expect(questions.inputOptionalApiKey).toHaveBeenCalledWith('LM Studio', 'LMSTUDIO_API_KEY')
+      expect(questions.inputApiKey).not.toHaveBeenCalled()
+      expect(mockAppendToGitConfig).toHaveBeenCalledWith(
+        '/home/coco/.gitconfig',
+        expect.objectContaining({
+          service: expect.objectContaining({
+            provider: 'openai',
+            baseURL: 'http://localhost:1234/v1',
+            authentication: { type: 'None', credentials: undefined },
+          }),
+        })
+      )
+    })
   })
 
   it('skips the custom Ollama endpoint prompt for project scope', async () => {
