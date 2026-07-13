@@ -5,6 +5,7 @@ import cache from './commands/cache'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
 import doctor from './commands/doctor'
+import hooks from './commands/hooks'
 import init from './commands/init'
 import issues from './commands/issues'
 import log from './commands/log'
@@ -21,6 +22,7 @@ import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
 import { defaultRouteHandler, type DefaultRouteArgv } from './commands/defaultRouter'
 import { DoctorOptions } from './commands/doctor/config'
+import { HooksOptions } from './commands/hooks/config'
 import { InitOptions } from './commands/init/config'
 import { IssuesOptions } from './commands/issues/config'
 import { LogOptions } from './commands/log/config'
@@ -186,6 +188,13 @@ y.command<CacheOptions>(
   cache.handler
 )
 
+y.command<HooksOptions>(
+  hooks.command,
+  hooks.desc,
+  hooks.builder,
+  hooks.handler
+)
+
 y.command<IssuesOptions>(
   issues.command,
   issues.desc,
@@ -330,6 +339,7 @@ export {
   commit,
   Config,
   doctor,
+  hooks,
   init,
   issues,
   log,
