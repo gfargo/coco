@@ -66,7 +66,8 @@ src/
     ├── surfaces/<view>/      ← Per-view render modules — each `render<View>Surface(ctx: SurfaceRenderContext, …extras)` (history, status, diff, branches, tags, stash, compose, conflicts, reflog, bisect, …)
     │
     └── chrome/               ← Cross-cutting visual + state + lifecycle utilities (this directory's reason for existing)
-        ├── theme.ts          ← `LogInkTheme` resolver, color preset registry, `NO_COLOR` honoring
+        ├── theme.ts          ← `LogInkTheme` resolver, `NO_COLOR` honoring; re-exports `THEME_PRESET_COLORS`
+        ├── themePresets.ts   ← `THEME_PRESET_COLORS` data table (one source of truth for themes, #1640)
         ├── colorSupport.ts   ← Terminal color-level detection (`COLORTERM`, `TERM`)
         ├── layout.ts         ← Width / height splitter for sidebar | main | detail
         ├── iconography.ts    ← Glyphs for sidebar tabs, status, refs (theme-aware)
