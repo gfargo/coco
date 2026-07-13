@@ -36,6 +36,7 @@ import {
     ChangelogResponseSchema,
 } from './config'
 import { CHANGELOG_PROMPT } from './prompt'
+import { writeChangelogFile } from './writeChangelog'
 
 type CommitDetailsWithDiffText = CommitDetails & { diffText?: string };
 
@@ -387,6 +388,18 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   }
 
   const { text: changelogMsg, structured } = await generateChangelogResult(argv, logger)
+
+  // #1600 — write before the --json early return, so `--json --write`
+  // still lands the file (release scripts want both: the file update
+  // and a machine-readable result to log/parse).
+  if (argv.write && structured) {
+    const filePath = argv.file || 'CHANGELOG.md'
+    writeChangelogFile({ filePath, title: structured.title, content: structured.content })
+    // Silenced along with the rest of the command's status chrome in
+    // non-interactive/--json mode (set up in generateChangelogResult) —
+    // no special-casing needed here.
+    logger.log(`Updated ${filePath}`, { color: 'green' })
+  }
 
   if (argv.json) {
     emitJson(structured ?? null)
