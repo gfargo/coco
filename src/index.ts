@@ -4,6 +4,7 @@ import amend from './commands/amend'
 import cache from './commands/cache'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
+import configCmd from './commands/config'
 import doctor from './commands/doctor'
 import hooks from './commands/hooks'
 import init from './commands/init'
@@ -20,6 +21,7 @@ import { AmendOptions } from './commands/amend/config'
 import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
+import { ConfigOptions as ConfigCmdOptions } from './commands/config/config'
 import { defaultRouteHandler, type DefaultRouteArgv } from './commands/defaultRouter'
 import { DoctorOptions } from './commands/doctor/config'
 import { HooksOptions } from './commands/hooks/config'
@@ -188,6 +190,13 @@ y.command<CacheOptions>(
   cache.handler
 )
 
+y.command<ConfigCmdOptions>(
+  configCmd.command,
+  configCmd.desc,
+  configCmd.builder,
+  configCmd.handler
+)
+
 y.command<HooksOptions>(
   hooks.command,
   hooks.desc,
@@ -240,6 +249,8 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(ui.command), desc: ui.desc },
   { name: firstCommandToken(workspace.command), desc: workspace.desc },
   { name: firstCommandToken(cache.command), desc: cache.desc },
+  { name: firstCommandToken(configCmd.command), desc: configCmd.desc },
+  { name: firstCommandToken(hooks.command), desc: hooks.desc },
   { name: firstCommandToken(issues.command), desc: issues.desc },
   { name: firstCommandToken(prCreate.command), desc: prCreate.desc },
   { name: firstCommandToken(prs.command), desc: prs.desc },
@@ -338,6 +349,7 @@ export {
   changelog,
   commit,
   Config,
+  configCmd,
   doctor,
   hooks,
   init,
