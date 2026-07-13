@@ -9,6 +9,8 @@ export interface ReviewOptions extends BaseCommandOptions {
   json?: boolean
   staged?: boolean
   severity?: number
+  /** Overrides the configured `language` for this invocation only. */
+  language?: string
   /** Review an existing forge PR/MR by number instead of local changes. */
   pr?: number
   /** Post the findings summary (or request-changes above --severity) to the PR/MR. */
@@ -66,6 +68,10 @@ export const options = {
     type: 'number',
     alias: 's',
     description: 'Exit non-zero if any finding has severity >= this threshold (1-10). For CI gating.',
+  },
+  language: {
+    type: 'string',
+    description: 'Write review feedback in this language, overriding the configured `language`.',
   },
   pr: {
     type: 'number',

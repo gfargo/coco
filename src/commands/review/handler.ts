@@ -11,6 +11,7 @@ import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudg
 import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
+import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { fileChangeParser } from '../../lib/parsers/default/index'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { getChanges } from '../../lib/simple-git/getChanges'
@@ -302,6 +303,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const variables = {
         changes: context,
         format_instructions: formatInstructions,
+        language_context: getLanguageContext(argv.language || config.language, { taskDescription: 'code review feedback' }),
       }
       const budgetedPrompt = await enforcePromptBudget({
         prompt,

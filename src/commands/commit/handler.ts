@@ -8,6 +8,7 @@ import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
+import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { PreCommitHookError, createCommit } from '../../lib/simple-git/createCommit'
@@ -315,6 +316,10 @@ IMPORTANT RULES:
         commit_history: commit_history,
         branch_name_context: branchNameContext,
         commitlint_rules_context: commitlint_rules_context,
+        language_context: getLanguageContext(argv.language || config.language, {
+          taskDescription: 'commit message',
+          preserveConventionalTokens: USE_CONVENTIONAL_COMMITS,
+        }),
       }
 
       const maxAttempts =

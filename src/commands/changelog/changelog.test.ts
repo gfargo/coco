@@ -251,6 +251,55 @@ describe('changelog command', () => {
     expect(writes.map((w) => w.trim())).toContain('null')
   })
 
+  describe('language_context (#1614)', () => {
+    it('is empty when no language is configured', async () => {
+      await handler(argv, logger)
+      const call = mockExecuteChain.mock.calls[0][0] as { variables: Record<string, string> }
+      expect(call.variables.language_context).toBe('')
+    })
+
+    it('builds an instruction from the configured language', async () => {
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        language: 'German',
+      } as unknown as Config)
+
+      await handler(argv, logger)
+      const call = mockExecuteChain.mock.calls[0][0] as { variables: Record<string, string> }
+      expect(call.variables.language_context).toBe('Write the changelog in German.')
+    })
+
+    it('honors a per-invocation --language flag over the configured language', async () => {
+      ;(argv as unknown as { language?: string }).language = 'French'
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        language: 'German',
+      } as unknown as Config)
+
+      await handler(argv, logger)
+      const call = mockExecuteChain.mock.calls[0][0] as { variables: Record<string, string> }
+      expect(call.variables.language_context).toBe('Write the changelog in French.')
+    })
+  })
+
   describe('--range (#1590)', () => {
     beforeEach(() => {
       mockGetCommitLogRangeDetails.mockResolvedValue([

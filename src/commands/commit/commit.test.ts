@@ -32,6 +32,7 @@ jest.mock('../../lib/utils/commitlintValidator', () => ({
     warnings: [],
   }),
   getCommitlintRulesContext: jest.fn().mockResolvedValue(''),
+  checkCommitlintAvailability: jest.fn().mockReturnValue({ available: true, missingPackages: [] }),
 }))
 
 jest.mock('../../lib/simple-git/getRepo')
@@ -349,6 +350,73 @@ describe('commit command', () => {
 
     const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
     expect(variables.branch_name_context).toBe('')
+  })
+
+  describe('language_context (#1614)', () => {
+    it('is empty when no language is configured', async () => {
+      await handler(argv, logger)
+      const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+      expect(variables.language_context).toBe('')
+    })
+
+    it('builds an instruction from the configured language', async () => {
+      mockLoadConfig.mockReturnValue({
+        service: { authentication: { type: 'apiKey' }, provider: 'openai', model: 'gpt-4o' },
+        hideCocoBanner: false,
+        noDiff: false,
+        ignoredFiles: [],
+        ignoredExtensions: [],
+        includeBranchName: true,
+        conventionalCommits: false,
+        openInEditor: false,
+        mode: 'stdout',
+        language: 'German',
+      } as unknown as Config)
+
+      await handler(argv, logger)
+      const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+      expect(variables.language_context).toBe('Write the commit message in German.')
+    })
+
+    it('preserves Conventional Commits tokens when conventionalCommits is enabled', async () => {
+      argv.conventional = true
+      mockLoadConfig.mockReturnValue({
+        service: { authentication: { type: 'apiKey' }, provider: 'openai', model: 'gpt-4o' },
+        hideCocoBanner: false,
+        noDiff: false,
+        ignoredFiles: [],
+        ignoredExtensions: [],
+        includeBranchName: true,
+        conventionalCommits: true,
+        openInEditor: false,
+        mode: 'stdout',
+        language: 'German',
+      } as unknown as Config)
+
+      await handler(argv, logger)
+      const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+      expect(variables.language_context).toContain('Keep the Conventional Commits type/scope tokens')
+    })
+
+    it('honors a per-invocation --language flag over the configured language', async () => {
+      ;(argv as unknown as { language?: string }).language = 'French'
+      mockLoadConfig.mockReturnValue({
+        service: { authentication: { type: 'apiKey' }, provider: 'openai', model: 'gpt-4o' },
+        hideCocoBanner: false,
+        noDiff: false,
+        ignoredFiles: [],
+        ignoredExtensions: [],
+        includeBranchName: true,
+        conventionalCommits: false,
+        openInEditor: false,
+        mode: 'stdout',
+        language: 'German',
+      } as unknown as Config)
+
+      await handler(argv, logger)
+      const variables = mockExecuteChainWithSchema.mock.calls[0][3] as Record<string, string>
+      expect(variables.language_context).toBe('Write the commit message in French.')
+    })
   })
 
   describe('interactive commit flow (awaited handleResult)', () => {
