@@ -6,6 +6,7 @@ import changelog from './commands/changelog'
 import commit from './commands/commit'
 import configCmd from './commands/config'
 import doctor from './commands/doctor'
+import hooks from './commands/hooks'
 import init from './commands/init'
 import issues from './commands/issues'
 import log from './commands/log'
@@ -23,6 +24,7 @@ import { CommitOptions } from './commands/commit/config'
 import { ConfigOptions as ConfigCmdOptions } from './commands/config/config'
 import { defaultRouteHandler, type DefaultRouteArgv } from './commands/defaultRouter'
 import { DoctorOptions } from './commands/doctor/config'
+import { HooksOptions } from './commands/hooks/config'
 import { InitOptions } from './commands/init/config'
 import { IssuesOptions } from './commands/issues/config'
 import { LogOptions } from './commands/log/config'
@@ -195,6 +197,13 @@ y.command<ConfigCmdOptions>(
   configCmd.handler
 )
 
+y.command<HooksOptions>(
+  hooks.command,
+  hooks.desc,
+  hooks.builder,
+  hooks.handler
+)
+
 y.command<IssuesOptions>(
   issues.command,
   issues.desc,
@@ -241,6 +250,7 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(workspace.command), desc: workspace.desc },
   { name: firstCommandToken(cache.command), desc: cache.desc },
   { name: firstCommandToken(configCmd.command), desc: configCmd.desc },
+  { name: firstCommandToken(hooks.command), desc: hooks.desc },
   { name: firstCommandToken(issues.command), desc: issues.desc },
   { name: firstCommandToken(prCreate.command), desc: prCreate.desc },
   { name: firstCommandToken(prs.command), desc: prs.desc },
@@ -341,6 +351,7 @@ export {
   Config,
   configCmd,
   doctor,
+  hooks,
   init,
   issues,
   log,

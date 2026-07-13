@@ -214,6 +214,11 @@ describe('commit command', () => {
     mockGetPrompt.mockReturnValue({
       template: 'Test prompt template',
       inputVariables: ['summary'],
+      // `generateCommitDraft`'s `--print-message` path (#1591) calls
+      // `prompt.format(...)` directly (budgeting the summary token count)
+      // rather than going through the mocked `generateAndReviewLoop` /
+      // `executeChainWithSchema` path every other test exercises.
+      format: jest.fn().mockResolvedValue('rendered prompt'),
     } as unknown as ReturnType<typeof getPrompt>)
     mockGetCurrentBranchName.mockResolvedValue('main')
     mockGetPreviousCommits.mockResolvedValue('Previous commits mock')
@@ -395,6 +400,51 @@ describe('commit command', () => {
       const successOrder = mockLogSuccess.mock.invocationCallOrder[0]
       const telemetryOrder = mockLogLlmTelemetrySummary.mock.invocationCallOrder[0]
       expect(successOrder).toBeLessThan(telemetryOrder)
+    })
+  })
+
+  describe('--print-message (#1591)', () => {
+    beforeEach(() => {
+      argv.printMessage = true
+    })
+
+    it('prints the generated draft to stdout and returns without committing or reviewing', async () => {
+      const writes: string[] = []
+      const writeSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(((chunk: string) => {
+          writes.push(String(chunk))
+          return true
+        }) as never)
+      try {
+        await handler(argv, logger)
+      } finally {
+        writeSpy.mockRestore()
+      }
+
+      expect(writes.join('')).toContain('Test commit title')
+      expect(mockCreateCommit).not.toHaveBeenCalled()
+      expect(mockGenerateAndReviewLoop).not.toHaveBeenCalled()
+      expect(mockHandleResult).not.toHaveBeenCalled()
+    })
+
+    it('exits non-zero without printing anything when there are no staged changes', async () => {
+      mockGetChanges.mockResolvedValue({ staged: [], unstaged: [], untracked: [] })
+
+      const writes: string[] = []
+      const writeSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(((chunk: string) => {
+          writes.push(String(chunk))
+          return true
+        }) as never)
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      } finally {
+        writeSpy.mockRestore()
+      }
+
+      expect(writes).toHaveLength(0)
     })
   })
 })
