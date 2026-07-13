@@ -26,6 +26,7 @@ import {
     getLogInkWorkflowActionByKey,
 } from './inkWorkflows'
 import { sidebarTabHasSelectableItems } from '../chrome/sidebarSelection'
+import { handleBisectInput } from '../surfaces/bisect/input'
 
 export type LogInkInputKey = {
   backspace?: boolean
@@ -2338,68 +2339,11 @@ export function getLogInkInputEvents(
     return [action({ type: 'setPendingKey', value: undefined })]
   }
 
-  // #784 / #1352 — bisect view action keys. Scoped to `state.activeView
-  // === 'bisect' && state.focus === 'commits'` so the single-letter
-  // keys stay free everywhere else. Mark-good is `y` (yes/good), NOT
-  // bare `g`: the old `g` binding shadowed the global chord prefix, so
-  // a user reflexively typing `gh`/`gs` to navigate away silently ran
-  // `git bisect good` on the current candidate. `g` now arms the chord
-  // on bisect like everywhere else (`gh`/`gs`/`gx` work mid-bisect);
-  // `b` keeps the `pendingKey !== 'g'` guard so `gb` still reaches
-  // branches. The trade: `y` yank is unavailable on this one transient
-  // view (the candidate sha is visible in the panel).
-  if (state.activeView === 'bisect' && state.focus === 'commits') {
-    // Gated off once the bisect has terminated: the completion panel
-    // rebinds y/Y to yank the first-bad sha (#879 item 3), and there
-    // is no candidate left to mark. Also gated on an ACTIVE session —
-    // like `s`/`R`, marking is meaningless from the empty-state view
-    // and used to surface a raw `git bisect` error ("You need to
-    // start by \"git bisect start\"") on the status line.
-    if (
-      inputValue === 'y' &&
-      !key.ctrl &&
-      !key.meta &&
-      context.bisectActive &&
-      !context.bisectCompletionSha
-    ) {
-      return [{ type: 'runWorkflowAction', id: 'bisect-good' }]
-    }
-    if (inputValue === 'b' && state.pendingKey !== 'g' && context.bisectActive) {
-      return [{ type: 'runWorkflowAction', id: 'bisect-bad' }]
-    }
-    if (inputValue === 's') {
-      // #879 item 4 — `s` is context-overloaded. When a bisect is
-      // active, the original #784 behavior applies: skip the current
-      // candidate. When no bisect is active, the empty-state view is
-      // showing and `s` enters the in-TUI start wizard: push history,
-      // mark the user as picking the BAD commit, surface a sticky
-      // banner explaining the next step.
-      if (context.bisectActive) {
-        return [{ type: 'runWorkflowAction', id: 'bisect-skip' }]
-      }
-      return [
-        action({ type: 'setBisectPickMode', mode: 'bad' }),
-        action({ type: 'pushView', value: 'history' }),
-        action({
-          type: 'setStatus',
-          value: 'Pick the BAD commit (where the bug is present). Enter to confirm · esc to cancel',
-        }),
-      ]
-    }
-    if (inputValue === 'x' && context.bisectActive) {
-      return [action({ type: 'setPendingConfirmation', value: 'bisect-reset' })]
-    }
-    // #879 item 5 — `R` (capital) on an active bisect view opens an
-    // input prompt for a test command. Only fires when a session is
-    // active because `git bisect run` is meaningless otherwise. Lower-
-    // case `r` stays free for future view-local bindings.
-    if (inputValue === 'R' && context.bisectActive) {
-      return [action({
-        type: 'openInputPrompt',
-        kind: 'bisect-run-command',
-        label: 'Bisect run command (e.g. npm test, pytest -k regression)',
-      })]
-    }
+  // #784 / #1352 — bisect view action keys, extracted to
+  // `surfaces/bisect/input.ts` (#1625 first surface).
+  const bisectEvents = handleBisectInput(state, inputValue, key, context)
+  if (bisectEvents) {
+    return bisectEvents
   }
 
   // Changelog view local keymap. Scoped to `activeView === 'changelog'`
