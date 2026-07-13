@@ -4,6 +4,7 @@ import amend from './commands/amend'
 import cache from './commands/cache'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
+import configCmd from './commands/config'
 import doctor from './commands/doctor'
 import init from './commands/init'
 import issues from './commands/issues'
@@ -19,6 +20,7 @@ import { AmendOptions } from './commands/amend/config'
 import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
+import { ConfigOptions as ConfigCmdOptions } from './commands/config/config'
 import { defaultRouteHandler, type DefaultRouteArgv } from './commands/defaultRouter'
 import { DoctorOptions } from './commands/doctor/config'
 import { InitOptions } from './commands/init/config'
@@ -186,6 +188,13 @@ y.command<CacheOptions>(
   cache.handler
 )
 
+y.command<ConfigCmdOptions>(
+  configCmd.command,
+  configCmd.desc,
+  configCmd.builder,
+  configCmd.handler
+)
+
 y.command<IssuesOptions>(
   issues.command,
   issues.desc,
@@ -237,6 +246,7 @@ export {
   changelog,
   commit,
   Config,
+  configCmd,
   doctor,
   init,
   issues,
