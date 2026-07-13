@@ -250,6 +250,60 @@ describe('review command', () => {
     )
   })
 
+  describe('language_context (#1614)', () => {
+    it('is empty when no language is configured', async () => {
+      argv.json = true
+      await handler(argv, logger)
+      const variables = mockExecuteChain.mock.calls[0][0].variables as Record<string, string>
+      expect(variables.language_context).toBe('')
+    })
+
+    it('builds an instruction from the configured language', async () => {
+      argv.json = true
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        interactive: false,
+        language: 'German',
+      } as unknown as Config)
+
+      await handler(argv, logger)
+      const variables = mockExecuteChain.mock.calls[0][0].variables as Record<string, string>
+      expect(variables.language_context).toBe('Write the code review feedback in German.')
+    })
+
+    it('honors a per-invocation --language flag over the configured language', async () => {
+      argv.json = true
+      ;(argv as unknown as { language?: string }).language = 'French'
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        interactive: false,
+        language: 'German',
+      } as unknown as Config)
+
+      await handler(argv, logger)
+      const variables = mockExecuteChain.mock.calls[0][0].variables as Record<string, string>
+      expect(variables.language_context).toBe('Write the code review feedback in French.')
+    })
+  })
+
   describe('non-interactive TTY handling (no --json)', () => {
     let originalStdinIsTTY: PropertyDescriptor | undefined
     let originalStdoutIsTTY: PropertyDescriptor | undefined

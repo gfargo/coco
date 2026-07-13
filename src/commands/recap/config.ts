@@ -11,6 +11,8 @@ export interface RecapOptions extends BaseCommandOptions {
   currentBranch?: boolean
   timeframe?: 'current' | 'yesterday' | 'last-week' | 'last-month' | 'last-tag' | 'currentBranch'
   json?: boolean
+  /** Overrides the configured `language` for this invocation only. */
+  language?: string
 }
 
 export type RecapArgv = Arguments<RecapOptions>
@@ -64,6 +66,10 @@ export const options = {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
+  },
+  language: {
+    type: 'string',
+    description: 'Write the recap in this language, overriding the configured `language`.',
   },
   // `--json` is a global flag (see src/index.ts).
 } as Record<string, Options>

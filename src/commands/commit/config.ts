@@ -33,6 +33,8 @@ export interface CommitOptions extends BaseCommandOptions {
    * diff to the LLM (reduces token usage for large changesets).
    */
   noDiff?: boolean
+  /** Overrides the configured `language` for this invocation only. */
+  language?: string
 }
 
 export type CommitArgv = Arguments<CommitOptions>
@@ -119,6 +121,10 @@ export const options = {
     type: 'boolean',
     default: false,
     alias: 'n',
+  },
+  language: {
+    description: 'Write the commit message in this language, overriding the configured `language`.',
+    type: 'string',
   },
   split: {
     description: 'Group staged changes into multiple commits — shows the plan and prompts to apply',

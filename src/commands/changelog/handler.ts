@@ -36,6 +36,7 @@ import {
     ChangelogResponseSchema,
 } from './config'
 import { CHANGELOG_PROMPT } from './prompt'
+import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 
 type CommitDetailsWithDiffText = CommitDetails & { diffText?: string };
 
@@ -304,6 +305,7 @@ export async function generateChangelogResult(
         format_instructions: formatInstructions,
         additional_context: additional_context,
         author_instructions: author_instructions,
+        language_context: getLanguageContext(argv.language || config.language, { taskDescription: 'changelog' }),
       }
 
       const budgetedPrompt = await enforcePromptBudget({

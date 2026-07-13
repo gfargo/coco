@@ -22,6 +22,8 @@ You will be provided with a summary of changes. This summary can be one of the f
 ## Formatting Instructions
 {{format_instructions}}
 
+{{language_context}}
+
 {{additional_context}}
 
 """{{summary}}"""`
@@ -31,6 +33,7 @@ export const inputVariables = [
   'summary',
   'additional_context',
   'author_instructions',
+  'language_context',
 ]
 
 export const CHANGELOG_PROMPT = new PromptTemplate({

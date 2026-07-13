@@ -14,11 +14,13 @@ export const template = `As an experienced software engineer, you are tasked wit
 
 {{format_instructions}}
 
+{{language_context}}
+
 Following the formatting instructions, perform a code review on the following changes
 
 """{{changes}}"""`
 
-export const inputVariables = ['format_instructions', 'changes']
+export const inputVariables = ['format_instructions', 'changes', 'language_context']
 
 export const REVIEW_PROMPT = new PromptTemplate({
   template,

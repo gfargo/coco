@@ -79,6 +79,17 @@ type BaseConfig = {
   includeBranchName?: boolean
 
   /**
+   * Language for AI-generated output (commit messages, changelogs, recaps,
+   * reviews) — free text, e.g. `'German'` or `'es'`. Conventional Commits
+   * type/scope tokens (`feat`, `fix(parser)`, ...) always stay in English;
+   * only the description/body localizes. Unset generates in English, the
+   * existing default.
+   *
+   * @default undefined
+   */
+  language?: string
+
+  /**
    * The AI CLI tool to use for auto-fixing review issues.
    * Must match a registered adapter key (e.g. "codex", "claude", "gemini").
    * When unset, the auto-fix action is disabled.

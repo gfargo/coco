@@ -8,6 +8,7 @@ import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { logLlmTelemetrySummary } from '../../lib/langchain/utils/observability'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
+import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getChangesByTimestamp } from '../../lib/simple-git/getChangesByTimestamp'
 import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLastTag'
@@ -239,6 +240,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
           changes: context,
           format_instructions: formatInstructions,
           timeframe,
+          language_context: getLanguageContext(argv.language || config.language, { taskDescription: 'summary' }),
         }
         const budgetedPrompt = await enforcePromptBudget({
           prompt,

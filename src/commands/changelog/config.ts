@@ -12,6 +12,8 @@ export interface ChangelogOptions extends BaseCommandOptions {
   additional?: string
   author?: boolean
   json?: boolean
+  /** Overrides the configured `language` for this invocation only. */
+  language?: string
 }
 
 export type ChangelogArgv = Arguments<ChangelogOptions>
@@ -73,6 +75,10 @@ export const options = {
     type: 'boolean',
     alias: 'interactive',
     description: 'Toggle interactive mode',
+  },
+  language: {
+    type: 'string',
+    description: 'Write the changelog in this language, overriding the configured `language`.',
   },
   // `--json` is a global flag (see src/index.ts).
 } as Record<string, Options>
