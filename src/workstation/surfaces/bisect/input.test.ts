@@ -1,6 +1,6 @@
 import { handleBisectInput } from './input'
 import { createLogInkState } from '../../runtime/inkViewModel'
-import type { GitLogRow } from '../../../commands/log/data'
+import type { GitLogRow } from '../../../git/logData'
 
 /**
  * Direct coverage for the bisect-view input handler extracted out of
