@@ -15,7 +15,7 @@
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { truncateCells } from '../../chrome/text'
-import type { GitCommitDetail } from '../../../commands/log/data'
+import type { GitCommitDetail } from '../../../git/logData'
 import { getBisectCompletion } from '../../../git/bisectData'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'

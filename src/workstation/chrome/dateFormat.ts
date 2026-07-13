@@ -8,7 +8,7 @@
  * commit message for cells, so a 2-3 character form is the budget.
  *
  * Inputs are `YYYY-MM-DD` in the VIEWER's local zone
- * (`--date=format-local:%Y-%m-%d` in commands/log/data.ts). Caller
+ * (`--date=format-local:%Y-%m-%d` in git/logData.ts). Caller
  * passes `now` so tests can pin the reference instant.
  *
  * Outputs (rounded toward the nearest unit, no `ago` suffix):

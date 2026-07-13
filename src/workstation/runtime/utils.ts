@@ -7,7 +7,7 @@
  * they take state/theme inputs and return strings or style props.
  */
 
-import type { GitCommitDetail } from '../../commands/log/data'
+import type { GitCommitDetail } from '../../git/logData'
 import type { LogInkSidebarTab } from '../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../git/providerData'
 import { buildProviderUrl } from '../../git/providerData'

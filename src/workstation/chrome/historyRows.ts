@@ -1,4 +1,4 @@
-import { GitLogCommitRow, GitLogGraphRow, GitLogRow } from '../../commands/log/data'
+import { GitLogCommitRow, GitLogGraphRow, GitLogRow } from '../../git/logData'
 import { getDateBucket } from './dateBucket'
 import {
   DEFAULT_COMMIT_GLYPH,

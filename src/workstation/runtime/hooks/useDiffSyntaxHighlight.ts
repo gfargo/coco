@@ -44,7 +44,7 @@
  */
 
 import type * as ReactTypes from 'react'
-import { GitCommitDetail, GitCommitFilePreview } from '../../../commands/log/data'
+import { GitCommitDetail, GitCommitFilePreview } from '../../../git/logData'
 import type { WorktreeFileDiff } from '../../../git/worktreeDiffData'
 import { highlightDiffCode, type SyntaxSpan } from '../../../lib/syntax/highlightEngine'
 import type { LogInkDiffSource, LogInkView } from '../inkViewModel'

@@ -49,7 +49,7 @@
 
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
-import { GitCommitDetail, GitLogCommitRow, getCommitDetail } from '../../../commands/log/data'
+import { GitCommitDetail, GitLogCommitRow, getCommitDetail } from '../../../git/logData'
 
 /**
  * Best-effort promise unwrap, lifted verbatim from `app.ts`. Swallows the

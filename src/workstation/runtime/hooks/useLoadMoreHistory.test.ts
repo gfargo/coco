@@ -1,7 +1,7 @@
 import {
   LOG_INTERACTIVE_DEFAULT_LIMIT,
   getCommitRows,
-} from '../../../commands/log/data'
+} from '../../../git/logData'
 import type { LogArgv } from '../../../commands/log/config'
 import { computeHasMoreCommits, useHistoryPaginationState } from './useLoadMoreHistory'
 
@@ -13,8 +13,8 @@ import { computeHasMoreCommits, useHistoryPaginationState } from './useLoadMoreH
  * `getCommitRows` mocked to control the loaded-window size.
  */
 
-jest.mock('../../../commands/log/data', () => {
-  const actual = jest.requireActual('../../../commands/log/data')
+jest.mock('../../../git/logData', () => {
+  const actual = jest.requireActual('../../../git/logData')
   return { ...actual, getCommitRows: jest.fn() }
 })
 

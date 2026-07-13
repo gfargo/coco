@@ -15,7 +15,7 @@
  * and the diffs human-readable.
  */
 import { createElement } from 'react'
-import type { GitLogCommitRow } from '../../../commands/log/data'
+import type { GitLogCommitRow } from '../../../git/logData'
 import { createLogInkTheme } from '../../chrome/theme'
 import { renderBranchTipChip } from './index'
 

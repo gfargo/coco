@@ -33,7 +33,7 @@
  *      rendering / cursor-position reads across the codebase).
  */
 
-import type { GitLogCommitRow } from '../../commands/log/data'
+import type { GitLogCommitRow } from '../../git/logData'
 import { getSelectedInkCommit, type LogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
 import type { BranchRef } from '../../git/branchData'

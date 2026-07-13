@@ -17,8 +17,8 @@ import {
     getLogView,
     parseCommitDetail,
     parseLogOutput,
-} from './data'
-import { LogOptions } from './config'
+} from './logData'
+import { LogOptions } from '../commands/log/config'
 
 // Several tests here spin up a real temp git repo (mkdtemp + git init +
 // many commits) and shell out to walk the log. The default 5s budget is

@@ -1,4 +1,4 @@
-import { GitLogCommitRow, GitLogRow, getCommitRows } from './data'
+import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../git/logData'
 
 export type LogTuiState = {
   rows: GitLogRow[]

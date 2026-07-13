@@ -1,4 +1,4 @@
-import { GitLogRow } from '../../commands/log/data'
+import { GitLogRow } from '../../git/logData'
 import {
     getLogInkInputEvents,
     getLogInkPaletteExecuteEvents,

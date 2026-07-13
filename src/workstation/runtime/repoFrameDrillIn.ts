@@ -1,6 +1,6 @@
 import { join } from 'path'
 import type { SubmoduleChange } from '../../git/submoduleDiff'
-import type { GitCommitFilePreview } from '../../commands/log/data'
+import type { GitCommitFilePreview } from '../../git/logData'
 import type { LogInkRepoFrameEntryRange } from '../../workstation/runtime/inkViewModel'
 import { findSubmoduleByPath, type SubmoduleOverview } from '../../git/submoduleData'
 

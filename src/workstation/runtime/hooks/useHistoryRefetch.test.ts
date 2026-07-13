@@ -15,13 +15,13 @@
  */
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
-import { getLogRows } from '../../../commands/log/data'
+import { getLogRows } from '../../../git/logData'
 import { getStashCommitHashes } from '../../../git/stashData'
 import { useHistoryRefetch, type UseHistoryRefetchDeps } from './useHistoryRefetch'
 import type { LogArgv } from '../../../commands/log/config'
 
-jest.mock('../../../commands/log/data', () => {
-  const actual = jest.requireActual('../../../commands/log/data')
+jest.mock('../../../git/logData', () => {
+  const actual = jest.requireActual('../../../git/logData')
   return { ...actual, getLogRows: jest.fn() }
 })
 jest.mock('../../../git/stashData', () => ({

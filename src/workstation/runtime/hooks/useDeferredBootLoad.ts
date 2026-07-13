@@ -32,7 +32,7 @@
 
 import type * as ReactTypes from 'react'
 import type { LogArgv } from '../../../commands/log/config'
-import type { GitLogRow } from '../../../commands/log/data'
+import type { GitLogRow } from '../../../git/logData'
 import type { LogInkAction } from '../inkViewModel'
 import { isStaleBootLoadResolve } from '../loadMoreResolver'
 import { computeHasMoreCommits } from './useLoadMoreHistory'

@@ -11,12 +11,12 @@ import {
   useWorktreeHunksHydration,
   useWorktreeHunksState,
 } from './useDiffHydration'
-import { getCommitFilePreview, GitCommitFilePreview } from '../../../commands/log/data'
+import { getCommitFilePreview, GitCommitFilePreview } from '../../../git/logData'
 import { getStashDiff } from '../../../git/stashData'
 import type { WorktreeFile } from '../../../git/statusData'
 import type * as ReactTypes from 'react'
 
-jest.mock('../../../commands/log/data', () => ({
+jest.mock('../../../git/logData', () => ({
   getCommitFilePreview: jest.fn(),
 }))
 jest.mock('../../../git/stashData', () => ({

@@ -38,7 +38,7 @@ import { cellWidth, truncateCells, truncatePathCells } from '../../chrome/text'
 import type {
   GitCommitDetail,
   GitCommitFilePreview,
-} from '../../../commands/log/data'
+} from '../../../git/logData'
 import { hunkIndexAtOffset } from '../../../workstation/runtime/inkViewModel'
 import {
   applyStatusFilterMask,

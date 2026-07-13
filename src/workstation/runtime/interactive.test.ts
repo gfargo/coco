@@ -1,4 +1,4 @@
-import { GitCommitDetail, GitLogRow } from './data'
+import { GitCommitDetail, GitLogRow } from '../../git/logData'
 import { createLogTuiState } from './interactiveState'
 import { renderInteractiveLog } from './interactive'
 import { BranchOverview } from '../../git/branchData'
