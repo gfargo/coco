@@ -12,6 +12,7 @@ import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
 import { PreCommitHookError, createCommit } from '../../lib/simple-git/createCommit'
+import { generateCommitDraft } from './generateCommitDraft'
 import { extractTicketIdFromBranchName } from '../../lib/simple-git/extractTicketIdFromBranchName'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
@@ -41,6 +42,27 @@ import { handleCommitSplit, isCommitSplitCommand } from './split'
 
 export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   const git = applyRepoFlag(argv)
+
+  // `--print-message`: generate a draft and print it to stdout without
+  // committing. Skips the interactive review loop, the split planner, and
+  // `createCommit` entirely — this is the non-interactive path the
+  // `prepare-commit-msg` hook installed via `coco hooks install` calls on
+  // every plain `git commit` (#1591).
+  if (argv.printMessage) {
+    const result = await generateCommitDraft({ git, argv, logger })
+    if (!result.ok || !result.draft) {
+      for (const warning of result.warnings) {
+        logger.verbose(warning, { color: 'yellow' })
+      }
+      for (const validationError of result.validationErrors) {
+        logger.verbose(validationError, { color: 'red' })
+      }
+      commandExit(1)
+    }
+    process.stdout.write(`${result.draft}\n`)
+    return
+  }
+
   const config = loadConfig<CommitOptions, CommitArgv>(argv)
   const key = getApiKeyForModel(config)
   const { provider } = getModelAndProviderFromConfig(config)

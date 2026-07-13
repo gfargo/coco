@@ -1,3 +1,6 @@
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import { Arguments } from 'yargs'
 import { SimpleGit } from 'simple-git'
 import { handler } from './handler'
@@ -179,6 +182,52 @@ describe('changelog command', () => {
     expect(mockHandleResult).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'stdout' })
     )
+  })
+
+  describe('--write (#1600)', () => {
+    let dir: string
+    let filePath: string
+
+    beforeEach(() => {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-changelog-handler-write-'))
+      filePath = path.join(dir, 'CHANGELOG.md')
+    })
+
+    afterEach(() => {
+      fs.rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('writes the generated section into --file', async () => {
+      argv.write = true
+      argv.file = filePath
+
+      await handler(argv, logger)
+
+      const written = fs.readFileSync(filePath, 'utf8')
+      expect(written).toContain('## Mocked changelog title')
+      expect(written).toContain('Mocked changelog content')
+    })
+
+    it('still writes the file when --json is also passed', async () => {
+      argv.write = true
+      argv.file = filePath
+      argv.json = true
+
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((() => true) as never)
+      try {
+        await handler(argv, logger)
+      } finally {
+        writeSpy.mockRestore()
+      }
+
+      const written = fs.readFileSync(filePath, 'utf8')
+      expect(written).toContain('## Mocked changelog title')
+    })
+
+    it('does not touch the file when --write is not passed', async () => {
+      await handler(argv, logger)
+      expect(fs.existsSync(filePath)).toBe(false)
+    })
   })
 
   it('emits JSON null (not colored status text) when there are no commits and --json is passed', async () => {

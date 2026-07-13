@@ -35,6 +35,12 @@ export interface CommitOptions extends BaseCommandOptions {
   noDiff?: boolean
   /** Overrides the configured `language` for this invocation only. */
   language?: string
+  /**
+   * Generate a commit message draft and print it to stdout without
+   * committing. Used by the `prepare-commit-msg` hook installed via
+   * `coco hooks install` (#1591) to fill a plain `git commit`'s message.
+   */
+  printMessage?: boolean
 }
 
 export type CommitArgv = Arguments<CommitOptions>
@@ -144,6 +150,12 @@ export const options = {
   strictSplit: {
     description:
       'Fail loudly if the split planner exhausts its retry budget with an invalid plan (otherwise falls back to a single combined commit).',
+    type: 'boolean',
+    default: false,
+  },
+  printMessage: {
+    description:
+      'Generate a commit message draft and print it to stdout without committing (used by the `coco hooks install` prepare-commit-msg hook).',
     type: 'boolean',
     default: false,
   },

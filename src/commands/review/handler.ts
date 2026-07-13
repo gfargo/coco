@@ -2,6 +2,8 @@ import { LLMModel } from '../../lib/langchain/types'
 import chalk from 'chalk'
 import { z } from 'zod'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
+import { getProviderOverview } from '../../git/providerData'
+import { getForgeActions } from '../../git/forgeActions'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
@@ -49,6 +51,17 @@ function formatFindings(findings: ReviewFeedbackItem[]): string {
     .join('\n\n')
 }
 
+// Plain-markdown rendering for posting to a forge PR/MR comment — no ANSI
+// color codes, since those render as literal escape sequences on GitHub/GitLab.
+function formatFindingsMarkdown(findings: ReviewFeedbackItem[]): string {
+  if (findings.length === 0) {
+    return 'coco review found no issues.'
+  }
+  return findings
+    .map((task) => `- **[${task.severity}] ${task.title}** (${task.category}) — \`${task.filePath}\`\n  ${task.summary}`)
+    .join('\n')
+}
+
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const git = applyRepoFlag(argv)
   const config = loadConfig<ReviewOptions, ReviewArgv>(argv)
@@ -74,7 +87,42 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     }
   }
 
+  // `--pr <n>`: review an existing forge PR/MR instead of local changes.
+  // Resolved once up front so both the diff-fetch (factory) and the
+  // optional `--comment` post-review step share the same forge instance.
+  const forge = argv.pr !== undefined
+    ? await (async () => {
+        const overview = await getProviderOverview(git)
+        const forgeProvider = overview.repository.provider
+        const repoPath =
+          overview.repository.owner && overview.repository.name
+            ? `${overview.repository.owner}/${overview.repository.name}`
+            : undefined
+        return getForgeActions(forgeProvider, {
+          gitlabPath: repoPath,
+          gitlabHost: overview.repository.host,
+          bitbucketPath: repoPath,
+        })
+      })()
+    : undefined
+
   async function factory() {
+    if (argv.pr !== undefined) {
+      logger.verbose(`Fetching diff for PR/MR #${argv.pr}`, { color: 'yellow' })
+
+      const diffResult = await forge!.getPullRequestDiffByNumber(argv.pr)
+      if (!diffResult.ok) {
+        logger.error(diffResult.message, { color: 'red' })
+        commandExit(1)
+      }
+      if (diffResult.lines.length === 0) {
+        logger.log(`No diff found for PR/MR #${argv.pr}. Exiting...`)
+        commandExit(0)
+      }
+
+      return [diffResult.lines.join('\n')]
+    }
+
     if (argv.branch) {
       logger.verbose(`Generating diff for branch: ${argv.branch}`, { color: 'yellow' })
 
@@ -280,7 +328,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
         logger,
         tokenizer,
         metadata: {
-          task: argv.branch ? 'review-branch' : 'review',
+          task: argv.pr !== undefined ? 'review-pr' : argv.branch ? 'review-branch' : 'review',
           command: 'review',
           provider,
           model: String(model),
@@ -310,6 +358,22 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const severityThreshold = Number.isFinite(argv.severity) ? argv.severity : undefined
   const exceedsThreshold =
     severityThreshold !== undefined && findings.some((f) => f.severity >= severityThreshold)
+
+  // `--comment`: post the findings to the PR/MR (requires `--pr`, enforced by
+  // the builder's `.check()`). Findings meeting `--severity` request changes
+  // instead of a plain comment, mirroring the CI-gating semantics above.
+  if (argv.comment && argv.pr !== undefined && forge) {
+    const body = formatFindingsMarkdown(findings)
+    const postResult = exceedsThreshold
+      ? await forge.requestChangesPullRequestByNumber(argv.pr, body)
+      : await forge.commentPullRequestByNumber(argv.pr, body)
+
+    if (postResult.ok) {
+      logger.log(postResult.message, { color: 'green' })
+    } else {
+      logger.error(postResult.message, { color: 'red' })
+    }
+  }
 
   if (argv.json) {
     emitJson(findings)
