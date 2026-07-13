@@ -256,14 +256,22 @@ function fishCompletionArgTriggered(rawArgs: string[]): boolean {
     (rest.includes('--shell') && rest[rest.indexOf('--shell') + 1] === 'fish')
 }
 
+// Escapes backslashes BEFORE quotes — reversing the order would let a
+// description ending in a backslash consume the closing quote's own escape
+// (`foo\` -> `"foo\"` reads as unterminated to fish), breaking out of the
+// quoted string.
+function fishQuoteEscape(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 function generateFishCompletionScript(): string {
   const subcommandLines = FISH_COMPLETION_SUBCOMMANDS
     .map(({ name, desc }) =>
-      `complete -c coco -n "__fish_use_subcommand" -a "${name}" -d "${desc.replace(/"/g, '\\"')}"`
+      `complete -c coco -n "__fish_use_subcommand" -a "${name}" -d "${fishQuoteEscape(desc)}"`
     )
     .join('\n')
   const flagLines = FISH_COMPLETION_GLOBAL_FLAGS
-    .map(({ name, desc }) => `complete -c coco -l ${name} -d "${desc.replace(/"/g, '\\"')}"`)
+    .map(({ name, desc }) => `complete -c coco -l ${name} -d "${fishQuoteEscape(desc)}"`)
     .join('\n')
 
   return `###-begin-coco-completions-###
