@@ -176,6 +176,23 @@ try {
   })
   console.log('✓ packaged init dry run')
 
+  const bashCompletionOutput = runCheck({
+    command: packagedBinPath(prefix),
+    args: ['completion'],
+    label: 'packaged bash completion script',
+    env: { SHELL: '/bin/bash' },
+  })
+  assertOutputIncludes('packaged bash completion script', bashCompletionOutput, '_coco_yargs_completions')
+  console.log('✓ packaged bash completion script')
+
+  const fishCompletionOutput = runCheck({
+    command: packagedBinPath(prefix),
+    args: ['completion', 'fish'],
+    label: 'packaged fish completion script',
+  })
+  assertOutputIncludes('packaged fish completion script', fishCompletionOutput, 'complete -c coco')
+  console.log('✓ packaged fish completion script')
+
   const smokeRepo = createSmokeRepo(tempRoot)
   const logOutput = runCheck({
     command: packagedBinPath(prefix),

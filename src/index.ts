@@ -207,6 +207,87 @@ y.command<PrsOptions>(
   prs.handler
 )
 
+// #1587 — shell completions. yargs generates bash/zsh scripts natively
+// (auto-detected from $SHELL at generation time) and answers
+// `--get-yargs-completions` for live tab-completion in both. Fish has
+// no yargs template, so `coco completion fish` is special-cased below
+// to print a static script covering subcommands + global flags —
+// intercepted before `y.parse()` runs so it can't collide with yargs'
+// own hidden `completion` command.
+y.completion(
+  'completion',
+  'Generate a shell completion script. Auto-detects bash/zsh from $SHELL; run `coco completion fish` for Fish.'
+)
+
+const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
+  { name: firstCommandToken(commit.command), desc: commit.desc },
+  { name: firstCommandToken(amend.command), desc: amend.desc },
+  { name: firstCommandToken(changelog.command), desc: changelog.desc },
+  { name: firstCommandToken(recap.command), desc: recap.desc },
+  { name: firstCommandToken(review.command), desc: review.desc },
+  { name: firstCommandToken(init.command), desc: init.desc },
+  { name: firstCommandToken(doctor.command), desc: doctor.desc },
+  { name: firstCommandToken(log.command), desc: log.desc },
+  { name: firstCommandToken(ui.command), desc: ui.desc },
+  { name: firstCommandToken(workspace.command), desc: workspace.desc },
+  { name: firstCommandToken(cache.command), desc: cache.desc },
+  { name: firstCommandToken(issues.command), desc: issues.desc },
+  { name: firstCommandToken(prCreate.command), desc: prCreate.desc },
+  { name: firstCommandToken(prs.command), desc: prs.desc },
+]
+
+const FISH_COMPLETION_GLOBAL_FLAGS: Array<{ name: string; desc: string }> = [
+  { name: 'repo', desc: 'Target a specific repository directory instead of the current working directory.' },
+  { name: 'verbose', desc: 'Print verbose diagnostic output.' },
+  { name: 'quiet', desc: 'Suppress non-error status output.' },
+  { name: 'json', desc: 'Emit machine-readable JSON to stdout (supported commands only).' },
+  { name: 'help', desc: 'Show help.' },
+]
+
+function firstCommandToken(command: string | readonly string[]): string {
+  const first = Array.isArray(command) ? command[0] : (command as string)
+  return first.split(' ')[0]
+}
+
+function fishCompletionArgTriggered(rawArgs: string[]): boolean {
+  if (rawArgs[0] !== 'completion') return false
+  const rest = rawArgs.slice(1)
+  return rest.includes('fish') || rest.includes('--shell=fish') ||
+    (rest.includes('--shell') && rest[rest.indexOf('--shell') + 1] === 'fish')
+}
+
+// Escapes backslashes BEFORE quotes — reversing the order would let a
+// description ending in a backslash consume the closing quote's own escape
+// (`foo\` -> `"foo\"` reads as unterminated to fish), breaking out of the
+// quoted string.
+function fishQuoteEscape(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function generateFishCompletionScript(): string {
+  const subcommandLines = FISH_COMPLETION_SUBCOMMANDS
+    .map(({ name, desc }) =>
+      `complete -c coco -n "__fish_use_subcommand" -a "${name}" -d "${fishQuoteEscape(desc)}"`
+    )
+    .join('\n')
+  const flagLines = FISH_COMPLETION_GLOBAL_FLAGS
+    .map(({ name, desc }) => `complete -c coco -l ${name} -d "${fishQuoteEscape(desc)}"`)
+    .join('\n')
+
+  return `###-begin-coco-completions-###
+#
+# coco fish completion script
+#
+# Installation: coco completion fish > ~/.config/fish/completions/coco.fish
+#
+# Static subcommand + global-flag completion (no live --get-yargs-completions
+# support, unlike the bash/zsh scripts from \`coco completion\`).
+${subcommandLines}
+${flagLines}
+###-end-coco-completions-###
+`
+}
+
 // `COCO_PREFETCH` hook (#933 phase 3). When set, downloads any
 // requested lazy-load tree-sitter parsers into the user's cache
 // dir before yargs hands control to a subcommand. No-op when
@@ -218,6 +299,17 @@ y.command<PrsOptions>(
 import { runPrefetchFromEnv } from './lib/parsers/default/__tree_sitter__/prefetch'
 
 async function main(): Promise<void> {
+  const rawArgs = process.argv.slice(2)
+
+  // `coco completion fish` short-circuits before yargs ever parses —
+  // yargs' own hidden `completion` command only knows the bash/zsh
+  // templates, so this is handled as a distinct, static code path
+  // rather than fighting yargs for control of its own command.
+  if (fishCompletionArgTriggered(rawArgs)) {
+    process.stdout.write(generateFishCompletionScript())
+    return
+  }
+
   await runPrefetchFromEnv()
   // .strictOptions() rejects unknown option names (e.g. `--interactve` typos)
   // with a clear "Unknown argument" error and non-zero exit. We use
@@ -225,7 +317,7 @@ async function main(): Promise<void> {
   // (e.g. `cache <subcommand>`) are still accepted.
   // --no-<flag> negations of declared booleans are automatically allowed by
   // yargs and are not affected by this setting.
-  y.strictOptions().help().parse(process.argv.slice(2))
+  y.strictOptions().help().parse(rawArgs)
 }
 
 main().catch((error) => {
