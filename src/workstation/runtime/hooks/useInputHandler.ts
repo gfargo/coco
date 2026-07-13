@@ -55,7 +55,7 @@ import type { CocoConfigScope } from '../configFiles'
 import {
     GitCommitDetail,
     GitCommitFilePreview,
-} from '../../../commands/log/data'
+} from '../../../git/logData'
 import { WorktreeFileDiff } from '../../../git/worktreeDiffData'
 import {
     LogInkAction,

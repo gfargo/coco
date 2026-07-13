@@ -81,7 +81,7 @@ import {
   getCommitRows,
   getLogRows,
   getLogRowsAnchoredOn,
-} from '../../../commands/log/data'
+} from '../../../git/logData'
 import { getStashCommitHashes } from '../../../git/stashData'
 import { applyHistoryFetchArgsOverlay } from '../historyRefetchResolver'
 import type { LogInkAction, LogInkState } from '../inkViewModel'

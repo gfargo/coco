@@ -1,7 +1,7 @@
 import { buildSyntheticArgv, decideDefaultRoute, defaultRouteHandler, type DefaultRouteArgv } from './defaultRouter'
 import { createLogArgvFromUiArgv } from './ui/handler'
 import { UiArgv } from './ui/config'
-import { buildLogArgs, getLogView } from './log/data'
+import { buildLogArgs, getLogView } from '../git/logData'
 import { handler as commitHandler } from './commit/handler'
 import { Logger } from '../lib/utils/logger'
 

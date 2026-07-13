@@ -31,7 +31,7 @@ import {
 } from '../chrome/layout'
 import { renderToLines } from './testSupport/renderToLines'
 import type { LogInkComponents, SurfaceRenderContext } from './types'
-import type { GitCommitDetail } from '../../commands/log/data'
+import type { GitCommitDetail } from '../../git/logData'
 
 import { renderBisectSurface } from '../surfaces/bisect/index'
 import { renderBlameSurface, type BlameSurfaceData } from '../surfaces/blame/index'

@@ -14,8 +14,8 @@
 
 import type * as ReactTypes from 'react'
 import { SimpleGit } from 'simple-git'
-import { GitLogRow } from '../../commands/log/data'
-import { startInteractiveLog } from '../../commands/log/interactive'
+import { GitLogRow } from '../../git/logData'
+import { startInteractiveLog } from './interactive'
 import { LogInkView } from './inkViewModel'
 import { LogInkApp } from '../runtime/app'
 import { createLogInkTheme, LogInkThemeConfig } from '../chrome/theme'

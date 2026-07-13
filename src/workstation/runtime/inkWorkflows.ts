@@ -1,5 +1,5 @@
 import { BranchOverview } from '../../git/branchData'
-import { GitLogCommitRow } from '../../commands/log/data'
+import { GitLogCommitRow } from '../../git/logData'
 import { GitOperationOverview } from '../../git/operationData'
 import { ProviderOverview } from '../../git/providerData'
 import { PullRequestOverview } from '../../git/pullRequestData'

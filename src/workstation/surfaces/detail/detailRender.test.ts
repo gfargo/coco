@@ -18,7 +18,7 @@ import {
   type LogInkContextStatus,
 } from '../../chrome/context'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
-import type { GitCommitDetail } from '../../../commands/log/data'
+import type { GitCommitDetail } from '../../../git/logData'
 import { renderToLines } from '../../runtime/testSupport/renderToLines'
 import {
   renderBranchPreviewPanel,

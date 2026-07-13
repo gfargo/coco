@@ -54,7 +54,7 @@ import type { LogInkTheme } from '../../chrome/theme'
 import type {
   GitCommitDetail,
   GitCommitFilePreview,
-} from '../../../commands/log/data'
+} from '../../../git/logData'
 import type { LogInkState } from '../../../workstation/runtime/inkViewModel'
 import { getSelectedInkCommit } from '../../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../../git/providerData'

@@ -1,4 +1,4 @@
-import { getCommitDetail } from '../../../commands/log/data'
+import { getCommitDetail } from '../../../git/logData'
 import {
     useCommitDetailHydration,
     useCommitDetailState,
@@ -15,7 +15,7 @@ import {
  *   - cancellation via the `active` flag suppresses a stale write.
  */
 
-jest.mock('../../../commands/log/data', () => ({
+jest.mock('../../../git/logData', () => ({
   getCommitDetail: jest.fn(),
 }))
 

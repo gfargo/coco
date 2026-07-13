@@ -11,19 +11,14 @@ This README is for contributors. It explains where things live, how a keypress b
 
 ```
 src/
-├── commands/log/             ← Orchestration + log command (transitional home; see "Migration" below)
+├── commands/log/             ← `coco log` the CLI command only — the workstation promotion (#1638) is done
 │   ├── handler.ts            ← `coco log` command entrypoint
-│   ├── data.ts               ← `getLogRows` + `getCommitDetail` + GitLogRow / GitCommitDetail types
+│   ├── config.ts             ← `LogOptions` / yargs option definitions
 │   ├── render.ts             ← stdout formatter for the non-interactive path
-│   ├── interactive.ts        ← non-TTY (CI / pipe) snapshot fallback
-│   ├── inkRuntime.ts         ← Boot shim only: TTY vs non-TTY path, dynamic ESM import of ink/react, mounts `LogInkApp`, installs lifecycle handlers (render layer now lives in `workstation/runtime/` — see Migration)
-│   ├── inkInput.ts           ← Global onKey switch — routes keypresses to view-specific handlers
-│   ├── inkViewModel.ts       ← `LogInkState`, `LogInkAction`, `applyLogInkAction` reducer
-│   ├── inkKeymap.ts          ← Chord prefix model, key bindings, footer hint generation
-│   ├── inkWorkflows.ts       ← Workflow registry — id + kind + handler for every confirmable action
 │   └── commitCompose.ts      ← Compose-surface state slice
 │
 ├── git/                      ← Shared data layer (overview loaders + workstation-shaped actions)
+│   ├── logData.ts            ← `getLogRows` + `getCommitDetail` + GitLogRow / GitCommitDetail types
 │   ├── branchData.ts         ← `getBranchOverview`, BranchRef, BranchOverview
 │   ├── branchActions.ts      ← `checkoutBranch`, `createBranch`, `deleteBranch`, …
 │   ├── pullRequestData.ts    ← `getPullRequestOverview`, PR / status-check types
@@ -52,8 +47,15 @@ src/
 │   └── aiActions.ts          ← Drives AI-generated commit messages / changelogs
 │
 └── workstation/
-    ├── runtime/              ← Render layer + app shell (phase 5 of #890 — promoted out of `commands/log/inkRuntime.ts`)
+    ├── runtime/              ← Render layer + app shell + state/input orchestration, fully promoted out of `commands/log/` (#890, #1638)
     │   ├── app.ts            ← `LogInkApp` component: state, effects, async dispatchers, top-level render tree
+    │   ├── inkRuntime.ts     ← Boot shim: TTY vs non-TTY path, dynamic ESM import of ink/react, mounts `LogInkApp`, installs lifecycle handlers
+    │   ├── inkInput.ts       ← Global onKey switch — routes keypresses to view-specific handlers
+    │   ├── inkViewModel.ts   ← `LogInkState`, `LogInkAction`, `applyLogInkAction` reducer
+    │   ├── inkKeymap.ts      ← Chord prefix model, key bindings, footer hint generation
+    │   ├── inkWorkflows.ts   ← Workflow registry — id + kind + handler for every confirmable action
+    │   ├── interactive.ts    ← Non-TTY (CI / pipe) snapshot fallback renderer
+    │   ├── interactiveState.ts ← State slice backing the snapshot fallback
     │   ├── header.ts         ← Header / breadcrumb renderer
     │   ├── sidebar.ts        ← Repository sidebar (accordion tabs)
     │   ├── mainPanel.ts      ← Main-panel dispatcher → per-view surface (builds the `SurfaceRenderContext` bundle)
@@ -170,10 +172,10 @@ The bisect view (`g B`) is the most recent worked example — see PRs [#868, #88
 
 1. **Data layer** (`src/git/<view>Data.ts`) — write the `getXxxOverview(git)` loader. Keep it pure-shape; no rendering decisions.
 2. **Actions** (`src/git/<view>Actions.ts`, optional) — wrappers around the underlying git commands the view needs to mutate.
-3. **State slice** (`src/commands/log/inkViewModel.ts`) — add the view ID to `LogInkView`, add fields to `LogInkState`, add the load / clear actions to the `LogInkAction` union, handle them in `applyLogInkAction`.
-4. **Keymap** (`src/commands/log/inkKeymap.ts`) — add the chord binding (`g <letter>`) and the per-view footer hint.
-5. **Workflows** (`src/commands/log/inkWorkflows.ts`) — register any palette-reachable workflows (mutations, multi-step flows). Inline keypress handlers don't need a registration.
-6. **Input dispatch** (`src/commands/log/inkInput.ts`) — add the per-view branch in the `onKey` switch.
+3. **State slice** (`src/workstation/runtime/inkViewModel.ts`) — add the view ID to `LogInkView`, add fields to `LogInkState`, add the load / clear actions to the `LogInkAction` union, handle them in `applyLogInkAction`.
+4. **Keymap** (`src/workstation/runtime/inkKeymap.ts`) — add the chord binding (`g <letter>`) and the per-view footer hint.
+5. **Workflows** (`src/workstation/runtime/inkWorkflows.ts`) — register any palette-reachable workflows (mutations, multi-step flows). Inline keypress handlers don't need a registration.
+6. **Input dispatch** (`src/workstation/runtime/inkInput.ts`) — add the per-view branch in the `onKey` switch.
 7. **Render** (`src/workstation/surfaces/<view>/`) — write `renderXxxSurface(ctx: SurfaceRenderContext, …extras)`. The `SurfaceRenderContext` bundle (#1136, defined in `runtime/types.ts`) carries the universal render values — `h`, `components`, `state`, `context`, `contextStatus`, `bodyRows`, `width`, `theme` — so you destructure what you need instead of accepting eight positional props; pass any surface-specific values (diff hunks, spinner frame, loading flags) as your own explicit params after it. Add the `activeView` branch in `workstation/runtime/mainPanel.ts` that calls your surface with the `surface` bundle (the inspector half still wires through `detailPanel.ts` with positional args). Use `chrome/surfaceStates.ts` for empty / loading copy.
 8. **Tests** — at minimum: data parser fixtures, reducer state transitions, a render snapshot of empty / populated / error states.
 
@@ -263,7 +265,7 @@ Scenarios match common workstation states: feature branch ready to PR, dirty wor
 
 - **`src/workstation/`** depends on **`src/git/`** and **`src/lib/`**. Never the other way.
 - **`src/git/`** depends on **`src/lib/`** and other `src/commands/<x>/` modules it integrates with (`commit`, `changelog`, `ui`). It does not depend on `src/workstation/`.
-- **`src/commands/log/`** is the log command. The render layer has already moved to `src/workstation/runtime/` + `surfaces/` (phase 5). The state/orchestration files (`inkInput`, `inkViewModel`, `inkKeymap`, `inkWorkflows`) still live here as a **transitional home** until phases 6–7 of [#890](https://github.com/gfargo/coco/issues/890) move them into `src/workstation/state/`; `inkRuntime` stays as a thin boot shim.
+- **`src/commands/log/`** is the `coco log` CLI command only. The render layer, state/orchestration files (`inkInput`, `inkViewModel`, `inkKeymap`, `inkWorkflows`, `inkRuntime`), and shared data loader (`logData.ts`) have all promoted out (phase 5, #1638) — the former two groups live in `src/workstation/runtime/`, the latter in `src/git/`. Phases 6–7 of [#890](https://github.com/gfargo/coco/issues/890) will further split `inkInput`/`inkViewModel` into per-surface modules under `src/workstation/state/`.
 
 If you find yourself wanting `src/git/` to import from `src/workstation/`, the right move is almost always to push the workstation-specific shaping back into the workstation. The data layer should expose neutral overview types; the workstation decides how to render them.
 
@@ -274,8 +276,9 @@ The current layout reflects an in-flight refactor tracked in [#890](https://gith
 - ✅ **Phase 2** (#891) — pruned dead Inquirer-era branch from `interactive.ts`.
 - ✅ **Phase 3** (#894) — promoted shared git-data layer from `commands/log/` to `src/git/`.
 - ✅ **Phase 4** (#893) — promoted workstation chrome to `src/workstation/chrome/` (this directory). Dropped the `ink*` prefix.
-- ✅ **Phase 5** — split the old ~6k-LOC `inkRuntime.ts` into `workstation/runtime/app.ts` + the chrome renderers (`runtime/{header,sidebar,mainPanel,detailPanel,footer,overlays}.ts`) + per-surface modules under `workstation/surfaces/<view>/`. `commands/log/inkRuntime.ts` is now a ~150-LOC boot shim only.
-- ⏳ **Phase 6** — split `inkInput.ts` (~3,400 LOC) into per-surface key handlers under `workstation/state/input/`.
-- ⏳ **Phase 7** — split `inkViewModel.ts` (~2,600 LOC) into per-surface state slices under `workstation/state/`.
+- ✅ **Phase 5** — split the old ~6k-LOC `inkRuntime.ts` into `workstation/runtime/app.ts` + the chrome renderers (`runtime/{header,sidebar,mainPanel,detailPanel,footer,overlays}.ts`) + per-surface modules under `workstation/surfaces/<view>/`. `inkRuntime.ts` itself, along with the rest of the state/orchestration cluster (`inkInput`, `inkViewModel`, `inkKeymap`, `inkWorkflows`) and the non-TTY snapshot fallback (`interactive.ts` / `interactiveState.ts`), have since promoted into `workstation/runtime/` too — it's now a ~150-LOC boot shim there, not a `commands/log/` resident (#1638).
+- ✅ **#1638** — moved the remaining `commands/log/` residents to their natural homes: `data.ts` → `src/git/logData.ts` (a git data loader, not a command), `interactive.ts` / `interactiveState.ts` → `workstation/runtime/` (they render workstation surfaces). `commands/log/` now holds only the actual CLI command (`handler.ts`, `config.ts`, `render.ts`, `commitCompose.ts`).
+- ⏳ **Phase 6** — split `inkInput.ts` (~4,600 LOC) into per-surface key handlers under `workstation/state/input/`.
+- ⏳ **Phase 7** — split `inkViewModel.ts` (~3,700 LOC) into per-surface state slices under `workstation/state/`.
 
-The render layer (phase 5) has landed under `workstation/runtime/` + `workstation/surfaces/`. What remains in `src/commands/log/` are the four state/orchestration residents still targeted by phases 6–7 — `inkInput`, `inkViewModel`, `inkKeymap`, `inkWorkflows` — plus the thin `inkRuntime` boot shim. Treat those as transitional; new render code belongs under `workstation/`.
+The render layer (phase 5) and the state/orchestration + data-loader promotion (#1638) have both landed under `workstation/runtime/` / `src/git/`. What remains in `src/commands/log/` is just the CLI command itself. Phases 6–7 are the one still-open piece: splitting `inkInput`/`inkViewModel` from single monolithic modules into per-surface ones (they already live in the right directory, just not yet decomposed).

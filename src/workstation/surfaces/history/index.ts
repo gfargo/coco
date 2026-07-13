@@ -37,7 +37,7 @@ import {
 } from '../../chrome/surfaceStates'
 import { cellWidth, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
-import type { GitLogCommitRow } from '../../../commands/log/data'
+import type { GitLogCommitRow } from '../../../git/logData'
 import type {
     LogInkHistoryFetchArgs,
     LogInkState,

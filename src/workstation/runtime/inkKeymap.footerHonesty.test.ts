@@ -21,7 +21,7 @@
  * a one-line reason, mirroring the reviewed-exception pattern in
  * `inkKeymap.collisions.test.ts`.
  */
-import { GitLogRow } from '../../commands/log/data'
+import { GitLogRow } from '../../git/logData'
 import { getLogInkInputEvents, LogInkInputContext, LogInkInputKey } from './inkInput'
 import { getLogInkFooterHints, GetLogInkFooterHintsOptions, LOG_INK_KEY_BINDINGS, LogInkCommandId } from './inkKeymap'
 import {

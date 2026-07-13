@@ -80,7 +80,7 @@ import {
   GitCommitFilePreview,
   GitLogCommitRow,
   getCommitFilePreview,
-} from '../../../commands/log/data'
+} from '../../../git/logData'
 import { getCompareDiff } from '../../../git/compareData'
 import { getStashDiff } from '../../../git/stashData'
 import { WorktreeHunkOverview, getWorktreeHunks } from '../../../git/statusHunks'

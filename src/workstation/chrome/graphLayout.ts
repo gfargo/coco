@@ -60,7 +60,7 @@
  * `to > from` diverges right. Computing the bottom attachment needs one
  * commit of lookahead, so layout runs in two passes.
  */
-import type { GitLogCommitRow } from '../../commands/log/data'
+import type { GitLogCommitRow } from '../../git/logData'
 
 /**
  * One edge in the transition row below a commit. `from` is the column

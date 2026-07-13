@@ -53,7 +53,7 @@ import {
 import { getBisectCompletion } from '../../../git/bisectData'
 import { findStashFileForOffset, type StashDiffFile } from '../../../git/stashData'
 import type { WorktreeFile } from '../../../git/statusData'
-import type { GitLogCommitRow, GitCommitDetail } from '../../../commands/log/data'
+import type { GitLogCommitRow, GitCommitDetail } from '../../../git/logData'
 
 // Element type is derived from `LogInkContext` indexed access so it tracks
 // the real overview shape without re-importing it (mirrors the convention

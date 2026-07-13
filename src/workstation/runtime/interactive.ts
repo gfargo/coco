@@ -1,7 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { LogAiAction, LogAiActionImpact } from '../../git/aiActions'
 import { BranchOverview, BranchRef, getBranchOverview } from '../../git/branchData'
-import { GitCommitDetail, GitLogRow, getCommitDetail } from './data'
+import { GitCommitDetail, GitLogRow, getCommitDetail } from '../../git/logData'
 import { HistoryCommitRef, ReflogEntry, ResetMode } from '../../git/historyActions'
 import { type PullRequestOverview } from '../../git/pullRequestData'
 import { getForgePullRequestOverview } from '../../git/forgeActions'

@@ -1,5 +1,5 @@
 import type ReactTypes from 'react'
-import type { GitLogRow } from '../../../commands/log/data'
+import type { GitLogRow } from '../../../git/logData'
 import { createLogInkState } from '../inkViewModel'
 import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
 import { checkoutBranch, checkoutBranchByName, deleteBranches, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'

@@ -16,7 +16,7 @@
  * printed in the divider. Day-granularity comparison uses the
  * VIEWER's local calendar day on both sides (#1336): commit dates
  * arrive as viewer-local days (`--date=format-local:%Y-%m-%d` in
- * commands/log/data.ts) and `now` is truncated to the viewer's local
+ * git/logData.ts) and `now` is truncated to the viewer's local
  * day, so "Today" always means the user's own today. (`Date.UTC` in
  * the math below is just a timezone-free day-arithmetic device.)
  *

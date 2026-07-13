@@ -1,4 +1,4 @@
-import { LOG_INTERACTIVE_DEFAULT_LIMIT } from '../../commands/log/data'
+import { LOG_INTERACTIVE_DEFAULT_LIMIT } from '../../git/logData'
 import {
   isCursorNearBottom,
   isStaleBootLoadResolve,

@@ -1,4 +1,4 @@
-import { GitCommitDetail, GitLogRow, getCommitRows } from './data'
+import { GitCommitDetail, GitLogRow, getCommitRows } from '../../git/logData'
 import { LogFormat } from './config'
 
 const DEFAULT_TERMINAL_WIDTH = 120

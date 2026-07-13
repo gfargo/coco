@@ -1,4 +1,4 @@
-import { GitLogRow } from './data'
+import { GitLogRow } from '../../git/logData'
 import { applyLogTuiAction, createLogTuiState, getSelectedCommit } from './interactiveState'
 
 const rows: GitLogRow[] = [

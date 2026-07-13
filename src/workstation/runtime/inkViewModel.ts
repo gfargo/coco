@@ -1,4 +1,4 @@
-import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../commands/log/data'
+import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../git/logData'
 import { hashesMatchAny } from '../../git/hashes'
 import type { RebasePlanRow, RebaseTodoAction } from '../../git/rebasePlanActions'
 import type { ConflictRegion } from '../../git/conflictRegionActions'

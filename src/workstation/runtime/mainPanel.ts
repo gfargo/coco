@@ -13,7 +13,7 @@ import type { LogInkLayoutDensity } from '../chrome/layout'
 import type {
   GitCommitDetail,
   GitCommitFilePreview,
-} from '../../commands/log/data'
+} from '../../git/logData'
 import type { WorktreeHunkOverview } from '../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../git/worktreeDiffData'
 import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'

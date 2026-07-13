@@ -1,4 +1,4 @@
-import { GitLogRow } from './data'
+import { GitLogRow } from '../../git/logData'
 import { formatLogJson, formatLogTable } from './render'
 
 const rows: GitLogRow[] = [

@@ -36,7 +36,7 @@ import {
   LOG_INTERACTIVE_DEFAULT_LIMIT,
   getCommitRows,
   getLogRows,
-} from '../../../commands/log/data'
+} from '../../../git/logData'
 import { getStashCommitHashes } from '../../../git/stashData'
 import { resolveHistoryRefetch } from '../historyRefetchResolver'
 import type { LogInkAction, LogInkState } from '../inkViewModel'

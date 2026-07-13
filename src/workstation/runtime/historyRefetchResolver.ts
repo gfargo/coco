@@ -1,5 +1,5 @@
 import type { LogArgv } from '../../commands/log/config'
-import { buildToggleGraphArgs } from '../../commands/log/data'
+import { buildToggleGraphArgs } from '../../git/logData'
 import type { LogInkHistoryFetchArgs } from './inkViewModel'
 
 /**

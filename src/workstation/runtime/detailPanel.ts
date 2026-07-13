@@ -17,7 +17,7 @@ import type * as ReactTypes from 'react'
 import type {
     GitCommitDetail,
     GitCommitFilePreview,
-} from '../../commands/log/data'
+} from '../../git/logData'
 import {
     renderBranchPreviewPanel,
     renderCommitDiffDetail,

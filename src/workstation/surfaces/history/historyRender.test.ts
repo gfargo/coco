@@ -20,7 +20,7 @@ import {
 } from '../../../workstation/runtime/inkViewModel'
 import { createLogInkContextStatus } from '../../chrome/context'
 import { createLogInkTheme } from '../../chrome/theme'
-import type { GitLogRow } from '../../../commands/log/data'
+import type { GitLogRow } from '../../../git/logData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { formatHistoryFetchArgs, renderHistoryPanel } from './index'
 

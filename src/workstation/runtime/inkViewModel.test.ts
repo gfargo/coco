@@ -1,4 +1,4 @@
-import { GitLogRow, getCommitRows } from '../../commands/log/data'
+import { GitLogRow, getCommitRows } from '../../git/logData'
 import {
     DEFAULT_LOG_INK_STATUS_FILTER_MASK,
     applyLogInkAction,

@@ -1,7 +1,7 @@
 import { SimpleGit } from 'simple-git'
-import { extractLfsPatchChange, renderLfsSummary } from '../../git/lfsPointer'
-import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from '../../git/submoduleDiff'
-import { LogArgv, LogView } from './config'
+import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
+import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from './submoduleDiff'
+import { LogArgv, LogView } from '../commands/log/config'
 
 export const FIELD_SEPARATOR = '\x1f'
 // `%P` (parent hashes, space-separated) lets the TUI distinguish
