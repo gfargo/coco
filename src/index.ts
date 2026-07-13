@@ -240,6 +240,7 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(ui.command), desc: ui.desc },
   { name: firstCommandToken(workspace.command), desc: workspace.desc },
   { name: firstCommandToken(cache.command), desc: cache.desc },
+  { name: firstCommandToken(configCmd.command), desc: configCmd.desc },
   { name: firstCommandToken(issues.command), desc: issues.desc },
   { name: firstCommandToken(prCreate.command), desc: prCreate.desc },
   { name: firstCommandToken(prs.command), desc: prs.desc },
