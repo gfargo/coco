@@ -9,6 +9,10 @@ export interface ReviewOptions extends BaseCommandOptions {
   json?: boolean
   staged?: boolean
   severity?: number
+  /** Review an existing forge PR/MR by number instead of local changes. */
+  pr?: number
+  /** Post the findings summary (or request-changes above --severity) to the PR/MR. */
+  comment?: boolean
 }
 
 export type ReviewArgv = Arguments<ReviewOptions>
@@ -63,6 +67,16 @@ export const options = {
     alias: 's',
     description: 'Exit non-zero if any finding has severity >= this threshold (1-10). For CI gating.',
   },
+  pr: {
+    type: 'number',
+    alias: 'mr',
+    description: 'Review a forge pull/merge request by number instead of local changes.',
+  },
+  comment: {
+    type: 'boolean',
+    default: false,
+    description: 'Post the findings to the PR/MR (requires --pr). Findings meeting --severity request changes instead of a plain comment.',
+  },
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
@@ -78,6 +92,13 @@ export const builder = (yargs: Argv) => {
         !(Number.isInteger(severity) && severity >= 1 && severity <= 10)
       ) {
         throw new Error('--severity must be an integer between 1 and 10')
+      }
+      const rawArgv = argv as { pr?: number; comment?: boolean; branch?: string; staged?: boolean }
+      if (rawArgv.comment && rawArgv.pr === undefined) {
+        throw new Error('--comment requires --pr <number>.')
+      }
+      if (rawArgv.pr !== undefined && (rawArgv.branch || rawArgv.staged)) {
+        throw new Error('--pr cannot be combined with --branch or --staged.')
       }
       return true
     })

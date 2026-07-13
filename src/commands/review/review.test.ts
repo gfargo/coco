@@ -15,6 +15,8 @@ import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { Logger } from '../../lib/utils/logger'
 import { TaskList } from '../../lib/ui/TaskList'
+import { getProviderOverview } from '../../git/providerData'
+import { getForgeActions } from '../../git/forgeActions'
 
 jest.mock('../../lib/simple-git/getRepo')
 jest.mock('../../lib/simple-git/getChanges')
@@ -29,6 +31,8 @@ jest.mock('../../lib/config/utils/loadConfig')
 jest.mock('../../lib/langchain/utils')
 jest.mock('../../lib/langchain/utils/getLlm')
 jest.mock('../../lib/utils/tokenizer')
+jest.mock('../../git/providerData')
+jest.mock('../../git/forgeActions')
 jest.mock('../../lib/ui/generateAndReviewLoop', () => ({
   generateAndReviewLoop: jest.fn().mockImplementation(async ({ factory, parser, agent, noResult, options }) => {
     const changes = await factory()
@@ -62,6 +66,8 @@ const mockGetLlm = getLlm as jest.MockedFunction<typeof getLlm>
 const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.MockedFunction<
   typeof getTokenCounterForProvider
 >
+const mockGetProviderOverview = getProviderOverview as jest.MockedFunction<typeof getProviderOverview>
+const mockGetForgeActions = getForgeActions as jest.MockedFunction<typeof getForgeActions>
 const MockTaskList = TaskList as unknown as jest.Mock
 
 describe('review command', () => {
@@ -299,6 +305,78 @@ describe('review command', () => {
         expect.anything()
       )
       expect(mockTaskListStart).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('--pr / --comment (#1596)', () => {
+    const mockGetPullRequestDiffByNumber = jest.fn()
+    const mockCommentPullRequestByNumber = jest.fn()
+    const mockRequestChangesPullRequestByNumber = jest.fn()
+
+    beforeEach(() => {
+      argv.json = true
+
+      mockGetProviderOverview.mockResolvedValue({
+        repository: { provider: 'github', remote: 'origin', owner: 'acme', name: 'widgets' },
+        authenticated: true,
+      } as unknown as Awaited<ReturnType<typeof getProviderOverview>>)
+
+      mockGetForgeActions.mockReturnValue({
+        getPullRequestDiffByNumber: mockGetPullRequestDiffByNumber,
+        commentPullRequestByNumber: mockCommentPullRequestByNumber,
+        requestChangesPullRequestByNumber: mockRequestChangesPullRequestByNumber,
+      } as unknown as ReturnType<typeof getForgeActions>)
+
+      mockGetPullRequestDiffByNumber.mockResolvedValue({
+        ok: true,
+        lines: ['diff --git a/file.ts b/file.ts', '+added line'],
+      })
+      mockCommentPullRequestByNumber.mockResolvedValue({ ok: true, message: 'Comment posted.' })
+      mockRequestChangesPullRequestByNumber.mockResolvedValue({ ok: true, message: 'Changes requested.' })
+    })
+
+    it('sources the review context from the PR diff instead of local changes', async () => {
+      argv.pr = 42
+
+      await handler(argv, logger)
+
+      expect(mockGetForgeActions).toHaveBeenCalledWith('github', expect.objectContaining({ gitlabPath: 'acme/widgets' }))
+      expect(mockGetPullRequestDiffByNumber).toHaveBeenCalledWith(42)
+      expect(mockGetChanges).not.toHaveBeenCalled()
+      expect(mockGetDiffForBranch).not.toHaveBeenCalled()
+
+      const variables = mockExecuteChain.mock.calls[0][0].variables as Record<string, string>
+      expect(variables.changes).toContain('+added line')
+    })
+
+    it('exits with the diff-fetch error when the PR diff cannot be retrieved', async () => {
+      argv.pr = 42
+      mockGetPullRequestDiffByNumber.mockResolvedValue({ ok: false, message: 'PR #42 not found.' })
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      expect(logger.error).toHaveBeenCalledWith('PR #42 not found.', { color: 'red' })
+    })
+
+    it('posts a plain comment when findings stay below --severity', async () => {
+      argv.pr = 42
+      argv.comment = true
+      argv.severity = 8 // finding severity is 5 → below threshold
+
+      await handler(argv, logger)
+
+      expect(mockCommentPullRequestByNumber).toHaveBeenCalledWith(42, expect.stringContaining('Review finding'))
+      expect(mockRequestChangesPullRequestByNumber).not.toHaveBeenCalled()
+    })
+
+    it('requests changes instead of commenting when findings meet --severity', async () => {
+      argv.pr = 42
+      argv.comment = true
+      argv.severity = 4 // finding severity is 5 → meets threshold
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+
+      expect(mockRequestChangesPullRequestByNumber).toHaveBeenCalledWith(42, expect.stringContaining('Review finding'))
+      expect(mockCommentPullRequestByNumber).not.toHaveBeenCalled()
     })
   })
 })
