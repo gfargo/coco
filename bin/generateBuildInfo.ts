@@ -24,6 +24,11 @@ async function generateBuildInfo(): Promise<void> {
  * Current build version from package.json
  */
 export const BUILD_VERSION = ${JSON.stringify(process.env.npm_package_version)}
+
+/**
+ * Package name from package.json
+ */
+export const BUILD_PACKAGE_NAME = ${JSON.stringify(process.env.npm_package_name)}
 `
 
     fs.writeFileSync(tsPath, tsContent)

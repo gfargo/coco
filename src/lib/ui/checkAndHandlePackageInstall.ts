@@ -1,11 +1,11 @@
+import { BUILD_PACKAGE_NAME } from '../buildInfo'
 import { findProjectRoot } from '../utils/findProjectRoot'
 import { installNpmPackage } from '../utils/installPackage'
 import { isPackageInstalled } from '../utils/isPackageInstalled'
 import { Logger } from '../utils/logger'
 import { confirmPrompt } from './inquirerPrompts'
 
-// TODO: QoL improvement to import this from `package.json`
-const packageName = 'git-coco'
+const packageName = BUILD_PACKAGE_NAME
 
 type CheckAndHandlePackageInstallationInput = {
   global?: boolean

@@ -11,7 +11,6 @@ import { PromptTemplate } from '@langchain/core/prompts'
  * - Add guidance for preserving semantic meaning of changes
  * - Consider change type (added/modified/deleted) in prompt for better context
  * - Include hints about the programming language for more idiomatic summaries
- * - Add support for custom user-provided summarization prompts via config
  */
 const template = `GOAL: Use functional abstractions to summarize the following text
 

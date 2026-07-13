@@ -123,8 +123,11 @@ type BaseConfig = {
     dateBucketing?: boolean
 
     /**
-     * Syntax-highlight code in the diff view using tree-sitter
-     * (TypeScript / TSX / JavaScript today). On by default. Highlighting
+     * Syntax-highlight code in the diff view using tree-sitter. Built-in
+     * languages (TypeScript / TSX / JavaScript) highlight immediately;
+     * others lazy-download their grammar on first use — see
+     * `TREE_SITTER_MANIFEST` (src/lib/parsers/default/__tree_sitter__/manifest.ts)
+     * for the current supported-language list. On by default. Highlighting
      * degrades gracefully — unsupported languages, non-ASCII lines, and
      * parse failures fall back to the plain add/remove coloring — so the
      * only reason to disable it is preference or a very low-color
