@@ -18,6 +18,10 @@ import {
 import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
 import { COMMIT_PROMPT } from '../commit/prompt'
 import { InstallationScope } from './config'
+import { OPENAI_COMPATIBLE_PRESETS, OpenAiCompatiblePreset } from './openAiCompatiblePresets'
+
+/** Sentinel returned by `selectLLMProvider` for the compat-endpoint branch. */
+export const OPENAI_COMPATIBLE_SENTINEL = 'openai-compatible' as const
 
 /**
  * Resolve the list of locally-available Ollama models for the init picker,
@@ -102,8 +106,8 @@ export const questions = {
         },
       ],
     }),
-  selectLLMProvider: async (): Promise<LLMProvider> =>
-    await selectPrompt<LLMProvider>({
+  selectLLMProvider: async (): Promise<LLMProvider | typeof OPENAI_COMPATIBLE_SENTINEL> =>
+    await selectPrompt<LLMProvider | typeof OPENAI_COMPATIBLE_SENTINEL>({
       message: 'select language model provider:',
       choices: [
         {
@@ -140,10 +144,52 @@ export const questions = {
           name: 'AWS Bedrock',
           value: 'bedrock',
           description: 'AWS Bedrock (uses the AWS credential chain)',
-        }
+        },
+        {
+          name: 'OpenAI-compatible endpoint',
+          value: OPENAI_COMPATIBLE_SENTINEL,
+          description: 'OpenRouter, Groq, LM Studio, vLLM, or any other OpenAI-compatible API',
+        },
       ],
       default: 'ollama',
     }),
+
+  selectOpenAiCompatiblePreset: async (): Promise<OpenAiCompatiblePreset> => {
+    const presetId = await selectPrompt<OpenAiCompatiblePreset['id']>({
+      message: 'select OpenAI-compatible endpoint:',
+      choices: OPENAI_COMPATIBLE_PRESETS.map((preset) => ({
+        name: preset.label,
+        value: preset.id,
+        description: preset.baseURL ? preset.baseURL : 'you provide the base URL',
+      })),
+    })
+    const preset = OPENAI_COMPATIBLE_PRESETS.find((p) => p.id === presetId)
+    if (!preset) {
+      throw new Error(`selectOpenAiCompatiblePreset: unknown preset id '${presetId}'`)
+    }
+
+    if (preset.baseURL) {
+      return preset
+    }
+
+    // vLLM / custom: no fixed endpoint, ask for one.
+    const baseURL = await inputPrompt({
+      message: `${preset.label} base URL (e.g. http://localhost:8000/v1):`,
+      validate(input) {
+        return input.trim().length > 0 ? true : 'Base URL cannot be empty'
+      },
+    })
+
+    return { ...preset, baseURL: baseURL.trim() }
+  },
+
+  inputOpenAiCompatibleModel: async (): Promise<LLMModel> =>
+    (await inputPrompt({
+      message: 'model id (e.g. meta-llama/llama-3.3-70b-instruct):',
+      validate(input) {
+        return input.trim().length > 0 ? true : 'Model id cannot be empty'
+      },
+    })) as LLMModel,
 
   selectLLMModel: async (provider: LLMProvider): Promise<LLMModel> => {
     let availableModels = [] as { name: string; value: LLMModel }[]
@@ -264,6 +310,33 @@ export const questions = {
         return input.length > 0 ? true : 'API key cannot be empty';
       },
     });
+  },
+
+  /**
+   * Same as `inputApiKey`, but empty is a valid answer — for
+   * self-hosted/local OpenAI-compatible endpoints (LM Studio, vLLM, custom)
+   * that typically don't enforce a real key.
+   */
+  inputOptionalApiKey: async (
+    keyName: string,
+    envVarName: string
+  ): Promise<string> => {
+    const envVarValue = process.env[envVarName]
+
+    if (envVarValue) {
+      const useExisting = await confirmPrompt({
+        message: `Use existing ${envVarName} env var?`,
+        default: true,
+      })
+
+      if (useExisting) {
+        return envVarValue
+      }
+    }
+
+    return await passwordPrompt({
+      message: `Enter your ${keyName} API key (optional — leave blank if this endpoint doesn't require one):`,
+    })
   },
 
   inputTokenLimit: async (): Promise<number> => {
