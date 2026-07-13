@@ -3,9 +3,7 @@ import {
     DEFAULT_LOG_INK_STATUS_FILTER_MASK,
     applyLogInkAction,
     createLogInkState,
-    filterThemePresets,
     getActiveLogInkRepoFrame,
-    getThemePickerSelection,
     getLogInkRepoStackLabels,
     getLogInkSidebarTabs,
     getSelectedInkCommit,
@@ -2867,14 +2865,12 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
     })
   })
 
+  // Pure theme-picker filter/cursor logic now lives in
+  // `themePicker.test.ts` alongside its extracted slice (#1630 first
+  // slice). This composition-root test stays here because it's the
+  // overlay-exclusivity behavior `applyLogInkAction` layers on top of
+  // the slice, not something the slice module itself owns.
   describe('theme picker', () => {
-    it('starts closed with a clean filter/cursor', () => {
-      const state = createLogInkState(rows)
-      expect(state.showThemePicker).toBe(false)
-      expect(state.themePickerFilter).toBe('')
-      expect(state.themePickerIndex).toBe(0)
-    })
-
     it('toggleThemePicker opens/closes and closes other overlays', () => {
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, { type: 'toggleHelp' })
@@ -2885,66 +2881,6 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
 
       state = applyLogInkAction(state, { type: 'toggleThemePicker' })
       expect(state.showThemePicker).toBe(false)
-    })
-
-    it('fuzzy-filters presets case-insensitively', () => {
-      expect(filterThemePresets('')).toContain('catppuccin')
-      // Exact substring still matches…
-      expect(filterThemePresets('TOKYO')).toContain('tokyo-night')
-      // …and a non-contiguous subsequence matches too.
-      const gl = filterThemePresets('gl')
-      expect(gl).toContain('gruvbox-light')
-      expect(gl).toContain('github-light')
-      // Nonsense query that can't appear as a subsequence → no matches.
-      expect(filterThemePresets('definitely-not-a-theme')).toHaveLength(0)
-    })
-
-    it('ranks the best fuzzy match first', () => {
-      // Exact preset id outranks the longer one that merely contains it.
-      const gruvbox = filterThemePresets('gruvbox')
-      expect(gruvbox[0]).toBe('gruvbox')
-      expect(gruvbox).toContain('gruvbox-light')
-      // Word-segment matches (after `-`) rank ahead of incidental ones.
-      const cm = filterThemePresets('cm')
-      expect(cm[0]).toBe('catppuccin-macchiato')
-    })
-
-    it('moveThemePicker clamps the cursor to the filtered list', () => {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'toggleThemePicker' })
-      const count = filterThemePresets('').length
-
-      state = applyLogInkAction(state, { type: 'moveThemePicker', delta: -1, presetCount: count })
-      expect(state.themePickerIndex).toBe(0) // clamped at the top
-
-      state = applyLogInkAction(state, { type: 'moveThemePicker', delta: 999, presetCount: count })
-      expect(state.themePickerIndex).toBe(count - 1) // clamped at the bottom
-    })
-
-    it('typing into the filter resets the cursor and getThemePickerSelection follows it', () => {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'toggleThemePicker' })
-      state = applyLogInkAction(state, { type: 'moveThemePicker', delta: 3, presetCount: 50 })
-      expect(state.themePickerIndex).toBe(3)
-
-      state = applyLogInkAction(state, { type: 'appendThemePickerFilter', value: 'gruvbox' })
-      expect(state.themePickerFilter).toBe('gruvbox')
-      expect(state.themePickerIndex).toBe(0)
-      expect(getThemePickerSelection(state)).toBe('gruvbox')
-
-      state = applyLogInkAction(state, { type: 'backspaceThemePickerFilter' })
-      expect(state.themePickerFilter).toBe('gruvbo')
-
-      state = applyLogInkAction(state, { type: 'clearThemePickerFilter' })
-      expect(state.themePickerFilter).toBe('')
-      expect(state.themePickerIndex).toBe(0)
-    })
-
-    it('getThemePickerSelection is undefined when nothing matches', () => {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'toggleThemePicker' })
-      state = applyLogInkAction(state, { type: 'appendThemePickerFilter', value: 'zzzzz' })
-      expect(getThemePickerSelection(state)).toBeUndefined()
     })
   })
 })
