@@ -13,6 +13,13 @@ import { getDiff } from './getDiff'
 import { Logger } from '../utils/logger'
 import { FileChange } from '../types'
 
+// `createTempGitRepo()` spawns several real git subprocesses (init +
+// 3x addConfig + checkout) per test. The default 5s jest hook timeout can
+// be too tight under parallel test-runner load — sibling real-git-repo
+// suites (isEmptyRepo.test.ts, logData.test.ts, reflogActions.integration.test.ts)
+// already raise this for the same reason.
+jest.setTimeout(30_000)
+
 function createLogger(): Logger {
   return {
     log: jest.fn(),

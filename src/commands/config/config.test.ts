@@ -48,11 +48,22 @@ function createArgv(overrides: Partial<ConfigOptions> = {}): ConfigArgv {
 describe('config command (#1605)', () => {
   let projectDir: string
   let xdgDir: string
+  let fakeHomeDir: string
   let logger: Logger
+  let homedirSpy: jest.SpyInstance
 
   beforeEach(() => {
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-config-cmd-project-'))
     xdgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-config-cmd-xdg-'))
+    // `loadGitConfig` reads `~/.gitconfig` straight off `os.homedir()` with
+    // no env-var override, unlike the XDG loader. Left unmocked, these
+    // tests read the REAL developer machine's `~/.gitconfig` — a `[coco]`
+    // section set by a prior `coco init` run (e.g. `defaultBranch`) makes
+    // "source: default" assertions fail only on that machine, not in a
+    // clean sandbox. Point homedir at an empty temp dir so the git layer
+    // never contributes here.
+    fakeHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-config-cmd-home-'))
+    homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(fakeHomeDir)
     mockResolveGitRepoRoot.mockReturnValue(projectDir)
     process.env.XDG_CONFIG_HOME = xdgDir
     logger = createLogger()
@@ -61,6 +72,8 @@ describe('config command (#1605)', () => {
   afterEach(() => {
     fs.rmSync(projectDir, { recursive: true, force: true })
     fs.rmSync(xdgDir, { recursive: true, force: true })
+    fs.rmSync(fakeHomeDir, { recursive: true, force: true })
+    homedirSpy.mockRestore()
     if (ORIGINAL_XDG_CONFIG_HOME === undefined) {
       delete process.env.XDG_CONFIG_HOME
     } else {

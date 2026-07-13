@@ -125,6 +125,45 @@ describe('loadEnvConfig', () => {
   })
 
   describe('provider API keys from the environment', () => {
+    // Every provider-key env var this suite touches. A test that only sets
+    // (and restores) the one var it's exercising still reads through to
+    // whichever of these are ALREADY set in the ambient shell — e.g. a
+    // developer's real OPENAI_API_KEY, which outranks the deprecated
+    // OPEN_AI_KEY alias per #1584's own precedence. That leaked a real key
+    // into a test assertion (and into CI/release output) on any machine
+    // that had one exported. Stash and clear the full set before each test,
+    // restore it after, so these tests are hermetic regardless of the
+    // ambient environment.
+    const PROVIDER_KEY_ENV_VARS = [
+      'OPEN_AI_KEY',
+      'OPENAI_API_KEY',
+      'ANTHROPIC_API_KEY',
+      'GEMINI_API_KEY',
+      'GOOGLE_API_KEY',
+      'MISTRAL_API_KEY',
+      'AZURE_OPENAI_API_KEY',
+    ] as const
+
+    let savedEnv: Record<string, string | undefined>
+
+    beforeEach(() => {
+      savedEnv = {}
+      for (const key of PROVIDER_KEY_ENV_VARS) {
+        savedEnv[key] = process.env[key]
+        delete process.env[key]
+      }
+    })
+
+    afterEach(() => {
+      for (const key of PROVIDER_KEY_ENV_VARS) {
+        if (savedEnv[key] === undefined) {
+          delete process.env[key]
+        } else {
+          process.env[key] = savedEnv[key]
+        }
+      }
+    })
+
     // Regression for the toEnvVarName mangling bug: these env-var-form names
     // (OPEN_AI_KEY, GEMINI_API_KEY, ...) must be read verbatim, not rewritten
     // to COCO__O_P_E_N__A_I__K_E_Y. Each key only applies to its provider.
@@ -143,67 +182,50 @@ describe('loadEnvConfig', () => {
 
     it.each(cases)('reads $envVar into the $provider service auth', ({ provider, envVar }) => {
       process.env[envVar] = 'env-provided-key'
-      try {
-        const config = loadEnvConfig({
-          ...defaultConfig,
-          service: getDefaultServiceConfigFromAlias(provider),
-        })
-        expect(config.service.provider).toBe(provider)
-        expect(config.service.authentication.type).toBe('APIKey')
-        if (config.service.authentication.type === 'APIKey') {
-          expect(config.service.authentication.credentials?.apiKey).toBe('env-provided-key')
-        }
-      } finally {
-        delete process.env[envVar]
+      const config = loadEnvConfig({
+        ...defaultConfig,
+        service: getDefaultServiceConfigFromAlias(provider),
+      })
+      expect(config.service.provider).toBe(provider)
+      expect(config.service.authentication.type).toBe('APIKey')
+      if (config.service.authentication.type === 'APIKey') {
+        expect(config.service.authentication.credentials?.apiKey).toBe('env-provided-key')
       }
     })
 
     it('ignores a provider key when the configured provider differs', () => {
       process.env.GEMINI_API_KEY = 'gemini-key'
-      try {
-        const config = loadEnvConfig({
-          ...defaultConfig,
-          service: getDefaultServiceConfigFromAlias('openai'),
-        })
-        // openai service shouldn't pick up the gemini key
-        if (config.service.authentication.type === 'APIKey') {
-          expect(config.service.authentication.credentials?.apiKey).not.toBe('gemini-key')
-        }
-      } finally {
-        delete process.env.GEMINI_API_KEY
+      const config = loadEnvConfig({
+        ...defaultConfig,
+        service: getDefaultServiceConfigFromAlias('openai'),
+      })
+      // openai service shouldn't pick up the gemini key
+      if (config.service.authentication.type === 'APIKey') {
+        expect(config.service.authentication.credentials?.apiKey).not.toBe('gemini-key')
       }
     })
 
     it('ignores ANTHROPIC_API_KEY when the configured provider is not anthropic (#1584)', () => {
       process.env.ANTHROPIC_API_KEY = 'anthropic-key'
-      try {
-        const config = loadEnvConfig({
-          ...defaultConfig,
-          service: getDefaultServiceConfigFromAlias('openai'),
-        })
-        if (config.service.authentication.type === 'APIKey') {
-          expect(config.service.authentication.credentials?.apiKey).not.toBe('anthropic-key')
-        }
-      } finally {
-        delete process.env.ANTHROPIC_API_KEY
+      const config = loadEnvConfig({
+        ...defaultConfig,
+        service: getDefaultServiceConfigFromAlias('openai'),
+      })
+      if (config.service.authentication.type === 'APIKey') {
+        expect(config.service.authentication.credentials?.apiKey).not.toBe('anthropic-key')
       }
     })
 
     it('prefers OPENAI_API_KEY over the deprecated OPEN_AI_KEY alias when both are set (#1584)', () => {
       process.env.OPEN_AI_KEY = 'legacy-key'
       process.env.OPENAI_API_KEY = 'standard-key'
-      try {
-        const config = loadEnvConfig({
-          ...defaultConfig,
-          service: getDefaultServiceConfigFromAlias('openai'),
-        })
-        expect(config.service.authentication.type).toBe('APIKey')
-        if (config.service.authentication.type === 'APIKey') {
-          expect(config.service.authentication.credentials?.apiKey).toBe('standard-key')
-        }
-      } finally {
-        delete process.env.OPEN_AI_KEY
-        delete process.env.OPENAI_API_KEY
+      const config = loadEnvConfig({
+        ...defaultConfig,
+        service: getDefaultServiceConfigFromAlias('openai'),
+      })
+      expect(config.service.authentication.type).toBe('APIKey')
+      if (config.service.authentication.type === 'APIKey') {
+        expect(config.service.authentication.credentials?.apiKey).toBe('standard-key')
       }
     })
   })
