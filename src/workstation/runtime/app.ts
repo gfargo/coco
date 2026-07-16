@@ -450,6 +450,14 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     historyRefetchGenerationRef,
   })
 
+  // Render-fresh snapshot of `state` for `refreshContext`'s rectification
+  // step (OSS-1001 / #1671) — read at refresh-completion time via the ref
+  // rather than closing over `state` directly, so `refreshContext` keeps
+  // its stable identity (it feeds `useRefreshWatcher`'s effect deps below;
+  // re-memoizing it every keystroke would re-subscribe the fs watcher).
+  const stateRef = React.useRef(state)
+  stateRef.current = state
+
   // Context refresh callbacks (#1418 app.ts decomposition). Owns
   // `refreshContext` and `refreshWorktreeContext` — the two async callbacks
   // that re-fetch git metadata. Also owns the per-frame monotonic
@@ -459,6 +467,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     runtimesLength: runtimes.length,
     worktree: context.worktree,
     dispatch,
+    stateRef,
     setContext,
     setContextStatus,
     setPrDiffRefreshToken,
