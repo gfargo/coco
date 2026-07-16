@@ -83,11 +83,18 @@ export const builder = (yargs: Argv) => {
       // value (`coco recap --tag v1.0.0`) used to silently drop it as a
       // stray positional and recap since the *latest* tag instead (#1613).
       // Reject up front so the value is never silently discarded.
+      //
+      // When this command is registered via `yargs.command()` (as it is in
+      // production), yargs leaves the command token itself ('recap') at the
+      // front of argv._, so it must be excluded before counting stray
+      // positionals — otherwise every `--tag`/`--last-tag` invocation trips
+      // this guard, even with no value attached (#1668).
       const rawArgv = argv as { tag?: boolean; 'last-tag'?: boolean; _: (string | number)[] }
       const tagRequested = Boolean(rawArgv.tag ?? rawArgv['last-tag'])
-      if (tagRequested && rawArgv._.length > 0) {
+      const positionals = rawArgv._.filter((value, index) => !(index === 0 && value === command))
+      if (tagRequested && positionals.length > 0) {
         throw new Error(
-          `--tag on recap takes no value (it means "since the last tag") — unexpected argument '${rawArgv._[0]}'. Did you mean 'coco changelog --tag ${rawArgv._[0]}'?`
+          `--tag on recap takes no value (it means "since the last tag") — unexpected argument '${positionals[0]}'. Did you mean 'coco changelog --tag ${positionals[0]}'?`
         )
       }
       return true

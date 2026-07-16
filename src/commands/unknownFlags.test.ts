@@ -20,7 +20,7 @@ import { builder as issuesBuilder } from './issues/config'
 import { builder as logBuilder } from './log/config'
 import { builder as prCreateBuilder, command as prCreateCommand } from './prCreate/config'
 import { builder as prsBuilder } from './prs/config'
-import { builder as recapBuilder } from './recap/config'
+import { builder as recapBuilder, command as recapCommand } from './recap/config'
 import { builder as reviewBuilder } from './review/config'
 import { builder as uiBuilder } from './ui/config'
 import { builder as workspaceBuilder } from './workspace/config'
@@ -370,5 +370,76 @@ describe('recap --tag rejects a discarded value (#1613)', () => {
     // stays whatever behavior strictOptions() already gives it (allowed).
     const { failMessage } = parseWithStrict(recapBuilder, ['some-stray-arg'])
     expect(failMessage).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// `recap --tag` / `--last-tag` with the command registered via
+// `yargs.command()` (#1668)
+//
+// yargs leaves the command token ('recap') at the front of argv._ when the
+// command is registered this way — unlike the bare-builder `parseWithStrict`
+// harness above, where `_` has no command token. The #1613 `.check()` counted
+// `argv._.length` directly, so it always saw a stray positional (the command
+// token itself) and rejected every `--tag`/`--last-tag` invocation, even with
+// no value attached. These tests register the real command string, like
+// src/index.ts does, to catch that regression.
+// ---------------------------------------------------------------------------
+
+describe('recap <command-registered> --tag / --last-tag (#1668)', () => {
+  function parseRecapCommand(args: string[]): { failMessage: string | null; handlerCalled: boolean } {
+    let failMessage: string | null = null
+    let handlerCalled = false
+
+    const y = yargs()
+    y.option('repo', { type: 'string', alias: 'cwd', global: true })
+    y.option('verbose', { type: 'boolean', alias: 'v', global: true })
+    y.option('quiet', { type: 'boolean', alias: 'q', global: true })
+    y.option('json', { type: 'boolean', global: true })
+
+    y.command(recapCommand, 'Recap description', recapBuilder, () => {
+      handlerCalled = true
+    })
+
+    try {
+      y.strictOptions()
+        .fail((msg) => {
+          failMessage = msg
+          throw new Error(msg || 'fail')
+        })
+        .exitProcess(false)
+        .parse(args)
+    } catch {
+      // Expected for the rejection cases; failMessage already captured.
+    }
+
+    return { failMessage, handlerCalled }
+  }
+
+  it('accepts `recap --last-tag` and invokes the handler', () => {
+    const { failMessage, handlerCalled } = parseRecapCommand(['recap', '--last-tag'])
+    expect(failMessage).toBeNull()
+    expect(handlerCalled).toBe(true)
+  })
+
+  it('accepts `recap --tag` and invokes the handler', () => {
+    const { failMessage, handlerCalled } = parseRecapCommand(['recap', '--tag'])
+    expect(failMessage).toBeNull()
+    expect(handlerCalled).toBe(true)
+  })
+
+  it('rejects `recap --tag v1.0.0`, naming the discarded value (not the command token)', () => {
+    const { failMessage, handlerCalled } = parseRecapCommand(['recap', '--tag', 'v1.0.0'])
+    expect(failMessage).toMatch(/--tag on recap takes no value/)
+    expect(failMessage).toMatch(/v1\.0\.0/)
+    expect(failMessage).not.toMatch(/'recap'/)
+    expect(handlerCalled).toBe(false)
+  })
+
+  it('rejects `recap --last-tag v1.0.0` the same way', () => {
+    const { failMessage, handlerCalled } = parseRecapCommand(['recap', '--last-tag', 'v1.0.0'])
+    expect(failMessage).toMatch(/--tag on recap takes no value/)
+    expect(failMessage).toMatch(/v1\.0\.0/)
+    expect(handlerCalled).toBe(false)
   })
 })
