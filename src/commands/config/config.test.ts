@@ -193,6 +193,48 @@ describe('config command (#1605)', () => {
     expect(loggedLines.some((line) => line.includes('•••'))).toBe(true)
   })
 
+  it('masks Bedrock static credentials instead of printing them in plain text', async () => {
+    // Mirrors the apiKey test above: `provider` must be set first so the
+    // XDG loader's parseServiceConfig reconstructs the bedrock `service`
+    // block (xdg.ts's bedrock case) that `get`/`list` read through.
+    await handler(
+      createArgv({ action: 'set', key: 'service.provider', value: 'bedrock', scope: 'global' }),
+      logger
+    )
+    await handler(
+      createArgv({ action: 'set', key: 'service.secretAccessKey', value: 'wJalrXUtnFEMI-secret', scope: 'global' }),
+      logger
+    )
+    await handler(
+      createArgv({ action: 'set', key: 'service.sessionToken', value: 'session-token-secret', scope: 'global' }),
+      logger
+    )
+
+    await handler(createArgv({ action: 'get', key: 'service.secretAccessKey' }), logger)
+    await handler(createArgv({ action: 'get', key: 'service.sessionToken' }), logger)
+
+    const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
+    expect(loggedLines.some((line) => line.includes('wJalrXUtnFEMI-secret'))).toBe(false)
+    expect(loggedLines.some((line) => line.includes('session-token-secret'))).toBe(false)
+    expect(loggedLines.filter((line) => line.includes('•••')).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('list masks Bedrock secrets in the flattened effective config', async () => {
+    await handler(
+      createArgv({ action: 'set', key: 'service.provider', value: 'bedrock', scope: 'global' }),
+      logger
+    )
+    await handler(
+      createArgv({ action: 'set', key: 'service.secretAccessKey', value: 'wJalrXUtnFEMI-secret', scope: 'global' }),
+      logger
+    )
+    await handler(createArgv({ action: 'list' }), logger)
+
+    const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
+    expect(loggedLines.some((line) => line.includes('wJalrXUtnFEMI-secret'))).toBe(false)
+    expect(loggedLines.some((line) => line.includes('service.secretAccessKey') && line.includes('•••'))).toBe(true)
+  })
+
   it('list --scope project prints only that scope\'s raw contents', async () => {
     await handler(createArgv({ action: 'set', key: 'defaultBranch', value: 'develop', scope: 'project' }), logger)
     await handler(createArgv({ action: 'list', scope: 'project' }), logger)
