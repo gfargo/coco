@@ -52,7 +52,12 @@ describeWithWasm('treeSitterTsParser (.wasm-backed)', () => {
     expect(out).toContain('Updated TypeScript `src/p.ts`')
     expect(out).toContain('parseRequest()')
     expect(out).toContain('legacyParse()')
-  })
+    // This is the first test in the suite that actually reaches
+    // `getTreeSitterParser` (the .md/.rs cases above short-circuit
+    // before touching the runtime), so it pays the one-time WASM
+    // cold-init cost. That's occasionally >5s on a loaded macOS CI
+    // runner — bump this test's timeout rather than the suite's.
+  }, 20000)
 
   it('classifies an arrow-function export as a function, not a const (regex miss)', async () => {
     // Regex extractor returns `const handler` for this line because
