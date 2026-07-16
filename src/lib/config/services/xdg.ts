@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { AnthropicLLMService, AzureLLMService, BedrockLLMService, GeminiLLMService, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
+import { LLMService } from '../../langchain/types'
 import { Config } from '../types'
 
 /** Path to the global XDG config (`$XDG_CONFIG_HOME/coco/config.json`). */
@@ -69,12 +69,12 @@ export function loadXDGConfig<ConfigType = Config>(
     foundPath = xdgConfigPath
     const xdgConfig = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8'))
 
-    const service = parseServiceConfig(xdgConfig.service || config.service)
+    const service = mergeXDGServiceConfig(config.service as LLMService | undefined, xdgConfig.service)
 
-    config = { 
-      ...config, 
-      ...xdgConfig, 
-      service: service 
+    config = {
+      ...config,
+      ...xdgConfig,
+      service: service
     }
   }
 
@@ -84,97 +84,27 @@ export function loadXDGConfig<ConfigType = Config>(
   return config as ConfigType
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseServiceConfig(service: any): LLMService | undefined {
-  if (!service) return undefined
+/**
+ * Merges the on-disk XDG `service` block onto the already-accumulated
+ * `base` service (default config, or an earlier layer). Unlike the old
+ * `parseServiceConfig` (which round-tripped through a per-provider switch
+ * and dropped any key it didn't explicitly whitelist), this preserves every
+ * key the file sets — including tuning keys like `temperature` and
+ * `maxConcurrent` — and falls back to `base` for anything the file omits,
+ * so a partial write (e.g. `{"service":{"model":"gpt-4o"}}`) never wipes
+ * out the provider or defaults.
+ *
+ * The flat on-disk `apiKey` (see `toOnDiskConfigKey`) is converted to the
+ * nested `authentication.credentials.apiKey` shape the rest of the app
+ * expects.
+ */
+function mergeXDGServiceConfig(base: LLMService | undefined, fileService: unknown): LLMService | undefined {
+  if (!isRecord(fileService)) return base
 
-  switch (service.provider) {
-    case 'openai':
-      return {
-        provider: 'openai',
-        model: service.model,
-        baseURL: service.baseURL,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as OpenAILLMService
-    case 'anthropic':
-      return {
-        provider: 'anthropic',
-        model: service.model,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as AnthropicLLMService
-    case 'gemini':
-      return {
-        provider: 'gemini',
-        model: service.model,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as GeminiLLMService
-    case 'mistral':
-      return {
-        provider: 'mistral',
-        model: service.model,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as MistralLLMService
-    case 'azure':
-      return {
-        provider: 'azure',
-        model: service.model,
-        instanceName: service.instanceName,
-        deploymentName: service.deploymentName,
-        apiVersion: service.apiVersion,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as AzureLLMService
-    case 'bedrock':
-      return {
-        provider: 'bedrock',
-        model: service.model,
-        region: service.region,
-        accessKeyId: service.accessKeyId,
-        secretAccessKey: service.secretAccessKey,
-        sessionToken: service.sessionToken,
-        authentication: {
-          type: 'None',
-          credentials: undefined
-        },
-        fields: service.fields
-      } as BedrockLLMService
-    case 'ollama':
-      return {
-        provider: 'ollama',
-        model: service.model,
-        endpoint: service.endpoint,
-        fields: service.fields
-      } as OllamaLLMService
-    default:
-      return undefined
+  const { apiKey, ...rest } = fileService
+  const merged: Record<string, unknown> = { ...(base ?? {}), ...rest }
+  if (typeof apiKey === 'string') {
+    merged.authentication = { type: 'APIKey', credentials: { apiKey } }
   }
+  return merged as LLMService
 }
