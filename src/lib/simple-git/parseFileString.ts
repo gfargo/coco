@@ -15,12 +15,20 @@ export function parseFileString(file: string): ParsedFilePaths {
 
   if (file.includes(separator)) {
     const [oldFilePathWithRoot, filePath] = file.split(separator)
+    const right = (filePath ?? '').trim()
+
+    if (!oldFilePathWithRoot.includes('{')) {
+      return {
+        filePath: right,
+        oldFilePath: oldFilePathWithRoot.trim(),
+      }
+    }
 
     const [rootPath, oldFilePath] = oldFilePathWithRoot.split('{')
 
     return {
-      filePath: rootPath + filePath.trim().replace('{', '').replace('}', ''),
-      oldFilePath: rootPath + oldFilePath.trim().replace('{', '').replace('}', ''),
+      filePath: rootPath + right.replace('{', '').replace('}', ''),
+      oldFilePath: rootPath + (oldFilePath ?? '').trim().replace('{', '').replace('}', ''),
     }
   } else {
     return {
