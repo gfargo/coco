@@ -28,6 +28,15 @@ const mockGetChangesByCommit = getChangesByCommit as jest.MockedFunction<typeof 
 const mockGetChanges = getChanges as jest.MockedFunction<typeof getChanges>
 const mockCreateCommit = createCommit as jest.MockedFunction<typeof createCommit>
 
+const spyStdout = () => {
+  const writes: string[] = []
+  const spy = jest.spyOn(process.stdout, 'write').mockImplementation(((chunk: string) => {
+    writes.push(String(chunk))
+    return true
+  }) as never)
+  return { writes, restore: () => spy.mockRestore() }
+}
+
 describe('amend command', () => {
   let argv: Arguments<AmendOptions>
   let logger: Logger
@@ -74,45 +83,66 @@ describe('amend command', () => {
   afterEach(() => jest.clearAllMocks())
 
   it('previews the regenerated message by default without amending', async () => {
-    await handler(argv, logger)
+    const { writes, restore } = spyStdout()
+    try {
+      await handler(argv, logger)
+    } finally {
+      restore()
+    }
     expect(mockGenerate).toHaveBeenCalledWith(
       expect.objectContaining({ changeSource: expect.objectContaining({ commitRef: 'HEAD' }) })
     )
     expect(mockCreateCommit).not.toHaveBeenCalled()
-    expect(logger.log).toHaveBeenCalledWith('feat: regenerated message')
+    expect(writes).toContain('feat: regenerated message\n')
   })
 
-  it('amends the last commit when --apply is passed', async () => {
+  it('amends the last commit when --apply is passed and prints the applied message', async () => {
     argv.apply = true
-    await handler(argv, logger)
+    const { writes, restore } = spyStdout()
+    try {
+      await handler(argv, logger)
+    } finally {
+      restore()
+    }
     expect(mockCreateCommit).toHaveBeenCalledWith(
       'feat: regenerated message',
       expect.anything(),
       expect.any(Function),
       expect.objectContaining({ amend: true, noVerify: false })
     )
+    expect(writes).toContain('feat: regenerated message\n')
   })
 
   it('does not amend on --dry-run, just prints the message', async () => {
     argv.dryRun = true
-    await handler(argv, logger)
+    const { writes, restore } = spyStdout()
+    try {
+      await handler(argv, logger)
+    } finally {
+      restore()
+    }
     expect(mockCreateCommit).not.toHaveBeenCalled()
-    expect(logger.log).toHaveBeenCalledWith('feat: regenerated message')
+    expect(writes).toContain('feat: regenerated message\n')
+  })
+
+  it('prints the deliverable to stdout even when logger.log is muted by --quiet', async () => {
+    ;(logger.log as jest.Mock).mockImplementation(() => {})
+    const { writes, restore } = spyStdout()
+    try {
+      await handler(argv, logger)
+    } finally {
+      restore()
+    }
+    expect(writes).toContain('feat: regenerated message\n')
   })
 
   it('emits JSON and does not amend on --json', async () => {
     argv.json = true
-    const writes: string[] = []
-    const spy = jest
-      .spyOn(process.stdout, 'write')
-      .mockImplementation(((c: string) => {
-        writes.push(String(c))
-        return true
-      }) as never)
+    const { writes, restore } = spyStdout()
     try {
       await handler(argv, logger)
     } finally {
-      spy.mockRestore()
+      restore()
     }
     expect(mockCreateCommit).not.toHaveBeenCalled()
     const json = writes.find((w) => {
@@ -132,7 +162,12 @@ describe('amend command', () => {
   it('passes --no-verify through to the amend commit', async () => {
     argv.noVerify = true
     argv.apply = true
-    await handler(argv, logger)
+    const { restore } = spyStdout()
+    try {
+      await handler(argv, logger)
+    } finally {
+      restore()
+    }
     expect(mockCreateCommit).toHaveBeenCalledWith(
       expect.any(String),
       expect.anything(),
