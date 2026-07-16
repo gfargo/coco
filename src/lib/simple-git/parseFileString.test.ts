@@ -52,6 +52,27 @@ describe('parseFileString', () => {
     })
   })
 
+  describe('rename paths without braces (no common prefix)', () => {
+    it('parses a root-level rename', () => {
+      // git diff --stat format when there's no common path prefix: "old.txt => new.txt"
+      const result = parseFileString('old.txt => new.txt')
+      expect(result.filePath).toBe('new.txt')
+      expect(result.oldFilePath).toBe('old.txt')
+    })
+
+    it('parses a rename across different directories', () => {
+      const result = parseFileString('dir/a.txt => other/b.txt')
+      expect(result.filePath).toBe('other/b.txt')
+      expect(result.oldFilePath).toBe('dir/a.txt')
+    })
+
+    it('trims extra whitespace around the paths', () => {
+      const result = parseFileString('a.txt =>  b.txt ')
+      expect(result.filePath).toBe('b.txt')
+      expect(result.oldFilePath).toBe('a.txt')
+    })
+  })
+
   describe('edge cases', () => {
     it('handles a path that is just whitespace after trim', () => {
       expect(parseFileString('   ')).toEqual({
