@@ -94,8 +94,16 @@ export function getDefaultServiceApiKey(config: Config): string {
   }
 
   if (service.authentication.type === 'None') {
-    if (requiresAuth) {
-      const endpoint = (service as { endpoint?: string }).endpoint
+    const endpoint = (service as { endpoint?: string }).endpoint
+    const baseURL = (service as { baseURL?: string }).baseURL
+    // A custom baseURL/endpoint means this is a self-hosted or
+    // OpenAI-compatible endpoint (LM Studio, vLLM, custom, Ollama) —
+    // 'None' there is an explicit, valid opt-out even for providers that
+    // normally require auth. Mirrors the same predicate `doctor/checks.ts`
+    // already uses to downgrade this case to a warning instead of an error.
+    const hasCustomEndpoint = Boolean(baseURL?.trim() || endpoint?.trim())
+
+    if (requiresAuth && !hasCustomEndpoint) {
       throw new LangChainAuthenticationError(
         `getDefaultServiceApiKey: ${provider} provider requires authentication but 'None' was configured`,
         provider,
@@ -103,7 +111,7 @@ export function getDefaultServiceApiKey(config: Config): string {
         { authenticationType: service.authentication.type }
       )
     }
-    
+
     return ''
   }
 
