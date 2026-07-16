@@ -551,15 +551,23 @@ export function getSelectedCommitTarget(
  * Returns the span in DISPLAY order (index 0 = newest, matching
  * `state.filteredCommits`), or undefined when there's no active range
  * on history, the anchor no longer resolves (list reloaded out from
- * under it), or the cursor is parked on the synthetic "new commit"
- * row. Callers needing "oldest" / "newest" for the git command read
- * `range[range.length - 1]` / `range[0]`.
+ * under it), the cursor is parked on the synthetic "new commit" row,
+ * or a text filter is active. Under a filter, `filterCommits` re-sorts
+ * by fuzzy-match score rather than chronological order (#1670), so
+ * "index 0 = newest" no longer holds and the display span can't be
+ * trusted to name a real ancestor chain — callers fall back to the
+ * single cursored commit instead. Callers needing "oldest" / "newest"
+ * for the git command read `range[range.length - 1]` / `range[0]`,
+ * but MUST first check `isContiguousHistoryRange` — a non-contiguous
+ * span (e.g. interleaved branches from the default `--all` view) isn't
+ * safe to replay as `oldest^..newest`.
  */
 export function getSelectedCommitRange(
   state: LogInkState,
 ): GitLogCommitRow[] | undefined {
   if (state.selection?.view !== 'history' || !state.selection.anchorId) return undefined
   if (state.pendingCommitFocused) return undefined
+  if (state.filter) return undefined
   const commits = state.filteredCommits
   const anchorIndex = commits.findIndex((c) => c.hash === state.selection?.anchorId)
   if (anchorIndex < 0 || commits.length === 0) return undefined
@@ -568,4 +576,27 @@ export function getSelectedCommitRange(
     ? [anchorIndex, cursorIndex]
     : [cursorIndex, anchorIndex]
   return commits.slice(from, to + 1)
+}
+
+/**
+ * True when a DISPLAY-order span (index 0 = newest, as returned by
+ * `getSelectedCommitRange`) is a real, unbroken ancestor chain: each
+ * row's first parent is the hash of the next (older) row. Uses
+ * first-parent only, matching linear-history intent — a span crossing
+ * a merge's second parent is treated as non-contiguous.
+ *
+ * `getSelectedCommitRange` already bails under an active filter, but
+ * the default unfiltered view is `git log --all` (#1670), which
+ * interleaves commits from every branch by date — a visible run of
+ * rows there is not guaranteed to be a single line of real history.
+ * Only a contiguous span is safe to replay with `oldest^..newest`
+ * range syntax; anything else must cherry-pick the explicit hash list
+ * so exactly the displayed commits are applied.
+ */
+export function isContiguousHistoryRange(range: GitLogCommitRow[]): boolean {
+  if (range.length <= 1) return true
+  for (let i = 0; i < range.length - 1; i++) {
+    if (range[i].parents[0] !== range[i + 1].hash) return false
+  }
+  return true
 }
