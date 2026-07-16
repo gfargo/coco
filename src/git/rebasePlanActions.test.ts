@@ -1,4 +1,6 @@
-import { readFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { dirname, join } from 'path'
 import {
   buildRebaseTodo,
   executeRebasePlan,
@@ -151,6 +153,43 @@ describe('executeRebasePlan', () => {
       message: expect.stringContaining('Rebase stopped'),
       details: [expect.stringContaining('conflicts view (gx)')],
     })
+  })
+
+  it('treats a zero-exit edit stop as not-done: keeps the temp dir and reports paused', async () => {
+    const fakeGitDir = mkdtempSync(join(tmpdir(), 'coco-fake-git-'))
+    let capturedTodoFile = ''
+    const git = {
+      revparse: jest.fn(async (args: string[]) => {
+        if (args[0] === '--git-path') {
+          return join(fakeGitDir, args[1])
+        }
+        return '/repo/root'
+      }),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+    const runner = jest.fn(async (_args: string[], options: { env: Record<string, string | undefined> }) => {
+      const match = /^cp '(.+)'$/.exec(options.env.GIT_SEQUENCE_EDITOR || '')
+      if (match) {
+        capturedTodoFile = match[1]
+      }
+      // Simulate git stopping at an `edit` todo line with exit 0.
+      mkdirSync(join(fakeGitDir, 'rebase-merge'))
+      return ''
+    })
+    const rows = [
+      row({ action: 'edit' }),
+      row({ sha: 'b'.repeat(40), shortSha: 'bbbbbbb', subject: 'wip', action: 'reword', newMessage: 'better' }),
+    ]
+    const result = await executeRebasePlan(git as never, rows, runner)
+
+    expect(result).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('paused'),
+      details: [expect.stringContaining('conflicts view (gx)')],
+    })
+    // The temp dir (holding the pending reword message file) must survive
+    // so `git rebase --continue`'s exec line can still find it.
+    expect(existsSync(dirname(capturedTodoFile))).toBe(true)
   })
 
   it('refuses invalid plans before touching git', async () => {

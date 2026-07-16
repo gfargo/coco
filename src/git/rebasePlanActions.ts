@@ -207,6 +207,18 @@ export async function executeRebasePlan(
         GIT_EDITOR: 'true',
       },
     })
+    const postOperation = await getInProgressOperationType(git)
+    if (postOperation !== 'none') {
+      // Exit 0 doesn't mean done — `edit`/`break` stop the rebase mid-run
+      // too. Keep the temp dir: a later `reword` row's `exec ... -F` line
+      // still needs its message file on `git rebase --continue`.
+      return {
+        ok: false,
+        message: 'Rebase paused for editing — finish the stopped step, then continue.',
+        details: ['Resolve/edit in the conflicts view (gx), then continue — or abort the operation to unwind.'],
+      }
+    }
+
     rmSync(dir, { recursive: true, force: true })
     return {
       ok: true,
