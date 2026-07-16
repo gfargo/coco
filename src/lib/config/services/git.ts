@@ -9,6 +9,7 @@ import { removeUndefined } from '../../utils/removeUndefined'
 import { updateFileSection } from '../../utils/updateFileSection'
 import { COCO_CONFIG_END_COMMENT, COCO_CONFIG_START_COMMENT } from '../constants'
 import { Config } from '../types'
+import { splitList } from '../utils/splitList'
 
 /**
  * Load git profile config (from ~/.gitconfig)
@@ -129,8 +130,9 @@ export function loadGitConfig<ConfigType = Config>(
       prompt: gitConfigParsed.coco?.prompt || config.prompt,
       mode: gitConfigParsed.coco?.mode || config.mode,
       summarizePrompt: gitConfigParsed.coco?.summarizePrompt || config.summarizePrompt,
-      ignoredFiles: gitConfigParsed.coco?.ignoredFiles || config.ignoredFiles,
-      ignoredExtensions: gitConfigParsed.coco?.ignoredExtensions || config.ignoredExtensions,
+      ignoredFiles: splitList(gitConfigParsed.coco?.ignoredFiles) || config.ignoredFiles,
+      ignoredExtensions:
+        splitList(gitConfigParsed.coco?.ignoredExtensions) || config.ignoredExtensions,
       defaultBranch: gitConfigParsed.coco?.defaultBranch || config.defaultBranch,
       verbose: gitConfigParsed.coco?.verbose || config.verbose,
       conventionalCommits: gitConfigParsed.coco?.conventionalCommits || config.conventionalCommits,

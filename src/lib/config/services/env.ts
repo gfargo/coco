@@ -2,6 +2,7 @@ import { LLMProvider, LLMService, OllamaLLMService, OpenAILLMService } from '../
 import { removeUndefined } from '../../utils/removeUndefined'
 import { CONFIG_KEYS } from '../constants'
 import { Config } from '../types'
+import { splitList } from '../utils/splitList'
 
 type ValuesTypes = Config[keyof Config]
 
@@ -215,11 +216,11 @@ function parseEnvValue(key: string, value: ValuesTypes) {
     case value === undefined:
       return undefined
 
-    // Handle comma separated strings for ignoredFiles and ignoredExtensions arrays
-    case (key === 'ignoredFiles' || key === 'ignoredExtensions') &&
-      typeof value === 'string' &&
-      value.includes(','):
-      return (value as string).split(',')
+    // Handle comma separated (or single-value) strings for ignoredFiles and
+    // ignoredExtensions arrays — a lone value with no comma must still
+    // become a one-element array, not stay a string (#1675).
+    case (key === 'ignoredFiles' || key === 'ignoredExtensions') && typeof value === 'string':
+      return splitList(value as string)
 
     // Handle boolean values
     case typeof value === 'string' && (value === 'false' || value === 'true'):
