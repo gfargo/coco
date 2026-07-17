@@ -40,6 +40,26 @@ export const TRUSTED_PROJECT_SERVICE_KEYS = [
 ] as const
 
 /**
+ * Mirrors the read-side filter above, but for the write path: strips
+ * `authentication`/`baseURL`/`endpoint`/`fields` (and anything else not on
+ * the allowlist) from a service object before it's persisted to a
+ * repo-local `.coco.json`. Without this, `coco init --scope project` writes
+ * fields the loader above immediately rejects as untrusted on every
+ * subsequent run — a spurious warning about a file coco itself generated.
+ */
+export function pickTrustedProjectServiceFields<T extends Record<string, unknown>>(
+  service: T
+): Partial<T> {
+  const trusted: Partial<T> = {}
+  for (const key of TRUSTED_PROJECT_SERVICE_KEYS) {
+    if (key in service) {
+      trusted[key as keyof T] = service[key as keyof T]
+    }
+  }
+  return trusted
+}
+
+/**
  * Config is loaded many times per command run — `loadConfig` is called
  * independently from the command handler, the command executor, the
  * default router, doctor, etc. Each call re-runs `loadProjectJsonConfig`,

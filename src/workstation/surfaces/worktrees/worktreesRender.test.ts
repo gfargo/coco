@@ -12,6 +12,7 @@ import {
 import type { WorktreeEntry, WorktreeOverview } from '../../../git/worktreeData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
 import { renderWorktreesSurface } from './index'
+import { buildFilteredLists } from '../../runtime/hooks/buildFilteredLists'
 import { renderToLines } from '../../runtime/testSupport/renderToLines'
 import { cellWidth } from '../../chrome/text'
 
@@ -160,6 +161,62 @@ describe('renderWorktreesSurface', () => {
       const tree = render(makeState(), { worktreeList: makeOverview([]) })
       const text = flatten(tree).join('\n')
       expect(text).toContain('No linked worktrees.')
+    })
+  })
+
+  // Regression (OSS-986 / #1686): the renderer used to filter on
+  // `[path, branch, head]` while every action-targeting consumer
+  // (buildFilteredLists.filteredWorktreeList, getSelectedWorktree,
+  // useInputHandler's j/k bounds) filtered on `[path, branch]` only. A
+  // filter that matched a detached worktree's HEAD sha (visibly shown as
+  // the branch-column label) surfaced that row on screen while the
+  // action layer's list excluded it — cursor row N on screen was not
+  // element N of the list destructive actions operated on.
+  describe('renderer filter field set matches filteredWorktreeList (OSS-986 / #1686)', () => {
+    function visibleWorktreePaths(tree: ReactElement, candidatePaths: string[]): string[] {
+      const lines = renderToLines(tree, Text, Box)
+      return candidatePaths.filter((path) => lines.some((line) => line.endsWith(` ${path}`)))
+    }
+
+    function headerCount(tree: ReactElement): { shown: number; total: number } {
+      const lines = renderToLines(tree, Text, Box)
+      const line = lines.find((entry) => / worktrees/.test(entry))
+      if (!line) throw new Error('no header line found')
+      const match = line.match(/(\d+)\/(\d+) worktrees/)
+      if (!match) throw new Error(`header line did not match expected shape: "${line}"`)
+      return { shown: Number(match[1]), total: Number(match[2]) }
+    }
+
+    const worktrees = [
+      makeEntry({ path: '/repo', branch: 'main', head: 'deadbeef00', detached: false }),
+      makeEntry({ path: '/repo-fix', branch: undefined, head: 'abc1234def', detached: true }),
+      makeEntry({ path: '/work/abc-service', branch: 'svc', head: 'cafef00d00', detached: false }),
+    ]
+
+    it('a filter matching only a detached worktree\'s HEAD sha surfaces no rows, matching filteredWorktreeList', () => {
+      const context: LogInkContext = { worktreeList: makeOverview(worktrees) }
+      const filter = 'abc1234'
+      const tree = render(makeState({ filter }), { worktreeList: makeOverview(worktrees) })
+
+      const { filteredWorktreeList } = buildFilteredLists(context, filter)
+      expect(filteredWorktreeList).toHaveLength(0)
+
+      const shownPaths = visibleWorktreePaths(tree, worktrees.map((w) => w.path))
+      expect(shownPaths).toHaveLength(0)
+      expect(headerCount(tree)).toEqual({ shown: 0, total: worktrees.length })
+    })
+
+    it('a filter matching by path does not also surface a head-matching detached row', () => {
+      const context: LogInkContext = { worktreeList: makeOverview(worktrees) }
+      const filter = 'abc'
+      const tree = render(makeState({ filter }), { worktreeList: makeOverview(worktrees) })
+
+      const { filteredWorktreeList } = buildFilteredLists(context, filter)
+      expect(filteredWorktreeList.map((w) => w.path)).toEqual(['/work/abc-service'])
+
+      const shownPaths = visibleWorktreePaths(tree, worktrees.map((w) => w.path))
+      expect(shownPaths).toEqual(['/work/abc-service'])
+      expect(headerCount(tree)).toEqual({ shown: filteredWorktreeList.length, total: worktrees.length })
     })
   })
 

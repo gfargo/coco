@@ -230,16 +230,68 @@ function parseDiffGitHeader(line: string): { aPath: string; bPath: string } | un
   return { aPath, bPath }
 }
 
+const SIMPLE_ESCAPES: Record<string, string> = {
+  '\\': '\\',
+  '"': '"',
+  t: '\t',
+  n: '\n',
+  r: '\r',
+  a: '\x07',
+  b: '\b',
+  f: '\f',
+  v: '\v',
+}
+
 function unescapeGitQuoted(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
-  // Git's diff header quoting escapes `"`, `\`, and the usual
-  // C-style sequences. Reverse the most common ones so callers get the
-  // raw on-disk path.
-  return value
-    .replace(/\\\\/g, '\\')
-    .replace(/\\"/g, '"')
-    .replace(/\\t/g, '\t')
-    .replace(/\\n/g, '\n')
+  if (!value.includes('\\')) return value
+
+  // Git's diff header quoting escapes `"`, `\`, the usual C-style
+  // sequences, and non-ASCII bytes as `\NNN` octal escapes. Reverse them
+  // in a single left-to-right pass — collapsing `\\` before scanning for
+  // other escapes would let a decoded backslash form a *new* escape
+  // sequence (e.g. `a\\tb` must become `a\tb`, not a real tab).
+  let result = ''
+  let octalBytes: number[] = []
+  const flushOctal = () => {
+    if (octalBytes.length === 0) return
+    result += new TextDecoder('utf-8', { fatal: false }).decode(Uint8Array.from(octalBytes))
+    octalBytes = []
+  }
+
+  for (let i = 0; i < value.length; ) {
+    const char = value[i]
+    if (char !== '\\') {
+      flushOctal()
+      result += char
+      i += 1
+      continue
+    }
+
+    const next = value[i + 1]
+    if (next !== undefined && next >= '0' && next <= '7') {
+      let digits = next
+      let j = i + 2
+      while (digits.length < 3 && value[j] !== undefined && value[j] >= '0' && value[j] <= '7') {
+        digits += value[j]
+        j += 1
+      }
+      octalBytes.push(parseInt(digits, 8) & 0xff)
+      i = j
+      continue
+    }
+
+    flushOctal()
+    if (next !== undefined && next in SIMPLE_ESCAPES) {
+      result += SIMPLE_ESCAPES[next]
+      i += 2
+    } else {
+      result += char
+      i += 1
+    }
+  }
+  flushOctal()
+  return result
 }
 
 export const stashDataTestInternals = {

@@ -1,9 +1,9 @@
 import type ReactTypes from 'react'
 import type { GitLogRow } from '../../../git/logData'
-import { createLogInkState } from '../inkViewModel'
+import { createLogInkState, applyLogInkAction } from '../inkViewModel'
 import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
 import { checkoutBranch, checkoutBranchByName, deleteBranches, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
-import { cherryPickCommit, autosquashRebase } from '../../../git/historyActions'
+import { cherryPickCommit, cherryPickRange, cherryPickCommits, autosquashRebase } from '../../../git/historyActions'
 import { createStash, dropStashes, restoreStash } from '../../../git/stashActions'
 import { continueOperation } from '../../../git/operationActions'
 import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowAction'
@@ -42,6 +42,8 @@ jest.mock('../../../git/historyActions', () => {
   return {
     ...actual,
     cherryPickCommit: jest.fn(),
+    cherryPickRange: jest.fn(),
+    cherryPickCommits: jest.fn(),
     autosquashRebase: jest.fn(),
   }
 })
@@ -380,6 +382,8 @@ describe('result status carries the outcome kind (#1349)', () => {
 const checkoutBranchMock = checkoutBranch as jest.MockedFunction<typeof checkoutBranch>
 const checkoutBranchByNameMock = checkoutBranchByName as jest.MockedFunction<typeof checkoutBranchByName>
 const cherryPickCommitMock = cherryPickCommit as jest.MockedFunction<typeof cherryPickCommit>
+const cherryPickRangeMock = cherryPickRange as jest.MockedFunction<typeof cherryPickRange>
+const cherryPickCommitsMock = cherryPickCommits as jest.MockedFunction<typeof cherryPickCommits>
 const createStashMock = createStash as jest.MockedFunction<typeof createStash>
 const pullCurrentBranchRebaseMock = pullCurrentBranchRebase as jest.MockedFunction<typeof pullCurrentBranchRebase>
 const autosquashRebaseMock = autosquashRebase as jest.MockedFunction<typeof autosquashRebase>
@@ -600,6 +604,105 @@ describe('operation conflict recovery (#1360)', () => {
         title: 'Pull stopped on conflicts',
       }),
     }))
+  })
+})
+
+// #1670 — a v-range span that isn't a real, contiguous ancestor chain
+// must cherry-pick the explicit hash list instead of `oldest^..newest`
+// range syntax, and a filtered display must never resolve a range at all.
+describe('cherry-pick-commit range handling (#1670)', () => {
+  const rangeRow = (hash: string, parents: string[]): GitLogRow => ({
+    type: 'commit',
+    graph: '*',
+    shortHash: hash,
+    hash,
+    parents,
+    date: '2026-05-01',
+    author: 'Coco',
+    refs: [],
+    message: `commit ${hash}`,
+  })
+
+  beforeEach(() => {
+    cherryPickCommitMock.mockReset()
+    cherryPickRangeMock.mockReset()
+    cherryPickCommitsMock.mockReset()
+  })
+
+  it('uses cherryPickRange for a contiguous span', async () => {
+    const rows = [
+      rangeRow('c0', ['c1']),
+      rangeRow('c1', ['c2']),
+      rangeRow('c2', ['c3']),
+      rangeRow('c3', []),
+    ]
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'c2' })
+    state = { ...state, selectedIndex: 0 }
+    cherryPickRangeMock.mockResolvedValue({ ok: true, message: 'Cherry-picked c2..c0' })
+
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state }))
+
+    await runWorkflowAction('cherry-pick-commit')
+    expect(cherryPickRangeMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ hash: 'c2' }),
+      expect.objectContaining({ hash: 'c0' }),
+    )
+    expect(cherryPickCommitsMock).not.toHaveBeenCalled()
+  })
+
+  it('uses the explicit hash list for a non-contiguous span (interleaved branches)', async () => {
+    const rows = [
+      rangeRow('c0', ['other']),
+      rangeRow('c1', ['c2']),
+      rangeRow('c2', []),
+    ]
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'c2' })
+    state = { ...state, selectedIndex: 0 }
+    cherryPickCommitsMock.mockResolvedValue({ ok: true, message: 'Cherry-picked 3 commits' })
+
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state }))
+
+    await runWorkflowAction('cherry-pick-commit')
+    expect(cherryPickCommitsMock).toHaveBeenCalledWith(
+      expect.anything(),
+      [
+        expect.objectContaining({ hash: 'c2' }),
+        expect.objectContaining({ hash: 'c1' }),
+        expect.objectContaining({ hash: 'c0' }),
+      ],
+    )
+    expect(cherryPickRangeMock).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the single cursored commit when a filter is active', async () => {
+    const rows = [
+      rangeRow('c0', ['c1']),
+      rangeRow('c1', ['c2']),
+      rangeRow('c2', []),
+    ]
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'c2' })
+    state = { ...state, selectedIndex: 0, filter: 'fix' }
+    cherryPickCommitMock.mockResolvedValue({ ok: true, message: 'Cherry-picked c0' })
+
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state }))
+
+    await runWorkflowAction('cherry-pick-commit')
+    expect(cherryPickCommitMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ hash: 'c0' }),
+    )
+    expect(cherryPickRangeMock).not.toHaveBeenCalled()
+    expect(cherryPickCommitsMock).not.toHaveBeenCalled()
   })
 })
 

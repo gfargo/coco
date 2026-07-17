@@ -5,6 +5,7 @@ import {
   amendHeadCommit,
   checkoutOrDeleteFromRef,
   cherryPickCommit,
+  cherryPickCommits,
   cherryPickRange,
   compareCommits,
   copyCommitHash,
@@ -299,6 +300,70 @@ describe('log history actions', () => {
       }
       try {
         await expect(cherryPickRange(git as never, oldest, newest)).resolves.toEqual({
+          ok: false,
+          message: 'Finish or abort the in-progress merge before editing history.',
+        })
+        expect(git.raw).not.toHaveBeenCalled()
+      } finally {
+        rmSync(tempDir, { force: true, recursive: true })
+      }
+    })
+  })
+
+  // #1670 — used when a v-range display span isn't a contiguous ancestor
+  // chain (e.g. rows interleaved from other branches); replays exactly
+  // the given hashes instead of everything git would walk between them.
+  describe('cherryPickCommits', () => {
+    const oldest = { hash: 'oldest1234567890', shortHash: 'oldest12', message: 'feat: oldest' }
+    const middle = { hash: 'middle1234567890', shortHash: 'middle12', message: 'feat: middle' }
+    const newest = { hash: 'newest1234567890', shortHash: 'newest12', message: 'feat: newest' }
+
+    it('constructs an explicit cherry-pick command, oldest-first', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      await expect(cherryPickCommits(git as never, [oldest, middle, newest])).resolves.toEqual({
+        ok: true,
+        message: 'Cherry-picked 3 commits',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['cherry-pick', oldest.hash, middle.hash, newest.hash])
+    })
+
+    it('delegates to the single-commit path for one commit', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      await expect(cherryPickCommits(git as never, [commit])).resolves.toEqual({
+        ok: true,
+        message: 'Cherry-picked abcdef1',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['cherry-pick', commit.hash])
+    })
+
+    it('reports no commit selected for an empty list', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn(),
+      }
+      await expect(cherryPickCommits(git as never, [])).resolves.toEqual({
+        ok: false,
+        message: 'No commit selected.',
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+
+    it('blocks while another git operation is in progress, same guard as the range path', async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'coco-history-explicit-'))
+      const mergeHead = join(tempDir, 'MERGE_HEAD')
+      writeFileSync(mergeHead, oldest.hash)
+      const git = {
+        revparse: jest.fn().mockResolvedValue(mergeHead),
+        raw: jest.fn(),
+      }
+      try {
+        await expect(cherryPickCommits(git as never, [oldest, middle, newest])).resolves.toEqual({
           ok: false,
           message: 'Finish or abort the in-progress merge before editing history.',
         })

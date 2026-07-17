@@ -115,7 +115,7 @@ export async function summarizeDirectoryDiff(
 
     const newTokenTotal = tokenizer(directorySummary)
 
-    if (cacheKey && cacheModel) {
+    if (cacheKey && cacheModel && directorySummary.trim()) {
       writeDiffSummary(cacheRepo, cacheKey, {
         summary: directorySummary,
         model: cacheModel,

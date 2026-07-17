@@ -30,7 +30,7 @@ export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: 
   const allWorktrees = context.worktreeList?.worktrees || []
   const worktrees = state.filter
     ? allWorktrees.filter((entry) =>
-      matchesPromotedFilter([entry.path, entry.branch || '', entry.head || ''], state.filter)
+      matchesPromotedFilter([entry.path, entry.branch || ''], state.filter)
     )
     : allWorktrees
   const selected = Math.max(0, Math.min(state.selectedWorktreeListIndex, Math.max(0, worktrees.length - 1)))

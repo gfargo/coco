@@ -3789,6 +3789,16 @@ describe('log Ink input interactions', () => {
         expect(events).toEqual([])
       })
 
+      // #1670 — filterCommits re-sorts by fuzzy-match score under a text
+      // filter, so a v-range anchor set there wouldn't name real history.
+      it('v does not anchor a range while a filter is active', () => {
+        const state = { ...historyState(), filter: 'fix' }
+        const events = getLogInkInputEvents(state, 'v', {})
+        expect(events).not.toContainEqual(
+          expect.objectContaining({ type: 'action', action: expect.objectContaining({ type: 'setRangeAnchor' }) }),
+        )
+      })
+
       it('Esc is two-stage on a history range too', () => {
         const both = {
           ...historyState(),

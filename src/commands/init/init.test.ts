@@ -1,3 +1,4 @@
+import chalk from 'chalk'
 import { handler } from './handler'
 import { questions, OPENAI_COMPATIBLE_SENTINEL } from './questions'
 import { InitOptions } from './config'
@@ -19,7 +20,10 @@ jest.mock('../../lib/ui/inquirerPrompts', () => ({
   confirmPrompt: jest.fn(),
 }))
 jest.mock('../../lib/config/services/git')
-jest.mock('../../lib/config/services/project')
+jest.mock('../../lib/config/services/project', () => ({
+  ...jest.requireActual('../../lib/config/services/project'),
+  appendToProjectJsonConfig: jest.fn(),
+}))
 jest.mock('../../lib/config/utils/loadConfig')
 jest.mock('../../lib/ui/checkAndHandlePackageInstall')
 jest.mock('../../lib/ui/logResult')
@@ -157,16 +161,15 @@ describe('init command', () => {
     expect(mockAppendToProjectJsonConfig).toHaveBeenCalledWith(
       '/repo/.coco.config.json',
       expect.objectContaining({
-        service: expect.objectContaining({
+        service: {
           provider: 'openai',
-          authentication: expect.objectContaining({
-            credentials: expect.objectContaining({
-              apiKey: '',
-            }),
-          }),
-        }),
+          model: 'gpt-4o',
+        },
       })
     )
+    const [, writtenConfig] = mockAppendToProjectJsonConfig.mock.calls[0]
+    expect(writtenConfig.service).not.toHaveProperty('authentication')
+    expect(writtenConfig.service).not.toHaveProperty('baseURL')
     expect(mockCheckAndHandlePackageInstallation).toHaveBeenCalledWith({
       global: false,
       logger,
@@ -265,6 +268,41 @@ describe('init command', () => {
     })
   })
 
+  it('warns that a compat baseURL preset is dropped on load for project scope (OSS-1003)', async () => {
+    // Project scope's trust filter never honors a repo-committed baseURL
+    // (or authentication), so a keyless compat preset silently falls back
+    // to the real OpenAI API on load. The user should be steered to global
+    // scope / an env var instead of getting a confusing later auth failure.
+    mockLoadConfig.mockReturnValue({
+      scope: 'project',
+      dryRun: false,
+    } as unknown as Config)
+    jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue(OPENAI_COMPATIBLE_SENTINEL)
+    jest.spyOn(questions, 'selectOpenAiCompatiblePreset').mockResolvedValue({
+      id: 'lmstudio',
+      label: 'LM Studio',
+      baseURL: 'http://localhost:1234/v1',
+      apiKeyEnvVar: 'LMSTUDIO_API_KEY',
+      requiresApiKey: false,
+    })
+    jest.spyOn(questions, 'inputOpenAiCompatibleModel').mockResolvedValue('local-model')
+
+    await handler(createArgv({ scope: 'project' }), logger)
+
+    expect(logger.log).toHaveBeenCalledWith(
+      chalk.dim(
+        `Note: project scope can't persist a custom endpoint (http://localhost:1234/v1) — ` +
+        `it will be dropped on load. Use \`coco init --scope global\`, or set COCO_SERVICE_BASE_URL via env var.`
+      )
+    )
+    // The in-memory config still carries baseURL (used for the approval
+    // display above), but the persisted file must not — the loader would
+    // reject it as untrusted on every later run anyway.
+    const [, writtenConfig] = mockAppendToProjectJsonConfig.mock.calls[0]
+    expect(writtenConfig.service).not.toHaveProperty('baseURL')
+    expect(writtenConfig.service).not.toHaveProperty('authentication')
+  })
+
   it('skips the custom Ollama endpoint prompt for project scope', async () => {
     jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('ollama')
     jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('llama3')
@@ -286,12 +324,17 @@ describe('init command', () => {
     await handler(createArgv({ scope: 'project' }), logger)
 
     expect(questions.inputOllamaEndpoint).not.toHaveBeenCalled()
-    expect(mockAppendToProjectJsonConfig).toHaveBeenCalledWith(
-      '/repo/.coco.config.json',
+    // `endpoint` isn't in TRUSTED_PROJECT_SERVICE_KEYS, so it's stripped from
+    // the persisted file entirely (not just kept at its safe default) — the
+    // loader would reject it as untrusted either way.
+    const [, writtenConfig] = mockAppendToProjectJsonConfig.mock.calls[0]
+    expect(writtenConfig.service).not.toHaveProperty('endpoint')
+    expect(writtenConfig.service).toEqual(
       expect.objectContaining({
-        service: expect.objectContaining({
-          endpoint: 'http://localhost:11434',
-        }),
+        provider: 'ollama',
+        model: 'llama3',
+        temperature: 0.2,
+        tokenLimit: 4096,
       })
     )
   })

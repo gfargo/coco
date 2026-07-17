@@ -1,5 +1,5 @@
 import { appendToGitConfig } from '../../lib/config/services/git'
-import { appendToProjectJsonConfig } from '../../lib/config/services/project'
+import { appendToProjectJsonConfig, pickTrustedProjectServiceFields } from '../../lib/config/services/project'
 import { persistUsagePreference } from '../../lib/config/services/xdg'
 import chalk from 'chalk'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
@@ -105,6 +105,20 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // ignored on load, which is a worse (confusing auth failure) experience
   // than just not asking.
   const isProjectScope = scope === 'project'
+
+  if (isProjectScope && compatiblePreset?.baseURL) {
+    // Same trust boundary as above, but for the compat baseURL itself: a
+    // repo-committed config can't carry a custom endpoint (baseURL isn't in
+    // TRUSTED_PROJECT_SERVICE_KEYS either), so this preset would silently
+    // fall back to the real OpenAI API on load — steer the user to a scope
+    // that actually persists it.
+    logger.log(
+      chalk.dim(
+        `Note: project scope can't persist a custom endpoint (${compatiblePreset.baseURL}) — ` +
+        `it will be dropped on load. Use \`coco init --scope global\`, or set COCO_SERVICE_BASE_URL via env var.`
+      )
+    )
+  }
   const inputPromptByProvider: Partial<Record<LLMProvider, { label: string; envVar: string }>> = {
     openai: { label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
     anthropic: { label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
@@ -286,7 +300,15 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       configFilePath.endsWith('.coco.config.json') ||
       configFilePath.endsWith('.coco.json')
     ) {
-      appendToProjectJsonConfig(configFilePath, config)
+      // Project-scope files are untrusted on load (see project.ts) — only
+      // TRUSTED_PROJECT_SERVICE_KEYS survive a reload. Persist that same
+      // filtered shape here so we don't write fields (authentication,
+      // baseURL, endpoint, fields) that the loader will immediately reject
+      // with an "untrusted-service-fields" warning on every later command.
+      const configToWrite: ConfigWithServiceObject = isProjectScope
+        ? { ...config, service: pickTrustedProjectServiceFields(config.service) as ConfigWithServiceObject['service'] }
+        : config
+      appendToProjectJsonConfig(configFilePath, configToWrite)
     } else {
       // Fail loud rather than silently no-op: any config-file type without a
       // writer branch is a bug, and a silent skip here looks like success.
