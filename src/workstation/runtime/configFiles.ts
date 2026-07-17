@@ -17,7 +17,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { SCHEMA_PUBLIC_URL } from '../../lib/schema'
-import { getXdgConfigPath } from '../chrome/themePersistence'
+import { getXdgConfigPath } from '../../lib/config/services/xdg'
+import { resolveProjectConfigPath } from '../../lib/config/utils/projectConfigPath'
 
 export type CocoConfigScope = 'global' | 'project'
 
@@ -47,11 +48,7 @@ export function getGlobalConfigPath(): string {
  * to create.
  */
 export function getProjectConfigPath(repoRoot: string): string {
-  for (const name of ['.coco.json', '.coco.config.json']) {
-    const candidate = path.join(repoRoot, name)
-    if (fs.existsSync(candidate)) return candidate
-  }
-  return path.join(repoRoot, '.coco.json')
+  return resolveProjectConfigPath(repoRoot)
 }
 
 /** Resolve the config path for a scope. `project` needs the repo root. */

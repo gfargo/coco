@@ -4,10 +4,15 @@ import { getXdgConfigPath } from '../services/xdg'
 import { TRUSTED_PROJECT_SERVICE_KEYS } from '../services/project'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
 import { SCHEMA_PUBLIC_URL } from '../../schema'
+import { resolveProjectConfigPath } from './projectConfigPath'
 
 export type ConfigWriteScope = 'global' | 'project'
 
-const PROJECT_CONFIG_CANDIDATES = ['.coco.json', '.coco.config.json'] as const
+// Re-exported for existing callers; the candidate list and lookup helpers
+// live in `projectConfigPath.ts` so `services/project.ts` can consume them
+// without creating an import cycle (this module already imports from
+// `services/project.ts` for `TRUSTED_PROJECT_SERVICE_KEYS`).
+export { PROJECT_CONFIG_CANDIDATES, findExistingProjectConfig, resolveProjectConfigPath } from './projectConfigPath'
 
 /**
  * Resolve the on-disk path for a `coco config` write scope (#1605).
@@ -26,15 +31,7 @@ export function resolveScopedConfigPath(scope: ConfigWriteScope): string {
     return getXdgConfigPath()
   }
 
-  const repoRoot = resolveGitRepoRoot()
-  for (const candidate of PROJECT_CONFIG_CANDIDATES) {
-    const candidatePath = path.join(repoRoot, candidate)
-    if (fs.existsSync(candidatePath)) {
-      return candidatePath
-    }
-  }
-
-  return path.join(repoRoot, PROJECT_CONFIG_CANDIDATES[0])
+  return resolveProjectConfigPath(resolveGitRepoRoot())
 }
 
 /** Reads and parses a scoped config file. Returns `{}` if it doesn't exist. */

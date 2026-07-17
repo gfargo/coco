@@ -1,9 +1,9 @@
 import * as fs from 'fs'
-import * as path from 'path'
 import { Config } from '../types'
 import { SCHEMA_PUBLIC_URL, schema } from '../../schema'
 import { ajv } from '../../ajv'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
+import { findExistingProjectConfig } from '../utils/projectConfigPath'
 
 const validate = ajv.compile(schema)
 
@@ -101,16 +101,7 @@ export function loadProjectJsonConfig<ConfigType = Config>(
   // the repo root once (falling back to cwd outside a git repo) so a
   // subdirectory invocation finds the same file `coco init` wrote.
   const repoRoot = resolveGitRepoRoot()
-  const candidates = ['.coco.json', '.coco.config.json']
-  let resolvedPath: string | undefined
-
-  for (const candidate of candidates) {
-    const candidatePath = path.join(repoRoot, candidate)
-    if (fs.existsSync(candidatePath)) {
-      resolvedPath = candidatePath
-      break
-    }
-  }
+  const resolvedPath = findExistingProjectConfig(repoRoot)
 
   if (resolvedPath) {
     // Parse defensively. A malformed config file (a stray comma, an

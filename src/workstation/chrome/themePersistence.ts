@@ -1,8 +1,6 @@
 import * as fs from 'node:fs'
-import * as os from 'node:os'
-import * as path from 'node:path'
 
-import { writeFileAtomic } from '../../lib/utils/atomicFileWrite'
+import { getXdgConfigPath, writeGlobalConfigKey } from '../../lib/config/services/xdg'
 import { getLogInkThemePresets, type LogInkThemePreset } from './theme'
 
 /**
@@ -19,10 +17,7 @@ import { getLogInkThemePresets, type LogInkThemePreset } from './theme'
 
 const VALID_PRESETS = new Set<string>(getLogInkThemePresets())
 
-export function getXdgConfigPath(): string {
-  const home = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
-  return path.join(home, 'coco', 'config.json')
-}
+export { getXdgConfigPath }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -38,38 +33,7 @@ export function saveThemePreset(preset: LogInkThemePreset): boolean {
   if (!VALID_PRESETS.has(preset)) {
     return false
   }
-  const file = getXdgConfigPath()
-  try {
-    let config: Record<string, unknown> = {}
-    if (fs.existsSync(file)) {
-      // The file exists: it must parse as an object before we merge into
-      // it. Treating a malformed file (hand-edit with a trailing comma,
-      // truncated write) as "start fresh" silently ERASED every other
-      // setting the user had — abort instead; the theme still applies
-      // for the session.
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
-      } catch {
-        return false
-      }
-      if (!isRecord(parsed)) {
-        return false
-      }
-      config = parsed
-    }
-
-    const logTui = isRecord(config.logTui) ? config.logTui : {}
-    const theme = isRecord(logTui.theme) ? logTui.theme : {}
-    config.logTui = { ...logTui, theme: { ...theme, preset } }
-
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    // tmp+rename so a crash mid-write can't leave a truncated config.
-    writeFileAtomic(file, `${JSON.stringify(config, null, 2)}\n`)
-    return true
-  } catch {
-    return false
-  }
+  return writeGlobalConfigKey(['logTui', 'theme', 'preset'], preset)
 }
 
 /**

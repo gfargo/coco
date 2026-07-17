@@ -3,6 +3,7 @@ import * as os from 'os'
 import * as path from 'path'
 import { LLMService } from '../../langchain/types'
 import { Config } from '../types'
+import { writeFileAtomic } from '../../utils/atomicFileWrite'
 
 /** Path to the global XDG config (`$XDG_CONFIG_HOME/coco/config.json`). */
 export function getXdgConfigPath(): string {
@@ -37,6 +38,55 @@ export function resetXdgConfigLoadWarnings(): void {
 }
 
 /**
+ * Write `value` at `keyPath` into the global XDG config, merging into any
+ * existing content — every sibling key (and every sibling along the path)
+ * is preserved, only the leaf named by `keyPath` is touched. Returns `false`
+ * without writing if the existing file exists but isn't parseable JSON or
+ * isn't an object at its root: treating a malformed file as "start fresh"
+ * would silently erase every other setting the user had. Best-effort —
+ * a read-only HOME never throws, it just returns `false`.
+ */
+export function writeGlobalConfigKey(keyPath: [string, ...string[]], value: unknown): boolean {
+  const file = getXdgConfigPath()
+  try {
+    let config: Record<string, unknown> = {}
+    if (fs.existsSync(file)) {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+      } catch {
+        return false
+      }
+      if (!isRecord(parsed)) {
+        return false
+      }
+      config = parsed
+    }
+
+    const rootKey = keyPath[0]
+    const rest = keyPath.slice(1)
+    config[rootKey] = setAtPath(isRecord(config[rootKey]) ? config[rootKey] : {}, rest, value)
+
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    writeFileAtomic(file, `${JSON.stringify(config, null, 2)}\n`)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Deep-sets `value` at `path` under `node`, preserving every sibling key at each level. */
+function setAtPath(node: Record<string, unknown>, path: string[], value: unknown): unknown {
+  if (path.length === 0) return value
+
+  const [key, ...rest] = path
+  return {
+    ...node,
+    [key]: setAtPath(isRecord(node[key]) ? node[key] : {}, rest, value),
+  }
+}
+
+/**
  * Persist `telemetry.usage` into the global XDG config, merging into any
  * existing content (only this one key is touched). This is the per-machine home
  * for the recording preference — deliberately NOT the project config, so a
@@ -44,25 +94,7 @@ export function resetXdgConfigLoadWarnings(): void {
  * success; best-effort, so a read-only HOME or malformed file never throws.
  */
 export function persistUsagePreference(usage: boolean): boolean {
-  const file = getXdgConfigPath()
-  try {
-    let config: Record<string, unknown> = {}
-    try {
-      const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'))
-      if (isRecord(parsed)) config = parsed
-    } catch {
-      // No existing file (or unreadable/malformed) — start fresh.
-      config = {}
-    }
-    const telemetry = isRecord(config.telemetry) ? config.telemetry : {}
-    config.telemetry = { ...telemetry, usage }
-
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`)
-    return true
-  } catch {
-    return false
-  }
+  return writeGlobalConfigKey(['telemetry', 'usage'], usage)
 }
 
 /**
