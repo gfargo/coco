@@ -76,8 +76,9 @@ export async function handleValidationErrors(
 
   switch (choice) {
     case 'edit': {
-      // Edit message manually
-      const editedMessage = await editResult(message, options)
+      // Edit message manually — the user explicitly asked to edit, so force the editor open
+      // regardless of config.openInEditor (otherwise editResult is a silent no-op).
+      const editedMessage = await editResult(message, { ...options, openInEditor: true })
       
       // Validate the manually edited message if commitlint config exists
       const { hasCommitlintConfig } = await import('../utils/hasCommitlintConfig')
