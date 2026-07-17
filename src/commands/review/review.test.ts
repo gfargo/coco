@@ -211,6 +211,74 @@ describe('review command', () => {
     await expect(handler(argv, logger)).resolves.toBeUndefined()
   })
 
+  describe('empty-input --json paths (#1680)', () => {
+    function captureStdoutWrites() {
+      const writes: string[] = []
+      const writeSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(((chunk: string) => {
+          writes.push(String(chunk))
+          return true
+        }) as never)
+      return { writes, restore: () => writeSpy.mockRestore() }
+    }
+
+    it('emits an empty JSON array on a clean tree instead of a human sentence', async () => {
+      argv.json = true
+      mockGetChanges.mockResolvedValue({ staged: [], unstaged: [], untracked: [] })
+
+      const { writes, restore } = captureStdoutWrites()
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 0 })
+      } finally {
+        restore()
+      }
+
+      expect(writes).toEqual(['[]\n'])
+      expect(logger.setConfig).toHaveBeenCalledWith({ quiet: true })
+    })
+
+    it('emits an empty JSON array with --staged when nothing is staged', async () => {
+      argv.json = true
+      argv.staged = true
+      mockGetChanges.mockResolvedValue({
+        staged: [],
+        unstaged: [{ filePath: 'src/file.ts', status: 'modified', summary: 'changed file' }],
+        untracked: [],
+      })
+
+      const { writes, restore } = captureStdoutWrites()
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 0 })
+      } finally {
+        restore()
+      }
+
+      expect(writes).toEqual(['[]\n'])
+    })
+
+    it('emits an empty JSON array when the review loop reports noResult', async () => {
+      argv.json = true
+
+      const { generateAndReviewLoop } = jest.requireMock('../../lib/ui/generateAndReviewLoop') as {
+        generateAndReviewLoop: jest.Mock
+      }
+      generateAndReviewLoop.mockImplementationOnce(async ({ noResult, options }) => {
+        await noResult(options)
+        return []
+      })
+
+      const { writes, restore } = captureStdoutWrites()
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 0 })
+      } finally {
+        restore()
+      }
+
+      expect(writes).toEqual(['[]\n'])
+    })
+  })
+
   it('reviews only staged changes with --staged', async () => {
     argv.staged = true
     argv.json = true
