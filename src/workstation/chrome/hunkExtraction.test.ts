@@ -233,6 +233,109 @@ describe('extractDiffHunk', () => {
     expect(result!.patchText).toContain('@@ -1,4 +1,4 @@')
   })
 
+  it('emits `--- /dev/null` for a new-file hunk (stash-style, headers present)', () => {
+    // A stash containing a staged new file: the original patch's `---`
+    // side is `/dev/null`. Synthesizing `--- a/new.txt` would make
+    // `git apply` fail with "No such file or directory".
+    const newFilePatch = [
+      'diff --git a/new.txt b/new.txt',
+      'new file mode 100644',
+      'index 0000000..1234567',
+      '--- /dev/null',
+      '+++ b/new.txt',
+      '@@ -0,0 +1,3 @@',
+      '+line one',
+      '+line two',
+      '+line three',
+    ]
+
+    const result = extractDiffHunk({
+      lines: newFilePatch,
+      cursorOffset: newFilePatch.length - 1,
+      path: 'new.txt',
+    })
+
+    expect(result).not.toBeNull()
+    expect(result!.patchText).toContain('new file mode 100644')
+    expect(result!.patchText).toContain('--- /dev/null')
+    expect(result!.patchText).toContain('+++ b/new.txt')
+    expect(result!.patchText).not.toContain('--- a/new.txt')
+  })
+
+  it('emits `+++ /dev/null` for a whole-file-deletion hunk', () => {
+    // The original patch's `+++` side is `/dev/null`. Synthesizing
+    // `+++ b/del.txt` instead makes `git apply` "succeed" while
+    // leaving a 0-byte tracked file behind instead of deleting it.
+    const deletionPatch = [
+      'diff --git a/del.txt b/del.txt',
+      'deleted file mode 100644',
+      'index 1234567..0000000',
+      '--- a/del.txt',
+      '+++ /dev/null',
+      '@@ -1,2 +0,0 @@',
+      '-line one',
+      '-line two',
+    ]
+
+    const result = extractDiffHunk({
+      lines: deletionPatch,
+      cursorOffset: deletionPatch.length - 1,
+      path: 'del.txt',
+    })
+
+    expect(result).not.toBeNull()
+    expect(result!.patchText).toContain('deleted file mode 100644')
+    expect(result!.patchText).toContain('--- a/del.txt')
+    expect(result!.patchText).toContain('+++ /dev/null')
+    expect(result!.patchText).not.toContain('+++ b/del.txt')
+  })
+
+  it('emits `--- /dev/null` for a new-file hunk from hunks-only commit-diff input', () => {
+    const hunksOnlyNewFile = [
+      '@@ -0,0 +1,2 @@',
+      '+line one',
+      '+line two',
+    ]
+
+    const result = extractDiffHunk({
+      lines: hunksOnlyNewFile,
+      cursorOffset: 1,
+      path: 'src/added.ts',
+    })
+
+    expect(result).not.toBeNull()
+    expect(result!.patchText).toBe([
+      'diff --git a/src/added.ts b/src/added.ts',
+      'new file mode 100644',
+      '--- /dev/null',
+      '+++ b/src/added.ts',
+      '@@ -0,0 +1,2 @@',
+      '+line one',
+      '+line two',
+      '',
+    ].join('\n'))
+  })
+
+  it('classifies count-omission header forms correctly', () => {
+    // `@@ -0,0 +1 @@` (omitted new count means 1) is still a new-file hunk.
+    const newFileOmittedCount = ['@@ -0,0 +1 @@', '+only line']
+    const newFileResult = extractDiffHunk({
+      lines: newFileOmittedCount,
+      cursorOffset: 1,
+      path: 'src/single.ts',
+    })
+    expect(newFileResult!.patchText).toContain('--- /dev/null')
+
+    // `@@ -1 +0,0 @@` (omitted old count means 1) is still a deletion hunk.
+    const deletionOmittedCount = ['@@ -1 +0,0 @@', '-only line']
+    const deletionResult = extractDiffHunk({
+      lines: deletionOmittedCount,
+      cursorOffset: 1,
+      path: 'src/single.ts',
+    })
+    expect(deletionResult!.patchText).toContain('+++ /dev/null')
+  })
+
   describe('internals', () => {
     it('findHunkHeaderAtOrBefore walks backwards', () => {
       const lines = ['@@ a @@', 'x', 'y', '@@ b @@', 'z']
@@ -245,6 +348,29 @@ describe('extractDiffHunk', () => {
       const lines = ['@@ a @@', 'x', 'y', '@@ b @@', 'z']
       expect(inkHunkExtractionTestInternals.findHunkBodyEnd(lines, 0)).toBe(3)
       expect(inkHunkExtractionTestInternals.findHunkBodyEnd(lines, 3)).toBe(5)
+    })
+
+    it('parseHunkHeader parses counts, defaulting omitted counts to 1', () => {
+      expect(inkHunkExtractionTestInternals.parseHunkHeader('@@ -1,3 +1,4 @@')).toEqual({
+        oldStart: 1,
+        oldCount: 3,
+        newStart: 1,
+        newCount: 4,
+      })
+      expect(inkHunkExtractionTestInternals.parseHunkHeader('@@ -0,0 +1 @@')).toEqual({
+        oldStart: 0,
+        oldCount: 0,
+        newStart: 1,
+        newCount: 1,
+      })
+      expect(inkHunkExtractionTestInternals.parseHunkHeader('@@ -1 +0,0 @@')).toEqual({
+        oldStart: 1,
+        oldCount: 1,
+        newStart: 0,
+        newCount: 0,
+      })
+      expect(inkHunkExtractionTestInternals.parseHunkHeader('not a header')).toBeNull()
+      expect(inkHunkExtractionTestInternals.parseHunkHeader(undefined)).toBeNull()
     })
   })
 })

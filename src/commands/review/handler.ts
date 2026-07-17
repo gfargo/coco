@@ -85,6 +85,10 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     if (!config.hideCocoBanner) {
       logger.log(LOGO)
     }
+  } else if (argv.json) {
+    // JSON output is data on stdout; silence human log lines so they can't
+    // pollute the machine-readable payload (mirrors recap #1586).
+    logger.setConfig({ quiet: true })
   }
 
   // `--pr <n>`: review an existing forge PR/MR instead of local changes.
@@ -165,6 +169,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
 
       if (staged.length === 0 && unstaged?.length === 0 && untracked?.length === 0) {
         logger.log('No changes detected. Exiting...')
+        if (argv.json) emitJson([])
         commandExit(0)
       }
 
@@ -181,6 +186,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       if (argv.staged) {
         if (staged.length === 0) {
           logger.log('No staged changes detected. Exiting...')
+          if (argv.json) emitJson([])
           commandExit(0)
         }
         const stagedOnly = await fileChangeParser({
@@ -345,6 +351,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     },
     noResult: async () => {
       await noResult({ git, logger })
+      if (argv.json) emitJson([])
       commandExit(0)
     },
   })

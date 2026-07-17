@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import {
+  compactGlabError,
   describeGlabStatus,
   getGitLabProject,
   getGlabStatus,
@@ -86,6 +87,31 @@ describe('resolveGlabActionError (#0.70)', () => {
     }
     await resolveGlabActionError(new Error('failed'), runner, 'gitlab.acme.com')
     expect(calls[0]).toEqual(['auth', 'status', '--hostname', 'gitlab.acme.com'])
+  })
+
+  it('prefers the attached stderr (where glab explains itself) over the echoed command', async () => {
+    const error = Object.assign(
+      new Error('Command failed: glab mr create --description=huge'),
+      { stderr: 'GitLab: An open merge request already exists\n' }
+    )
+    const result = await resolveGlabActionError(error, async () => '')
+    expect(result.message).toBe('GitLab: An open merge request already exists')
+  })
+})
+
+describe('compactGlabError', () => {
+  it('drops the echoed command line and leads with the real reason', () => {
+    const message = [
+      'Command failed: glab mr create --description=huge',
+      'GitLab: merge request already exists',
+    ].join('\n')
+    const result = compactGlabError(message)
+    expect(result.message).toBe('GitLab: merge request already exists')
+    expect(result.details).toEqual([])
+  })
+
+  it('falls back to a generic message for empty input', () => {
+    expect(compactGlabError('   ')).toEqual({ message: 'GitLab CLI command failed.', details: [] })
   })
 })
 
