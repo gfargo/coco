@@ -116,4 +116,15 @@ describe('writeChangelogFile', () => {
     expect(written).toContain('- old')
     expect(written).toContain('- new')
   })
+
+  it('does not match a title that is a word-prefix of another title', () => {
+    fs.writeFileSync(filePath, '# Changelog\n\n## v1.0 hotfix — 2026-06-01\n\n- hotfix notes\n')
+    writeChangelogFile({ filePath, title: 'v1.0', content: '- new', date: '2026-07-13' })
+    const written = fs.readFileSync(filePath, 'utf8')
+    // Both headings survive — v1.0 was inserted as new, not merged into v1.0 hotfix's section.
+    expect(written).toContain('## v1.0 hotfix — 2026-06-01')
+    expect(written).toContain('## v1.0 — 2026-07-13')
+    expect(written).toContain('- hotfix notes')
+    expect(written).toContain('- new')
+  })
 })
