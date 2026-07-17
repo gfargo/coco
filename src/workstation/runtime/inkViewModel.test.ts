@@ -1686,6 +1686,80 @@ describe('log Ink view model', () => {
     })
   })
 
+  // OSS-1001 / #1671 — a background context refresh only replaces
+  // `LogInkContext`; it never touches the reducer, so `selected*Index`
+  // goes stale the moment the refresh reorders/inserts/removes rows.
+  // `rectifyPromotedSelections` re-syncs the index to wherever the id
+  // now sits (or clears the id when it no longer resolves) so the
+  // rendered highlight and the id-first workflow executor stay in
+  // agreement — see `refreshRectification.test.ts` for the snapshot
+  // computation this action consumes.
+  describe('rectifyPromotedSelections (OSS-1001 / #1671)', () => {
+    it('moves selectedBranchIndex to the snapshot index and keeps the id', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature-a' })
+      expect(state.selectedBranchIndex).toBe(3)
+      state = applyLogInkAction(state, {
+        type: 'rectifyPromotedSelections',
+        snapshot: { branch: { index: 5 } },
+      })
+      expect(state.selectedBranchIndex).toBe(5)
+      expect(state.selectedBranchId).toBe('feature-a')
+    })
+
+    it('clears selectedBranchId and leaves the index untouched when the id no longer resolves', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature-a' })
+      state = applyLogInkAction(state, {
+        type: 'rectifyPromotedSelections',
+        snapshot: { branch: { clear: true } },
+      })
+      expect(state.selectedBranchIndex).toBe(3)
+      expect(state.selectedBranchId).toBeUndefined()
+    })
+
+    it('is a no-op for views absent from the snapshot — never fights a resetBranchSelection', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature-a' })
+      state = applyLogInkAction(state, { type: 'resetBranchSelection' })
+      expect(state.selectedBranchId).toBeUndefined()
+      // An empty snapshot (e.g. the branch id was already unset before
+      // the refresh landed) must not resurrect a stale index/id.
+      const before = state
+      state = applyLogInkAction(state, { type: 'rectifyPromotedSelections', snapshot: {} })
+      expect(state).toBe(before)
+    })
+
+    it('rectifies tag / stash / worktree / submodule / remote independently in one dispatch', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'moveTag', delta: 1, count: 10, id: 'v2.0' })
+      state = applyLogInkAction(state, { type: 'moveStash', delta: 1, count: 10, id: 'stash@{1}' })
+      state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 10, id: '/repo-feature' })
+      state = applyLogInkAction(state, { type: 'moveSubmodule', delta: 1, count: 10, id: '/vendor/b' })
+      state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 10, id: 'upstream' })
+      state = applyLogInkAction(state, {
+        type: 'rectifyPromotedSelections',
+        snapshot: {
+          tag: { index: 4 },
+          stash: { clear: true },
+          worktreeList: { index: 2 },
+          submodule: { clear: true },
+          remote: { index: 0 },
+        },
+      })
+      expect(state.selectedTagIndex).toBe(4)
+      expect(state.selectedTagId).toBe('v2.0')
+      expect(state.selectedStashIndex).toBe(1)
+      expect(state.selectedStashId).toBeUndefined()
+      expect(state.selectedWorktreeListIndex).toBe(2)
+      expect(state.selectedWorktreeListId).toBe('/repo-feature')
+      expect(state.selectedSubmoduleIndex).toBe(1)
+      expect(state.selectedSubmoduleId).toBeUndefined()
+      expect(state.selectedRemoteIndex).toBe(0)
+      expect(state.selectedRemoteId).toBe('upstream')
+    })
+  })
+
   // #1361 — multi-select marks + range anchor.
   describe('multi-select selection (#1361)', () => {
     it('toggleMark adds then removes an id, collapsing to undefined when empty', () => {

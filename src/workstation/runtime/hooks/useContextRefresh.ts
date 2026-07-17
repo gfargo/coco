@@ -23,6 +23,8 @@ import type { SimpleGit } from 'simple-git'
 import type { LogInkContext } from '../types'
 import type { LogInkContextKey, LogInkContextStatus } from '../../chrome/context'
 import { createLogInkContextStatus, mergeRefreshedContext, updateLogInkContextStatus } from '../../chrome/context'
+import type { LogInkAction, LogInkState } from '../inkViewModel'
+import { computeRefreshRectificationSnapshot, hasRefreshRectification } from '../refreshRectification'
 import { getBranchOverview } from '../../../git/branchData'
 import { getLfsAttributeStatus } from '../../../git/lfsAttributes'
 import { getSubmoduleOverview } from '../../../git/submoduleData'
@@ -113,7 +115,17 @@ export type UseContextRefreshDeps = {
    * still in context instead of `undefined`.
    */
   worktree: LogInkContext['worktree']
-  dispatch: (action: { type: 'setStatus'; value: string }) => void
+  dispatch: (action: LogInkAction) => void
+  /**
+   * Render-fresh snapshot of the reducer state (OSS-1001 / #1671), read
+   * at refresh-completion time rather than closed over — `refreshContext`
+   * is memoized once (its identity feeds `useRefreshWatcher`'s effect dep
+   * array; re-memoizing it on every keystroke would re-subscribe the fs
+   * watcher), so a stale `state` closure would rectify against whatever
+   * the cursor was pointed at when the hook first mounted, not where it
+   * actually is when the refresh lands.
+   */
+  stateRef: ReactTypes.MutableRefObject<LogInkState>
   setContext: (updater: (current: LogInkContext) => LogInkContext, depth: number) => void
   setContextStatus: (
     value: LogInkContextStatus | ((current: LogInkContextStatus) => LogInkContextStatus),
@@ -149,6 +161,7 @@ export function useContextRefresh(
     runtimesLength,
     worktree: currentWorktree,
     dispatch,
+    stateRef,
     setContext,
     setContextStatus,
     setPrDiffRefreshToken,
@@ -176,15 +189,25 @@ export function useContextRefresh(
     if (refreshContextRequestRef.current[issuedAtDepth] !== requestId) {
       return
     }
+    // OSS-1001 / #1671 — every field `loadLogInkContext` fetches (branches,
+    // tags, stashes, worktreeList, submodules, remotes — the six views
+    // this rectifies) is always present on `next`, so it wins the merge
+    // below unconditionally; computing the snapshot against `next` here
+    // is equivalent to computing it against the merged context, without
+    // waiting on the (batched, async) `setContext` write to land.
+    const rectification = computeRefreshRectificationSnapshot(stateRef.current, next)
     // OSS-452 — merge, don't replace: preserves lazily-loaded slices.
     setContext((current) => mergeRefreshedContext(current, next), issuedAtDepth)
+    if (hasRefreshRectification(rectification)) {
+      dispatch({ type: 'rectifyPromotedSelections', snapshot: rectification })
+    }
     setContextStatus(createLogInkContextStatus('ready'), issuedAtDepth)
     // Force PR-diff hydration re-evaluation.
     setPrDiffRefreshToken((token) => token + 1)
     if (!options.silent) {
       dispatch({ type: 'setStatus', value: 'repository context refreshed' })
     }
-  }, [dispatch, git, runtimesLength, setContext, setContextStatus, setPrDiffRefreshToken])
+  }, [dispatch, git, runtimesLength, setContext, setContextStatus, setPrDiffRefreshToken, stateRef])
 
   const refreshWorktreeContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
     const issuedAtDepth = runtimesLength - 1

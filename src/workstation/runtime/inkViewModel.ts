@@ -22,6 +22,7 @@ import {
     type PullRequestFilterPreset,
 } from '../../git/triageFilterPresets'
 import { PromotedSelectionsSnapshot } from '../chrome/selectionRectify'
+import type { RefreshRectificationSnapshot } from './refreshRectification'
 import {
     BranchSortMode,
     DEFAULT_BRANCH_SORT_MODE,
@@ -1218,6 +1219,13 @@ export type LogInkAction =
   | { type: 'cycleIssueFilter' }
   | { type: 'cyclePullRequestTriageFilter' }
   | { type: 'moveWorktreeListEntry'; delta: number; count: number; id?: string }
+  // OSS-1001 / #1671 — re-syncs each promoted view's `selected*Index` to
+  // wherever its `selected*Id` now sits after a background context
+  // refresh reorders/inserts/removes rows (or clears the id when it no
+  // longer resolves). Dispatched by `useContextRefresh.refreshContext`
+  // right after the fresh context lands; see `refreshRectification.ts`
+  // for how the snapshot is computed.
+  | { type: 'rectifyPromotedSelections'; snapshot: RefreshRectificationSnapshot }
   | { type: 'moveConflictFile'; delta: number; count: number }
   | { type: 'moveToBottom' }
   | { type: 'moveToTop' }
@@ -1905,6 +1913,51 @@ function withFilter(
   }
 }
 
+/**
+ * Apply a `refreshRectification.ts` snapshot (OSS-1001 / #1671): for each
+ * view with an entry, either move `selected*Index` to where the id now
+ * sits (keeping the id — it's still the same logical row, just at a new
+ * position) or clear the id mirror when it no longer resolves (leaving
+ * the index as-is; the selectors already clamp it against the current
+ * list length). Views with no entry (no id was set) are left untouched —
+ * this must never fight `resetBranchSelection` or similar resets that
+ * intentionally cleared the id.
+ */
+function applyRefreshRectification(
+  state: LogInkState,
+  snapshot: RefreshRectificationSnapshot
+): LogInkState {
+  const patch: Partial<LogInkState> = {}
+  if (snapshot.branch) {
+    if ('index' in snapshot.branch) patch.selectedBranchIndex = snapshot.branch.index
+    else patch.selectedBranchId = undefined
+  }
+  if (snapshot.tag) {
+    if ('index' in snapshot.tag) patch.selectedTagIndex = snapshot.tag.index
+    else patch.selectedTagId = undefined
+  }
+  if (snapshot.stash) {
+    if ('index' in snapshot.stash) patch.selectedStashIndex = snapshot.stash.index
+    else patch.selectedStashId = undefined
+  }
+  if (snapshot.worktreeList) {
+    if ('index' in snapshot.worktreeList) patch.selectedWorktreeListIndex = snapshot.worktreeList.index
+    else patch.selectedWorktreeListId = undefined
+  }
+  if (snapshot.submodule) {
+    if ('index' in snapshot.submodule) patch.selectedSubmoduleIndex = snapshot.submodule.index
+    else patch.selectedSubmoduleId = undefined
+  }
+  if (snapshot.remote) {
+    if ('index' in snapshot.remote) patch.selectedRemoteIndex = snapshot.remote.index
+    else patch.selectedRemoteId = undefined
+  }
+  if (Object.keys(patch).length === 0) {
+    return state
+  }
+  return { ...state, ...patch }
+}
+
 function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
   // Wholesale row replacement after a server-side re-fetch (#776).
   const commits = getCommitRows(rows)
@@ -2506,6 +2559,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedWorktreeListId: action.id,
         pendingKey: undefined,
       }
+    case 'rectifyPromotedSelections':
+      return applyRefreshRectification(state, action.snapshot)
     case 'moveConflictFile':
       return {
         ...state,
