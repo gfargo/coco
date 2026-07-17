@@ -91,3 +91,35 @@ describe('summarize() retry behavior', () => {
     expect(firstCall[0].input_documents[0]).toBeInstanceOf(Document)
   })
 })
+
+describe('summarize() empty-result handling (#1700)', () => {
+  it('rejects when the chain resolves an empty string', async () => {
+    const invoke = jest.fn().mockResolvedValue({ text: '' })
+    const ctx = makeContext({ invoke })
+    await expect(summarize([{ pageContent: 'hello' }], ctx)).rejects.toThrow(
+      'summarize: chain returned an empty summary'
+    )
+  })
+
+  it('rejects when the chain resolves a whitespace-only string', async () => {
+    const invoke = jest.fn().mockResolvedValue({ text: '   \n\t  ' })
+    const ctx = makeContext({ invoke })
+    await expect(summarize([{ pageContent: 'hello' }], ctx)).rejects.toThrow(
+      'summarize: chain returned an empty summary'
+    )
+  })
+
+  it('rejects when the chain result has no text key', async () => {
+    const invoke = jest.fn().mockResolvedValue({})
+    const ctx = makeContext({ invoke })
+    await expect(summarize([{ pageContent: 'hello' }], ctx)).rejects.toThrow(
+      'summarize: chain returned an empty summary'
+    )
+  })
+
+  it('still resolves the trimmed summary on the happy path', async () => {
+    const invoke = jest.fn().mockResolvedValue({ text: '  summary  ' })
+    const ctx = makeContext({ invoke })
+    await expect(summarize([{ pageContent: 'hello' }], ctx)).resolves.toBe('summary')
+  })
+})
