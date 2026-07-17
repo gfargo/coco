@@ -109,8 +109,8 @@ function isHeaderLine(line: string): boolean {
   return (
     line.startsWith('diff --git') ||
     line.startsWith('index ') ||
-    line.startsWith('--- ') ||
-    line.startsWith('+++ ') ||
+    /^--- (a\/|b\/|\/dev\/null)/.test(line) ||
+    /^\+\+\+ (a\/|b\/|\/dev\/null)/.test(line) ||
     line.startsWith('@@') ||
     line.startsWith('new file mode') ||
     line.startsWith('deleted file mode') ||
