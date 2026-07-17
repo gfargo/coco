@@ -118,6 +118,10 @@ export function compactGlabError(message: string): GhActionError {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
+    // execFile prefixes its message with the echoed argv ("Command failed:
+    // glab mr create --description=<full MR body>"), which names no failure
+    // reason and buries glab's stderr past the 8-line cap. Drop it.
+    .filter((line) => !line.startsWith('Command failed:'))
 
   return {
     message: lines[0] || 'GitLab CLI command failed.',
@@ -139,7 +143,14 @@ export async function resolveGlabActionError(
   runner: GlabRunner,
   hostname?: string
 ): Promise<GhActionError> {
-  const raw = (error as Error)?.message || 'GitLab CLI command failed.'
+  // Promisified execFile attaches process stderr to the error — that's
+  // where glab explains itself (MR already exists, pipeline red, auth).
+  // Prefer it over `message`, which leads with the echoed command line.
+  const stderr = (error as { stderr?: unknown })?.stderr
+  const raw =
+    (typeof stderr === 'string' && stderr.trim() ? stderr : undefined) ||
+    (error as Error)?.message ||
+    'GitLab CLI command failed.'
 
   try {
     const status = await getGlabStatus(runner, hostname)
