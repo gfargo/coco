@@ -132,10 +132,10 @@ export function loadGitConfig<ConfigType = Config>(
       ignoredFiles: gitConfigParsed.coco?.ignoredFiles || config.ignoredFiles,
       ignoredExtensions: gitConfigParsed.coco?.ignoredExtensions || config.ignoredExtensions,
       defaultBranch: gitConfigParsed.coco?.defaultBranch || config.defaultBranch,
-      verbose: gitConfigParsed.coco?.verbose || config.verbose,
-      conventionalCommits: gitConfigParsed.coco?.conventionalCommits || config.conventionalCommits,
-      openInEditor: gitConfigParsed.coco?.openInEditor || config.openInEditor,
-      includeBranchName: gitConfigParsed.coco?.includeBranchName || config.includeBranchName,
+      verbose: gitConfigParsed.coco?.verbose ?? config.verbose,
+      conventionalCommits: gitConfigParsed.coco?.conventionalCommits ?? config.conventionalCommits,
+      openInEditor: gitConfigParsed.coco?.openInEditor ?? config.openInEditor,
+      includeBranchName: gitConfigParsed.coco?.includeBranchName ?? config.includeBranchName,
     }
   }
 

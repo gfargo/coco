@@ -233,6 +233,87 @@ describe('loadGitConfig', () => {
     // openai service.
     expect((service as unknown as { endpoint?: string }).endpoint).toBeUndefined()
   })
+
+  it('lets an explicit `false` gitconfig boolean override a `true` lower-layer value', () => {
+    // Regression: `gitConfigParsed.coco?.verbose || config.verbose` treated
+    // an explicit `false` from gitconfig as "not set" and fell through to
+    // the lower-layer `true`, so users could never disable these flags via
+    // .gitconfig once a lower layer had them enabled.
+    const falseBooleans = `
+[coco]
+  verbose = false
+  conventionalCommits = false
+  openInEditor = false
+  includeBranchName = false
+`
+    const defaults: Partial<Config> = {
+      service: getDefaultServiceConfigFromAlias('ollama'),
+      mode: 'stdout',
+      defaultBranch: 'test',
+      verbose: true,
+      conventionalCommits: true,
+      openInEditor: true,
+      includeBranchName: true,
+    }
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(falseBooleans)
+
+    const config = loadGitConfig(defaults as Config)
+
+    expect(config.verbose).toBe(false)
+    expect(config.conventionalCommits).toBe(false)
+    expect(config.openInEditor).toBe(false)
+    expect(config.includeBranchName).toBe(false)
+  })
+
+  it('lets an explicit `true` gitconfig boolean override a `false` lower-layer value', () => {
+    const trueBooleans = `
+[coco]
+  verbose = true
+  conventionalCommits = true
+  openInEditor = true
+  includeBranchName = true
+`
+    const defaults: Partial<Config> = {
+      service: getDefaultServiceConfigFromAlias('ollama'),
+      mode: 'stdout',
+      defaultBranch: 'test',
+      verbose: false,
+      conventionalCommits: false,
+      openInEditor: false,
+      includeBranchName: false,
+    }
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(trueBooleans)
+
+    const config = loadGitConfig(defaults as Config)
+
+    expect(config.verbose).toBe(true)
+    expect(config.conventionalCommits).toBe(true)
+    expect(config.openInEditor).toBe(true)
+    expect(config.includeBranchName).toBe(true)
+  })
+
+  it('preserves the lower-layer boolean when the key is absent from [coco]', () => {
+    const defaults: Partial<Config> = {
+      service: getDefaultServiceConfigFromAlias('ollama'),
+      mode: 'stdout',
+      defaultBranch: 'test',
+      verbose: true,
+      conventionalCommits: false,
+      openInEditor: true,
+      includeBranchName: false,
+    }
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION)
+
+    const config = loadGitConfig(defaults as Config)
+
+    expect(config.verbose).toBe(true)
+    expect(config.conventionalCommits).toBe(false)
+    expect(config.openInEditor).toBe(true)
+    expect(config.includeBranchName).toBe(false)
+  })
 })
 
 describe('appendToGitConfig', () => {
