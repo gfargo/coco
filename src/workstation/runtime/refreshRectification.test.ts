@@ -147,4 +147,77 @@ describe('computeRefreshRectificationSnapshot (OSS-1001 / #1671)', () => {
     expect(snapshot.submodule).toEqual({ index: 1 })
     expect(snapshot.remote).toEqual({ index: 1 })
   })
+
+  it('does not clear a worktree id that a filter hides but the unfiltered list still resolves (review gap #1)', () => {
+    // getSelectedWorktree (selection.ts) falls back to searching the FULL
+    // unfiltered list when an active filter hides every row — a palette
+    // action can still fire with a stale filter applied. The rectification
+    // snapshot must not clear an id the selector would still resolve.
+    const state = {
+      ...createLogInkState([]),
+      selectedWorktreeListId: '/repo/wt-a',
+      selectedWorktreeListIndex: 0,
+      filter: 'does-not-match-anything',
+    }
+    const context = {
+      worktreeList: { worktrees: [makeWorktree('/repo/wt-a'), makeWorktree('/repo/wt-b')] },
+    } as unknown as LogInkContext
+    const snapshot = computeRefreshRectificationSnapshot(state, context)
+    // No rectification for this view — the id is left exactly as-is
+    // rather than being cleared, since getSelectedWorktree would still
+    // find it via its unfiltered-list fallback tier.
+    expect(snapshot.worktreeList).toBeUndefined()
+  })
+
+  it('still clears a worktree id that is genuinely gone from both the filtered and unfiltered lists', () => {
+    const state = {
+      ...createLogInkState([]),
+      selectedWorktreeListId: '/repo/deleted',
+      selectedWorktreeListIndex: 0,
+      filter: 'does-not-match-anything',
+    }
+    const context = {
+      worktreeList: { worktrees: [makeWorktree('/repo/wt-a'), makeWorktree('/repo/wt-b')] },
+    } as unknown as LogInkContext
+    const snapshot = computeRefreshRectificationSnapshot(state, context)
+    expect(snapshot.worktreeList).toEqual({ clear: true })
+  })
+
+  it('does not clear a submodule/remote id filtered out of the visible list either (review gap #1)', () => {
+    const state = {
+      ...createLogInkState([]),
+      selectedSubmoduleId: 'libs/a',
+      selectedSubmoduleIndex: 0,
+      selectedRemoteId: 'origin',
+      selectedRemoteIndex: 0,
+      filter: 'does-not-match-anything',
+    }
+    const context = {
+      submodules: { entries: [makeSubmodule('libs/a'), makeSubmodule('libs/b')] },
+      remotes: { entries: [makeRemote('origin'), makeRemote('upstream')] },
+    } as unknown as LogInkContext
+    const snapshot = computeRefreshRectificationSnapshot(state, context)
+    expect(snapshot.submodule).toBeUndefined()
+    expect(snapshot.remote).toBeUndefined()
+  })
+
+  it('skips a view entirely (rather than clearing) when its section is absent from a failed refresh fetch (review gap #2)', () => {
+    // useContextRefresh.loadLogInkContext wraps each section's fetch in
+    // safe(), which swallows a thrown error and resolves to undefined for
+    // just that key. A single flaky fetch (e.g. a hiccuping git submodule
+    // subprocess) must not permanently clear a valid id — unlike the
+    // context merge itself, a cleared id has no self-healing recovery on
+    // the next successful refresh.
+    const state = {
+      ...createLogInkState([]),
+      selectedSubmoduleId: 'libs/a',
+      selectedSubmoduleIndex: 0,
+    }
+    const context = {
+      // submodules key entirely absent — this round's fetch failed.
+    } as unknown as LogInkContext
+    const snapshot = computeRefreshRectificationSnapshot(state, context)
+    expect(snapshot.submodule).toBeUndefined()
+    expect(hasRefreshRectification(snapshot)).toBe(false)
+  })
 })

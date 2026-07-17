@@ -42,12 +42,30 @@ export type RefreshRectificationSnapshot = {
   remote?: RefreshRectificationEntry
 }
 
-function rectifyEntry(id: string | undefined, visibleKeys: string[]): RefreshRectificationEntry | undefined {
+/**
+ * `allKeys`, when passed, is the corresponding selector's unfiltered-list
+ * fallback tier (worktree/submodule/remote only — see `getSelectedWorktree`
+ * et al. in `selection.ts`). When the id isn't in the filtered `visibleKeys`
+ * but still resolves in `allKeys`, the selector would still find it via that
+ * fallback, so we leave the view out of the snapshot entirely (`undefined`)
+ * rather than clearing a still-valid id.
+ */
+function rectifyEntry(
+  id: string | undefined,
+  visibleKeys: string[],
+  allKeys?: string[],
+): RefreshRectificationEntry | undefined {
   if (!id) {
     return undefined
   }
   const index = visibleKeys.indexOf(id)
-  return index >= 0 ? { index } : { clear: true }
+  if (index >= 0) {
+    return { index }
+  }
+  if (allKeys && allKeys.includes(id)) {
+    return undefined
+  }
+  return { clear: true }
 }
 
 /**
@@ -60,46 +78,86 @@ export function computeRefreshRectificationSnapshot(
   state: LogInkState,
   context: LogInkContext,
 ): RefreshRectificationSnapshot {
-  const allBranches = sortBranches(context.branches?.localBranches || [], state.branchSort)
-  const visibleBranches = state.filter
-    ? allBranches.filter((branch) =>
-      matchesPromotedFilter([branch.shortName, branch.upstream || ''], state.filter))
-    : allBranches
-  const branch = rectifyEntry(state.selectedBranchId, visibleBranches.map((b) => b.shortName))
+  // A section that's entirely absent (as opposed to present with an empty
+  // list) means THIS refresh's fetch for it failed and `safe()` swallowed
+  // the error (see `useContextRefresh.loadLogInkContext`) — a transient
+  // hiccup (e.g. a flaky git submodule subprocess), not evidence the row
+  // is actually gone. Skip rectifying that view entirely rather than
+  // treating the failure as "zero rows", which would otherwise clear a
+  // still-valid id. Unlike the context merge itself (which self-heals on
+  // the next successful refresh), a cleared id has no such recovery.
+  const branch = context.branches
+    ? rectifyEntry(
+      state.selectedBranchId,
+      (() => {
+        const all = sortBranches(context.branches?.localBranches || [], state.branchSort)
+        const visible = state.filter
+          ? all.filter((b) => matchesPromotedFilter([b.shortName, b.upstream || ''], state.filter))
+          : all
+        return visible.map((b) => b.shortName)
+      })(),
+    )
+    : undefined
 
-  const allTags = sortTags(context.tags?.tags || [], state.tagSort)
-  const visibleTags = state.filter
-    ? allTags.filter((tag) => matchesPromotedFilter([tag.name, tag.subject], state.filter))
-    : allTags
-  const tag = rectifyEntry(state.selectedTagId, visibleTags.map((t) => t.name))
+  const tag = context.tags
+    ? rectifyEntry(
+      state.selectedTagId,
+      (() => {
+        const all = sortTags(context.tags?.tags || [], state.tagSort)
+        const visible = state.filter
+          ? all.filter((t) => matchesPromotedFilter([t.name, t.subject], state.filter))
+          : all
+        return visible.map((t) => t.name)
+      })(),
+    )
+    : undefined
 
-  const allStashes = context.stashes?.stashes || []
-  const visibleStashes = state.filter
-    ? allStashes.filter((stash) => matchesPromotedFilter([stash.ref, stash.message], state.filter))
-    : allStashes
-  const stash = rectifyEntry(state.selectedStashId, visibleStashes.map((s) => s.ref))
+  const stash = context.stashes
+    ? rectifyEntry(
+      state.selectedStashId,
+      (() => {
+        const all = context.stashes?.stashes || []
+        const visible = state.filter
+          ? all.filter((s) => matchesPromotedFilter([s.ref, s.message], state.filter))
+          : all
+        return visible.map((s) => s.ref)
+      })(),
+    )
+    : undefined
 
-  const allWorktrees = context.worktreeList?.worktrees || []
-  const visibleWorktrees = state.filter
-    ? allWorktrees.filter((entry) => matchesPromotedFilter([entry.path, entry.branch || ''], state.filter))
-    : allWorktrees
-  const worktreeList = rectifyEntry(state.selectedWorktreeListId, visibleWorktrees.map((w) => w.path))
+  const worktreeList = context.worktreeList
+    ? (() => {
+      const all = context.worktreeList?.worktrees || []
+      const visible = state.filter
+        ? all.filter((entry) => matchesPromotedFilter([entry.path, entry.branch || ''], state.filter))
+        : all
+      return rectifyEntry(state.selectedWorktreeListId, visible.map((w) => w.path), all.map((w) => w.path))
+    })()
+    : undefined
 
-  const allSubmodules = context.submodules?.entries || []
-  const visibleSubmodules = state.filter
-    ? allSubmodules.filter((entry) =>
-      matchesPromotedFilter(
-        [entry.name, entry.path, entry.trackingBranch || '', entry.url || ''],
-        state.filter,
-      ))
-    : allSubmodules
-  const submodule = rectifyEntry(state.selectedSubmoduleId, visibleSubmodules.map((s) => s.path))
+  const submodule = context.submodules
+    ? (() => {
+      const all = context.submodules?.entries || []
+      const visible = state.filter
+        ? all.filter((entry) =>
+          matchesPromotedFilter(
+            [entry.name, entry.path, entry.trackingBranch || '', entry.url || ''],
+            state.filter,
+          ))
+        : all
+      return rectifyEntry(state.selectedSubmoduleId, visible.map((s) => s.path), all.map((s) => s.path))
+    })()
+    : undefined
 
-  const allRemotes = context.remotes?.entries || []
-  const visibleRemotes = state.filter
-    ? allRemotes.filter((entry) => matchesPromotedFilter([entry.name, entry.fetchUrl, entry.pushUrl], state.filter))
-    : allRemotes
-  const remote = rectifyEntry(state.selectedRemoteId, visibleRemotes.map((r) => r.name))
+  const remote = context.remotes
+    ? (() => {
+      const all = context.remotes?.entries || []
+      const visible = state.filter
+        ? all.filter((entry) => matchesPromotedFilter([entry.name, entry.fetchUrl, entry.pushUrl], state.filter))
+        : all
+      return rectifyEntry(state.selectedRemoteId, visible.map((r) => r.name), all.map((r) => r.name))
+    })()
+    : undefined
 
   return { branch, tag, stash, worktreeList, submodule, remote }
 }
