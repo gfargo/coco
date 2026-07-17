@@ -7,12 +7,12 @@
  */
 import { applyLogInkAction, createLogInkState } from './inkViewModel'
 import type { LogInkContext } from './types'
-import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedSubmodule, getSelectedRemote, getSelectedIssue, getSelectedPullRequestTriage, getSelectedCommitTarget, getSelectedCommitRange } from './selection'
+import { getSelectedBranchBatch, getSelectedBranchId, getSelectedTagId, getSelectedStashId, getSelectedStashBatch, getSelectedWorktree, getSelectedSubmodule, getSelectedRemote, getSelectedIssue, getSelectedPullRequestTriage, getSelectedCommitTarget, getSelectedCommitRange, isContiguousHistoryRange } from './selection'
 
-function makeCommitRow(hash: string) {
+function makeCommitRow(hash: string, parents: string[] = []) {
   return {
     type: 'commit' as const, graph: '*', shortHash: hash, hash,
-    parents: [], date: '2026-05-01', author: 'Coco', refs: [], message: `commit ${hash}`,
+    parents, date: '2026-05-01', author: 'Coco', refs: [], message: `commit ${hash}`,
   }
 }
 
@@ -671,7 +671,7 @@ describe('selection selectors (#1452)', () => {
   // #1361 — history is v-range only (no x-marks). Rows: c0 (newest) ..
   // c4 (oldest), matching git log's own newest-first display order.
   describe('getSelectedCommitRange', () => {
-    const rows = ['c0', 'c1', 'c2', 'c3', 'c4'].map(makeCommitRow)
+    const rows = ['c0', 'c1', 'c2', 'c3', 'c4'].map((hash) => makeCommitRow(hash))
 
     it('returns undefined with no active range', () => {
       const state = createLogInkState(rows)
@@ -716,6 +716,40 @@ describe('selection selectors (#1452)', () => {
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, { type: 'toggleMark', view: 'branches', id: 'main' })
       expect(getSelectedCommitRange({ ...state, selectedIndex: 2 })).toBeUndefined()
+    })
+
+    it('returns undefined when a filter is active (#1670 — filtered display is score-ordered, not chronological)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setRangeAnchor', view: 'history', id: 'c1' })
+      const filtered = { ...state, selectedIndex: 3, filter: 'fix' }
+      expect(getSelectedCommitRange(filtered)).toBeUndefined()
+    })
+  })
+
+  // #1670 — the default history view is `git log --all`, which interleaves
+  // commits from every branch by date; a visible run of rows isn't
+  // guaranteed to be a single ancestor chain even without a text filter.
+  describe('isContiguousHistoryRange', () => {
+    it('returns true for a contiguous chain (display order newest-first)', () => {
+      const range = [
+        makeCommitRow('c1', ['c2']),
+        makeCommitRow('c2', ['c3']),
+        makeCommitRow('c3', ['c4']),
+      ]
+      expect(isContiguousHistoryRange(range)).toBe(true)
+    })
+
+    it('returns false when a row is interleaved from another branch', () => {
+      const range = [
+        makeCommitRow('c1', ['other']),
+        makeCommitRow('c2', ['c3']),
+        makeCommitRow('c3', ['c4']),
+      ]
+      expect(isContiguousHistoryRange(range)).toBe(false)
+    })
+
+    it('returns true for a single-commit range', () => {
+      expect(isContiguousHistoryRange([makeCommitRow('c1', ['c2'])])).toBe(true)
     })
   })
 })

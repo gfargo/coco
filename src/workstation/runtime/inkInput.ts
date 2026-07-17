@@ -515,12 +515,18 @@ function isStashActionTarget(state: LogInkState): boolean {
  * History has no sidebar tab, so this is simpler than the promoted-view
  * predicates above — just the one condition, shared with the actual
  * range-anchor handler so the two can't drift.
+ *
+ * Excludes an active filter (#1670): `filterCommits` re-sorts by
+ * fuzzy-match score rather than chronological order, so the display
+ * span an anchor would capture can't be trusted to name a real,
+ * ordered run of commits — `getSelectedCommitRange` bails the same way.
  */
 function isHistoryRangeTarget(state: LogInkState): boolean {
   return state.activeView === 'history' &&
     state.focus === 'commits' &&
     state.filteredCommits.length > 0 &&
-    !state.pendingCommitFocused
+    !state.pendingCommitFocused &&
+    !state.filter
 }
 
 /**

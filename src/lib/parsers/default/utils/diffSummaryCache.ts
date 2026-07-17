@@ -120,6 +120,7 @@ export function readDiffSummary(
   if (!envelope) return undefined
   const entry = envelope.entries[key]
   if (!entry) return undefined
+  if (!entry.summary || !entry.summary.trim()) return undefined
   return entry
 }
 

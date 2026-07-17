@@ -218,7 +218,11 @@ export async function executeRebasePlan(
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
-    const stopped = /CONFLICT|could not apply|Stopped at/i.test((error as Error).message)
+    // Decide "stopped mid-rebase" from repo state (rebase-merge/-apply dir),
+    // not by sniffing git's error text — git localizes those strings, so a
+    // regex over stderr silently misclassifies conflict/edit stops as plain
+    // failures on non-English locales (#1688).
+    const stopped = (await getInProgressOperationType(git)) === 'rebase'
     if (!stopped) {
       rmSync(dir, { recursive: true, force: true })
     }

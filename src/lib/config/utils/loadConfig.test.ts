@@ -1,6 +1,6 @@
 import { BaseArgvOptions, BaseCommandOptions } from '../../../commands/types'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
-import { DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../constants'
+import { DEFAULT_CONFIG, DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../constants'
 import { loadConfig } from './loadConfig'
 import * as fs from 'fs'
 import * as os from 'os'
@@ -163,5 +163,47 @@ describe('loadConfig', () => {
 
     expect(config.verbose).toBe(false)
     expect(config.includeBranchName).toBe(true)
+  })
+
+  it('does not mutate the shared DEFAULT_CONFIG singleton across calls (#1695)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? ['.gitignore'].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === '.gitignore') {
+        return 'docs/\n*.md\n'
+      }
+      return ''
+    })
+
+    loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
+    loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
+    loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
+
+    expect(DEFAULT_CONFIG.ignoredFiles).toEqual(DEFAULT_IGNORED_FILES)
+    expect(DEFAULT_CONFIG.ignoredExtensions).toEqual(DEFAULT_IGNORED_EXTENSIONS)
+    expect(DEFAULT_CONFIG.ignoredFiles).not.toContain('docs/')
+  })
+
+  it('does not leak gitignore patterns from one repo into the next call (#1695)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? ['.gitignore'].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === '.gitignore') {
+        return 'docs/\n'
+      }
+      return ''
+    })
+
+    const repoAConfig = loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
+    expect(repoAConfig.ignoredFiles).toContain('docs/')
+
+    // Simulate switching to a repo with no .gitignore.
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const repoBConfig = loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
+    expect(repoBConfig.ignoredFiles).not.toContain('docs/')
   })
 })
