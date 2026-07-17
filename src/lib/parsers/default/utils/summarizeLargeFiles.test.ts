@@ -375,6 +375,36 @@ describe('summarizeLargeFiles', () => {
     expect(mockSummarize).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the raw diff when summarize() rejects with an empty-summary error (#1700)', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockSummarize.mockRejectedValueOnce(
+      new Error('summarize: chain returned an empty summary')
+    )
+
+    const diffs: FileDiff[] = [
+      {
+        file: 'large.ts',
+        diff: 'a'.repeat(2000),
+        summary: 'large.ts',
+        tokenCount: 600,
+      },
+    ]
+
+    const result = await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    // Raw diff preserved, not overwritten with an empty summary.
+    expect(result[0]).toEqual(diffs[0])
+    consoleErrorSpy.mockRestore()
+  })
+
   it('should respect maxConcurrent limit', async () => {
     const diffs: FileDiff[] = Array.from({ length: 10 }, (_, i) => ({
       file: `file${i}.ts`,
