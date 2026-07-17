@@ -90,6 +90,40 @@ describe('manageHooks (#1591)', () => {
     expect(fs.readFileSync(hookPath(), 'utf8')).toContain(HOOK_MARKER)
   })
 
+  it('refuses to install over a symlinked hook without --force', async () => {
+    fs.mkdirSync(path.join(repoDir, '.git', 'hooks'), { recursive: true })
+    const dispatcherPath = path.join(repoDir, 'dispatch.sh')
+    fs.writeFileSync(dispatcherPath, '#!/bin/sh\necho "dispatch"\n', { mode: 0o755 })
+    fs.symlinkSync(dispatcherPath, hookPath())
+
+    const result = await installHooks({ git })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('symlink')
+    expect(result.message).toContain('--force')
+    // The symlink and its shared target are both left untouched.
+    expect(fs.lstatSync(hookPath()).isSymbolicLink()).toBe(true)
+    expect(fs.readFileSync(dispatcherPath, 'utf8')).toContain('dispatch')
+  })
+
+  it('replaces a symlinked hook with --force without corrupting its shared target', async () => {
+    fs.mkdirSync(path.join(repoDir, '.git', 'hooks'), { recursive: true })
+    const dispatcherPath = path.join(repoDir, 'dispatch.sh')
+    fs.writeFileSync(dispatcherPath, '#!/bin/sh\necho "dispatch"\n', { mode: 0o755 })
+    fs.symlinkSync(dispatcherPath, hookPath())
+
+    const result = await installHooks({ git, force: true })
+
+    expect(result.ok).toBe(true)
+    // hookPath is now a regular, coco-managed file — the symlink is gone.
+    expect(fs.lstatSync(hookPath()).isSymbolicLink()).toBe(false)
+    expect(fs.readFileSync(hookPath(), 'utf8')).toContain(HOOK_MARKER)
+    // The shared dispatcher script other hooks still symlink to is untouched.
+    expect(fs.readFileSync(dispatcherPath, 'utf8')).toContain('dispatch')
+    // Its original content was preserved for restoration on uninstall.
+    expect(fs.readFileSync(backupPath(), 'utf8')).toContain('dispatch')
+  })
+
   it('reports not-installed status before installing', async () => {
     const status = await getHooksStatus({ git })
     expect(status.installed).toBe(false)

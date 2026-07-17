@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import * as path from 'node:path'
 import { SimpleGit } from 'simple-git'
 
@@ -96,8 +104,22 @@ export async function installHooks({
   const hookPath = path.join(hooksDir, HOOK_FILENAME)
   const backupPath = path.join(hooksDir, BACKUP_FILENAME)
 
+  // `writeFileSync` follows symlinks, so a plain write here would clobber
+  // whatever the symlink points at (e.g. a shared dispatcher script that
+  // other hooks — pre-commit, pre-push, in this and other repos — also
+  // symlink to). Refuse by default and only convert it once the caller
+  // explicitly opts in with --force.
+  const isSymlink = existsSync(hookPath) && lstatSync(hookPath).isSymbolicLink()
+
+  if (isSymlink && !force) {
+    return {
+      ok: false,
+      message: `${hookPath} is a symlink, likely pointing at a shared hook script also used by other hooks. Writing through it would corrupt that shared target. Re-run with --force to replace the symlink with a coco-managed hook (its resolved content will be backed up to ${backupPath} first), or remove the symlink manually.`,
+    }
+  }
+
   const existing = existsSync(hookPath) ? readFileSync(hookPath, 'utf8') : undefined
-  const alreadyManaged = existing !== undefined && existing.includes(HOOK_MARKER)
+  const alreadyManaged = !isSymlink && existing !== undefined && existing.includes(HOOK_MARKER)
 
   if (existing !== undefined && !alreadyManaged) {
     if (existsSync(backupPath) && !force) {
@@ -107,6 +129,12 @@ export async function installHooks({
       }
     }
     writeFileSync(backupPath, existing, { mode: 0o755 })
+  }
+
+  if (isSymlink) {
+    // Remove the symlink itself (not its target) so the write below creates
+    // a fresh regular file instead of following the link.
+    rmSync(hookPath)
   }
 
   writeFileSync(hookPath, HOOK_SCRIPT, { mode: 0o755 })
