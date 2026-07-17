@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { Config } from '../types'
-import { loadXDGConfig } from './xdg'
+import { loadXDGConfig, resetXdgConfigLoadWarnings } from './xdg'
 
 jest.mock('fs')
 
@@ -24,6 +24,7 @@ const ollamaConfig: Partial<Config> = {
 describe('loadXDGConfig', () => {
   afterEach(() => {
     jest.resetAllMocks()
+    resetXdgConfigLoadWarnings()
   })
 
   it('should load XDG config', () => {
@@ -180,5 +181,50 @@ describe('loadXDGConfig', () => {
     if (config.service.provider === 'bedrock') {
       expect(config.service.region).toBe('us-east-1')
     }
+  })
+
+  it('does not throw on malformed JSON and warns once with the file path', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('{ "service": { bad json ]')
+
+    let config: Config | undefined
+    expect(() => {
+      config = loadXDGConfig(openAIConfig)
+    }).not.toThrow()
+
+    expect(config?.service.provider).toBe('openai')
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    const message = warnSpy.mock.calls[0][0]
+    expect(message).toContain('could not parse')
+    expect(message).toContain('config.json')
+  })
+
+  it('warns at most once across repeated loads of the same malformed file', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('{ "service": { bad json ]')
+
+    loadXDGConfig(openAIConfig)
+    loadXDGConfig(openAIConfig)
+    loadXDGConfig(openAIConfig)
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a parsed-but-non-object XDG file (array)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('[]')
+
+    const config = loadXDGConfig(openAIConfig)
+    expect(config.service.provider).toBe('openai')
+  })
+
+  it('ignores a parsed-but-non-object XDG file (primitive)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('42')
+
+    const config = loadXDGConfig(openAIConfig)
+    expect(config.service.provider).toBe('openai')
   })
 })

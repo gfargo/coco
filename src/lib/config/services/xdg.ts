@@ -15,6 +15,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Config is loaded many times per command run, so a malformed XDG file
+ * would otherwise print the same warning repeatedly for one invocation.
+ * Mirrors project.ts's warn-once guard, kept independent (own file, own
+ * key) so the two loaders don't couple or suppress each other.
+ */
+const warnedXdgPaths = new Set<string>()
+
+function warnXdgParseOnce(resolvedPath: string, message: string): void {
+  if (warnedXdgPaths.has(resolvedPath)) return
+  warnedXdgPaths.add(resolvedPath)
+  console.warn(message)
+}
+
+/**
+ * Clears the warn-once guard. Intended for tests that exercise the
+ * warning paths in isolation — production code never needs to reset it.
+ */
+export function resetXdgConfigLoadWarnings(): void {
+  warnedXdgPaths.clear()
+}
+
+/**
  * Persist `telemetry.usage` into the global XDG config, merging into any
  * existing content (only this one key is touched). This is the per-machine home
  * for the recording preference — deliberately NOT the project config, so a
@@ -67,14 +89,32 @@ export function loadXDGConfig<ConfigType = Config>(
 
   if (fs.existsSync(xdgConfigPath)) {
     foundPath = xdgConfigPath
-    const xdgConfig = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8'))
 
-    const service = mergeXDGServiceConfig(config.service as LLMService | undefined, xdgConfig.service)
+    // Parse defensively — a malformed XDG config (stray comma, truncated
+    // file) must not crash every command at load time. Warn with the file
+    // path + reason and fall back to the other config sources instead.
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8'))
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      warnXdgParseOnce(
+        xdgConfigPath,
+        `[coco] Warning: could not parse ${xdgConfigPath} as JSON — ignoring it.\n` +
+        `  Parse error: ${reason}\n` +
+        `  Fix the file's syntax (or run \`coco init\` to regenerate it). ` +
+        `Other config sources (defaults, project, git, env) still apply.`
+      )
+    }
 
-    config = {
-      ...config,
-      ...xdgConfig,
-      service: service
+    if (isRecord(parsed)) {
+      const service = mergeXDGServiceConfig(config.service as LLMService | undefined, parsed.service)
+
+      config = {
+        ...config,
+        ...parsed,
+        service: service
+      }
     }
   }
 

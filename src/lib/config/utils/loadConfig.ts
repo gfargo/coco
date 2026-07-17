@@ -5,7 +5,7 @@ import { loadProjectJsonConfig } from '../services/project'
 import { loadXDGConfig } from '../services/xdg'
 import { Config } from '../types'
 
-import { DEFAULT_CONFIG } from '../constants'
+import { DEFAULT_CONFIG, DEFAULT_IGNORED_FILES, DEFAULT_IGNORED_EXTENSIONS } from '../constants'
 import { BaseCommandOptions } from '../../../commands/types'
 import { mergeIgnoreLists } from './mergeIgnoreLists'
 
@@ -57,8 +57,12 @@ export function getConfigSources(): ConfigSourceInfo[] {
 export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} as ArgvType) {
   const sources: ConfigSourceInfo[] = [{ source: 'default' }]
 
-  // Default config
-  let config = DEFAULT_CONFIG
+  // Default config (copy — never mutate the shared DEFAULT_CONFIG singleton)
+  let config: Config = {
+    ...DEFAULT_CONFIG,
+    ignoredFiles: [...DEFAULT_IGNORED_FILES],
+    ignoredExtensions: [...DEFAULT_IGNORED_EXTENSIONS],
+  }
 
   config = loadGitignore(config)
   config = loadIgnore(config)

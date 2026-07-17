@@ -37,7 +37,7 @@ import {
 } from './config'
 import { CHANGELOG_PROMPT } from './prompt'
 import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
-import { writeChangelogFile } from './writeChangelog'
+import { writeChangelogFile, splitChangelogMessage } from './writeChangelog'
 
 type CommitDetailsWithDiffText = CommitDetails & { diffText?: string };
 
@@ -364,6 +364,14 @@ export async function generateChangelogResult(
       commandExit(0)
     },
   })
+
+  // Reconcile the structured snapshot with the final (possibly
+  // user-edited) loop result — in interactive mode `changelogMsg` carries
+  // the editor's text while `structured` was captured pre-edit inside the
+  // `agent` closure above (#1679/OSS-993).
+  if (structured && changelogMsg) {
+    structured = splitChangelogMessage(changelogMsg)
+  }
 
   return { text: changelogMsg, structured }
 }
