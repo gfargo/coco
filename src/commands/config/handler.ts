@@ -25,10 +25,21 @@ import { ConfigArgv } from './config'
 
 const validate = ajv.compile(schema)
 
-/** Never print a real API key back to a terminal or --json output. */
+/** Last-dotted-segment names whose values must never be printed. */
+const SENSITIVE_SEGMENTS = new Set([
+  'apikey',
+  'secretaccesskey',
+  'sessiontoken',
+  'accesskeyid',
+  'token',
+  'clientsecret',
+  'password',
+])
+
+/** Never print a real credential back to a terminal or --json output. */
 function maskSecrets(key: string, value: unknown): unknown {
   const lastSegment = key.split('.').pop()?.toLowerCase()
-  if (lastSegment === 'apikey' && typeof value === 'string' && value.length > 0) {
+  if (lastSegment && SENSITIVE_SEGMENTS.has(lastSegment) && typeof value === 'string' && value.length > 0) {
     return '•••••••••••••••'
   }
   return value
