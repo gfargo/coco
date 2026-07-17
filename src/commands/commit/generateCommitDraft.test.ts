@@ -199,3 +199,74 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
     expect(result.ok).toBe(true)
   })
 })
+
+describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)', () => {
+  const git = {
+    status: jest.fn().mockResolvedValue({
+      files: [{ path: 'src/index.ts', index: 'M', working_dir: ' ' }],
+    }),
+  } as unknown as SimpleGit
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+
+    mockGetApiKeyForModel.mockReturnValue('test-key')
+    mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'openai', model: 'gpt-4o' })
+    mockResolveDynamicService.mockImplementation((config, task) => ({
+      ...(config.service as Record<string, unknown>),
+      model: task === 'commit' ? 'commit-model' : 'summarize-model',
+    }) as ReturnType<typeof resolveDynamicService>)
+    mockGetLlm.mockReturnValue({} as ReturnType<typeof getLlm>)
+    mockGetTokenCounterForProvider.mockResolvedValue(charTokenizer)
+    mockGetChanges.mockResolvedValue({
+      staged: [{ filePath: 'src/index.ts', status: 'modified', summary: 'changed' }],
+      unstaged: [],
+      untracked: [],
+    } as unknown as Awaited<ReturnType<typeof getChanges>>)
+    mockGetCurrentBranchName.mockResolvedValue('main')
+    mockGetPreviousCommits.mockResolvedValue('')
+    mockHasCommitlintConfig.mockResolvedValue(false)
+    mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
+    mockFileChangeParser.mockResolvedValue('a short summary')
+  })
+
+  it('passes a language_context built from config.language to the prompt variables', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig({ language: 'German' }) as never)
+
+    await generateCommitDraft({ git, argv: buildArgv() })
+
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as { language_context: string }
+    expect(variables.language_context).toContain('Write the commit message in German.')
+  })
+
+  it('prefers argv.language over config.language', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig({ language: 'German' }) as never)
+
+    await generateCommitDraft({ git, argv: buildArgv({ language: 'French' }) })
+
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as { language_context: string }
+    expect(variables.language_context).toContain('Write the commit message in French.')
+  })
+
+  it('appends the conventional-tokens caveat when conventionalCommits is enabled', async () => {
+    mockLoadConfig.mockReturnValue(
+      buildConfig({ language: 'German', conventionalCommits: true }) as never
+    )
+
+    await generateCommitDraft({ git, argv: buildArgv({ conventional: true }) })
+
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as { language_context: string }
+    expect(variables.language_context).toContain(
+      'Keep the Conventional Commits type/scope tokens (e.g. feat, fix, chore) in English.'
+    )
+  })
+
+  it('renders an empty language_context when no language is configured', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+
+    await generateCommitDraft({ git, argv: buildArgv() })
+
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as { language_context: string }
+    expect(variables.language_context).toBe('')
+  })
+})

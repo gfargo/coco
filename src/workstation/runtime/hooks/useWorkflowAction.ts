@@ -50,7 +50,7 @@ import {
 import { forgeNouns } from '../../chrome/forgeNouns'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, getSelectedWorktreeId, getSelectedWorktree, getSelectedIssue, getSelectedPullRequestTriage, getSelectedPullRequestTriageId } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, isContiguousHistoryRange, getSelectedWorktreeId, getSelectedWorktree, getSelectedIssue, getSelectedPullRequestTriage, getSelectedPullRequestTriageId } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -88,6 +88,7 @@ import {
     ResetMode,
     checkoutFileFromCommit,
     cherryPickCommit,
+    cherryPickCommits,
     cherryPickRange,
     createBranchFromCommit,
     createTagAtCommit,
@@ -735,19 +736,32 @@ export function useWorkflowAction(
         return checkoutFileFromStash(git, ref, path)
       },
       // #1361 — batch-capable (`targets: 'multi'`): history is v-range
-      // only (no x-marks), so an active range cherry-picks as one
-      // `oldest^..newest` command instead of the single-commit path.
-      // `range` is in display order (newest first), so the git-layer
-      // args are index-reversed from what's on screen.
+      // only (no x-marks), so an active range cherry-picks in one command
+      // instead of the single-commit path. `range` is in display order
+      // (newest first), so the git-layer args are index-reversed from
+      // what's on screen.
+      //
+      // #1670 — a contiguous span (each row's parent is the next row)
+      // replays correctly as `oldest^..newest` range syntax. A
+      // non-contiguous span (e.g. rows interleaved from other branches
+      // in the default `--all` view) would pull in real intermediate
+      // ancestors via range syntax, so it cherry-picks the explicit
+      // hash list instead — exactly the displayed commits, nothing more.
       'cherry-pick-commit': async () => {
         const range = getSelectedCommitRange(state)
         if (range && range.length > 1) {
-          const newest = range[0]
-          const oldest = range[range.length - 1]
-          return cherryPickRange(
+          if (isContiguousHistoryRange(range)) {
+            const newest = range[0]
+            const oldest = range[range.length - 1]
+            return cherryPickRange(
+              git,
+              { hash: oldest.hash, shortHash: oldest.shortHash, message: oldest.message },
+              { hash: newest.hash, shortHash: newest.shortHash, message: newest.message },
+            )
+          }
+          return cherryPickCommits(
             git,
-            { hash: oldest.hash, shortHash: oldest.shortHash, message: oldest.message },
-            { hash: newest.hash, shortHash: newest.shortHash, message: newest.message },
+            [...range].reverse().map((c) => ({ hash: c.hash, shortHash: c.shortHash, message: c.message })),
           )
         }
         const commit = getSelectedInkCommit(state)

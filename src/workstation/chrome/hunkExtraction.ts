@@ -69,6 +69,35 @@ function findHunkHeaderAtOrBefore(lines: string[], cursorOffset: number): number
   return -1
 }
 
+const HUNK_HEADER_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
+
+type HunkHeaderCounts = {
+  oldStart: number
+  oldCount: number
+  newStart: number
+  newCount: number
+}
+
+/**
+ * Parse the `@@ -oldStart,oldCount +newStart,newCount @@` header. A
+ * missing count (e.g. `@@ -1 +1,2 @@`) means a count of 1, per the
+ * unified-diff spec. Returns null when `line` isn't a well-formed hunk
+ * header, so callers can fall back to legacy behavior for odd-but-
+ * appliable input.
+ */
+function parseHunkHeader(line: string | undefined): HunkHeaderCounts | null {
+  const match = line ? HUNK_HEADER_RE.exec(line) : null
+  if (!match) {
+    return null
+  }
+  return {
+    oldStart: Number(match[1]),
+    oldCount: match[2] === undefined ? 1 : Number(match[2]),
+    newStart: Number(match[3]),
+    newCount: match[4] === undefined ? 1 : Number(match[4]),
+  }
+}
+
 /**
  * Walk forward from a hunk header to either the next `@@` header or
  * the next `diff --git` line — that's where this hunk's body ends.
@@ -106,10 +135,30 @@ export function extractDiffHunk(input: ExtractDiffHunkInput): ExtractDiffHunkRes
   }
 
   const hunkLines = lines.slice(headerIndex, bodyEnd)
+  const counts = parseHunkHeader(hunkLines[0])
+
+  const fileHeaderLines: string[] = []
+  if (counts && counts.oldStart === 0 && counts.oldCount === 0) {
+    // The hunk creates the file from nothing — the original patch's
+    // `---` side is `/dev/null`. Synthesizing `--- a/<path>` instead
+    // makes `git apply` fail with "No such file or directory" because
+    // it tries to read the pre-image of a file that doesn't exist yet.
+    // The mode is guessed as 100644 since hunk bodies carry no mode
+    // data; an executable new file would be recreated non-executable.
+    fileHeaderLines.push('new file mode 100644', '--- /dev/null', `+++ b/${path}`)
+  } else if (counts && counts.newStart === 0 && counts.newCount === 0) {
+    // The hunk deletes the whole file — the original patch's `+++`
+    // side is `/dev/null`. Synthesizing `+++ b/<path>` instead makes
+    // `git apply` "succeed" while leaving a 0-byte tracked file behind
+    // instead of removing it.
+    fileHeaderLines.push('deleted file mode 100644', `--- a/${path}`, '+++ /dev/null')
+  } else {
+    fileHeaderLines.push(`--- a/${path}`, `+++ b/${path}`)
+  }
+
   const patchText = [
     `diff --git a/${path} b/${path}`,
-    `--- a/${path}`,
-    `+++ b/${path}`,
+    ...fileHeaderLines,
     ...hunkLines,
     '',
   ].join('\n')
@@ -120,4 +169,5 @@ export function extractDiffHunk(input: ExtractDiffHunkInput): ExtractDiffHunkRes
 export const inkHunkExtractionTestInternals = {
   findHunkHeaderAtOrBefore,
   findHunkBodyEnd,
+  parseHunkHeader,
 }

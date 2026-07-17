@@ -18,6 +18,7 @@ import {
 import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessage'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
+import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { LLMModel } from '../../lib/langchain/types'
 import { FileChange } from '../../lib/types'
 import { fileChangeParser } from '../../lib/parsers/default'
@@ -251,6 +252,10 @@ export async function generateCommitDraft({
     commit_history: commitHistory,
     branch_name_context: branchNameContext,
     commitlint_rules_context: commitlintRulesContext,
+    language_context: getLanguageContext(argv.language || config.language, {
+      taskDescription: 'commit message',
+      preserveConventionalTokens: useConventional,
+    }),
   }
 
   // Reconciles the summarizer's `|| 4096` fallback (createFileChangeParserOptions

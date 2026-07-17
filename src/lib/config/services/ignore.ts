@@ -10,13 +10,16 @@ import { Config } from '../types'
 export function loadGitignore<ConfigType = Config>(config: Partial<Config>) {
   if (fs.existsSync('.gitignore')) {
     const gitignoreContent = fs.readFileSync('.gitignore', 'utf-8')
-    
-    config.ignoredFiles = [
-      ...(config?.ignoredFiles || []),
-      ...gitignoreContent
-        .split('\n')
-        .filter((line) => line.trim() !== '' && !line.startsWith('#') && !line.startsWith('!')),
-    ]
+
+    return {
+      ...config,
+      ignoredFiles: [
+        ...(config?.ignoredFiles || []),
+        ...gitignoreContent
+          .split('\n')
+          .filter((line) => line.trim() !== '' && !line.startsWith('#') && !line.startsWith('!')),
+      ],
+    } as ConfigType
   }
   return config as ConfigType
 }
@@ -30,12 +33,15 @@ export function loadGitignore<ConfigType = Config>(config: Partial<Config>) {
 export function loadIgnore<ConfigType = Config>(config: Partial<Config>) {
   if (fs.existsSync('.ignore')) {
     const ignoreContent = fs.readFileSync('.ignore', 'utf-8')
-    config.ignoredFiles = [
-      ...(config?.ignoredFiles || []),
-      ...ignoreContent
-        .split('\n')
-        .filter((line) => line.trim() !== '' && !line.startsWith('#') && !line.startsWith('!')),
-    ]
+    return {
+      ...config,
+      ignoredFiles: [
+        ...(config?.ignoredFiles || []),
+        ...ignoreContent
+          .split('\n')
+          .filter((line) => line.trim() !== '' && !line.startsWith('#') && !line.startsWith('!')),
+      ],
+    } as ConfigType
   }
   return config as ConfigType
 }

@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { AnthropicLLMService, AzureLLMService, BedrockLLMService, GeminiLLMService, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from '../../langchain/types'
+import { LLMService } from '../../langchain/types'
 import { Config } from '../types'
 
 /** Path to the global XDG config (`$XDG_CONFIG_HOME/coco/config.json`). */
@@ -12,6 +12,28 @@ export function getXdgConfigPath(): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Config is loaded many times per command run, so a malformed XDG file
+ * would otherwise print the same warning repeatedly for one invocation.
+ * Mirrors project.ts's warn-once guard, kept independent (own file, own
+ * key) so the two loaders don't couple or suppress each other.
+ */
+const warnedXdgPaths = new Set<string>()
+
+function warnXdgParseOnce(resolvedPath: string, message: string): void {
+  if (warnedXdgPaths.has(resolvedPath)) return
+  warnedXdgPaths.add(resolvedPath)
+  console.warn(message)
+}
+
+/**
+ * Clears the warn-once guard. Intended for tests that exercise the
+ * warning paths in isolation — production code never needs to reset it.
+ */
+export function resetXdgConfigLoadWarnings(): void {
+  warnedXdgPaths.clear()
 }
 
 /**
@@ -67,14 +89,32 @@ export function loadXDGConfig<ConfigType = Config>(
 
   if (fs.existsSync(xdgConfigPath)) {
     foundPath = xdgConfigPath
-    const xdgConfig = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8'))
 
-    const service = parseServiceConfig(xdgConfig.service || config.service)
+    // Parse defensively — a malformed XDG config (stray comma, truncated
+    // file) must not crash every command at load time. Warn with the file
+    // path + reason and fall back to the other config sources instead.
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(fs.readFileSync(xdgConfigPath, 'utf-8'))
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      warnXdgParseOnce(
+        xdgConfigPath,
+        `[coco] Warning: could not parse ${xdgConfigPath} as JSON — ignoring it.\n` +
+        `  Parse error: ${reason}\n` +
+        `  Fix the file's syntax (or run \`coco init\` to regenerate it). ` +
+        `Other config sources (defaults, project, git, env) still apply.`
+      )
+    }
 
-    config = { 
-      ...config, 
-      ...xdgConfig, 
-      service: service 
+    if (isRecord(parsed)) {
+      const service = mergeXDGServiceConfig(config.service as LLMService | undefined, parsed.service)
+
+      config = {
+        ...config,
+        ...parsed,
+        service: service
+      }
     }
   }
 
@@ -84,97 +124,27 @@ export function loadXDGConfig<ConfigType = Config>(
   return config as ConfigType
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseServiceConfig(service: any): LLMService | undefined {
-  if (!service) return undefined
+/**
+ * Merges the on-disk XDG `service` block onto the already-accumulated
+ * `base` service (default config, or an earlier layer). Unlike the old
+ * `parseServiceConfig` (which round-tripped through a per-provider switch
+ * and dropped any key it didn't explicitly whitelist), this preserves every
+ * key the file sets — including tuning keys like `temperature` and
+ * `maxConcurrent` — and falls back to `base` for anything the file omits,
+ * so a partial write (e.g. `{"service":{"model":"gpt-4o"}}`) never wipes
+ * out the provider or defaults.
+ *
+ * The flat on-disk `apiKey` (see `toOnDiskConfigKey`) is converted to the
+ * nested `authentication.credentials.apiKey` shape the rest of the app
+ * expects.
+ */
+function mergeXDGServiceConfig(base: LLMService | undefined, fileService: unknown): LLMService | undefined {
+  if (!isRecord(fileService)) return base
 
-  switch (service.provider) {
-    case 'openai':
-      return {
-        provider: 'openai',
-        model: service.model,
-        baseURL: service.baseURL,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as OpenAILLMService
-    case 'anthropic':
-      return {
-        provider: 'anthropic',
-        model: service.model,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as AnthropicLLMService
-    case 'gemini':
-      return {
-        provider: 'gemini',
-        model: service.model,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as GeminiLLMService
-    case 'mistral':
-      return {
-        provider: 'mistral',
-        model: service.model,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as MistralLLMService
-    case 'azure':
-      return {
-        provider: 'azure',
-        model: service.model,
-        instanceName: service.instanceName,
-        deploymentName: service.deploymentName,
-        apiVersion: service.apiVersion,
-        authentication: {
-          type: 'APIKey',
-          credentials: {
-            apiKey: service.apiKey
-          }
-        },
-        fields: service.fields
-      } as AzureLLMService
-    case 'bedrock':
-      return {
-        provider: 'bedrock',
-        model: service.model,
-        region: service.region,
-        accessKeyId: service.accessKeyId,
-        secretAccessKey: service.secretAccessKey,
-        sessionToken: service.sessionToken,
-        authentication: {
-          type: 'None',
-          credentials: undefined
-        },
-        fields: service.fields
-      } as BedrockLLMService
-    case 'ollama':
-      return {
-        provider: 'ollama',
-        model: service.model,
-        endpoint: service.endpoint,
-        fields: service.fields
-      } as OllamaLLMService
-    default:
-      return undefined
+  const { apiKey, ...rest } = fileService
+  const merged: Record<string, unknown> = { ...(base ?? {}), ...rest }
+  if (typeof apiKey === 'string') {
+    merged.authentication = { type: 'APIKey', credentials: { apiKey } }
   }
+  return merged as LLMService
 }

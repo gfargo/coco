@@ -284,7 +284,7 @@ async function summarizeFileDiff(
 
     const newTokenCount = tokenizer(fileSummary)
 
-    if (cacheKey && cacheModel) {
+    if (cacheKey && cacheModel && fileSummary.trim()) {
       writeDiffSummary(cacheRepo, cacheKey, {
         summary: fileSummary,
         model: cacheModel,
