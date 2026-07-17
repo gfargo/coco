@@ -42,6 +42,15 @@ describe('loadGitignore', () => {
     expect(config.ignoredFiles).not.toContain('!stacks/*/logs/')
     expect(config.ignoredFiles).not.toContain('!stacks/*/logs/**/.gitkeep')
   })
+
+  it('does not mutate the config object passed in', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('file.txt\n')
+    const input: Config = { ...defaultConfig }
+    const result = loadGitignore(input)
+    expect(input.ignoredFiles).toBeUndefined()
+    expect(result).not.toBe(input)
+  })
 })
 
 describe('loadIgnore', () => {
@@ -63,5 +72,14 @@ describe('loadIgnore', () => {
     const config = loadIgnore(defaultConfig)
     expect(config.ignoredFiles).toContain('dist')
     expect(config.ignoredFiles).not.toContain('!dist/keep.js')
+  })
+
+  it('does not mutate the config object passed in', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('ignore.txt\n')
+    const input: Config = { ...defaultConfig }
+    const result = loadIgnore(input)
+    expect(input.ignoredFiles).toBeUndefined()
+    expect(result).not.toBe(input)
   })
 })
