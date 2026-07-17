@@ -170,19 +170,30 @@ export type StashDiffFile = {
  * Renames / moves return the destination path (the `b/` side); the
  * action surface treats that as the path to materialize from the stash.
  *
- * Path quoting: git wraps paths containing spaces or special characters
- * in double-quotes (`diff --git "a/path with spaces" "b/path with spaces"`).
- * The parser handles both the unquoted and quoted forms; without that,
- * stash-file navigation and cherry-pick silently broke for any file
- * whose path contained a space.
+ * Path quoting: git only C-quotes a path (`diff --git "a/..." "b/..."`)
+ * when it contains non-ASCII bytes, control characters, or a literal
+ * quote/backslash. A plain space is NOT quoted, so the `diff --git`
+ * line alone (`a/X b/X`) is ambiguous for unquoted paths with spaces.
+ * For those, resolution falls through to the unambiguous `---`/`+++`
+ * and `rename to`/`copy to` lines that follow the header, with a
+ * length-halving fallback for the header line itself when none of
+ * those are present (e.g. a pure rename with no content change still
+ * has `rename to`, but a merge/binary diff might not).
+ *
+ * Quoting is also decided per-path, not per-header: a rename can quote
+ * one side and not the other (e.g. `a/ascii.ts "b/weird\".ts"`), so the
+ * `---`/`+++`/`rename to`/`copy to` fallback lines each accept a quoted
+ * *or* unquoted form independently and unescape whichever one matched.
  */
 export function parseStashDiffFiles(lines: string[]): StashDiffFile[] {
   const files: StashDiffFile[] = []
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]
-    const parsed = parseDiffGitHeader(line)
-    if (parsed) {
-      files.push({ path: parsed.bPath || parsed.aPath, startLine: i })
+    if (!DIFF_GIT_HEADER_LINE.test(line)) continue
+
+    const path = resolveDiffGitHeaderPath(lines, i)
+    if (path) {
+      files.push({ path, startLine: i })
     }
   }
   return files
@@ -219,15 +230,94 @@ export function findStashFileForOffset(
   return current ?? files[0]
 }
 
-const DIFF_GIT_HEADER = /^diff --git (?:"a\/((?:\\.|[^"\\])+)"|a\/(\S+)) (?:"b\/((?:\\.|[^"\\])+)"|b\/(\S+))$/
+const DIFF_GIT_HEADER_LINE = /^diff --git /
+const DIFF_GIT_HEADER_QUOTED = /^diff --git "a\/((?:\\.|[^"\\])+)" "b\/((?:\\.|[^"\\])+)"$/
+const RENAME_OR_COPY_TO_LINE = /^(?:rename|copy) to (?:"((?:\\.|[^"\\])+)"|(.+))$/
+const PLUS_PLUS_LINE = /^\+\+\+ (?:"b\/((?:\\.|[^"\\])+)"|b\/(.+)|\/dev\/null)$/
+const MINUS_LINE = /^--- (?:"a\/((?:\\.|[^"\\])+)"|a\/(.+)|\/dev\/null)$/
 
-function parseDiffGitHeader(line: string): { aPath: string; bPath: string } | undefined {
-  const match = line.match(DIFF_GIT_HEADER)
-  if (!match) return undefined
-  const aPath = unescapeGitQuoted(match[1]) || match[2]
-  const bPath = unescapeGitQuoted(match[3]) || match[4]
-  if (!aPath || !bPath) return undefined
-  return { aPath, bPath }
+/**
+ * Resolve the path for the `diff --git` header at `lines[headerIndex]`.
+ * Quoted headers are unambiguous and handled directly; unquoted headers
+ * with a space in the path can't be split reliably (a rename can put a
+ * literal ` b/` inside a name), so resolution instead scans the section
+ * for the unambiguous follow-on lines, bounded by the next `diff --git`
+ * so a malformed section can't consume the next file's headers.
+ *
+ * Git decides quoting per path, not per header: a rename from an ASCII
+ * name to one with non-ASCII bytes can leave the `diff --git` header's
+ * `a/…` side unquoted while its `rename to "b/…"` line (and `+++`/`---`)
+ * is quoted. The fallback lines below accept both quoted and unquoted
+ * forms and unescape the quoted case the same way the header branch does.
+ */
+function resolveDiffGitHeaderPath(lines: string[], headerIndex: number): string | undefined {
+  const quotedMatch = lines[headerIndex].match(DIFF_GIT_HEADER_QUOTED)
+  if (quotedMatch) {
+    const aPath = unescapeGitQuoted(quotedMatch[1])
+    const bPath = unescapeGitQuoted(quotedMatch[2])
+    return bPath || aPath
+  }
+
+  let bFromPlusPlus: string | undefined
+  let renameOrCopyTo: string | undefined
+  let aFromMinus: string | undefined
+
+  for (let i = headerIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i]
+    if (DIFF_GIT_HEADER_LINE.test(line)) break
+
+    if (bFromPlusPlus === undefined) {
+      const plusMatch = line.match(PLUS_PLUS_LINE)
+      if (plusMatch) {
+        if (plusMatch[1] !== undefined) bFromPlusPlus = unescapeGitQuoted(plusMatch[1])
+        else if (plusMatch[2]) bFromPlusPlus = stripTrailingTab(plusMatch[2])
+        continue
+      }
+    }
+
+    if (renameOrCopyTo === undefined) {
+      const renameMatch = line.match(RENAME_OR_COPY_TO_LINE)
+      if (renameMatch) {
+        renameOrCopyTo =
+          renameMatch[1] !== undefined ? unescapeGitQuoted(renameMatch[1]) : renameMatch[2]
+        continue
+      }
+    }
+
+    if (aFromMinus === undefined) {
+      const minusMatch = line.match(MINUS_LINE)
+      if (minusMatch) {
+        if (minusMatch[1] !== undefined) aFromMinus = unescapeGitQuoted(minusMatch[1])
+        else if (minusMatch[2]) aFromMinus = stripTrailingTab(minusMatch[2])
+      }
+    }
+  }
+
+  return bFromPlusPlus ?? renameOrCopyTo ?? aFromMinus ?? halveUnquotedHeaderPath(lines[headerIndex])
+}
+
+function stripTrailingTab(path: string): string {
+  return path.endsWith('\t') ? path.slice(0, -1) : path
+}
+
+/**
+ * Last-resort fallback for an unquoted `diff --git a/X b/X` header with
+ * no `---`/`+++`/`rename to` lines to disambiguate it (e.g. a mode-only
+ * change). Splits by length rather than searching for `" b/"`, since a
+ * filename can itself contain that substring.
+ */
+function halveUnquotedHeaderPath(headerLine: string): string | undefined {
+  const prefix = 'diff --git a/'
+  if (!headerLine.startsWith(prefix)) return undefined
+
+  const remainder = headerLine.slice(prefix.length)
+  const n = (remainder.length - 3) / 2
+  if (!Number.isInteger(n) || n <= 0) return undefined
+  if (remainder.slice(n, n + 3) !== ' b/') return undefined
+
+  const aPath = remainder.slice(0, n)
+  const bPath = remainder.slice(n + 3)
+  return aPath === bPath ? bPath : undefined
 }
 
 const SIMPLE_ESCAPES: Record<string, string> = {
