@@ -62,6 +62,20 @@ describe('mergeIgnoreLists (#851)', () => {
     }
   })
 
+  // Regression (#1675): a loader that leaks a raw comma-separated string
+  // (instead of splitting it into an array) used to be spread into
+  // individual characters — a lone '*' character then matched every file.
+  it('normalizes a stray string extras value instead of spreading it into characters', () => {
+    const merged = mergeIgnoreLists(
+      baseConfig({ ignoredFiles: '*.env,secrets' as unknown as string[] })
+    )
+    expect(merged.ignoredFiles).toContain('*.env')
+    expect(merged.ignoredFiles).toContain('secrets')
+    expect(merged.ignoredFiles).not.toContain('*')
+    expect(merged.ignoredFiles).not.toContain('s')
+    expect(merged.ignoredFiles?.length).toBe(DEFAULT_IGNORED_FILES.length + 2)
+  })
+
   it('preserves other config fields untouched', () => {
     const config = baseConfig({
       ignoredFiles: ['extra.json'],

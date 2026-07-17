@@ -79,6 +79,30 @@ describe('loadEnvConfig', () => {
     delete process.env.COCO_IGNORED_EXTENSIONS
   })
 
+  // Regression (#1675): a single value with no comma stayed a raw string
+  // (only the comma-containing branch split it), which downstream code
+  // then iterated character-by-character.
+  it('wraps a single-value COCO_IGNORED_FILES (no comma) into a one-element array', () => {
+    process.env.COCO_IGNORED_FILES = 'dist'
+    const config = loadEnvConfig(defaultConfig)
+    expect(config.ignoredFiles).toEqual(['dist'])
+    delete process.env.COCO_IGNORED_FILES
+  })
+
+  it('wraps a single-value COCO_IGNORED_EXTENSIONS (no comma) into a one-element array', () => {
+    process.env.COCO_IGNORED_EXTENSIONS = '.map'
+    const config = loadEnvConfig(defaultConfig)
+    expect(config.ignoredExtensions).toEqual(['.map'])
+    delete process.env.COCO_IGNORED_EXTENSIONS
+  })
+
+  it('trims whitespace around comma-separated COCO_IGNORED_FILES entries', () => {
+    process.env.COCO_IGNORED_FILES = '*.env, secrets'
+    const config = loadEnvConfig(defaultConfig)
+    expect(config.ignoredFiles).toEqual(['*.env', 'secrets'])
+    delete process.env.COCO_IGNORED_FILES
+  })
+
   it('should load environment variables with prompt', () => {
     process.env.COCO_PROMPT = 'prompt'
     const config = loadEnvConfig(defaultConfig)

@@ -1,5 +1,6 @@
 import { DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../constants'
 import { Config } from '../types'
+import { splitList } from './splitList'
 
 /**
  * Ensure the canonical default ignore lists are always present in
@@ -18,11 +19,18 @@ import { Config } from '../types'
  * per commit) outweighs the niche case of intentionally excluding a
  * default lockfile pattern.
  */
-function unionPreservingOrder(base: string[], extras: string[] | undefined): string[] {
-  if (!extras || extras.length === 0) return [...base]
+function unionPreservingOrder(
+  base: string[],
+  extras: string[] | string | undefined
+): string[] {
+  // Defense in depth: a loader that leaks a raw string here (instead of
+  // splitting it) would otherwise be spread into individual characters —
+  // normalize it back into an array first (#1675).
+  const normalized = typeof extras === 'string' ? splitList(extras) : extras
+  if (!normalized || normalized.length === 0) return [...base]
   const seen = new Set(base)
   const merged = [...base]
-  for (const value of extras) {
+  for (const value of normalized) {
     if (!seen.has(value)) {
       seen.add(value)
       merged.push(value)

@@ -262,6 +262,37 @@ describe('loadGitConfig', () => {
     expect((service as unknown as { endpoint?: string }).endpoint).toBeUndefined()
   })
 
+  it('splits a comma-separated ignoredFiles/ignoredExtensions gitconfig value into an array (#1675)', () => {
+    // Regression: the documented ~/.gitconfig format
+    // (`ignoredFiles = node_modules,.git`) was passed through verbatim as a
+    // string, which downstream code iterated character-by-character.
+    const ignoreConfig = `
+[coco]
+  ignoredFiles = *.env,secrets
+  ignoredExtensions = .env,.pem
+`
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(ignoreConfig)
+
+    const config = loadGitConfig(defaultConfig as Config)
+
+    expect(config.ignoredFiles).toEqual(['*.env', 'secrets'])
+    expect(config.ignoredExtensions).toEqual(['.env', '.pem'])
+  })
+
+  it('splits a single-value ignoredFiles gitconfig value into a one-element array (#1675)', () => {
+    const ignoreConfig = `
+[coco]
+  ignoredFiles = dist
+`
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(ignoreConfig)
+
+    const config = loadGitConfig(defaultConfig as Config)
+
+    expect(config.ignoredFiles).toEqual(['dist'])
+  })
+
   it('lets an explicit `false` gitconfig boolean override a `true` lower-layer value', () => {
     // Regression: `gitConfigParsed.coco?.verbose || config.verbose` treated
     // an explicit `false` from gitconfig as "not set" and fell through to
