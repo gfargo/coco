@@ -51,6 +51,14 @@ const MOCK_GIT_CONFIG_OPENROUTER = `
   serviceBaseURL = https://openrouter.ai/api/v1
 `
 
+const MOCK_GIT_CONFIG_KEYLESS_COMPAT = `
+[coco]
+  serviceProvider = openai
+  serviceModel = local-model
+  serviceBaseURL = http://localhost:1234/v1
+  serviceAuthType = None
+`
+
 const MOCK_GIT_CONFIG_WITHOUT_COCO_SECTION = `
 [core]
   editor=nano
@@ -206,6 +214,26 @@ describe('loadGitConfig', () => {
     expect(service.requestOptions?.maxRetries).toBeUndefined()
   })
 
+  it('reconstructs authentication.type "None" for a keyless OpenAI-compatible endpoint (OSS-1003)', () => {
+    // Regression: previously authentication was only reconstructed when
+    // serviceApiKey was present, so a keyless compat config (LM Studio /
+    // vLLM / custom) reverted to the incoming default service's APIKey
+    // auth on reload — breaking the very presets #1610/#1665 introduced.
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(MOCK_GIT_CONFIG_KEYLESS_COMPAT)
+
+    const defaultsOpenai: Partial<Config> = {
+      service: getDefaultServiceConfigFromAlias('openai'),
+      mode: 'stdout',
+      defaultBranch: 'test',
+    }
+    const config = loadGitConfig(defaultsOpenai as Config)
+    const service = config.service as OpenAILLMService
+
+    expect(service.authentication.type).toBe('None')
+    expect(service.baseURL).toBe('http://localhost:1234/v1')
+  })
+
   it('does not attach provider-irrelevant fields (endpoint on openai, baseURL on ollama)', () => {
     // Regression: the loader unconditionally attached both endpoint
     // AND baseURL regardless of provider. Each provider's schema
@@ -359,5 +387,31 @@ describe('appendToGitConfig', () => {
       confirmUpdate: true,
       confirmMessage: CONFIG_ALREADY_EXISTS,
     })
+  })
+
+  it('emits serviceAuthType = None (and no serviceApiKey) for a keyless OpenAI-compatible service (OSS-1003)', async () => {
+    const config: Partial<Config> = {
+      service: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        baseURL: 'http://localhost:1234/v1',
+        authentication: { type: 'None', credentials: undefined },
+      } as OpenAILLMService,
+      mode: 'interactive',
+      defaultBranch: 'main',
+    }
+
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('')
+    mockedUpdateFileSection.mockResolvedValue(undefined)
+
+    await appendToGitConfig('~/.gitconfig', config)
+
+    const { getNewContent } = mockedUpdateFileSection.mock.calls[0][0]
+    const content = await getNewContent()
+
+    expect(content).toContain('serviceAuthType = None')
+    expect(content).not.toContain('serviceApiKey')
+    expect(content).toContain('serviceBaseURL = http://localhost:1234/v1')
   })
 })

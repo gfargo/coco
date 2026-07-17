@@ -1,3 +1,4 @@
+import chalk from 'chalk'
 import { handler } from './handler'
 import { questions, OPENAI_COMPATIBLE_SENTINEL } from './questions'
 import { InitOptions } from './config'
@@ -263,6 +264,35 @@ describe('init command', () => {
         })
       )
     })
+  })
+
+  it('warns that a compat baseURL preset is dropped on load for project scope (OSS-1003)', async () => {
+    // Project scope's trust filter never honors a repo-committed baseURL
+    // (or authentication), so a keyless compat preset silently falls back
+    // to the real OpenAI API on load. The user should be steered to global
+    // scope / an env var instead of getting a confusing later auth failure.
+    mockLoadConfig.mockReturnValue({
+      scope: 'project',
+      dryRun: false,
+    } as unknown as Config)
+    jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue(OPENAI_COMPATIBLE_SENTINEL)
+    jest.spyOn(questions, 'selectOpenAiCompatiblePreset').mockResolvedValue({
+      id: 'lmstudio',
+      label: 'LM Studio',
+      baseURL: 'http://localhost:1234/v1',
+      apiKeyEnvVar: 'LMSTUDIO_API_KEY',
+      requiresApiKey: false,
+    })
+    jest.spyOn(questions, 'inputOpenAiCompatibleModel').mockResolvedValue('local-model')
+
+    await handler(createArgv({ scope: 'project' }), logger)
+
+    expect(logger.log).toHaveBeenCalledWith(
+      chalk.dim(
+        `Note: project scope can't persist a custom endpoint (http://localhost:1234/v1) — ` +
+        `it will be dropped on load. Use \`coco init --scope global\`, or set COCO_SERVICE_BASE_URL via env var.`
+      )
+    )
   })
 
   it('skips the custom Ollama endpoint prompt for project scope', async () => {

@@ -109,15 +109,18 @@ export function loadGitConfig<ConfigType = Config>(
       if (Object.keys(requestOptionsOverrides).length > 0) {
         overrides.requestOptions = requestOptionsOverrides
       }
-      // Authentication: only when an apiKey was provided. Default
-      // service ships with an empty-credential placeholder for users
-      // who'll set the key via env var; gitconfig's apiKey should
+      // Authentication: only when an apiKey was provided, or the user
+      // explicitly opted out (keyless compat endpoint, e.g. LM Studio /
+      // vLLM). Default service ships with an empty-credential placeholder
+      // for users who'll set the key via env var; gitconfig's value should
       // override that path, not the structure itself.
       if (coco.serviceApiKey) {
         overrides.authentication = {
           type: 'APIKey',
           credentials: { apiKey: coco.serviceApiKey },
         }
+      } else if (coco.serviceAuthType === 'None') {
+        overrides.authentication = { type: 'None', credentials: undefined }
       }
 
       service = { ...(service || {}), ...overrides } as LLMService
@@ -169,6 +172,8 @@ export const appendToGitConfig = async (filePath: string, config: Partial<Config
         contentLines.push(`	serviceModel = ${service.model}`)
         if (service.authentication.type === 'APIKey') {
           contentLines.push(`	serviceApiKey = ${service.authentication.credentials.apiKey}`)
+        } else if (service.authentication.type === 'None') {
+          contentLines.push(`	serviceAuthType = None`)
         }
         if (service.tokenLimit !== undefined) {
           contentLines.push(`	serviceTokenLimit = ${service.tokenLimit}`)
