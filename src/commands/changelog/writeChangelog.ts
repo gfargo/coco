@@ -42,7 +42,9 @@ export function writeChangelogFile({ filePath, title, content, date = todayIsoDa
   const lines = existing.split(/\r?\n/)
   const headingPrefix = `## ${title}`
 
-  const startIndex = lines.findIndex((line) => line.trim() === headingPrefix.trim() || line.trim().startsWith(`${headingPrefix} `))
+  const startIndex = lines.findIndex(
+    (line) => line.trim() === headingPrefix.trim() || line.trim().startsWith(`${headingPrefix} — `),
+  )
 
   if (startIndex !== -1) {
     let endIndex = startIndex + 1
