@@ -1,7 +1,7 @@
 import { ChatBedrockConverse } from '@langchain/aws'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { BedrockLLMService } from '../types'
-import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_PROVIDER_MAX_RETRIES } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createBedrockLlm({ model, config }: CreateLlmArgs): BaseChatModel {
@@ -26,6 +26,7 @@ function createBedrockLlm({ model, config }: CreateLlmArgs): BaseChatModel {
       : {}),
     temperature: config.service.temperature ?? 0.2,
     maxConcurrency: config.service.maxConcurrent,
+    maxRetries: config.service.requestOptions?.maxRetries ?? DEFAULT_PROVIDER_MAX_RETRIES,
   }
 
   // Merge Bedrock-specific fields forwarded from service config.

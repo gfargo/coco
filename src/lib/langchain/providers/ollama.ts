@@ -1,7 +1,7 @@
 import { ChatOllama } from '@langchain/ollama'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { Config } from '../../../commands/types'
-import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_PROVIDER_MAX_RETRIES } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 /** Fallback when no endpoint is configured. Inlined here (rather than imported
@@ -25,6 +25,7 @@ function createOllamaLlm({ model, config }: CreateLlmArgs): BaseChatModel {
     // providers use — Ollama's own default service config already ships 0.4.
     temperature: config.service.temperature ?? 0.4,
     numPredict: DEFAULT_MAX_OUTPUT_TOKENS,
+    maxRetries: config.service.requestOptions?.maxRetries ?? DEFAULT_PROVIDER_MAX_RETRIES,
   }
 
   // Merge Ollama-specific fields forwarded from service config (e.g. an

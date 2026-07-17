@@ -54,6 +54,16 @@ function temperatureOf(llm: unknown): number | undefined {
   return (llm as { temperature?: number }).temperature
 }
 
+// Most LangChain chat models store the effective retry count on the
+// `AsyncCaller` instance under `.caller.maxRetries`. Mistral additionally
+// (and the jest stubs for mistral/bedrock, which just `Object.assign` the
+// raw constructor config) surface it as a top-level `.maxRetries` field —
+// fall back to that when `.caller` doesn't have it.
+function callerRetriesOf(llm: unknown): number | undefined {
+  const model = llm as { caller?: { maxRetries?: number }; maxRetries?: number }
+  return model.caller?.maxRetries ?? model.maxRetries
+}
+
 describe.each(CASES)('provider config forwarding — $provider', (c) => {
   it('defaults temperature to 0.2 when unset', () => {
     const llm = getLlm(c.provider, c.model as LLMModel, makeConfig(c))
@@ -89,6 +99,29 @@ describe.each(CASES)('provider config forwarding — $provider', (c) => {
       makeConfig(c, { fields: { [c.maxTokensField]: 8192 } })
     ) as unknown as Record<string, unknown>
     expect(llm[c.maxTokensField]).toBe(8192)
+  })
+
+  it('clamps the AsyncCaller maxRetries to 0 by default', () => {
+    const llm = getLlm(c.provider, c.model as LLMModel, makeConfig(c))
+    expect(callerRetriesOf(llm)).toBe(0)
+  })
+
+  it('forwards an explicit requestOptions.maxRetries', () => {
+    const llm = getLlm(
+      c.provider,
+      c.model as LLMModel,
+      makeConfig(c, { requestOptions: { maxRetries: 3 } })
+    )
+    expect(callerRetriesOf(llm)).toBe(3)
+  })
+
+  it('lets service.fields override requestOptions.maxRetries', () => {
+    const llm = getLlm(
+      c.provider,
+      c.model as LLMModel,
+      makeConfig(c, { requestOptions: { maxRetries: 3 }, fields: { maxRetries: 5 } })
+    )
+    expect(callerRetriesOf(llm)).toBe(5)
   })
 })
 
@@ -157,5 +190,50 @@ describe('bedrock config forwarding', () => {
       bedrockConfig({ accessKeyId: 'AKIA' })
     )
     expect((llm as { credentials?: unknown }).credentials).toBeUndefined()
+  })
+
+  it('clamps the AsyncCaller maxRetries to 0 by default', () => {
+    const llm = getLlm('bedrock', 'anthropic.claude-sonnet-4-6' as LLMModel, bedrockConfig())
+    expect(callerRetriesOf(llm)).toBe(0)
+  })
+
+  it('forwards an explicit requestOptions.maxRetries', () => {
+    const llm = getLlm(
+      'bedrock',
+      'anthropic.claude-sonnet-4-6' as LLMModel,
+      bedrockConfig({ requestOptions: { maxRetries: 3 } })
+    )
+    expect(callerRetriesOf(llm)).toBe(3)
+  })
+})
+
+describe('provider requestOptions.timeout forwarding (openai/azure only)', () => {
+  it('forwards requestOptions.timeout to OpenAI', () => {
+    const llm = getLlm(
+      'openai',
+      'gpt-5.4-mini' as LLMModel,
+      makeConfig(
+        { provider: 'openai', model: 'gpt-5.4-mini', maxTokensField: 'maxTokens' },
+        { requestOptions: { timeout: 5000 } }
+      )
+    )
+    expect((llm as { timeout?: number }).timeout).toBe(5000)
+  })
+
+  it('forwards requestOptions.timeout to Azure', () => {
+    const llm = getLlm(
+      'azure',
+      'gpt-5.4-mini' as LLMModel,
+      makeConfig(
+        {
+          provider: 'azure',
+          model: 'gpt-5.4-mini',
+          extraService: { instanceName: 'inst', deploymentName: 'gpt-4o', apiVersion: '2024-10-21' },
+          maxTokensField: 'maxTokens',
+        },
+        { requestOptions: { timeout: 5000 } }
+      )
+    )
+    expect((llm as { timeout?: number }).timeout).toBe(5000)
   })
 })

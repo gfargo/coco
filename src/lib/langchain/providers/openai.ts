@@ -1,6 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
-import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_PROVIDER_MAX_RETRIES } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
@@ -12,6 +12,10 @@ function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatMode
     // respected instead of being coerced to the 0.2 default.
     temperature: config.service.temperature ?? 0.2,
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    maxRetries: config.service.requestOptions?.maxRetries ?? DEFAULT_PROVIDER_MAX_RETRIES,
+    ...(config.service.requestOptions?.timeout !== undefined
+      ? { timeout: config.service.requestOptions.timeout }
+      : {}),
   }
 
   // Custom base URL for OpenAI-compatible APIs (OpenRouter, etc.).

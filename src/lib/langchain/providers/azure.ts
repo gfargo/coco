@@ -1,7 +1,7 @@
 import { AzureChatOpenAI } from '@langchain/openai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { AzureLLMService } from '../types'
-import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_PROVIDER_MAX_RETRIES } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
@@ -15,6 +15,10 @@ function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel
     temperature: config.service.temperature ?? 0.2,
     maxConcurrency: config.service.maxConcurrent,
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    maxRetries: config.service.requestOptions?.maxRetries ?? DEFAULT_PROVIDER_MAX_RETRIES,
+    ...(config.service.requestOptions?.timeout !== undefined
+      ? { timeout: config.service.requestOptions.timeout }
+      : {}),
   }
 
   // Merge Azure-specific fields forwarded from service config.
