@@ -17,6 +17,7 @@ import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { handleResult } from '../../lib/ui/handleResult'
 import { Logger } from '../../lib/utils/logger'
+import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 
 jest.mock('../../lib/simple-git/getRepo')
 jest.mock('../../lib/simple-git/getCommitLogCurrentBranch')
@@ -72,6 +73,7 @@ const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.Mocked
   typeof getTokenCounterForProvider
 >
 const mockHandleResult = handleResult as jest.MockedFunction<typeof handleResult>
+const mockGenerateAndReviewLoop = generateAndReviewLoop as jest.MockedFunction<typeof generateAndReviewLoop>
 
 describe('changelog command', () => {
   let argv: Arguments<ChangelogOptions>
@@ -227,6 +229,75 @@ describe('changelog command', () => {
     it('does not touch the file when --write is not passed', async () => {
       await handler(argv, logger)
       expect(fs.existsSync(filePath)).toBe(false)
+    })
+  })
+
+  describe('reconciling user edits from the interactive review loop (#1679/OSS-993)', () => {
+    let dir: string
+    let filePath: string
+
+    beforeEach(() => {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-changelog-handler-edit-'))
+      filePath = path.join(dir, 'CHANGELOG.md')
+
+      // Simulate the review loop's Edit path: it still calls `agent` (so
+      // `structured` gets captured from the pre-edit LLM response), but the
+      // loop's final return value is the user's edited text rather than the
+      // agent's raw output.
+      mockGenerateAndReviewLoop.mockImplementationOnce(async ({ factory, parser, agent, options }) => {
+        const changes = await factory()
+        const context = await parser(changes, '', options)
+        await agent(context, options)
+        return 'Edited title\n\nEdited body'
+      })
+    })
+
+    afterEach(() => {
+      fs.rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('writes the edited title/content to the file, not the stale pre-edit snapshot', async () => {
+      argv.write = true
+      argv.file = filePath
+
+      await handler(argv, logger)
+
+      const written = fs.readFileSync(filePath, 'utf8')
+      expect(written).toContain('## Edited title')
+      expect(written).toContain('Edited body')
+      expect(written).not.toContain('Mocked changelog title')
+      expect(written).not.toContain('Mocked changelog content')
+    })
+
+    it('emits the edited title/content via --json, not the stale pre-edit snapshot', async () => {
+      argv.json = true
+
+      const writes: string[] = []
+      const writeSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(((chunk: string) => {
+          writes.push(String(chunk))
+          return true
+        }) as never)
+      try {
+        await handler(argv, logger)
+      } finally {
+        writeSpy.mockRestore()
+      }
+
+      const jsonCall = writes.find((message) => {
+        try {
+          JSON.parse(message)
+          return true
+        } catch {
+          return false
+        }
+      })
+
+      expect(jsonCall).toBeDefined()
+      const parsed = JSON.parse(jsonCall as string)
+      expect(parsed.title).toBe('Edited title')
+      expect(parsed.content).toContain('Edited body')
     })
   })
 

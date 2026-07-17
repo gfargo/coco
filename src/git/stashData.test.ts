@@ -235,6 +235,46 @@ describe('log stash data', () => {
         { path: 'weird".ts', startLine: 0 },
       ])
     })
+
+    it('decodes octal-escaped UTF-8 bytes for accented filenames', () => {
+      const lines = [
+        'diff --git "a/caf\\303\\251.txt" "b/caf\\303\\251.txt"',
+        'index aaa..bbb 100644',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'café.txt', startLine: 0 },
+      ])
+    })
+
+    it('decodes multi-byte octal sequences for CJK and emoji filenames', () => {
+      const lines = [
+        'diff --git "a/\\344\\270\\255.txt" "b/\\344\\270\\255.txt"',
+        'index aaa..bbb 100644',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: '中.txt', startLine: 0 },
+      ])
+    })
+
+    it('does not corrupt a literal backslash-t into a tab character', () => {
+      const lines = [
+        'diff --git "a/a\\\\tb.txt" "b/a\\\\tb.txt"',
+        'index aaa..bbb 100644',
+      ]
+      const files = parseStashDiffFiles(lines)
+      expect(files).toEqual([{ path: 'a\\tb.txt', startLine: 0 }])
+      expect(files[0].path).not.toContain('\t')
+    })
+
+    it('decodes an octal escape adjacent to a quote escape in the same path', () => {
+      const lines = [
+        'diff --git "a/caf\\303\\251\\".txt" "b/caf\\303\\251\\".txt"',
+        'index aaa..bbb 100644',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'café".txt', startLine: 0 },
+      ])
+    })
   })
 
   // #791 follow-up — the diff surface uses this to decide which file

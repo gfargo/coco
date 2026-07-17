@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { Config } from '../types'
-import { loadXDGConfig } from './xdg'
+import { loadXDGConfig, resetXdgConfigLoadWarnings } from './xdg'
 
 jest.mock('fs')
 
@@ -24,6 +24,7 @@ const ollamaConfig: Partial<Config> = {
 describe('loadXDGConfig', () => {
   afterEach(() => {
     jest.resetAllMocks()
+    resetXdgConfigLoadWarnings()
   })
 
   it('should load XDG config', () => {
@@ -124,6 +125,45 @@ describe('loadXDGConfig', () => {
     }
   })
 
+  it('does not wipe the service when the XDG file only sets a partial key (#1667)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ service: { model: 'gpt-4o' } }))
+
+    const config = loadXDGConfig(openAIConfig)
+
+    expect(config.service).toBeDefined()
+    expect(config.service.provider).toBe('openai')
+    expect(config.service.model).toBe('gpt-4o')
+    expect(config.service.tokenLimit).toBe(openAIConfig.service?.tokenLimit)
+    expect(config.service.temperature).toBe(openAIConfig.service?.temperature)
+    expect(config.service.maxConcurrent).toBe(openAIConfig.service?.maxConcurrent)
+  })
+
+  it('applies tuning keys written by `config set` instead of silently discarding them (#1667)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({ service: { temperature: 0.2, maxConcurrent: 3 } })
+    )
+
+    const config = loadXDGConfig(openAIConfig)
+
+    expect(config.service.temperature).toBe(0.2)
+    expect(config.service.maxConcurrent).toBe(3)
+  })
+
+  it('converts a flat on-disk apiKey to nested authentication credentials (#1667)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ service: { apiKey: 'sk-xyz' } }))
+
+    const config = loadXDGConfig(openAIConfig)
+
+    expect(config.service.authentication.type).toBe('APIKey')
+    if (config.service.authentication.type === 'APIKey') {
+      expect(config.service.authentication.credentials.apiKey).toBe('sk-xyz')
+    }
+    expect((config.service as unknown as Record<string, unknown>).apiKey).toBeUndefined()
+  })
+
   it('parses a bedrock service with region and no-auth credential chain', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(
@@ -141,5 +181,50 @@ describe('loadXDGConfig', () => {
     if (config.service.provider === 'bedrock') {
       expect(config.service.region).toBe('us-east-1')
     }
+  })
+
+  it('does not throw on malformed JSON and warns once with the file path', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('{ "service": { bad json ]')
+
+    let config: Config | undefined
+    expect(() => {
+      config = loadXDGConfig(openAIConfig)
+    }).not.toThrow()
+
+    expect(config?.service.provider).toBe('openai')
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    const message = warnSpy.mock.calls[0][0]
+    expect(message).toContain('could not parse')
+    expect(message).toContain('config.json')
+  })
+
+  it('warns at most once across repeated loads of the same malformed file', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('{ "service": { bad json ]')
+
+    loadXDGConfig(openAIConfig)
+    loadXDGConfig(openAIConfig)
+    loadXDGConfig(openAIConfig)
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a parsed-but-non-object XDG file (array)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('[]')
+
+    const config = loadXDGConfig(openAIConfig)
+    expect(config.service.provider).toBe('openai')
+  })
+
+  it('ignores a parsed-but-non-object XDG file (primitive)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('42')
+
+    const config = loadXDGConfig(openAIConfig)
+    expect(config.service.provider).toBe('openai')
   })
 })

@@ -96,5 +96,9 @@ export async function summarize(
 
   if (res.error) throw new Error(res.error)
 
-  return res.text && res.text.trim()
+  const summary = res.text?.trim()
+  if (!summary) {
+    throw new Error('summarize: chain returned an empty summary')
+  }
+  return summary
 }

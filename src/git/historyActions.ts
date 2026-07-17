@@ -386,6 +386,33 @@ export function cherryPickRange(
 }
 
 /**
+ * Cherry-pick an explicit list of commits (#1670) — used when a v-range
+ * span isn't a contiguous ancestor chain (e.g. rows interleaved from
+ * other branches by the default `--all` history view), so `oldest^..newest`
+ * range syntax would replay real intermediate ancestors the user never
+ * saw. `commits` must already be oldest-first (git applies them in the
+ * order given); the caller is responsible for reversing display order.
+ */
+export function cherryPickCommits(
+  git: SimpleGit,
+  commits: HistoryCommitRef[]
+): Promise<BranchActionResult> {
+  if (commits.length === 0) {
+    return Promise.resolve({ ok: false, message: 'No commit selected.' })
+  }
+  if (commits.length === 1) {
+    return cherryPickCommit(git, commits[0])
+  }
+
+  return guardNoInProgressOperation(git).then((blocked) => (
+    blocked || runAction(
+      () => git.raw(['cherry-pick', ...commits.map((c) => c.hash)]),
+      `Cherry-picked ${commits.length} commits`
+    )
+  ))
+}
+
+/**
  * Materialize a single file's contents from a historical commit into the
  * working tree, leaving every other path untouched. Equivalent to
  * `git checkout <sha> -- <path>` for additions/modifications. When the

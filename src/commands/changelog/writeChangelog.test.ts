@@ -1,12 +1,46 @@
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { buildChangelogSection, writeChangelogFile } from './writeChangelog'
+import { buildChangelogSection, splitChangelogMessage, writeChangelogFile } from './writeChangelog'
 
 describe('buildChangelogSection', () => {
   it('renders a `## title — date` heading followed by the trimmed content', () => {
     const section = buildChangelogSection('v1.2.0', '\n- did a thing\n- did another\n\n', '2026-07-13')
     expect(section).toBe('## v1.2.0 — 2026-07-13\n\n- did a thing\n- did another\n')
+  })
+})
+
+describe('splitChangelogMessage', () => {
+  it('splits multi-line content into a title and the remaining body', () => {
+    expect(splitChangelogMessage('v1.2.0\n\n- did a thing\n- did another')).toEqual({
+      title: 'v1.2.0',
+      content: '- did a thing\n- did another',
+    })
+  })
+
+  it('normalizes CRLF input', () => {
+    expect(splitChangelogMessage('v1.2.0\r\n\r\n- did a thing\r\n- did another')).toEqual({
+      title: 'v1.2.0',
+      content: '- did a thing\n- did another',
+    })
+  })
+
+  it('returns empty content for a single-line message with no newline', () => {
+    expect(splitChangelogMessage('v1.2.0')).toEqual({ title: 'v1.2.0', content: '' })
+  })
+
+  it('keeps a trailing ticket footer inside the content', () => {
+    const message = 'v1.2.0\n\n- did a thing\n\nPart of **OSS-993**'
+    expect(splitChangelogMessage(message)).toEqual({
+      title: 'v1.2.0',
+      content: '- did a thing\n\nPart of **OSS-993**',
+    })
+  })
+
+  it('roundtrips a `${title}\\n\\n${content}` message back to its original parts', () => {
+    const title = 'v1.2.0'
+    const content = '- did a thing\n- did another\n\nPart of **OSS-993**'
+    expect(splitChangelogMessage(`${title}\n\n${content}`)).toEqual({ title, content })
   })
 })
 
@@ -80,6 +114,17 @@ describe('writeChangelogFile', () => {
     expect(written).toContain('## v1.0 — 2026-07-01')
     expect(written).toContain('## v1.0.0 — 2026-07-13')
     expect(written).toContain('- old')
+    expect(written).toContain('- new')
+  })
+
+  it('does not match a title that is a word-prefix of another title', () => {
+    fs.writeFileSync(filePath, '# Changelog\n\n## v1.0 hotfix — 2026-06-01\n\n- hotfix notes\n')
+    writeChangelogFile({ filePath, title: 'v1.0', content: '- new', date: '2026-07-13' })
+    const written = fs.readFileSync(filePath, 'utf8')
+    // Both headings survive — v1.0 was inserted as new, not merged into v1.0 hotfix's section.
+    expect(written).toContain('## v1.0 hotfix — 2026-06-01')
+    expect(written).toContain('## v1.0 — 2026-07-13')
+    expect(written).toContain('- hotfix notes')
     expect(written).toContain('- new')
   })
 })

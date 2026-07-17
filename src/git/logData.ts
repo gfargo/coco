@@ -202,21 +202,46 @@ function parseNumericStat(value: string): number | undefined {
   return value === '-' ? undefined : Number(value)
 }
 
+/**
+ * Parses `git show --numstat -z` output (NUL-separated, no C-quoting) —
+ * same rationale as `parsePorcelainStatus` (#1597): the text-mode
+ * name-status/numstat quote non-ASCII paths (`"caf\303\251.txt"`), which
+ * then fail to match as pathspecs downstream. `-z` reports a rename/copy
+ * record as `<add>\t<del>\t\0<oldpath>\0<newpath>\0` (empty path field
+ * before the NUL, then two separate path tokens) instead of one
+ * tab-separated line, so those records are walked as three tokens here.
+ * Rename stats are keyed by the new path — the only one name-status
+ * needs to look up.
+ */
 function parseNumstat(output: string): ParsedNumstat[] {
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [additions, deletions, path] = line.split('\t')
+  const tokens = output.split('\0').filter((token) => token.length > 0)
+  const entries: ParsedNumstat[] = []
 
-      return {
+  for (let i = 0; i < tokens.length; i += 1) {
+    const [additions, deletions, path] = tokens[i].split('\t')
+
+    if (path === undefined || path === '') {
+      // Rename/copy record: path field is empty, old/new paths follow as
+      // their own tokens. Key stats by the new path.
+      const newPath = tokens[i + 2]
+      entries.push({
+        additions: parseNumericStat(additions),
+        binary: additions === '-' || deletions === '-',
+        deletions: parseNumericStat(deletions),
+        path: newPath,
+      })
+      i += 2
+    } else {
+      entries.push({
         additions: parseNumericStat(additions),
         binary: additions === '-' || deletions === '-',
         deletions: parseNumericStat(deletions),
         path,
-      }
-    })
+      })
+    }
+  }
+
+  return entries
 }
 
 function summarizeNumstat(entries: ParsedNumstat[]): GitCommitDetail['stats'] {
@@ -231,38 +256,50 @@ function summarizeNumstat(entries: ParsedNumstat[]): GitCommitDetail['stats'] {
   })
 }
 
+/**
+ * Parses `git show --name-status -z` output (NUL-separated, no
+ * C-quoting) — see `parseNumstat` above for why `-z` is required. Each
+ * record is `<status>\0<path>\0`, except rename/copy records which are
+ * `<status>\0<oldpath>\0<newpath>\0` (three tokens).
+ */
 function parseNameStatus(output: string, numstat: ParsedNumstat[] = []): GitCommitDetail['files'] {
   const statsByPath = new Map(numstat.map((entry) => [entry.path, entry]))
+  const tokens = output.split('\0').filter((token) => token.length > 0)
+  const files: GitCommitDetail['files'] = []
 
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [status, firstPath, secondPath] = line.split('\t')
+  for (let i = 0; i < tokens.length; i += 1) {
+    const status = tokens[i]
 
-      if (status.startsWith('R') || status.startsWith('C')) {
-        const stats = statsByPath.get(secondPath) || statsByPath.get(`${firstPath} => ${secondPath}`)
+    if (status.startsWith('R') || status.startsWith('C')) {
+      const oldPath = tokens[i + 1]
+      const path = tokens[i + 2]
+      const stats = statsByPath.get(path)
 
-        return {
-          additions: stats?.additions,
-          binary: stats?.binary,
-          deletions: stats?.deletions,
-          status,
-          oldPath: firstPath,
-          path: secondPath,
-        }
-      }
-      const stats = statsByPath.get(firstPath)
-
-      return {
+      files.push({
         additions: stats?.additions,
         binary: stats?.binary,
         deletions: stats?.deletions,
         status,
-        path: firstPath,
-      }
-    })
+        oldPath,
+        path,
+      })
+      i += 2
+    } else {
+      const path = tokens[i + 1]
+      const stats = statsByPath.get(path)
+
+      files.push({
+        additions: stats?.additions,
+        binary: stats?.binary,
+        deletions: stats?.deletions,
+        status,
+        path,
+      })
+      i += 1
+    }
+  }
+
+  return files
 }
 
 export function parseCommitDetail(metadata: string, files: string, numstatOutput = ''): GitCommitDetail {
@@ -484,6 +521,7 @@ export async function getCommitDetail(git: SimpleGit, commit: string): Promise<G
     git.raw([
       'show',
       '--name-status',
+      '-z',
       '--format=',
       '--find-renames',
       '--color=never',
@@ -492,6 +530,7 @@ export async function getCommitDetail(git: SimpleGit, commit: string): Promise<G
     git.raw([
       'show',
       '--numstat',
+      '-z',
       '--format=',
       '--find-renames',
       '--color=never',

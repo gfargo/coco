@@ -170,9 +170,6 @@ describe('config command (#1605)', () => {
   })
 
   it('masks an API key value instead of printing it in plain text', async () => {
-    // The XDG loader's parseServiceConfig only reconstructs a `service`
-    // block when `provider` is present in the same file — set it first so
-    // the apiKey round-trips through the real load chain `get` reads from.
     await handler(
       createArgv({ action: 'set', key: 'service.provider', value: 'openai', scope: 'global' }),
       logger
@@ -191,6 +188,30 @@ describe('config command (#1605)', () => {
     const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
     expect(loggedLines.some((line) => line.includes('sk-real-secret-key'))).toBe(false)
     expect(loggedLines.some((line) => line.includes('•••'))).toBe(true)
+  })
+
+  it('set service.model at global scope leaves the effective service config intact (#1667)', async () => {
+    await handler(
+      createArgv({ action: 'set', key: 'service.model', value: 'gpt-4o', scope: 'global' }),
+      logger
+    )
+    await handler(createArgv({ action: 'get', key: 'service.model' }), logger)
+    await handler(createArgv({ action: 'get', key: 'service.provider' }), logger)
+
+    const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
+    expect(loggedLines.some((line) => line.includes('service.model = "gpt-4o"'))).toBe(true)
+    expect(loggedLines.some((line) => line.includes('service.provider = "openai"'))).toBe(true)
+    expect(loggedLines.some((line) => line.includes('is not set'))).toBe(false)
+  })
+
+  it('set service.temperature at global scope actually takes effect (#1667)', async () => {
+    await handler(
+      createArgv({ action: 'set', key: 'service.temperature', value: '0.2', scope: 'global' }),
+      logger
+    )
+    await handler(createArgv({ action: 'get', key: 'service.temperature' }), logger)
+
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('service.temperature = 0.2'))
   })
 
   it('list --scope project prints only that scope\'s raw contents', async () => {

@@ -92,7 +92,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
   }
 
   if (argv.dryRun) {
-    logger.log(message)
+    process.stdout.write(`${message}\n`)
     return
   }
 
@@ -127,7 +127,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
       }
     }
   } else if (!argv.apply) {
-    logger.log(message)
+    process.stdout.write(`${message}\n`)
     return
   }
 
@@ -153,6 +153,6 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
   if (INTERACTIVE) {
     logSuccess()
   } else {
-    logger.log(message)
+    process.stdout.write(`${message}\n`)
   }
 }
