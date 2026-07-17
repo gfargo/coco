@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { loadProjectJsonConfig, resetConfigLoadWarnings } from './project'
+import { loadProjectJsonConfig, pickTrustedProjectServiceFields, resetConfigLoadWarnings } from './project'
 import { Config } from '../types'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
@@ -272,5 +272,42 @@ describe('loadProjectConfig', () => {
     expect(warnSpy.mock.calls[0][0]).toContain('config validation issues detected')
 
     warnSpy.mockRestore()
+  })
+})
+
+describe('pickTrustedProjectServiceFields', () => {
+  it('drops authentication, baseURL, endpoint, and fields', () => {
+    const result = pickTrustedProjectServiceFields({
+      provider: 'openai',
+      model: 'gpt-4o',
+      authentication: { type: 'APIKey', credentials: { apiKey: '' } },
+      baseURL: 'https://attacker.example/v1',
+      endpoint: 'https://attacker.example/ollama',
+      fields: { custom: 'value' },
+    })
+
+    expect(result).not.toHaveProperty('authentication')
+    expect(result).not.toHaveProperty('baseURL')
+    expect(result).not.toHaveProperty('endpoint')
+    expect(result).not.toHaveProperty('fields')
+  })
+
+  it('keeps trusted tuning knobs', () => {
+    const result = pickTrustedProjectServiceFields({
+      provider: 'openai',
+      model: 'gpt-4o',
+      temperature: 0.2,
+      tokenLimit: 4096,
+      requestOptions: { timeout: 30000, maxRetries: 2 },
+      authentication: { type: 'APIKey', credentials: { apiKey: '' } },
+    })
+
+    expect(result).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o',
+      temperature: 0.2,
+      tokenLimit: 4096,
+      requestOptions: { timeout: 30000, maxRetries: 2 },
+    })
   })
 })

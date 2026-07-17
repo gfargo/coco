@@ -10,6 +10,7 @@ import {
     LOG_INTERACTIVE_DEFAULT_LIMIT,
     buildLogArgs,
     buildToggleGraphArgs,
+    getCommitDetail,
     getCommitFilePreview,
     getCommitRows,
     getLogRows,
@@ -290,8 +291,8 @@ describe('log data layer', () => {
         'feat: add details',
         'Detailed body',
       ].join(FIELD_SEPARATOR),
-      ['A\tREADME.md', 'R100\told.ts\tnew.ts'].join('\n'),
-      ['10\t2\tREADME.md', '3\t1\tnew.ts'].join('\n')
+      ['A\0README.md\0', 'R100\0old.ts\0new.ts\0'].join(''),
+      ['10\t2\tREADME.md\0', '3\t1\t\0old.ts\0new.ts\0'].join('')
     )
 
     expect(detail).toEqual(expect.objectContaining({
@@ -322,6 +323,64 @@ describe('log data layer', () => {
         insertions: 13,
       },
     }))
+  })
+
+  // Regression (#1690): git's text-mode name-status/numstat C-quote
+  // non-ASCII paths (`"caf\303\251.txt"`), which then fail to match as
+  // pathspecs downstream (empty diff preview, misrouted checkout). `-z`
+  // sidesteps quoting entirely — this asserts the raw UTF-8 path survives.
+  it('parses non-ASCII paths without C-quoting when given -z output', () => {
+    const detail = parseCommitDetail(
+      [
+        'abc1234',
+        'abc1234',
+        '',
+        '2026-04-27',
+        'Coco Test',
+        '',
+        'feat: add café file',
+        '',
+      ].join(FIELD_SEPARATOR),
+      'A\0café.txt\0',
+      '1\t0\tcafé.txt\0'
+    )
+
+    expect(detail.files).toEqual([
+      {
+        additions: 1,
+        binary: false,
+        deletions: 0,
+        status: 'A',
+        path: 'café.txt',
+      },
+    ])
+  })
+
+  it('marks binary numstat entries and leaves additions/deletions undefined', () => {
+    const detail = parseCommitDetail(
+      [
+        'abc1234',
+        'abc1234',
+        '',
+        '2026-04-27',
+        'Coco Test',
+        '',
+        'feat: add binary asset',
+        '',
+      ].join(FIELD_SEPARATOR),
+      'A\0image.png\0',
+      '-\t-\timage.png\0'
+    )
+
+    expect(detail.files).toEqual([
+      {
+        additions: undefined,
+        binary: true,
+        deletions: undefined,
+        status: 'A',
+        path: 'image.png',
+      },
+    ])
   })
 
   it('loads a bounded selected-file hunk preview', async () => {
@@ -472,6 +531,43 @@ describe('log data layer', () => {
         expect(rows.length).toBeGreaterThan(0)
         const commitRows = getCommitRows(rows)
         expect(commitRows[0]?.message).toBe('chore: initial')
+      } finally {
+        await rm(path, { recursive: true, force: true })
+      }
+    })
+  })
+
+  describe('getCommitDetail with non-ASCII paths', () => {
+    // Regression (#1690): getCommitDetail used to shell out to `git show
+    // --name-status`/`--numstat` in text mode, which C-quotes non-ASCII
+    // paths (`"caf\303\251.txt"`). That quoted form doesn't match as a
+    // pathspec, so getCommitFilePreview came back empty and the
+    // checkout-file-from-commit action misrouted into the delete branch.
+    // -z sidesteps quoting entirely — assert the real filename survives
+    // end-to-end and the diff preview actually finds the file.
+    it('reports the raw UTF-8 filename and produces a non-empty diff preview', async () => {
+      const path = await mkdtemp(join(tmpdir(), 'coco-detail-nonascii-test-'))
+      try {
+        const git = simpleGit(path)
+        await git.init()
+        await git.addConfig('user.name', 'Coco Test')
+        await git.addConfig('user.email', 'coco@example.com')
+        await git.addConfig('commit.gpgsign', 'false')
+        await git.raw(['checkout', '-b', 'main'])
+
+        const fileName = 'café.txt'
+        await writeFile(join(path, fileName), 'bonjour\n')
+        await git.add(fileName)
+        await git.commit('feat: add café file')
+        const rev = (await git.revparse(['HEAD'])).trim()
+
+        const detail = await getCommitDetail(git, rev)
+        expect(detail.files).toEqual([
+          expect.objectContaining({ status: 'A', path: fileName }),
+        ])
+
+        const preview = await getCommitFilePreview(git, rev, detail.files[0])
+        expect(preview.hunks.length).toBeGreaterThan(0)
       } finally {
         await rm(path, { recursive: true, force: true })
       }

@@ -140,11 +140,18 @@ describe('executeRebasePlan', () => {
   })
 
   it('surfaces a stopped (conflict) rebase with conflicts-view guidance', async () => {
+    // rebase-merge only starts existing once the runner has actually run —
+    // mirrors git creating it mid-rebase, after the initial "none in
+    // progress" guard has already passed.
+    let midRebase = false
     const git = {
-      revparse: jest.fn().mockResolvedValue('/repo/root'),
+      revparse: jest.fn((args: string[]) => Promise.resolve(
+        midRebase && args[0] === '--git-path' && args[1] === 'rebase-merge' ? tmpdir() : '/repo/root'
+      )),
       raw: jest.fn().mockResolvedValue(''),
     }
     const runner = jest.fn(async () => {
+      midRebase = true
       throw new Error('CONFLICT (content): Merge conflict in src/app.ts\ncould not apply bbbbbbb')
     })
     const result = await executeRebasePlan(git as never, [row()], runner)
@@ -190,6 +197,47 @@ describe('executeRebasePlan', () => {
     // The temp dir (holding the pending reword message file) must survive
     // so `git rebase --continue`'s exec line can still find it.
     expect(existsSync(dirname(capturedTodoFile))).toBe(true)
+  })
+
+  it('detects a stopped rebase from repo state, not from English keywords in the error text (#1688)', async () => {
+    // git localizes its stderr — a de_DE conflict prints "Fehler: Konnte
+    // ... nicht anwenden" instead of "could not apply". The classifier
+    // must not depend on matching English strings.
+    let midRebase = false
+    const git = {
+      revparse: jest.fn((args: string[]) => Promise.resolve(
+        midRebase && args[0] === '--git-path' && args[1] === 'rebase-merge' ? tmpdir() : '/repo/root'
+      )),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+    const runner = jest.fn(async () => {
+      midRebase = true
+      throw new Error('Fehler: Konnte aaaaaaa nicht anwenden')
+    })
+    const result = await executeRebasePlan(git as never, [row()], runner)
+    expect(result).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('Rebase stopped'),
+      details: [expect.stringContaining('conflicts view (gx)')],
+    })
+  })
+
+  it('treats a genuine failure (no in-progress rebase left behind) as a plain failure, not a stop', async () => {
+    const git = {
+      // No OPERATION_PATHS entry resolves to a real directory — the
+      // rebase never got mid-run, so this cannot be a conflict/edit stop.
+      revparse: jest.fn().mockResolvedValue('/coco-test-nonexistent-git-path'),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+    const runner = jest.fn(async () => {
+      throw new Error('fatal: could not read Username for \'https://example.com\': terminal prompts disabled')
+    })
+    const result = await executeRebasePlan(git as never, [row()], runner)
+    expect(result).toMatchObject({
+      ok: false,
+      message: expect.not.stringContaining('Rebase stopped'),
+    })
+    expect(result.details).not.toEqual([expect.stringContaining('conflicts view (gx)')])
   })
 
   it('refuses invalid plans before touching git', async () => {

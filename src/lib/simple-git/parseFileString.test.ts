@@ -50,6 +50,41 @@ describe('parseFileString', () => {
       expect(result.filePath).toBe('src/new/file.ts')
       expect(result.oldFilePath).toBe('src/old/file.ts')
     })
+
+    it('parses a rename with a shared suffix after the braces (mid-path compressed form)', () => {
+      // git diff --stat format when a file moves between sibling directories
+      // but keeps its name: "src/{old => new}/file.ts"
+      const result = parseFileString('src/{old => new}/file.ts')
+      expect(result.filePath).toBe('src/new/file.ts')
+      expect(result.oldFilePath).toBe('src/old/file.ts')
+    })
+
+    it('parses a rename where one side of the brace is empty, normalizing doubled slashes', () => {
+      const result = parseFileString('src/{ => sub}/file.ts')
+      expect(result.filePath).toBe('src/sub/file.ts')
+      expect(result.oldFilePath).toBe('src/file.ts')
+    })
+  })
+
+  describe('rename paths without braces (no common prefix)', () => {
+    it('parses a root-level rename', () => {
+      // git diff --stat format when there's no common path prefix: "old.txt => new.txt"
+      const result = parseFileString('old.txt => new.txt')
+      expect(result.filePath).toBe('new.txt')
+      expect(result.oldFilePath).toBe('old.txt')
+    })
+
+    it('parses a rename across different directories', () => {
+      const result = parseFileString('dir/a.txt => other/b.txt')
+      expect(result.filePath).toBe('other/b.txt')
+      expect(result.oldFilePath).toBe('dir/a.txt')
+    })
+
+    it('trims extra whitespace around the paths', () => {
+      const result = parseFileString('a.txt =>  b.txt ')
+      expect(result.filePath).toBe('b.txt')
+      expect(result.oldFilePath).toBe('a.txt')
+    })
   })
 
   describe('edge cases', () => {
