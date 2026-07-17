@@ -108,8 +108,17 @@ export async function installHooks({
   // whatever the symlink points at (e.g. a shared dispatcher script that
   // other hooks — pre-commit, pre-push, in this and other repos — also
   // symlink to). Refuse by default and only convert it once the caller
-  // explicitly opts in with --force.
-  const isSymlink = existsSync(hookPath) && lstatSync(hookPath).isSymbolicLink()
+  // explicitly opts in with --force. Use lstatSync directly rather than
+  // existsSync + lstatSync: existsSync follows symlinks and reports
+  // false for a dangling one, which would let a broken symlink slip
+  // through this check and still get written-through by writeFileSync.
+  let hookStat
+  try {
+    hookStat = lstatSync(hookPath)
+  } catch {
+    hookStat = undefined
+  }
+  const isSymlink = hookStat?.isSymbolicLink() ?? false
 
   if (isSymlink && !force) {
     return {

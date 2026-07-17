@@ -124,6 +124,27 @@ describe('manageHooks (#1591)', () => {
     expect(fs.readFileSync(backupPath(), 'utf8')).toContain('dispatch')
   })
 
+  it('refuses to install over a dangling symlinked hook without --force', async () => {
+    // Regression: existsSync follows symlinks and reports false for a
+    // broken/dangling one, so a naive `existsSync && lstatSync(...)`
+    // symlink check would miss this case entirely and fall through to
+    // writeFileSync, which still follows the dangling link and creates
+    // the hook script at whatever nonexistent path it points to.
+    fs.mkdirSync(path.join(repoDir, '.git', 'hooks'), { recursive: true })
+    const missingTarget = path.join(repoDir, 'nonexistent-dispatch.sh')
+    fs.symlinkSync(missingTarget, hookPath())
+
+    const result = await installHooks({ git })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('symlink')
+    expect(result.message).toContain('--force')
+    // The dangling symlink is left untouched, and nothing was created
+    // at its target.
+    expect(fs.lstatSync(hookPath()).isSymbolicLink()).toBe(true)
+    expect(fs.existsSync(missingTarget)).toBe(false)
+  })
+
   it('reports not-installed status before installing', async () => {
     const status = await getHooksStatus({ git })
     expect(status.installed).toBe(false)
