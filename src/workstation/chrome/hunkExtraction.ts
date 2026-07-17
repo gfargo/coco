@@ -42,6 +42,7 @@ export type ExtractDiffHunkResult = {
 
 const HUNK_HEADER_PREFIX = '@@'
 const DIFF_GIT_PREFIX = 'diff --git '
+const HUNK_HEADER_RE = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/
 
 /**
  * Find the index of the `@@` hunk header at or before `cursorOffset`.
@@ -85,6 +86,44 @@ function findHunkBodyEnd(lines: string[], headerIndex: number): number {
   return lines.length
 }
 
+/**
+ * Verify a hunk's body actually contains as many old-file (context +
+ * removal) and new-file (context + addition) lines as its `@@ -a,b +c,d @@`
+ * header declares. commit-diff mode feeds `extractDiffHunk` the file's
+ * `filePreview.hunks`, which upstream truncates to a fixed line count
+ * (`getCommitFilePreview`'s `.slice(0, limit)`); when that cut lands mid-hunk
+ * the last hunk's body is shorter than its header claims, and `git apply`
+ * rejects the resulting patch with a low-level "corrupt patch" error. Bail
+ * out here instead so the caller can show its existing clear status message.
+ */
+function hunkBodyMatchesHeader(hunkLines: string[]): boolean {
+  const header = hunkLines[0]
+  const match = header?.match(HUNK_HEADER_RE)
+  if (!match) {
+    return false
+  }
+  const oldCount = match[1] === undefined ? 1 : Number(match[1])
+  const newCount = match[2] === undefined ? 1 : Number(match[2])
+
+  let oldLines = 0
+  let newLines = 0
+  for (let i = 1; i < hunkLines.length; i += 1) {
+    const line = hunkLines[i] ?? ''
+    if (line.startsWith('-')) {
+      oldLines += 1
+    } else if (line.startsWith('+')) {
+      newLines += 1
+    } else if (line.startsWith('\\')) {
+      // "\ No newline at end of file" marker — not a counted body line.
+    } else {
+      oldLines += 1
+      newLines += 1
+    }
+  }
+
+  return oldLines >= oldCount && newLines >= newCount
+}
+
 export function extractDiffHunk(input: ExtractDiffHunkInput): ExtractDiffHunkResult | null {
   const { lines, cursorOffset, path } = input
 
@@ -106,6 +145,10 @@ export function extractDiffHunk(input: ExtractDiffHunkInput): ExtractDiffHunkRes
   }
 
   const hunkLines = lines.slice(headerIndex, bodyEnd)
+  if (!hunkBodyMatchesHeader(hunkLines)) {
+    return null
+  }
+
   const patchText = [
     `diff --git a/${path} b/${path}`,
     `--- a/${path}`,
@@ -120,4 +163,5 @@ export function extractDiffHunk(input: ExtractDiffHunkInput): ExtractDiffHunkRes
 export const inkHunkExtractionTestInternals = {
   findHunkHeaderAtOrBefore,
   findHunkBodyEnd,
+  hunkBodyMatchesHeader,
 }
