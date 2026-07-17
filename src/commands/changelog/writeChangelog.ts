@@ -24,6 +24,21 @@ export function buildChangelogSection(title: string, content: string, date: stri
 }
 
 /**
+ * Split a changelog message ("title\n\ncontent") into its parts. First
+ * line = title, remainder (leading blanks trimmed) = content. Roundtrips
+ * the agent's `${title}\n\n${content}` output (#1679/OSS-993).
+ */
+export function splitChangelogMessage(message: string): { title: string; content: string } {
+  const normalized = message.replace(/\r\n/g, '\n')
+  const nl = normalized.indexOf('\n')
+  if (nl === -1) return { title: normalized.trim(), content: '' }
+  return {
+    title: normalized.slice(0, nl).trim(),
+    content: normalized.slice(nl + 1).replace(/^\n+/, '').trimEnd(),
+  }
+}
+
+/**
  * Idempotently insert or replace a `## {title}` section in a CHANGELOG-style
  * file (#1600). Plain markdown headings, not marker comments — a
  * human-read CHANGELOG shouldn't carry `<!-- coco:start -->`-style noise.
