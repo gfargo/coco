@@ -2596,6 +2596,74 @@ describe('log Ink input interactions', () => {
     expect(types).not.toContain('pushView')
   })
 
+  // #1685 — Esc/q while a g-chord is armed must cancel the chord, not fall
+  // through to whatever global handler Esc/q would otherwise hit first.
+  describe('Esc/q cancel a pending g chord ahead of global handlers (#1685)', () => {
+    it('Esc on a nested view stack cancels the chord instead of popping the view', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'branches' })
+      state = applyInput(state, 'g')
+      expect(state.pendingKey).toBe('g')
+
+      state = applyInput(state, '', { escape: true })
+      expect(state.pendingKey).toBeUndefined()
+      expect(state.viewStack).toEqual(['history', 'branches'])
+    })
+
+    it('Esc with an active mark selection cancels the chord instead of clearing the selection', () => {
+      let state: LogInkState = {
+        ...createLogInkState(rows),
+        activeView: 'branches',
+        selection: { view: 'branches', anchorId: undefined, ids: new Set(['feat/b']) },
+      }
+      state = applyInput(state, 'g')
+      expect(state.pendingKey).toBe('g')
+
+      state = applyInput(state, '', { escape: true })
+      expect(state.pendingKey).toBeUndefined()
+      expect(state.selection).toEqual({ view: 'branches', anchorId: undefined, ids: new Set(['feat/b']) })
+    })
+
+    it('Esc with a compare base armed at history root cancels the chord instead of clearing the base', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'setCompareBase',
+        value: { kind: 'branch', ref: 'main', label: 'main' },
+      })
+      state = applyInput(state, 'g')
+      expect(state.pendingKey).toBe('g')
+
+      state = applyInput(state, '', { escape: true })
+      expect(state.pendingKey).toBeUndefined()
+      expect(state.compareBase).toEqual({ kind: 'branch', ref: 'main', label: 'main' })
+    })
+
+    it('q during a chord cancels it instead of exiting', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'g')
+      expect(state.pendingKey).toBe('g')
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingKey', value: undefined } },
+      ])
+      expect(events).not.toContainEqual({ type: 'exit' })
+    })
+
+    it('a real continuation still fires after the chord is armed (gt still navigates)', () => {
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'g')
+      state = applyInput(state, 't')
+
+      expect(state.viewStack).toEqual(['tags'])
+      expect(state.activeView).toBe('tags')
+    })
+
+    it('bare q with no chord armed still exits', () => {
+      expect(getLogInkInputEvents(createLogInkState(rows), 'q')).toEqual([{ type: 'exit' }])
+    })
+  })
+
   describe('command palette', () => {
     function openPalette() {
       return applyLogInkAction(createLogInkState(rows), { type: 'toggleCommandPalette' })
