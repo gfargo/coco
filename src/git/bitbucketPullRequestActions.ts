@@ -1,4 +1,4 @@
-import { defaultBitbucketRunner, resolveBitbucketActionError, type BitbucketRunner } from './bitbucketCli'
+import { defaultBitbucketRunner, runBitbucketAction, type BitbucketRunner } from './bitbucketCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
 
@@ -11,25 +11,6 @@ import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeS
  * Merge strategies: Bitbucket Cloud supports `merge_commit`, `squash`, and
  * `fast_forward`. `rebase` (coco vocabulary) maps to `fast_forward`.
  */
-
-async function runBitbucketAction(
-  runner: BitbucketRunner,
-  endpoint: string,
-  method: string,
-  body: Record<string, unknown> | undefined,
-  onSuccess: (output: string) => PullRequestActionResult
-): Promise<PullRequestActionResult> {
-  try {
-    const out = await runner(endpoint, {
-      method,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
-    return onSuccess(out)
-  } catch (error) {
-    const { message, details } = await resolveBitbucketActionError(error, runner)
-    return { ok: false, message, ...(details && details.length ? { details } : {}) }
-  }
-}
 
 function bitbucketMergeStrategy(strategy: PullRequestMergeStrategy): string {
   if (strategy === 'squash') return 'squash'

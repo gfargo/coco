@@ -1,6 +1,7 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { SimpleGit } from 'simple-git'
+import type { ForgeActionResult } from './pullRequestActions'
 
 const execFileAsync = promisify(execFile)
 
@@ -282,4 +283,28 @@ export async function resolveGhActionError(
   }
 
   return compactGhError(raw)
+}
+
+/**
+ * Shared try/run/resolve-error wrapper for every `gh` mutating action
+ * (PR and issue actions alike). Runs `args` through `runner`, maps a
+ * successful result through `onSuccess`, and on failure routes the thrown
+ * error through `resolveGhActionError` so every call site gets the same
+ * curated-message-vs-compacted-stderr behavior.
+ */
+export async function runGhAction(
+  runner: GhRunner,
+  args: string[],
+  onSuccess: (output: string) => ForgeActionResult
+): Promise<ForgeActionResult> {
+  try {
+    return onSuccess(await runner(args))
+  } catch (error) {
+    const { message, details } = await resolveGhActionError(error, runner)
+    return {
+      ok: false,
+      message,
+      ...(details && details.length ? { details } : {}),
+    }
+  }
 }

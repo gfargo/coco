@@ -10,6 +10,7 @@ import {
   type GhRunner,
   type GhStatus,
 } from './githubCli'
+import type { ForgeActionResult } from './pullRequestActions'
 
 const execFileAsync = promisify(execFile)
 
@@ -162,4 +163,23 @@ export async function resolveGlabActionError(
   }
 
   return compactGlabError(raw)
+}
+
+/**
+ * Shared try/run/resolve-error wrapper for every `glab` mutating action
+ * (MR and issue actions alike), mirroring `runGhAction`. `hostname` scopes
+ * the error-path auth re-probe to the right GitLab instance.
+ */
+export async function runGlabAction(
+  runner: GlabRunner,
+  args: string[],
+  onSuccess: (output: string) => ForgeActionResult,
+  hostname?: string
+): Promise<ForgeActionResult> {
+  try {
+    return onSuccess(await runner(args))
+  } catch (error) {
+    const { message, details } = await resolveGlabActionError(error, runner, hostname)
+    return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
 }
