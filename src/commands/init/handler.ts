@@ -1,5 +1,5 @@
 import { appendToGitConfig } from '../../lib/config/services/git'
-import { appendToProjectJsonConfig } from '../../lib/config/services/project'
+import { appendToProjectJsonConfig, pickTrustedProjectServiceFields } from '../../lib/config/services/project'
 import { persistUsagePreference } from '../../lib/config/services/xdg'
 import chalk from 'chalk'
 import { checkAndHandlePackageInstallation } from '../../lib/ui/checkAndHandlePackageInstall'
@@ -300,7 +300,15 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       configFilePath.endsWith('.coco.config.json') ||
       configFilePath.endsWith('.coco.json')
     ) {
-      appendToProjectJsonConfig(configFilePath, config)
+      // Project-scope files are untrusted on load (see project.ts) — only
+      // TRUSTED_PROJECT_SERVICE_KEYS survive a reload. Persist that same
+      // filtered shape here so we don't write fields (authentication,
+      // baseURL, endpoint, fields) that the loader will immediately reject
+      // with an "untrusted-service-fields" warning on every later command.
+      const configToWrite: ConfigWithServiceObject = isProjectScope
+        ? { ...config, service: pickTrustedProjectServiceFields(config.service) as ConfigWithServiceObject['service'] }
+        : config
+      appendToProjectJsonConfig(configFilePath, configToWrite)
     } else {
       // Fail loud rather than silently no-op: any config-file type without a
       // writer branch is a bug, and a silent skip here looks like success.
