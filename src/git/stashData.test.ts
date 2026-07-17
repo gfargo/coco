@@ -219,6 +219,22 @@ describe('log stash data', () => {
         { path: 'src/quote".ts', startLine: 0 },
       ])
     })
+
+    it('decodes a rename with a quoted destination and unquoted header (mixed quoting)', () => {
+      // Git quotes each path independently: renaming a plain-ASCII name
+      // to one containing a literal `"` leaves the `diff --git` header's
+      // `a/` side unquoted while `rename to` (and `+++`) is quoted for
+      // the `b/` side, e.g. `diff --git a/ascii.ts "b/weird\".ts"`.
+      const lines = [
+        'diff --git a/ascii.ts "b/weird\\".ts"',
+        'similarity index 100%',
+        'rename from ascii.ts',
+        'rename to "weird\\".ts"',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'weird".ts', startLine: 0 },
+      ])
+    })
   })
 
   // #791 follow-up — the diff surface uses this to decide which file

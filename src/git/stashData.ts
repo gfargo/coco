@@ -179,6 +179,11 @@ export type StashDiffFile = {
  * length-halving fallback for the header line itself when none of
  * those are present (e.g. a pure rename with no content change still
  * has `rename to`, but a merge/binary diff might not).
+ *
+ * Quoting is also decided per-path, not per-header: a rename can quote
+ * one side and not the other (e.g. `a/ascii.ts "b/weird\".ts"`), so the
+ * `---`/`+++`/`rename to`/`copy to` fallback lines each accept a quoted
+ * *or* unquoted form independently and unescape whichever one matched.
  */
 export function parseStashDiffFiles(lines: string[]): StashDiffFile[] {
   const files: StashDiffFile[] = []
@@ -227,9 +232,9 @@ export function findStashFileForOffset(
 
 const DIFF_GIT_HEADER_LINE = /^diff --git /
 const DIFF_GIT_HEADER_QUOTED = /^diff --git "a\/((?:\\.|[^"\\])+)" "b\/((?:\\.|[^"\\])+)"$/
-const RENAME_OR_COPY_TO_LINE = /^(?:rename|copy) to (.+)$/
-const PLUS_PLUS_LINE = /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/
-const MINUS_LINE = /^--- (?:a\/(.+)|\/dev\/null)$/
+const RENAME_OR_COPY_TO_LINE = /^(?:rename|copy) to (?:"((?:\\.|[^"\\])+)"|(.+))$/
+const PLUS_PLUS_LINE = /^\+\+\+ (?:"b\/((?:\\.|[^"\\])+)"|b\/(.+)|\/dev\/null)$/
+const MINUS_LINE = /^--- (?:"a\/((?:\\.|[^"\\])+)"|a\/(.+)|\/dev\/null)$/
 
 /**
  * Resolve the path for the `diff --git` header at `lines[headerIndex]`.
@@ -238,6 +243,12 @@ const MINUS_LINE = /^--- (?:a\/(.+)|\/dev\/null)$/
  * literal ` b/` inside a name), so resolution instead scans the section
  * for the unambiguous follow-on lines, bounded by the next `diff --git`
  * so a malformed section can't consume the next file's headers.
+ *
+ * Git decides quoting per path, not per header: a rename from an ASCII
+ * name to one with non-ASCII bytes can leave the `diff --git` header's
+ * `a/…` side unquoted while its `rename to "b/…"` line (and `+++`/`---`)
+ * is quoted. The fallback lines below accept both quoted and unquoted
+ * forms and unescape the quoted case the same way the header branch does.
  */
 function resolveDiffGitHeaderPath(lines: string[], headerIndex: number): string | undefined {
   const quotedMatch = lines[headerIndex].match(DIFF_GIT_HEADER_QUOTED)
@@ -258,7 +269,8 @@ function resolveDiffGitHeaderPath(lines: string[], headerIndex: number): string 
     if (bFromPlusPlus === undefined) {
       const plusMatch = line.match(PLUS_PLUS_LINE)
       if (plusMatch) {
-        if (plusMatch[1]) bFromPlusPlus = stripTrailingTab(plusMatch[1])
+        if (plusMatch[1] !== undefined) bFromPlusPlus = unescapeGitQuoted(plusMatch[1])
+        else if (plusMatch[2]) bFromPlusPlus = stripTrailingTab(plusMatch[2])
         continue
       }
     }
@@ -266,15 +278,17 @@ function resolveDiffGitHeaderPath(lines: string[], headerIndex: number): string 
     if (renameOrCopyTo === undefined) {
       const renameMatch = line.match(RENAME_OR_COPY_TO_LINE)
       if (renameMatch) {
-        renameOrCopyTo = renameMatch[1]
+        renameOrCopyTo =
+          renameMatch[1] !== undefined ? unescapeGitQuoted(renameMatch[1]) : renameMatch[2]
         continue
       }
     }
 
     if (aFromMinus === undefined) {
       const minusMatch = line.match(MINUS_LINE)
-      if (minusMatch && minusMatch[1]) {
-        aFromMinus = stripTrailingTab(minusMatch[1])
+      if (minusMatch) {
+        if (minusMatch[1] !== undefined) aFromMinus = unescapeGitQuoted(minusMatch[1])
+        else if (minusMatch[2]) aFromMinus = stripTrailingTab(minusMatch[2])
       }
     }
   }
