@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { sanitizeIssueListItem } from './forgeText'
+import { loadForgeList } from './forgeLoad'
 import {
     defaultGhRunner,
     describeGhStatus,
@@ -134,44 +135,16 @@ export async function getIssueList(
   // rejected by the github.com-only parser `getGitHubRepository` uses,
   // even though the provider layer classifies it as GitHub and probes
   // auth against the right host elsewhere.
-  const repository = await getGitHubRepositoryForGit(git)
-
-  if (!repository) {
-    return {
-      available: false,
-      authenticated: false,
-      filter,
-      message: 'No GitHub remote detected.',
-    }
-  }
-
-  const ghStatus = await getGhStatus(runner, repository.host)
-  if (ghStatus.kind !== 'ok') {
-    return {
-      available: true,
-      authenticated: false,
-      repository,
-      filter,
-      message: describeGhStatus(ghStatus),
-    }
-  }
-
-  try {
-    const output = await runner(buildGhArgs(filter))
-    return {
-      available: true,
-      authenticated: true,
-      repository,
-      filter,
-      issues: parseIssueListItems(output).map(sanitizeIssueListItem),
-    }
-  } catch (error) {
-    return {
-      available: true,
-      authenticated: true,
-      repository,
-      filter,
-      message: error instanceof Error ? error.message : 'Failed to fetch issue list.',
-    }
-  }
+  return loadForgeList({
+    detect: () => getGitHubRepositoryForGit(git),
+    notDetectedMessage: 'No GitHub remote detected.',
+    probe: (repository) => getGhStatus(runner, repository.host),
+    describeStatus: describeGhStatus,
+    repository: (repository) => repository,
+    filter,
+    fetch: async () => ({
+      issues: parseIssueListItems(await runner(buildGhArgs(filter))).map(sanitizeIssueListItem),
+    }),
+    fetchErrorMessage: 'Failed to fetch issue list.',
+  })
 }
