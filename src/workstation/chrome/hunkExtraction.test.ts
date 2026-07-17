@@ -82,13 +82,13 @@ describe('extractDiffHunk', () => {
       'diff --git a/src/aaa.ts b/src/aaa.ts',
       '--- a/src/aaa.ts',
       '+++ b/src/aaa.ts',
-      '@@ -1,2 +1,3 @@',
+      '@@ -1,1 +1,2 @@',
       ' const a = 1',
       '+const added = 2',
       'diff --git a/src/bbb.ts b/src/bbb.ts',
       '--- a/src/bbb.ts',
       '+++ b/src/bbb.ts',
-      '@@ -5,2 +5,3 @@',
+      '@@ -5,1 +5,2 @@',
       ' const z = 9',
       '+const y = 8',
     ]
@@ -199,6 +199,38 @@ describe('extractDiffHunk', () => {
       ' const d = 4',
       '',
     ].join('\n'))
+  })
+
+  it('returns null when the last hunk body is truncated mid-hunk (commit-diff 40-line preview cap)', () => {
+    // getCommitFilePreview truncates `filePreview.hunks` with a hard
+    // `.slice(0, limit)`, which can cut off the tail of the final hunk.
+    // The header still claims 4 old-file lines but only 2 are present —
+    // git apply would reject the synthesized patch as corrupt.
+    const truncated = [
+      '@@ -1,4 +1,4 @@',
+      ' const a = 1',
+      '-const b = 2',
+      // body cut off here — missing the remaining 2 declared lines
+    ]
+
+    expect(
+      extractDiffHunk({ lines: truncated, cursorOffset: 1, path: 'src/example.ts' })
+    ).toBeNull()
+  })
+
+  it('extracts the last hunk when its body fully matches the header counts', () => {
+    const complete = [
+      '@@ -1,4 +1,4 @@',
+      ' const a = 1',
+      '-const b = 2',
+      '+const b = 20',
+      ' const c = 3',
+      ' const d = 4',
+    ]
+
+    const result = extractDiffHunk({ lines: complete, cursorOffset: 1, path: 'src/example.ts' })
+    expect(result).not.toBeNull()
+    expect(result!.patchText).toContain('@@ -1,4 +1,4 @@')
   })
 
   it('emits `--- /dev/null` for a new-file hunk (stash-style, headers present)', () => {
