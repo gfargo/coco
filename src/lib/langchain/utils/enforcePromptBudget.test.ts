@@ -146,4 +146,71 @@ describe('enforcePromptBudget', () => {
       tokenizer(await prompt.format(renderVariables(result.variables)))
     ).toBeLessThanOrEqual(tokenBudget)
   })
+
+  it('never leaves an unpaired surrogate when char-slicing lands mid-emoji', async () => {
+    const additionalContext = 'context'
+    const responseTokenReserve = 10
+    const prefix = 'a'.repeat(40)
+    const summary = `${prefix}😀${'b'.repeat(40)}`
+
+    const overheadTokenCount = tokenizer(
+      await prompt.format({ summary: '', additional_context: additionalContext })
+    )
+    // Force the binary search to land exactly one code unit past `prefix`,
+    // i.e. right after the emoji's lone high surrogate.
+    const tokenBudget = overheadTokenCount + prefix.length + 1
+    const maxTokens = tokenBudget + responseTokenReserve
+
+    const result = await enforcePromptBudget({
+      prompt,
+      variables: { summary, additional_context: additionalContext },
+      tokenizer,
+      maxTokens,
+      responseTokenReserve,
+    })
+
+    expect(result.truncated).toBe(true)
+    expect(result.variables.summary).toBe(prefix)
+    expect(/[\uD800-\uDBFF]$/.test(result.variables.summary)).toBe(false)
+    expect(() => JSON.stringify(result.variables.summary)).not.toThrow()
+  })
+
+  it('never leaves an unpaired surrogate when the last-block char-slice fallback lands mid-emoji', async () => {
+    const bigBlockBody = `* changes in "/generated"\n\n${FILE_BULLET_PREFIX}${'x'.repeat(300)}\n\n`
+    const prefix = `* changes in "/src/auth"\n\n${FILE_BULLET_PREFIX}${'a'.repeat(20)}`
+    const smallBlockBody = `${prefix}😀${'a'.repeat(20)}\n\n`
+    const summary =
+      `${DIRECTORY_BLOCK_SEPARATOR}${bigBlockBody}` +
+      `${DIRECTORY_BLOCK_SEPARATOR}${smallBlockBody}`
+
+    const additionalContext = 'context'
+    const responseTokenReserve = 10
+    const marker = '\n\n[1 files omitted for length]\n'
+
+    const emptyLastBlockTokenCount = tokenizer(
+      await prompt.format({
+        summary: `${DIRECTORY_BLOCK_SEPARATOR}${marker}`,
+        additional_context: additionalContext,
+      })
+    )
+    // Force the binary search to land exactly one code unit past `prefix`,
+    // i.e. right after the emoji's lone high surrogate.
+    const tokenBudget = emptyLastBlockTokenCount + prefix.length + 1
+    const maxTokens = tokenBudget + responseTokenReserve
+
+    const result = await enforcePromptBudget({
+      prompt,
+      variables: { summary, additional_context: additionalContext },
+      tokenizer,
+      maxTokens,
+      responseTokenReserve,
+    })
+
+    expect(result.truncated).toBe(true)
+    expect(result.variables.summary).toContain(prefix)
+    expect(/[\uD800-\uDBFF]$/.test(result.variables.summary.replace(marker.trimEnd(), ''))).toBe(
+      false
+    )
+    expect(() => JSON.stringify(result.variables.summary)).not.toThrow()
+  })
 })

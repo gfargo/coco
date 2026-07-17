@@ -125,6 +125,45 @@ describe('loadXDGConfig', () => {
     }
   })
 
+  it('does not wipe the service when the XDG file only sets a partial key (#1667)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ service: { model: 'gpt-4o' } }))
+
+    const config = loadXDGConfig(openAIConfig)
+
+    expect(config.service).toBeDefined()
+    expect(config.service.provider).toBe('openai')
+    expect(config.service.model).toBe('gpt-4o')
+    expect(config.service.tokenLimit).toBe(openAIConfig.service?.tokenLimit)
+    expect(config.service.temperature).toBe(openAIConfig.service?.temperature)
+    expect(config.service.maxConcurrent).toBe(openAIConfig.service?.maxConcurrent)
+  })
+
+  it('applies tuning keys written by `config set` instead of silently discarding them (#1667)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({ service: { temperature: 0.2, maxConcurrent: 3 } })
+    )
+
+    const config = loadXDGConfig(openAIConfig)
+
+    expect(config.service.temperature).toBe(0.2)
+    expect(config.service.maxConcurrent).toBe(3)
+  })
+
+  it('converts a flat on-disk apiKey to nested authentication credentials (#1667)', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ service: { apiKey: 'sk-xyz' } }))
+
+    const config = loadXDGConfig(openAIConfig)
+
+    expect(config.service.authentication.type).toBe('APIKey')
+    if (config.service.authentication.type === 'APIKey') {
+      expect(config.service.authentication.credentials.apiKey).toBe('sk-xyz')
+    }
+    expect((config.service as unknown as Record<string, unknown>).apiKey).toBeUndefined()
+  })
+
   it('parses a bedrock service with region and no-auth credential chain', () => {
     mockFs.existsSync.mockReturnValue(true)
     mockFs.readFileSync.mockReturnValue(

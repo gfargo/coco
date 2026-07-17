@@ -38,6 +38,17 @@ describe('log Ink text helpers', () => {
     expect(cellWidth('fix ✨')).toBe(6)
   })
 
+  // #1706 — Symbols & Pictographs Extended-A (U+1FA70-U+1FAFF) and
+  // East-Asian-Wide symbols like ⭐/⬛/⭕ were measured as 1 cell while
+  // terminals render them 2 cells wide, under-measuring row budgets.
+  it('measures modern wide emoji blocks by terminal cell width (#1706)', () => {
+    expect(cellWidth('🫡')).toBe(2)
+    expect(cellWidth('⭐')).toBe(2)
+    expect(cellWidth('⬛')).toBe(2)
+    expect(cellWidth('⭕')).toBe(2)
+    expect(cellWidth(truncateCells('🫡 approve deploy', 10))).toBeLessThanOrEqual(10)
+  })
+
   it('truncates without splitting wide characters past the target width', () => {
     expect(truncateCells('src/変更-summary.ts', 10)).toBe('src/変更-…')
     expect(cellWidth(truncateCells('emoji ✨ commit message', 12))).toBeLessThanOrEqual(12)

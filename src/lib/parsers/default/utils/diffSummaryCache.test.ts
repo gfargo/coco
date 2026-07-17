@@ -116,6 +116,20 @@ describe('diffSummaryCache (#845, PR 5)', () => {
       writeDiffSummary('/repo/x', key, { summary: 'second', model: 'gpt', tokens: 2 })
       expect(readDiffSummary('/repo/x', key)?.summary).toBe('second')
     })
+
+    it('treats a blank cached summary as a miss (#1700 self-heal)', () => {
+      const emptyKey = diffSummaryKey('empty diff', 'gpt', 'p')
+      writeDiffSummary('/repo/blank', emptyKey, { summary: '', model: 'gpt', tokens: 0 })
+      expect(readDiffSummary('/repo/blank', emptyKey)).toBeUndefined()
+
+      const whitespaceKey = diffSummaryKey('whitespace diff', 'gpt', 'p')
+      writeDiffSummary('/repo/blank', whitespaceKey, { summary: '   ', model: 'gpt', tokens: 0 })
+      expect(readDiffSummary('/repo/blank', whitespaceKey)).toBeUndefined()
+
+      const okKey = diffSummaryKey('ok diff', 'gpt', 'p')
+      writeDiffSummary('/repo/blank', okKey, { summary: 'real summary', model: 'gpt', tokens: 3 })
+      expect(readDiffSummary('/repo/blank', okKey)?.summary).toBe('real summary')
+    })
   })
 
   describe('LRU eviction at hard cap', () => {

@@ -157,6 +157,28 @@ describe('confirmation target naming', () => {
     expect(text).toContain('3 commits: c2..c0')
   })
 
+  // #1670 — under a text filter, `filteredCommits` is re-sorted by fuzzy
+  // score rather than chronological order, so a v-range span can't be
+  // trusted; the confirm must fall back to naming the single cursored
+  // commit rather than a range that may not reflect real history.
+  it('names the single cursored commit for a cherry-pick confirm when a filter is active', () => {
+    const rows = [
+      { type: 'commit' as const, graph: '*', shortHash: 'c0', hash: 'c0', parents: [], date: '2026-05-03', author: 'Coco', refs: [], message: 'fix: newest' },
+      { type: 'commit' as const, graph: '*', shortHash: 'c1', hash: 'c1', parents: [], date: '2026-05-02', author: 'Coco', refs: [], message: 'fix: middle' },
+      { type: 'commit' as const, graph: '*', shortHash: 'c2', hash: 'c2', parents: [], date: '2026-05-01', author: 'Coco', refs: [], message: 'fix: oldest' },
+    ]
+    const state = {
+      ...createLogInkState(rows),
+      pendingConfirmationId: 'cherry-pick-commit',
+      selectedIndex: 2,
+      selection: { view: 'history' as const, anchorId: 'c0', ids: new Set<string>() },
+      filter: 'fix',
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
+    expect(text).toContain('commit c2: fix: oldest')
+    expect(text).not.toContain('3 commits')
+  })
+
   // #1361 — a batch confirm must name every marked target (or an exact
   // count with the first few names), or the user confirms one item and
   // acts on N — the exact failure mode the #1452 audit warned about.

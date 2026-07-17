@@ -60,6 +60,16 @@ function buildOmittedMarker(omittedFileCount: number): string {
 }
 
 /**
+ * A char-index slice can land inside a UTF-16 surrogate pair (emoji,
+ * non-BMP CJK, etc.), leaving a trailing lone high surrogate that
+ * JSON.stringify serializes as an unpaired `\ud...` escape -- rejected by
+ * strict providers. Drop it so slices always end on a valid boundary.
+ */
+function stripTrailingHighSurrogate(value: string): string {
+  return /[\uD800-\uDBFF]$/.test(value) ? value.slice(0, -1) : value
+}
+
+/**
  * Trim a summary composed of whole directory blocks (see
  * `DIRECTORY_BLOCK_SEPARATOR`) by dropping entire blocks rather than
  * slicing through arbitrary characters. Blocks are dropped largest-first,
@@ -118,7 +128,7 @@ async function trimSummaryByBlocks(
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2)
-    const candidateSummary = `${DIRECTORY_BLOCK_SEPARATOR}${lastBlock.text.slice(0, mid)}${marker}`
+    const candidateSummary = `${DIRECTORY_BLOCK_SEPARATOR}${stripTrailingHighSurrogate(lastBlock.text.slice(0, mid))}${marker}`
     const candidateTokenCount = await render(candidateSummary)
 
     if (candidateTokenCount <= tokenBudget) {
@@ -153,7 +163,7 @@ async function trimSummaryByCharSlice(
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2)
-    const candidateSummary = summary.slice(0, mid)
+    const candidateSummary = stripTrailingHighSurrogate(summary.slice(0, mid))
     const candidateVariables = { ...variables, [summaryKey]: candidateSummary }
     const candidateTokenCount = tokenizer(await renderPrompt(prompt, candidateVariables))
 

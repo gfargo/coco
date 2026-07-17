@@ -16,8 +16,8 @@ export function splitDottedPath(key: string): string[] {
 /**
  * The persisted-config on-disk shape (both the XDG JSON file and
  * `~/.gitconfig`'s `[coco]` section) stores the API key flat, as
- * `service.apiKey` — see `parseServiceConfig`'s `openai`/`anthropic`/etc.
- * cases in `services/xdg.ts` and `serviceApiKey` in `services/git.ts`.
+ * `service.apiKey` — see `mergeXDGServiceConfig` in `services/xdg.ts` and
+ * `serviceApiKey` in `services/git.ts`.
  * The runtime `Config`/`LLMService` TYPE nests it instead, at
  * `service.authentication.credentials.apiKey` — that's the shape schema
  * validation and `coco doctor` present. `coco config` accepts the

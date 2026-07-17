@@ -8,7 +8,6 @@ export async function editPrompt(options: GenerateReviewLoopOptions): Promise<st
     message: 'Edit the prompt',
     default: options.prompt?.length ? options.prompt : COMMIT_PROMPT.template as string,
     waitForUserInput: false,
-    postfix: 'Press ENTER to continue',
     validate: (text) => {
       try {
         validatePromptTemplate(text, COMMIT_PROMPT.inputVariables)
