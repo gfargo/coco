@@ -13,7 +13,7 @@ import {
     CommitComposeState,
     applyCommitComposeAction,
     createCommitComposeState,
-} from '../../commands/log/commitCompose'
+} from './commitCompose'
 import type { CommitSplitPlan, CommitSplitPlanContext } from '../../commands/commit/split'
 import {
     cycleIssueFilterPreset,

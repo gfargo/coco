@@ -127,4 +127,17 @@ describe('writeChangelogFile', () => {
     expect(written).toContain('- hotfix notes')
     expect(written).toContain('- new')
   })
+
+  if (process.platform !== 'win32') {
+    it('preserves an existing world-readable file mode instead of downgrading to 0600', () => {
+      fs.writeFileSync(filePath, '# Changelog\n\n## v1.0.0 — 2026-07-01\n\n- initial release\n', { mode: 0o644 })
+      writeChangelogFile({ filePath, title: 'v1.1.0', content: '- a new feature', date: '2026-07-13' })
+      expect(fs.statSync(filePath).mode & 0o777).toBe(0o644)
+    })
+
+    it('creates a new file with a umask-derived mode, not 0600', () => {
+      writeChangelogFile({ filePath, title: 'v1.0.0', content: '- initial release', date: '2026-07-13' })
+      expect(fs.statSync(filePath).mode & 0o777).toBe(0o666 & ~process.umask())
+    })
+  }
 })

@@ -49,8 +49,8 @@ import * as nodePath from 'node:path'
 import type { LogInkAction } from '../inkViewModel'
 import type { LogInkContext } from '../types'
 import { COMMIT_MOMENTUM_HINT } from '../../chrome/postApplyHints'
-import type { CommitComposeState } from '../../../commands/log/commitCompose'
-import { createManualCommit, formatCommitComposeMessage } from '../../../commands/log/commitCompose'
+import type { CommitComposeState } from '../commitCompose'
+import { createManualCommit, formatCommitComposeMessage } from '../commitCompose'
 import type { WorktreeOverview } from '../../../git/statusData'
 
 export type UseCommitComposeActionsDeps = {

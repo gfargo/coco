@@ -1,7 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import {
   GH_DEFAULT_TIMEOUT_MS,
-  parseRemoteUrl,
+  resolveForgeProject,
   type GhActionError,
   type GhStatus,
 } from './githubCli'
@@ -86,20 +86,7 @@ export async function defaultBitbucketRunner(
 
 /** Parse the Bitbucket workspace/slug from the repo's origin remote (else first). */
 export async function getBitbucketProject(git: SimpleGit): Promise<BitbucketProject | undefined> {
-  const remotes = await git.getRemotes(true)
-  const remote = remotes.find((r) => r.name === 'origin') || remotes[0]
-  const url = remote?.refs.push || remote?.refs.fetch
-  if (!url) return undefined
-
-  const parsed = parseRemoteUrl(url)
-  if (!parsed) return undefined
-
-  return {
-    owner: parsed.owner,
-    name: parsed.name,
-    path: parsed.owner ? `${parsed.owner}/${parsed.name}` : parsed.name,
-    host: parsed.host,
-  }
+  return resolveForgeProject(git)
 }
 
 /**

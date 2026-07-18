@@ -210,7 +210,7 @@ export const DEFAULT_MISTRAL_LLM_SERVICE: MistralLLMService = {
 
 export const DEFAULT_AZURE_LLM_SERVICE: AzureLLMService = {
   provider: 'azure',
-  model: 'gpt-4.1-nano',
+  model: 'gpt-5.4-nano',
   apiVersion: '2024-10-21',
   tokenLimit: 4096,
   temperature: 0.32,
