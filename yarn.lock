@@ -1591,9 +1591,9 @@
     "@google/generative-ai" "^0.24.1"
 
 "@langchain/mistralai@^1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@langchain/mistralai/-/mistralai-1.1.0.tgz#75c8c192489343852b20650efd56dfefaaa69af3"
-  integrity sha512-MUGLKgJbfH81UIvvKLRHmMZxWnyg6qPTeiXnIu3zbzjJR456W5eWOWjr4LLuXIRTy1hRxX+mZZHyqHu4Bkq+0Q==
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/@langchain/mistralai/-/mistralai-1.2.0.tgz#f1820a354a188d42b0d09b8700150f18ed61cc7d"
+  integrity sha512-SRtCSDIBzcQc6ZK5qa1V2ZhqSdZomXOt4VzBWXkD//IYYhbMJHhbrlYuCIuHktwpF/1ME5a7Euyk+BujN9hkTA==
   dependencies:
     "@mistralai/mistralai" "2.2.1"
 
