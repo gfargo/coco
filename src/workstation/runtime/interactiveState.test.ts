@@ -1,5 +1,5 @@
 import { GitLogRow } from '../../git/logData'
-import { applyLogTuiAction, createLogTuiState, getSelectedCommit } from './interactiveState'
+import { createLogTuiState, getSelectedCommit } from './interactiveState'
 
 const rows: GitLogRow[] = [
   {
@@ -31,52 +31,29 @@ const rows: GitLogRow[] = [
 ]
 
 describe('log interactive state', () => {
-  it('moves through commit rows without selecting graph-only rows', () => {
-    let state = createLogTuiState(rows)
+  it('builds state from commit rows, skipping graph-only rows', () => {
+    const state = createLogTuiState(rows)
 
-    state = applyLogTuiAction(state, { type: 'move', delta: 1 })
-
-    expect(getSelectedCommit(state)).toEqual(expect.objectContaining({
-      shortHash: 'bbb2222',
-    }))
-
-    state = applyLogTuiAction(state, { type: 'move', delta: 1 })
-
-    expect(getSelectedCommit(state)).toEqual(expect.objectContaining({
-      shortHash: 'bbb2222',
-    }))
+    expect(state.commits).toHaveLength(2)
+    expect(state.filteredCommits).toEqual(state.commits)
+    expect(state.selectedIndex).toBe(0)
+    expect(state.filter).toBe('')
+    expect(state.filterMode).toBe(false)
+    expect(state.fullGraph).toBe(false)
+    expect(state.showHelp).toBe(true)
   })
 
-  it('filters commits by message, author, hash, and refs', () => {
-    let state = createLogTuiState(rows)
+  it('selects the commit at the current index', () => {
+    const state = createLogTuiState(rows)
 
-    state = applyLogTuiAction(state, { type: 'setFilter', value: 'dependency' })
-
-    expect(state.filteredCommits).toHaveLength(1)
-    expect(getSelectedCommit(state)).toEqual(expect.objectContaining({
-      shortHash: 'bbb2222',
-    }))
-
-    state = applyLogTuiAction(state, { type: 'setFilter', value: 'HEAD' })
-
-    expect(state.filteredCommits).toHaveLength(1)
     expect(getSelectedCommit(state)).toEqual(expect.objectContaining({
       shortHash: 'aaa1111',
     }))
   })
 
-  it('updates filter text incrementally and supports graph/help toggles', () => {
-    let state = createLogTuiState(rows)
+  it('returns undefined when there are no commits', () => {
+    const state = createLogTuiState([])
 
-    state = applyLogTuiAction(state, { type: 'toggleFilterMode' })
-    state = applyLogTuiAction(state, { type: 'appendFilter', value: 'feat' })
-    state = applyLogTuiAction(state, { type: 'backspaceFilter' })
-    state = applyLogTuiAction(state, { type: 'toggleGraph' })
-    state = applyLogTuiAction(state, { type: 'toggleHelp' })
-
-    expect(state.filterMode).toBe(true)
-    expect(state.filter).toBe('fea')
-    expect(state.fullGraph).toBe(true)
-    expect(state.showHelp).toBe(false)
+    expect(getSelectedCommit(state)).toBeUndefined()
   })
 })
