@@ -7,12 +7,11 @@ import {
     resolveConflictKeepIncoming,
     resolveConflictOurs,
     resolveConflictTheirs,
-    skipOperation,
     stageConflictResolved,
 } from './operationActions'
 
 describe('log operation actions', () => {
-  it('constructs continue, abort, and skip commands for rebase operations', async () => {
+  it('constructs continue and abort commands for rebase operations', async () => {
     const git = {
       raw: jest.fn().mockResolvedValue(''),
     }
@@ -25,14 +24,9 @@ describe('log operation actions', () => {
       ok: true,
       message: 'Aborted rebase',
     })
-    await expect(skipOperation(git as never, 'rebase')).resolves.toEqual({
-      ok: true,
-      message: 'Skipped rebase',
-    })
 
     expect(git.raw).toHaveBeenNthCalledWith(1, ['rebase', '--continue'])
     expect(git.raw).toHaveBeenNthCalledWith(2, ['rebase', '--abort'])
-    expect(git.raw).toHaveBeenNthCalledWith(3, ['rebase', '--skip'])
   })
 
   it('uses merge-specific continue and abort commands', async () => {

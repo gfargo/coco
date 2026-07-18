@@ -3,7 +3,6 @@ import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
 import { rejectFlagLike } from './forgeArgGuards'
 import { getInProgressOperationType } from './operationData'
-import { buildProviderUrl, getProviderOverview } from './providerData'
 
 function compactOutputLines(output: string): string[] {
   return output
@@ -186,151 +185,6 @@ export async function rewordHeadCommit(
     () => git.raw(['commit', '--amend', '-m', trimmedMessage]),
     'Reworded HEAD commit'
   )
-}
-
-export async function copyCommitHash(
-  commit: HistoryCommitRef | undefined,
-  clipboard: ClipboardRunner = defaultClipboardRunner
-): Promise<BranchActionResult> {
-  if (!commit) {
-    return {
-      ok: false,
-      message: 'No commit selected.',
-    }
-  }
-
-  return runAction(
-    () => clipboard(commit.hash),
-    `Copied commit hash ${commit.shortHash}`
-  )
-}
-
-export async function copyCommitMessage(
-  commit: HistoryCommitRef | undefined,
-  clipboard: ClipboardRunner = defaultClipboardRunner
-): Promise<BranchActionResult> {
-  if (!commit) {
-    return {
-      ok: false,
-      message: 'No commit selected.',
-    }
-  }
-
-  return runAction(
-    () => clipboard(commit.message),
-    `Copied commit message ${commit.shortHash}`
-  )
-}
-
-function normalizeRemoteUrl(remoteUrl: string): string | undefined {
-  const trimmed = remoteUrl.trim().replace(/\.git$/, '')
-  const sshMatch = trimmed.match(/^git@([^:]+):(.+)$/)
-
-  if (sshMatch) {
-    return `https://${sshMatch[1]}/${sshMatch[2]}`
-  }
-
-  // Match the remote URL exactly as the user has configured it in
-  // git — including legacy http:// remotes still in use on some
-  // self-hosted GitHub Enterprise / GitLab installations. We only
-  // pass the URL through; coco never fetches it. Upgrading the user's
-  // remote to https isn't our call. DevSkim DS137138 doesn't apply.
-  // DevSkim: ignore DS137138
-  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
-    return trimmed
-  }
-
-  return undefined
-}
-
-export async function getRemoteCommitUrl(
-  git: SimpleGit,
-  commitHash: string,
-  remote = 'origin'
-): Promise<string | undefined> {
-  try {
-    const provider = await getProviderOverview(git)
-
-    if (provider.repository.remote === remote) {
-      return buildProviderUrl(provider.repository, {
-        type: 'commit',
-        commit: commitHash,
-      })
-    }
-  } catch {
-    // Fall back to direct remote URL parsing for older mocks and unsupported providers.
-  }
-
-  const remoteUrl = await git.raw(['remote', 'get-url', remote])
-  const webUrl = normalizeRemoteUrl(remoteUrl)
-
-  return webUrl ? `${webUrl}/commit/${commitHash}` : undefined
-}
-
-export async function openCommitOnRemote(
-  git: SimpleGit,
-  commit: HistoryCommitRef | undefined,
-  openUrl: OpenUrlRunner = defaultOpenUrlRunner
-): Promise<BranchActionResult> {
-  if (!commit) {
-    return {
-      ok: false,
-      message: 'No commit selected.',
-    }
-  }
-
-  try {
-    const url = await getRemoteCommitUrl(git, commit.hash)
-
-    if (!url) {
-      return {
-        ok: false,
-        message: 'Could not infer a web URL for origin.',
-      }
-    }
-
-    await openUrl(url)
-
-    return {
-      ok: true,
-      message: `Opened ${commit.shortHash}`,
-      details: [url],
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      message: (error as Error).message,
-    }
-  }
-}
-
-export async function compareCommits(
-  git: SimpleGit,
-  from: HistoryCommitRef | undefined,
-  to: HistoryCommitRef | undefined
-): Promise<BranchActionResult> {
-  if (!from || !to) {
-    return {
-      ok: false,
-      message: 'Select two commits to compare.',
-    }
-  }
-
-  try {
-    const output = await git.raw(['diff', '--stat', '--color=never', `${from.hash}..${to.hash}`])
-    const lines = compactOutputLines(output)
-
-    return {
-      ok: true,
-      message: `Compared ${from.shortHash}..${to.shortHash}`,
-      details: lines.length ? lines.slice(0, 8) : ['No file changes in range.'],
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      message: (error as Error).message,
-    }
-  }
 }
 
 export function cherryPickCommit(
@@ -703,34 +557,8 @@ export function startInteractiveRebase(
   }))
 }
 
-export function parseReflog(output: string): ReflogEntry[] {
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [selector, hash, subject] = line.split('\x1f')
-
-      return {
-        selector,
-        hash,
-        subject,
-      }
-    })
-}
-
-export async function getReflogEntries(git: SimpleGit, limit = 8): Promise<ReflogEntry[]> {
-  return parseReflog(await git.raw([
-    'reflog',
-    '--date=short',
-    `--max-count=${limit}`,
-    '--pretty=format:%gd%x1f%h%x1f%gs',
-  ]))
-}
-
 export const historyActionTestInternals = {
   compactOutputLines,
   getInProgressOperation,
   isHeadCommit,
-  normalizeRemoteUrl,
 }
