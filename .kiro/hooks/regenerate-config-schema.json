@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Regenerate config schema",
+      "description": "When the config type definitions or schema source change, regenerate schema.json so it never drifts from the types. CI fails the build job on schema drift, so this catches it before push.",
+      "trigger": "PostFileSave",
+      "matcher": "(src/lib/config/.*[^/]*\\.ts$|src/lib/schema\\.ts$)",
+      "action": {
+        "type": "agent",
+        "prompt": "Config types may have changed. Run `npm run build:schema` (or `npm run build`) to regenerate `schema.json`, then check `git diff --stat -- schema.json`. If schema.json changed, that regeneration is required for CI to pass — leave it staged and mention it. If nothing changed, stay silent."
+      },
+      "enabled": true
+    }
+  ]
+}

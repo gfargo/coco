@@ -308,8 +308,7 @@ async function spinUpAsync(scenarioName: string | null): Promise<{ path: string;
       const repo = await fromScenario(scenarios[i])
       const targetDir = join(realParent, ['widget-app', 'dashboard', 'api-server'][i])
       mkdirSyncFs(targetDir, { recursive: true })
-      const { execSync } = await import('child_process')
-      execSync(`cp -a ${repo.path}/. ${targetDir}/`)
+      spawnSync('cp', ['-a', `${repo.path}/.`, `${targetDir}/`])
       repos.push(repo)
     }
 

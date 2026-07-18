@@ -1,12 +1,13 @@
 import { SimpleGit } from 'simple-git'
 import {
+  bbqlQuote,
   describeBitbucketStatus,
   getBitbucketProject,
   getBitbucketStatus,
   type BitbucketRunner,
   defaultBitbucketRunner,
 } from './bitbucketCli'
-import { loadForgeList, loadForgeOverview } from './forgeLoad'
+import { loadForgeList, loadForgeOverview, paginate } from './forgeLoad'
 import type { IssueListFilter, IssueListItem, IssueListOverview } from './issuesListData'
 import type {
   PullRequestListFilter,
@@ -69,20 +70,17 @@ async function fetchAllPages<T>(
   resource: string,
   want: number
 ): Promise<T[]> {
-  const acc: T[] = []
-  let page = 1
   const pagelen = Math.min(want, 50)
-
-  while (acc.length < want && page <= 100) {
-    const sep = baseEndpoint.includes('?') ? '&' : '?'
-    const out = await runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`)
-    const result = parsePage<T>(out, resource)
-    acc.push(...result.values)
-    if (result.values.length < pagelen || !result.next) break
-    page += 1
-  }
-
-  return acc.slice(0, want)
+  const sep = baseEndpoint.includes('?') ? '&' : '?'
+  return paginate({
+    fetchPage: (page) => runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`),
+    parsePage: (output) => {
+      const result = parsePage<T>(output, resource)
+      return { items: result.values, hasMore: result.values.length >= pagelen && Boolean(result.next) }
+    },
+    want,
+    maxPages: 100,
+  })
 }
 
 function normalizeState(raw: unknown): string {
@@ -172,12 +170,12 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
   // 'all' and undefined: omit state param — returns all PRs.
 
   if (filter.head) {
-    const headQ = `source.branch.name = "${filter.head}"`
+    const headQ = `source.branch.name = "${bbqlQuote(filter.head)}"`
     params.q = params.q ? `(${params.q}) AND ${headQ}` : headQ
   }
 
   if (filter.base) {
-    const baseQ = `destination.branch.name = "${filter.base}"`
+    const baseQ = `destination.branch.name = "${bbqlQuote(filter.base)}"`
     params.q = params.q ? `(${params.q}) AND ${baseQ}` : baseQ
   }
 
@@ -306,15 +304,15 @@ function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
   }
 
   if (filter.assignee && filter.assignee !== '@me') {
-    q.push(`assignee.nickname = "${filter.assignee}"`)
+    q.push(`assignee.nickname = "${bbqlQuote(filter.assignee)}"`)
   }
 
   if (filter.author && filter.author !== '@me') {
-    q.push(`reporter.nickname = "${filter.author}"`)
+    q.push(`reporter.nickname = "${bbqlQuote(filter.author)}"`)
   }
 
   if (filter.search) {
-    q.push(`title ~ "${filter.search}"`)
+    q.push(`title ~ "${bbqlQuote(filter.search)}"`)
   }
 
   const pairs: string[] = []
@@ -423,7 +421,7 @@ export async function findOpenBitbucketPullRequestForBranch(
   branch: string,
   runner: BitbucketRunner
 ): Promise<RawBitbucketPR | undefined> {
-  const q = encodeURIComponent(`source.branch.name = "${branch}" AND state = "OPEN"`)
+  const q = encodeURIComponent(`source.branch.name = "${bbqlQuote(branch)}" AND state = "OPEN"`)
   const out = (await runner(`repositories/${projectPath}/pullrequests?q=${q}&pagelen=1`)).trim()
   const page = out ? (JSON.parse(out) as { values?: RawBitbucketPR[] }) : undefined
   return page?.values?.[0]

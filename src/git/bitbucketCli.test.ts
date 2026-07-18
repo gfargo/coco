@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import {
+  bbqlQuote,
   describeBitbucketStatus,
   getBitbucketProject,
   getBitbucketStatus,
@@ -131,6 +132,32 @@ describe('resolveBitbucketActionError (1238)', () => {
       expect(result.details).toEqual(['line2', 'line3'])
     }
   ))
+})
+
+describe('bbqlQuote (1709)', () => {
+  it('leaves an empty string unchanged', () => {
+    expect(bbqlQuote('')).toBe('')
+  })
+
+  it('leaves a value with no special characters unchanged', () => {
+    expect(bbqlQuote('feature/login')).toBe('feature/login')
+  })
+
+  it('escapes a double quote', () => {
+    expect(bbqlQuote('fix "login" bug')).toBe('fix \\"login\\" bug')
+  })
+
+  it('escapes a backslash', () => {
+    expect(bbqlQuote('a\\b')).toBe('a\\\\b')
+  })
+
+  it('escapes backslashes before quotes so a pre-escaped quote is not double-escaped', () => {
+    expect(bbqlQuote('a\\"b')).toBe('a\\\\\\"b')
+  })
+
+  it('neutralizes a BBQL injection payload', () => {
+    expect(bbqlQuote('x" OR state != "')).toBe('x\\" OR state != \\"')
+  })
 })
 
 describe('getBitbucketProject (1238)', () => {
