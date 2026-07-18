@@ -2,7 +2,8 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { AIMessageChunk } from '@langchain/core/messages'
 import { ChatGenerationChunk, ChatResult } from '@langchain/core/outputs'
 import { PromptTemplate } from '@langchain/core/prompts'
-import { StringOutputParser } from '@langchain/core/output_parsers'
+import { OutputParserException, StringOutputParser } from '@langchain/core/output_parsers'
+import { RunnableLambda } from '@langchain/core/runnables'
 import { FakeListChatModel } from '@langchain/core/utils/testing'
 import { Logger } from '../../utils/logger'
 import { getLlm } from './getLlm'
@@ -10,6 +11,7 @@ import {
   LangChainCancelledError,
   LangChainExecutionError,
   LangChainNetworkError,
+  LangChainSchemaParseError,
 } from '../errors'
 import {
   executeChainStreaming,
@@ -444,6 +446,38 @@ describe('executeChainStreaming', () => {
         logger: silentLogger(),
       }),
     ).rejects.toThrow(LangChainExecutionError)
+  })
+
+  it('wraps an OutputParserException as LangChainSchemaParseError, not a generic execution error', async () => {
+    // Mirrors executeChain's classification (#1460 / OSS-503) so
+    // withRetry's default predicate skips retrying an identical call
+    // that streamed prose instead of parseable JSON.
+    const llm = new FakeListChatModel({ responses: ['not valid json'] })
+    const parser = RunnableLambda.from(() => {
+      throw new OutputParserException('Failed to parse. Text: "not valid json"')
+    })
+
+    let captured: LangChainSchemaParseError | undefined
+    try {
+      await executeChainStreaming<string>({
+        llm: asLlm(llm),
+        prompt,
+        variables,
+        parser,
+        onChunk: () => {
+          /* noop */
+        },
+        logger: silentLogger(),
+      })
+    } catch (error) {
+      if (error instanceof LangChainSchemaParseError) {
+        captured = error
+      }
+    }
+
+    expect(captured).toBeInstanceOf(LangChainSchemaParseError)
+    // Carries the streamed text so a caller can salvage it.
+    expect(captured?.context?.accumulated).toBe('not valid json')
   })
 
   it('wraps network-style errors as LangChainNetworkError with provider + endpoint context', async () => {
