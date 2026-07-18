@@ -75,13 +75,15 @@ export function writeChangelogFile({ filePath, title, content, date = todayIsoDa
     const before = lines.slice(0, startIndex)
     const after = lines.slice(endIndex)
     const next = [...before, ...section.split(/\r?\n/), ...after]
-    writeFileAtomic(filePath, next.join('\n'))
+    writeFileAtomic(filePath, next.join('\n'), { preserveExistingMode: true })
     return
   }
 
   const topHeadingIndex = lines.findIndex((line) => line.startsWith('# ') && !line.startsWith('## '))
   if (topHeadingIndex === -1) {
-    writeFileAtomic(filePath, `${DEFAULT_CHANGELOG_HEADER}\n${section}\n${existing.trim()}\n`.trimEnd() + '\n')
+    writeFileAtomic(filePath, `${DEFAULT_CHANGELOG_HEADER}\n${section}\n${existing.trim()}\n`.trimEnd() + '\n', {
+      preserveExistingMode: true,
+    })
     return
   }
 
@@ -92,5 +94,5 @@ export function writeChangelogFile({ filePath, title, content, date = todayIsoDa
   const before = lines.slice(0, insertAt)
   const after = lines.slice(insertAt)
   const next = [...before, '', ...section.split(/\r?\n/), ...after]
-  writeFileAtomic(filePath, next.join('\n'))
+  writeFileAtomic(filePath, next.join('\n'), { preserveExistingMode: true })
 }
