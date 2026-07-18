@@ -215,8 +215,22 @@ describe('recap command', () => {
 
   it('should call getChangesSinceLastTag for last-tag', async () => {
     argv['last-tag'] = true
+    mockGetChangesSinceLastTag.mockResolvedValue(['[2023-01-01] feat: add new feature'])
     await handler(argv, logger)
     expect(mockGetChangesSinceLastTag).toHaveBeenCalled()
+    expect(mockExecuteChain).toHaveBeenCalled()
+  })
+
+  it('should skip the LLM call and report no tags found when the repo has no tags', async () => {
+    argv['last-tag'] = true
+    mockGetChangesSinceLastTag.mockResolvedValue([])
+    await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 0 })
+    expect(mockGetChangesSinceLastTag).toHaveBeenCalled()
+    expect(mockExecuteChain).not.toHaveBeenCalled()
+    expect(logger.log).toHaveBeenCalledWith(
+      'No tags found, or no commits since the last tag. 👀',
+      expect.objectContaining({ color: 'blue' })
+    )
   })
 
   it('should call getDiffForBranch for currentBranch', async () => {

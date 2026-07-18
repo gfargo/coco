@@ -9,6 +9,7 @@ import { Config } from '../../commands/types'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getCommitLogRangeDetails } from '../../lib/simple-git/getCommitLogRangeDetails'
+import { getChangesSinceLastTag } from '../../lib/simple-git/getChangesSinceLastTag'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
@@ -62,6 +63,7 @@ const mockGetCurrentBranchName = getCurrentBranchName as jest.MockedFunction<typ
 const mockGetCommitLogRangeDetails = getCommitLogRangeDetails as jest.MockedFunction<
   typeof getCommitLogRangeDetails
 >
+const mockGetChangesSinceLastTag = getChangesSinceLastTag as jest.MockedFunction<typeof getChangesSinceLastTag>
 const mockExecuteChain = executeChain as jest.MockedFunction<typeof executeChain>
 const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
 const mockGetApiKeyForModel = getApiKeyForModel as jest.MockedFunction<typeof getApiKeyForModel>
@@ -446,6 +448,34 @@ describe('changelog command', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('--range'),
         expect.anything()
+      )
+    })
+  })
+
+  describe('--since-last-tag on a tagless repo (OSS-969)', () => {
+    it('skips the LLM call and reports no tags found instead of fabricating a changelog', async () => {
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        sinceLastTag: true,
+      } as unknown as Config)
+      mockGetChangesSinceLastTag.mockResolvedValue([])
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 0 })
+
+      expect(mockGetChangesSinceLastTag).toHaveBeenCalled()
+      expect(mockExecuteChain).not.toHaveBeenCalled()
+      expect(logger.log).toHaveBeenCalledWith(
+        'No tags found in the repository.',
+        expect.objectContaining({ color: 'yellow' })
       )
     })
   })

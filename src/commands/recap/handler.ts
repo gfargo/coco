@@ -297,7 +297,14 @@ ${errorMessage}
       }
     },
     noResult: async () => {
-      await noResult({ git, logger })
+      await noResult({
+        git,
+        logger,
+        message:
+          timeframe === 'last-tag'
+            ? 'No tags found, or no commits since the last tag. 👀'
+            : undefined,
+      })
       // emitJson writes to stdout directly, so the silenced logger
       // (non-interactive mode, or global --quiet) doesn't suppress the
       // payload — mirrors changelog's noResult (#1586).

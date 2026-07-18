@@ -348,6 +348,12 @@ export async function generateChangelogResult(
       return `${changelog.title}\n\n${changelog.content}${footer}`
     },
     noResult: async () => {
+      if (config.sinceLastTag) {
+        logger.log(`No tags found in the repository.`, { color: 'yellow' })
+        if (argv.json) emitJson(null)
+        commandExit(0)
+      }
+
       if (config.range) {
         logger.log(`No commits found in the provided range.`, { color: 'yellow' })
         if (argv.json) emitJson(null)

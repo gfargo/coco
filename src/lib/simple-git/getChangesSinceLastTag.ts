@@ -14,6 +14,6 @@ export const getChangesSinceLastTag = async ({ git }: Props) => {
     const commitLog = await git.log({ from: lastTag })
     return formatCommitLog(commitLog)
   } else {
-    return ['No tags found in the repository.']
+    return []
   }
 }
