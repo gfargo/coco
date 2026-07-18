@@ -114,35 +114,40 @@ function nicknamesOf(value: unknown): string[] | undefined {
 
 type RawBitbucketPR = Record<string, unknown>
 
+function prSharedFields(pr: RawBitbucketPR) {
+  const source = pr.source as Record<string, unknown> | undefined
+  const destination = pr.destination as Record<string, unknown> | undefined
+  const links = pr.links as Record<string, unknown> | undefined
+  const htmlLink = links?.html as Record<string, unknown> | undefined
+  return {
+    number: Number(pr.id),
+    title: String(pr.title || ''),
+    url: String(htmlLink?.href || ''),
+    state: normalizeState(pr.state),
+    isDraft: Boolean(pr.draft),
+    headRefName: String(((source?.branch as Record<string, unknown> | undefined)?.name) || ''),
+    baseRefName: String(
+      ((destination?.branch as Record<string, unknown> | undefined)?.name) || ''
+    ),
+    author: nicknameOf(pr.author),
+    reviewDecision: undefined,
+    mergeable: undefined,
+    mergeStateStatus: undefined,
+  }
+}
+
+function mapPullRequestItem(pr: RawBitbucketPR): PullRequestListItem {
+  return {
+    ...prSharedFields(pr),
+    assignees: nicknamesOf(pr.reviewers),
+    labels: undefined,
+    createdAt: String(pr.created_on || ''),
+    updatedAt: String(pr.updated_on || ''),
+  }
+}
+
 function parsePullRequests(output: string): PullRequestListItem[] {
-  const result = parsePage<RawBitbucketPR>(output, 'pull requests')
-  return result.values.map((pr) => {
-    const source = pr.source as Record<string, unknown> | undefined
-    const destination = pr.destination as Record<string, unknown> | undefined
-    const links = pr.links as Record<string, unknown> | undefined
-    const htmlLink = links?.html as Record<string, unknown> | undefined
-    return {
-      number: Number(pr.id),
-      title: String(pr.title || ''),
-      url: String(htmlLink?.href || ''),
-      state: normalizeState(pr.state),
-      isDraft: Boolean(pr.draft),
-      headRefName: String(
-        ((source?.branch as Record<string, unknown> | undefined)?.name) || ''
-      ),
-      baseRefName: String(
-        ((destination?.branch as Record<string, unknown> | undefined)?.name) || ''
-      ),
-      author: nicknameOf(pr.author),
-      assignees: nicknamesOf(pr.reviewers),
-      labels: undefined,
-      reviewDecision: undefined,
-      mergeable: undefined,
-      mergeStateStatus: undefined,
-      createdAt: String(pr.created_on || ''),
-      updatedAt: String(pr.updated_on || ''),
-    }
-  })
+  return parsePage<RawBitbucketPR>(output, 'pull requests').values.map(mapPullRequestItem)
 }
 
 function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): string {
@@ -199,33 +204,7 @@ export async function getBitbucketPullRequestList(
         want
       )
 
-      pullRequests = raw.map((pr) => {
-        const source = pr.source as Record<string, unknown> | undefined
-        const destination = pr.destination as Record<string, unknown> | undefined
-        const links = pr.links as Record<string, unknown> | undefined
-        const htmlLink = links?.html as Record<string, unknown> | undefined
-        return {
-          number: Number(pr.id),
-          title: String(pr.title || ''),
-          url: String(htmlLink?.href || ''),
-          state: normalizeState(pr.state),
-          isDraft: Boolean(pr.draft),
-          headRefName: String(
-            ((source?.branch as Record<string, unknown> | undefined)?.name) || ''
-          ),
-          baseRefName: String(
-            ((destination?.branch as Record<string, unknown> | undefined)?.name) || ''
-          ),
-          author: nicknameOf(pr.author),
-          assignees: nicknamesOf(pr.reviewers),
-          labels: undefined,
-          reviewDecision: undefined,
-          mergeable: undefined,
-          mergeStateStatus: undefined,
-          createdAt: String(pr.created_on || ''),
-          updatedAt: String(pr.updated_on || ''),
-        }
-      })
+      pullRequests = raw.map(mapPullRequestItem)
 
       if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
 
@@ -251,26 +230,27 @@ export async function getBitbucketPullRequestList(
 
 type RawBitbucketIssue = Record<string, unknown>
 
+function mapIssueItem(issue: RawBitbucketIssue): IssueListItem {
+  const links = issue.links as Record<string, unknown> | undefined
+  const htmlLink = links?.html as Record<string, unknown> | undefined
+  const assignee = issue.assignee as Record<string, unknown> | undefined
+  const kind = typeof issue.kind === 'string' && issue.kind ? [issue.kind] : undefined
+  return {
+    number: Number(issue.id),
+    title: String(issue.title || ''),
+    url: String(htmlLink?.href || ''),
+    state: normalizeIssueState(issue.status ?? issue.state),
+    author: nicknameOf(issue.reporter ?? issue.author),
+    assignees: assignee ? [String(assignee.nickname || '')].filter(Boolean) : undefined,
+    labels: kind,
+    comments: typeof issue.comment_count === 'number' ? issue.comment_count : undefined,
+    createdAt: String(issue.created_on || ''),
+    updatedAt: String(issue.updated_on || ''),
+  } as IssueListItem
+}
+
 function parseIssues(output: string): IssueListItem[] {
-  const result = parsePage<RawBitbucketIssue>(output, 'issues')
-  return result.values.map((issue) => {
-    const links = issue.links as Record<string, unknown> | undefined
-    const htmlLink = links?.html as Record<string, unknown> | undefined
-    const assignee = issue.assignee as Record<string, unknown> | undefined
-    const kind = typeof issue.kind === 'string' && issue.kind ? [issue.kind] : undefined
-    return {
-      number: Number(issue.id),
-      title: String(issue.title || ''),
-      url: String(htmlLink?.href || ''),
-      state: normalizeIssueState(issue.status ?? issue.state),
-      author: nicknameOf(issue.reporter ?? issue.author),
-      assignees: assignee ? [String(assignee.nickname || '')] .filter(Boolean) : undefined,
-      labels: kind,
-      comments: typeof issue.comment_count === 'number' ? issue.comment_count : undefined,
-      createdAt: String(issue.created_on || ''),
-      updatedAt: String(issue.updated_on || ''),
-    } as IssueListItem
-  })
+  return parsePage<RawBitbucketIssue>(output, 'issues').values.map(mapIssueItem)
 }
 
 function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
@@ -322,24 +302,7 @@ export async function getBitbucketIssueList(
         want
       )
 
-      const issues = raw.map((issue) => {
-        const links = issue.links as Record<string, unknown> | undefined
-        const htmlLink = links?.html as Record<string, unknown> | undefined
-        const assignee = issue.assignee as Record<string, unknown> | undefined
-        const kind = typeof issue.kind === 'string' && issue.kind ? [issue.kind] : undefined
-        return {
-          number: Number(issue.id),
-          title: String(issue.title || ''),
-          url: String(htmlLink?.href || ''),
-          state: normalizeIssueState(issue.status ?? issue.state),
-          author: nicknameOf(issue.reporter ?? issue.author),
-          assignees: assignee ? [String(assignee.nickname || '')].filter(Boolean) : undefined,
-          labels: kind,
-          comments: typeof issue.comment_count === 'number' ? issue.comment_count : undefined,
-          createdAt: String(issue.created_on || ''),
-          updatedAt: String(issue.updated_on || ''),
-        } as IssueListItem
-      })
+      const issues = raw.map(mapIssueItem)
 
       return { issues: issues.map(sanitizeIssueListItem) }
     },
@@ -352,27 +315,9 @@ export async function getBitbucketIssueList(
 // ---------------------------------------------------------------------------
 
 function prToPullRequestInfo(pr: RawBitbucketPR): PullRequestInfo {
-  const source = pr.source as Record<string, unknown> | undefined
-  const destination = pr.destination as Record<string, unknown> | undefined
-  const links = pr.links as Record<string, unknown> | undefined
-  const htmlLink = links?.html as Record<string, unknown> | undefined
   return {
-    number: Number(pr.id),
-    title: String(pr.title || ''),
-    url: String(htmlLink?.href || ''),
-    state: normalizeState(pr.state),
-    isDraft: Boolean(pr.draft),
-    headRefName: String(
-      ((source?.branch as Record<string, unknown> | undefined)?.name) || ''
-    ),
-    baseRefName: String(
-      ((destination?.branch as Record<string, unknown> | undefined)?.name) || ''
-    ),
+    ...prSharedFields(pr),
     body: typeof pr.description === 'string' ? pr.description : undefined,
-    author: nicknameOf(pr.author),
-    reviewDecision: undefined,
-    mergeable: undefined,
-    mergeStateStatus: undefined,
     statusCheckRollup: undefined,
     reviews: undefined,
   }
