@@ -526,24 +526,6 @@ describe('log Ink view model', () => {
     expect(state.showCommandPalette).toBe(true)
   })
 
-  it('defaults helpScrollOffset to 0 and resets it on toggleHelp', () => {
-    let state = createLogInkState(rows)
-    expect(state.helpScrollOffset).toBe(0)
-
-    // Simulate the user opening help, scrolling, then closing it.
-    state = applyLogInkAction(state, { type: 'toggleHelp' })
-    state = applyLogInkAction(state, { type: 'scrollHelp', delta: 5 })
-    expect(state.helpScrollOffset).toBe(5)
-    state = applyLogInkAction(state, { type: 'toggleHelp' })
-    // Closing clears the offset so the next open starts at the top.
-    expect(state.showHelp).toBe(false)
-    expect(state.helpScrollOffset).toBe(0)
-
-    // Reopening keeps offset at 0.
-    state = applyLogInkAction(state, { type: 'toggleHelp' })
-    expect(state.helpScrollOffset).toBe(0)
-  })
-
   it('toggles the view-keys strip and keeps it mutually exclusive with other overlays (#1137)', () => {
     let state = createLogInkState(rows)
     expect(state.showViewKeys).toBe(false)
@@ -573,17 +555,6 @@ describe('log Ink view model', () => {
     state = applyLogInkAction(state, { type: 'toggleViewKeys' })
     state = applyLogInkAction(state, { type: 'toggleFilterMode' })
     expect(state.showViewKeys).toBe(false)
-  })
-
-  it('scrollHelp floor-clamps at 0 (no negative offsets)', () => {
-    let state = createLogInkState(rows)
-    state = applyLogInkAction(state, { type: 'toggleHelp' })
-    state = applyLogInkAction(state, { type: 'scrollHelp', delta: -3 })
-    expect(state.helpScrollOffset).toBe(0)
-
-    state = applyLogInkAction(state, { type: 'scrollHelp', delta: 7 })
-    state = applyLogInkAction(state, { type: 'scrollHelp', delta: -100 })
-    expect(state.helpScrollOffset).toBe(0)
   })
 
   it('clears helpScrollOffset when opening filter mode or command palette', () => {
@@ -849,31 +820,8 @@ describe('log Ink view model', () => {
         expect(state.rebasePlan?.selectedIndex).toBe(0)
       })
 
-      it('retags, rewords, and reorders the cursored row with clamping', () => {
-        let state = openPlan()
-        state = applyLogInkAction(state, { type: 'moveRebaseCursor', delta: 5 })
-        expect(state.rebasePlan?.selectedIndex).toBe(2)
-
-        state = applyLogInkAction(state, { type: 'setRebaseAction', action: 'fixup' })
-        expect(state.rebasePlan?.rows[2].action).toBe('fixup')
-
-        state = applyLogInkAction(state, { type: 'setRebaseRewordMessage', message: 'chore: reworded' })
-        expect(state.rebasePlan?.rows[2]).toMatchObject({ action: 'reword', newMessage: 'chore: reworded' })
-
-        // Retagging away from reword drops the stale message.
-        state = applyLogInkAction(state, { type: 'setRebaseAction', action: 'pick' })
-        expect(state.rebasePlan?.rows[2].newMessage).toBeUndefined()
-
-        state = applyLogInkAction(state, { type: 'moveRebaseRow', delta: -1 })
-        expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(['aaaaaaa', 'ccccccc', 'bbbbbbb'])
-        expect(state.rebasePlan?.selectedIndex).toBe(1)
-
-        // Reorder off either edge is a no-op.
-        state = applyLogInkAction(state, { type: 'moveRebaseCursor', delta: -5 })
-        const before = state.rebasePlan?.rows.map((r) => r.shortSha)
-        state = applyLogInkAction(state, { type: 'moveRebaseRow', delta: -1 })
-        expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(before)
-      })
+      // Pure retag/reword/reorder field logic now lives in
+      // `rebasePlanState.test.ts` alongside its extracted slice (#1723).
 
       it('clears the plan on lateral navigation and on popView — a stale plan must never execute', () => {
         let state = openPlan()

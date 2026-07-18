@@ -1,6 +1,6 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../git/logData'
 import { hashesMatchAny } from '../../git/hashes'
-import type { RebasePlanRow, RebaseTodoAction } from '../../git/rebasePlanActions'
+import type { RebasePlanRow } from '../../git/rebasePlanActions'
 import {
     applyThemePickerAction,
     createThemePickerState,
@@ -34,6 +34,22 @@ import {
     type LogInkInputPromptState,
 } from './inputPromptState'
 export type { LogInkInputPromptKind } from './inputPromptState'
+import {
+    applyHelpOverlayAction,
+    createHelpOverlayState,
+    type HelpOverlayAction,
+} from './helpOverlayState'
+import {
+    applyCommandPaletteAction,
+    createCommandPaletteState,
+    type CommandPaletteAction,
+} from './commandPaletteState'
+import {
+    applyRebasePlanAction,
+    type LogInkRebasePlan,
+    type RebasePlanAction,
+} from './rebasePlanState'
+export type { LogInkRebasePlan } from './rebasePlanState'
 import {
     CommitComposeAction,
     CommitComposeState,
@@ -1004,11 +1020,6 @@ export type LogInkState = {
   conflictResolution?: LogInkConflictResolutionState
 }
 
-export type LogInkRebasePlan = {
-  rows: RebasePlanRow[]
-  selectedIndex: number
-}
-
 export type LogInkStatusFilterMask = {
   staged: boolean
   unstaged: boolean
@@ -1177,22 +1188,11 @@ export type LogInkAction =
   // re-resolving a now-meaningless range against the shrunken list.
   | { type: 'setMarks'; view: LogInkView; ids: string[] }
   | { type: 'clearSelection' }
-  | { type: 'appendPaletteFilter'; value: string }
-  | { type: 'backspacePaletteFilter' }
-  | { type: 'clearPaletteFilter' }
-  | { type: 'movePaletteSelection'; delta: number; commandCount: number }
-  | { type: 'recordPaletteRecent'; value: string }
+  | CommandPaletteAction
   | { type: 'toggleFilterMode' }
   | { type: 'toggleGraph' }
-  | { type: 'toggleHelp' }
-  | { type: 'scrollHelp'; delta: number }
-  | { type: 'openHelpFilter' }
-  | { type: 'appendHelpFilter'; value: string }
-  | { type: 'backspaceHelpFilter' }
-  | { type: 'commitHelpFilter' }
-  | { type: 'clearHelpFilter' }
+  | HelpOverlayAction
   | { type: 'toggleViewKeys' }
-  | { type: 'toggleCommandPalette' }
   | ThemePickerAction
   | { type: 'openGitignorePicker'; file: string }
   | { type: 'closeGitignorePicker' }
@@ -1211,11 +1211,7 @@ export type LogInkAction =
   | { type: 'setBisectPickMode'; mode: 'bad' | 'good'; pendingBad?: string }
   | { type: 'clearBisectPickMode' }
   | { type: 'openRebasePlan'; rows: RebasePlanRow[] }
-  | { type: 'moveRebaseCursor'; delta: number }
-  | { type: 'setRebaseAction'; action: RebaseTodoAction }
-  | { type: 'moveRebaseRow'; delta: number }
-  | { type: 'setRebaseRewordMessage'; message: string }
-  | { type: 'clearRebasePlan' }
+  | RebasePlanAction
   | { type: 'setDiffLineSelectAnchor'; value?: number }
   | ConflictResolutionAction
 
@@ -2001,9 +1997,7 @@ export function createLogInkState(
     repoStack: [{ label: options.repoLabel || 'root', workdir: options.repoWorkdir }],
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
-    paletteFilter: '',
-    paletteSelectedIndex: 0,
-    paletteRecent: [],
+    ...createCommandPaletteState(),
     ...createThemePickerState(),
     commitCompose: createCommitComposeState(),
     diffPreviewOffset: 0,
@@ -2020,10 +2014,7 @@ export function createLogInkState(
     // override via `options.fullGraph` when they need the compact
     // case explicitly.
     fullGraph: options.fullGraph ?? true,
-    showHelp: false,
-    helpScrollOffset: 0,
-    helpFilter: '',
-    helpFilterMode: false,
+    ...createHelpOverlayState(),
     showViewKeys: false,
     showCommandPalette: false,
     workflowActionId: undefined,
@@ -3000,17 +2991,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         fullGraph: !state.fullGraph,
         pendingKey: undefined,
       }
-    case 'toggleHelp': {
-      const opening = !state.showHelp
+    case 'toggleHelp':
       return {
         ...state,
-        showHelp: opening,
-        // Reset scroll position when toggling either direction so the
-        // next open always starts at the top — feels more predictable
-        // than picking up where the user last scrolled.
-        helpScrollOffset: 0,
-        helpFilter: '',
-        helpFilterMode: false,
+        ...applyHelpOverlayAction(state, action),
         showCommandPalette: false,
         // Opening full help supersedes the compact view-keys strip — this
         // is the progressive-disclosure step (`?` from the strip expands
@@ -3018,7 +3002,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         showViewKeys: false,
         pendingKey: undefined,
       }
-    }
     case 'toggleViewKeys':
       return {
         ...state,
@@ -3033,82 +3016,37 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingKey: undefined,
       }
     case 'scrollHelp':
-      // No upper-bound clamp here — the renderer caps the offset
-      // against the actual content height at render time. The
-      // reducer just prevents going below 0 so callers can safely
-      // pass negative deltas without us going past the top.
-      return {
-        ...state,
-        helpScrollOffset: Math.max(0, state.helpScrollOffset + action.delta),
-      }
     case 'openHelpFilter':
-      return { ...state, helpFilterMode: true }
     case 'appendHelpFilter':
-      // Typing narrows from the top — reset the scroll so the first
-      // match is visible instead of whatever row the user had reached.
-      return { ...state, helpFilter: state.helpFilter + action.value, helpScrollOffset: 0 }
     case 'backspaceHelpFilter':
-      return { ...state, helpFilter: state.helpFilter.slice(0, -1), helpScrollOffset: 0 }
     case 'commitHelpFilter':
-      // Enter keeps the narrowed list but returns j/k to scrolling.
-      return { ...state, helpFilterMode: false }
     case 'clearHelpFilter':
-      return { ...state, helpFilter: '', helpFilterMode: false, helpScrollOffset: 0 }
-    case 'toggleCommandPalette': {
-      const opening = !state.showCommandPalette
       return {
         ...state,
-        showCommandPalette: opening,
+        ...applyHelpOverlayAction(state, action),
+      }
+    case 'toggleCommandPalette':
+      return {
+        ...state,
+        ...applyCommandPaletteAction(state, action),
+        showCommandPalette: !state.showCommandPalette,
         showHelp: false,
         helpScrollOffset: 0,
         helpFilter: '',
         helpFilterMode: false,
         showViewKeys: false,
-        // Reset palette interaction state on every open/close so the next
-        // session starts from a clean slate.
-        paletteFilter: '',
-        paletteSelectedIndex: 0,
         pendingKey: undefined,
       }
-    }
     case 'appendPaletteFilter':
-      return {
-        ...state,
-        paletteFilter: `${state.paletteFilter}${action.value}`,
-        paletteSelectedIndex: 0,
-        pendingKey: undefined,
-      }
     case 'backspacePaletteFilter':
-      return {
-        ...state,
-        paletteFilter: state.paletteFilter.slice(0, -1),
-        paletteSelectedIndex: 0,
-        pendingKey: undefined,
-      }
     case 'clearPaletteFilter':
-      return {
-        ...state,
-        paletteFilter: '',
-        paletteSelectedIndex: 0,
-        pendingKey: undefined,
-      }
     case 'movePaletteSelection':
+    case 'recordPaletteRecent':
       return {
         ...state,
-        paletteSelectedIndex: clampIndex(
-          state.paletteSelectedIndex + action.delta,
-          action.commandCount
-        ),
+        ...applyCommandPaletteAction(state, action),
         pendingKey: undefined,
       }
-    case 'recordPaletteRecent': {
-      const next = [action.value, ...state.paletteRecent.filter((id) => id !== action.value)]
-      return {
-        ...state,
-        paletteRecent: next.slice(0, 8),
-        pendingKey: undefined,
-      }
-    }
     case 'toggleThemePicker':
       return {
         ...state,
@@ -3216,59 +3154,30 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         rebasePlan: { rows: action.rows, selectedIndex: 0 },
       }
     }
-    case 'moveRebaseCursor': {
-      const plan = state.rebasePlan
-      if (!plan || plan.rows.length === 0) return state
-      return {
-        ...state,
-        rebasePlan: {
-          ...plan,
-          selectedIndex: clampIndex(plan.selectedIndex + action.delta, plan.rows.length),
-        },
-        pendingKey: undefined,
-      }
-    }
+    case 'moveRebaseCursor':
+      if (!state.rebasePlan || state.rebasePlan.rows.length === 0) return state
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     case 'setRebaseAction': {
       const plan = state.rebasePlan
-      const row = plan?.rows[plan.selectedIndex]
-      if (!plan || !row) return state
-      // Retagging away from reword drops the stashed message so a later
-      // re-reword starts fresh instead of resurrecting stale text.
-      const rows = plan.rows.map((entry, index) => (
-        index === plan.selectedIndex
-          ? { ...entry, action: action.action, newMessage: action.action === 'reword' ? entry.newMessage : undefined }
-          : entry
-      ))
-      return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
+      if (!plan || !plan.rows[plan.selectedIndex]) return state
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     }
     case 'moveRebaseRow': {
       const plan = state.rebasePlan
       if (!plan) return state
-      const from = plan.selectedIndex
-      const to = from + action.delta
+      const to = plan.selectedIndex + action.delta
       if (to < 0 || to >= plan.rows.length) return state
-      const rows = [...plan.rows]
-      const [moved] = rows.splice(from, 1)
-      rows.splice(to, 0, moved)
-      return { ...state, rebasePlan: { rows, selectedIndex: to }, pendingKey: undefined }
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     }
     case 'setRebaseRewordMessage': {
       const plan = state.rebasePlan
-      const row = plan?.rows[plan.selectedIndex]
-      if (!plan || !row) return state
-      const message = action.message.trim()
-      if (!message) return { ...state, pendingKey: undefined }
-      const rows = plan.rows.map((entry, index) => (
-        index === plan.selectedIndex
-          ? { ...entry, action: 'reword' as const, newMessage: message }
-          : entry
-      ))
-      return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
+      if (!plan || !plan.rows[plan.selectedIndex]) return state
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     }
     case 'setDiffLineSelectAnchor':
       return { ...state, diffLineSelectAnchor: action.value, pendingKey: undefined }
     case 'clearRebasePlan':
-      return { ...state, rebasePlan: undefined, pendingKey: undefined }
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     case 'setConflictResolutionLoading':
     case 'setConflictResolutionReady':
     case 'setConflictResolutionError':
