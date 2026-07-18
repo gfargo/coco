@@ -115,6 +115,18 @@ describe('selectDiffCodeLines', () => {
     // The `+++ b/x` / `--- a/x` file headers must NOT be treated as code.
     expect(selectDiffCodeLines(['--- a/x.ts', '+++ b/x.ts'])).toEqual([])
   })
+
+  it("passes through the `\\ No newline at end of file` marker without ending the hunk", () => {
+    const lines = [
+      '@@ -1,2 +1,3 @@',
+      ' const a = 1',
+      '-const b = 2',
+      '\\ No newline at end of file',
+      '+const b = 2',
+      '+const c = 3',
+    ]
+    expect(selectDiffCodeLines(lines)).toEqual(['const a = 1', 'const b = 2', 'const c = 3'])
+  })
 })
 
 describe('highlightLine fallbacks (no grammar needed)', () => {
