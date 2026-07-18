@@ -1,6 +1,5 @@
 import {
   findStashFileForOffset,
-  getStashDiffSummary,
   getStashOverview,
   parseStashDiffFiles,
   parseStashFiles,
@@ -85,18 +84,6 @@ describe('log stash data', () => {
       ],
     })
     expect(parseStashFiles('\n src/a.ts \n\n')).toEqual(['src/a.ts'])
-  })
-
-  it('loads stash diff summary lines', async () => {
-    const git = {
-      raw: jest.fn().mockResolvedValue(' src/a.ts | 2 +-\n 1 file changed\n'),
-    }
-
-    await expect(getStashDiffSummary(git as never, 'stash@{0}')).resolves.toEqual([
-      ' src/a.ts | 2 +-',
-      ' 1 file changed',
-    ])
-    expect(git.raw).toHaveBeenCalledWith(['stash', 'show', '--stat', 'stash@{0}'])
   })
 
   describe('parseStashDiffFiles', () => {

@@ -526,24 +526,6 @@ describe('log Ink view model', () => {
     expect(state.showCommandPalette).toBe(true)
   })
 
-  it('defaults helpScrollOffset to 0 and resets it on toggleHelp', () => {
-    let state = createLogInkState(rows)
-    expect(state.helpScrollOffset).toBe(0)
-
-    // Simulate the user opening help, scrolling, then closing it.
-    state = applyLogInkAction(state, { type: 'toggleHelp' })
-    state = applyLogInkAction(state, { type: 'scrollHelp', delta: 5 })
-    expect(state.helpScrollOffset).toBe(5)
-    state = applyLogInkAction(state, { type: 'toggleHelp' })
-    // Closing clears the offset so the next open starts at the top.
-    expect(state.showHelp).toBe(false)
-    expect(state.helpScrollOffset).toBe(0)
-
-    // Reopening keeps offset at 0.
-    state = applyLogInkAction(state, { type: 'toggleHelp' })
-    expect(state.helpScrollOffset).toBe(0)
-  })
-
   it('toggles the view-keys strip and keeps it mutually exclusive with other overlays (#1137)', () => {
     let state = createLogInkState(rows)
     expect(state.showViewKeys).toBe(false)
@@ -573,17 +555,6 @@ describe('log Ink view model', () => {
     state = applyLogInkAction(state, { type: 'toggleViewKeys' })
     state = applyLogInkAction(state, { type: 'toggleFilterMode' })
     expect(state.showViewKeys).toBe(false)
-  })
-
-  it('scrollHelp floor-clamps at 0 (no negative offsets)', () => {
-    let state = createLogInkState(rows)
-    state = applyLogInkAction(state, { type: 'toggleHelp' })
-    state = applyLogInkAction(state, { type: 'scrollHelp', delta: -3 })
-    expect(state.helpScrollOffset).toBe(0)
-
-    state = applyLogInkAction(state, { type: 'scrollHelp', delta: 7 })
-    state = applyLogInkAction(state, { type: 'scrollHelp', delta: -100 })
-    expect(state.helpScrollOffset).toBe(0)
   })
 
   it('clears helpScrollOffset when opening filter mode or command palette', () => {
@@ -663,107 +634,31 @@ describe('log Ink view model', () => {
     expect(state.pendingConfirmationId).toBeUndefined()
   })
 
+  // Pure conflict-resolution proposal logic now lives in
+  // `conflictResolutionState.test.ts` alongside its extracted slice
+  // (#1723). This composition-root test stays here because dropping the
+  // session on navigation away from the conflicts view is behavior
+  // `applyLogInkAction` layers on top of the slice, not something the
+  // slice module itself owns.
   describe('AI conflict-resolution session (#1369)', () => {
-    const region = (index: number) => ({
-      index,
-      startLine: index * 10 + 1,
-      endLine: index * 10 + 5,
-      oursLabel: 'HEAD',
-      theirsLabel: 'feature/x',
-      ours: [`ours ${index}`],
-      theirs: [`theirs ${index}`],
-    })
-    const proposal = (index: number) => ({
-      regionIndex: index,
-      resolution: `resolved ${index}`,
-      rationale: 'combines both',
-      region: region(index),
-    })
-
-    function readyState() {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
-      state = applyLogInkAction(state, { type: 'setConflictResolutionLoading', path: 'src/app.ts' })
-      expect(state.conflictResolution?.status).toBe('loading')
-      state = applyLogInkAction(state, {
-        type: 'setConflictResolutionReady',
-        path: 'src/app.ts',
-        proposals: [proposal(0), proposal(1), proposal(2)],
-      })
-      return state
-    }
-
-    it('lands proposals as pending with the cursor on the first', () => {
-      const state = readyState()
-      expect(state.conflictResolution).toMatchObject({
-        path: 'src/app.ts',
-        status: 'ready',
-        selectedIndex: 0,
-      })
-      expect(state.conflictResolution?.proposals.map((p) => p.status))
-        .toEqual(['pending', 'pending', 'pending'])
-    })
-
-    it('marking a proposal advances the cursor to the next pending one', () => {
-      let state = readyState()
-      state = applyLogInkAction(state, {
-        type: 'setConflictProposalStatus',
-        regionIndex: 0,
-        status: 'accepted',
-      })
-      expect(state.conflictResolution?.proposals[0].status).toBe('accepted')
-      expect(state.conflictResolution?.selectedIndex).toBe(1)
-
-      // Rejecting the middle one skips to the last pending.
-      state = applyLogInkAction(state, {
-        type: 'setConflictProposalStatus',
-        regionIndex: 1,
-        status: 'rejected',
-      })
-      expect(state.conflictResolution?.selectedIndex).toBe(2)
-    })
-
-    it('an edit-accept records the replacement resolution text', () => {
-      let state = readyState()
-      state = applyLogInkAction(state, {
-        type: 'setConflictProposalStatus',
-        regionIndex: 1,
-        status: 'accepted',
-        resolution: 'hand-edited text',
-      })
-      expect(state.conflictResolution?.proposals[1]).toMatchObject({
-        status: 'accepted',
-        resolution: 'hand-edited text',
-      })
-    })
-
-    it('clamps proposal cursor movement', () => {
-      let state = readyState()
-      state = applyLogInkAction(state, { type: 'moveConflictProposal', delta: 5 })
-      expect(state.conflictResolution?.selectedIndex).toBe(2)
-      state = applyLogInkAction(state, { type: 'moveConflictProposal', delta: -9 })
-      expect(state.conflictResolution?.selectedIndex).toBe(0)
-    })
-
     it('drops the session on navigation away from the conflicts view', () => {
+      function readyState() {
+        let state = createLogInkState(rows)
+        state = applyLogInkAction(state, { type: 'pushView', value: 'conflicts' })
+        state = applyLogInkAction(state, {
+          type: 'setConflictResolutionReady',
+          path: 'src/app.ts',
+          proposals: [],
+        })
+        return state
+      }
+
       let state = readyState()
       state = applyLogInkAction(state, { type: 'pushView', value: 'history' })
       expect(state.conflictResolution).toBeUndefined()
 
       state = readyState()
       state = applyLogInkAction(state, { type: 'popView' })
-      expect(state.conflictResolution).toBeUndefined()
-    })
-
-    it('records the error state for the surface to render', () => {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, {
-        type: 'setConflictResolutionError',
-        path: 'src/app.ts',
-        error: 'rate limited',
-      })
-      expect(state.conflictResolution).toMatchObject({ status: 'error', error: 'rate limited' })
-      state = applyLogInkAction(state, { type: 'clearConflictResolution' })
       expect(state.conflictResolution).toBeUndefined()
     })
   })
@@ -925,31 +820,8 @@ describe('log Ink view model', () => {
         expect(state.rebasePlan?.selectedIndex).toBe(0)
       })
 
-      it('retags, rewords, and reorders the cursored row with clamping', () => {
-        let state = openPlan()
-        state = applyLogInkAction(state, { type: 'moveRebaseCursor', delta: 5 })
-        expect(state.rebasePlan?.selectedIndex).toBe(2)
-
-        state = applyLogInkAction(state, { type: 'setRebaseAction', action: 'fixup' })
-        expect(state.rebasePlan?.rows[2].action).toBe('fixup')
-
-        state = applyLogInkAction(state, { type: 'setRebaseRewordMessage', message: 'chore: reworded' })
-        expect(state.rebasePlan?.rows[2]).toMatchObject({ action: 'reword', newMessage: 'chore: reworded' })
-
-        // Retagging away from reword drops the stale message.
-        state = applyLogInkAction(state, { type: 'setRebaseAction', action: 'pick' })
-        expect(state.rebasePlan?.rows[2].newMessage).toBeUndefined()
-
-        state = applyLogInkAction(state, { type: 'moveRebaseRow', delta: -1 })
-        expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(['aaaaaaa', 'ccccccc', 'bbbbbbb'])
-        expect(state.rebasePlan?.selectedIndex).toBe(1)
-
-        // Reorder off either edge is a no-op.
-        state = applyLogInkAction(state, { type: 'moveRebaseCursor', delta: -5 })
-        const before = state.rebasePlan?.rows.map((r) => r.shortSha)
-        state = applyLogInkAction(state, { type: 'moveRebaseRow', delta: -1 })
-        expect(state.rebasePlan?.rows.map((r) => r.shortSha)).toEqual(before)
-      })
+      // Pure retag/reword/reorder field logic now lives in
+      // `rebasePlanState.test.ts` alongside its extracted slice (#1723).
 
       it('clears the plan on lateral navigation and on popView — a stale plan must never execute', () => {
         let state = openPlan()
@@ -2133,144 +2005,9 @@ describe('log Ink view model', () => {
     })
   })
 
-  describe('split-plan overlay state (#907)', () => {
-    const mockPlan = {
-      groups: [
-        { title: 'feat: foo', files: ['src/foo.ts'], hunks: [] },
-        { title: 'feat: bar', files: ['src/bar.ts'], hunks: [] },
-      ],
-    }
-    const mockPlanContext = {
-      changes: { staged: [], unstaged: [], untracked: [] },
-      hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any
-
-    it('startSplitPlanLoad opens the overlay in loading state', () => {
-      let state = createLogInkState(rows)
-      expect(state.splitPlan).toBeUndefined()
-
-      state = applyLogInkAction(state, { type: 'startSplitPlanLoad' })
-      expect(state.splitPlan).toEqual({ status: 'loading', scrollOffset: 0 })
-    })
-
-    it('setSplitPlanReady populates the plan and resets scroll', () => {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'startSplitPlanLoad' })
-      state = applyLogInkAction(state, {
-        type: 'setSplitPlanReady',
-        plan: mockPlan,
-        planContext: mockPlanContext,
-      })
-
-      expect(state.splitPlan).toEqual({
-        status: 'ready',
-        plan: mockPlan,
-        planContext: mockPlanContext,
-        scrollOffset: 0,
-      })
-    })
-
-    it('setSplitPlanReady carries dedupeWarnings onto splitPlan state (#1462)', () => {
-      const dedupeWarnings = [
-        {
-          kind: 'file' as const,
-          id: 'docs/page.tsx',
-          keptGroupIndex: 0,
-          keptGroupTitle: 'feat: docs',
-          droppedGroupIndices: [1],
-          droppedGroupTitles: ['chore: misc'],
-        },
-      ]
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, {
-        type: 'setSplitPlanReady',
-        plan: mockPlan,
-        planContext: mockPlanContext,
-        dedupeWarnings,
-      })
-
-      expect(state.splitPlan?.dedupeWarnings).toEqual(dedupeWarnings)
-    })
-
-    it('setSplitPlanApplying preserves plan + context, transitions status', () => {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, {
-        type: 'setSplitPlanReady',
-        plan: mockPlan,
-        planContext: mockPlanContext,
-      })
-      state = applyLogInkAction(state, { type: 'setSplitPlanApplying' })
-
-      expect(state.splitPlan?.status).toBe('applying')
-      // Plan + context preserved so the overlay can keep rendering
-      // the same content during the apply phase.
-      expect(state.splitPlan?.plan).toEqual(mockPlan)
-      expect(state.splitPlan?.planContext).toEqual(mockPlanContext)
-    })
-
-    it('setSplitPlanError keeps the overlay open when a plan exists', () => {
-      // Apply failed mid-flight — we keep the overlay open so the user
-      // can retry or back out. Status flips back to 'ready' (no longer
-      // applying), with the error annotated for the renderer.
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, {
-        type: 'setSplitPlanReady',
-        plan: mockPlan,
-        planContext: mockPlanContext,
-      })
-      state = applyLogInkAction(state, { type: 'setSplitPlanApplying' })
-      state = applyLogInkAction(state, { type: 'setSplitPlanError', error: 'patch conflict' })
-
-      expect(state.splitPlan?.status).toBe('ready')
-      expect(state.splitPlan?.error).toBe('patch conflict')
-      expect(state.splitPlan?.plan).toEqual(mockPlan)
-    })
-
-    it('setSplitPlanError closes the overlay when no plan exists', () => {
-      // Initial generation failed — nothing to retry from, close out.
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'startSplitPlanLoad' })
-      state = applyLogInkAction(state, { type: 'setSplitPlanError', error: 'LLM unreachable' })
-
-      expect(state.splitPlan).toBeUndefined()
-    })
-
-    it('pageSplitPlan scrolls within the line-count bounds', () => {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, {
-        type: 'setSplitPlanReady',
-        plan: mockPlan,
-        planContext: mockPlanContext,
-      })
-
-      state = applyLogInkAction(state, { type: 'pageSplitPlan', delta: 5, lineCount: 20 })
-      expect(state.splitPlan?.scrollOffset).toBe(5)
-
-      // Clamps to 0 on overshoot the other way.
-      state = applyLogInkAction(state, { type: 'pageSplitPlan', delta: -100, lineCount: 20 })
-      expect(state.splitPlan?.scrollOffset).toBe(0)
-
-      // Clamps to lineCount-1 on overshoot upward.
-      state = applyLogInkAction(state, { type: 'pageSplitPlan', delta: 999, lineCount: 20 })
-      expect(state.splitPlan?.scrollOffset).toBe(19)
-    })
-
-    it('clearSplitPlan closes the overlay regardless of phase', () => {
-      let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'startSplitPlanLoad' })
-      state = applyLogInkAction(state, { type: 'clearSplitPlan' })
-      expect(state.splitPlan).toBeUndefined()
-
-      state = applyLogInkAction(state, {
-        type: 'setSplitPlanReady',
-        plan: mockPlan,
-        planContext: mockPlanContext,
-      })
-      state = applyLogInkAction(state, { type: 'clearSplitPlan' })
-      expect(state.splitPlan).toBeUndefined()
-    })
-  })
+  // Pure split-plan overlay logic now lives in `splitPlanState.test.ts`
+  // alongside its extracted slice (#1723 / originally #907) — none of
+  // it depends on composition-root behavior, so nothing stays here.
 
   describe('recent-commit markers', () => {
     it('markRecentCommits records the hash list with the action-supplied timestamp', () => {

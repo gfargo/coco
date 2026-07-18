@@ -34,7 +34,7 @@ src/
 │   ├── providerData.ts       ← Provider URL builders (GitHub, GitLab, Bitbucket)
 │   ├── providerActions.ts    ← `openProviderUrl` (xdg-open / `open`)
 │   ├── worktreeData.ts       ← `getWorktreeListOverview`, WorktreeEntry
-│   ├── worktreeActions.ts    ← `createWorktree`, `removeWorktree`
+│   ├── worktreeActions.ts    ← `removeWorktree`, `removeWorktreeAndBranch`
 │   ├── worktreeDiffData.ts   ← Per-worktree file diff
 │   ├── compareData.ts        ← `getCompareDiff` for `m`-mark cross-view ref compare
 │   ├── historyActions.ts     ← Cherry-pick, revert, reset, rebase, copy-hash

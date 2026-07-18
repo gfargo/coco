@@ -36,21 +36,6 @@ export function createLightweightTag(
   )
 }
 
-export function createAnnotatedTag(
-  git: SimpleGit,
-  tagName: string,
-  target: string,
-  message: string
-): Promise<TagActionResult> {
-  const nameError = rejectFlagLike(tagName, `Tag name '${tagName}'`)
-  if (nameError) return Promise.resolve({ ok: false, message: nameError })
-
-  return runAction(
-    () => git.raw(['tag', '-a', tagName, target, '-m', message]),
-    `Created annotated tag ${tagName}`
-  )
-}
-
 export function deleteLocalTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
   const nameError = rejectFlagLike(tagName, `Tag name '${tagName}'`)
   if (nameError) return Promise.resolve({ ok: false, message: nameError })
