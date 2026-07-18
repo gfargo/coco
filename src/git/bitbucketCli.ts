@@ -1,10 +1,11 @@
 import { SimpleGit } from 'simple-git'
 import {
   GH_DEFAULT_TIMEOUT_MS,
-  parseRemoteUrl,
+  resolveForgeProject,
   type GhActionError,
   type GhStatus,
 } from './githubCli'
+import { compactCliError, resolveForgeActionError } from './forgeErrors'
 
 /**
  * Bitbucket workspace / repo coordinates parsed from a remote URL. `owner` is
@@ -36,6 +37,15 @@ export type BitbucketRunner = (
 ) => Promise<string>
 
 export const BITBUCKET_API_BASE = 'https://api.bitbucket.org/2.0'
+
+/**
+ * Escape a user-controlled value for safe interpolation inside a BBQL
+ * double-quoted string literal (backslash first, then quote — order matters
+ * so an existing backslash isn't re-escaped by the quote pass).
+ */
+export function bbqlQuote(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
 
 function buildAuthHeaders(): Record<string, string> {
   const token = process.env.BITBUCKET_ACCESS_TOKEN
@@ -86,20 +96,7 @@ export async function defaultBitbucketRunner(
 
 /** Parse the Bitbucket workspace/slug from the repo's origin remote (else first). */
 export async function getBitbucketProject(git: SimpleGit): Promise<BitbucketProject | undefined> {
-  const remotes = await git.getRemotes(true)
-  const remote = remotes.find((r) => r.name === 'origin') || remotes[0]
-  const url = remote?.refs.push || remote?.refs.fetch
-  if (!url) return undefined
-
-  const parsed = parseRemoteUrl(url)
-  if (!parsed) return undefined
-
-  return {
-    owner: parsed.owner,
-    name: parsed.name,
-    path: parsed.owner ? `${parsed.owner}/${parsed.name}` : parsed.name,
-    host: parsed.host,
-  }
+  return resolveForgeProject(git)
 }
 
 /**
@@ -149,36 +146,30 @@ export function describeBitbucketStatus(status: GhStatus): string {
   }
 }
 
+/**
+ * Compact a multi-line Bitbucket error into a head line plus bounded detail
+ * lines. Thin wrapper over the shared `compactCliError`, mirroring
+ * `compactGhError` / `compactGlabError`. Bitbucket errors have no
+ * `Command failed:`-prefixed argv echo (they come from `fetch`, not
+ * `execFile`), so that filter is inert here.
+ */
 export function compactBitbucketError(message: string): GhActionError {
-  const lines = message
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-  return {
-    message: lines[0] || 'Bitbucket API call failed.',
-    details: lines.slice(1, 8),
-  }
+  return compactCliError(message, { fallback: 'Bitbucket API call failed.' })
 }
 
 /**
  * Turn a thrown Bitbucket error into a user-facing message, re-probing auth
  * on the error path so a mid-session credential expiry yields the recovery hint
- * instead of raw HTTP error output. Mirrors `resolveGlabActionError`.
+ * instead of raw HTTP error output. Mirrors `resolveGlabActionError` via the
+ * shared `resolveForgeActionError` scaffold.
  */
 export async function resolveBitbucketActionError(
   error: unknown,
   runner: BitbucketRunner
 ): Promise<GhActionError> {
-  const raw = (error as Error)?.message || 'Bitbucket API call failed.'
-
-  try {
-    const status = await getBitbucketStatus(runner)
-    if (status.kind !== 'ok') {
-      return { message: describeBitbucketStatus(status) }
-    }
-  } catch {
-    // Auth probe itself failed; fall back to the raw error.
-  }
-
-  return compactBitbucketError(raw)
+  return resolveForgeActionError(error, {
+    probe: () => getBitbucketStatus(runner),
+    describe: describeBitbucketStatus,
+    fallback: 'Bitbucket API call failed.',
+  })
 }

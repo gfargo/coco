@@ -1,4 +1,5 @@
 import { GitCommitDetail, GitLogRow, getCommitRows } from '../../git/logData'
+import { cellWidth, padCells, truncateCells } from '../../workstation/chrome/text'
 import { LogFormat } from './config'
 
 const DEFAULT_TERMINAL_WIDTH = 120
@@ -8,27 +9,11 @@ type RenderOptions = {
 }
 
 function truncate(value: string, width: number): string {
-  if (width < 1) {
-    return ''
-  }
-
-  if (value.length <= width) {
-    return value
-  }
-
-  if (width <= 3) {
-    return value.slice(0, width)
-  }
-
-  return `${value.slice(0, width - 3)}...`
-}
-
-function pad(value: string, width: number): string {
-  return value.padEnd(width, ' ')
+  return truncateCells(value, width, { ascii: true })
 }
 
 function maxLength(values: string[], minimum: number): number {
-  return values.reduce((max, value) => Math.max(max, value.length), minimum)
+  return values.reduce((max, value) => Math.max(max, cellWidth(value)), minimum)
 }
 
 function getTerminalWidth(options?: RenderOptions): number {
@@ -65,20 +50,20 @@ export function formatLogTable(rows: GitLogRow[], options?: RenderOptions): stri
     const messageWidth = Math.max(24, terminalWidth - baseWidth - refText.length)
 
     return [
-      pad(row.graph || '*', graphWidth),
-      pad(row.shortHash, 9),
-      pad(row.date, 10),
-      pad(truncate(row.author, authorWidth), authorWidth),
+      padCells(row.graph || '*', graphWidth),
+      padCells(row.shortHash, 9),
+      padCells(row.date, 10),
+      padCells(truncate(row.author, authorWidth), authorWidth),
       `${truncate(row.message, messageWidth)}${refText}`,
     ].join('  ')
   })
 
   return [
     [
-      pad('Graph', graphWidth),
-      pad('Commit', 9),
-      pad('Date', 10),
-      pad('Author', authorWidth),
+      padCells('Graph', graphWidth),
+      padCells('Commit', 9),
+      padCells('Date', 10),
+      padCells('Author', authorWidth),
       'Message',
     ].join('  '),
     ...renderedRows,

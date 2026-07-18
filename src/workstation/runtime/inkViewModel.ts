@@ -55,7 +55,7 @@ import {
     CommitComposeState,
     applyCommitComposeAction,
     createCommitComposeState,
-} from '../../commands/log/commitCompose'
+} from './commitCompose'
 import {
     cycleIssueFilterPreset,
     cyclePullRequestFilterPreset,

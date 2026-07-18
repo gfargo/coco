@@ -1,6 +1,7 @@
 import { GitCommitDetail, GitLogRow } from '../../git/logData'
 import { createLogTuiState } from './interactiveState'
 import { renderInteractiveLog } from './interactive'
+import { cellWidth } from '../chrome/text'
 import { BranchOverview } from '../../git/branchData'
 import { PullRequestOverview } from '../../git/pullRequestData'
 import { TagOverview, TagRangeSummary } from '../../git/tagData'
@@ -747,5 +748,50 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Focus: status')
     expect(output).toContain('>  M unstaged.ts')
     expect(output).toContain('Pending revert: press Z to revert unstaged.ts')
+  })
+
+  it('pads the author column by cell width so wide-glyph (CJK) names stay aligned (#1624)', () => {
+    const wideRows: GitLogRow[] = [
+      {
+        type: 'commit',
+        graph: '*',
+        shortHash: 'aaa1111',
+        hash: 'aaa1111',
+        parents: [],
+        date: '2026-05-01',
+        author: 'Ada Lovelace',
+        refs: [],
+        message: 'alpha-message',
+      },
+      {
+        type: 'commit',
+        graph: '*',
+        shortHash: 'bbb2222',
+        hash: 'bbb2222',
+        parents: [],
+        date: '2026-05-02',
+        author: '李雷',
+        refs: [],
+        message: 'beta-message',
+      },
+    ]
+
+    const output = renderInteractiveLog(createLogTuiState(wideRows), undefined, undefined, undefined, undefined, undefined, undefined, {}, {
+      height: 70,
+      width: 140,
+    })
+
+    const lines = output.split('\n')
+    const asciiLine = lines.find((line) => line.includes('alpha-message'))
+    const cjkLine = lines.find((line) => line.includes('beta-message'))
+
+    if (!asciiLine || !cjkLine) {
+      throw new Error('expected both rendered commit rows to be present')
+    }
+
+    const prefixWidth = (line: string, marker: string) =>
+      cellWidth(line.slice(0, line.indexOf(marker)))
+
+    expect(prefixWidth(cjkLine, 'beta-message')).toBe(prefixWidth(asciiLine, 'alpha-message'))
   })
 })

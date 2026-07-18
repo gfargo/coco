@@ -1,12 +1,13 @@
 import { SimpleGit } from 'simple-git'
 import {
+  bbqlQuote,
   describeBitbucketStatus,
   getBitbucketProject,
   getBitbucketStatus,
   type BitbucketRunner,
   defaultBitbucketRunner,
 } from './bitbucketCli'
-import { loadForgeList, loadForgeOverview } from './forgeLoad'
+import { loadForgeList, loadForgeOverview, paginate } from './forgeLoad'
 import type { IssueListFilter, IssueListItem, IssueListOverview } from './issuesListData'
 import type {
   PullRequestListFilter,
@@ -69,20 +70,17 @@ async function fetchAllPages<T>(
   resource: string,
   want: number
 ): Promise<T[]> {
-  const acc: T[] = []
-  let page = 1
   const pagelen = Math.min(want, 50)
-
-  while (acc.length < want && page <= 100) {
-    const sep = baseEndpoint.includes('?') ? '&' : '?'
-    const out = await runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`)
-    const result = parsePage<T>(out, resource)
-    acc.push(...result.values)
-    if (result.values.length < pagelen || !result.next) break
-    page += 1
-  }
-
-  return acc.slice(0, want)
+  const sep = baseEndpoint.includes('?') ? '&' : '?'
+  return paginate({
+    fetchPage: (page) => runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`),
+    parsePage: (output) => {
+      const result = parsePage<T>(output, resource)
+      return { items: result.values, hasMore: result.values.length >= pagelen && Boolean(result.next) }
+    },
+    want,
+    maxPages: 100,
+  })
 }
 
 function normalizeState(raw: unknown): string {
@@ -110,6 +108,19 @@ function nicknamesOf(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined
   const names = value.map(nicknameOf).filter((n): n is string => Boolean(n))
   return names.length ? names : undefined
+}
+
+/**
+ * Resolve the '@me' filter sentinel to the authenticated user's Bitbucket
+ * nickname via GET /user. Author/assignee fields elsewhere in this file are
+ * already keyed off `nickname` (see `nicknameOf`), so this keeps '@me'
+ * comparisons consistent with the rest of the mapping.
+ */
+async function resolveBitbucketMeNickname(runner: BitbucketRunner): Promise<string | undefined> {
+  const out = (await runner('user')).trim()
+  if (!out) return undefined
+  const raw = JSON.parse(out) as Record<string, unknown>
+  return nicknameOf(raw)
 }
 
 type RawBitbucketPR = Record<string, unknown>
@@ -159,12 +170,12 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
   // 'all' and undefined: omit state param — returns all PRs.
 
   if (filter.head) {
-    const headQ = `source.branch.name = "${filter.head}"`
+    const headQ = `source.branch.name = "${bbqlQuote(filter.head)}"`
     params.q = params.q ? `(${params.q}) AND ${headQ}` : headQ
   }
 
   if (filter.base) {
-    const baseQ = `destination.branch.name = "${filter.base}"`
+    const baseQ = `destination.branch.name = "${bbqlQuote(filter.base)}"`
     params.q = params.q ? `(${params.q}) AND ${baseQ}` : baseQ
   }
 
@@ -229,14 +240,24 @@ export async function getBitbucketPullRequestList(
 
       if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
 
+      const wantsMe = filter.author === '@me' || filter.assignee === '@me'
+      const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
+      if (wantsMe && !me) {
+        throw new Error(
+          'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
+        )
+      }
+
       if (filter.author) {
-        const authorFilter = filter.author
+        const authorFilter = filter.author === '@me' ? me : filter.author
         pullRequests = pullRequests.filter((pr) => pr.author === authorFilter)
       }
 
       if (filter.assignee) {
-        const assigneeFilter = filter.assignee
-        pullRequests = pullRequests.filter((pr) => pr.assignees?.includes(assigneeFilter))
+        const assigneeFilter = filter.assignee === '@me' ? me : filter.assignee
+        pullRequests = pullRequests.filter(
+          (pr) => assigneeFilter !== undefined && pr.assignees?.includes(assigneeFilter)
+        )
       }
 
       return { pullRequests: pullRequests.map(sanitizePullRequestListItem) }
@@ -283,15 +304,15 @@ function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
   }
 
   if (filter.assignee && filter.assignee !== '@me') {
-    q.push(`assignee.nickname = "${filter.assignee}"`)
+    q.push(`assignee.nickname = "${bbqlQuote(filter.assignee)}"`)
   }
 
   if (filter.author && filter.author !== '@me') {
-    q.push(`reporter.nickname = "${filter.author}"`)
+    q.push(`reporter.nickname = "${bbqlQuote(filter.author)}"`)
   }
 
   if (filter.search) {
-    q.push(`title ~ "${filter.search}"`)
+    q.push(`title ~ "${bbqlQuote(filter.search)}"`)
   }
 
   const pairs: string[] = []
@@ -322,7 +343,7 @@ export async function getBitbucketIssueList(
         want
       )
 
-      const issues = raw.map((issue) => {
+      let issues = raw.map((issue) => {
         const links = issue.links as Record<string, unknown> | undefined
         const htmlLink = links?.html as Record<string, unknown> | undefined
         const assignee = issue.assignee as Record<string, unknown> | undefined
@@ -340,6 +361,22 @@ export async function getBitbucketIssueList(
           updatedAt: String(issue.updated_on || ''),
         } as IssueListItem
       })
+
+      const wantsMe = filter.author === '@me' || filter.assignee === '@me'
+      const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
+      if (wantsMe && !me) {
+        throw new Error(
+          'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
+        )
+      }
+
+      if (filter.author === '@me') {
+        issues = issues.filter((issue) => issue.author === me)
+      }
+
+      if (filter.assignee === '@me') {
+        issues = issues.filter((issue) => issue.assignees?.includes(me as string))
+      }
 
       return { issues: issues.map(sanitizeIssueListItem) }
     },
@@ -391,7 +428,7 @@ export async function getBitbucketPullRequestOverview(
     repository: (project) => ({ owner: project.owner, name: project.name }),
     requireCurrentBranch: true,
     fetch: async (project, currentBranch) => {
-      const q = encodeURIComponent(`source.branch.name = "${currentBranch}" AND state = "OPEN"`)
+      const q = encodeURIComponent(`source.branch.name = "${bbqlQuote(currentBranch ?? '')}" AND state = "OPEN"`)
       const out = (await runner(`repositories/${project.path}/pullrequests?q=${q}&pagelen=1`)).trim()
       const page = out ? JSON.parse(out) as { values?: RawBitbucketPR[] } : undefined
       const pr = page?.values?.[0]
@@ -411,4 +448,5 @@ export const __test = {
   parseIssues,
   normalizeState,
   normalizeIssueState,
+  resolveBitbucketMeNickname,
 }

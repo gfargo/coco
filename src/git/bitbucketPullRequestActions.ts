@@ -1,4 +1,4 @@
-import { defaultBitbucketRunner, resolveBitbucketActionError, type BitbucketRunner } from './bitbucketCli'
+import { bbqlQuote, defaultBitbucketRunner, resolveBitbucketActionError, type BitbucketRunner } from './bitbucketCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
 
@@ -227,7 +227,7 @@ async function findCurrentBranchPR(
   runner: BitbucketRunner
 ): Promise<{ id: number } | undefined> {
   try {
-    const q = encodeURIComponent(`source.branch.name = "${currentBranch}" AND state = "OPEN"`)
+    const q = encodeURIComponent(`source.branch.name = "${bbqlQuote(currentBranch)}" AND state = "OPEN"`)
     const out = (await runner(`repositories/${projectPath}/pullrequests?q=${q}&pagelen=1`)).trim()
     const page = out ? JSON.parse(out) as { values?: Array<{ id?: number }> } : undefined
     const pr = page?.values?.[0]
