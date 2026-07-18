@@ -37,6 +37,15 @@ export type BitbucketRunner = (
 
 export const BITBUCKET_API_BASE = 'https://api.bitbucket.org/2.0'
 
+/**
+ * Escape a user-controlled value for safe interpolation inside a BBQL
+ * double-quoted string literal (backslash first, then quote — order matters
+ * so an existing backslash isn't re-escaped by the quote pass).
+ */
+export function bbqlQuote(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 function buildAuthHeaders(): Record<string, string> {
   const token = process.env.BITBUCKET_ACCESS_TOKEN
   if (token) return { Authorization: `Bearer ${token}` }
