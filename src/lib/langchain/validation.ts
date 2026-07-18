@@ -106,13 +106,21 @@ export function validateModel(
   // Retired/superseded ids (see `DEPRECATED_MODELS`) 404 against the provider's
   // API — catch them here, before the network call, instead of letting the
   // request fail mid-generation with a cryptic provider error.
-  const replacement = getDeprecatedReplacement(model)
-  if (replacement) {
-    throw new LangChainValidationError(
-      `${functionName ? `${functionName}: ` : ''}Model '${model}' has been retired and is no longer available. ` +
-        `Update service.model to '${replacement}', or run 'coco doctor' to apply the fix automatically.`,
-      { model, provider, replacement, functionName }
-    )
+  //
+  // Azure `model` doubles as the user-named deployment (see azure.ts:
+  // azureOpenAIApiDeploymentName: svc.deploymentName || model). Deployment
+  // names are user-defined and Azure's retirement schedule differs from the
+  // first-party OpenAI API, so a deprecated-looking id may be a live
+  // deployment — don't hard-block it here (coco doctor still warns).
+  if (provider !== 'azure') {
+    const replacement = getDeprecatedReplacement(model)
+    if (replacement) {
+      throw new LangChainValidationError(
+        `${functionName ? `${functionName}: ` : ''}Model '${model}' has been retired and is no longer available. ` +
+          `Update service.model to '${replacement}', or run 'coco doctor' to apply the fix automatically.`,
+        { model, provider, replacement, functionName }
+      )
+    }
   }
 }
 
