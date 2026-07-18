@@ -321,6 +321,17 @@ function mrToPullRequestInfo(mr: Record<string, unknown>): PullRequestInfo {
   }
 }
 
+/** Fetch the open GitLab merge request whose source branch is `branch`, if any. */
+export async function findOpenMergeRequestForBranch(
+  projectPath: string,
+  branch: string,
+  runner: GlabRunner
+): Promise<Record<string, unknown> | undefined> {
+  const endpoint = `projects/${encodeProjectPath(projectPath)}/merge_requests?source_branch=${encodeURIComponent(branch)}&state=opened`
+  const out = (await runner(['api', endpoint])).trim()
+  return (out ? (JSON.parse(out) as Array<Record<string, unknown>>) : [])[0]
+}
+
 /**
  * Current-branch merge-request overview — the glab counterpart to
  * `getPullRequestOverview`, for the single-PR (`g p`) surface. Resolves the open
@@ -340,9 +351,7 @@ export async function getMergeRequestOverview(
     repository: (project) => ({ owner: project.owner, name: project.name }),
     requireCurrentBranch: true,
     fetch: async (project, currentBranch) => {
-      const endpoint = `projects/${encodeProjectPath(project.path)}/merge_requests?source_branch=${encodeURIComponent(currentBranch as string)}&state=opened`
-      const out = (await runner(['api', endpoint])).trim()
-      const mr = (out ? (JSON.parse(out) as Array<Record<string, unknown>>) : [])[0]
+      const mr = await findOpenMergeRequestForBranch(project.path, currentBranch as string, runner)
       return {
         currentPullRequest: mr ? sanitizePullRequestInfo(mrToPullRequestInfo(mr)) : undefined,
         ...(mr ? {} : { message: `No merge request found for ${currentBranch}.` }),
