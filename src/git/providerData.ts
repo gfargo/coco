@@ -5,6 +5,7 @@ import {
   getGhStatus,
   parseGitHubRemoteUrl as parseGitHubRemoteUrlBase,
   parseRemoteUrl,
+  resolveDefaultRemote,
   type GhRunner,
   defaultGhRunner,
 } from './githubCli'
@@ -156,10 +157,8 @@ export function getProviderRepository(remoteName: string, remoteUrl: string): Pr
 export async function getProviderRepositoryForGit(
   git: SimpleGit
 ): Promise<ProviderRepository | undefined> {
-  const remotes = await git.getRemotes(true)
-  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
-  const url = remote?.refs.push || remote?.refs.fetch
-  return url ? getProviderRepository(remote.name, url) : undefined
+  const resolved = await resolveDefaultRemote(git)
+  return resolved ? getProviderRepository(resolved.name, resolved.url) : undefined
 }
 
 export type GitHubRepositoryWithHost = {
@@ -489,8 +488,8 @@ export async function getProviderOverview(
   glabRunner: GlabRunner = defaultGlabRunner,
   bitbucketRunner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<ProviderOverview> {
-  const [remotes, currentBranchOutput, localDefaultBranch] = await Promise.all([
-    git.getRemotes(true),
+  const [resolvedRepository, currentBranchOutput, localDefaultBranch] = await Promise.all([
+    getProviderRepositoryForGit(git),
     git.raw(['branch', '--show-current']),
     // Read local default-branch signal up-front in parallel — used as
     // the fallback when gh is unavailable / unauthenticated / can't see
@@ -498,15 +497,11 @@ export async function getProviderOverview(
     // GH-specific paths layer on top of this, they don't replace it.
     detectLocalDefaultBranch(git),
   ])
-  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
-  const remoteUrl = remote?.refs.push || remote?.refs.fetch
-  const repository = remoteUrl
-    ? getProviderRepository(remote.name, remoteUrl)
-    : {
-      provider: 'unsupported' as const,
-      remote: 'origin',
-      message: 'No Git remote detected.',
-    }
+  const repository = resolvedRepository ?? {
+    provider: 'unsupported' as const,
+    remote: 'origin',
+    message: 'No Git remote detected.',
+  }
   const currentBranch = currentBranchOutput.trim() || undefined
 
   if (repository.provider === 'gitlab') {
