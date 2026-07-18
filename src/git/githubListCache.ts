@@ -1,6 +1,4 @@
-import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 
 import type { IssueListItem, IssueListFilter } from './issuesListData'
@@ -8,6 +6,7 @@ import type {
   PullRequestListItem,
   PullRequestListFilter,
 } from './pullRequestListData'
+import { cacheKeyHash, getCocoCacheDir } from '../lib/utils/cocoPaths'
 
 /**
  * Disk-backed cache for `coco issues` / `coco prs` list fetches
@@ -66,24 +65,6 @@ export type CacheReadResult<T extends CachedList> = {
   fresh: boolean
 }
 
-function resolveCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  if (xdg && xdg.trim().length > 0) {
-    return path.join(xdg, 'coco', CACHE_DIR_NAME)
-  }
-  return path.join(os.homedir(), '.cache', 'coco', CACHE_DIR_NAME)
-}
-
-function shortHash(input: string): string {
-  // sha1 here is a non-security cache-key derivation — we just need a
-  // deterministic short identifier so two repos / filters at different
-  // values never collide in the cache directory. No PII or auth
-  // context is hashed and no collision-resistance against an adversary
-  // is required.
-  // DevSkim: ignore DS126858
-  return crypto.createHash('sha1').update(input).digest('hex').slice(0, 16)
-}
-
 /**
  * Canonicalize the filter object into a stable string before hashing.
  * Sorts keys + drops undefined entries so equivalent filters
@@ -104,9 +85,9 @@ export function getCachePath(
   repoPath: string,
   filter: IssueListFilter | PullRequestListFilter
 ): string {
-  const repoHash = shortHash(repoPath)
-  const filterHash = shortHash(canonicalizeFilter(filter))
-  return path.join(resolveCacheDir(), `${kind}.${repoHash}.${filterHash}.json`)
+  const repoHash = cacheKeyHash(repoPath)
+  const filterHash = cacheKeyHash(canonicalizeFilter(filter))
+  return path.join(getCocoCacheDir(CACHE_DIR_NAME), `${kind}.${repoHash}.${filterHash}.json`)
 }
 
 export function readCachedList<T extends CachedList>(
@@ -163,7 +144,7 @@ export function writeCachedList<T extends CachedList>(
  * never-populated cache directory is treated as success.
  */
 export function clearGitHubListCache(): { removed: number } {
-  const dir = resolveCacheDir()
+  const dir = getCocoCacheDir(CACHE_DIR_NAME)
   let removed = 0
   try {
     const entries = fs.readdirSync(dir)

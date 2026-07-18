@@ -1,10 +1,9 @@
-import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { GitLogRow } from '../../git/logData'
 import { writeFileAtomic } from '../../lib/utils/atomicFileWrite'
+import { cacheKeyHash, getCocoCacheDir } from '../../lib/utils/cocoPaths'
 
 /**
  * Per-repo disk cache of the last successful commit-log fetch (#808).
@@ -39,26 +38,8 @@ type CacheEnvelope = {
   rows: GitLogRow[]
 }
 
-function resolveCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  if (xdg && xdg.trim().length > 0) {
-    return path.join(xdg, 'coco', CACHE_DIR_NAME)
-  }
-  return path.join(os.homedir(), '.cache', 'coco', CACHE_DIR_NAME)
-}
-
-function repoKey(repoPath: string): string {
-  // sha1 here is a non-security cache-key derivation — we just need a
-  // deterministic short identifier for the cache filename so two repos
-  // at different paths never collide. No PII or auth context is hashed
-  // and no collision-resistance against an adversary is required.
-  // DevSkim DS126858 doesn't apply.
-  // DevSkim: ignore DS126858
-  return crypto.createHash('sha1').update(repoPath).digest('hex').slice(0, 16)
-}
-
 export function getOverviewCachePath(repoPath: string): string {
-  return path.join(resolveCacheDir(), `commits.${repoKey(repoPath)}.json`)
+  return path.join(getCocoCacheDir(CACHE_DIR_NAME), `commits.${cacheKeyHash(repoPath)}.json`)
 }
 
 export function readCachedCommits(repoPath: string): GitLogRow[] | undefined {

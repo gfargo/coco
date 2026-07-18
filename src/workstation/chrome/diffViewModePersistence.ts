@@ -1,9 +1,8 @@
-import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { LogInkDiffViewMode } from '../../workstation/runtime/inkViewModel'
+import { cacheKeyHash, getCocoCacheDir } from '../../lib/utils/cocoPaths'
 
 /**
  * Persist the user's preferred diff view mode (unified vs side-by-side
@@ -14,24 +13,8 @@ import { LogInkDiffViewMode } from '../../workstation/runtime/inkViewModel'
 
 const VALID_MODES: ReadonlyArray<LogInkDiffViewMode> = ['unified', 'split']
 
-function resolveCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  if (xdg && xdg.trim().length > 0) {
-    return path.join(xdg, 'coco')
-  }
-  return path.join(os.homedir(), '.cache', 'coco')
-}
-
-function repoKey(repoPath: string): string {
-  // sha1 is used here as a non-security cache-key derivation — we just
-  // need a deterministic short identifier for the marker filename. No
-  // PII or auth context is hashed.
-  // DevSkim: ignore DS126858
-  return crypto.createHash('sha1').update(repoPath).digest('hex').slice(0, 16)
-}
-
 export function getDiffViewModeMarkerPath(repoPath: string): string {
-  return path.join(resolveCacheDir(), `diff-view-mode.${repoKey(repoPath)}`)
+  return path.join(getCocoCacheDir(), `diff-view-mode.${cacheKeyHash(repoPath)}`)
 }
 
 export function getSavedDiffViewMode(repoPath: string): LogInkDiffViewMode | undefined {
