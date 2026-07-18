@@ -4,13 +4,14 @@ import { SimpleGit } from 'simple-git'
 import {
   GH_DEFAULT_TIMEOUT_MS,
   GH_MAX_BUFFER_BYTES,
-  parseRemoteUrl,
+  resolveForgeProject,
   type GhActionError,
   type GhRunOptions,
   type GhRunner,
   type GhStatus,
 } from './githubCli'
 import type { ForgeActionResult } from './pullRequestActions'
+import { compactCliError, resolveForgeActionError } from './forgeErrors'
 
 const execFileAsync = promisify(execFile)
 
@@ -53,20 +54,7 @@ export async function defaultGlabRunner(
 
 /** Parse the GitLab project from the repo's `origin` remote (else first), or undefined. */
 export async function getGitLabProject(git: SimpleGit): Promise<GitLabProject | undefined> {
-  const remotes = await git.getRemotes(true)
-  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
-  const url = remote?.refs.push || remote?.refs.fetch
-  if (!url) return undefined
-
-  const parsed = parseRemoteUrl(url)
-  if (!parsed) return undefined
-
-  return {
-    owner: parsed.owner,
-    name: parsed.name,
-    path: parsed.owner ? `${parsed.owner}/${parsed.name}` : parsed.name,
-    host: parsed.host,
-  }
+  return resolveForgeProject(git)
 }
 
 /**
@@ -113,27 +101,19 @@ export function describeGlabStatus(status: GhStatus): string {
   }
 }
 
-/** Compact a multi-line glab error into a head line plus bounded detail lines. */
+/**
+ * Compact a multi-line glab error into a head line plus bounded detail lines.
+ * Thin wrapper over the shared `compactCliError`, mirroring `compactGhError`.
+ */
 export function compactGlabError(message: string): GhActionError {
-  const lines = message
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    // execFile prefixes its message with the echoed argv ("Command failed:
-    // glab mr create --description=<full MR body>"), which names no failure
-    // reason and buries glab's stderr past the 8-line cap. Drop it.
-    .filter((line) => !line.startsWith('Command failed:'))
-
-  return {
-    message: lines[0] || 'GitLab CLI command failed.',
-    details: lines.slice(1, 8),
-  }
+  return compactCliError(message, { fallback: 'GitLab CLI command failed.' })
 }
 
 /**
  * Turn a thrown glab error into a user-facing message, probing auth on the
  * error path so a mid-session de-auth yields the curated recovery hint instead
- * of raw glab stderr. Mirrors `resolveGhActionError`.
+ * of raw glab stderr. Mirrors `resolveGhActionError` via the shared
+ * `resolveForgeActionError` scaffold.
  *
  * Pass `hostname` (the repo's remote host) so the auth re-probe checks the
  * right instance — self-hosted GitLab installs aren't `gitlab.com`, and a
@@ -144,25 +124,11 @@ export async function resolveGlabActionError(
   runner: GlabRunner,
   hostname?: string
 ): Promise<GhActionError> {
-  // Promisified execFile attaches process stderr to the error — that's
-  // where glab explains itself (MR already exists, pipeline red, auth).
-  // Prefer it over `message`, which leads with the echoed command line.
-  const stderr = (error as { stderr?: unknown })?.stderr
-  const raw =
-    (typeof stderr === 'string' && stderr.trim() ? stderr : undefined) ||
-    (error as Error)?.message ||
-    'GitLab CLI command failed.'
-
-  try {
-    const status = await getGlabStatus(runner, hostname)
-    if (status.kind !== 'ok') {
-      return { message: describeGlabStatus(status) }
-    }
-  } catch {
-    // If even the status probe throws, fall back to compacting the raw error.
-  }
-
-  return compactGlabError(raw)
+  return resolveForgeActionError(error, {
+    probe: () => getGlabStatus(runner, hostname),
+    describe: describeGlabStatus,
+    fallback: 'GitLab CLI command failed.',
+  })
 }
 
 /**

@@ -1,3 +1,4 @@
+import { OutputParserException } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { Runnable } from '@langchain/core/runnables'
 import { handleLangChainError, isNetworkError } from '../errorHandler'
@@ -5,6 +6,7 @@ import {
   LangChainCancelledError,
   LangChainExecutionError,
   LangChainNetworkError,
+  LangChainSchemaParseError,
 } from '../errors'
 import { validateRequired } from '../validation'
 import { getLlm } from './getLlm'
@@ -390,6 +392,27 @@ export async function executeChainStreaming<T>({
         },
       )
     }
+
+    // Schema/format parse failures (#1460 / OSS-503): classify separately
+    // from a generic LangChainExecutionError so withRetry's default
+    // predicate can skip retrying an identical call that's unlikely to
+    // parse differently. Mirrors executeChain; carries the accumulated
+    // streamed text so callers can salvage.
+    if (error instanceof OutputParserException) {
+      throw new LangChainSchemaParseError(
+        `executeChainStreaming: Failed to parse schema output: ${error.message}`,
+        {
+          promptInputVariables: prompt.inputVariables,
+          variableKeys: Object.keys(variables),
+          parserType: parser.constructor.name,
+          provider: effectiveProvider,
+          endpoint: effectiveEndpoint,
+          accumulated,
+          streamed: true,
+        },
+      )
+    }
+
     if (
       error instanceof LangChainExecutionError ||
       error instanceof LangChainNetworkError ||

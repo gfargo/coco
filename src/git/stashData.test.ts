@@ -139,18 +139,74 @@ describe('log stash data', () => {
       expect(parseStashDiffFiles([])).toEqual([])
     })
 
-    it('handles git\'s quoted-path form for filenames with spaces', () => {
+    it('handles git\'s real unquoted output for filenames with spaces', () => {
+      // Git only C-quotes paths with non-ASCII/control/quote characters —
+      // a plain space is NOT quoted, so the `diff --git` line reads
+      // `a/src/file with spaces.ts b/src/file with spaces.ts` and the
+      // `---`/`+++` lines get a trailing tab to disambiguate the name.
       const lines = [
-        'diff --git "a/src/file with spaces.ts" "b/src/file with spaces.ts"',
+        'diff --git a/src/file with spaces.ts b/src/file with spaces.ts',
         'index aaa..bbb 100644',
-        '--- "a/src/file with spaces.ts"',
-        '+++ "b/src/file with spaces.ts"',
+        '--- a/src/file with spaces.ts\t',
+        '+++ b/src/file with spaces.ts\t',
         '@@ -1 +1 @@',
         '-old',
         '+new',
       ]
       expect(parseStashDiffFiles(lines)).toEqual([
         { path: 'src/file with spaces.ts', startLine: 0 },
+      ])
+    })
+
+    it('segments a multi-file patch when one file has a space, without dropping it', () => {
+      const lines = [
+        'diff --git a/src/a.ts b/src/a.ts',
+        'index aaa..bbb 100644',
+        '--- a/src/a.ts',
+        '+++ b/src/a.ts',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+        'diff --git a/my file.ts b/my file.ts',
+        'index ccc..ddd 100644',
+        '--- a/my file.ts\t',
+        '+++ b/my file.ts\t',
+        '@@ -1 +1 @@',
+        '-x',
+        '+y',
+      ]
+      const files = parseStashDiffFiles(lines)
+      expect(files).toEqual([
+        { path: 'src/a.ts', startLine: 0 },
+        { path: 'my file.ts', startLine: 7 },
+      ])
+      expect(findStashFileForOffset(files, 10)?.path).toBe('my file.ts')
+    })
+
+    it('returns the destination path for an unquoted rename with spaces', () => {
+      const lines = [
+        'diff --git a/old name.ts b/new name.ts',
+        'similarity index 95%',
+        'rename from old name.ts',
+        'rename to new name.ts',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'new name.ts', startLine: 0 },
+      ])
+    })
+
+    it('resolves a deleted file with a space to its real path, not /dev/null', () => {
+      const lines = [
+        'diff --git a/gone file.ts b/gone file.ts',
+        'deleted file mode 100644',
+        'index aaa..0000000',
+        '--- a/gone file.ts\t',
+        '+++ /dev/null',
+        '@@ -1 +0,0 @@',
+        '-old',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'gone file.ts', startLine: 0 },
       ])
     })
 
@@ -161,6 +217,22 @@ describe('log stash data', () => {
       ]
       expect(parseStashDiffFiles(lines)).toEqual([
         { path: 'src/quote".ts', startLine: 0 },
+      ])
+    })
+
+    it('decodes a rename with a quoted destination and unquoted header (mixed quoting)', () => {
+      // Git quotes each path independently: renaming a plain-ASCII name
+      // to one containing a literal `"` leaves the `diff --git` header's
+      // `a/` side unquoted while `rename to` (and `+++`) is quoted for
+      // the `b/` side, e.g. `diff --git a/ascii.ts "b/weird\".ts"`.
+      const lines = [
+        'diff --git a/ascii.ts "b/weird\\".ts"',
+        'similarity index 100%',
+        'rename from ascii.ts',
+        'rename to "weird\\".ts"',
+      ]
+      expect(parseStashDiffFiles(lines)).toEqual([
+        { path: 'weird".ts', startLine: 0 },
       ])
     })
 

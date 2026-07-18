@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { loadForgeOverview } from './forgeLoad'
 import {
   defaultGhRunner,
   describeGhStatus,
@@ -152,54 +153,28 @@ export async function getPullRequestOverview(
 ): Promise<PullRequestOverview> {
   // Host-aware resolution (#1609) — see issuesListData.ts's getIssueList
   // for the same fix and rationale.
-  const [repository, currentBranchOutput] = await Promise.all([
-    getGitHubRepositoryForGit(git),
-    git.raw(['branch', '--show-current']),
-  ])
-  const currentBranch = currentBranchOutput.trim() || undefined
-
-  if (!repository) {
-    return {
-      available: false,
-      authenticated: false,
-      currentBranch,
-      message: 'No GitHub remote detected.',
-    }
-  }
-
-  const ghStatus = await getGhStatus(runner, repository.host)
-  if (ghStatus.kind !== 'ok') {
-    return {
-      available: true,
-      authenticated: false,
-      repository,
-      currentBranch,
-      message: describeGhStatus(ghStatus),
-    }
-  }
-
-  try {
-    const output = await runner([
-      'pr',
-      'view',
-      '--json',
-      PULL_REQUEST_VIEW_JSON_FIELDS,
-    ])
-
-    return {
-      available: true,
-      authenticated: true,
-      repository,
-      currentBranch,
-      currentPullRequest: parsePullRequestInfo(output),
-    }
-  } catch {
-    return {
-      available: true,
-      authenticated: true,
-      repository,
-      currentBranch,
-      message: currentBranch ? `No pull request found for ${currentBranch}.` : 'No current branch.',
-    }
-  }
+  return loadForgeOverview({
+    git,
+    detect: () => getGitHubRepositoryForGit(git),
+    notDetectedMessage: 'No GitHub remote detected.',
+    probe: (repository) => getGhStatus(runner, repository.host),
+    describeStatus: describeGhStatus,
+    repository: (repository) => repository,
+    // Unlike GitLab/Bitbucket, `gh pr view` is always attempted even with no
+    // resolved current branch — the no-branch message is produced by the
+    // catch below, not a pre-fetch short-circuit.
+    requireCurrentBranch: false,
+    fetch: async (_repository, currentBranch) => {
+      try {
+        const output = await runner(['pr', 'view', '--json', PULL_REQUEST_VIEW_JSON_FIELDS])
+        return { currentPullRequest: parsePullRequestInfo(output) }
+      } catch {
+        return {
+          message: currentBranch ? `No pull request found for ${currentBranch}.` : 'No current branch.',
+        }
+      }
+    },
+    fetchErrorMessage: (currentBranch) =>
+      currentBranch ? `No pull request found for ${currentBranch}.` : 'No current branch.',
+  })
 }

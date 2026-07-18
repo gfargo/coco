@@ -48,7 +48,12 @@ describe('structuralParserRegistry', () => {
       const result = await dispatchStructuralParser('ts', fileDiff('src/p.ts', diff))
       expect(result).toBeDefined()
       expect(result).toContain('Updated TypeScript `src/p.ts`')
-    })
+      // This is the first test in the suite to reach `dispatchStructuralParser`,
+      // which tries the tree-sitter TS parser before falling back to regex —
+      // it pays the one-time WASM cold-init cost. That's occasionally >5s on
+      // a loaded macOS CI runner; bump this test's timeout rather than the
+      // suite's.
+    }, 20000)
 
     it('returns the regex parser\'s summary for a Python diff with structural signal', async () => {
       const diff = [

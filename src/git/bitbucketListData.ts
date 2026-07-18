@@ -1,11 +1,13 @@
 import { SimpleGit } from 'simple-git'
 import {
+  bbqlQuote,
   describeBitbucketStatus,
   getBitbucketProject,
   getBitbucketStatus,
   type BitbucketRunner,
   defaultBitbucketRunner,
 } from './bitbucketCli'
+import { loadForgeList, loadForgeOverview, paginate } from './forgeLoad'
 import type { IssueListFilter, IssueListItem, IssueListOverview } from './issuesListData'
 import type {
   PullRequestListFilter,
@@ -68,20 +70,17 @@ async function fetchAllPages<T>(
   resource: string,
   want: number
 ): Promise<T[]> {
-  const acc: T[] = []
-  let page = 1
   const pagelen = Math.min(want, 50)
-
-  while (acc.length < want && page <= 100) {
-    const sep = baseEndpoint.includes('?') ? '&' : '?'
-    const out = await runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`)
-    const result = parsePage<T>(out, resource)
-    acc.push(...result.values)
-    if (result.values.length < pagelen || !result.next) break
-    page += 1
-  }
-
-  return acc.slice(0, want)
+  const sep = baseEndpoint.includes('?') ? '&' : '?'
+  return paginate({
+    fetchPage: (page) => runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`),
+    parsePage: (output) => {
+      const result = parsePage<T>(output, resource)
+      return { items: result.values, hasMore: result.values.length >= pagelen && Boolean(result.next) }
+    },
+    want,
+    maxPages: 100,
+  })
 }
 
 function normalizeState(raw: unknown): string {
@@ -109,6 +108,19 @@ function nicknamesOf(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined
   const names = value.map(nicknameOf).filter((n): n is string => Boolean(n))
   return names.length ? names : undefined
+}
+
+/**
+ * Resolve the '@me' filter sentinel to the authenticated user's Bitbucket
+ * nickname via GET /user. Author/assignee fields elsewhere in this file are
+ * already keyed off `nickname` (see `nicknameOf`), so this keeps '@me'
+ * comparisons consistent with the rest of the mapping.
+ */
+async function resolveBitbucketMeNickname(runner: BitbucketRunner): Promise<string | undefined> {
+  const out = (await runner('user')).trim()
+  if (!out) return undefined
+  const raw = JSON.parse(out) as Record<string, unknown>
+  return nicknameOf(raw)
 }
 
 type RawBitbucketPR = Record<string, unknown>
@@ -158,12 +170,12 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
   // 'all' and undefined: omit state param — returns all PRs.
 
   if (filter.head) {
-    const headQ = `source.branch.name = "${filter.head}"`
+    const headQ = `source.branch.name = "${bbqlQuote(filter.head)}"`
     params.q = params.q ? `(${params.q}) AND ${headQ}` : headQ
   }
 
   if (filter.base) {
-    const baseQ = `destination.branch.name = "${filter.base}"`
+    const baseQ = `destination.branch.name = "${bbqlQuote(filter.base)}"`
     params.q = params.q ? `(${params.q}) AND ${baseQ}` : baseQ
   }
 
@@ -180,89 +192,78 @@ export async function getBitbucketPullRequestList(
   filter: PullRequestListFilter = {},
   runner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<PullRequestListOverview> {
-  const project = await getBitbucketProject(git)
-  if (!project) {
-    return { available: false, authenticated: false, filter, message: 'No Bitbucket remote detected.' }
-  }
+  return loadForgeList({
+    detect: () => getBitbucketProject(git),
+    notDetectedMessage: 'No Bitbucket remote detected.',
+    probe: () => getBitbucketStatus(runner),
+    describeStatus: describeBitbucketStatus,
+    repository: (project) => ({ owner: project.owner, name: project.name }),
+    filter,
+    fetch: async (project) => {
+      const want = filter.limit ?? 30
+      let pullRequests: PullRequestListItem[] = []
 
-  const status = await getBitbucketStatus(runner)
-  if (status.kind !== 'ok') {
-    return {
-      available: true,
-      authenticated: false,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      message: describeBitbucketStatus(status),
-    }
-  }
+      const raw = await fetchAllPages<RawBitbucketPR>(
+        runner,
+        buildPullRequestEndpoint(project.path, filter),
+        'pull requests',
+        want
+      )
 
-  try {
-    const want = filter.limit ?? 30
-    let pullRequests: PullRequestListItem[] = []
+      pullRequests = raw.map((pr) => {
+        const source = pr.source as Record<string, unknown> | undefined
+        const destination = pr.destination as Record<string, unknown> | undefined
+        const links = pr.links as Record<string, unknown> | undefined
+        const htmlLink = links?.html as Record<string, unknown> | undefined
+        return {
+          number: Number(pr.id),
+          title: String(pr.title || ''),
+          url: String(htmlLink?.href || ''),
+          state: normalizeState(pr.state),
+          isDraft: Boolean(pr.draft),
+          headRefName: String(
+            ((source?.branch as Record<string, unknown> | undefined)?.name) || ''
+          ),
+          baseRefName: String(
+            ((destination?.branch as Record<string, unknown> | undefined)?.name) || ''
+          ),
+          author: nicknameOf(pr.author),
+          assignees: nicknamesOf(pr.reviewers),
+          labels: undefined,
+          reviewDecision: undefined,
+          mergeable: undefined,
+          mergeStateStatus: undefined,
+          createdAt: String(pr.created_on || ''),
+          updatedAt: String(pr.updated_on || ''),
+        }
+      })
 
-    const raw = await fetchAllPages<RawBitbucketPR>(
-      runner,
-      buildPullRequestEndpoint(project.path, filter),
-      'pull requests',
-      want
-    )
+      if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
 
-    pullRequests = raw.map((pr) => {
-      const source = pr.source as Record<string, unknown> | undefined
-      const destination = pr.destination as Record<string, unknown> | undefined
-      const links = pr.links as Record<string, unknown> | undefined
-      const htmlLink = links?.html as Record<string, unknown> | undefined
-      return {
-        number: Number(pr.id),
-        title: String(pr.title || ''),
-        url: String(htmlLink?.href || ''),
-        state: normalizeState(pr.state),
-        isDraft: Boolean(pr.draft),
-        headRefName: String(
-          ((source?.branch as Record<string, unknown> | undefined)?.name) || ''
-        ),
-        baseRefName: String(
-          ((destination?.branch as Record<string, unknown> | undefined)?.name) || ''
-        ),
-        author: nicknameOf(pr.author),
-        assignees: nicknamesOf(pr.reviewers),
-        labels: undefined,
-        reviewDecision: undefined,
-        mergeable: undefined,
-        mergeStateStatus: undefined,
-        createdAt: String(pr.created_on || ''),
-        updatedAt: String(pr.updated_on || ''),
+      const wantsMe = filter.author === '@me' || filter.assignee === '@me'
+      const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
+      if (wantsMe && !me) {
+        throw new Error(
+          'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
+        )
       }
-    })
 
-    if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
+      if (filter.author) {
+        const authorFilter = filter.author === '@me' ? me : filter.author
+        pullRequests = pullRequests.filter((pr) => pr.author === authorFilter)
+      }
 
-    if (filter.author) {
-      const authorFilter = filter.author
-      pullRequests = pullRequests.filter((pr) => pr.author === authorFilter)
-    }
+      if (filter.assignee) {
+        const assigneeFilter = filter.assignee === '@me' ? me : filter.assignee
+        pullRequests = pullRequests.filter(
+          (pr) => assigneeFilter !== undefined && pr.assignees?.includes(assigneeFilter)
+        )
+      }
 
-    if (filter.assignee) {
-      const assigneeFilter = filter.assignee
-      pullRequests = pullRequests.filter((pr) => pr.assignees?.includes(assigneeFilter))
-    }
-
-    return {
-      available: true,
-      authenticated: true,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      pullRequests: pullRequests.map(sanitizePullRequestListItem),
-    }
-  } catch (error) {
-    return {
-      available: true,
-      authenticated: true,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      message: error instanceof Error ? error.message : 'Failed to fetch pull request list.',
-    }
-  }
+      return { pullRequests: pullRequests.map(sanitizePullRequestListItem) }
+    },
+    fetchErrorMessage: 'Failed to fetch pull request list.',
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -303,15 +304,15 @@ function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
   }
 
   if (filter.assignee && filter.assignee !== '@me') {
-    q.push(`assignee.nickname = "${filter.assignee}"`)
+    q.push(`assignee.nickname = "${bbqlQuote(filter.assignee)}"`)
   }
 
   if (filter.author && filter.author !== '@me') {
-    q.push(`reporter.nickname = "${filter.author}"`)
+    q.push(`reporter.nickname = "${bbqlQuote(filter.author)}"`)
   }
 
   if (filter.search) {
-    q.push(`title ~ "${filter.search}"`)
+    q.push(`title ~ "${bbqlQuote(filter.search)}"`)
   }
 
   const pairs: string[] = []
@@ -326,66 +327,61 @@ export async function getBitbucketIssueList(
   filter: IssueListFilter = {},
   runner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<IssueListOverview> {
-  const project = await getBitbucketProject(git)
-  if (!project) {
-    return { available: false, authenticated: false, filter, message: 'No Bitbucket remote detected.' }
-  }
+  return loadForgeList({
+    detect: () => getBitbucketProject(git),
+    notDetectedMessage: 'No Bitbucket remote detected.',
+    probe: () => getBitbucketStatus(runner),
+    describeStatus: describeBitbucketStatus,
+    repository: (project) => ({ owner: project.owner, name: project.name }),
+    filter,
+    fetch: async (project) => {
+      const want = filter.limit ?? 30
+      const raw = await fetchAllPages<RawBitbucketIssue>(
+        runner,
+        buildIssueEndpoint(project.path, filter),
+        'issues',
+        want
+      )
 
-  const status = await getBitbucketStatus(runner)
-  if (status.kind !== 'ok') {
-    return {
-      available: true,
-      authenticated: false,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      message: describeBitbucketStatus(status),
-    }
-  }
+      let issues = raw.map((issue) => {
+        const links = issue.links as Record<string, unknown> | undefined
+        const htmlLink = links?.html as Record<string, unknown> | undefined
+        const assignee = issue.assignee as Record<string, unknown> | undefined
+        const kind = typeof issue.kind === 'string' && issue.kind ? [issue.kind] : undefined
+        return {
+          number: Number(issue.id),
+          title: String(issue.title || ''),
+          url: String(htmlLink?.href || ''),
+          state: normalizeIssueState(issue.status ?? issue.state),
+          author: nicknameOf(issue.reporter ?? issue.author),
+          assignees: assignee ? [String(assignee.nickname || '')].filter(Boolean) : undefined,
+          labels: kind,
+          comments: typeof issue.comment_count === 'number' ? issue.comment_count : undefined,
+          createdAt: String(issue.created_on || ''),
+          updatedAt: String(issue.updated_on || ''),
+        } as IssueListItem
+      })
 
-  try {
-    const want = filter.limit ?? 30
-    const raw = await fetchAllPages<RawBitbucketIssue>(
-      runner,
-      buildIssueEndpoint(project.path, filter),
-      'issues',
-      want
-    )
+      const wantsMe = filter.author === '@me' || filter.assignee === '@me'
+      const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
+      if (wantsMe && !me) {
+        throw new Error(
+          'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
+        )
+      }
 
-    const issues = raw.map((issue) => {
-      const links = issue.links as Record<string, unknown> | undefined
-      const htmlLink = links?.html as Record<string, unknown> | undefined
-      const assignee = issue.assignee as Record<string, unknown> | undefined
-      const kind = typeof issue.kind === 'string' && issue.kind ? [issue.kind] : undefined
-      return {
-        number: Number(issue.id),
-        title: String(issue.title || ''),
-        url: String(htmlLink?.href || ''),
-        state: normalizeIssueState(issue.status ?? issue.state),
-        author: nicknameOf(issue.reporter ?? issue.author),
-        assignees: assignee ? [String(assignee.nickname || '')].filter(Boolean) : undefined,
-        labels: kind,
-        comments: typeof issue.comment_count === 'number' ? issue.comment_count : undefined,
-        createdAt: String(issue.created_on || ''),
-        updatedAt: String(issue.updated_on || ''),
-      } as IssueListItem
-    })
+      if (filter.author === '@me') {
+        issues = issues.filter((issue) => issue.author === me)
+      }
 
-    return {
-      available: true,
-      authenticated: true,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      issues: issues.map(sanitizeIssueListItem),
-    }
-  } catch (error) {
-    return {
-      available: true,
-      authenticated: true,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      message: error instanceof Error ? error.message : 'Failed to fetch issue list.',
-    }
-  }
+      if (filter.assignee === '@me') {
+        issues = issues.filter((issue) => issue.assignees?.includes(me as string))
+      }
+
+      return { issues: issues.map(sanitizeIssueListItem) }
+    },
+    fetchErrorMessage: 'Failed to fetch issue list.',
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -423,49 +419,26 @@ export async function getBitbucketPullRequestOverview(
   git: SimpleGit,
   runner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<PullRequestOverview> {
-  const [project, branchOut] = await Promise.all([
-    getBitbucketProject(git),
-    git.raw(['branch', '--show-current']),
-  ])
-  const currentBranch = branchOut.trim() || undefined
-
-  if (!project) {
-    return { available: false, authenticated: false, currentBranch, message: 'No Bitbucket remote detected.' }
-  }
-
-  const repository = { owner: project.owner, name: project.name }
-
-  const status = await getBitbucketStatus(runner)
-  if (status.kind !== 'ok') {
-    return { available: true, authenticated: false, repository, currentBranch, message: describeBitbucketStatus(status) }
-  }
-
-  if (!currentBranch) {
-    return { available: true, authenticated: true, repository, message: 'No current branch.' }
-  }
-
-  try {
-    const q = encodeURIComponent(`source.branch.name = "${currentBranch}" AND state = "OPEN"`)
-    const out = (await runner(`repositories/${project.path}/pullrequests?q=${q}&pagelen=1`)).trim()
-    const page = out ? JSON.parse(out) as { values?: RawBitbucketPR[] } : undefined
-    const pr = page?.values?.[0]
-    return {
-      available: true,
-      authenticated: true,
-      repository,
-      currentBranch,
-      currentPullRequest: pr ? sanitizePullRequestInfo(prToPullRequestInfo(pr)) : undefined,
-      ...(pr ? {} : { message: `No pull request found for ${currentBranch}.` }),
-    }
-  } catch (error) {
-    return {
-      available: true,
-      authenticated: true,
-      repository,
-      currentBranch,
-      message: error instanceof Error ? error.message : `No pull request found for ${currentBranch}.`,
-    }
-  }
+  return loadForgeOverview({
+    git,
+    detect: () => getBitbucketProject(git),
+    notDetectedMessage: 'No Bitbucket remote detected.',
+    probe: () => getBitbucketStatus(runner),
+    describeStatus: describeBitbucketStatus,
+    repository: (project) => ({ owner: project.owner, name: project.name }),
+    requireCurrentBranch: true,
+    fetch: async (project, currentBranch) => {
+      const q = encodeURIComponent(`source.branch.name = "${bbqlQuote(currentBranch ?? '')}" AND state = "OPEN"`)
+      const out = (await runner(`repositories/${project.path}/pullrequests?q=${q}&pagelen=1`)).trim()
+      const page = out ? JSON.parse(out) as { values?: RawBitbucketPR[] } : undefined
+      const pr = page?.values?.[0]
+      return {
+        currentPullRequest: pr ? sanitizePullRequestInfo(prToPullRequestInfo(pr)) : undefined,
+        ...(pr ? {} : { message: `No pull request found for ${currentBranch}.` }),
+      }
+    },
+    fetchErrorMessage: (currentBranch) => `No pull request found for ${currentBranch}.`,
+  })
 }
 
 export const __test = {
@@ -475,4 +448,5 @@ export const __test = {
   parseIssues,
   normalizeState,
   normalizeIssueState,
+  resolveBitbucketMeNickname,
 }

@@ -1,7 +1,15 @@
 import { SimpleGit } from 'simple-git'
 import { getBitbucketPullRequestList, getBitbucketIssueList, __test } from './bitbucketListData'
 
-const { buildPullRequestEndpoint, buildIssueEndpoint, parsePullRequests, parseIssues, normalizeState, normalizeIssueState } = __test
+const {
+  buildPullRequestEndpoint,
+  buildIssueEndpoint,
+  parsePullRequests,
+  parseIssues,
+  normalizeState,
+  normalizeIssueState,
+  resolveBitbucketMeNickname,
+} = __test
 
 function fakeGit(url = 'https://bitbucket.org/workspace/repo.git'): SimpleGit {
   return {
@@ -93,6 +101,11 @@ describe('buildPullRequestEndpoint (1238)', () => {
     expect(decodeURIComponent(e)).toContain('source.branch.name = "feat"')
     expect(decodeURIComponent(e)).toContain('destination.branch.name = "main"')
   })
+
+  it('escapes a double quote in the head branch name (1709)', () => {
+    const e = buildPullRequestEndpoint('ws/repo', { head: 'x" OR state != "' })
+    expect(decodeURIComponent(e)).toContain('source.branch.name = "x\\" OR state != \\""')
+  })
 })
 
 describe('buildIssueEndpoint (1238)', () => {
@@ -121,6 +134,32 @@ describe('buildIssueEndpoint (1238)', () => {
   it('does not add assignee filter for @me (handled client-side)', () => {
     const e = buildIssueEndpoint('ws/repo', { assignee: '@me' })
     expect(e).not.toContain('assignee.nickname')
+  })
+
+  it('escapes a double quote in the search string (1709)', () => {
+    const e = buildIssueEndpoint('ws/repo', { search: 'fix "login" bug' })
+    expect(decodeURIComponent(e)).toContain('title ~ "fix \\"login\\" bug"')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resolveBitbucketMeNickname
+// ---------------------------------------------------------------------------
+
+describe('resolveBitbucketMeNickname (981)', () => {
+  it('returns the nickname from GET /user', async () => {
+    const runner = async () => JSON.stringify({ nickname: 'alice' })
+    expect(await resolveBitbucketMeNickname(runner)).toBe('alice')
+  })
+
+  it('returns undefined when the response has no nickname', async () => {
+    const runner = async () => '{}'
+    expect(await resolveBitbucketMeNickname(runner)).toBeUndefined()
+  })
+
+  it('returns undefined for an empty response', async () => {
+    const runner = async () => ''
+    expect(await resolveBitbucketMeNickname(runner)).toBeUndefined()
   })
 })
 
@@ -277,6 +316,65 @@ describe('getBitbucketPullRequestList (1238)', () => {
     const overview = await getBitbucketPullRequestList(git, {}, runner)
     expect(overview).toMatchObject({ available: false, message: 'No Bitbucket remote detected.' })
   })
+
+  it('resolves author=@me to the authenticated nickname and filters by it', withCredentials(async () => {
+    const payload = JSON.stringify({
+      values: [makePR({ id: 1, author: { nickname: 'alice' } }), makePR({ id: 2, author: { nickname: 'bob' } })],
+      pagelen: 50,
+      page: 1,
+    })
+    const runner = async (endpoint: string) => {
+      if (endpoint === 'user') return JSON.stringify({ nickname: 'alice' })
+      return payload
+    }
+    const overview = await getBitbucketPullRequestList(fakeGit(), { author: '@me' }, runner)
+    expect(overview.pullRequests).toHaveLength(1)
+    expect(overview.pullRequests?.[0]?.author).toBe('alice')
+  }))
+
+  it('resolves assignee=@me to the authenticated nickname and filters by reviewer', withCredentials(async () => {
+    const payload = JSON.stringify({
+      values: [
+        makePR({ id: 1, reviewers: [{ nickname: 'bob' }] }),
+        makePR({ id: 2, reviewers: [{ nickname: 'carol' }] }),
+      ],
+      pagelen: 50,
+      page: 1,
+    })
+    const runner = async (endpoint: string) => {
+      if (endpoint === 'user') return JSON.stringify({ nickname: 'bob' })
+      return payload
+    }
+    const overview = await getBitbucketPullRequestList(fakeGit(), { assignee: '@me' }, runner)
+    expect(overview.pullRequests).toHaveLength(1)
+    expect(overview.pullRequests?.[0]?.number).toBe(1)
+  }))
+
+  it('still filters literal author values by exact match', withCredentials(async () => {
+    const payload = JSON.stringify({
+      values: [makePR({ id: 1, author: { nickname: 'alice' } }), makePR({ id: 2, author: { nickname: 'bob' } })],
+      pagelen: 50,
+      page: 1,
+    })
+    const runner = async (endpoint: string) => {
+      if (endpoint === 'user') return '{}'
+      return payload
+    }
+    const overview = await getBitbucketPullRequestList(fakeGit(), { author: 'alice' }, runner)
+    expect(overview.pullRequests).toHaveLength(1)
+    expect(overview.pullRequests?.[0]?.author).toBe('alice')
+  }))
+
+  it('surfaces an explicit message when @me cannot be resolved', withCredentials(async () => {
+    const payload = JSON.stringify({ values: [makePR()], pagelen: 50, page: 1 })
+    const runner = async (endpoint: string) => {
+      if (endpoint === 'user') return '{}'
+      return payload
+    }
+    const overview = await getBitbucketPullRequestList(fakeGit(), { author: '@me' }, runner)
+    expect(overview.message).toContain('Could not resolve "@me"')
+    expect(overview.pullRequests).toBeUndefined()
+  }))
 })
 
 describe('getBitbucketIssueList (1238)', () => {
@@ -295,5 +393,23 @@ describe('getBitbucketIssueList (1238)', () => {
     const overview = await getBitbucketIssueList(fakeGit(), {}, async () => '{}')
     expect(overview.authenticated).toBe(false)
     expect(overview.message).toContain('BITBUCKET_ACCESS_TOKEN')
+  }))
+
+  it('resolves assignee=@me to the authenticated nickname and filters by it', withCredentials(async () => {
+    const payload = JSON.stringify({
+      values: [
+        makeIssue({ id: 1, assignee: { nickname: 'erin' } }),
+        makeIssue({ id: 2, assignee: { nickname: 'frank' } }),
+      ],
+      pagelen: 50,
+      page: 1,
+    })
+    const runner = async (endpoint: string) => {
+      if (endpoint === 'user') return JSON.stringify({ nickname: 'erin' })
+      return payload
+    }
+    const overview = await getBitbucketIssueList(fakeGit(), { assignee: '@me' }, runner)
+    expect(overview.issues).toHaveLength(1)
+    expect(overview.issues?.[0]?.number).toBe(1)
   }))
 })

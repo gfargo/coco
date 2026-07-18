@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { describeGlabStatus, getGitLabProject, getGlabStatus, type GlabRunner, defaultGlabRunner } from './glabCli'
+import { loadForgeList, loadForgeOverview, paginate } from './forgeLoad'
 import type {
   IssueListFilter,
   IssueListItem,
@@ -61,8 +62,7 @@ function gitlabListError(raw: unknown, resource: string): Error {
  * caps `per_page` at 100, so a single request silently truncates large result
  * sets; page through (`per_page` is baked into `baseEndpoint`) until we have
  * `want` rows or reach the last page. Mirrors how `gh` paginates internally so
- * `--limit N` behaves the same on both forges. The `page <= 100` ceiling is a
- * safety stop against a misbehaving API.
+ * `--limit N` behaves the same on both forges.
  */
 async function fetchAllPages<T>(
   runner: GlabRunner,
@@ -71,15 +71,15 @@ async function fetchAllPages<T>(
   want: number,
   perPage: number
 ): Promise<T[]> {
-  const acc: T[] = []
-  let page = 1
-  while (acc.length < want && page <= 100) {
-    const batch = parse(await runner(['api', `${baseEndpoint}&page=${page}`]))
-    acc.push(...batch)
-    if (batch.length < perPage) break
-    page += 1
-  }
-  return acc.slice(0, want)
+  return paginate({
+    fetchPage: (page) => runner(['api', `${baseEndpoint}&page=${page}`]),
+    parsePage: (output) => {
+      const items = parse(output)
+      return { items, hasMore: items.length >= perPage }
+    },
+    want,
+    maxPages: 100,
+  })
 }
 
 /** Map a GitLab MR/issue `state` to coco's uppercased state vocabulary. */
@@ -201,50 +201,29 @@ export async function getMergeRequestList(
   filter: PullRequestListFilter = {},
   runner: GlabRunner = defaultGlabRunner
 ): Promise<PullRequestListOverview> {
-  const project = await getGitLabProject(git)
-  if (!project) {
-    return { available: false, authenticated: false, filter, message: 'No GitLab remote detected.' }
-  }
-
-  const status = await getGlabStatus(runner, project.host)
-  if (status.kind !== 'ok') {
-    return {
-      available: true,
-      authenticated: false,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      message: describeGlabStatus(status),
-    }
-  }
-
-  try {
-    const want = filter.limit ?? 30
-    let pullRequests = await fetchAllPages(
-      runner,
-      buildMergeRequestEndpoint(project.path, filter),
-      parseMergeRequests,
-      want,
-      Math.min(want, 100)
-    )
-    // The REST API has no stable cross-version "draft only" filter; apply it
-    // client-side so `--draft` behaves the same as on GitHub.
-    if (filter.draft) pullRequests = pullRequests.filter((mr) => mr.isDraft)
-    return {
-      available: true,
-      authenticated: true,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      pullRequests: pullRequests.map(sanitizePullRequestListItem),
-    }
-  } catch (error) {
-    return {
-      available: true,
-      authenticated: true,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      message: error instanceof Error ? error.message : 'Failed to fetch merge request list.',
-    }
-  }
+  return loadForgeList({
+    detect: () => getGitLabProject(git),
+    notDetectedMessage: 'No GitLab remote detected.',
+    probe: (project) => getGlabStatus(runner, project.host),
+    describeStatus: describeGlabStatus,
+    repository: (project) => ({ owner: project.owner, name: project.name }),
+    filter,
+    fetch: async (project) => {
+      const want = filter.limit ?? 30
+      let pullRequests = await fetchAllPages(
+        runner,
+        buildMergeRequestEndpoint(project.path, filter),
+        parseMergeRequests,
+        want,
+        Math.min(want, 100)
+      )
+      // The REST API has no stable cross-version "draft only" filter; apply it
+      // client-side so `--draft` behaves the same as on GitHub.
+      if (filter.draft) pullRequests = pullRequests.filter((mr) => mr.isDraft)
+      return { pullRequests: pullRequests.map(sanitizePullRequestListItem) }
+    },
+    fetchErrorMessage: 'Failed to fetch merge request list.',
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -295,47 +274,26 @@ export async function getGitLabIssueList(
   filter: IssueListFilter = {},
   runner: GlabRunner = defaultGlabRunner
 ): Promise<IssueListOverview> {
-  const project = await getGitLabProject(git)
-  if (!project) {
-    return { available: false, authenticated: false, filter, message: 'No GitLab remote detected.' }
-  }
-
-  const status = await getGlabStatus(runner, project.host)
-  if (status.kind !== 'ok') {
-    return {
-      available: true,
-      authenticated: false,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      message: describeGlabStatus(status),
-    }
-  }
-
-  try {
-    const want = filter.limit ?? 30
-    const issues = await fetchAllPages(
-      runner,
-      buildIssueEndpoint(project.path, filter),
-      parseIssues,
-      want,
-      Math.min(want, 100)
-    )
-    return {
-      available: true,
-      authenticated: true,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      issues: issues.map(sanitizeIssueListItem),
-    }
-  } catch (error) {
-    return {
-      available: true,
-      authenticated: true,
-      repository: { owner: project.owner, name: project.name },
-      filter,
-      message: error instanceof Error ? error.message : 'Failed to fetch issue list.',
-    }
-  }
+  return loadForgeList({
+    detect: () => getGitLabProject(git),
+    notDetectedMessage: 'No GitLab remote detected.',
+    probe: (project) => getGlabStatus(runner, project.host),
+    describeStatus: describeGlabStatus,
+    repository: (project) => ({ owner: project.owner, name: project.name }),
+    filter,
+    fetch: async (project) => {
+      const want = filter.limit ?? 30
+      const issues = await fetchAllPages(
+        runner,
+        buildIssueEndpoint(project.path, filter),
+        parseIssues,
+        want,
+        Math.min(want, 100)
+      )
+      return { issues: issues.map(sanitizeIssueListItem) }
+    },
+    fetchErrorMessage: 'Failed to fetch issue list.',
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -372,48 +330,25 @@ export async function getMergeRequestOverview(
   git: SimpleGit,
   runner: GlabRunner = defaultGlabRunner
 ): Promise<PullRequestOverview> {
-  const [project, branchOut] = await Promise.all([
-    getGitLabProject(git),
-    git.raw(['branch', '--show-current']),
-  ])
-  const currentBranch = branchOut.trim() || undefined
-
-  if (!project) {
-    return { available: false, authenticated: false, currentBranch, message: 'No GitLab remote detected.' }
-  }
-
-  const repository = { owner: project.owner, name: project.name }
-
-  const status = await getGlabStatus(runner, project.host)
-  if (status.kind !== 'ok') {
-    return { available: true, authenticated: false, repository, currentBranch, message: describeGlabStatus(status) }
-  }
-
-  if (!currentBranch) {
-    return { available: true, authenticated: true, repository, message: 'No current branch.' }
-  }
-
-  try {
-    const endpoint = `projects/${encodeProjectPath(project.path)}/merge_requests?source_branch=${encodeURIComponent(currentBranch)}&state=opened`
-    const out = (await runner(['api', endpoint])).trim()
-    const mr = (out ? (JSON.parse(out) as Array<Record<string, unknown>>) : [])[0]
-    return {
-      available: true,
-      authenticated: true,
-      repository,
-      currentBranch,
-      currentPullRequest: mr ? sanitizePullRequestInfo(mrToPullRequestInfo(mr)) : undefined,
-      ...(mr ? {} : { message: `No merge request found for ${currentBranch}.` }),
-    }
-  } catch (error) {
-    return {
-      available: true,
-      authenticated: true,
-      repository,
-      currentBranch,
-      message: error instanceof Error ? error.message : `No merge request found for ${currentBranch}.`,
-    }
-  }
+  return loadForgeOverview({
+    git,
+    detect: () => getGitLabProject(git),
+    notDetectedMessage: 'No GitLab remote detected.',
+    probe: (project) => getGlabStatus(runner, project.host),
+    describeStatus: describeGlabStatus,
+    repository: (project) => ({ owner: project.owner, name: project.name }),
+    requireCurrentBranch: true,
+    fetch: async (project, currentBranch) => {
+      const endpoint = `projects/${encodeProjectPath(project.path)}/merge_requests?source_branch=${encodeURIComponent(currentBranch as string)}&state=opened`
+      const out = (await runner(['api', endpoint])).trim()
+      const mr = (out ? (JSON.parse(out) as Array<Record<string, unknown>>) : [])[0]
+      return {
+        currentPullRequest: mr ? sanitizePullRequestInfo(mrToPullRequestInfo(mr)) : undefined,
+        ...(mr ? {} : { message: `No merge request found for ${currentBranch}.` }),
+      }
+    },
+    fetchErrorMessage: (currentBranch) => `No merge request found for ${currentBranch}.`,
+  })
 }
 
 // Exported for unit tests (endpoint construction + state mapping).

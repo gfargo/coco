@@ -31,6 +31,7 @@ function baseDeps(overrides: Partial<UseContextRefreshDeps> = {}): UseContextRef
     runtimesLength: 1,
     worktree: undefined,
     dispatch: jest.fn(),
+    stateRef: { current: {} as never },
     setContext: jest.fn(),
     setContextStatus: jest.fn(),
     setPrDiffRefreshToken: jest.fn(),

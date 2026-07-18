@@ -26,7 +26,7 @@ import { LogOptions } from '../commands/log/config'
 // too tight for that I/O once the full suite runs all workers in parallel
 // (e.g. during `npm run release`), producing flaky timeouts that aren't
 // real failures. Give the whole file a generous budget instead.
-jest.setTimeout(30_000)
+jest.setTimeout(60_000)
 
 function argv(overrides: Partial<LogOptions> = {}): Arguments<LogOptions> {
   return {
@@ -514,6 +514,34 @@ describe('log data layer', () => {
       }
     })
 
+    it('returns [] on an unborn HEAD even when git raises a localized error (#1708)', async () => {
+      const path = await mkdtemp(join(tmpdir(), 'coco-log-empty-locale-test-'))
+      try {
+        const git = simpleGit(path)
+        await git.init()
+        await git.addConfig('user.name', 'Coco Test')
+        await git.addConfig('user.email', 'coco@example.com')
+        await git.raw(['checkout', '-b', 'main'])
+
+        // Simulate a non-English git build: the raw `git log` call fails
+        // with a message that doesn't contain either English phrase the
+        // old code matched on. The fix must fall back to a structural
+        // `rev-parse --verify HEAD` check (isEmptyRepo) instead of
+        // re-throwing.
+        const rawSpy = jest
+          .spyOn(git, 'raw')
+          .mockRejectedValueOnce(
+            new Error("fatal: la branche courante 'main' n'a pas encore de commit")
+          )
+
+        const rows = await getLogRows(git, argv())
+        expect(rows).toEqual([])
+        rawSpy.mockRestore()
+      } finally {
+        await rm(path, { recursive: true, force: true })
+      }
+    })
+
     it('returns commit rows on a repo with commits', async () => {
       const path = await mkdtemp(join(tmpdir(), 'coco-log-onecommit-test-'))
       try {
@@ -531,6 +559,32 @@ describe('log data layer', () => {
         expect(rows.length).toBeGreaterThan(0)
         const commitRows = getCommitRows(rows)
         expect(commitRows[0]?.message).toBe('chore: initial')
+      } finally {
+        await rm(path, { recursive: true, force: true })
+      }
+    })
+
+    it('rethrows when git.raw fails for a reason unrelated to an unborn HEAD', async () => {
+      const path = await mkdtemp(join(tmpdir(), 'coco-log-realerror-test-'))
+      try {
+        const git = simpleGit(path)
+        await git.init()
+        await git.addConfig('user.name', 'Coco Test')
+        await git.addConfig('user.email', 'coco@example.com')
+        await git.addConfig('commit.gpgsign', 'false')
+        await git.raw(['checkout', '-b', 'main'])
+        await writeFile(join(path, 'README.md'), '# repo\n')
+        await git.add('README.md')
+        await git.commit('chore: initial')
+
+        // HEAD resolves fine here (there's a commit), so the failure
+        // below can't be an unborn-HEAD case — it must propagate.
+        const rawSpy = jest
+          .spyOn(git, 'raw')
+          .mockRejectedValueOnce(new Error('fatal: unknown option --bogus-flag'))
+
+        await expect(getLogRows(git, argv())).rejects.toThrow('fatal: unknown option --bogus-flag')
+        rawSpy.mockRestore()
       } finally {
         await rm(path, { recursive: true, force: true })
       }

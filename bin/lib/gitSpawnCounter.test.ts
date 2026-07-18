@@ -1,6 +1,10 @@
 import { spawn } from 'node:child_process'
 import { withSpawnCount } from './gitSpawnCounter'
 
+// Spawns real git processes; under heavy parallel load the default 5s
+// jest timeout is too tight.
+jest.setTimeout(15000)
+
 describe('withSpawnCount', () => {
   it('counts spawn calls made during fn and restores the original afterward', async () => {
     const { result, spawnCount } = await withSpawnCount(async () => {

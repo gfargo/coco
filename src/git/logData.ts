@@ -2,6 +2,7 @@ import { SimpleGit } from 'simple-git'
 import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
 import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from './submoduleDiff'
 import { LogArgv, LogView } from '../commands/log/config'
+import { isEmptyRepo } from '../lib/simple-git/isEmptyRepo'
 
 export const FIELD_SEPARATOR = '\x1f'
 // `%P` (parent hashes, space-separated) lets the TUI distinguish
@@ -490,16 +491,19 @@ export async function getLogRows(
   options: LogRowLoadOptions = {}
 ): Promise<GitLogRow[]> {
   // Unborn HEAD short-circuit. Without this, `git log` on a freshly
-  // Catch git's "does not have any commits yet" error instead of
-  // probing isEmptyRepo before every fetch (#1364 item 5). The probe
-  // added a subprocess to every getLogRows call (boot, refresh, each
-  // load-more page, graph toggle, filter refetch). Catching the error
-  // is O(0) on non-empty repos.
+  // `git init`-ed repo throws instead of returning an empty history.
+  // Rather than probing isEmptyRepo before every fetch (#1364 item 5,
+  // which would add a subprocess to every getLogRows call — boot,
+  // refresh, each load-more page, graph toggle, filter refetch), only
+  // pay for the structural `rev-parse --verify HEAD` check once `git
+  // log` has already failed. This stays O(0) on non-empty repos and,
+  // unlike matching on `err.message`, isn't fooled by git's localized
+  // translation catalog (#1708 — 'does not have any commits yet' /
+  // 'bad default revision' are only the English strings).
   try {
     return parseLogOutput(await git.raw(buildLogArgs(argv, options)))
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    if (message.includes('does not have any commits yet') || message.includes('bad default revision')) {
+    if (await isEmptyRepo(git)) {
       return []
     }
     throw err

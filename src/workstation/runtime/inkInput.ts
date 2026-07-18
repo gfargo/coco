@@ -1939,6 +1939,18 @@ export function getLogInkInputEvents(
     return []
   }
 
+  // #1685 — while a g-chord is armed the footer advertises "esc cancel",
+  // but the general chord-cancel rung sits BELOW the global Esc/q handlers.
+  // Esc would popView / clearSelection / clearCompareBase / popRepoFrame and
+  // q would exit before the cancel ran. Intercept the two keys that a
+  // higher-priority global handler would otherwise swallow, up here at the
+  // top of normal mode. Real continuations (gh/gs/…/gg) and every other
+  // non-continuation key are still resolved by the g-chord block below;
+  // neither Esc nor q is a continuation, so this is safe.
+  if (state.pendingKey === 'g' && (key.escape || inputValue === 'q')) {
+    return [action({ type: 'setPendingKey', value: undefined })]
+  }
+
   // #879 item 4 — Esc cancels an in-flight bisect-start wizard. Runs
   // BEFORE the generic `popView` so we both clear the wizard state
   // and walk back to the bisect view in one keystroke. Without this
