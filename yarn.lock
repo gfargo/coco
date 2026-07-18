@@ -4128,10 +4128,10 @@ ink-testing-library@4.0.0:
   resolved "https://registry.npmjs.org/ink-testing-library/-/ink-testing-library-4.0.0.tgz"
   integrity sha512-yF92kj3pmBvk7oKbSq5vEALO//o7Z9Ck/OaLNlkzXNeYdwfpxMQkSowGTFUCS5MSu9bWfSZMewGpp7bFc66D7Q==
 
-ink@7.1.0:
-  version "7.1.0"
-  resolved "https://registry.yarnpkg.com/ink/-/ink-7.1.0.tgz#8e51fdf583606160ee282c59dd2d395c8d548df0"
-  integrity sha512-VWE6/yeLtFCJBNLflyI2OSylyXK1Rc24LuXup8Qt+icwkmmycFNdbn8IkSp6Frc0h1iA0NOvvi1ajW44U/w3Qg==
+ink@7.1.1:
+  version "7.1.1"
+  resolved "https://registry.yarnpkg.com/ink/-/ink-7.1.1.tgz#9f5acfdd6de553a20a3109efdcefe0afe763342f"
+  integrity sha512-Y43xxa1ZSPvpmfLHcN5o+OdP8Rf8ykkNJEuKYOUNZKT8wXVNLFTtEm1nSDMQkfBH+YANF4Xuu0hhZ4ejqAtN2w==
   dependencies:
     "@alcalzone/ansi-tokenize" "^0.3.0"
     ansi-escapes "^7.3.0"
