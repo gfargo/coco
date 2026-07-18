@@ -1,6 +1,7 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { SimpleGit } from 'simple-git'
+import { compactCliError, resolveForgeActionError } from './forgeErrors'
 
 const execFileAsync = promisify(execFile)
 
@@ -229,25 +230,11 @@ export type GhActionError = {
 
 /**
  * Compact a multi-line gh error/stderr into a head line plus a bounded set of
- * detail lines, mirroring `operationActions.compactOutputLines`. Keeps a raw
- * stderr dump from flooding a notification.
+ * detail lines. Thin wrapper over the shared `compactCliError` so gh, glab,
+ * and Bitbucket can't drift from each other.
  */
 export function compactGhError(message: string): GhActionError {
-  const lines = message
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    // execFile prefixes its message with the entire echoed command line
-    // ("Command failed: gh pr create --title=... --body=<pages of text>").
-    // That line names no failure reason — and with a generated PR body in
-    // the argv it dwarfs the status line — so drop it and lead with gh's
-    // actual stderr complaint.
-    .filter((line) => !line.startsWith('Command failed:'))
-
-  return {
-    message: lines[0] || 'GitHub CLI command failed.',
-    details: lines.slice(1, 8),
-  }
+  return compactCliError(message, { fallback: 'GitHub CLI command failed.' })
 }
 
 /**
@@ -256,30 +243,16 @@ export function compactGhError(message: string): GhActionError {
  * de-authed mid-flight would otherwise dump raw gh stderr. We probe
  * `getGhStatus` on the error path: if gh is no longer `ok`, return the curated
  * recovery hint; otherwise compact the underlying error. The probe is one extra
- * gh call and only happens when an action has already failed.
+ * gh call and only happens when an action has already failed. Thin wrapper
+ * over the shared `resolveForgeActionError` scaffold.
  */
 export async function resolveGhActionError(
   error: unknown,
   runner: GhRunner
 ): Promise<GhActionError> {
-  // Promisified execFile attaches the process stderr to the error —
-  // that's where gh explains itself ("a pull request for branch X
-  // already exists", auth guidance, …). Prefer it over `message`,
-  // which leads with the echoed command line.
-  const stderr = (error as { stderr?: unknown })?.stderr
-  const raw =
-    (typeof stderr === 'string' && stderr.trim() ? stderr : undefined) ||
-    (error as Error)?.message ||
-    'GitHub CLI command failed.'
-
-  try {
-    const status = await getGhStatus(runner)
-    if (status.kind !== 'ok') {
-      return { message: describeGhStatus(status) }
-    }
-  } catch {
-    // If even the status probe throws, fall back to compacting the raw error.
-  }
-
-  return compactGhError(raw)
+  return resolveForgeActionError(error, {
+    probe: () => getGhStatus(runner),
+    describe: describeGhStatus,
+    fallback: 'GitHub CLI command failed.',
+  })
 }
