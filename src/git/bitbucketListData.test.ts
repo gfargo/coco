@@ -101,6 +101,11 @@ describe('buildPullRequestEndpoint (1238)', () => {
     expect(decodeURIComponent(e)).toContain('source.branch.name = "feat"')
     expect(decodeURIComponent(e)).toContain('destination.branch.name = "main"')
   })
+
+  it('escapes a double quote in the head branch name (1709)', () => {
+    const e = buildPullRequestEndpoint('ws/repo', { head: 'x" OR state != "' })
+    expect(decodeURIComponent(e)).toContain('source.branch.name = "x\\" OR state != \\""')
+  })
 })
 
 describe('buildIssueEndpoint (1238)', () => {
@@ -129,6 +134,11 @@ describe('buildIssueEndpoint (1238)', () => {
   it('does not add assignee filter for @me (handled client-side)', () => {
     const e = buildIssueEndpoint('ws/repo', { assignee: '@me' })
     expect(e).not.toContain('assignee.nickname')
+  })
+
+  it('escapes a double quote in the search string (1709)', () => {
+    const e = buildIssueEndpoint('ws/repo', { search: 'fix "login" bug' })
+    expect(decodeURIComponent(e)).toContain('title ~ "fix \\"login\\" bug"')
   })
 })
 

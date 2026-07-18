@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import {
+  bbqlQuote,
   describeBitbucketStatus,
   getBitbucketProject,
   getBitbucketStatus,
@@ -172,12 +173,12 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
   // 'all' and undefined: omit state param — returns all PRs.
 
   if (filter.head) {
-    const headQ = `source.branch.name = "${filter.head}"`
+    const headQ = `source.branch.name = "${bbqlQuote(filter.head)}"`
     params.q = params.q ? `(${params.q}) AND ${headQ}` : headQ
   }
 
   if (filter.base) {
-    const baseQ = `destination.branch.name = "${filter.base}"`
+    const baseQ = `destination.branch.name = "${bbqlQuote(filter.base)}"`
     params.q = params.q ? `(${params.q}) AND ${baseQ}` : baseQ
   }
 
@@ -306,15 +307,15 @@ function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
   }
 
   if (filter.assignee && filter.assignee !== '@me') {
-    q.push(`assignee.nickname = "${filter.assignee}"`)
+    q.push(`assignee.nickname = "${bbqlQuote(filter.assignee)}"`)
   }
 
   if (filter.author && filter.author !== '@me') {
-    q.push(`reporter.nickname = "${filter.author}"`)
+    q.push(`reporter.nickname = "${bbqlQuote(filter.author)}"`)
   }
 
   if (filter.search) {
-    q.push(`title ~ "${filter.search}"`)
+    q.push(`title ~ "${bbqlQuote(filter.search)}"`)
   }
 
   const pairs: string[] = []
@@ -430,7 +431,7 @@ export async function getBitbucketPullRequestOverview(
     repository: (project) => ({ owner: project.owner, name: project.name }),
     requireCurrentBranch: true,
     fetch: async (project, currentBranch) => {
-      const q = encodeURIComponent(`source.branch.name = "${currentBranch}" AND state = "OPEN"`)
+      const q = encodeURIComponent(`source.branch.name = "${bbqlQuote(currentBranch ?? '')}" AND state = "OPEN"`)
       const out = (await runner(`repositories/${project.path}/pullrequests?q=${q}&pagelen=1`)).trim()
       const page = out ? JSON.parse(out) as { values?: RawBitbucketPR[] } : undefined
       const pr = page?.values?.[0]

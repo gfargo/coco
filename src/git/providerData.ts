@@ -16,6 +16,7 @@ import {
   type GlabRunner,
 } from './glabCli'
 import {
+  bbqlQuote,
   defaultBitbucketRunner,
   describeBitbucketStatus,
   getBitbucketStatus,
@@ -416,7 +417,7 @@ async function getBitbucketProviderOverview(
   async function getCurrentPRBitbucket(): Promise<ProviderPullRequestStatus | undefined> {
     if (!path || !currentBranch) return undefined
     try {
-      const q = encodeURIComponent(`source.branch.name = "${currentBranch}" AND state = "OPEN"`)
+      const q = encodeURIComponent(`source.branch.name = "${bbqlQuote(currentBranch)}" AND state = "OPEN"`)
       const out = (await runner(`repositories/${path}/pullrequests?q=${q}&pagelen=1`)).trim()
       if (!out) return undefined
       const page = JSON.parse(out) as { values?: Array<{ id?: number; title?: string; state?: string; draft?: boolean }> }
