@@ -16,7 +16,7 @@ import {
 import { LogTuiState, createLogTuiState, getSelectedCommit } from './interactiveState'
 import { GitOperationOverview, getGitOperationOverview } from '../../git/operationData'
 import { ProviderOverview, getProviderOverview } from '../../git/providerData'
-import { truncateCells } from '../chrome/text'
+import { padCells, truncateCells } from '../chrome/text'
 
 type LogTuiStreams = {
   appLabel?: string
@@ -140,7 +140,7 @@ function renderCommitList(state: LogTuiState, maxRows: number, width: number): s
       graph.padEnd(state.fullGraph ? 8 : 2),
       commit.shortHash.padEnd(9),
       commit.date.padEnd(10),
-      truncate(commit.author, 18).padEnd(18),
+      padCells(truncate(commit.author, 18), 18),
       `${commit.message}${refs}`,
     ].join(' ')
 
