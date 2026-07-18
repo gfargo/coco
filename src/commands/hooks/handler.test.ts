@@ -11,11 +11,6 @@ import { HooksArgv } from './config'
 // too tight — especially for tests that call handler() twice.
 jest.setTimeout(15000)
 
-describe('coco hooks <action> (#1591)', () => {simple-git) for hook-dir
-// resolution. Under heavy parallel load the default 5s jest timeout is
-// too tight — especially for tests that call handler() twice.
-jest.setTimeout(15000)
-
 describe('coco hooks <action> (#1591)', () => {
   let repoDir: string
   let originalCwd: string
