@@ -112,6 +112,19 @@ function nicknamesOf(value: unknown): string[] | undefined {
   return names.length ? names : undefined
 }
 
+/**
+ * Resolve the '@me' filter sentinel to the authenticated user's Bitbucket
+ * nickname via GET /user. Author/assignee fields elsewhere in this file are
+ * already keyed off `nickname` (see `nicknameOf`), so this keeps '@me'
+ * comparisons consistent with the rest of the mapping.
+ */
+async function resolveBitbucketMeNickname(runner: BitbucketRunner): Promise<string | undefined> {
+  const out = (await runner('user')).trim()
+  if (!out) return undefined
+  const raw = JSON.parse(out) as Record<string, unknown>
+  return nicknameOf(raw)
+}
+
 type RawBitbucketPR = Record<string, unknown>
 
 function parsePullRequests(output: string): PullRequestListItem[] {
@@ -238,14 +251,24 @@ export async function getBitbucketPullRequestList(
 
       if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
 
+      const wantsMe = filter.author === '@me' || filter.assignee === '@me'
+      const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
+      if (wantsMe && !me) {
+        throw new Error(
+          'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
+        )
+      }
+
       if (filter.author) {
-        const authorFilter = filter.author
+        const authorFilter = filter.author === '@me' ? me : filter.author
         pullRequests = pullRequests.filter((pr) => pr.author === authorFilter)
       }
 
       if (filter.assignee) {
-        const assigneeFilter = filter.assignee
-        pullRequests = pullRequests.filter((pr) => pr.assignees?.includes(assigneeFilter))
+        const assigneeFilter = filter.assignee === '@me' ? me : filter.assignee
+        pullRequests = pullRequests.filter(
+          (pr) => assigneeFilter !== undefined && pr.assignees?.includes(assigneeFilter)
+        )
       }
 
       return { pullRequests: pullRequests.map(sanitizePullRequestListItem) }
@@ -331,7 +354,7 @@ export async function getBitbucketIssueList(
         want
       )
 
-      const issues = raw.map((issue) => {
+      let issues = raw.map((issue) => {
         const links = issue.links as Record<string, unknown> | undefined
         const htmlLink = links?.html as Record<string, unknown> | undefined
         const assignee = issue.assignee as Record<string, unknown> | undefined
@@ -349,6 +372,22 @@ export async function getBitbucketIssueList(
           updatedAt: String(issue.updated_on || ''),
         } as IssueListItem
       })
+
+      const wantsMe = filter.author === '@me' || filter.assignee === '@me'
+      const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
+      if (wantsMe && !me) {
+        throw new Error(
+          'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
+        )
+      }
+
+      if (filter.author === '@me') {
+        issues = issues.filter((issue) => issue.author === me)
+      }
+
+      if (filter.assignee === '@me') {
+        issues = issues.filter((issue) => issue.assignees?.includes(me as string))
+      }
 
       return { issues: issues.map(sanitizeIssueListItem) }
     },
@@ -420,4 +459,5 @@ export const __test = {
   parseIssues,
   normalizeState,
   normalizeIssueState,
+  resolveBitbucketMeNickname,
 }
