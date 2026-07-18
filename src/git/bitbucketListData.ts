@@ -6,7 +6,7 @@ import {
   type BitbucketRunner,
   defaultBitbucketRunner,
 } from './bitbucketCli'
-import { loadForgeList, loadForgeOverview } from './forgeLoad'
+import { loadForgeList, loadForgeOverview, paginate } from './forgeLoad'
 import type { IssueListFilter, IssueListItem, IssueListOverview } from './issuesListData'
 import type {
   PullRequestListFilter,
@@ -69,20 +69,17 @@ async function fetchAllPages<T>(
   resource: string,
   want: number
 ): Promise<T[]> {
-  const acc: T[] = []
-  let page = 1
   const pagelen = Math.min(want, 50)
-
-  while (acc.length < want && page <= 100) {
-    const sep = baseEndpoint.includes('?') ? '&' : '?'
-    const out = await runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`)
-    const result = parsePage<T>(out, resource)
-    acc.push(...result.values)
-    if (result.values.length < pagelen || !result.next) break
-    page += 1
-  }
-
-  return acc.slice(0, want)
+  const sep = baseEndpoint.includes('?') ? '&' : '?'
+  return paginate({
+    fetchPage: (page) => runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`),
+    parsePage: (output) => {
+      const result = parsePage<T>(output, resource)
+      return { items: result.values, hasMore: result.values.length >= pagelen && Boolean(result.next) }
+    },
+    want,
+    maxPages: 100,
+  })
 }
 
 function normalizeState(raw: unknown): string {
