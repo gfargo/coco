@@ -1,7 +1,6 @@
 import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../git/logData'
 import { hashesMatchAny } from '../../git/hashes'
-import type { RebasePlanRow, RebaseTodoAction } from '../../git/rebasePlanActions'
-import type { ConflictRegion } from '../../git/conflictRegionActions'
+import type { RebasePlanRow } from '../../git/rebasePlanActions'
 import {
     applyThemePickerAction,
     createThemePickerState,
@@ -9,12 +8,54 @@ import {
 } from './themePicker'
 export { filterThemePresets, getThemePickerSelection, getThemePickerSelectionFor } from './themePicker'
 import {
+    applyChangelogAction,
+    createChangelogState,
+    type ChangelogAction,
+    type ChangelogCacheEntry,
+    type ChangelogViewState,
+} from './changelogState'
+export { DEFAULT_CHANGELOG_VIEW_STATE } from './changelogState'
+export type { ChangelogViewStatus } from './changelogState'
+import {
+    applySplitPlanAction,
+    type SplitPlanAction,
+    type SplitPlanState,
+} from './splitPlanState'
+export type { SplitPlanState } from './splitPlanState'
+import {
+    applyConflictResolutionAction,
+    type ConflictResolutionAction,
+    type LogInkConflictResolutionState,
+} from './conflictResolutionState'
+export type { LogInkConflictProposal, LogInkConflictResolutionState } from './conflictResolutionState'
+import {
+    applyInputPromptAction,
+    type InputPromptAction,
+    type LogInkInputPromptState,
+} from './inputPromptState'
+export type { LogInkInputPromptKind } from './inputPromptState'
+import {
+    applyHelpOverlayAction,
+    createHelpOverlayState,
+    type HelpOverlayAction,
+} from './helpOverlayState'
+import {
+    applyCommandPaletteAction,
+    createCommandPaletteState,
+    type CommandPaletteAction,
+} from './commandPaletteState'
+import {
+    applyRebasePlanAction,
+    type LogInkRebasePlan,
+    type RebasePlanAction,
+} from './rebasePlanState'
+export type { LogInkRebasePlan } from './rebasePlanState'
+import {
     CommitComposeAction,
     CommitComposeState,
     applyCommitComposeAction,
     createCommitComposeState,
 } from './commitCompose'
-import type { CommitSplitPlan, CommitSplitPlanContext } from '../../commands/commit/split'
 import {
     cycleIssueFilterPreset,
     cyclePullRequestFilterPreset,
@@ -979,85 +1020,6 @@ export type LogInkState = {
   conflictResolution?: LogInkConflictResolutionState
 }
 
-export type LogInkRebasePlan = {
-  rows: RebasePlanRow[]
-  selectedIndex: number
-}
-
-export type LogInkConflictProposal = {
-  regionIndex: number
-  resolution: string
-  rationale: string
-  status: 'pending' | 'accepted' | 'rejected'
-  /**
-   * Region snapshot at generation time — the display source for the
-   * ours/theirs blocks AND the content-matched identity the apply path
-   * uses (line numbers shift as earlier regions are accepted).
-   */
-  region: ConflictRegion
-}
-
-export type LogInkConflictResolutionState = {
-  path: string
-  status: 'loading' | 'ready' | 'error'
-  error?: string
-  proposals: LogInkConflictProposal[]
-  selectedIndex: number
-}
-
-export type ChangelogViewStatus = 'idle' | 'loading' | 'ready' | 'error'
-
-export type ChangelogViewState = {
-  status: ChangelogViewStatus
-  text?: string
-  error?: string
-  branch?: string
-  baseLabel?: string
-  scrollOffset: number
-}
-
-export type ChangelogCacheEntry = {
-  text: string
-  baseLabel: string
-  generatedAt: number
-}
-
-export const DEFAULT_CHANGELOG_VIEW_STATE: ChangelogViewState = {
-  status: 'idle',
-  scrollOffset: 0,
-}
-
-/**
- * Split-plan overlay state. Held on root state (not on a per-view
- * surface) because the overlay can be triggered from compose and
- * dismissed back to whatever view was active beneath. The plan +
- * context come from `runCommitSplitPlanWorkflow`; the workstation
- * holds them between preview and apply so the executed split matches
- * exactly what was previewed.
- */
-export type SplitPlanState = {
-  status: 'loading' | 'ready' | 'applying'
-  plan?: CommitSplitPlan
-  planContext?: CommitSplitPlanContext
-  scrollOffset: number
-  error?: string
-  /**
-   * Set when the planner exhausted its retry budget and returned the
-   * single-group fallback. Surfaces in the overlay header so the user
-   * knows the plan they're previewing isn't a real LLM split, and in
-   * the apply-time success message. Cleared when the user re-rolls
-   * the planner.
-   */
-  fallback?: import('../../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
-  /**
-   * Set when a dedupe rescue silently dropped a file/hunk placement
-   * the model had also put in an earlier group (#1462). Surfaces as a
-   * warning banner in the overlay so a validation-clean plan doesn't
-   * hide an auto-resolved placement from the user before they apply.
-   */
-  dedupeWarnings?: import('../../commands/commit/splitPlanValidation').DuplicateRescueNote[]
-}
-
 export type LogInkStatusFilterMask = {
   staged: boolean
   unstaged: boolean
@@ -1106,66 +1068,6 @@ export function parseLogInkHistoryFetchPrefix(filter: string): LogInkHistoryFetc
     return value ? { grep: value } : undefined
   }
   return undefined
-}
-
-export type LogInkInputPromptKind =
-  | 'create-branch'
-  | 'create-branch-here'
-  | 'create-tag'
-  | 'create-tag-here'
-  | 'rename-branch'
-  | 'set-upstream'
-  | 'create-stash'
-  | 'rename-stash'
-  | 'stash-branch'
-  | 'gitignore-pattern'
-  | 'stage-pathspec'
-  | 'reword-head'
-  | 'pr-comment'
-  | 'pr-request-changes'
-  | 'create-pr'
-  | 'bisect-run-command'
-  | 'rebase-reword'
-  // #0.71 — remotes view mutations. `add-remote` collects a single
-  // `name url` line (space-separated, parsed in the submit handler);
-  // `set-remote-url` collects just a URL applied to the cursored
-  // remote. The prompt itself is the affirmative gate for both, so
-  // neither routes through the y-confirm path.
-  | 'add-remote'
-  | 'set-remote-url'
-  // #882 phase 4 — triage-view mutations. Distinct from the
-  // single-PR `pr-comment` / `pr-request-changes` kinds above so
-  // the submit handler routes to the by-number workflows (the
-  // single-PR equivalents target the current branch's PR).
-  | 'triage-issue-comment'
-  | 'triage-issue-label'
-  | 'triage-issue-assign'
-  | 'triage-pr-comment'
-  | 'triage-pr-label'
-  | 'triage-pr-assign'
-  // #882 phase 5 — destructive PR mutations on the triage view.
-  // Prompts for the review body then forwards through the y-confirm
-  // path, routed to the by-number workflow so the cursored PR (not
-  // the current branch's) gets the action. (The merge-strategy
-  // prompts became 1-key choice prompts in #1351.)
-  | 'triage-pr-request-changes'
-
-export type LogInkInputPromptState = {
-  kind: LogInkInputPromptKind
-  label: string
-  value: string
-  /**
-   * Free-form text mode (#806). When true:
-   *   - Enter inserts a literal newline into `value`
-   *   - Ctrl+D submits (Unix EOF convention — more reliable across
-   *     terminals + Ink than Ctrl+Enter, which most terminals
-   *     deliver as plain Enter)
-   *   - Backspace, Ctrl+U, Esc behave the same as single-line mode
-   * Opt-in per prompt — structured prompts (branch / tag / stash
-   * names, merge strategies, reset modes) stay single-line so muscle
-   * memory survives.
-   */
-  multiline?: boolean
 }
 
 export type LogInkAction =
@@ -1286,82 +1188,32 @@ export type LogInkAction =
   // re-resolving a now-meaningless range against the shrunken list.
   | { type: 'setMarks'; view: LogInkView; ids: string[] }
   | { type: 'clearSelection' }
-  | { type: 'appendPaletteFilter'; value: string }
-  | { type: 'backspacePaletteFilter' }
-  | { type: 'clearPaletteFilter' }
-  | { type: 'movePaletteSelection'; delta: number; commandCount: number }
-  | { type: 'recordPaletteRecent'; value: string }
+  | CommandPaletteAction
   | { type: 'toggleFilterMode' }
   | { type: 'toggleGraph' }
-  | { type: 'toggleHelp' }
-  | { type: 'scrollHelp'; delta: number }
-  | { type: 'openHelpFilter' }
-  | { type: 'appendHelpFilter'; value: string }
-  | { type: 'backspaceHelpFilter' }
-  | { type: 'commitHelpFilter' }
-  | { type: 'clearHelpFilter' }
+  | HelpOverlayAction
   | { type: 'toggleViewKeys' }
-  | { type: 'toggleCommandPalette' }
   | ThemePickerAction
   | { type: 'openGitignorePicker'; file: string }
   | { type: 'closeGitignorePicker' }
   | { type: 'moveGitignorePicker'; delta: number; count: number }
   | { type: 'cycleBranchSort' }
   | { type: 'cycleTagSort' }
-  | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string; multiline?: boolean }
-  | { type: 'appendInputPrompt'; value: string }
-  | { type: 'backspaceInputPrompt' }
-  | { type: 'clearInputPromptText' }
-  | { type: 'closeInputPrompt' }
+  | InputPromptAction
   | { type: 'toggleStatusFilterMask'; kind: keyof LogInkStatusFilterMask }
   | { type: 'setHistoryFetchArgs'; value?: LogInkHistoryFetchArgs }
   | { type: 'toggleDiffViewMode' }
   | { type: 'setDiffViewMode'; value: LogInkDiffViewMode }
-  | { type: 'setChangelogLoading'; branch: string; baseLabel: string }
-  | { type: 'setChangelogReady'; branch: string; baseLabel: string; text: string; generatedAt: number }
-  | { type: 'setChangelogError'; branch: string; baseLabel: string; error: string }
-  | { type: 'setChangelogText'; text: string; generatedAt: number }
-  | { type: 'pageChangelog'; delta: number; lineCount: number }
-  | { type: 'clearChangelogCache'; branch?: string }
+  | ChangelogAction
   | { type: 'markRecentCommits'; hashes: string[]; markedAt: number }
   | { type: 'clearRecentCommits' }
-  | { type: 'startSplitPlanLoad' }
-  | {
-      type: 'setSplitPlanReady'
-      plan: CommitSplitPlan
-      planContext: CommitSplitPlanContext
-      fallback?: import('../../commands/commit/splitPlanGenerator').SplitPlanFallbackInfo
-      dedupeWarnings?: import('../../commands/commit/splitPlanValidation').DuplicateRescueNote[]
-    }
-  | { type: 'setSplitPlanApplying' }
-  | { type: 'setSplitPlanError'; error: string }
-  | { type: 'pageSplitPlan'; delta: number; lineCount: number }
-  | { type: 'clearSplitPlan' }
+  | SplitPlanAction
   | { type: 'setBisectPickMode'; mode: 'bad' | 'good'; pendingBad?: string }
   | { type: 'clearBisectPickMode' }
   | { type: 'openRebasePlan'; rows: RebasePlanRow[] }
-  | { type: 'moveRebaseCursor'; delta: number }
-  | { type: 'setRebaseAction'; action: RebaseTodoAction }
-  | { type: 'moveRebaseRow'; delta: number }
-  | { type: 'setRebaseRewordMessage'; message: string }
-  | { type: 'clearRebasePlan' }
+  | RebasePlanAction
   | { type: 'setDiffLineSelectAnchor'; value?: number }
-  | { type: 'setConflictResolutionLoading'; path: string }
-  | {
-    type: 'setConflictResolutionReady'
-    path: string
-    proposals: Array<Omit<LogInkConflictProposal, 'status'>>
-  }
-  | { type: 'setConflictResolutionError'; path: string; error: string }
-  | { type: 'moveConflictProposal'; delta: number }
-  | {
-    type: 'setConflictProposalStatus'
-    regionIndex: number
-    status: 'accepted' | 'rejected'
-    /** Replacement text when an $EDITOR edit changed the proposal before accept. */
-    resolution?: string
-  }
-  | { type: 'clearConflictResolution' }
+  | ConflictResolutionAction
 
 const FOCUS_ORDER: LogInkFocus[] = ['sidebar', 'commits', 'detail']
 const SIDEBAR_TABS: LogInkSidebarTab[] = ['status', 'branches', 'tags', 'stashes', 'worktrees']
@@ -2145,9 +1997,7 @@ export function createLogInkState(
     repoStack: [{ label: options.repoLabel || 'root', workdir: options.repoWorkdir }],
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
-    paletteFilter: '',
-    paletteSelectedIndex: 0,
-    paletteRecent: [],
+    ...createCommandPaletteState(),
     ...createThemePickerState(),
     commitCompose: createCommitComposeState(),
     diffPreviewOffset: 0,
@@ -2164,10 +2014,7 @@ export function createLogInkState(
     // override via `options.fullGraph` when they need the compact
     // case explicitly.
     fullGraph: options.fullGraph ?? true,
-    showHelp: false,
-    helpScrollOffset: 0,
-    helpFilter: '',
-    helpFilterMode: false,
+    ...createHelpOverlayState(),
     showViewKeys: false,
     showCommandPalette: false,
     workflowActionId: undefined,
@@ -2189,8 +2036,7 @@ export function createLogInkState(
     inspectorTab: 'inspector',
     inspectorActionIndex: 0,
     bootLoading: options.bootLoading ?? false,
-    changelogView: { ...DEFAULT_CHANGELOG_VIEW_STATE },
-    changelogCache: {},
+    ...createChangelogState(),
   }
 }
 
@@ -2588,30 +2434,21 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingKey: undefined,
       }
     case 'openInputPrompt':
+    case 'closeInputPrompt':
       return {
         ...state,
-        inputPrompt: {
-          kind: action.kind,
-          label: action.label,
-          value: action.initial || '',
-          multiline: action.multiline,
-        },
+        ...applyInputPromptAction(state, action),
         pendingKey: undefined,
       }
     case 'appendInputPrompt':
-      return state.inputPrompt
-        ? { ...state, inputPrompt: { ...state.inputPrompt, value: `${state.inputPrompt.value}${action.value}` } }
-        : state
     case 'backspaceInputPrompt':
-      return state.inputPrompt
-        ? { ...state, inputPrompt: { ...state.inputPrompt, value: state.inputPrompt.value.slice(0, -1) } }
-        : state
     case 'clearInputPromptText':
-      return state.inputPrompt
-        ? { ...state, inputPrompt: { ...state.inputPrompt, value: '' } }
-        : state
-    case 'closeInputPrompt':
-      return { ...state, inputPrompt: undefined, pendingKey: undefined }
+      // These deliberately do NOT clear pendingKey — mid-typing
+      // keystrokes shouldn't cost the pending-key combo state.
+      return {
+        ...state,
+        ...applyInputPromptAction(state, action),
+      }
     case 'toggleStatusFilterMask': {
       const next = { ...state.statusFilterMask, [action.kind]: !state.statusFilterMask[action.kind] }
       // If the user just zeroed the mask, snap back to all-on rather
@@ -3154,17 +2991,10 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         fullGraph: !state.fullGraph,
         pendingKey: undefined,
       }
-    case 'toggleHelp': {
-      const opening = !state.showHelp
+    case 'toggleHelp':
       return {
         ...state,
-        showHelp: opening,
-        // Reset scroll position when toggling either direction so the
-        // next open always starts at the top — feels more predictable
-        // than picking up where the user last scrolled.
-        helpScrollOffset: 0,
-        helpFilter: '',
-        helpFilterMode: false,
+        ...applyHelpOverlayAction(state, action),
         showCommandPalette: false,
         // Opening full help supersedes the compact view-keys strip — this
         // is the progressive-disclosure step (`?` from the strip expands
@@ -3172,7 +3002,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         showViewKeys: false,
         pendingKey: undefined,
       }
-    }
     case 'toggleViewKeys':
       return {
         ...state,
@@ -3187,82 +3016,37 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingKey: undefined,
       }
     case 'scrollHelp':
-      // No upper-bound clamp here — the renderer caps the offset
-      // against the actual content height at render time. The
-      // reducer just prevents going below 0 so callers can safely
-      // pass negative deltas without us going past the top.
-      return {
-        ...state,
-        helpScrollOffset: Math.max(0, state.helpScrollOffset + action.delta),
-      }
     case 'openHelpFilter':
-      return { ...state, helpFilterMode: true }
     case 'appendHelpFilter':
-      // Typing narrows from the top — reset the scroll so the first
-      // match is visible instead of whatever row the user had reached.
-      return { ...state, helpFilter: state.helpFilter + action.value, helpScrollOffset: 0 }
     case 'backspaceHelpFilter':
-      return { ...state, helpFilter: state.helpFilter.slice(0, -1), helpScrollOffset: 0 }
     case 'commitHelpFilter':
-      // Enter keeps the narrowed list but returns j/k to scrolling.
-      return { ...state, helpFilterMode: false }
     case 'clearHelpFilter':
-      return { ...state, helpFilter: '', helpFilterMode: false, helpScrollOffset: 0 }
-    case 'toggleCommandPalette': {
-      const opening = !state.showCommandPalette
       return {
         ...state,
-        showCommandPalette: opening,
+        ...applyHelpOverlayAction(state, action),
+      }
+    case 'toggleCommandPalette':
+      return {
+        ...state,
+        ...applyCommandPaletteAction(state, action),
+        showCommandPalette: !state.showCommandPalette,
         showHelp: false,
         helpScrollOffset: 0,
         helpFilter: '',
         helpFilterMode: false,
         showViewKeys: false,
-        // Reset palette interaction state on every open/close so the next
-        // session starts from a clean slate.
-        paletteFilter: '',
-        paletteSelectedIndex: 0,
         pendingKey: undefined,
       }
-    }
     case 'appendPaletteFilter':
-      return {
-        ...state,
-        paletteFilter: `${state.paletteFilter}${action.value}`,
-        paletteSelectedIndex: 0,
-        pendingKey: undefined,
-      }
     case 'backspacePaletteFilter':
-      return {
-        ...state,
-        paletteFilter: state.paletteFilter.slice(0, -1),
-        paletteSelectedIndex: 0,
-        pendingKey: undefined,
-      }
     case 'clearPaletteFilter':
-      return {
-        ...state,
-        paletteFilter: '',
-        paletteSelectedIndex: 0,
-        pendingKey: undefined,
-      }
     case 'movePaletteSelection':
+    case 'recordPaletteRecent':
       return {
         ...state,
-        paletteSelectedIndex: clampIndex(
-          state.paletteSelectedIndex + action.delta,
-          action.commandCount
-        ),
+        ...applyCommandPaletteAction(state, action),
         pendingKey: undefined,
       }
-    case 'recordPaletteRecent': {
-      const next = [action.value, ...state.paletteRecent.filter((id) => id !== action.value)]
-      return {
-        ...state,
-        paletteRecent: next.slice(0, 8),
-        pendingKey: undefined,
-      }
-    }
     case 'toggleThemePicker':
       return {
         ...state,
@@ -3306,112 +3090,27 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         }
         : state
     case 'setChangelogLoading':
-      return {
-        ...state,
-        changelogView: {
-          status: 'loading',
-          branch: action.branch,
-          baseLabel: action.baseLabel,
-          scrollOffset: 0,
-        },
-        pendingKey: undefined,
-      }
-    case 'setChangelogReady': {
-      // Cache the result so re-entry (or `c` to PR) reuses it instead of
-      // re-running the LLM. Keyed by branch so a checkout naturally
-      // produces a fresh generation.
-      // Audit finding #9: `generatedAt` arrives on the action payload
-      // instead of being read from `Date.now()` here, so the reducer
-      // stays pure. Dispatchers (currently `runChangelogView` in
-      // app.ts) call `Date.now()` at dispatch time.
-      const cached: ChangelogCacheEntry = {
-        text: action.text,
-        baseLabel: action.baseLabel,
-        generatedAt: action.generatedAt,
-      }
-      return {
-        ...state,
-        changelogView: {
-          status: 'ready',
-          text: action.text,
-          branch: action.branch,
-          baseLabel: action.baseLabel,
-          scrollOffset: 0,
-        },
-        changelogCache: {
-          ...state.changelogCache,
-          [action.branch]: cached,
-        },
-        pendingKey: undefined,
-      }
-    }
+    case 'setChangelogReady':
     case 'setChangelogError':
+    case 'pageChangelog':
+    case 'clearChangelogCache':
       return {
         ...state,
-        changelogView: {
-          status: 'error',
-          branch: action.branch,
-          baseLabel: action.baseLabel,
-          error: action.error,
-          scrollOffset: 0,
-        },
+        ...applyChangelogAction(state, action),
         pendingKey: undefined,
       }
-    case 'setChangelogText': {
-      // Used by the $EDITOR round-trip: user edits the cached text, we
-      // update the view AND the cache entry so subsequent re-entry
-      // reflects the edits. Branch key is taken from the current view
-      // (which is what the user just edited against).
+    case 'setChangelogText':
+      // Guard lives in the slice reducer, which returns the fragment
+      // unchanged when the view isn't 'ready' — mirror that no-op here
+      // by skipping the pendingKey clear too.
       if (state.changelogView.status !== 'ready' || !state.changelogView.branch) {
         return state
       }
-      const branch = state.changelogView.branch
-      const existing = state.changelogCache[branch]
       return {
         ...state,
-        changelogView: {
-          ...state.changelogView,
-          text: action.text,
-        },
-        changelogCache: {
-          ...state.changelogCache,
-          [branch]: {
-            text: action.text,
-            baseLabel: existing?.baseLabel || state.changelogView.baseLabel || '',
-            // Updated-at timestamp reflects the edit. Not the original
-            // generation time — `r` (regenerate) is the explicit knob
-            // for "I want fresh LLM output, not my edits".
-            // Audit finding #9: timestamp arrives on the action.
-            generatedAt: action.generatedAt,
-          },
-        },
+        ...applyChangelogAction(state, action),
         pendingKey: undefined,
       }
-    }
-    case 'pageChangelog':
-      return {
-        ...state,
-        changelogView: {
-          ...state.changelogView,
-          scrollOffset: clampIndex(
-            state.changelogView.scrollOffset + action.delta,
-            action.lineCount
-          ),
-        },
-        pendingKey: undefined,
-      }
-    case 'clearChangelogCache': {
-      // Targeted clear for a single branch, or wholesale wipe when
-      // `branch` is omitted. Wholesale used on session reset / config
-      // change; targeted reserved for future "this generation looks
-      // wrong, drop it" UX.
-      if (!action.branch) {
-        return { ...state, changelogCache: {}, pendingKey: undefined }
-      }
-      const next = { ...state.changelogCache }
-      delete next[action.branch]
-      return { ...state, changelogCache: next, pendingKey: undefined }
-    }
     case 'markRecentCommits':
       // Empty hash list closes out the marker — caller may use this
       // to clear early when a follow-up op fires (so old "new"
@@ -3429,77 +3128,25 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
     case 'clearRecentCommits':
       return { ...state, recentCommitHashes: undefined, pendingKey: undefined }
     case 'startSplitPlanLoad':
-      // Overlay opens immediately so the user sees the loading state
-      // (rather than the compose view sitting frozen while the LLM
-      // call resolves). plan + planContext stay undefined until ready.
-      return {
-        ...state,
-        splitPlan: { status: 'loading', scrollOffset: 0 },
-        pendingKey: undefined,
-      }
     case 'setSplitPlanReady':
-      return {
-        ...state,
-        splitPlan: {
-          status: 'ready',
-          plan: action.plan,
-          planContext: action.planContext,
-          scrollOffset: 0,
-          fallback: action.fallback,
-          dedupeWarnings: action.dedupeWarnings,
-        },
-        pendingKey: undefined,
-      }
     case 'setSplitPlanApplying':
-      // Preserve plan + planContext so the overlay can keep rendering
-      // the same content during apply (just with a "applying…" hint
-      // overlaid). If somehow this fires without a plan loaded, fall
-      // back to the loading shape.
-      if (!state.splitPlan?.plan || !state.splitPlan.planContext) {
-        return { ...state, splitPlan: { status: 'loading', scrollOffset: 0 }, pendingKey: undefined }
-      }
-      return {
-        ...state,
-        splitPlan: {
-          ...state.splitPlan,
-          status: 'applying',
-        },
-        pendingKey: undefined,
-      }
     case 'setSplitPlanError':
-      // Apply / plan failure path. We KEEP the overlay open in 'ready'
-      // shape with the previous plan if we have one, so the user can
-      // either retry or back out without losing context. If no plan
-      // yet (failure during initial load), close the overlay — there's
-      // nothing to retry from. The status line carries the message
-      // either way; the `error` field is for the overlay's own copy.
-      if (!state.splitPlan?.plan) {
-        return { ...state, splitPlan: undefined, pendingKey: undefined }
-      }
+    case 'clearSplitPlan':
       return {
         ...state,
-        splitPlan: {
-          ...state.splitPlan,
-          status: 'ready',
-          error: action.error,
-        },
+        ...applySplitPlanAction(state, action),
         pendingKey: undefined,
       }
     case 'pageSplitPlan':
+      // Guard lives in the slice reducer, which returns the fragment
+      // unchanged when no plan is loaded — mirror that no-op here by
+      // skipping the pendingKey clear too.
       if (!state.splitPlan) return state
       return {
         ...state,
-        splitPlan: {
-          ...state.splitPlan,
-          scrollOffset: clampIndex(
-            state.splitPlan.scrollOffset + action.delta,
-            action.lineCount
-          ),
-        },
+        ...applySplitPlanAction(state, action),
         pendingKey: undefined,
       }
-    case 'clearSplitPlan':
-      return { ...state, splitPlan: undefined, pendingKey: undefined }
     case 'openRebasePlan': {
       const next = withPushedView(state, 'rebase')
       return {
@@ -3507,135 +3154,41 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         rebasePlan: { rows: action.rows, selectedIndex: 0 },
       }
     }
-    case 'moveRebaseCursor': {
-      const plan = state.rebasePlan
-      if (!plan || plan.rows.length === 0) return state
-      return {
-        ...state,
-        rebasePlan: {
-          ...plan,
-          selectedIndex: clampIndex(plan.selectedIndex + action.delta, plan.rows.length),
-        },
-        pendingKey: undefined,
-      }
-    }
+    case 'moveRebaseCursor':
+      if (!state.rebasePlan || state.rebasePlan.rows.length === 0) return state
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     case 'setRebaseAction': {
       const plan = state.rebasePlan
-      const row = plan?.rows[plan.selectedIndex]
-      if (!plan || !row) return state
-      // Retagging away from reword drops the stashed message so a later
-      // re-reword starts fresh instead of resurrecting stale text.
-      const rows = plan.rows.map((entry, index) => (
-        index === plan.selectedIndex
-          ? { ...entry, action: action.action, newMessage: action.action === 'reword' ? entry.newMessage : undefined }
-          : entry
-      ))
-      return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
+      if (!plan || !plan.rows[plan.selectedIndex]) return state
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     }
     case 'moveRebaseRow': {
       const plan = state.rebasePlan
       if (!plan) return state
-      const from = plan.selectedIndex
-      const to = from + action.delta
+      const to = plan.selectedIndex + action.delta
       if (to < 0 || to >= plan.rows.length) return state
-      const rows = [...plan.rows]
-      const [moved] = rows.splice(from, 1)
-      rows.splice(to, 0, moved)
-      return { ...state, rebasePlan: { rows, selectedIndex: to }, pendingKey: undefined }
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     }
     case 'setRebaseRewordMessage': {
       const plan = state.rebasePlan
-      const row = plan?.rows[plan.selectedIndex]
-      if (!plan || !row) return state
-      const message = action.message.trim()
-      if (!message) return { ...state, pendingKey: undefined }
-      const rows = plan.rows.map((entry, index) => (
-        index === plan.selectedIndex
-          ? { ...entry, action: 'reword' as const, newMessage: message }
-          : entry
-      ))
-      return { ...state, rebasePlan: { ...plan, rows }, pendingKey: undefined }
+      if (!plan || !plan.rows[plan.selectedIndex]) return state
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     }
     case 'setDiffLineSelectAnchor':
       return { ...state, diffLineSelectAnchor: action.value, pendingKey: undefined }
     case 'clearRebasePlan':
-      return { ...state, rebasePlan: undefined, pendingKey: undefined }
+      return { ...state, ...applyRebasePlanAction(state, action), pendingKey: undefined }
     case 'setConflictResolutionLoading':
-      return {
-        ...state,
-        conflictResolution: { path: action.path, status: 'loading', proposals: [], selectedIndex: 0 },
-        pendingKey: undefined,
-      }
     case 'setConflictResolutionReady':
-      return {
-        ...state,
-        conflictResolution: {
-          path: action.path,
-          status: 'ready',
-          proposals: action.proposals.map((proposal) => ({ ...proposal, status: 'pending' as const })),
-          selectedIndex: 0,
-        },
-        pendingKey: undefined,
-      }
     case 'setConflictResolutionError':
-      return {
-        ...state,
-        conflictResolution: {
-          path: action.path,
-          status: 'error',
-          error: action.error,
-          proposals: [],
-          selectedIndex: 0,
-        },
-        pendingKey: undefined,
-      }
-    case 'moveConflictProposal': {
-      const session = state.conflictResolution
-      if (!session || session.proposals.length === 0) {
-        return { ...state, pendingKey: undefined }
-      }
-      return {
-        ...state,
-        conflictResolution: {
-          ...session,
-          selectedIndex: clampIndex(session.selectedIndex + action.delta, session.proposals.length),
-        },
-        pendingKey: undefined,
-      }
-    }
-    case 'setConflictProposalStatus': {
-      const session = state.conflictResolution
-      if (!session) {
-        return { ...state, pendingKey: undefined }
-      }
-      const proposals = session.proposals.map((proposal) =>
-        proposal.regionIndex === action.regionIndex
-          ? {
-            ...proposal,
-            status: action.status,
-            resolution: action.resolution ?? proposal.resolution,
-          }
-          : proposal
-      )
-      // Advance the cursor to the next still-pending proposal so the
-      // y/y/y flow walks the file without manual j presses.
-      const nextPending = proposals.findIndex(
-        (proposal, index) => index > session.selectedIndex && proposal.status === 'pending'
-      )
-      const anyPending = proposals.findIndex((proposal) => proposal.status === 'pending')
-      const selectedIndex = nextPending !== -1
-        ? nextPending
-        : anyPending !== -1
-          ? anyPending
-          : session.selectedIndex
-      return {
-        ...state,
-        conflictResolution: { ...session, proposals, selectedIndex },
-        pendingKey: undefined,
-      }
-    }
+    case 'moveConflictProposal':
+    case 'setConflictProposalStatus':
     case 'clearConflictResolution':
-      return { ...state, conflictResolution: undefined, pendingKey: undefined }
+      return {
+        ...state,
+        ...applyConflictResolutionAction(state, action),
+        pendingKey: undefined,
+      }
     case 'setBisectPickMode':
       return {
         ...state,
