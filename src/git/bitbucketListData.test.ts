@@ -93,6 +93,24 @@ describe('buildPullRequestEndpoint (1238)', () => {
     expect(decodeURIComponent(e)).toContain('source.branch.name = "feat"')
     expect(decodeURIComponent(e)).toContain('destination.branch.name = "main"')
   })
+
+  it('adds a title search filter', () => {
+    const e = decodeURIComponent(buildPullRequestEndpoint('ws/repo', { search: 'auth' }))
+    expect(e).toContain('title ~ "auth"')
+  })
+
+  it('combines search with a state filter', () => {
+    const e = decodeURIComponent(buildPullRequestEndpoint('ws/repo', { state: 'open', search: 'auth' }))
+    expect(e).toContain('state=OPEN')
+    expect(e).toContain('title ~ "auth"')
+  })
+
+  it('combines search with a closed-state q clause', () => {
+    const e = decodeURIComponent(buildPullRequestEndpoint('ws/repo', { state: 'closed', search: 'auth' }))
+    expect(e).toContain('title ~ "auth"')
+    expect(e).toContain('AND')
+    expect(e).toContain('DECLINED')
+  })
 })
 
 describe('buildIssueEndpoint (1238)', () => {
@@ -277,6 +295,17 @@ describe('getBitbucketPullRequestList (1238)', () => {
     const overview = await getBitbucketPullRequestList(git, {}, runner)
     expect(overview).toMatchObject({ available: false, message: 'No Bitbucket remote detected.' })
   })
+
+  it('surfaces a not-supported message instead of silently ignoring --label', withCredentials(async () => {
+    const payload = JSON.stringify({ values: [makePR()], pagelen: 50, page: 1 })
+    const runner = async (endpoint: string) => {
+      if (endpoint === 'user') return '{}'
+      return payload
+    }
+    const overview = await getBitbucketPullRequestList(fakeGit(), { label: 'bug' }, runner)
+    expect(overview.message).toContain('not supported on Bitbucket Cloud')
+    expect(overview.pullRequests).toBeUndefined()
+  }))
 })
 
 describe('getBitbucketIssueList (1238)', () => {
