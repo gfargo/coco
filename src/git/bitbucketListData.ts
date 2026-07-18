@@ -123,7 +123,7 @@ async function resolveBitbucketMeNickname(runner: BitbucketRunner): Promise<stri
   return nicknameOf(raw)
 }
 
-type RawBitbucketPR = Record<string, unknown>
+export type RawBitbucketPR = Record<string, unknown>
 
 function parsePullRequests(output: string): PullRequestListItem[] {
   const result = parsePage<RawBitbucketPR>(output, 'pull requests')
@@ -415,6 +415,18 @@ function prToPullRequestInfo(pr: RawBitbucketPR): PullRequestInfo {
   }
 }
 
+/** Fetch the open Bitbucket pull request whose source branch is `branch`, if any. */
+export async function findOpenBitbucketPullRequestForBranch(
+  projectPath: string,
+  branch: string,
+  runner: BitbucketRunner
+): Promise<RawBitbucketPR | undefined> {
+  const q = encodeURIComponent(`source.branch.name = "${bbqlQuote(branch)}" AND state = "OPEN"`)
+  const out = (await runner(`repositories/${projectPath}/pullrequests?q=${q}&pagelen=1`)).trim()
+  const page = out ? (JSON.parse(out) as { values?: RawBitbucketPR[] }) : undefined
+  return page?.values?.[0]
+}
+
 export async function getBitbucketPullRequestOverview(
   git: SimpleGit,
   runner: BitbucketRunner = defaultBitbucketRunner
@@ -428,10 +440,7 @@ export async function getBitbucketPullRequestOverview(
     repository: (project) => ({ owner: project.owner, name: project.name }),
     requireCurrentBranch: true,
     fetch: async (project, currentBranch) => {
-      const q = encodeURIComponent(`source.branch.name = "${bbqlQuote(currentBranch ?? '')}" AND state = "OPEN"`)
-      const out = (await runner(`repositories/${project.path}/pullrequests?q=${q}&pagelen=1`)).trim()
-      const page = out ? JSON.parse(out) as { values?: RawBitbucketPR[] } : undefined
-      const pr = page?.values?.[0]
+      const pr = await findOpenBitbucketPullRequestForBranch(project.path, currentBranch as string, runner)
       return {
         currentPullRequest: pr ? sanitizePullRequestInfo(prToPullRequestInfo(pr)) : undefined,
         ...(pr ? {} : { message: `No pull request found for ${currentBranch}.` }),
