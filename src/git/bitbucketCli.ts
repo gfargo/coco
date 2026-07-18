@@ -5,6 +5,7 @@ import {
   type GhActionError,
   type GhStatus,
 } from './githubCli'
+import { compactCliError, resolveForgeActionError } from './forgeErrors'
 
 /**
  * Bitbucket workspace / repo coordinates parsed from a remote URL. `owner` is
@@ -145,36 +146,30 @@ export function describeBitbucketStatus(status: GhStatus): string {
   }
 }
 
+/**
+ * Compact a multi-line Bitbucket error into a head line plus bounded detail
+ * lines. Thin wrapper over the shared `compactCliError`, mirroring
+ * `compactGhError` / `compactGlabError`. Bitbucket errors have no
+ * `Command failed:`-prefixed argv echo (they come from `fetch`, not
+ * `execFile`), so that filter is inert here.
+ */
 export function compactBitbucketError(message: string): GhActionError {
-  const lines = message
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-  return {
-    message: lines[0] || 'Bitbucket API call failed.',
-    details: lines.slice(1, 8),
-  }
+  return compactCliError(message, { fallback: 'Bitbucket API call failed.' })
 }
 
 /**
  * Turn a thrown Bitbucket error into a user-facing message, re-probing auth
  * on the error path so a mid-session credential expiry yields the recovery hint
- * instead of raw HTTP error output. Mirrors `resolveGlabActionError`.
+ * instead of raw HTTP error output. Mirrors `resolveGlabActionError` via the
+ * shared `resolveForgeActionError` scaffold.
  */
 export async function resolveBitbucketActionError(
   error: unknown,
   runner: BitbucketRunner
 ): Promise<GhActionError> {
-  const raw = (error as Error)?.message || 'Bitbucket API call failed.'
-
-  try {
-    const status = await getBitbucketStatus(runner)
-    if (status.kind !== 'ok') {
-      return { message: describeBitbucketStatus(status) }
-    }
-  } catch {
-    // Auth probe itself failed; fall back to the raw error.
-  }
-
-  return compactBitbucketError(raw)
+  return resolveForgeActionError(error, {
+    probe: () => getBitbucketStatus(runner),
+    describe: describeBitbucketStatus,
+    fallback: 'Bitbucket API call failed.',
+  })
 }
