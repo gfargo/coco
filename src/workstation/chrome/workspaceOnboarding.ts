@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
+
+import { getCocoCacheDir } from '../../lib/utils/cocoPaths'
 
 /**
  * First-run onboarding marker for the workspace surface (#880
@@ -15,16 +16,8 @@ import * as path from 'node:path'
 
 const MARKER_BASENAME = 'workspace-onboarding.seen'
 
-function resolveCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  if (xdg && xdg.trim().length > 0) {
-    return path.join(xdg, 'coco')
-  }
-  return path.join(os.homedir(), '.cache', 'coco')
-}
-
 export function getWorkspaceOnboardingMarkerPath(): string {
-  return path.join(resolveCacheDir(), MARKER_BASENAME)
+  return path.join(getCocoCacheDir(), MARKER_BASENAME)
 }
 
 export function hasSeenWorkspaceOnboarding(): boolean {

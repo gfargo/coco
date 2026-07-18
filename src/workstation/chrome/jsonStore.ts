@@ -1,8 +1,8 @@
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { writeFileAtomic } from '../../lib/utils/atomicFileWrite'
+import { getCocoCacheDir } from '../../lib/utils/cocoPaths'
 
 /**
  * Shared XDG-friendly JSON persistence used by every chrome cache /
@@ -74,12 +74,6 @@ type RawEnvelope = {
   savedAt?: string
 } & Record<string, unknown>
 
-function resolveStoreDir(subdir: string): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  const root = xdg && xdg.trim().length > 0 ? xdg : path.join(os.homedir(), '.cache')
-  return path.join(root, 'coco', subdir)
-}
-
 export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
   const indent = options.format === 'compact' ? undefined : 2
   const payloadField = options.payloadField ?? 'payload'
@@ -88,7 +82,7 @@ export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
     return options.basename(key ?? '')
   }
   const resolvePath = (key?: string): string =>
-    path.join(resolveStoreDir(options.subdir), resolveBasename(key))
+    path.join(getCocoCacheDir(options.subdir), resolveBasename(key))
 
   return {
     path: resolvePath,
