@@ -132,27 +132,6 @@ export function abortOperation(
   )
 }
 
-export function skipOperation(
-  git: SimpleGit,
-  operation: GitOperationType
-): Promise<BranchActionResult> {
-  const command = getOperationCommand(operation, 'skip')
-
-  if (!command) {
-    return Promise.resolve({
-      ok: false,
-      message: operation === 'merge'
-        ? 'Skip is not supported for merge operations.'
-        : 'No in-progress Git operation to skip.',
-    })
-  }
-
-  return runAction(
-    () => git.raw(command.args),
-    command.successMessage
-  )
-}
-
 export function resolveConflictOurs(
   git: SimpleGit,
   path: string

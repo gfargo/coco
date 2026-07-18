@@ -62,23 +62,3 @@ export async function getTagOverview(git: SimpleGit): Promise<TagOverview> {
     tags: parseTagRefs(output),
   }
 }
-
-export async function getTagRangeSummary(
-  git: SimpleGit,
-  from: string,
-  to = 'HEAD'
-): Promise<TagRangeSummary> {
-  const [commits, authors, files] = await Promise.all([
-    git.raw(['rev-list', '--count', `${from}..${to}`]),
-    git.raw(['log', '--format=%an', `${from}..${to}`]),
-    git.raw(['diff', '--name-only', `${from}..${to}`]),
-  ])
-
-  return {
-    from,
-    to,
-    commitCount: Number.parseInt(commits.trim(), 10) || 0,
-    authors: Array.from(new Set(authors.split('\n').map((author) => author.trim()).filter(Boolean))),
-    changedFiles: Array.from(new Set(files.split('\n').map((file) => file.trim()).filter(Boolean))),
-  }
-}

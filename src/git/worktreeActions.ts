@@ -19,48 +19,6 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
   }
 }
 
-export function createWorktree(
-  git: SimpleGit,
-  path: string,
-  ref: string
-): Promise<BranchActionResult> {
-  const trimmedPath = path.trim()
-
-  if (!trimmedPath) {
-    return Promise.resolve({
-      ok: false,
-      message: 'Worktree cancelled: empty path.',
-    })
-  }
-
-  return runAction(
-    () => git.raw(['worktree', 'add', trimmedPath, ref]),
-    `Created worktree ${trimmedPath} from ${ref}`
-  )
-}
-
-export function createBranchWorktree(
-  git: SimpleGit,
-  path: string,
-  branchName: string,
-  startPoint: string
-): Promise<BranchActionResult> {
-  const trimmedPath = path.trim()
-  const trimmedBranch = branchName.trim()
-
-  if (!trimmedPath || !trimmedBranch) {
-    return Promise.resolve({
-      ok: false,
-      message: 'Worktree cancelled: empty path or branch name.',
-    })
-  }
-
-  return runAction(
-    () => git.raw(['worktree', 'add', '-b', trimmedBranch, trimmedPath, startPoint]),
-    `Created worktree ${trimmedPath} on ${trimmedBranch}`
-  )
-}
-
 export function removeWorktree(git: SimpleGit, worktree: WorktreeEntry): Promise<BranchActionResult> {
   if (worktree.current) {
     return Promise.resolve({
@@ -80,13 +38,6 @@ export function removeWorktree(git: SimpleGit, worktree: WorktreeEntry): Promise
     () => git.raw(['worktree', 'remove', worktree.path]),
     `Removed worktree ${worktree.path}`
   )
-}
-
-export function worktreePathAction(worktree: WorktreeEntry): BranchActionResult {
-  return {
-    ok: true,
-    message: `Worktree path: ${worktree.path}`,
-  }
 }
 
 /**
