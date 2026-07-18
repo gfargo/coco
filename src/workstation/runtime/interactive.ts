@@ -16,6 +16,7 @@ import {
 import { LogTuiState, createLogTuiState, getSelectedCommit } from './interactiveState'
 import { GitOperationOverview, getGitOperationOverview } from '../../git/operationData'
 import { ProviderOverview, getProviderOverview } from '../../git/providerData'
+import { truncateCells } from '../chrome/text'
 
 type LogTuiStreams = {
   appLabel?: string
@@ -110,19 +111,7 @@ const DEFAULT_HEIGHT = 70
 const DEFAULT_WIDTH = 120
 
 function truncate(value: string, width: number): string {
-  if (width < 1) {
-    return ''
-  }
-
-  if (value.length <= width) {
-    return value
-  }
-
-  if (width <= 3) {
-    return value.slice(0, width)
-  }
-
-  return `${value.slice(0, width - 3)}...`
+  return truncateCells(value, width, { ascii: true })
 }
 
 function formatChangedFile(file: GitCommitDetail['files'][number]): string {
