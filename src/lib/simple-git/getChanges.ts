@@ -1,9 +1,8 @@
 import { SimpleGit } from 'simple-git'
-import path from 'path'
-import { minimatch } from 'minimatch'
 import { FileChange } from '../types'
 import { getStatus } from './getStatus'
 import { getSummaryText } from './getSummaryText'
+import { filterIgnoredChanges } from './filterIgnoredChanges'
 import { DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../config/constants'
 
 export type GetChangesInput = {
@@ -67,36 +66,11 @@ export async function getChanges({ git, options }: GetChangesInput): Promise<Get
     }
   })
 
-  const ignoredExtensionsSet = new Set(
-    ignoredExtensions.map((extension) => extension.toLowerCase())
-  )
-  const filteredStaged = staged.filter((file) => {
-    const extension = path.extname(file.filePath).toLowerCase()
-    return (
-      !ignoredExtensionsSet.has(extension) &&
-      !ignoredFiles.some((ignoredPattern) => minimatch(file.filePath, ignoredPattern))
-    )
-  })
-
-  const filteredUnstaged = unstaged.filter((file) => {
-    const extension = path.extname(file.filePath).toLowerCase()
-    return (
-      !ignoredExtensionsSet.has(extension) &&
-      !ignoredFiles.some((ignoredPattern) => minimatch(file.filePath, ignoredPattern))
-    )
-  })
-
-  const filteredUntracked = untracked.filter((file) => {
-    const extension = path.extname(file.filePath).toLowerCase()
-    return (
-      !ignoredExtensionsSet.has(extension) &&
-      !ignoredFiles.some((ignoredPattern) => minimatch(file.filePath, ignoredPattern))
-    )
-  })
+  const filterOptions = { ignoredFiles, ignoredExtensions }
 
   return {
-    staged: filteredStaged,
-    unstaged: filteredUnstaged,
-    untracked: filteredUntracked,
+    staged: filterIgnoredChanges(staged, filterOptions),
+    unstaged: filterIgnoredChanges(unstaged, filterOptions),
+    untracked: filterIgnoredChanges(untracked, filterOptions),
   }
 }

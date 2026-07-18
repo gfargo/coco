@@ -1,4 +1,5 @@
 import { defaultGlabRunner, type GlabRunner } from './glabCli'
+import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
 import type {
@@ -57,30 +58,22 @@ function parseNotes(output: string): IssueComment[] {
 /**
  * Page through an MR/issue's notes endpoint. GitLab caps `per_page` at 100, so a
  * single request silently truncates long discussion threads; accumulate pages
- * (up to a 2000-note ceiling) until a short page. A failed or malformed page
+ * (up to a 20-page ceiling) until a short page. A failed or malformed page
  * degrades to whatever was collected rather than failing the whole detail.
  */
 async function fetchAllNotes(runner: GlabRunner, base: string): Promise<IssueComment[]> {
-  const comments: IssueComment[] = []
-  for (let page = 1; page <= 20; page++) {
-    let out = ''
-    try {
-      out = (await runner(['api', `${base}/notes?per_page=100&page=${page}`])).trim()
-    } catch {
-      break
-    }
-    if (!out) break
-    let raw: unknown
-    try {
-      raw = JSON.parse(out)
-    } catch {
-      break
-    }
-    if (!Array.isArray(raw)) break
-    comments.push(...mapNotes(raw as GlabNote[]))
-    if (raw.length < 100) break
-  }
-  return comments
+  return paginate({
+    fetchPage: async (page) => (await runner(['api', `${base}/notes?per_page=100&page=${page}`])).trim(),
+    parsePage: (output) => {
+      if (!output) return undefined
+      const raw = JSON.parse(output)
+      if (!Array.isArray(raw)) return undefined
+      return { items: mapNotes(raw as GlabNote[]), hasMore: raw.length >= 100 }
+    },
+    want: Infinity,
+    maxPages: 20,
+    onError: 'stop',
+  })
 }
 
 async function safeJson<T>(runner: GlabRunner, endpoint: string): Promise<T | undefined> {
