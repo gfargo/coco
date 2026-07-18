@@ -116,14 +116,46 @@ export async function defaultGhRunner(
   return result.stdout
 }
 
-export async function getGitHubRepository(
+/**
+ * Resolve the repo's default remote — `origin`, else the first configured
+ * remote — and its URL (preferring the push URL, falling back to fetch).
+ * The single source of truth for remote-selection policy; every
+ * remote-to-project resolver in this file (and in `glabCli.ts`,
+ * `bitbucketCli.ts`, `providerData.ts`, `repoIdentifier.ts`) builds on this.
+ */
+export async function resolveDefaultRemote(
   git: SimpleGit
-): Promise<GitHubRepository | undefined> {
+): Promise<{ name: string; url: string } | undefined> {
   const remotes = await git.getRemotes(true)
   const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
   const url = remote?.refs.push || remote?.refs.fetch
+  return remote && url ? { name: remote.name, url } : undefined
+}
 
-  return url ? parseGitHubRemoteUrl(url) : undefined
+/**
+ * Resolve the `{owner,name,path,host}` shape shared by GitLab and Bitbucket
+ * project resolution — their bodies are otherwise byte-identical.
+ */
+export async function resolveForgeProject(
+  git: SimpleGit
+): Promise<{ owner: string; name: string; path: string; host: string } | undefined> {
+  const resolved = await resolveDefaultRemote(git)
+  if (!resolved) return undefined
+  const parsed = parseRemoteUrl(resolved.url)
+  if (!parsed) return undefined
+  return {
+    owner: parsed.owner,
+    name: parsed.name,
+    path: parsed.owner ? `${parsed.owner}/${parsed.name}` : parsed.name,
+    host: parsed.host,
+  }
+}
+
+export async function getGitHubRepository(
+  git: SimpleGit
+): Promise<GitHubRepository | undefined> {
+  const resolved = await resolveDefaultRemote(git)
+  return resolved ? parseGitHubRemoteUrl(resolved.url) : undefined
 }
 
 /**

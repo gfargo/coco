@@ -4,7 +4,7 @@ import { SimpleGit } from 'simple-git'
 import {
   GH_DEFAULT_TIMEOUT_MS,
   GH_MAX_BUFFER_BYTES,
-  parseRemoteUrl,
+  resolveForgeProject,
   type GhActionError,
   type GhRunOptions,
   type GhRunner,
@@ -52,20 +52,7 @@ export async function defaultGlabRunner(
 
 /** Parse the GitLab project from the repo's `origin` remote (else first), or undefined. */
 export async function getGitLabProject(git: SimpleGit): Promise<GitLabProject | undefined> {
-  const remotes = await git.getRemotes(true)
-  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
-  const url = remote?.refs.push || remote?.refs.fetch
-  if (!url) return undefined
-
-  const parsed = parseRemoteUrl(url)
-  if (!parsed) return undefined
-
-  return {
-    owner: parsed.owner,
-    name: parsed.name,
-    path: parsed.owner ? `${parsed.owner}/${parsed.name}` : parsed.name,
-    host: parsed.host,
-  }
+  return resolveForgeProject(git)
 }
 
 /**
