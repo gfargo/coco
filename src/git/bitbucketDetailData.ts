@@ -1,4 +1,5 @@
 import { defaultBitbucketRunner, type BitbucketRunner } from './bitbucketCli'
+import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
 import type {
@@ -64,27 +65,19 @@ async function fetchAllComments(
   runner: BitbucketRunner,
   base: string
 ): Promise<IssueComment[]> {
-  const comments: IssueComment[] = []
-  for (let page = 1; page <= 20; page++) {
-    let out = ''
-    try {
-      out = (await runner(`${base}/comments?pagelen=50&page=${page}`)).trim()
-    } catch {
-      break
-    }
-    if (!out) break
-    let raw: unknown
-    try {
-      raw = JSON.parse(out)
-    } catch {
-      break
-    }
-    const page_data = raw as { values?: BitbucketComment[] }
-    if (!Array.isArray(page_data?.values)) break
-    comments.push(...mapComments(page_data.values))
-    if (page_data.values.length < 50) break
-  }
-  return comments
+  return paginate({
+    fetchPage: async (page) => (await runner(`${base}/comments?pagelen=50&page=${page}`)).trim(),
+    parsePage: (output) => {
+      if (!output) return undefined
+      const raw = JSON.parse(output)
+      const page_data = raw as { values?: BitbucketComment[] }
+      if (!Array.isArray(page_data?.values)) return undefined
+      return { items: mapComments(page_data.values), hasMore: page_data.values.length >= 50 }
+    },
+    want: Infinity,
+    maxPages: 20,
+    onError: 'stop',
+  })
 }
 
 function parseParticipantsAsReviews(participants: unknown): PullRequestReview[] {
