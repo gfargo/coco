@@ -26,7 +26,7 @@ import { LogOptions } from '../commands/log/config'
 // too tight for that I/O once the full suite runs all workers in parallel
 // (e.g. during `npm run release`), producing flaky timeouts that aren't
 // real failures. Give the whole file a generous budget instead.
-jest.setTimeout(30_000)
+jest.setTimeout(60_000)
 
 function argv(overrides: Partial<LogOptions> = {}): Arguments<LogOptions> {
   return {
