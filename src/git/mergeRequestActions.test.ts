@@ -126,6 +126,7 @@ describe('MR mutating action arg contracts (#0.70)', () => {
   it('rejects flag-like / unsafe arg shapes without invoking glab', async () => {
     const { calls, runner } = capturingRunner()
     expect((await addMergeRequestLabel(5, '--delete', runner)).ok).toBe(false)
+    expect((await addMergeRequestLabel(5, 'area: db,cache', runner)).ok).toBe(false)
     expect((await addMergeRequestAssignee(5, '-rf', runner)).ok).toBe(false)
     expect((await addMergeRequestAssignee(5, 'bob,carol', runner)).ok).toBe(false)
     expect((await createMergeRequest({ base: 'main', head: '--foo', title: 'T', body: 'B' }, runner)).ok).toBe(false)

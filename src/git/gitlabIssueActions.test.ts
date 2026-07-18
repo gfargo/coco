@@ -39,6 +39,7 @@ describe('GitLab issue action arg contracts (#0.70)', () => {
   it('rejects flag-like / unsafe arg shapes without shelling out', async () => {
     const { calls, runner } = capturingRunner()
     expect((await addGitLabIssueLabel(7, '--delete', runner)).ok).toBe(false)
+    expect((await addGitLabIssueLabel(7, 'area: db,cache', runner)).ok).toBe(false)
     expect((await addGitLabIssueAssignee(7, '-rf', runner)).ok).toBe(false)
     expect((await addGitLabIssueAssignee(7, 'bob,carol', runner)).ok).toBe(false)
     expect(calls).toHaveLength(0)

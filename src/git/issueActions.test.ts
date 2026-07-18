@@ -112,6 +112,12 @@ describe('issueActions', () => {
       expect((await addIssueLabel(882, '--delete', runner)).ok).toBe(false)
       expect(runner).not.toHaveBeenCalled()
     })
+
+    it('rejects comma-bearing labels without invoking gh', async () => {
+      const runner = jest.fn()
+      expect((await addIssueLabel(882, 'area: db,cache', runner)).ok).toBe(false)
+      expect(runner).not.toHaveBeenCalled()
+    })
   })
 })
 

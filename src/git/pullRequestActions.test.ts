@@ -251,6 +251,12 @@ describe('triage-by-number PR actions (#882 phase 4)', () => {
       expect((await addPullRequestLabel(962, '--delete', runner)).ok).toBe(false)
       expect(runner).not.toHaveBeenCalled()
     })
+
+    it('rejects comma-bearing labels without invoking gh', async () => {
+      const runner = jest.fn()
+      expect((await addPullRequestLabel(962, 'area: db,cache', runner)).ok).toBe(false)
+      expect(runner).not.toHaveBeenCalled()
+    })
 })
 
   describe('addPullRequestAssignee', () => {

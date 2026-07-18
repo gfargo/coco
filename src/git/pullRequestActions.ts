@@ -3,7 +3,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { GhRunner, defaultGhRunner } from './pullRequestData'
 import { resolveGhActionError } from './githubCli'
-import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
+import { rejectFlagLike, rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
 
 export type PullRequestActionResult = {
   ok: boolean
@@ -221,7 +221,7 @@ export function addPullRequestLabel(
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
   }
-  const bad = rejectFlagLike(label, 'Label')
+  const bad = rejectUnsafeLabel(label)
   if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGhAction(
     runner,
