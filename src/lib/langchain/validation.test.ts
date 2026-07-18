@@ -1,5 +1,6 @@
-import { validateModel } from './validation'
+import { validateModel, validateServiceConfig } from './validation'
 import { LangChainValidationError } from './errors'
+import { getDefaultServiceConfigFromAlias } from './utils'
 
 describe('validateModel (#1243 — per-provider validity)', () => {
   it('accepts a model that matches its provider', () => {
@@ -45,5 +46,22 @@ describe('validateModel (#1456 — deprecated model ids)', () => {
     expect(() =>
       validateModel('anthropic.claude-3-5-sonnet-20241022-v2:0', 'bedrock'),
     ).toThrow(/anthropic\.claude-sonnet-4-6/)
+  })
+
+  it('still rejects a deprecated id under the first-party openai provider', () => {
+    expect(() => validateModel('gpt-4.1-nano', 'openai')).toThrow(/retired/)
+  })
+
+  it('does not hard-block a deprecated-looking id under azure — deployment names are user-defined', () => {
+    expect(() => validateModel('gpt-4.1-nano', 'azure')).not.toThrow()
+  })
+})
+
+describe('validateServiceConfig (OSS-975 — shipped defaults pass their own validation)', () => {
+  it('accepts every provider default straight out of getDefaultServiceConfigFromAlias', () => {
+    const providers = ['openai', 'anthropic', 'azure', 'gemini', 'mistral', 'bedrock', 'ollama'] as const
+    for (const provider of providers) {
+      expect(() => validateServiceConfig(getDefaultServiceConfigFromAlias(provider))).not.toThrow()
+    }
   })
 })
