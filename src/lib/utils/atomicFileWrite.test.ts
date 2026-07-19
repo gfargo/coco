@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -34,6 +34,21 @@ describe('writeFileAtomic', () => {
       const file = join(dir, 'data.json')
       writeFileAtomic(file, 'x')
       expect(statSync(file).mode & 0o777).toBe(0o600)
+    })
+
+    it('preserveExistingMode keeps the destination mode on overwrite', () => {
+      const file = join(dir, 'CHANGELOG.md')
+      writeFileAtomic(file, 'first')
+      chmodSync(file, 0o644)
+      writeFileAtomic(file, 'second', { preserveExistingMode: true })
+      expect(readFileSync(file, 'utf8')).toBe('second')
+      expect(statSync(file).mode & 0o777).toBe(0o644)
+    })
+
+    it('preserveExistingMode uses a umask-derived default for a new file', () => {
+      const file = join(dir, 'CHANGELOG.md')
+      writeFileAtomic(file, 'first', { preserveExistingMode: true })
+      expect(statSync(file).mode & 0o777).toBe(0o666 & ~process.umask())
     })
   }
 })

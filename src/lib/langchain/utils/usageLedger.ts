@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 import type { LlmCallMetadata } from './observability'
+import { getCocoCacheDir } from '../../utils/cocoPaths'
 
 /**
  * Local LLM usage ledger. Records a compact line per LLM call so the
@@ -51,12 +51,6 @@ export type UsageAggregate = {
 const MAX_LEDGER_BYTES = 5 * 1024 * 1024
 const TRIM_TO_RECORDS = 20_000
 
-function cacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  if (xdg) return path.join(xdg, 'coco')
-  return path.join(os.homedir(), '.cache', 'coco')
-}
-
 /**
  * Path to the ledger. `COCO_USAGE_LOG` may be a filesystem path (used verbatim)
  * or a boolean-ish toggle (`1` / `true`), in which case the default cache path
@@ -67,7 +61,7 @@ export function getUsageLogPath(): string {
   if (env && !isBooleanish(env)) {
     return env
   }
-  return path.join(cacheDir(), 'usage.jsonl')
+  return path.join(getCocoCacheDir(), 'usage.jsonl')
 }
 
 function isBooleanish(value: string): boolean {

@@ -1,5 +1,6 @@
 import * as path from 'node:path'
 import { simpleGit, SimpleGit } from 'simple-git'
+import { resolveDefaultRemote } from './githubCli'
 
 /**
  * Derive a readable `owner/repo` identifier from a git remote URL for any forge
@@ -41,10 +42,8 @@ export async function resolveRepoIdentifier(
   try {
     const git = options.git ?? (options.cwd ? simpleGit({ baseDir: options.cwd }) : simpleGit())
 
-    const remotes = await git.getRemotes(true)
-    const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
-    const url = remote?.refs?.push || remote?.refs?.fetch
-    const fromRemote = url ? parseRepoIdentifierFromRemote(url) : undefined
+    const resolved = await resolveDefaultRemote(git)
+    const fromRemote = resolved ? parseRepoIdentifierFromRemote(resolved.url) : undefined
     if (fromRemote) return fromRemote
 
     const toplevel = (await git.revparse(['--show-toplevel'])).trim()

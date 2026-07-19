@@ -1,6 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { describeGlabStatus, getGitLabProject, getGlabStatus, type GlabRunner, defaultGlabRunner } from './glabCli'
-import { loadForgeList, loadForgeOverview } from './forgeLoad'
+import { loadForgeList, loadForgeOverview, paginate } from './forgeLoad'
 import type {
   IssueListFilter,
   IssueListItem,
@@ -62,8 +62,7 @@ function gitlabListError(raw: unknown, resource: string): Error {
  * caps `per_page` at 100, so a single request silently truncates large result
  * sets; page through (`per_page` is baked into `baseEndpoint`) until we have
  * `want` rows or reach the last page. Mirrors how `gh` paginates internally so
- * `--limit N` behaves the same on both forges. The `page <= 100` ceiling is a
- * safety stop against a misbehaving API.
+ * `--limit N` behaves the same on both forges.
  */
 async function fetchAllPages<T>(
   runner: GlabRunner,
@@ -72,15 +71,15 @@ async function fetchAllPages<T>(
   want: number,
   perPage: number
 ): Promise<T[]> {
-  const acc: T[] = []
-  let page = 1
-  while (acc.length < want && page <= 100) {
-    const batch = parse(await runner(['api', `${baseEndpoint}&page=${page}`]))
-    acc.push(...batch)
-    if (batch.length < perPage) break
-    page += 1
-  }
-  return acc.slice(0, want)
+  return paginate({
+    fetchPage: (page) => runner(['api', `${baseEndpoint}&page=${page}`]),
+    parsePage: (output) => {
+      const items = parse(output)
+      return { items, hasMore: items.length >= perPage }
+    },
+    want,
+    maxPages: 100,
+  })
 }
 
 /** Map a GitLab MR/issue `state` to coco's uppercased state vocabulary. */
@@ -321,6 +320,17 @@ function mrToPullRequestInfo(mr: Record<string, unknown>): PullRequestInfo {
   }
 }
 
+/** Fetch the open GitLab merge request whose source branch is `branch`, if any. */
+export async function findOpenMergeRequestForBranch(
+  projectPath: string,
+  branch: string,
+  runner: GlabRunner
+): Promise<Record<string, unknown> | undefined> {
+  const endpoint = `projects/${encodeProjectPath(projectPath)}/merge_requests?source_branch=${encodeURIComponent(branch)}&state=opened`
+  const out = (await runner(['api', endpoint])).trim()
+  return (out ? (JSON.parse(out) as Array<Record<string, unknown>>) : [])[0]
+}
+
 /**
  * Current-branch merge-request overview — the glab counterpart to
  * `getPullRequestOverview`, for the single-PR (`g p`) surface. Resolves the open
@@ -340,9 +350,7 @@ export async function getMergeRequestOverview(
     repository: (project) => ({ owner: project.owner, name: project.name }),
     requireCurrentBranch: true,
     fetch: async (project, currentBranch) => {
-      const endpoint = `projects/${encodeProjectPath(project.path)}/merge_requests?source_branch=${encodeURIComponent(currentBranch as string)}&state=opened`
-      const out = (await runner(['api', endpoint])).trim()
-      const mr = (out ? (JSON.parse(out) as Array<Record<string, unknown>>) : [])[0]
+      const mr = await findOpenMergeRequestForBranch(project.path, currentBranch as string, runner)
       return {
         currentPullRequest: mr ? sanitizePullRequestInfo(mrToPullRequestInfo(mr)) : undefined,
         ...(mr ? {} : { message: `No merge request found for ${currentBranch}.` }),

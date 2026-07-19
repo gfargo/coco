@@ -87,24 +87,6 @@ function formatRegions(regions: ConflictRegion[]): string {
     .join('\n\n')
 }
 
-/**
- * Rough token estimate for the confirm overlay's cost line: prompt
- * scaffolding + the serialized regions at ~4 chars/token, plus output
- * headroom proportional to the region content (the model echoes a
- * resolution per region).
- */
-export function estimateConflictResolutionTokens(regions: ConflictRegion[]): number {
-  const contentChars = regions.reduce(
-    (total, region) =>
-      total +
-      region.ours.join('\n').length +
-      (region.base?.join('\n').length ?? 0) +
-      region.theirs.join('\n').length,
-    0
-  )
-  return Math.ceil(contentChars / 4) * 2 + 400
-}
-
 type ConflictWorkflowArgv = Arguments<CommitOptions>
 
 function createConflictWorkflowArgv(): ConflictWorkflowArgv {

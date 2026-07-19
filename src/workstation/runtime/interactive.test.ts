@@ -1,11 +1,11 @@
 import { GitCommitDetail, GitLogRow } from '../../git/logData'
 import { createLogTuiState } from './interactiveState'
 import { renderInteractiveLog } from './interactive'
+import { cellWidth } from '../chrome/text'
 import { BranchOverview } from '../../git/branchData'
 import { PullRequestOverview } from '../../git/pullRequestData'
-import { TagOverview, TagRangeSummary } from '../../git/tagData'
+import { TagOverview } from '../../git/tagData'
 import { WorktreeOverview } from '../../git/statusData'
-import { WorktreeHunkOverview } from '../../git/statusHunks'
 import { StashOverview } from '../../git/stashData'
 import { WorktreeOverview as WorktreeListOverview } from '../../git/worktreeData'
 import { GitOperationOverview } from '../../git/operationData'
@@ -113,14 +113,6 @@ const tags: TagOverview = {
   ],
 }
 
-const tagRangeSummary: TagRangeSummary = {
-  from: '0.33.0',
-  to: 'HEAD',
-  commitCount: 4,
-  authors: ['Coco Test'],
-  changedFiles: ['src/commands/log/interactive.ts'],
-}
-
 const worktree: WorktreeOverview = {
   stagedCount: 1,
   unstagedCount: 1,
@@ -146,21 +138,6 @@ const worktree: WorktreeOverview = {
     },
   ],
 }
-
-const statusHunks = {
-  filePath: 'unstaged.ts',
-  hunks: [
-    {
-      id: 'unstaged.ts::unstaged-hunk-1',
-      filePath: 'unstaged.ts',
-      state: 'unstaged',
-      header: '@@ -1,1 +1,1 @@',
-      preview: '-old +new',
-      patch: {},
-      hunk: {},
-    },
-  ],
-} as WorktreeHunkOverview
 
 const stashOverview: StashOverview = {
   stashes: [
@@ -199,14 +176,6 @@ const worktreeList: WorktreeListOverview = {
     },
   ],
 }
-
-const reflog = [
-  {
-    selector: 'HEAD@{0}',
-    hash: 'abc1234',
-    subject: 'commit: feat: add interactive log',
-  },
-]
 
 const operationOverview: GitOperationOverview = {
   operation: 'merge',
@@ -259,7 +228,7 @@ const providerOverview: ProviderOverview = {
 
 describe('log interactive renderer', () => {
   it('renders commit navigation, selected details, changed files, and help', () => {
-    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, undefined, worktree, {}, {
+    const output = renderInteractiveLog(createLogTuiState(rows), detail, branches, pullRequest, tags, worktree, {
       height: 70,
       width: 140,
     })
@@ -288,321 +257,7 @@ describe('log interactive renderer', () => {
     expect(output).toContain('Commit actions: e amend HEAD | w reword HEAD')
   })
 
-  it('renders provider context, checks, and compare state', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'commits',
-      },
-      {
-        height: 90,
-        width: 140,
-      },
-      {},
-      {
-        providerCompareBase: 'main',
-      },
-      undefined,
-      providerOverview
-    )
-
-    expect(output).toContain('Provider: github gfargo/coco | default main | authenticated')
-    expect(output).toContain('Repository: https://github.com/gfargo/coco')
-    expect(output).toContain('Provider PR: #123 OPEN review APPROVED')
-    expect(output).toContain('Checks: test:SUCCESS')
-    expect(output).toContain('Provider compare base: main')
-    expect(output).toContain('Provider actions: R repo | L branch | O commit | U compare | o PR')
-  })
-
-  it('renders opt-in AI impact and editable drafts', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'commits',
-        pendingAiAction: 'summarize-commit',
-      },
-      {
-        height: 90,
-        width: 140,
-      },
-      {},
-      {},
-      undefined,
-      undefined,
-      {
-        pendingAction: 'summarize-commit',
-        impact: {
-          action: 'summarize-commit',
-          label: 'summarize commit',
-          estimatedTokens: 512,
-          large: false,
-          requiresConfirmation: true,
-        },
-        draft: 'Generated summary\n- Important change',
-      }
-    )
-
-    expect(output).toContain('Coco AI:')
-    expect(output).toContain('Pending AI summarize commit: press I to run | ~512 tokens')
-    expect(output).toContain('AI calls are opt-in')
-    expect(output).toContain('AI draft:')
-    expect(output).toContain('Generated summary')
-  })
-
-  it('renders in-progress operation, conflicts, hooks, and no-verify state', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'commits',
-        pendingOperationAction: 'abort',
-        noVerify: true,
-      },
-      {
-        height: 90,
-        width: 140,
-      },
-      {},
-      {},
-      operationOverview
-    )
-
-    expect(output).toContain('Operation: merge in progress | no-verify on')
-    expect(output).toContain('Pending abort: press G to confirm abort merge')
-    expect(output).toContain('Conflicts: 1')
-    expect(output).toContain('UU src/conflict.ts')
-    expect(output).toContain('src/conflict.ts:12 <<<<<<< HEAD')
-    expect(output).toContain('Hooks: pre-commit, commit-msg')
-    expect(output).toContain('AI conflict help: opt-in action planned')
-  })
-
-  it('renders commit history actions and recovery state', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'commits',
-        pendingResetCommit: 'abc1234',
-        pendingResetMode: 'mixed',
-      },
-      {
-        height: 80,
-        width: 140,
-      },
-      {},
-      {
-        compareBase: {
-          hash: 'abc1234',
-          shortHash: 'abc1234',
-          message: 'feat: add interactive log',
-        },
-        reflog,
-      }
-    )
-
-    expect(output).toContain('History:')
-    expect(output).toContain('Pending reset: press X to reset --mixed to abc1234')
-    expect(output).toContain('Compare base: abc1234 feat: add interactive log')
-    expect(output).toContain('Reflog:')
-    expect(output).toContain('HEAD@{0} abc1234 commit: feat: add interactive log')
-  })
-
-  it('renders selected file hunks and hunk staging controls', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'status',
-        statusIndex: 1,
-        statusHunks,
-        statusHunkIndex: 0,
-      },
-      {
-        height: 70,
-        width: 120,
-      }
-    )
-
-    expect(output).toContain('Focus: status')
-    expect(output).toContain('Hunks: unstaged.ts')
-    expect(output).toContain('> [U] @@ -1,1 +1,1 @@ -old +new')
-    expect(output).toContain('enter hunk')
-    expect(output).toContain('[/] hunk select')
-  })
-
-  it('renders selected hunk revert confirmation without extra chrome', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'status',
-        statusIndex: 1,
-        statusHunks,
-        statusHunkIndex: 0,
-        pendingRevertHunk: 'unstaged.ts::unstaged-hunk-1',
-      },
-      {
-        height: 70,
-        width: 120,
-      }
-    )
-
-    expect(output).toContain('Pending hunk revert: press Z to revert selected hunk')
-    expect(output).toContain('> [U] @@ -1,1 +1,1 @@ -old +new')
-  })
-
-  it('renders stash and worktree workspace controls', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'workspace',
-        workspaceSection: 'stashes',
-        stashIndex: 0,
-      },
-      {
-        height: 80,
-        width: 140,
-      },
-      {
-        stashes: stashOverview,
-        worktreeList,
-        stashDiffSummary: [' src/a.ts | 2 +-', ' 1 file changed'],
-      }
-    )
-
-    expect(output).toContain('Focus: workspace')
-    expect(output).toContain('Workspace: stashes')
-    expect(output).toContain('> stash@{0} main: save local edits 2 file(s)')
-    expect(output).toContain('  feature/log dirty /repo-feature')
-    expect(output).toContain('src/a.ts | 2 +-')
-    expect(output).toContain('s stash')
-    expect(output).toContain('B branch+worktree')
-  })
-
-  it('renders workspace destructive confirmations', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'workspace',
-        workspaceSection: 'worktrees',
-        worktreeIndex: 1,
-        pendingRemoveWorktree: '/repo-feature',
-      },
-      {
-        height: 80,
-        width: 140,
-      },
-      {
-        stashes: stashOverview,
-        worktreeList,
-      }
-    )
-
-    expect(output).toContain('Workspace: worktrees')
-    expect(output).toContain('>  feature/log dirty /repo-feature')
-    expect(output).toContain('Pending worktree remove: press X to remove /repo-feature')
-  })
-
-  it('renders branch focus, status, and pending delete prompts', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'branches',
-        branchIndex: 0,
-        statusMessage: 'Press D to confirm deleting main',
-        pendingDeleteBranch: 'main',
-      },
-      {
-        height: 70,
-        width: 100,
-      }
-    )
-
-    expect(output).toContain('Focus: branches')
-    expect(output).toContain('Status: Press D to confirm deleting main')
-    expect(output).toContain('Pending delete: press D to delete main')
-    expect(output).toContain('>* main +1/-2 vs origin/main')
-  })
-
-  it('renders concise action feedback details below the status line', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
-      {
-        focus: 'status',
-        statusMessage: 'Commit blocked by hook: eslint failed',
-        statusDetails: [
-          'src/file.ts:1:1 error no-unused-vars',
-          'Run npm run lint before committing',
-        ],
-      },
-      {
-        height: 70,
-        width: 120,
-      }
-    )
-
-    expect(output).toContain('Status: Commit blocked by hook: eslint failed')
-    expect(output).toContain('  src/file.ts:1:1 error no-unused-vars')
-    expect(output).toContain('  Run npm run lint before committing')
-  })
-
-  it('renders branch input prompts for create and rename actions', () => {
+  it('renders pull request states without a current PR', () => {
     const output = renderInteractiveLog(
       createLogTuiState(rows),
       detail,
@@ -614,138 +269,134 @@ describe('log interactive renderer', () => {
         message: 'No pull request found for feature/log-prs.',
       },
       tags,
-      undefined,
       worktree,
-      {
-        focus: 'branches',
-        branchIndex: 0,
-        inputPrompt: {
-          kind: 'rename-branch',
-          label: 'Rename main to',
-          value: 'feature/main',
-          sourceRef: 'main',
-          branchName: 'main',
-        },
-      },
       {
         height: 70,
         width: 100,
       }
     )
 
-    expect(output).toContain('Rename main to: feature/main_')
-    expect(output).toContain('n branch')
-    expect(output).toContain('enter checkout')
     expect(output).toContain('Pull request: no PR for feature/log-prs')
+    expect(output).toContain('Create mode: ready')
+    expect(output).toContain('PR actions: C create | v draft toggle | o open current PR')
   })
 
-  it('renders reword prompts as a focused commit action', () => {
+  it('renders provider context, checks, and repository info', () => {
     const output = renderInteractiveLog(
       createLogTuiState(rows),
       detail,
       branches,
       pullRequest,
       tags,
+      worktree,
+      {
+        height: 90,
+        width: 140,
+      },
+      {},
       undefined,
-      worktree,
-      {
-        focus: 'commits',
-        inputPrompt: {
-          kind: 'reword-commit',
-          label: 'Reword HEAD',
-          value: 'feat: updated title',
-          sourceRef: 'abc1234',
-          commitHash: 'abc1234',
-        },
-      },
-      {
-        height: 70,
-        width: 120,
-      }
+      providerOverview
     )
 
-    expect(output).toContain('Reword HEAD: feat: updated title_')
-    expect(output).toContain('Commit actions: e amend HEAD | w reword HEAD')
+    expect(output).toContain('Provider: github gfargo/coco | default main | authenticated')
+    expect(output).toContain('Repository: https://github.com/gfargo/coco')
+    expect(output).toContain('Provider PR: #123 OPEN review APPROVED')
+    expect(output).toContain('Checks: test:SUCCESS')
+    expect(output).toContain('Provider actions: R repo | L branch | O commit | U compare | o PR')
   })
 
-  it('renders PR create prompts and draft mode', () => {
+  it('renders in-progress operation, conflicts, and hooks', () => {
     const output = renderInteractiveLog(
       createLogTuiState(rows),
       detail,
       branches,
       pullRequest,
       tags,
-      undefined,
       worktree,
       {
-        inputPrompt: {
-          kind: 'create-pr-title',
-          label: 'Create draft PR into main',
-          value: 'Add PR workflow',
-          sourceRef: 'feature/log-prs',
-          baseRef: 'main',
-        },
-        pullRequestDraft: true,
+        height: 90,
+        width: 140,
       },
-      {
-        height: 70,
-        width: 100,
-      }
+      {},
+      operationOverview
     )
 
-    expect(output).toContain('Create draft PR into main: Add PR workflow_')
-    expect(output).toContain('C PR')
-    expect(output).toContain('v draft')
+    expect(output).toContain('Operation: merge in progress | no-verify off')
+    expect(output).toContain('Operation actions: g continue | A abort | K skip | N no-verify')
+    expect(output).toContain('Conflicts: 1')
+    expect(output).toContain('UU src/conflict.ts')
+    expect(output).toContain('src/conflict.ts:12 <<<<<<< HEAD')
+    expect(output).toContain('Hooks: pre-commit, commit-msg')
+    expect(output).toContain('AI conflict help: opt-in action planned')
   })
 
-  it('renders tag focus, delete prompts, and release range summaries', () => {
+  it('renders stash and worktree workspace overview', () => {
     const output = renderInteractiveLog(
       createLogTuiState(rows),
       detail,
       branches,
       pullRequest,
       tags,
-      tagRangeSummary,
       worktree,
       {
-        focus: 'tags',
-        tagIndex: 0,
-        pendingDeleteTag: '0.33.0',
+        height: 80,
+        width: 140,
       },
       {
-        height: 60,
-        width: 100,
+        stashes: stashOverview,
+        worktreeList,
       }
     )
 
-    expect(output).toContain('Focus: tags')
-    expect(output).toContain('> 0.33.0 2026-04-27 abc1234 release v0.33.0')
-    expect(output).toContain('Pending tag delete: press X to delete 0.33.0')
-    expect(output).toContain('Range 0.33.0..HEAD: 4 commits, 1 authors, 1 files')
+    expect(output).toContain('Workspace: stashes')
+    expect(output).toContain('stash@{0} main: save local edits 2 file(s)')
+    expect(output).toContain('feature/log dirty /repo-feature')
+    expect(output).toContain('s stash')
+    expect(output).toContain('B branch+worktree')
   })
 
-  it('renders status focus and revert confirmation', () => {
-    const output = renderInteractiveLog(
-      createLogTuiState(rows),
-      detail,
-      branches,
-      pullRequest,
-      tags,
-      undefined,
-      worktree,
+  it('pads the author column by cell width so wide-glyph (CJK) names stay aligned (#1624)', () => {
+    const wideRows: GitLogRow[] = [
       {
-        focus: 'status',
-        statusIndex: 1,
-        pendingRevertFile: 'unstaged.ts',
+        type: 'commit',
+        graph: '*',
+        shortHash: 'aaa1111',
+        hash: 'aaa1111',
+        parents: [],
+        date: '2026-05-01',
+        author: 'Ada Lovelace',
+        refs: [],
+        message: 'alpha-message',
       },
       {
-        height: 70,
-        width: 100,
-      }
-    )
+        type: 'commit',
+        graph: '*',
+        shortHash: 'bbb2222',
+        hash: 'bbb2222',
+        parents: [],
+        date: '2026-05-02',
+        author: '李雷',
+        refs: [],
+        message: 'beta-message',
+      },
+    ]
 
-    expect(output).toContain('Focus: status')
-    expect(output).toContain('>  M unstaged.ts')
-    expect(output).toContain('Pending revert: press Z to revert unstaged.ts')
+    const output = renderInteractiveLog(createLogTuiState(wideRows), undefined, undefined, undefined, undefined, undefined, {
+      height: 70,
+      width: 140,
+    })
+
+    const lines = output.split('\n')
+    const asciiLine = lines.find((line) => line.includes('alpha-message'))
+    const cjkLine = lines.find((line) => line.includes('beta-message'))
+
+    if (!asciiLine || !cjkLine) {
+      throw new Error('expected both rendered commit rows to be present')
+    }
+
+    const prefixWidth = (line: string, marker: string) =>
+      cellWidth(line.slice(0, line.indexOf(marker)))
+
+    expect(prefixWidth(cjkLine, 'beta-message')).toBe(prefixWidth(asciiLine, 'alpha-message'))
   })
 })

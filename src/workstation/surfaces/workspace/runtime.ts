@@ -17,7 +17,6 @@
  */
 
 import * as nodeFs from 'node:fs'
-import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
 import type * as ReactTypes from 'react'
 
@@ -60,6 +59,7 @@ import {
   type LogInkThemePreset,
 } from '../../chrome/theme'
 import { saveThemePreset } from '../../chrome/themePersistence'
+import { getCocoCacheDir } from '../../../lib/utils/cocoPaths'
 import { getThemePickerSelectionFor } from '../../../workstation/runtime/inkViewModel'
 import {
   readCachedWorkspace,
@@ -346,11 +346,9 @@ function resolveWorkspaceTracePath(): string {
   if (process.env.COCO_DEBUG_WORKSPACE_PATH) {
     return process.env.COCO_DEBUG_WORKSPACE_PATH
   }
-  const xdg = process.env.XDG_CACHE_HOME
   // Default lives under the cache dir the user already confirmed
   // their tsx watcher ignores.
-  const cacheRoot = xdg && xdg.trim() ? xdg : nodePath.join(nodeOs.homedir(), '.cache')
-  return nodePath.join(cacheRoot, 'coco', 'workspace-trace.log')
+  return nodePath.join(getCocoCacheDir(), 'workspace-trace.log')
 }
 
 export function flushWorkspaceTrace(): void {

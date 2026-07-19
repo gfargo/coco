@@ -1,9 +1,6 @@
 import { Arguments } from 'yargs'
 import { generateChangelogResult } from '../commands/changelog/handler'
 import { ChangelogOptions } from '../commands/changelog/config'
-import { runCommitWorkflow } from './commitWorkflowActions'
-import { HistoryCommitRef } from './historyActions'
-import { TagRangeSummary } from './tagData'
 import { LangChainCancelledError } from '../lib/langchain/errors'
 import { isCommandExitError } from '../lib/utils/commandExit'
 import { Logger } from '../lib/utils/logger'
@@ -14,14 +11,6 @@ export type LogAiAction =
   | 'release-notes'
   | 'split-plan'
   | 'risk-review'
-
-export type LogAiActionContext = {
-  selectedCommit?: HistoryCommitRef
-  compareBase?: HistoryCommitRef
-  selectedTag?: string
-  tagRangeSummary?: TagRangeSummary
-  defaultBranch?: string
-}
 
 export type LogAiActionImpact = {
   action: LogAiAction
@@ -40,37 +29,6 @@ export type LogAiActionResult = {
 
 type ChangelogWorkflowArgv = Arguments<ChangelogOptions> & {
   mode: 'stdout'
-}
-
-const LARGE_AI_ACTION_TOKEN_THRESHOLD = 4000
-
-function estimateTextTokens(value: string): number {
-  return Math.ceil(value.length / 4)
-}
-
-export function estimateLogAiActionImpact(
-  action: LogAiAction,
-  context: LogAiActionContext
-): LogAiActionImpact {
-  const contextText = [
-    context.selectedCommit?.hash,
-    context.selectedCommit?.message,
-    context.compareBase?.hash,
-    context.compareBase?.message,
-    context.selectedTag,
-    context.tagRangeSummary
-      ? `${context.tagRangeSummary.commitCount} commits ${context.tagRangeSummary.changedFiles.length} files`
-      : undefined,
-  ].filter(Boolean).join('\n')
-  const estimatedTokens = Math.max(64, estimateTextTokens(contextText) + 256)
-
-  return {
-    action,
-    label: action.replace(/-/g, ' '),
-    estimatedTokens,
-    large: estimatedTokens >= LARGE_AI_ACTION_TOKEN_THRESHOLD,
-    requiresConfirmation: true,
-  }
 }
 
 function createChangelogArgv(input: Partial<ChangelogOptions>): ChangelogWorkflowArgv {
@@ -113,86 +71,6 @@ function formatCapturedAiOutput(output: string): Pick<LogAiActionResult, 'messag
   }
 }
 
-async function runChangelogAction(argv: ChangelogWorkflowArgv): Promise<LogAiActionResult> {
-  try {
-    const { text } = await generateChangelogResult(argv, new Logger({ silent: true }))
-    const formatted = formatCapturedAiOutput(text)
-
-    return {
-      ok: true,
-      ...formatted,
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      message: (error as Error).message,
-    }
-  }
-}
-
-export async function runLogAiAction(
-  action: LogAiAction,
-  context: LogAiActionContext
-): Promise<LogAiActionResult> {
-  if (action === 'split-plan') {
-    return runCommitWorkflow({
-      action: 'split-plan',
-    })
-  }
-
-  if (action === 'risk-review') {
-    return runCommitWorkflow({
-      action: 'split-plan',
-    }).then((result) => ({
-      ...result,
-      message: result.ok ? 'Risk review prepared from commit split analysis.' : result.message,
-    }))
-  }
-
-  if (action === 'release-notes') {
-    const tag = context.selectedTag || context.tagRangeSummary?.from
-
-    if (!tag) {
-      return {
-        ok: false,
-        message: 'Select a tag before generating release notes.',
-      }
-    }
-
-    return runChangelogAction(createChangelogArgv({
-      tag,
-      author: true,
-    }))
-  }
-
-  if (action === 'summarize-range') {
-    const from = context.compareBase?.hash
-    const to = context.selectedCommit?.hash
-
-    if (!from || !to) {
-      return {
-        ok: false,
-        message: 'Select a compare base before summarizing a range.',
-      }
-    }
-
-    return runChangelogAction(createChangelogArgv({
-      range: `${from}:${to}`,
-    }))
-  }
-
-  if (!context.selectedCommit) {
-    return {
-      ok: false,
-      message: 'No commit selected for AI summary.',
-    }
-  }
-
-  return runChangelogAction(createChangelogArgv({
-    range: `${context.selectedCommit.hash}^:${context.selectedCommit.hash}`,
-  }))
-}
-
 /**
  * Generate a pull-request body for the current branch by running
  * `coco changelog --branch <base>` and parsing the title / content
@@ -204,9 +82,9 @@ export async function runLogAiAction(
  * pre-fill the PR creation prompt with. Ticket footer (when present)
  * stays in the body so the resulting PR keeps the reference.
  *
- * Captures the raw stdout (rather than going through `runChangelogAction`,
- * which strips blank lines via its `compactOutputLines` filter) so the
- * title-vs-body separator survives intact.
+ * Captures the raw stdout (rather than passing it through
+ * `compactOutputLines`, which strips blank lines) so the title-vs-body
+ * separator survives intact.
  *
  * Returns the standard LogAiActionResult plus extracted `title` / `body`
  * fields. Falls back to undefined `title` / `body` when the changelog
@@ -274,9 +152,9 @@ export async function runPullRequestBodyWorkflow(
  * Run `coco changelog` and return the raw captured stdout, intact —
  * blank lines preserved, no telemetry stripping. Use this when you
  * want to show or copy the changelog as the user would see it from
- * the CLI (the chromed-up `runChangelogAction` collapses blank lines
- * via `compactOutputLines` which is wrong for any UI that wants the
- * full prose output).
+ * the CLI (`formatCapturedAiOutput`'s `compactOutputLines` pass would
+ * strip blank lines, which is wrong for any UI that wants the full
+ * prose output).
  *
  * The argv defaults match `createChangelogArgv` — pass overrides via
  * `input`. Common shapes:
@@ -326,6 +204,5 @@ export async function runChangelogTextWorkflow(
 export const aiActionTestInternals = {
   compactOutputLines,
   createChangelogArgv,
-  estimateTextTokens,
   formatCapturedAiOutput,
 }

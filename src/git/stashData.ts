@@ -130,13 +130,6 @@ export async function getStashOverview(git: SimpleGit): Promise<StashOverview> {
   }
 }
 
-export async function getStashDiffSummary(git: SimpleGit, stashRef: string): Promise<string[]> {
-  return (await git.raw(['stash', 'show', '--stat', stashRef]))
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-}
-
 /**
  * Full unified-patch diff for a stash. Used by the diff surface when
  * `state.diffSource === 'stash'` to render the stash's changes inline.

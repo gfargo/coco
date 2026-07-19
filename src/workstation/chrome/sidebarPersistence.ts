@@ -1,9 +1,8 @@
-import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { LogInkSidebarTab } from '../../workstation/runtime/inkViewModel'
+import { cacheKeyHash, getCocoCacheDir } from '../../lib/utils/cocoPaths'
 
 /**
  * Persist which sidebar tab the user last had active, keyed per repo so
@@ -25,26 +24,8 @@ const VALID_TABS: ReadonlyArray<LogInkSidebarTab> = [
   'worktrees',
 ]
 
-function resolveCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME
-  if (xdg && xdg.trim().length > 0) {
-    return path.join(xdg, 'coco')
-  }
-  return path.join(os.homedir(), '.cache', 'coco')
-}
-
-function repoKey(repoPath: string): string {
-  // sha1 is used here as a non-security cache-key derivation — we just
-  // need a deterministic short identifier for the marker filename so
-  // re-creating a repo at the same path keeps the same preference.
-  // No PII or auth context is hashed; no collision-resistance against
-  // an adversary is required. DevSkim DS126858 doesn't apply.
-  // DevSkim: ignore DS126858
-  return crypto.createHash('sha1').update(repoPath).digest('hex').slice(0, 16)
-}
-
 export function getSidebarTabMarkerPath(repoPath: string): string {
-  return path.join(resolveCacheDir(), `sidebar-tab.${repoKey(repoPath)}`)
+  return path.join(getCocoCacheDir(), `sidebar-tab.${cacheKeyHash(repoPath)}`)
 }
 
 export function getSavedSidebarTab(repoPath: string): LogInkSidebarTab | undefined {

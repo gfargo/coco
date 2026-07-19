@@ -5,6 +5,7 @@ import {
   getGhStatus,
   parseGitHubRemoteUrl as parseGitHubRemoteUrlBase,
   parseRemoteUrl,
+  resolveDefaultRemote,
   type GhRunner,
   defaultGhRunner,
 } from './githubCli'
@@ -20,6 +21,8 @@ import {
   getBitbucketStatus,
   type BitbucketRunner,
 } from './bitbucketCli'
+import { findOpenBitbucketPullRequestForBranch } from './bitbucketListData'
+import { findOpenMergeRequestForBranch } from './gitlabListData'
 
 export type GitProviderType = 'github' | 'gitlab' | 'bitbucket' | 'unsupported'
 
@@ -156,10 +159,8 @@ export function getProviderRepository(remoteName: string, remoteUrl: string): Pr
 export async function getProviderRepositoryForGit(
   git: SimpleGit
 ): Promise<ProviderRepository | undefined> {
-  const remotes = await git.getRemotes(true)
-  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
-  const url = remote?.refs.push || remote?.refs.fetch
-  return url ? getProviderRepository(remote.name, url) : undefined
+  const resolved = await resolveDefaultRemote(git)
+  return resolved ? getProviderRepository(resolved.name, resolved.url) : undefined
 }
 
 export type GitHubRepositoryWithHost = {
@@ -353,30 +354,17 @@ async function getGitLabDefaultBranch(
 }
 
 async function getCurrentMergeRequest(
-  encodedPath: string,
+  projectPath: string,
   sourceBranch: string,
   runner: GlabRunner
 ): Promise<ProviderPullRequestStatus | undefined> {
   try {
-    const out = (
-      await runner([
-        'api',
-        `projects/${encodedPath}/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened`,
-      ])
-    ).trim()
-    if (!out) return undefined
-    const mr = (JSON.parse(out) as Array<{
-      iid: number
-      title: string
-      state: string
-      draft?: boolean
-      work_in_progress?: boolean
-    }>)[0]
+    const mr = await findOpenMergeRequestForBranch(projectPath, sourceBranch, runner)
     if (!mr) return undefined
     return {
-      number: mr.iid,
-      title: mr.title,
-      state: mr.state,
+      number: Number(mr.iid),
+      title: String(mr.title || ''),
+      state: String(mr.state || ''),
       isDraft: Boolean(mr.draft ?? mr.work_in_progress),
     }
   } catch {
@@ -417,15 +405,11 @@ async function getBitbucketProviderOverview(
   async function getCurrentPRBitbucket(): Promise<ProviderPullRequestStatus | undefined> {
     if (!path || !currentBranch) return undefined
     try {
-      const q = encodeURIComponent(`source.branch.name = "${currentBranch}" AND state = "OPEN"`)
-      const out = (await runner(`repositories/${path}/pullrequests?q=${q}&pagelen=1`)).trim()
-      if (!out) return undefined
-      const page = JSON.parse(out) as { values?: Array<{ id?: number; title?: string; state?: string; draft?: boolean }> }
-      const pr = page?.values?.[0]
+      const pr = await findOpenBitbucketPullRequestForBranch(path, currentBranch, runner)
       if (!pr?.id) return undefined
       return {
-        number: pr.id,
-        title: pr.title || '',
+        number: Number(pr.id),
+        title: String(pr.title || ''),
         state: String(pr.state || '').toUpperCase(),
         isDraft: Boolean(pr.draft),
       }
@@ -470,9 +454,7 @@ async function getGitLabProviderOverview(
 
   const [defaultBranch, currentPullRequest] = await Promise.all([
     getGitLabDefaultBranch(encoded, runner),
-    currentBranch && encoded
-      ? getCurrentMergeRequest(encoded, currentBranch, runner)
-      : Promise.resolve(undefined),
+    currentBranch && path ? getCurrentMergeRequest(path, currentBranch, runner) : Promise.resolve(undefined),
   ])
 
   return {
@@ -489,8 +471,8 @@ export async function getProviderOverview(
   glabRunner: GlabRunner = defaultGlabRunner,
   bitbucketRunner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<ProviderOverview> {
-  const [remotes, currentBranchOutput, localDefaultBranch] = await Promise.all([
-    git.getRemotes(true),
+  const [resolvedRepository, currentBranchOutput, localDefaultBranch] = await Promise.all([
+    getProviderRepositoryForGit(git),
     git.raw(['branch', '--show-current']),
     // Read local default-branch signal up-front in parallel — used as
     // the fallback when gh is unavailable / unauthenticated / can't see
@@ -498,15 +480,11 @@ export async function getProviderOverview(
     // GH-specific paths layer on top of this, they don't replace it.
     detectLocalDefaultBranch(git),
   ])
-  const remote = remotes.find((entry) => entry.name === 'origin') || remotes[0]
-  const remoteUrl = remote?.refs.push || remote?.refs.fetch
-  const repository = remoteUrl
-    ? getProviderRepository(remote.name, remoteUrl)
-    : {
-      provider: 'unsupported' as const,
-      remote: 'origin',
-      message: 'No Git remote detected.',
-    }
+  const repository = resolvedRepository ?? {
+    provider: 'unsupported' as const,
+    remote: 'origin',
+    message: 'No Git remote detected.',
+  }
   const currentBranch = currentBranchOutput.trim() || undefined
 
   if (repository.provider === 'gitlab') {

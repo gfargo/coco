@@ -1,11 +1,8 @@
 import { generateChangelogResult } from '../commands/changelog/handler'
-import { runCommitWorkflow } from './commitWorkflowActions'
 import { CommandExitError } from '../lib/utils/commandExit'
 import {
   aiActionTestInternals,
-  estimateLogAiActionImpact,
   runChangelogTextWorkflow,
-  runLogAiAction,
   runPullRequestBodyWorkflow,
 } from './aiActions'
 
@@ -13,139 +10,11 @@ jest.mock('../commands/changelog/handler', () => ({
   generateChangelogResult: jest.fn(),
 }))
 
-jest.mock('./commitWorkflowActions', () => ({
-  runCommitWorkflow: jest.fn(),
-}))
-
 const mockedGenerateChangelogResult = generateChangelogResult as jest.MockedFunction<typeof generateChangelogResult>
-const mockedRunCommitWorkflow = runCommitWorkflow as jest.MockedFunction<typeof runCommitWorkflow>
 
 describe('log AI actions', () => {
-  const selectedCommit = {
-    hash: 'abcdef1234567890',
-    shortHash: 'abcdef1',
-    message: 'feat: add ai actions',
-  }
-
   beforeEach(() => {
     mockedGenerateChangelogResult.mockReset()
-    mockedRunCommitWorkflow.mockReset()
-  })
-
-  it('estimates token impact before running AI actions', () => {
-    expect(estimateLogAiActionImpact('summarize-commit', {
-      selectedCommit,
-    })).toEqual({
-      action: 'summarize-commit',
-      label: 'summarize commit',
-      estimatedTokens: expect.any(Number),
-      large: false,
-      requiresConfirmation: true,
-    })
-  })
-
-  it('routes selected commit summaries through bounded changelog ranges', async () => {
-    mockedGenerateChangelogResult.mockResolvedValue({
-      text: 'AI commit summary\n\n- Changed the log UI.',
-      structured: undefined,
-    })
-
-    await expect(runLogAiAction('summarize-commit', {
-      selectedCommit,
-    })).resolves.toEqual({
-      ok: true,
-      message: 'AI commit summary',
-      details: [],
-      editable: 'AI commit summary\n- Changed the log UI.',
-    })
-    expect(mockedGenerateChangelogResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        _: ['changelog'],
-        interactive: false,
-        mode: 'stdout',
-        range: 'abcdef1234567890^:abcdef1234567890',
-      }),
-      expect.anything()
-    )
-  })
-
-  it('routes selected range summaries through changelog ranges', async () => {
-    mockedGenerateChangelogResult.mockResolvedValue({
-      text: 'Range summary\n',
-      structured: undefined,
-    })
-
-    await expect(runLogAiAction('summarize-range', {
-      selectedCommit,
-      compareBase: {
-        hash: '1111111',
-        shortHash: '1111111',
-        message: 'base',
-      },
-    })).resolves.toMatchObject({
-      ok: true,
-      message: 'Range summary',
-    })
-    expect(mockedGenerateChangelogResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        range: '1111111:abcdef1234567890',
-      }),
-      expect.anything()
-    )
-  })
-
-  it('requires a compare base before range summaries', async () => {
-    await expect(runLogAiAction('summarize-range', {
-      selectedCommit,
-    })).resolves.toEqual({
-      ok: false,
-      message: 'Select a compare base before summarizing a range.',
-    })
-    expect(mockedGenerateChangelogResult).not.toHaveBeenCalled()
-  })
-
-  it('routes release notes through changelog tag summaries', async () => {
-    mockedGenerateChangelogResult.mockResolvedValue({
-      text: 'Release notes\n',
-      structured: undefined,
-    })
-
-    await expect(runLogAiAction('release-notes', {
-      selectedTag: '0.33.0',
-    })).resolves.toMatchObject({
-      ok: true,
-      message: 'Release notes',
-    })
-    expect(mockedGenerateChangelogResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tag: '0.33.0',
-        author: true,
-      }),
-      expect.anything()
-    )
-  })
-
-  it('requires a selected tag before generating release notes', async () => {
-    await expect(runLogAiAction('release-notes', {})).resolves.toEqual({
-      ok: false,
-      message: 'Select a tag before generating release notes.',
-    })
-    expect(mockedGenerateChangelogResult).not.toHaveBeenCalled()
-  })
-
-  it('routes risk review through existing commit split analysis', async () => {
-    mockedRunCommitWorkflow.mockResolvedValue({
-      ok: true,
-      message: 'Generated commit split plan.',
-    })
-
-    await expect(runLogAiAction('risk-review', {})).resolves.toEqual({
-      ok: true,
-      message: 'Risk review prepared from commit split analysis.',
-    })
-    expect(mockedRunCommitWorkflow).toHaveBeenCalledWith({
-      action: 'split-plan',
-    })
   })
 
   it('extracts telemetry while keeping generated text editable', () => {
