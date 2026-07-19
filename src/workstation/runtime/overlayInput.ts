@@ -2,6 +2,13 @@ import { deriveGitignoreOptions } from '../chrome/gitignore'
 import { filterLogInkPaletteCommands, getLogInkPaletteCommands } from './inkKeymap'
 import { filterThemePresets, getThemePickerSelection } from './themePicker'
 import type { LogInkAction, LogInkState } from './inkViewModel'
+// `getLogInkPaletteExecuteEvents` is the one runtime (non-type) import back
+// into `inkInput.ts`, which itself imports `handleOverlayInput` below — a
+// require cycle. It's safe: both bindings are only read inside function
+// bodies invoked after module init, never at top-level eval, so load order
+// doesn't matter (confirmed by the full suite passing). Not worth breaking
+// by extracting the 261-line, multi-helper-dependent palette-execute mapping
+// out of `inkInput.ts` for this pass — see OSS-1061 review discussion.
 import {
   getLogInkPaletteExecuteEvents,
   type LogInkInputContext,
