@@ -381,7 +381,7 @@ describe('log interactive renderer', () => {
       },
     ]
 
-    const output = renderInteractiveLog(createLogTuiState(wideRows), undefined, undefined, undefined, undefined, undefined, undefined, {}, {
+    const output = renderInteractiveLog(createLogTuiState(wideRows), undefined, undefined, undefined, undefined, undefined, {
       height: 70,
       width: 140,
     })
