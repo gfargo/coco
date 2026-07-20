@@ -180,7 +180,7 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
   }
 
   if (filter.search) {
-    const searchQ = `title ~ "${filter.search}"`
+    const searchQ = `title ~ "${bbqlQuote(filter.search)}"`
     params.q = params.q ? `(${params.q}) AND ${searchQ}` : searchQ
   }
 

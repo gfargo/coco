@@ -124,6 +124,11 @@ describe('buildPullRequestEndpoint (1238)', () => {
     const e = buildPullRequestEndpoint('ws/repo', { head: 'x" OR state != "' })
     expect(decodeURIComponent(e)).toContain('source.branch.name = "x\\" OR state != \\""')
   })
+
+  it('escapes a double quote in the search string (1709)', () => {
+    const e = buildPullRequestEndpoint('ws/repo', { search: 'x" OR state != "' })
+    expect(decodeURIComponent(e)).toContain('title ~ "x\\" OR state != \\""')
+  })
 })
 
 describe('buildIssueEndpoint (1238)', () => {
