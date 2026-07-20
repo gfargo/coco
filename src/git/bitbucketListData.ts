@@ -179,6 +179,11 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
     params.q = params.q ? `(${params.q}) AND ${baseQ}` : baseQ
   }
 
+  if (filter.search) {
+    const searchQ = `title ~ "${bbqlQuote(filter.search)}"`
+    params.q = params.q ? `(${params.q}) AND ${searchQ}` : searchQ
+  }
+
   const pairs = Object.entries(params)
     .filter(([, v]) => v !== undefined)
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
@@ -200,6 +205,10 @@ export async function getBitbucketPullRequestList(
     repository: (project) => ({ owner: project.owner, name: project.name }),
     filter,
     fetch: async (project) => {
+      if (filter.label) {
+        throw new Error('Pull request labels are not supported on Bitbucket Cloud.')
+      }
+
       const want = filter.limit ?? 30
       let pullRequests: PullRequestListItem[] = []
 
