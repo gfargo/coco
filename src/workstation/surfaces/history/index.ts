@@ -475,8 +475,13 @@ function renderStackedCommitHistoryRow(
   // filtered against the chip so we don't repeat the branch tip both
   // as a leading chip and a trailing label.
   const indent = ' '.repeat(graphWidth + 1)
-  const dateText = bucketed ? '' : formatCompactRelativeDate(commit.date, now)
   const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
+  // Bucket headers make the per-row date redundant — but only when the row
+  // has refs to show instead. A ref-less row under bucketing used to render
+  // a bare `·` placeholder on line 2, which at rail widths made the whole
+  // list read as double-spaced noise; fall back to the relative date so the
+  // line earns its space.
+  const dateText = bucketed && refs ? '' : formatCompactRelativeDate(commit.date, now)
   const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
   const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
   // If both pieces are empty (date unparseable + no refs), show a
@@ -664,7 +669,12 @@ export function renderHistoryPanel(
   // guardrail: even with bucketing enabled, an active search filter
   // shuffles commits by relevance so the adjacent-bucket invariant
   // breaks down and the dividers would read as noise.
-  const fullGraphSpacing = state.fullGraph && !state.filter
+  // Stacked rows already cost two terminal lines, so the per-commit
+  // transition row (comfortable rhythm on wide layouts) pushed each commit
+  // to ~3 lines at rail widths — the list read as mostly air. Rail mode
+  // keeps the lane rails on commit rows but skips the dedicated topology
+  // line between them.
+  const fullGraphSpacing = state.fullGraph && !state.filter && rowMode !== 'stacked'
   const dateBucketingNow = !dateBucketingEnabled || state.filter ? undefined : now
   // Hoisted so the row budget can count the banner (#1392) — it used
   // to be computed inline in the return, invisible to chromeRows.
@@ -676,14 +686,14 @@ export function renderHistoryPanel(
   const chromeRows = (showPendingRow ? 5 : 4)
     + (upstreamBanner ? 1 : 0)
     + (state.historyFetchArgs ? 1 : 0)
-  // Stacked rows take two terminal lines each; graph spacers and
-  // bucket headers take one. In practice the expanded list alternates
-  // commit (2 lines) and transition (1 line), so the average item
-  // costs ~1.5 lines. Dividing by 2 left ~25% of the body blank on
-  // 80×24 terminals (#1368). Using 2/3 of the line budget as the item
-  // count fills the panel without overflow.
+  // Stacked rows take two terminal lines each and (with transition rows
+  // suppressed above) every stacked item is a commit, so the item budget
+  // is the line budget halved. Bucket headers cost one line each, which
+  // under-fills by a line per header — safe direction, never overflows.
+  // (The old 2/3 ratio from #1368 assumed the commit/transition
+  // alternation averaging ~1.5 lines per item.)
   const listRows = rowMode === 'stacked'
-    ? Math.max(2, Math.floor((bodyRows - chromeRows) * 2 / 3))
+    ? Math.max(2, Math.floor((bodyRows - chromeRows) / 2))
     : Math.max(3, bodyRows - chromeRows)
   const visible = getVisibleLogInkHistory(state, listRows, { fullGraphSpacing, dateBucketingNow })
   const loadState = loadingMoreCommits
